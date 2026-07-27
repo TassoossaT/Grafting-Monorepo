@@ -1,177 +1,177 @@
-# Grafting Monorepo — Fonte Mestre de Arquitetura e Criação
+# Grafting Monorepo — Master Source of Architecture and Creation
 
-> **Documento canônico unificado para produto, arquitetura, criação e AI Control Plane.**
+> **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Versão: `1.7.1`
-> Data-base original: 23 de julho de 2026
-> Data de consolidação: 26 de julho de 2026
-> Última alteração: 26 de julho de 2026 — bootstrap mínimo de `.ai/` com a skill `task-completion` (seção 27, 29.1, 29.3).
-> Estado: `CANONICAL-UNIFIED`
-> Próximo marco: fechar os Decision Gates da Seção 5 e executar a Fase 0 unificada antes do scaffold definitivo.
+> Version: `1.8.0`
+> Original base date: July 23, 2026
+> Consolidation date: July 26, 2026
+> Last updated: 2026-07-26 — full English translation of all repository documentation; added DEC-047 (English as default documentation language).
+> State: `CANONICAL-UNIFIED`
+> Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
-> Nome do projeto: **Grafting Monorepo**
-> Subsistema de interoperabilidade: **Isekai**
+> Project name: **Grafting Monorepo**
+> Interoperability subsystem: **Isekai**
 > AI Control Plane: **`.ai/`**
-> Contrato operacional por escopo: **`AGENTS.md`**
+> Operational contract per scope: **`AGENTS.md`**
 >
 
 ---
 
-## 0. Como usar este documento
+## 0. How to use this document
 
-Este arquivo não é apenas uma descrição de arquitetura. Ele é simultaneamente:
+This file is not merely an architecture description. It is simultaneously:
 
-1. a definição do produto técnico;
-2. o registro das decisões arquiteturais já tomadas;
-3. a fonte mestre para criação e evolução do monorepo;
-4. o plano de criação incremental do repositório;
-5. o backlog inicial com critérios de aceite;
-6. a base para ADRs, runbooks, contratos e documentos gerados;
-7. a definição do Knowledge & Automation Plane;
-8. a definição do AI Control Plane para Claude, GPT/Codex e futuros provedores.
+1. the definition of the technical product;
+2. the record of architectural decisions already made;
+3. the master source for creating and evolving the monorepo;
+4. the plan for incremental creation of the repository;
+5. the initial backlog with acceptance criteria;
+6. the basis for ADRs, runbooks, contracts, and generated documents;
+7. the definition of the Knowledge & Automation Plane;
+8. the definition of the AI Control Plane for Claude, GPT/Codex, and future providers.
 
-Todo humano ou agente deve ler este arquivo antes de propor ou executar alterações estruturais. `AGENTS.md` complementa este documento com regras operacionais específicas do escopo; `.ai/` contém as capacidades e políticas do sistema de IA.
+Every human or agent must read this file before proposing or executing structural changes. `AGENTS.md` complements this document with scope-specific operational rules; `.ai/` contains the capabilities and policies of the AI system.
 
-### 0.1 Linguagem normativa
+### 0.1 Normative language
 
-Os termos abaixo têm significado deliberado:
+The terms below have deliberate meaning:
 
-- **DEVE / NÃO DEVE:** regra obrigatória.
-- **DEVERIA / NÃO DEVERIA:** padrão recomendado; exceções precisam ser justificadas.
-- **PODE:** decisão local permitida.
-- **LOCKED:** decisão arquitetural fechada.
-- **PROVISIONAL:** padrão inicial que precisa ser validado por um spike.
-- **OPEN:** decisão humana ainda não tomada.
+- **MUST / MUST NOT:** mandatory rule.
+- **SHOULD / SHOULD NOT:** recommended standard; exceptions need to be justified.
+- **MAY:** locally permitted decision.
+- **LOCKED:** closed architectural decision.
+- **PROVISIONAL:** initial standard that needs to be validated by a spike.
+- **OPEN:** human decision not yet made.
 
-### 0.2 Regra de precedência
+### 0.2 Precedence rule
 
-Em caso de conflito:
+In case of conflict:
 
-1. requisitos explícitos mais recentes do proprietário do projeto;
-2. ADR aceito mais recente;
-3. este documento mestre;
-4. contratos e schemas versionados;
-5. `AGENTS.md` aplicável ao escopo;
-6. código, manifests e pipelines existentes;
-7. `.ai/` para políticas e capacidades do AI Control Plane;
-8. adapters de fornecedor como `CLAUDE.md`, `.claude/`, `.codex/` e `.agents/`;
-9. documentação gerada e visualizações;
-10. suposições do agente.
+1. the project owner's most recent explicit requirements;
+2. the most recently accepted ADR;
+3. this master document;
+4. versioned contracts and schemas;
+5. `AGENTS.md` applicable to the scope;
+6. existing code, manifests, and pipelines;
+7. `.ai/` for AI Control Plane policies and capabilities;
+8. vendor adapters such as `CLAUDE.md`, `.claude/`, `.codex/`, and `.agents/`;
+9. generated documentation and visualizations;
+10. agent assumptions.
 
-Se o código contradizer uma decisão `LOCKED`, o agente NÃO DEVE assumir que o código venceu. Deve reportar o desvio e pedir uma decisão. `.ai/` NÃO DEVE sobrescrever silenciosamente um contrato operacional em `AGENTS.md`; adapters de fornecedor NÃO DEVEM contradizer nenhuma das duas camadas.
+If code contradicts a `LOCKED` decision, the agent MUST NOT assume that the code won. It must report the deviation and request a decision. `.ai/` MUST NOT silently override an operational contract in `AGENTS.md`; vendor adapters MUST NOT contradict either layer.
 
-### 0.3 O que um agente não pode fazer silenciosamente
+### 0.3 What an agent cannot do silently
 
-O agente NÃO DEVE:
+The agent MUST NOT:
 
-- transformar uma decisão `OPEN` em implementação definitiva;
-- trocar uma tecnologia `LOCKED` por preferência própria;
-- criar uma segunda implementação da lógica proprietária em TypeScript, C# ou Python;
-- expor tipos Rust diretamente pela FFI;
-- chamar replicação de estado de Event Sourcing;
-- prometer zero-copy entre domínios de memória distintos;
-- fazer um target cacheável executar efeitos externos;
-- adicionar uma nova raiz de workspace ou um novo lockfile sem ADR;
-- introduzir containers como requisito para toda compilação local;
-- reescrever amplamente arquivos não relacionados à tarefa;
-- gerar diretórios futuros vazios apenas para “completar” a árvore;
-- criar uma segunda fonte durável de tarefas;
-- expandir permissões, hooks, sandbox ou MCPs sem aprovação;
-- habilitar cache semântico para código, segurança, incidentes ou estado mutável;
-- promover aprendizado ou autorreescrita sem evidência, eval e rollback.
+- turn an `OPEN` decision into a definitive implementation;
+- swap a `LOCKED` technology for its own preference;
+- create a second implementation of proprietary logic in TypeScript, C#, or Python;
+- expose Rust types directly through FFI;
+- call state replication Event Sourcing;
+- promise zero-copy between distinct memory domains;
+- make a cacheable target execute external effects;
+- add a new workspace root or a new lockfile without an ADR;
+- introduce containers as a requirement for every local build;
+- broadly rewrite files unrelated to the task;
+- generate empty future directories just to "complete" the tree;
+- create a second durable source of tasks;
+- expand permissions, hooks, sandbox, or MCPs without approval;
+- enable semantic caching for code, security, incidents, or mutable state;
+- promote learning or self-rewriting without evidence, evaluation, and rollback.
 
 ---
 
-## 1. Visão do produto
+## 1. Product vision
 
-O repositório abrigará dois produtos principais:
+The repository will house two main products:
 
-1. **Virtual Tabletop Web**
+1. **Web Virtual Tabletop**
 
    - TypeScript;
    - Three.js;
-   - interface web;
-   - consumo do motor por WebAssembly;
-   - simulação e computação pesada fora da main thread.
-2. **Jogo Desktop Nativo**
+   - web interface;
+   - engine consumption via WebAssembly;
+   - simulation and heavy computation off the main thread.
+2. **Native Desktop Game**
 
    - C#/.NET;
-   - engine gráfica ainda a decidir;
-   - consumo do motor por biblioteca nativa;
-   - suporte inicial prioritário a Windows, com desenho compatível com Linux e macOS.
+   - graphics engine still to be decided;
+   - engine consumption via native library;
+   - initial priority support for Windows, with a design compatible with Linux and macOS.
 
-Os dois produtos consumirão o mesmo núcleo proprietário em Rust.
+Both products will consume the same proprietary Rust core.
 
-### 1.1 Objetivo central
+### 1.1 Central objective
 
-Construir um motor lógico, matemático e de otimização que:
+Build a logical, mathematical, and optimization engine that:
 
-- seja a fonte única de verdade;
-- seja reutilizável na Web e no Desktop;
-- permita implementação futura de solver de otimização próprio;
-- execute algoritmos na CPU e, quando vantajoso, na GPU;
-- mantenha controle explícito de memória e ciclo de vida;
-- não replique lógica proprietária nos hosts;
-- possa futuramente operar localmente ou em servidor autoritativo.
+- is the single source of truth;
+- is reusable on Web and Desktop;
+- allows future implementation of a proprietary optimization solver;
+- runs algorithms on CPU and, when advantageous, on GPU;
+- maintains explicit control of memory and lifecycle;
+- does not replicate proprietary logic in the hosts;
+- can in the future operate locally or on an authoritative server.
 
-### 1.2 O que “core único” significa
+### 1.2 What "single core" means
 
-“Core único” significa:
+"Single core" means:
 
-- uma única modelagem matemática;
-- uma única implementação das regras de negócio;
-- um único algoritmo de solver;
-- uma única coleção de kernels WGSL;
-- um único protocolo de comandos, eventos e snapshots;
-- bindings finos, sem reimplementar comportamento;
-- backends de execução intercambiáveis atrás de contratos internos.
+- a single mathematical model;
+- a single implementation of the business rules;
+- a single solver algorithm;
+- a single collection of WGSL kernels;
+- a single protocol for commands, events, and snapshots;
+- thin bindings, without reimplementing behavior;
+- interchangeable execution backends behind internal contracts.
 
-“Core único” não significa:
+"Single core" does not mean:
 
-- um único processo;
-- um único binário para todos os sistemas;
-- uma única instância de dispositivo lógico GPU;
-- uma referência Rust atravessando qualquer runtime;
-- uma única representação física da memória em CPU, Wasm, Worker, GPU e rede.
+- a single process;
+- a single binary for all systems;
+- a single logical GPU device instance;
+- a single Rust reference crossing any runtime;
+- a single physical representation of memory across CPU, Wasm, Worker, GPU, and network.
 
-### 1.3 Critérios de sucesso arquiteturais
+### 1.3 Architectural success criteria
 
-O projeto será considerado bem estruturado quando:
+The project will be considered well structured when:
 
-- uma regra alterada no Rust produz o mesmo comportamento nos dois produtos;
-- o Web e o Desktop não possuem cópias do solver;
-- uma mudança de contrato incompatível falha cedo no build;
-- uma ABI incompatível falha no startup, não durante gameplay;
-- tarefas afetadas são executadas em ordem correta pelo Nx;
-- cada compilador continua sendo operado por sua toolchain nativa;
-- o cache nunca mascara efeitos externos ou artefatos de outra plataforma;
-- a ausência de WebGPU aciona fallback CPU controlado;
-- o renderer não precisa conhecer a implementação interna do solver;
-- o solver não precisa conhecer Three.js, a engine C# ou protocolos de transporte.
+- a rule changed in Rust produces the same behavior in both products;
+- Web and Desktop do not have copies of the solver;
+- an incompatible contract change fails early in the build;
+- an incompatible ABI fails at startup, not during gameplay;
+- affected tasks are executed in the correct order by Nx;
+- each compiler continues to be operated by its native toolchain;
+- the cache never masks external effects or artifacts from another platform;
+- the absence of WebGPU triggers a controlled CPU fallback;
+- the renderer does not need to know the solver's internal implementation;
+- the solver does not need to know about Three.js, the C# engine, or transport protocols.
 
-### 1.4 Identidade e taxonomia
+### 1.4 Identity and taxonomy
 
-O projeto se chama **Grafting Monorepo**, inspirado na ideia de enxertar ou conectar partes que originalmente pertencem a lugares diferentes em um sistema coerente.
+The project is called **Grafting Monorepo**, inspired by the idea of grafting or connecting parts that originally belong to different places into a coherent system.
 
-Convenções:
+Conventions:
 
-| Contexto                         | Nome                  |
+| Context                         | Name                  |
 | -------------------------------- | --------------------- |
-| Nome humano do projeto           | `Grafting Monorepo` |
-| Slug recomendado do repositório | `grafting`          |
-| Prefixo de crates Rust           | `grafting-*`        |
-| Escopo de pacotes npm            | `@grafting/*`       |
-| Namespace raiz C#                | `Grafting.*`        |
-| Ponte entre runtimes/linguagens  | `Isekai`            |
+| Human project name           | `Grafting Monorepo` |
+| Recommended repository slug | `grafting`          |
+| Rust crate prefix           | `grafting-*`        |
+| npm package scope            | `@grafting/*`       |
+| C# root namespace                | `Grafting.*`        |
+| Bridge between runtimes/languages  | `Isekai`            |
 
-**Isekai** é o bounded context que transporta dados, comandos, resultados e ciclos de vida entre “mundos” de execução:
+**Isekai** is the bounded context that transports data, commands, results, and lifecycles between execution "worlds":
 
-- Rust nativo ↔ C#/.NET;
+- native Rust ↔ C#/.NET;
 - Rust/Wasm ↔ TypeScript;
-- memória linear Wasm ↔ TypedArrays;
-- memória nativa ↔ spans/views C#.
+- Wasm linear memory ↔ TypedArrays;
+- native memory ↔ C# spans/views.
 
-O nome não substitui terminologia técnica. APIs públicas continuam explícitas:
+The name does not replace technical terminology. Public APIs remain explicit:
 
 ```text
 engine_submit
@@ -179,31 +179,31 @@ engine_job_poll
 engine_buffer_release
 ```
 
-e não usam nomes metafóricos como `send_to_another_world`.
+and do not use metaphorical names such as `send_to_another_world`.
 
-Limites:
+Boundaries:
 
-- Isekai não contém regra de negócio;
-- Isekai não implementa solver;
-- Isekai não possui renderização;
-- Isekai não é o sistema de multiplayer;
-- Isekai depende do engine; o engine não depende de Isekai;
-- rede continua nos contextos `replication` e `transport`.
+- Isekai contains no business rules;
+- Isekai does not implement the solver;
+- Isekai has no rendering;
+- Isekai is not the multiplayer system;
+- Isekai depends on the engine; the engine does not depend on Isekai;
+- networking remains in the `replication` and `transport` contexts.
 
-Essa disciplina permite usar uma identidade memorável sem prejudicar a leitura técnica do código.
+This discipline allows using a memorable identity without harming the technical readability of the code.
 
-Componentes previstos:
+Planned components:
 
-| Artefato                     | Responsabilidade                         |
-| ---------------------------- | ---------------------------------------- |
-| `grafting-isekai-wasm`     | crate Rust que expõe o core para Wasm   |
-| `grafting-isekai-capi`     | crate Rust que expõe a C ABI nativa     |
-| `@grafting/isekai-wasm`    | pacote npm com Wasm, loader e tipos      |
-| `@grafting/isekai-web`     | cliente TypeScript/Worker idiomático    |
-| `Grafting.Isekai.Interop`  | wrapper C# seguro da biblioteca nativa   |
-| `Grafting.Isekai.Protocol` | tipos C# gerados dos contratos binários |
+| Artifact                     | Responsibility                         |
+| ----------------------------- | ----------------------------------------- |
+| `grafting-isekai-wasm`     | Rust crate that exposes the core to Wasm   |
+| `grafting-isekai-capi`     | Rust crate that exposes the native C ABI     |
+| `@grafting/isekai-wasm`    | npm package with Wasm, loader, and types      |
+| `@grafting/isekai-web`     | idiomatic TypeScript/Worker client    |
+| `Grafting.Isekai.Interop`  | safe C# wrapper for the native library   |
+| `Grafting.Isekai.Protocol` | C# types generated from binary contracts |
 
-No Nx, os nomes de projeto devem continuar únicos, por exemplo:
+In Nx, project names must remain unique, for example:
 
 ```text
 isekai-wasm-bridge
@@ -216,179 +216,180 @@ isekai-dotnet-protocol
 
 ---
 
-## 2. Princípios arquiteturais
+## 2. Architectural principles
 
-### 2.1 Fonte única de verdade
+### 2.1 Single source of truth
 
-Toda lógica que precisa produzir o mesmo significado em Web, Desktop ou servidor DEVE viver no Rust ou em contratos compartilhados.
+All logic that needs to produce the same meaning on Web, Desktop, or server MUST live in Rust or in shared contracts.
 
-TypeScript e C# são hosts:
+TypeScript and C# are hosts:
 
-- coletam input;
-- controlam UI e renderização;
-- operam transporte;
-- convertem erros para a linguagem do host;
-- chamam operações em lote;
-- apresentam resultados.
+- collect input;
+- control UI and rendering;
+- operate transport;
+- convert errors to the host language;
+- call batched operations;
+- present results.
 
-Eles NÃO DEVEM reproduzir regras internas do core.
+They MUST NOT reproduce the core's internal rules.
 
-### 2.2 Meta-orquestração
+### 2.2 Meta-orchestration
 
-Nx será o orquestrador superior, não o substituto dos compiladores.
+Nx will be the higher-level orchestrator, not a replacement for the compilers.
 
-| Ecossistema    | Autoridade nativa             | Papel do Nx                                                         |
+| Ecosystem    | Native authority             | Nx's role                                                         |
 | -------------- | ----------------------------- | ------------------------------------------------------------------- |
-| TypeScript     | pnpm + Vite/tsc/test runner   | ordenar, filtrar afetados e cachear                                 |
-| Rust           | Cargo + rustup + wasm tooling | ordenar targets, declarar inputs/outputs e cachear artefatos finais |
-| C#             | dotnet + MSBuild              | integrar projetos ao grafo e executar targets                       |
-| Python         | uv + Python                   | preparar ambiente e executar pacotes/scripts                        |
-| Contratos      | `flatc`                     | gerar linguagens na ordem correta                                   |
-| Documentação | gerador específico           | orquestrar e validar deriva                                         |
+| TypeScript     | pnpm + Vite/tsc/test runner   | ordering, filtering affected, and caching                                 |
+| Rust           | Cargo + rustup + wasm tooling | ordering targets, declaring inputs/outputs, and caching final artifacts |
+| C#             | dotnet + MSBuild              | integrating projects into the graph and running targets                       |
+| Python         | uv + Python                | preparing the environment and running packages/scripts                       |
+| Contracts      | `flatc`                     | generating languages in the correct order                   |
+| Documentation | dedicated generator           | orchestrating and validating drift                                   |
 
-Nx não resolverá dependências Python, não substituirá Cargo, não compilará C# diretamente e não será a fonte da verdade das dependências desses ecossistemas.
+Nx will not resolve Python dependencies, will not replace Cargo, will not compile C# directly, and will not be the source of truth for those ecosystems' dependencies.
 
-### 2.3 Toolchains nativas e builds nativos
+### 2.3 Native toolchains and native builds
 
-Artefatos dependentes de plataforma DEVEM ser construídos no sistema ou runner correspondente:
+Platform-dependent artifacts MUST be built on the corresponding system or runner:
 
-- Wasm: runner Linux para build normal;
+- Wasm: Linux runner for the normal build;
 - `.dll`: Windows;
 - `.so`: Linux;
 - `.dylib`: macOS;
-- testes gráficos DirectX: Windows com hardware apropriado;
-- testes gráficos Metal: macOS com hardware apropriado.
+- DirectX graphics tests: Windows with appropriate hardware;
+- Metal graphics tests: macOS with appropriate hardware.
 
-Containers PODEM ser usados em CI, serviços auxiliares e ambientes reprodutíveis específicos, mas NÃO DEVEM ser a abstração universal do desenvolvimento ou substituir runners gráficos nativos.
+Containers MAY be used in CI, auxiliary services, and specific reproducible environments, but MUST NOT be the universal abstraction for development or replace native graphics runners.
 
-### 2.4 Performance comprovada
+### 2.4 Proven performance
 
-O projeto NÃO DEVE usar GPU, FlatBuffers, pinning, SharedArrayBuffer ou unsafe apenas por prestígio arquitetural.
+The project MUST NOT use GPU, FlatBuffers, pinning, SharedArrayBuffer, or unsafe code merely for architectural prestige.
 
-Cada otimização importante deve possuir:
+Every major optimization must have:
 
-- benchmark representativo;
-- baseline CPU;
-- medida de upload;
-- medida de compute;
-- medida de readback;
-- tamanho do lote;
-- consumo de memória;
-- comportamento em fallback.
+- a representative benchmark;
+- a CPU baseline;
+- an upload measurement;
+- a compute measurement;
+- a readback measurement;
+- a batch size;
+- memory consumption;
+- fallback behavior.
 
-### 2.5 Portabilidade antes de interop de baixo nível
+### 2.5 Portability before low-level interop
 
-Na primeira versão:
+In the first version:
 
-- dispositivos e buffers de renderização não serão compartilhados com o `wgpu`;
-- recursos GPU do solver serão privados do Rust;
-- resultados atravessarão uma fronteira CPU explícita;
-- interop de recursos externos por D3D12/Vulkan/Metal só poderá entrar após benchmark e ADR.
+- rendering devices and buffers will not be shared with `wgpu`;
+- solver GPU resources will be private to Rust;
+- results will cross an explicit CPU boundary;
+- external resource interop via D3D12/Vulkan/Metal can only be introduced after benchmarking and an ADR.
 
 ---
 
-## 3. Registro resumido de decisões
+## 3. Summary decision log
 
-### 3.1 Decisões `LOCKED`
+### 3.1 `LOCKED` Decisions
 
-| ID      | Decisão                                                                                                                         |
+| ID      | Decision                                                                                                                         |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| DEC-001 | Rust é a fonte única da lógica, matemática e solver proprietário.                                                           |
-| DEC-002 | Nx atua como meta-orquestrador; toolchains nativas permanecem soberanas.                                                         |
-| DEC-003 | pnpm gerencia o workspace Node/TypeScript.                                                                                       |
-| DEC-004 | Cargo gerencia crates, features, targets e dependências Rust.                                                                   |
-| DEC-005 | uv gerencia Python, ambientes e lockfile.                                                                                        |
-| DEC-006 | dotnet/MSBuild gerencia projetos C#.                                                                                             |
-| DEC-007 | O Rust possui os recursos GPU de computação; os hosts possuem os recursos de renderização.                                   |
-| DEC-008 | O backend GPU será baseado em`wgpu`; kernels portáveis serão escritos em WGSL.                                              |
-| DEC-009 | O backend GPU possui fallback CPU funcional.                                                                                     |
-| DEC-010 | Chamadas FFI serão em lote; operações iterativas por entidade são proibidas no hot path.                                     |
-| DEC-011 | A ABI desktop será uma C ABI versionada com handles opacos e tipos de largura fixa.                                             |
-| DEC-012 | ABI, protocolo de rede e versão do produto são eixos de versão separados.                                                     |
-| DEC-013 | FlatBuffers será usado em dados estruturados; arrays numéricos quentes usarão layouts brutos explícitos.                     |
-| DEC-014 | “Zero-copy” não será descrito como propriedade end-to-end.                                                                   |
-| DEC-015 | A Web executará Wasm/simulação/compute em Dedicated Worker.                                                                   |
-| DEC-016 | Multiplayer inicial será replicação autoritativa com journal e snapshots, não Event Sourcing completo.                       |
-| DEC-017 | Builds nativos ocorrerão em runners do sistema de destino.                                                                      |
-| DEC-018 | Código gerado não será obrigatoriamente commitado; geração será uma tarefa determinística.                                |
-| DEC-019 | `.venv` nunca será compartilhado entre Windows, WSL, Linux, macOS ou checkouts diferentes.                                    |
-| DEC-020 | O Global Virtual Store experimental do pnpm não é requisito arquitetural.                                                      |
-| DEC-021 | Exportação do grafo Nx é contexto estrutural derivado, não RAG.                                                              |
-| DEC-022 | `AGENTS.md` será o contrato agnóstico de agente; arquivos específicos de fornecedor serão adaptadores curtos.              |
-| DEC-023 | O projeto se chama Grafting; Isekai é exclusivamente a fronteira de interoperabilidade entre runtimes e linguagens.             |
-| DEC-024 | `AGENTS.md` raiz e local é o contrato operacional canônico por escopo.                                                       |
-| DEC-025 | `.ai/` é a fonte canônica do AI Control Plane: skills, agentes, prompts, policies, workflows, evals, catálogo e roteamento. |
-| DEC-026 | `CLAUDE.md`, `.claude/`, `.codex/` e `.agents/` são adapters de fornecedor e não fontes arquiteturais paralelas.       |
-| DEC-027 | Knowledge & Automation Plane e Graph IR mínimo são P0.                                                                         |
-| DEC-028 | Todo projeto Nx nasce com`project.json`, `README.md`, `AGENTS.md`, metadata de Graph IR e `src/`.                        |
-| DEC-029 | Capacidades, skills, ferramentas e contexto são carregados sob demanda.                                                         |
-| DEC-030 | Agent Skills é o formato base interoperável de skills.                                                                         |
-| DEC-031 | Haverá uma única fonte durável de tarefas; Backlog.md é o default inicial.                                                   |
-| DEC-032 | Cada tarefa possui um único proprietário executor por vez; executores paralelos usam worktrees distintas.                      |
-| DEC-033 | O implementador não pode ser o único revisor da própria mudança.                                                             |
-| DEC-034 | Aprendizado contínuo é evidence-driven, avaliado e approval-gated.                                                             |
-| DEC-035 | A manutenção pós-ferramenta é determinística e não chama modelo.                                                           |
-| DEC-036 | Cache semântico permanece desabilitado por padrão e proibido para código, segurança, incidentes e side effects.              |
-| DEC-037 | Prompts canônicos vivem em`.ai/prompts/`; registros externos são projeções publicadas.                                     |
-| DEC-038 | Integrações externas de IA entram por spike, quarentena, licença, segurança e avaliação.                                   |
-| DEC-039 | Nenhuma integração de IA pode criar outra raiz de workspace, lockfile ou toolchain sem ADR.                                    |
-| DEC-040 | O Grafting Graph IR representa também capacidades, skills, agentes, prompts, ferramentas, políticas, evals, tarefas e runs.    |
-| DEC-041 | O host Web é Next.js (React + SSR/edge); o VTT é uma rota client-only dentro dele, não um app isolado (GATE-001, `docs/adr/ADR-0001-host-web.md`). |
-| DEC-042 | Diferenças de plataforma/ambiente (SO, runtime Web, RID) só podem ser inspecionadas dentro do pacote Polymath por runtime (`polymath` Rust, `@grafting/polymath` TS, `Grafting.Polymath` C# futuro); nenhum outro módulo faz essa inspeção diretamente (`docs/adr/ADR-0006-polymath-platform-abstraction.md`). |
-| DEC-043 | Cliente desktop da V1 é Windows x64 apenas; Linux/macOS permanecem alvos de compilação do core, validados progressivamente, sem cliente publicado na V1 (GATE-003, `docs/adr/ADR-0003-platforms-v1.md`). Expansão futura é absorvida pelo Polymath (DEC-042), não por reescrita do core. |
-| DEC-044 | O caminho autoritativo da V1 exige determinismo de replay na mesma plataforma/build (ordenação de comandos, RNG, DomainEvents, snapshots, state hash); "mesma plataforma" fixa build ID, target, versões de protocolo/schema, features, configuração numérica e algoritmo de RNG. Subsistemas numéricos/GPU usam tolerância matemática; resultados de GPU são validados, canonicalizados e desempatados deterministicamente na CPU antes de tocar o state hash. Renderização/efeitos não autoritativos exigem só determinismo semântico. Bit-a-bit entre plataformas não é requisito da V1; host autoritativo fica fixo a um target por sessão (GATE-005, `docs/adr/ADR-0004-determinism.md`; revisar ao fechar GATE-004/GATE-009). |
-| DEC-045 | Distribuição do monorepo é monolítica: um único workspace, produtos múltiplos como `apps/` distintos, sem repositórios satélite por produto. "Vender" um produto significa empacotar o artefato de build daquele app (`dist/<app>`), não dividir repositórios (GATE-007, `docs/adr/ADR-0007-repo-distribution-strategy.md`). |
-| DEC-046 | Uma capacidade nasce em `libs/domains` ou `packages/` — nunca duplicada dentro de um `app` — sempre que mais de um produto precisa dela ou é razoável prever que vai precisar; um `app` só compõe domínios, apresenta UI e integra o host. Mapa inicial: `narrative` e `session` são domínios genéricos (`libs/domains`); o mapa interativo do VTT é específico do produto, compartilhando só o wrapper `packages/x6-canvas` com o Architecture Studio; Discord e transcrição são integrações externas que consomem contratos, nunca domínios internos (`docs/adr/ADR-0008-libs-boundary-and-domain-map.md`). |
+| DEC-001 | Rust is the single source of proprietary logic, mathematics, and the solver.                                                           |
+| DEC-002 | Nx acts as the meta-orchestrator; native toolchains remain sovereign.                                                         |
+| DEC-003 | pnpm manages the Node/TypeScript workspace.                                                                                       |
+| DEC-004 | Cargo manages Rust crates, features, targets, and dependencies.                                                                   |
+| DEC-005 | uv manages Python, environments, and the lockfile.                                                                                        |
+| DEC-006 | dotnet/MSBuild manages C# projects.                                                                                             |
+| DEC-007 | Rust owns the GPU compute resources; the hosts own the rendering resources.                                                   |
+| DEC-008 | The GPU backend will be based on `wgpu`; portable kernels will be written in WGSL.                                              |
+| DEC-009 | The GPU backend has a functional CPU fallback.                                                                                     |
+| DEC-010 | FFI calls will be batched; per-entity iterative operations are prohibited in the hot path.                                     |
+| DEC-011 | The desktop ABI will be a versioned C ABI with opaque handles and fixed-width types.                                             |
+| DEC-012 | ABI, network protocol, and product version are separate versioning axes.                                                     |
+| DEC-013 | FlatBuffers will be used for structured data; hot numeric arrays will use explicit raw layouts.                     |
+| DEC-014 | "Zero-copy" will not be described as an end-to-end property.                                                                   |
+| DEC-015 | Web will run Wasm/simulation/compute in a Dedicated Worker.                                                                   |
+| DEC-016 | Initial multiplayer will be authoritative replication with a journal and snapshots, not full Event Sourcing.                       |
+| DEC-017 | Native builds will occur on runners of the target system.                                                                      |
+| DEC-018 | Generated code will not be mandatorily committed; generation will be a deterministic task.                                |
+| DEC-019 | `.venv` will never be shared between Windows, WSL, Linux, macOS, or different checkouts.                                    |
+| DEC-020 | pnpm's experimental Global Virtual Store is not an architectural requirement.                                                      |
+| DEC-021 | Nx graph export is derived structural context, not RAG.                                                              |
+| DEC-022 | `AGENTS.md` will be the agent-agnostic contract; vendor-specific files will be short adapters.              |
+| DEC-023 | The project is called Grafting; Isekai is exclusively the interoperability boundary between runtimes and languages.             |
+| DEC-024 | The root and local `AGENTS.md` is the canonical operational contract per scope.                                                       |
+| DEC-025 | `.ai/` is the canonical source of the AI Control Plane: skills, agents, prompts, policies, workflows, evals, catalog, and routing. |
+| DEC-026 | `CLAUDE.md`, `.claude/`, `.codex/`, and `.agents/` are vendor adapters and not parallel architectural sources.       |
+| DEC-027 | Knowledge & Automation Plane and a minimal Graph IR are P0.                                                                         |
+| DEC-028 | Every Nx project is born with `project.json`, `README.md`, `AGENTS.md`, Graph IR metadata, and `src/`.                        |
+| DEC-029 | Capabilities, skills, tools, and context are loaded on demand.                                                         |
+| DEC-030 | Agent Skills is the base interoperable skill format.                                                                         |
+| DEC-031 | There will be a single durable source of tasks; Backlog.md is the initial default.                                                   |
+| DEC-032 | Each task has a single executing owner at a time; parallel executors use distinct worktrees.                      |
+| DEC-033 | The implementer cannot be the sole reviewer of their own change.                                                             |
+| DEC-034 | Continuous learning is evidence-driven, evaluated, and approval-gated.                                                             |
+| DEC-035 | Post-tool maintenance is deterministic and does not call a model.                                                           |
+| DEC-036 | Semantic caching remains disabled by default and is prohibited for code, security, incidents, and side effects.              |
+| DEC-037 | Canonical prompts live in `.ai/prompts/`; external records are published projections.                                     |
+| DEC-038 | External AI integrations enter via spike, quarantine, license, security, and evaluation.                                   |
+| DEC-039 | No AI integration can create another workspace root, lockfile, or toolchain without an ADR.                                    |
+| DEC-040 | The Grafting Graph IR also represents capabilities, skills, agents, prompts, tools, policies, evals, tasks, and runs.    |
+| DEC-041 | The Web host is Next.js (React + SSR/edge); the VTT is a client-only route within it, not a standalone app (GATE-001, `docs/adr/ADR-0001-host-web.md`). |
+| DEC-042 | Platform/environment differences (OS, Web runtime, RID) may only be inspected inside the Polymath package per runtime (`polymath` Rust, `@grafting/polymath` TS, `Grafting.Polymath` C# in the future); no other module performs this inspection directly (`docs/adr/ADR-0006-polymath-platform-abstraction.md`). |
+| DEC-043 | The V1 desktop client is Windows x64 only; Linux/macOS remain core compilation targets, validated progressively, with no published client in V1 (GATE-003, `docs/adr/ADR-0003-platforms-v1.md`). Future expansion is absorbed by Polymath (DEC-042), not by rewriting the core. |
+| DEC-044 | The V1 authoritative path requires replay determinism on the same platform/build (command ordering, RNG, DomainEvents, snapshots, state hash); "same platform" fixes build ID, target, protocol/schema versions, features, numeric configuration, and RNG algorithm. Numeric/GPU subsystems use mathematical tolerance; GPU results are validated, canonicalized, and deterministically tie-broken on the CPU before touching the state hash. Non-authoritative rendering/effects require only semantic determinism. Bit-for-bit cross-platform matching is not a V1 requirement; the authoritative host stays fixed to one target per session (GATE-005, `docs/adr/ADR-0004-determinism.md`; to be reviewed when closing GATE-004/GATE-009). |
+| DEC-045 | Monorepo distribution is monolithic: a single workspace, multiple products as distinct `apps/`, with no satellite repositories per product. "Selling" a product means packaging that app's build artifact (`dist/<app>`), not splitting repositories (GATE-007, `docs/adr/ADR-0007-repo-distribution-strategy.md`). |
+| DEC-046 | A capability is born in `libs/domains` or `packages/` — never duplicated inside an `app` — whenever more than one product needs it or it is reasonable to foresee that it will; an `app` only composes domains, presents UI, and integrates the host. Initial map: `narrative` and `session` are generic domains (`libs/domains`); the VTT's interactive map is product-specific, sharing only the `packages/x6-canvas` wrapper with the Architecture Studio; Discord and transcription are external integrations that consume contracts, never internal domains (`docs/adr/ADR-0008-libs-boundary-and-domain-map.md`). |
+| DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
 
-### 3.2 Decisões `PROVISIONAL`
+### 3.2 `PROVISIONAL` Decisions
 
-| ID       | Decisão a validar                                                                            |
+| ID       | Decision to validate                                                                            |
 | -------- | --------------------------------------------------------------------------------------------- |
-| PROV-001 | Usar o plugin oficial`@nx/dotnet`, atualmente sujeito a validação de maturidade no spike. |
-| PROV-002 | Usar`wasm-pack` como empacotador inicial do binding Wasm.                                   |
-| PROV-003 | Usar FlatBuffers para Commands, DomainEvents, ReplicationDeltas e Snapshots.                  |
-| PROV-004 | Manter um único`uv.lock` para os pacotes Python compatíveis do workspace.                 |
-| PROV-005 | Usar uma única versão de produto enquanto os artefatos forem internos.                      |
-| PROV-006 | Manter o`wgpu::Device` do Web dentro do mesmo Worker que possui a instância Wasm.          |
-| PROV-007 | Usar Bifrost como gateway central, inicialmente por contêiner pinado ou serviço externo.    |
-| PROV-008 | Usar BAML como compilador tipado de prompts.                                                  |
-| PROV-009 | Usar Langfuse para tracing, datasets e versões publicadas de prompts.                        |
-| PROV-010 | Usar Promptfoo para evals rápidas e regressões.                                             |
-| PROV-011 | Usar LangMem para extração e consolidação de learning candidates.                         |
-| PROV-012 | Usar GEPA/DSPy para otimização offline de variantes.                                        |
-| PROV-013 | Usar LLMLingua somente para compressão seletiva de conteúdo não normativo.                 |
-| PROV-014 | Usar Serena e ast-grep como complementos de inteligência de repositório.                    |
+| PROV-001 | Use the official `@nx/dotnet` plugin, currently subject to maturity validation in the spike. |
+| PROV-002 | Use `wasm-pack` as the initial packager for the Wasm binding.                                   |
+| PROV-003 | Use FlatBuffers for Commands, DomainEvents, ReplicationDeltas, and Snapshots.                  |
+| PROV-004 | Maintain a single `uv.lock` for the workspace's compatible Python packages.                 |
+| PROV-005 | Use a single product version while artifacts remain internal.                      |
+| PROV-006 | Keep the Web `wgpu::Device` inside the same Worker that holds the Wasm instance.          |
+| PROV-007 | Use Bifrost as the central gateway, initially as a pinned container or external service.    |
+| PROV-008 | Use BAML as the typed prompt compiler.                                                                  |
+| PROV-009 | Use Langfuse for tracing, datasets, and published prompt versions.                        |
+| PROV-010 | Use Promptfoo for quick evals and regressions.                                             |
+| PROV-011 | Use LangMem for extracting and consolidating learning candidates.                         |
+| PROV-012 | Use GEPA/DSPy for offline optimization of variants.                                        |
+| PROV-013 | Use LLMLingua only for selective compression of non-normative content.                 |
+| PROV-014 | Use Serena and ast-grep as complements to repository intelligence.                    |
 
-### 3.3 Decisões `OPEN`
+### 3.3 `OPEN` Decisions
 
-| Gate     | Decisão humana necessária                                        | Impacto                                              |
-| -------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
-| GATE-002 | Engine C#: Unity, Godot C#, MonoGame, Stride ou engine própria    | integração nativa, packaging e ownership de thread — **adiado formalmente até haver um projeto de jogo C# concreto; ver `docs/adr/ADR-0002-engine-desktop.md`. Não bloqueia o desenvolvimento genérico de `isekai-capi`, apenas o scaffold do app desktop e o wrapper específico da engine.** |
-| GATE-004 | Linguagem do host do servidor autoritativo                         | árvore futura e deployment — **adiado formalmente para o início da Fase 6/Epic H; ver `docs/adr/ADR-0005-authoritative-host-deferral.md`.** |
-| GATE-006 | Política de suporte quando WebGPU estiver indisponível           | UX, fallback e requisitos mínimos                   |
-| GATE-008 | Licença e política de código proprietário                      | publicação e distribuição de símbolos           |
-| GATE-009 | Persistência do multiplayer                                       | journal, snapshots e operação                      |
+| Gate     | Human decision needed                        | Impact                                              |
+| -------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
+| GATE-002 | C# engine: Unity, Godot C#, MonoGame, Stride, or a custom engine    | native integration, packaging, and thread ownership — **formally deferred until there is a concrete C# game project; see `docs/adr/ADR-0002-engine-desktop.md`. Does not block the generic development of `isekai-capi`, only the desktop app scaffold and the engine-specific wrapper.** |
+| GATE-004 | Authoritative server host language                         | future tree and deployment — **formally deferred to the start of Phase 6/Epic H; see `docs/adr/ADR-0005-authoritative-host-deferral.md`.** |
+| GATE-006 | Support policy when WebGPU is unavailable           | UX, fallback, and minimum requirements                   |
+| GATE-008 | Proprietary code license and policy                      | publication and distribution of symbols           |
+| GATE-009 | Multiplayer persistence                                       | journal, snapshots, and operation                      |
 
-`GATE-001` foi fechado — ver DEC-041 e `docs/adr/ADR-0001-host-web.md`.
-`GATE-003` foi fechado — ver DEC-043 e `docs/adr/ADR-0003-platforms-v1.md`.
-`GATE-005` foi fechado — ver DEC-044 e `docs/adr/ADR-0004-determinism.md`.
-`GATE-007` foi fechado — ver DEC-045 e `docs/adr/ADR-0007-repo-distribution-strategy.md`.
+`GATE-001` has been closed — see DEC-041 and `docs/adr/ADR-0001-host-web.md`.
+`GATE-003` has been closed — see DEC-043 and `docs/adr/ADR-0003-platforms-v1.md`.
+`GATE-005` has been closed — see DEC-044 and `docs/adr/ADR-0004-determinism.md`.
+`GATE-007` has been closed — see DEC-045 and `docs/adr/ADR-0007-repo-distribution-strategy.md`.
 
-Nenhum gate impede criar provas de conceito isoladas. Dos gates que bloqueavam o scaffold definitivo das aplicações, apenas `GATE-002` segue aberto (GATE-001 e GATE-003 fechados).
+No gate prevents creating isolated proofs of concept. Of the gates that were blocking the definitive scaffold of the applications, only `GATE-002` remains open (GATE-001 and GATE-003 closed).
 
 ---
 
-## 4. Arquitetura lógica
+## 4. Logical architecture
 
-### 4.1 Visão geral
+### 4.1 Overview
 
 ```mermaid
 flowchart TB
     Web["Web VTT<br/>TypeScript + Three.js"]
     Desktop["Desktop Game<br/>C# + engine"]
-    Isekai["Isekai<br/>Wasm e C ABI"]
-    Core["Rust Core único<br/>domínio + solver"]
-    Backends["Compute backends<br/>CPU e wgpu"]
+    Isekai["Isekai<br/>Wasm and C ABI"]
+    Core["Single Rust Core<br/>domain + solver"]
+    Backends["Compute backends<br/>CPU and wgpu"]
 
     Web --> Isekai
     Desktop --> Isekai
@@ -396,280 +397,281 @@ flowchart TB
     Core --> Backends
 ```
 
-### 4.2 Camadas do motor
+### 4.2 Engine layers
 
 #### `domain-core`
 
-Responsável por:
+Responsible for:
 
-- regras de negócio;
-- estado autoritativo;
-- máquina de estados;
-- validação de Commands;
-- aplicação de mudanças;
-- geração de DomainEvents;
-- RNG controlado;
-- hashes de estado;
-- APIs independentes de transporte e renderização.
+- business rules;
+- authoritative state;
+- state machine;
+- Command validation;
+- applying changes;
+- generating DomainEvents;
+- controlled RNG;
+- state hashes;
+- APIs independent of transport and rendering.
 
-Não pode depender de:
+Cannot depend on:
 
 - Three.js;
 - C#;
 - Web APIs;
 - sockets;
-- banco de dados;
+- database;
 - `wgpu`;
-- sistema de arquivos do host;
-- relógio global não injetado.
+- the host's file system;
+- a non-injected global clock.
 
-#### `polymath` (Rust) / `@grafting/polymath` (TypeScript) / `Grafting.Polymath` (C#, futuro)
+#### `polymath` (Rust) / `@grafting/polymath` (TypeScript) / `Grafting.Polymath` (C#, future)
 
-Camada de infraestrutura, não de domínio (DEC-042). Responsável por:
+Infrastructure layer, not a domain layer (DEC-042). Responsible for:
 
-- centralizar toda inspeção de SO/runtime/RID (`polymath::os` em Rust: paths, extensão de
-  lib dinâmica `.dll`/`.so`/`.dylib`, dirs de config/cache/temp, diferenças de
-  processo/thread; `@grafting/polymath`'s `env`: Node vs. Edge vs. Browser);
-- expor fatos de capacidade gráfica ao restante do sistema (`polymath::gpu` em Rust:
-  quais backends o SO/driver expõe — Vulkan/DX12/Metal; `@grafting/polymath`'s `gpu`:
-  suporte a WebGPU no navegador) e de Worker (`@grafting/polymath`'s `worker`:
+- centralizing all OS/runtime/RID inspection (`polymath::os` in Rust: paths, dynamic
+  library extension `.dll`/`.so`/`.dylib`, config/cache/temp dirs, process/thread
+  differences; `@grafting/polymath`'s `env`: Node vs. Edge vs. Browser);
+- exposing graphics capability facts to the rest of the system (`polymath::gpu` in Rust:
+  which backends the OS/driver exposes — Vulkan/DX12/Metal; `@grafting/polymath`'s `gpu`:
+  WebGPU support in the browser) and Worker facts (`@grafting/polymath`'s `worker`:
   `SharedArrayBuffer`/Worker);
-- servir como a única fronteira que `compute-wgpu`, `isekai-capi`, `isekai-wasm` e os
-  hosts consultam para decisões dependentes de plataforma.
+- serving as the single boundary that `compute-wgpu`, `isekai-capi`, `isekai-wasm`, and the
+  hosts consult for platform-dependent decisions.
 
-Não pode conter:
+Cannot contain:
 
-- lógica de domínio ou regra de negócio (isso duplicaria DEC-001);
-- o contrato de compute em si (isso continua em `compute-api`) — Polymath fornece fatos
-  de ambiente que `compute-wgpu` consome, nunca o inverso;
-- orquestração de Worker/Wasm (isso continua em `isekai-wasm`/`packages/isekai-web-client`).
+- domain logic or business rules (that would duplicate DEC-001);
+- the compute contract itself (that remains in `compute-api`) — Polymath supplies environment
+  facts that `compute-wgpu` consumes, never the other way around;
+- Worker/Wasm orchestration (that remains in `isekai-wasm`/`packages/isekai-web-client`).
 
-Nenhum outro módulo deve inspecionar `cfg(target_os)`, `navigator.gpu`,
-`process.platform` ou RID diretamente fora de Polymath (DEC-042).
+No other module should inspect `cfg(target_os)`, `navigator.gpu`,
+`process.platform`, or RID directly outside Polymath (DEC-042).
 
 #### `compute-api`
 
-Define:
+Defines:
 
-- operações matemáticas;
-- tipos de job;
-- capacidades;
-- políticas de fallback;
-- contratos entre domínio e backends;
-- planos de execução em lote.
+- mathematical operations;
+- job types;
+- capabilities;
+- fallback policies;
+- contracts between the domain and backends;
+- batch execution plans.
 
-Não deve expor tipos concretos do `wgpu`.
+Must not expose concrete `wgpu` types.
 
 #### `compute-cpu`
 
-Responsável por:
+Responsible for:
 
-- implementação de referência;
-- execução em máquinas sem WebGPU;
-- testes diferenciais;
-- verificação final de resultados;
-- workloads pequenos em que a GPU seria mais lenta.
+- the reference implementation;
+- execution on machines without WebGPU;
+- differential tests;
+- final result verification;
+- small workloads where the GPU would be slower.
 
 #### `compute-wgpu`
 
-Responsável por:
+Responsible for:
 
-- criação do adapter/device/queue;
+- adapter/device/queue creation;
 - pipelines;
-- cache de pipelines;
-- buffers persistentes;
-- arenas de upload;
-- readback assíncrono;
-- kernels WGSL;
+- pipeline cache;
+- persistent buffers;
+- upload arenas;
+- asynchronous readback;
+- WGSL kernels;
 - capability negotiation;
-- recuperação de device loss;
-- métricas de upload/dispatch/readback.
+- device loss recovery;
+- upload/dispatch/readback metrics.
 
 #### `projection-core`
 
-Responsável por:
+Responsible for:
 
-- transformar estado/eventos autoritativos em visão permitida para cada cliente;
-- esconder informações privadas;
-- produzir `ReplicationDelta`;
-- não conhecer WebSocket, UDP, TCP ou autenticação concreta.
+- transforming authoritative state/events into a view allowed for each client;
+- hiding private information;
+- producing `ReplicationDelta`;
+- not knowing about WebSocket, UDP, TCP, or concrete authentication.
 
 #### `isekai-wasm`
 
-Responsável por:
+Responsible for:
 
-- adaptar offsets e comprimentos da memória linear;
-- expor handles numéricos;
-- inicialização assíncrona;
-- integração com Worker;
-- converter erros em códigos/estruturas estáveis;
-- nunca duplicar regras.
+- adapting linear memory offsets and lengths;
+- exposing numeric handles;
+- asynchronous initialization;
+- Worker integration;
+- converting errors into stable codes/structures;
+- never duplicating rules.
 
 #### `isekai-capi`
 
-Responsável por:
+Responsible for:
 
-- exports `extern "C"`;
-- ABI versionada;
-- validação de ponteiros;
-- `catch_unwind` na fronteira;
-- handles generacionais;
+- `extern "C"` exports;
+- versioned ABI;
+- pointer validation;
+- `catch_unwind` at the boundary;
+- generational handles;
 - status codes;
-- funções de criação/liberação;
-- nunca expor `Vec`, `String`, trait object ou enum Rust.
+- creation/release functions;
+- never exposing `Vec`, `String`, trait objects, or Rust enums.
 
-### 4.3 Domínios futuros
+### 4.3 Future domains
 
-Domínios como física, pathfinding, IA e otimização devem ser adicionados por feature slice.
+Domains such as physics, pathfinding, AI, and optimization should be added by feature slice.
 
-Um domínio pode conter:
+A domain may contain:
 
-- contratos próprios;
-- crate Rust;
-- testes;
+- its own contracts;
+- a Rust crate;
+- tests;
 - benchmarks;
-- documentação local;
-- integração com `domain-core` ou `compute-api`.
+- local documentation;
+- integration with `domain-core` or `compute-api`.
 
-Não devem ser criados diretórios vazios antecipadamente. O gerador local criará cada slice quando houver uma feature real.
+Empty directories must not be created ahead of time. The local generator will create each slice when a real feature exists.
 
-### 4.4 Regra de fronteira `libs/` e domínios multi-produto (DEC-046)
+### 4.4 `libs/` boundary rule and multi-product domains (DEC-046)
 
-Uma capacidade nasce em `libs/domains` (Rust) ou `packages/` (TypeScript) —
-nunca duplicada dentro de um `app` — sempre que mais de um produto precisa
-dela, ou é razoável prever que vai precisar. Um `app` (`apps/*`) só deve
-conter: composição de domínios, apresentação/UI e integração específica
-daquele host. Isso estende DEC-001 (Rust como fonte única de lógica) para o
-eixo multi-produto: DEC-001 impede duplicar lógica Rust em outra linguagem;
-esta regra impede duplicar lógica de domínio entre produtos diferentes do
-mesmo monorepo (DEC-045, monorepo único).
+A capability is born in `libs/domains` (Rust) or `packages/` (TypeScript) —
+never duplicated inside an `app` — whenever more than one product needs
+it, or it is reasonable to foresee that it will. An `app` (`apps/*`) should
+only contain: domain composition, presentation/UI, and integration specific
+to that host. This extends DEC-001 (Rust as the single source of logic) to
+the multi-product axis: DEC-001 prevents duplicating Rust logic in another
+language; this rule prevents duplicating domain logic between different
+products of the same monorepo (DEC-045, single monorepo).
 
-Mapa inicial de domínios (ver `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
+Initial domain map (see `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
 
-| Capacidade | Classificação | Onde nasce |
+| Capability | Classification | Where it is born |
 | --- | --- | --- |
-| Narrativa / criação de história | domínio genérico | `libs/domains/narrative` |
-| Organização de sessão / campanha | domínio genérico | `libs/domains/session` |
-| Mapa interativo (X6) do VTT | específico do produto + wrapper genérico | `apps/web-vtt` consome `packages/x6-canvas`, compartilhado com `apps/architecture-studio` (seção 16.8) |
-| Bot Discord | integração externa | serviço próprio consumindo contratos de `session`/`narrative`, nunca internals |
-| Transcrição de sessão | integração externa (provável Python) | `python/` ou serviço dedicado, alimentando `narrative` por contrato |
+| Narrative / story creation | generic domain | `libs/domains/narrative` |
+| Session / campaign organization | generic domain | `libs/domains/session` |
+| VTT interactive map (X6) | product-specific + generic wrapper | `apps/web-vtt` consumes `packages/x6-canvas`, shared with `apps/architecture-studio` (section 16.8) |
+| Discord bot | external integration | its own service consuming `session`/`narrative` contracts, never internals |
+| Session transcription | external integration (likely Python) | `python/` or a dedicated service, feeding `narrative` via contract |
 
-O mapa acima segue a regra da seção 4.3: `narrative` e `session` nascem
-porque já existe intenção declarada de mais de um produto precisar deles; o
-mapa do VTT permanece dentro do app até um segundo produto exigir mapa.
+The map above follows the rule in section 4.3: `narrative` and `session` are
+born because there is already a declared intention for more than one
+product to need them; the VTT map remains within the app until a second
+product requires a map.
 
 ---
 
-## 5. Decision Gates a fechar
+## 5. Decision Gates to close
 
-Esta seção deve ser respondida pelo proprietário antes do scaffold final. O agente pode preparar comparações e spikes, mas não escolher silenciosamente.
+This section must be answered by the owner before the final scaffold. The agent can prepare comparisons and spikes, but cannot choose silently.
 
-### GATE-001 — Host Web — FECHADO
+### GATE-001 — Web Host — CLOSED
 
-Status: **FECHADO em 2026-07-26.** Decisão registrada em DEC-041 e detalhada em
+Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-041 and detailed in
 `docs/adr/ADR-0001-host-web.md`.
 
-Perguntas que motivaram a decisão:
+Questions that drove the decision:
 
-- O VTT é uma SPA cliente ou precisa de SSR?
-- Haverá páginas públicas indexáveis?
-- A aplicação precisa de rotas de servidor do mesmo framework?
-- O deploy será estático, Node ou edge?
+- Is the VTT a client SPA or does it need SSR?
+- Will there be indexable public pages?
+- Does the application need server routes from the same framework?
+- Will the deploy be static, Node, or edge?
 
-Decisão: **Next.js (React + SSR/edge)**. O VTT é apenas uma das páginas planejadas do
-produto; as demais páginas se beneficiam de SSR/rotas de servidor no mesmo framework.
+Decision: **Next.js (React + SSR/edge)**. The VTT is just one of the product's planned
+pages; the other pages benefit from SSR/server routes in the same framework.
 
-O default originalmente cogitado nesta seção (React + Vite + Three.js como SPA isolada,
-com serviços de backend separados) foi descartado por assumir um produto de página única,
-o que não é o caso. O bootstrap do Worker/Wasm (DEC-015) deve ocorrer dentro de uma rota
-client-only do Next.js, sem participar do SSR.
+The default originally considered in this section (React + Vite + Three.js as an isolated
+SPA, with separate backend services) was discarded because it assumed a single-page
+product, which is not the case. The Worker/Wasm bootstrap (DEC-015) must occur within a
+client-only Next.js route, without participating in SSR.
 
-### GATE-002 — Engine Desktop
+### GATE-002 — Desktop Engine
 
-Status: **aberto, adiado formalmente até haver um projeto de jogo C# concreto** (ver
-`docs/adr/ADR-0002-engine-desktop.md`). Não há hoje um jogo ou engine específica a
-avaliar; forçar essa escolha agora seria decidir sem evidência.
+Status: **open, formally deferred until there is a concrete C# game project** (see
+`docs/adr/ADR-0002-engine-desktop.md`). There is currently no specific game or engine to
+evaluate; forcing this choice now would mean deciding without evidence.
 
-A escolha, quando retomada, precisa avaliar:
+The choice, when resumed, needs to evaluate:
 
-- possibilidade de distribuir uma DLL Rust;
-- modelo de threading;
-- suporte a P/Invoke;
-- controle de packaging por RID;
-- política de plugins nativos;
-- acesso a janela/input;
-- restrições de licença;
-- capacidade de rodar testes sem editor.
+- the possibility of distributing a Rust DLL;
+- the threading model;
+- P/Invoke support;
+- packaging control per RID;
+- native plugin policy;
+- window/input access;
+- license restrictions;
+- the ability to run tests without an editor.
 
-O core não deve assumir Unity, Godot ou outra engine até o gate fechar.
+The core must not assume Unity, Godot, or another engine until the gate closes.
 
-O adiamento não bloqueia trabalho genérico: `isekai-capi` (C ABI, handles opacos,
-DEC-011) é projetada para ser agnóstica de engine por construção, e pode ser desenvolvida
-e validada com um harness .NET genérico (console app ou testes com P/Invoke direto),
-sem escolher uma engine. O que fica bloqueado é o scaffold do app desktop em si e o
-wrapper específico de threading/janela/input de uma engine (seção 12.6).
+The deferral does not block generic work: `isekai-capi` (C ABI, opaque handles,
+DEC-011) is designed to be engine-agnostic by construction, and can be developed
+and validated with a generic .NET harness (console app or tests with direct P/Invoke),
+without choosing an engine. What remains blocked is the desktop app scaffold itself and the
+engine-specific threading/window/input wrapper (section 12.6).
 
-### GATE-003 — Plataformas V1 — FECHADO
+### GATE-003 — V1 Platforms — CLOSED
 
-Status: **FECHADO em 2026-07-26.** Decisão registrada em DEC-043 e detalhada em
+Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-043 and detailed in
 `docs/adr/ADR-0003-platforms-v1.md`.
 
-Decisão (default pragmático originalmente sugerido, adotado sem alteração):
+Decision (pragmatic default originally suggested, adopted unchanged):
 
-- Web: navegadores modernos com WebAssembly;
-- GPU Web: WebGPU quando disponível;
+- Web: modern browsers with WebAssembly;
+- Web GPU: WebGPU when available;
 - Desktop V1: Windows x64;
-- Linux/macOS: core compilável e validado progressivamente, sem cliente publicado na
-  primeira milestone.
+- Linux/macOS: core compilable and progressively validated, with no published client in
+  the first milestone.
 
-Justificativa: o pacote Polymath (DEC-042) já isola as diferenças de plataforma, então
-restringir o cliente desktop a Windows na V1 é uma decisão de sequenciamento de
-publicação, não uma limitação arquitetural — Linux/macOS entram depois como novas
-implementações dentro de Polymath, sem reescrever core ou hosts.
+Rationale: the Polymath package (DEC-042) already isolates platform differences, so
+restricting the desktop client to Windows in V1 is a publication sequencing decision,
+not an architectural limitation — Linux/macOS come later as new implementations
+inside Polymath, without rewriting the core or hosts.
 
-### GATE-004 — Servidor autoritativo
+### GATE-004 — Authoritative server
 
-Opções aceitáveis:
+Acceptable options:
 
-- host TypeScript/Node carregando Wasm ou addon nativo;
-- host C# carregando biblioteca nativa;
-- host Rust chamando o core diretamente.
+- a TypeScript/Node host loading Wasm or a native addon;
+- a C# host loading a native library;
+- a Rust host calling the core directly.
 
-Critério principal:
+Main criterion:
 
-- operação, observabilidade e escala do host;
-- não a linguagem do solver, que continuará Rust.
+- host operation, observability, and scale;
+- not the solver's language, which will remain Rust.
 
-### GATE-005 — Determinismo — FECHADO
+### GATE-005 — Determinism — CLOSED
 
-Status: **FECHADO em 2026-07-26.** Decisão registrada em DEC-044 e detalhada em
+Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-044 and detailed in
 `docs/adr/ADR-0004-determinism.md`.
 
-Níveis diferenciados (referência):
+Differentiated levels (reference):
 
-1. determinismo semântico;
-2. determinismo de replay em mesma plataforma;
-3. determinismo bit-a-bit entre plataformas;
-4. validade matemática dentro de tolerância.
+1. semantic determinism;
+2. same-platform replay determinism;
+3. cross-platform bit-for-bit determinism;
+4. mathematical validity within tolerance.
 
-GPU floating-point não deve ser usada para decisões que exigem igualdade bit-a-bit entre máquinas. Um solver pode usar GPU para busca e CPU para validar a solução final.
+Floating-point GPU must not be used for decisions that require bit-for-bit equality between machines. A solver may use GPU for search and CPU to validate the final solution.
 
-Decisão: a V1 adota **nível 2 (replay na mesma plataforma/build)** para o caminho
-autoritativo (ordenação de comandos, RNG, DomainEvents, snapshots, state hash). "Mesma
-plataforma" fixa build ID, target, versões de protocolo/schema, features, configuração
-numérica e algoritmo de RNG. Subsistemas numéricos e GPU usam **nível 4 (tolerância
-matemática)**; resultados de GPU nunca entram brutos no state hash — são validados,
-canonicalizados e desempatados deterministicamente na CPU antes de tocar o caminho
-autoritativo. Renderização e efeitos não autoritativos exigem só **nível 1 (semântico)**.
-**Nível 3 (bit-a-bit entre plataformas) não é requisito da V1**; o host autoritativo fica
-fixo a um único target durante uma sessão. Esta decisão será revisada ao fechar
-`GATE-004` e `GATE-009`.
+Decision: V1 adopts **level 2 (replay on the same platform/build)** for the
+authoritative path (command ordering, RNG, DomainEvents, snapshots, state hash). "Same
+platform" fixes build ID, target, protocol/schema versions, features, numeric
+configuration, and RNG algorithm. Numeric and GPU subsystems use **level 4 (mathematical
+tolerance)**; GPU results never enter the state hash raw — they are validated,
+canonicalized, and deterministically tie-broken on the CPU before touching the
+authoritative path. Non-authoritative rendering and effects require only **level 1
+(semantic)**. **Level 3 (cross-platform bit-for-bit) is not a V1 requirement**; the
+authoritative host stays fixed to a single target during a session. This decision will be
+reviewed when closing `GATE-004` and `GATE-009`.
 
 ---
 
-## 6. Topologia física proposta
+## 6. Proposed physical topology
 
-### 6.1 Árvore inicial
+### 6.1 Initial tree
 
 ```text
 /
@@ -770,42 +772,42 @@ fixo a um único target durante uma sessão. Esta decisão será revisada ao fec
 └── dist/
 ```
 
-Diretórios associados a decisões `OPEN` não devem ser populados definitivamente antes do gate correspondente. A árvore é uma direção; não é autorização para criar todos os diretórios vazios.
+Directories associated with `OPEN` decisions must not be definitively populated before the corresponding gate closes. The tree is a direction; it is not authorization to create every empty directory.
 
-Todo projeto Nx criado deve conter:
+Every Nx project created must contain:
 
 ```text
 project.json
 README.md
 AGENTS.md
-metadata de Graph IR
+Graph IR metadata
 src/
 ```
 
-`CLAUDE.md` local só será criado quando existir necessidade específica do adapter Claude.
+A local `CLAUDE.md` will only be created when there is a specific need for the Claude adapter.
 
-### 6.2 Regra correta para manifests
+### 6.2 Correct rule for manifests
 
-Haverá uma única **raiz de workspace e lockfile** por ecossistema, mas manifests locais continuarão existindo quando a toolchain exigir.
+There will be a single **workspace root and lockfile** per ecosystem, but local manifests will continue to exist when the toolchain requires them.
 
-| Ecossistema | Único na raiz                              | Permitido/necessário nos membros                                             |
+| Ecosystem | Unique at the root                              | Allowed/required in members                                             |
 | ----------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| Rust        | workspace`Cargo.toml`, `Cargo.lock`     | um`Cargo.toml` por crate                                                    |
-| Node        | `pnpm-workspace.yaml`, `pnpm-lock.yaml` | um`package.json` por pacote/app                                             |
-| Python      | workspace`pyproject.toml`, `uv.lock`    | um`pyproject.toml` por membro empacotado                                    |
-| .NET        | `System.sln`, props e packages centrais   | um`.csproj` e, se lock mode for adotado, `packages.lock.json` por projeto |
+| Rust        | workspace `Cargo.toml`, `Cargo.lock`     | one `Cargo.toml` per crate                                                    |
+| Node        | `pnpm-workspace.yaml`, `pnpm-lock.yaml` | one `package.json` per package/app                                             |
+| Python      | workspace `pyproject.toml`, `uv.lock`    | one `pyproject.toml` per packaged member                                    |
+| .NET        | `System.sln`, central props and packages   | one `.csproj` and, if lock mode is adopted, `packages.lock.json` per project |
 
-É proibido criar:
+It is forbidden to create:
 
-- um segundo `Cargo.lock` dentro de crate membro;
-- um segundo `pnpm-lock.yaml`;
-- outro workspace uv independente sem ADR;
-- solução .NET paralela sem motivo explícito;
-- ambientes virtuais commitados.
+- a second `Cargo.lock` inside a member crate;
+- a second `pnpm-lock.yaml`;
+- another independent uv workspace without an ADR;
+- a parallel .NET solution without explicit reason;
+- committed virtual environments.
 
-### 6.3 Saídas determinísticas
+### 6.3 Deterministic outputs
 
-Artefatos consumíveis devem convergir para:
+Consumable artifacts must converge into:
 
 ```text
 dist/
@@ -821,98 +823,97 @@ dist/
 └── docs/
 ```
 
-Diretórios internos de compilação não são artefatos públicos:
+Internal build directories are not public artifacts:
 
 - `target/`;
 - `bin/`;
 - `obj/`;
 - `.venv/`;
 - `node_modules/`;
-- caches locais.
+- local caches.
 
-O Nx deve cachear artefatos finais ou saídas determinísticas, não ambientes inteiros.
+Nx must cache final artifacts or deterministic outputs, not entire environments.
 
 ---
 
-## 7. Orquestração Nx
+## 7. Nx orchestration
 
-### 7.1 Papel
+### 7.1 Role
 
-Nx deve:
+Nx must:
 
-- conhecer projetos;
-- conhecer dependências;
-- criar o DAG de tarefas;
-- executar em ordem;
-- paralelizar tarefas independentes;
-- calcular hashes a partir de inputs;
-- restaurar outputs e logs;
-- executar somente afetados em PRs;
-- fornecer generators locais;
-- exportar o grafo estrutural.
+- know the projects;
+- know the dependencies;
+- build the task DAG;
+- execute in order;
+- parallelize independent tasks;
+- compute hashes from inputs;
+- restore outputs and logs;
+- run only affected tasks in PRs;
+- provide local generators;
+- export the structural graph.
 
-Nx não deve:
+Nx must not:
 
-- instalar toolchains durante cada target;
-- sincronizar `.venv` em múltiplas tarefas paralelas;
-- esconder dependências externas não declaradas;
-- cachear ações com side effects;
-- fingir hermeticidade que o workspace não possui.
+- install toolchains during every target;
+- sync `.venv` across multiple parallel tasks;
+- hide undeclared external dependencies;
+- cache actions with side effects;
+- fake hermeticity the workspace doesn't have.
 
-### 7.2 Regra de cache
+### 7.2 Cache rule
 
-Uma tarefa só pode usar `cache: true` quando:
+A task can only use `cache: true` when:
 
 \[
 f(\text, \text, \text)
 ======================
-
-\text{outputs determinísticos}
+\text{deterministic outputs}
 \]
 
-Targets cacheáveis:
+Cacheable targets:
 
 - compile;
 - build;
 - lint;
-- unit test determinístico;
+- deterministic unit test;
 - codegen;
-- documentação gerada;
-- benchmarks somente quando tratados como artefatos, não como comparação temporal absoluta.
+- generated documentation;
+- benchmarks only when treated as artifacts, not as an absolute time comparison.
 
-Targets não cacheáveis:
+Non-cacheable targets:
 
 - install/bootstrap;
 - deploy;
 - publish;
-- assinatura;
-- migração de banco;
-- chamadas a serviços externos;
-- testes end-to-end contra ambiente mutável;
-- atualização de lockfile;
-- download mutável sem checksum.
+- signing;
+- database migration;
+- calls to external services;
+- end-to-end tests against a mutable environment;
+- lockfile update;
+- mutable download without checksum.
 
-O Nx restaura tanto arquivos declarados quanto output de terminal. Inputs e outputs precisam ser ajustados por projeto, conforme a documentação oficial:
+Nx restores both declared files and terminal output. Inputs and outputs need to be adjusted per project, per the official documentation:
 
 - [https://nx.dev/docs/features/cache-task-results](https://nx.dev/docs/features/cache-task-results)
 - [https://nx.dev/docs/reference/project-configuration](https://nx.dev/docs/reference/project-configuration)
 
-### 7.3 Convenção mínima de targets
+### 7.3 Minimal target convention
 
-Cada projeto aplicável deveria expor:
+Every applicable project should expose:
 
-| Target           | Função                       |
+| Target           | Function                       |
 | ---------------- | ------------------------------ |
-| `format:check` | verificar formatação         |
-| `lint`         | análise estática             |
-| `typecheck`    | checagem de tipos              |
-| `test`         | testes unitários              |
-| `build`        | produzir artefato              |
-| `codegen`      | gerar fontes derivadas         |
-| `bench`        | benchmark local                |
-| `package`      | organizar artefato publicável |
+| `format:check` | check formatting         |
+| `lint`         | static analysis             |
+| `typecheck`    | type checking              |
+| `test`         | unit tests              |
+| `build`        | produce artifact              |
+| `codegen`      | generate derived sources         |
+| `bench`        | local benchmark                |
+| `package`      | organize publishable artifact |
 
-Targets específicos:
+Specific targets:
 
 - `build:wasm`;
 - `build:native`;
@@ -923,7 +924,7 @@ Targets específicos:
 - `docs:generate`;
 - `docs:check`.
 
-### 7.4 Dependências conceituais
+### 7.4 Conceptual dependencies
 
 ```text
 contracts:codegen
@@ -948,56 +949,56 @@ isekai-dotnet-interop:build
     └──> desktop-game:build
 ```
 
-### 7.5 Projeto explícito antes de plugins sofisticados
+### 7.5 Explicit project before sophisticated plugins
 
-Na fase inicial, Rust, Python e utilitários devem poder ser representados com `project.json` e comandos nativos.
+In the initial phase, Rust, Python, and utilities must be representable with `project.json` and native commands.
 
-Um plugin Nx local só deve abstrair algo depois de:
+A local Nx plugin should only abstract something after:
 
-- haver pelo menos duas ocorrências reais;
-- os inputs/outputs estarem compreendidos;
-- o comando manual estar testado;
-- a abstração reduzir manutenção.
+- there are at least two real occurrences;
+- the inputs/outputs are well understood;
+- the manual command has been tested;
+- the abstraction reduces maintenance.
 
-Não criar um executor genérico “universal” que recrie Cargo, uv ou MSBuild.
+Do not create a "universal" generic executor that recreates Cargo, uv, or MSBuild.
 
-### 7.6 Integração .NET
+### 7.6 .NET integration
 
-O plugin oficial `@nx/dotnet` deve ser avaliado em spike:
+The official `@nx/dotnet` plugin must be evaluated in a spike:
 
-- detecção dos `.csproj`;
-- dependências de projeto;
-- targets inferidos;
+- `.csproj` detection;
+- project dependencies;
+- inferred targets;
 - outputs;
-- compatibilidade com a engine escolhida;
-- comportamento em máquinas sem SDK .NET;
-- custo de migração.
+- compatibility with the chosen engine;
+- behavior on machines without the .NET SDK;
+- migration cost.
 
-Se o spike falhar, o fallback é:
+If the spike fails, the fallback is:
 
-- projetos explícitos;
+- explicit projects;
 - `dotnet restore/build/test/publish`;
-- dependências declaradas no grafo;
-- sem abandonar Nx.
+- dependencies declared in the graph;
+- without abandoning Nx.
 
-Para restore determinístico:
+For deterministic restore:
 
-- versões NuGet ficam centralizadas em `Directory.Packages.props`;
-- `RestorePackagesWithLockFile` deve ser habilitado;
-- `packages.lock.json` deve ser commitado por projeto;
-- CI usa `dotnet restore --locked-mode`;
-- arquivos `bin/` e `obj/` não são fontes nem lockfiles.
+- NuGet versions are centralized in `Directory.Packages.props`;
+- `RestorePackagesWithLockFile` must be enabled;
+- `packages.lock.json` must be committed per project;
+- CI uses `dotnet restore --locked-mode`;
+- `bin/` and `obj/` files are neither sources nor lockfiles.
 
-Referências:
+References:
 
 - [https://nx.dev/docs/technologies/dotnet/introduction](https://nx.dev/docs/technologies/dotnet/introduction)
 - [https://nx.dev/docs/technologies/dotnet/guides/migrate-from-nx-dotnet-core](https://nx.dev/docs/technologies/dotnet/guides/migrate-from-nx-dotnet-core)
 
-### 7.7 Identidade e tags dos projetos
+### 7.7 Project identity and tags
 
-Projetos Nx devem usar nomes estáveis e tags previsíveis.
+Nx projects must use stable names and predictable tags.
 
-Categorias iniciais:
+Initial categories:
 
 ```text
 scope:engine
@@ -1024,35 +1025,35 @@ type:generator
 type:test
 ```
 
-Regras de fronteira:
+Boundary rules:
 
-- `scope:engine` não depende de `scope:host`;
-- `scope:domain` não depende de bindings;
-- hosts dependem de wrappers/bindings, não de detalhes internos do core;
-- `compute-api` não depende de `compute-wgpu`;
-- contratos não dependem de código gerado consumidor;
-- ferramentas podem ler manifests, mas não entram no runtime do produto.
+- `scope:engine` does not depend on `scope:host`;
+- `scope:domain` does not depend on bindings;
+- hosts depend on wrappers/bindings, not on the core's internal details;
+- `compute-api` does not depend on `compute-wgpu`;
+- contracts do not depend on generated consumer code;
+- tools can read manifests, but do not enter the product's runtime.
 
-### 7.8 Dependências políglotas no grafo
+### 7.8 Polyglot dependencies in the graph
 
-Nx não deve “adivinhar” dependências Rust ou Python a partir de imports TypeScript.
+Nx must not "guess" Rust or Python dependencies from TypeScript imports.
 
-Fase inicial:
+Initial phase:
 
-- declarar `implicitDependencies` entre projetos políglotas;
-- usar generators para atualizar essas dependências;
-- validar o grafo em CI.
+- declare `implicitDependencies` between polyglot projects;
+- use generators to update those dependencies;
+- validate the graph in CI.
 
-Fase posterior:
+Later phase:
 
-- plugin local pode ler `cargo metadata`;
-- plugin local pode ler os membros e sources do uv;
-- `@nx/dotnet` pode fornecer dependências `.csproj`;
-- dependências geradas devem ser comparadas com o grafo declarado.
+- a local plugin can read `cargo metadata`;
+- a local plugin can read uv's members and sources;
+- `@nx/dotnet` can provide `.csproj` dependencies;
+- generated dependencies must be compared against the declared graph.
 
-O plugin local não deve implementar um novo resolvedor. Ele apenas traduz metadata das toolchains para o modelo de projetos do Nx.
+The local plugin must not implement a new resolver. It only translates toolchain metadata into Nx's project model.
 
-### 7.9 Exemplo de projeto Rust explícito
+### 7.9 Explicit Rust project example
 
 ```json
 {
@@ -1086,122 +1087,122 @@ O plugin local não deve implementar um novo resolvedor. Ele apenas traduz metad
 }
 ```
 
-O exemplo é conceitual. O nome real do crate e os inputs compartilhados devem ser definidos por `namedInputs`.
+The example is conceptual. The real crate name and shared inputs must be defined via `namedInputs`.
 
-### 7.10 Build directories e concorrência
+### 7.10 Build directories and concurrency
 
 Rust:
 
-- `target/` pode continuar compartilhado pelo Cargo localmente;
-- Nx não deve publicar `target/` como artefato;
-- builds publicáveis copiam somente arquivos finais para `dist/`;
-- targets Cargo excessivamente fragmentados podem disputar o mesmo lock;
-- preferir tarefas Cargo de granularidade suficiente para evitar dezenas de processos redundantes.
+- `target/` can continue to be shared by Cargo locally;
+- Nx must not publish `target/` as an artifact;
+- publishable builds copy only final files into `dist/`;
+- overly fragmented Cargo targets can contend for the same lock;
+- prefer Cargo tasks with enough granularity to avoid dozens of redundant processes.
 
 Python:
 
-- `uv sync` ocorre antes da execução paralela;
-- tarefas paralelas usam `--no-sync`.
+- `uv sync` happens before parallel execution;
+- parallel tasks use `--no-sync`.
 
 .NET:
 
-- restore ocorre antes da matriz de build;
-- targets não devem executar restore implícito quando `--no-restore` for seguro.
+- restore happens before the build matrix;
+- targets should not perform implicit restore when `--no-restore` is safe.
 
 Node:
 
-- `pnpm install` ocorre antes do Nx;
-- targets não alteram lockfile ou `node_modules`.
+- `pnpm install` happens before Nx;
+- targets do not modify the lockfile or `node_modules`.
 
-### 7.11 Inputs globais
+### 7.11 Global inputs
 
-Hashes de build devem considerar, conforme o target:
+Build hashes must consider, depending on the target:
 
-- lockfile do ecossistema;
-- manifest raiz;
-- manifest do membro;
-- toolchain pinada;
-- schema;
-- build profile;
-- target triple/RID;
+- the ecosystem's lockfile;
+- the root manifest;
+- the member manifest;
+- the pinned toolchain;
+- the schema;
+- the build profile;
+- the target triple/RID;
 - features;
-- variáveis de ambiente que alterem output;
-- scripts realmente executados.
+- environment variables that change output;
+- scripts actually executed.
 
-Não depender de uma variável externa escondida, como `RUSTFLAGS`, sem declará-la como input ou neutralizá-la no CI.
+Do not depend on a hidden external variable, such as `RUSTFLAGS`, without declaring it as an input or neutralizing it in CI.
 
 ---
 
-## 8. Gestão Python com uv e Nx
+## 8. Python management with uv and Nx
 
-### 8.1 Modelo
+### 8.1 Model
 
-Python será usado intensamente para:
+Python will be used heavily for:
 
-- requisições HTTP;
-- automações;
-- geração de dados;
-- experimentação;
-- IA;
-- análise;
-- ferramentas de CI;
-- documentação;
-- scripts de manutenção.
+- HTTP requests;
+- automation;
+- data generation;
+- experimentation;
+- AI;
+- analysis;
+- CI tools;
+- documentation;
+- maintenance scripts.
 
-uv é a fonte de verdade para:
+uv is the source of truth for:
 
-- resolução de dependências;
+- dependency resolution;
 - lock;
-- criação de ambiente;
-- execução;
-- build de pacotes.
+- environment creation;
+- execution;
+- package build.
 
-Nx apenas agenda essas operações.
+Nx only schedules these operations.
 
 ### 8.2 Workspace
 
-O workspace uv terá:
+The uv workspace will have:
 
-- um `pyproject.toml` raiz;
-- um `uv.lock` cross-platform;
-- membros com `pyproject.toml` próprio;
-- dependências locais declaradas como workspace sources;
-- grupos de dependência quando apropriado.
+- a root `pyproject.toml`;
+- a cross-platform `uv.lock`;
+- members with their own `pyproject.toml`;
+- local dependencies declared as workspace sources;
+- dependency groups where appropriate.
 
-uv workspaces compartilham um único lockfile, mas cada pacote mantém sua própria declaração:
+uv workspaces share a single lockfile, but each package keeps its own declaration:
 
 - [https://docs.astral.sh/uv/concepts/projects/workspaces/](https://docs.astral.sh/uv/concepts/projects/workspaces/)
 
 ### 8.3 `.venv`
 
-A regra é:
+The rule is:
 
-> um ambiente por checkout e por sistema operacional, reconstruível a partir de `uv.lock`.
+> one environment per checkout and per operating system, reconstructible from `uv.lock`.
 
 `.venv`:
 
-- não é universal;
-- não é artefato do Nx;
-- não é compartilhado Windows ↔ WSL;
-- não é enviado ao cache remoto;
-- não é executado em paralelo por jobs de `sync`;
-- não é commitado.
+- is not universal;
+- is not an Nx artifact;
+- is not shared Windows ↔ WSL;
+- is not sent to the remote cache;
+- is not run in parallel by `sync` jobs;
+- is not committed.
 
-### 8.4 Evitar corrida em tarefas paralelas
+### 8.4 Avoiding races in parallel tasks
 
-Fluxo local e CI:
+Local and CI flow:
 
-1. executar `uv sync --locked` uma única vez no bootstrap;
-2. executar tarefas Nx em paralelo;
-3. dentro das tarefas usar:
+1. run `uv sync --locked` once during bootstrap;
+2. run Nx tasks in parallel;
+3. within tasks use:
 
 ```bash
-uv run --locked --no-sync --package <pacote> <comando>
+uv run --locked --no-sync --package <package> <command>
 ```
 
-Isso impede que vários targets tentem mutar `.venv` simultaneamente.
+This prevents multiple targets from trying to mutate `.venv` simultaneously.
 
-Em CI:
+In CI:
 
 ```bash
 uv lock --check
@@ -1209,75 +1210,75 @@ uv sync --locked
 pnpm nx affected -t lint test build
 ```
 
-O comportamento de `--locked`, `--frozen` e `--no-sync` está documentado em:
+The behavior of `--locked`, `--frozen`, and `--no-sync` is documented at:
 
 - [https://docs.astral.sh/uv/concepts/projects/sync/](https://docs.astral.sh/uv/concepts/projects/sync/)
 
-### 8.5 Pacotes com build nativo
+### 8.5 Packages with native builds
 
-Pacotes Python que dependem de wheels nativas devem:
+Python packages that depend on native wheels must:
 
-- usar versões travadas;
-- preferir wheels oficiais;
-- declarar marcadores de plataforma;
-- ser testados na matriz de OS/arquitetura;
-- nunca reutilizar `.venv` de outra plataforma;
-- produzir wheels próprias em runners nativos quando necessário.
+- use pinned versions;
+- prefer official wheels;
+- declare platform markers;
+- be tested in the OS/architecture matrix;
+- never reuse `.venv` from another platform;
+- produce their own wheels on native runners when necessary.
 
-O cache do Nx pode armazenar:
+The Nx cache may store:
 
 ```text
 dist/python/<package>/<version>/<platform-tag>/*.whl
 ```
 
-Ele não deve armazenar o ambiente instalado.
+It must not store the installed environment.
 
-### 8.6 Requisições HTTP
+### 8.6 HTTP requests
 
-Bibliotecas como `requests` devem ser dependência do pacote que efetivamente as utiliza.
+Libraries such as `requests` must be a dependency of the package that actually uses them.
 
-Exemplo:
+Example:
 
 ```bash
 uv add --package automation requests
 ```
 
-Não instalar dependências manualmente com `pip` dentro da `.venv`.
+Do not manually install dependencies with `pip` inside `.venv`.
 
-### 8.7 Scripts descartáveis versus automação de produção
+### 8.7 Throwaway scripts versus production automation
 
-- Experimentos pequenos podem usar metadata inline reconhecida pelo uv.
-- Automação usada por CI ou release deve ser um pacote membro, testado.
-- Scripts não devem depender implicitamente do diretório atual.
-- Entrada, saída e side effects devem ser explícitos.
+- Small experiments can use inline metadata recognized by uv.
+- Automation used by CI or release must be a tested member package.
+- Scripts must not implicitly depend on the current directory.
+- Input, output, and side effects must be explicit.
 
 ---
 
-## 9. Node, pnpm e pacote Wasm
+## 9. Node, pnpm, and the Wasm package
 
-### 9.1 Política pnpm
+### 9.1 pnpm policy
 
-Usar:
+Use:
 
-- store content-addressed padrão;
+- the standard content-addressed store;
 - workspace protocol;
-- lockfile único;
-- Corepack ou versão pinada;
-- instalação congelada em CI.
+- a single lockfile;
+- Corepack or a pinned version;
+- frozen install in CI.
 
-Não tornar o Global Virtual Store experimental uma exigência.
+Do not make the experimental Global Virtual Store a requirement.
 
-### 9.2 Pacote Wasm
+### 9.2 Wasm package
 
-`packages/isekai-wasm` será o pacote técnico que contém:
+`packages/isekai-wasm` will be the technical package containing:
 
 - `.wasm`;
 - loader;
-- definições TypeScript;
-- metadata de ABI/protocolo;
-- glue estritamente necessário.
+- TypeScript definitions;
+- ABI/protocol metadata;
+- strictly necessary glue.
 
-O cliente web deve depender de:
+The web client must depend on:
 
 ```json
 {
@@ -1287,54 +1288,54 @@ O cliente web deve depender de:
 }
 ```
 
-O package não deve conter lógica de domínio escrita novamente em TypeScript.
+The package must not contain domain logic rewritten in TypeScript.
 
-### 9.3 Wrapper Web
+### 9.3 Web wrapper
 
-`packages/isekai-web-client` deve oferecer uma API idiomática:
+`packages/isekai-web-client` must offer an idiomatic API:
 
-- criação/encerramento do Worker;
-- submissão de lote;
-- Promise por job;
-- cancelamento cooperativo;
-- tratamento de device loss;
-- decode de resultados estruturados;
-- gerenciamento de transferables.
+- Worker creation/termination;
+- batch submission;
+- Promise per job;
+- cooperative cancellation;
+- device loss handling;
+- structured result decoding;
+- transferables management.
 
-O wrapper não deve expor offsets de memória para componentes React.
+The wrapper must not expose memory offsets to React components.
 
 ---
 
-## 10. Contratos de dados
+## 10. Data contracts
 
-### 10.1 Dois caminhos de dados
+### 10.1 Two data paths
 
-#### Caminho estruturado
+#### Structured path
 
-Usar FlatBuffers para:
+Use FlatBuffers for:
 
 - Commands;
 - DomainEvents;
 - ReplicationDeltas;
 - Snapshots;
-- envelopes de transporte;
-- resultados heterogêneos;
-- mensagens versionáveis.
+- transport envelopes;
+- heterogeneous results;
+- versionable messages.
 
-#### Caminho numérico quente
+#### Hot numeric path
 
-Usar arrays brutos, preferencialmente Structure of Arrays, para:
+Use raw arrays, preferably Structure of Arrays, for:
 
-- posições;
-- matrizes;
-- vetores;
-- custos;
-- gradientes;
-- candidatos;
-- índices;
-- grandes batches homogêneos.
+- positions;
+- matrices;
+- vectors;
+- costs;
+- gradients;
+- candidates;
+- indices;
+- large homogeneous batches.
 
-Exemplo:
+Example:
 
 ```text
 positions_x: Float32Array
@@ -1343,15 +1344,15 @@ positions_z: Float32Array
 entity_ids:  Uint32Array
 ```
 
-Não embrulhar milhões de floats em objetos FlatBuffers individuais.
+Do not wrap millions of floats in individual FlatBuffers objects.
 
-### 10.2 Localização
+### 10.2 Location
 
-- Contratos exclusivos de um domínio vivem no domínio.
-- Envelopes globais vivem em `libs/engine/contracts`.
-- Código gerado vai para diretórios fixos dos consumidores.
+- Contracts exclusive to a domain live in the domain.
+- Global envelopes live in `libs/engine/contracts`.
+- Generated code goes into fixed consumer directories.
 
-Exemplo:
+Example:
 
 ```text
 libs/domains/physics/contracts/*.fbs
@@ -1360,39 +1361,39 @@ dotnet/Grafting.Isekai.Protocol/Generated/
 libs/engine/domain-core/src/generated/
 ```
 
-### 10.3 Geração
+### 10.3 Generation
 
-`flatc` deve:
+`flatc` must:
 
-- ter versão pinada;
-- ser chamado por target Nx determinístico;
-- produzir TS, C# e Rust;
-- falhar com schema inválido;
-- gerar outputs declarados;
-- ser executado no bootstrap.
+- have a pinned version;
+- be invoked by a deterministic Nx target;
+- produce TS, C#, and Rust;
+- fail on invalid schema;
+- produce declared outputs;
+- run during bootstrap.
 
-Código gerado:
+Generated code:
 
-- não é fonte de verdade;
-- não precisa ser commitado por padrão;
-- deve estar ignorado quando for sempre reproduzível;
-- deve existir antes da checagem de tipos/IDE;
-- deve ser regenerado automaticamente em build/CI.
+- is not the source of truth;
+- does not need to be committed by default;
+- must be ignored when always reproducible;
+- must exist before typechecking/IDE use;
+- must be regenerated automatically in build/CI.
 
-Se um consumidor ou IDE exigir código commitado, a exceção deve ser registrada por ADR e validada com `codegen:check`.
+If a consumer or IDE requires committed code, the exception must be recorded via an ADR and validated with `codegen:check`.
 
-### 10.4 Evolução
+### 10.4 Evolution
 
-Regras mínimas:
+Minimum rules:
 
-- novos campos de table são adicionados ao final ou usam IDs explícitos;
-- campos removidos são marcados deprecated, não apagados;
-- defaults existentes não são alterados sem migração;
-- `struct` FlatBuffers é reservado a layouts realmente estáveis;
-- mensagens não confiáveis são verificadas antes do uso;
-- versão do protocolo fica no envelope.
+- new table fields are added at the end or use explicit IDs;
+- removed fields are marked deprecated, not erased;
+- existing defaults are not changed without migration;
+- FlatBuffers `struct` is reserved for truly stable layouts;
+- untrusted messages are verified before use;
+- protocol version stays in the envelope.
 
-Referências:
+References:
 
 - [https://flatbuffers.dev/](https://flatbuffers.dev/)
 - [https://flatbuffers.dev/evolution/](https://flatbuffers.dev/evolution/)
@@ -1402,41 +1403,41 @@ Referências:
 
 ---
 
-## 11. FFI e memória
+## 11. FFI and memory
 
-### 11.1 Regra principal
+### 11.1 Main rule
 
-> Quem aloca controla o ciclo de vida e oferece a operação compatível de liberação.
+> Whoever allocates controls the lifecycle and offers the compatible release operation.
 
-Isso não significa que toda memória precise ser copiada. Significa que ownership não pode ser implícito.
+This does not mean all memory needs to be copied. It means ownership cannot be implicit.
 
-### 11.2 O que pode atravessar a C ABI
+### 11.2 What can cross the C ABI
 
-Permitido:
+Allowed:
 
-- inteiros de largura fixa;
-- floats de largura fixa;
-- ponteiro + comprimento;
-- handles opacos;
-- structs `#[repr(C)]` versionadas;
+- fixed-width integers;
+- fixed-width floats;
+- pointer + length;
+- opaque handles;
+- versioned `#[repr(C)]` structs;
 - status codes;
-- callbacks com contrato explícito.
+- callbacks with an explicit contract.
 
-Proibido:
+Forbidden:
 
 - `Vec<T>`;
 - `String`;
 - `&str`;
-- `Box<T>` sem API opaca;
-- enum Rust sem representação fixa;
+- `Box<T>` without an opaque API;
+- Rust enum without a fixed representation;
 - trait object;
 - panic;
-- exceção C#;
-- `usize`, `long` ou `bool` dependente de ABI.
+- C# exception;
+- ABI-dependent `usize`, `long`, or `bool`.
 
 ### 11.3 Handles
 
-Usar handles generacionais de 64 bits:
+Use 64-bit generational handles:
 
 ```text
 EngineHandle
@@ -1445,45 +1446,45 @@ JobHandle
 BufferHandle
 ```
 
-Propriedades:
+Properties:
 
-- `0` é inválido;
-- índice e geração impedem use-after-free trivial;
-- tipo lógico é validado;
-- release duplicado retorna erro;
-- handles não são ponteiros públicos.
+- `0` is invalid;
+- index and generation prevent trivial use-after-free;
+- the logical type is validated;
+- duplicate release returns an error;
+- handles are not public pointers.
 
-### 11.4 Chamada síncrona
+### 11.4 Synchronous call
 
-Para dados pequenos ou trabalho curto:
-
-```text
-host empresta pointer + length
-Rust processa durante a chamada
-Rust não retém o ponteiro
-chamada retorna
-host pode mover/liberar a memória
-```
-
-No C#, memória gerenciada deve permanecer pinned apenas durante a chamada.
-
-### 11.5 Chamada assíncrona
-
-Para CPU longa ou GPU:
+For small data or short work:
 
 ```text
-host submete batch
-Rust copia para arena própria ou recebe ownership explícito
-Rust retorna JobHandle
-host consulta/aguarda status
-Rust entrega BufferHandle
-host lê dentro de um lease
-host libera BufferHandle
+host lends pointer + length
+Rust processes during the call
+Rust does not retain the pointer
+call returns
+host can move/free the memory
 ```
 
-Um ponteiro pinned do C# NÃO DEVE ser retido depois que a chamada `submit` retorna.
+In C#, managed memory must remain pinned only during the call.
 
-### 11.6 API conceitual
+### 11.5 Asynchronous call
+
+For long CPU work or GPU:
+
+```text
+host submits batch
+Rust copies to its own arena or receives explicit ownership
+Rust returns JobHandle
+host polls/waits on status
+Rust delivers BufferHandle
+host reads within a lease
+host releases BufferHandle
+```
+
+A pinned C# pointer MUST NOT be retained after the `submit` call returns.
+
+### 11.6 Conceptual API
 
 ```c
 EngineStatus engine_get_abi_info(EngineAbiInfo* out_info);
@@ -1524,16 +1525,16 @@ EngineStatus engine_destroy(EngineHandle engine);
 
 ### 11.7 Wasm
 
-No Wasm:
+In Wasm:
 
-- referências públicas são offsets e comprimentos;
-- TypedArrays são views da memória linear;
-- `memory.grow` pode invalidar views anteriores;
-- views devem ser recriadas após crescimento;
-- arenas devem reduzir crescimento frequente;
-- o Worker deve possuir a instância Wasm.
+- public references are offsets and lengths;
+- TypedArrays are views into linear memory;
+- `memory.grow` can invalidate previous views;
+- views must be recreated after growth;
+- arenas should reduce frequent growth;
+- the Worker must own the Wasm instance.
 
-API conceitual:
+Conceptual API:
 
 ```text
 reserve_input(length) -> offset
@@ -1545,70 +1546,70 @@ buffer_release(handle)
 
 ### 11.8 Copy budget
 
-| Fronteira                 | Meta V1                                                        |
+| Boundary                 | V1 target                                                        |
 | ------------------------- | -------------------------------------------------------------- |
-| C# → Rust síncrono      | zero cópia, memória pinned durante a chamada                 |
-| C# → Rust assíncrono    | uma cópia para memória nativa                                |
-| Rust → C# view síncrona | zero cópia dentro de lease                                    |
-| Main thread → Worker     | transferência de ownership do`ArrayBuffer` quando possível |
-| JS → arena Wasm          | uma cópia quando dados nasceram fora do Wasm                  |
-| view Wasm → Rust         | zero cópia dentro da memória linear                          |
-| CPU/Wasm → GPU           | um upload explícito                                           |
-| GPU → CPU                | um readback explícito                                         |
-| rede                      | cópias dependem do runtime e transporte                       |
+| C# → Rust synchronous      | zero copy, memory pinned during the call                 |
+| C# → Rust asynchronous    | one copy into native memory                                |
+| Rust → C# synchronous view | zero copy within lease                                    |
+| Main thread → Worker     | `ArrayBuffer` ownership transfer when possible |
+| JS → Wasm arena          | one copy when data originated outside Wasm                  |
+| Wasm view → Rust         | zero copy within linear memory                          |
+| CPU/Wasm → GPU           | one explicit upload                                           |
+| GPU → CPU                | one explicit readback                                           |
+| network                      | copies depend on the runtime and transport                       |
 
-Formulação correta:
+Correct formulation:
 
-> O sistema busca evitar desserialização completa e cópias redundantes, mantendo no máximo as cópias intencionais exigidas por cada domínio de memória.
+> The system aims to avoid full deserialization and redundant copies, keeping at most the intentional copies required by each memory domain.
 
 ---
 
-## 12. ABI: versão e ciclo de vida
+## 12. ABI: version and lifecycle
 
-### 12.1 Eixos de versão
+### 12.1 Version axes
 
-| Eixo            | Exemplo                      | O que protege                           |
-| --------------- | ---------------------------- | --------------------------------------- |
-| Produto         | `1.4.0`                    | release percebido pelo usuário         |
-| ABI             | `2.1`                      | layout e funções da biblioteca nativa |
-| Wire protocol   | `3.0`                      | mensagens cliente/servidor              |
-| Schema revision | identificadores por contrato | evolução FlatBuffers                  |
-| Save format     | `5`                        | snapshots/savegames persistidos         |
+| Axis            | Example                      | What it protects                           |
+| --------------- | ----------------------------- | ---------------------------------------- |
+| Product         | `1.4.0`                    | user-perceived release         |
+| ABI             | `2.1`                      | native library layout and functions |
+| Wire protocol   | `3.0`                      | client/server messages              |
+| Schema revision | per-contract identifiers | FlatBuffers evolution                  |
+| Save format     | `5`                        | persisted snapshots/savegames         |
 
-Não inferir compatibilidade de protocolo apenas pela versão do produto.
+Do not infer protocol compatibility solely from the product version.
 
-### 12.2 Política ABI
+### 12.2 ABI policy
 
-- `ABI_MAJOR`: quebra incompatível.
-- `ABI_MINOR`: extensão append-only compatível.
-- patch do produto: implementação interna sem alteração contratual.
+- `ABI_MAJOR`: incompatible break.
+- `ABI_MINOR`: compatible append-only extension.
+- product patch: internal implementation without contractual change.
 
-Toda struct pública começa com:
+Every public struct begins with:
 
 ```c
 uint32_t struct_size;
 ```
 
-Campos novos entram somente no final.
+New fields are added only at the end.
 
 ### 12.3 Capability negotiation
 
-`EngineAbiInfo` deve informar:
+`EngineAbiInfo` must report:
 
 - major;
 - minor;
-- tamanho;
+- size;
 - build ID;
 - target;
 - feature flags;
-- backend CPU;
-- backend GPU;
-- suporte a async;
-- versão de protocolo suportada.
+- CPU backend;
+- GPU backend;
+- async support;
+- supported protocol version.
 
-O wrapper C# valida isso no startup.
+The C# wrapper validates this at startup.
 
-### 12.4 Ciclo de vida
+### 12.4 Lifecycle
 
 #### Engine
 
@@ -1634,68 +1635,68 @@ OwnedByRust → ViewLeased → OwnedByRust → Released
 
 ### 12.5 Panic
 
-Cada export `extern "C"` deve proteger a fronteira.
+Every `extern "C"` export must protect the boundary.
 
-Se uma panic recuperável ocorrer:
+If a recoverable panic occurs:
 
-- converter para status;
-- registrar diagnóstico interno;
-- marcar engine como poisoned quando o estado não puder ser garantido;
-- permitir consulta de erro e destruição;
-- não continuar simulando em estado duvidoso.
+- convert to status;
+- log internal diagnostics;
+- mark the engine as poisoned when the state cannot be guaranteed;
+- allow querying the error and destruction;
+- do not continue simulating in a doubtful state.
 
-`catch_unwind` não captura builds com `panic=abort`; a política de compilação deve ser deliberada.
+`catch_unwind` does not capture builds with `panic=abort`; the compilation policy must be deliberate.
 
-Referência:
+Reference:
 
 - [https://doc.rust-lang.org/nomicon/ffi.html](https://doc.rust-lang.org/nomicon/ffi.html)
 
-### 12.6 Wrapper C#
+### 12.6 C# wrapper
 
-O wrapper deve usar:
+The wrapper must use:
 
-- `LibraryImport` quando compatível;
+- `LibraryImport` when compatible;
 - `SafeHandle`;
-- `Span<T>` apenas dentro de lifetime válido;
-- tradução centralizada de status;
-- shutdown idempotente;
-- packaging por RID;
-- teste de ABI antes do primeiro uso real.
+- `Span<T>` only within a valid lifetime;
+- centralized status translation;
+- idempotent shutdown;
+- packaging per RID;
+- ABI test before first real use.
 
 ---
 
-## 13. GPU e solver único
+## 13. GPU and the single solver
 
 ### 13.1 Ownership
 
-Regra fechada:
+Closed rule:
 
-> O Rust é o único proprietário dos recursos GPU de computação matemática. Three.js e a engine C# são proprietários dos recursos de renderização.
+> Rust is the sole owner of GPU resources for mathematical computation. Three.js and the C# engine own the rendering resources.
 
-Isso produz:
+This produces:
 
-- um solver;
-- um dispatcher Rust;
-- uma coleção WGSL;
-- dois formatos de distribuição;
-- dispositivos lógicos separados quando o renderer também usa GPU.
+- one solver;
+- one Rust dispatcher;
+- one WGSL collection;
+- two distribution formats;
+- separate logical devices when the renderer also uses GPU.
 
-### 13.2 O mesmo backend em Web e Desktop
+### 13.2 The same backend on Web and Desktop
 
-`wgpu` executa:
+`wgpu` runs:
 
-- nativamente sobre Vulkan, Metal, D3D12 e OpenGL;
-- no Wasm sobre WebGPU ou WebGL2.
+- natively on Vulkan, Metal, D3D12, and OpenGL;
+- on Wasm over WebGPU or WebGL2.
 
-Compute geral exige WebGPU; WebGL2 não deve ser tratado como fallback equivalente para compute. Quando WebGPU estiver indisponível, o backend CPU deve assumir.
+General compute requires WebGPU; WebGL2 must not be treated as an equivalent fallback for compute. When WebGPU is unavailable, the CPU backend must take over.
 
-Referência:
+Reference:
 
 - [https://github.com/gfx-rs/wgpu](https://github.com/gfx-rs/wgpu)
 
-### 13.3 Conteúdo do backend
+### 13.3 Backend contents
 
-`compute-wgpu` deve controlar:
+`compute-wgpu` must control:
 
 - `Instance`;
 - `Adapter`;
@@ -1704,59 +1705,59 @@ Referência:
 - shader modules;
 - bind groups;
 - compute pipelines;
-- buffers persistentes;
+- persistent buffers;
 - staging buffers;
 - ring buffers;
 - submission IDs;
 - readback pool;
 - device loss.
 
-### 13.4 Dados residentes
+### 13.4 Resident data
 
-Para solver futuro:
+For a future solver:
 
-1. modelo é carregado;
-2. matrizes e vetores persistem na GPU;
-3. cada iteração envia apenas parâmetros/deltas;
-4. múltiplos kernels são encadeados;
-5. readback ocorre somente para scalars ou solução final;
-6. solução é validada na CPU.
+1. the model is loaded;
+2. matrices and vectors persist on the GPU;
+3. each iteration sends only parameters/deltas;
+4. multiple kernels are chained;
+5. readback occurs only for scalars or the final solution;
+6. the solution is validated on the CPU.
 
-Evitar:
+Avoid:
 
 ```text
-upload matriz → dispatch → readback matriz
+upload matrix → dispatch → readback matrix
 ```
 
-em toda iteração.
+on every iteration.
 
-### 13.5 Divisão solver versus kernels
+### 13.5 Solver versus kernel division
 
 Rust:
 
-- modelagem;
-- política de busca;
-- controle macro das iterações;
+- modeling;
+- search policy;
+- macro control of iterations;
 - stopping criteria;
-- gestão de memória;
+- memory management;
 - scheduling;
-- validação.
+- validation.
 
 WGSL:
 
-- avaliação paralela;
+- parallel evaluation;
 - matvec;
-- reduções;
+- reductions;
 - scoring;
-- avaliação de restrições;
-- atualização vetorial;
-- operações densas ou massivamente paralelas.
+- constraint evaluation;
+- vector update;
+- dense or massively parallel operations.
 
-`wgpu` não transforma automaticamente uma função Rust comum em compute shader. Os kernels WGSL são fonte única para GPU.
+`wgpu` does not automatically turn a regular Rust function into a compute shader. WGSL kernels are the single source for GPU.
 
-### 13.6 Jobs assíncronos
+### 13.6 Async jobs
 
-API interna conceitual:
+Conceptual internal API:
 
 ```rust
 trait ComputeBackend {
@@ -1769,50 +1770,50 @@ trait ComputeBackend {
 }
 ```
 
-Evitar uma FFI por operação numérica. `ComputePlan` deve representar lote suficiente para amortizar dispatch.
+Avoid one FFI call per numeric operation. `ComputePlan` must represent a batch large enough to amortize dispatch.
 
-### 13.7 Workloads adequados
+### 13.7 Suitable workloads
 
-Ótimos candidatos:
+Good candidates:
 
-- milhares de avaliações independentes;
-- álgebra linear;
-- campos de distância;
-- scoring de IA;
-- relaxações;
-- redução de grandes vetores;
-- geração offline;
-- solver com estado residente e resposta compacta.
+- thousands of independent evaluations;
+- linear algebra;
+- distance fields;
+- AI scoring;
+- relaxations;
+- reduction of large vectors;
+- offline generation;
+- a solver with resident state and compact response.
 
-Candidatos ruins:
+Bad candidates:
 
-- regras de negócio;
-- fluxos altamente ramificados e pequenos;
-- tarefas menores que o custo de upload;
-- lógica que exige determinismo bit-a-bit;
-- output gigante consumido pelo renderer em todo frame.
+- business rules;
+- highly branched and small flows;
+- tasks smaller than the upload cost;
+- logic that requires bit-for-bit determinism;
+- huge output consumed by the renderer every frame.
 
-### 13.8 Limite da separação de dispositivos
+### 13.8 Limit of device separation
 
-Se o Rust calcular milhões de posições que Three.js precisa renderizar todo frame:
+If Rust computes millions of positions that Three.js needs to render every frame:
 
 ```text
-GPU Rust → CPU → GPU renderer
+Rust GPU → CPU → renderer GPU
 ```
 
-o readback/upload pode dominar.
+the readback/upload can dominate.
 
-Nesse caso, uma futura ADR escolherá entre:
+In that case, a future ADR will choose between:
 
-1. executar o compute visual no renderer;
-2. mover renderização para Rust;
-3. implementar external-memory interop por backend.
+1. running the visual compute in the renderer;
+2. moving rendering to Rust;
+3. implementing external-memory interop per backend.
 
-Não generalizar essa exceção para pathfinding, IA ou solver com output compacto.
+Do not generalize this exception to pathfinding, AI, or a solver with compact output.
 
 ---
 
-## 14. Threads e assincronia
+## 14. Threads and asynchrony
 
 ### 14.1 Web
 
@@ -1821,55 +1822,55 @@ Main thread:
 - React/UI;
 - Three.js;
 - input;
-- apresentação;
+- presentation;
 - frame loop.
 
 Worker:
 
-- instância Wasm;
-- estado da simulação;
+- Wasm instance;
+- simulation state;
 - `wgpu` compute;
 - jobs;
-- decode/encode de protocolo;
-- opcionalmente WebSocket em fase futura.
+- protocol decode/encode;
+- optionally WebSocket in a future phase.
 
-Regras:
+Rules:
 
-- não bloquear main thread;
-- não usar polling ocupado;
-- comunicar por mensagens;
-- transferir `ArrayBuffer` quando ownership puder mudar;
-- não introduzir `SharedArrayBuffer` na V1;
-- tratar encerramento e crash do Worker.
+- do not block the main thread;
+- do not use busy polling;
+- communicate via messages;
+- transfer `ArrayBuffer` when ownership can change;
+- do not introduce `SharedArrayBuffer` in V1;
+- handle Worker termination and crash.
 
 ### 14.2 Desktop
 
-O host C# não deve executar job pesado na thread de UI/render.
+The C# host must not run heavy jobs on the UI/render thread.
 
-Modelo:
+Model:
 
-- C# submete;
-- Rust agenda;
-- GPU/worker executa;
-- C# recebe completion;
-- resultado é consumido no ponto seguro do frame.
+- C# submits;
+- Rust schedules;
+- GPU/worker executes;
+- C# receives completion;
+- the result is consumed at a safe point in the frame.
 
-Não chamar `device.poll(Wait)` na thread principal.
+Do not call `device.poll(Wait)` on the main thread.
 
 ### 14.3 Readback
 
-Readback GPU deve usar:
+GPU readback must use:
 
-- buffer staging;
-- submissão;
+- staging buffer;
+- submission;
 - callback/future;
-- pool de buffers;
-- sinalização curta;
-- consumo posterior.
+- buffer pool;
+- short signaling;
+- later consumption.
 
-Enquanto um buffer estiver mapeado pela CPU, ele não deve ser usado simultaneamente pela GPU.
+While a buffer is mapped by the CPU, it must not be used simultaneously by the GPU.
 
-Referência:
+Reference:
 
 - [https://docs.rs/wgpu/latest/wgpu/struct.CommandBuffer.html](https://docs.rs/wgpu/latest/wgpu/struct.CommandBuffer.html)
 
@@ -1877,62 +1878,62 @@ Referência:
 
 ## 15. Multiplayer
 
-### 15.1 Nome correto da arquitetura
+### 15.1 Correct architecture name
 
 V1:
 
-> Replicação autoritativa com journal de comandos aceitos e snapshots periódicos.
+> Authoritative replication with a journal of accepted commands and periodic snapshots.
 
-Não chamar de Event Sourcing.
+Do not call it Event Sourcing.
 
-### 15.2 Tipos distintos
+### 15.2 Distinct types
 
-| Tipo                 | Significado                                           |
+| Type                 | Meaning                                           |
 | -------------------- | ----------------------------------------------------- |
-| `ClientCommand`    | intenção enviada pelo cliente                       |
-| `AcceptedCommand`  | comando autenticado, ordenado e aceito                |
-| `DomainEvent`      | fato semântico produzido pelo domínio               |
-| `ReplicationDelta` | projeção transmissível para um cliente específico |
-| `Snapshot`         | estado autoritativo persistível                      |
+| `ClientCommand`    | intent sent by the client                       |
+| `AcceptedCommand`  | authenticated, ordered, and accepted command                |
+| `DomainEvent`      | semantic fact produced by the domain               |
+| `ReplicationDelta` | projection transmissible to a specific client |
+| `Snapshot`         | persistable authoritative state                      |
 
-`DomainEvent` não é `ReplicationDelta`.
+`DomainEvent` is not `ReplicationDelta`.
 
-### 15.3 Fluxo
+### 15.3 Flow
 
 ```text
 ClientCommand
-  → autenticação/autorização no host
-  → ordenação e deduplicação
-  → batch para Rust
+  → authentication/authorization on the host
+  → ordering and deduplication
+  → batch to Rust
   → DomainEvents + state hash
   → journal
-  → projeção por cliente
+  → per-client projection
   → ReplicationDelta
-  → transporte
+  → transport
 ```
 
-### 15.4 Core agnóstico
+### 15.4 Agnostic core
 
-O core não conhece:
+The core does not know about:
 
-- socket;
+- sockets;
 - IP;
-- reconexão;
+- reconnection;
 - TLS;
-- banco;
-- filas;
-- autenticação concreta.
+- database;
+- queues;
+- concrete authentication.
 
-O host injeta comandos e coleta resultados.
+The host injects commands and collects results.
 
 ### 15.5 Journal
 
-Registro mínimo:
+Minimum record:
 
 - tick;
 - sequence;
 - command ID;
-- client ID lógico;
+- logical client ID;
 - AcceptedCommand;
 - DomainEvents;
 - state hash;
@@ -1941,41 +1942,41 @@ Registro mínimo:
 
 ### 15.6 Snapshot
 
-Conteúdo mínimo:
+Minimum content:
 
-- estado autoritativo;
+- authoritative state;
 - RNG state;
 - last sequence;
 - state hash;
 - core version;
 - protocol/save version.
 
-### 15.7 Recuperação
+### 15.7 Recovery
 
 ```text
-carregar snapshot mais recente
-→ aplicar AcceptedCommands posteriores
-→ recomputar state hash
-→ comparar
-→ liberar sessão
+load the most recent snapshot
+→ apply subsequent AcceptedCommands
+→ recompute state hash
+→ compare
+→ release the session
 ```
 
-Event Sourcing completo somente será adotado se eventos se tornarem a fonte primária e houver política formal de upcasting/migração.
+Full Event Sourcing will only be adopted if events become the primary source and there is a formal upcasting/migration policy.
 
 ---
 
-## 16. Knowledge, documentação e contexto para IA
+## 16. Knowledge, documentation, and context for AI
 
-### 16.1 Fontes de verdade
+### 16.1 Sources of truth
 
-A autoridade é dividida sem geração circular:
+Authority is divided without circular generation:
 
-- este documento: arquitetura global;
-- ADRs: alterações específicas;
-- `AGENTS.md`: contrato operacional por escopo;
+- this document: global architecture;
+- ADRs: specific changes;
+- `AGENTS.md`: operational contract per scope;
 - `.ai/`: AI Control Plane;
-- código/manifests/schemas: fatos implementados;
-- Graph IR e docs geradas: projeções com evidência.
+- code/manifests/schemas: implemented facts;
+- Graph IR and generated docs: projections with evidence.
 
 ```text
 docs/
@@ -2000,112 +2001,112 @@ docs/
 
 ### 16.2 `AGENTS.md`
 
-`AGENTS.md` é o contrato operacional agnóstico e canônico por escopo:
+`AGENTS.md` is the agnostic and canonical operational contract per scope:
 
-- propósito e superfície pública;
-- comandos oficiais;
-- invariantes e ownership;
-- dependências permitidas e proibidas;
-- critérios de aceite;
-- limites;
-- arquivos gerados;
-- testes obrigatórios;
+- purpose and public surface;
+- official commands;
+- invariants and ownership;
+- allowed and forbidden dependencies;
+- acceptance criteria;
+- boundaries;
+- generated files;
+- mandatory tests;
 - ADRs;
-- checklist de mudança;
-- mapa da documentação.
+- change checklist;
+- documentation map.
 
-Arquivos `AGENTS.md` locais restringem o subtree. `.ai/` pode indexá-los e validar consistência, mas não os sobrescreve silenciosamente.
+Local `AGENTS.md` files restrict the subtree. `.ai/` can index them and validate consistency, but does not silently override them.
 
-### 16.3 `CLAUDE.md` e adapters
+### 16.3 `CLAUDE.md` and adapters
 
-`CLAUDE.md` deve ser curto:
+`CLAUDE.md` must be short:
 
-- mandar ler `AGENTS.md`;
-- mandar ler este documento;
-- apontar para context packs e skills aplicáveis;
-- listar comandos de validação;
-- explicar como reportar decisões abertas;
-- conter apenas comportamento específico do Claude.
+- direct to read `AGENTS.md`;
+- direct to read this document;
+- point to applicable context packs and skills;
+- list validation commands;
+- explain how to report open decisions;
+- contain only Claude-specific behavior.
 
-`.claude/`, `.codex/` e `.agents/` adaptam a mesma fonte canônica. Não duplicar todo o blueprint nesses arquivos, pois isso cria deriva e aumenta contexto.
+`.claude/`, `.codex/`, and `.agents/` adapt the same canonical source. Do not duplicate the entire blueprint in these files, as this creates drift and increases context.
 
-### 16.4 Cursor e outros fornecedores
+### 16.4 Cursor and other vendors
 
-Regras específicas podem existir em:
+Specific rules can exist in:
 
 - `.cursor/rules/*.mdc`;
-- arquivos equivalentes de outras ferramentas.
+- equivalent files from other tools.
 
-Elas devem adaptar, não contradizer, `AGENTS.md`.
+They must adapt, not contradict, `AGENTS.md`.
 
-### 16.5 Grafo Nx
+### 16.5 Nx graph
 
-O grafo será gerado sob demanda ou em CI:
+The graph will be generated on demand or in CI:
 
 ```bash
 pnpm nx graph --file=docs/generated/project-graph.json
 ```
 
-Esse arquivo é:
+This file is:
 
-- contexto estrutural;
-- input para ferramentas;
-- snapshot derivado.
+- structural context;
+- input for tools;
+- derived snapshot.
 
-Não é RAG sozinho.
+It is not RAG by itself.
 
-RAG só existe quando houver:
+RAG only exists when there is:
 
-- corpus;
+- a corpus;
 - chunking;
-- embeddings ou índice;
-- mecanismo de retrieval;
-- política de atualização;
-- avaliação de relevância.
+- embeddings or an index;
+- a retrieval mechanism;
+- an update policy;
+- relevance evaluation.
 
-### 16.6 Documentação automatizada
+### 16.6 Automated documentation
 
-Automação deve gerar:
+Automation must generate:
 
-- grafo de projetos;
-- matriz de artefatos;
-- inventário de contratos;
-- lista de exports ABI;
-- versões de toolchains;
+- the project graph;
+- an artifact matrix;
+- a contract inventory;
+- a list of ABI exports;
+- toolchain versions;
 - benchmark summary;
-- compatibilidade de targets.
+- target compatibility.
 
-Automação não deve gerar silenciosamente:
+Automation must not silently generate:
 
-- decisões arquiteturais;
-- justificativas de ADR;
-- promessas de suporte;
-- requisitos de produto.
+- architectural decisions;
+- ADR rationale;
+- support promises;
+- product requirements.
 
 ---
 
 ### 16.7 Grafting Graph IR
 
-O Graph IR representa projetos, targets, módulos, símbolos, contratos, ABI, artefatos, runtimes, threads, documentos, ADRs, workflows, skills, agentes, prompts, ferramentas, MCPs, policies, evals, tarefas, runs e handoffs.
+The Graph IR represents projects, targets, modules, symbols, contracts, ABI, artifacts, runtimes, threads, documents, ADRs, workflows, skills, agents, prompts, tools, MCPs, policies, evals, tasks, runs, and handoffs.
 
-Relações derivadas registram extractor, versão, arquivo, símbolo, hash, confiança e evidência. O Graph IR é o modelo canônico de intercâmbio e consulta; a autoridade do fato continua no código, manifest, schema, contrato ou ADR de origem.
+Derived relations record extractor, version, file, symbol, hash, confidence, and evidence. The Graph IR is the canonical model for interchange and querying; the authority for a fact remains in the originating code, manifest, schema, or ADR.
 
-Níveis:
+Levels:
 
-| Nível | Conteúdo                                    |
+| Level | Content                                    |
 | ------ | -------------------------------------------- |
-| L0     | apps, packages, crates e projetos            |
-| L1     | módulos e imports                           |
-| L2     | classes, traits, interfaces e APIs públicas |
-| L3     | call graph, dataflow e runtime tracing       |
+| L0     | apps, packages, crates, and projects            |
+| L1     | modules and imports                           |
+| L2     | classes, traits, interfaces, and public APIs |
+| L3     | call graph, dataflow, and runtime tracing       |
 
-Call graphs aproximados não são verdade normativa.
+Approximate call graphs are not normative truth.
 
-### 16.8 AntV X6 e Architecture Studio
+### 16.8 AntV X6 and Architecture Studio
 
-X6 é visualizador/editor controlado. Informação normativa, derivada, authored e visual permanece separada. Grafos derivados são somente leitura. Workflows authored passam por schema, policy, plan/diff e executor Nx/CI.
+X6 is a controlled viewer/editor. Normative, derived, authored, and visual information remains separate. Derived graphs are read-only. Authored workflows go through schema, policy, plan/diff, and the Nx/CI executor.
 
-Views V1:
+V1 views:
 
 1. Project Map;
 2. Task Pipeline;
@@ -2114,24 +2115,24 @@ Views V1:
 5. Documentation Map;
 6. AI Capability Map.
 
-Por DEC-046, a biblioteca X6 em si é acessada por um wrapper genérico
-(`packages/x6-canvas`), do qual `graph-x6` (Graph IR do Architecture Studio)
-é um consumidor específico. Um segundo consumidor (o mapa interativo de um
-produto como o VTT) reaproveita `x6-canvas` sem reaproveitar `graph-x6` — as
-duas aplicações de X6 têm domínios diferentes e não devem compartilhar
-schema ou lógica além da camada de canvas.
+Per DEC-046, the X6 library itself is accessed through a generic wrapper
+(`packages/x6-canvas`), of which `graph-x6` (the Architecture Studio's Graph IR)
+is one specific consumer. A second consumer (a product's interactive map,
+such as the VTT's) reuses `x6-canvas` without reusing `graph-x6` — the
+two X6 applications have different domains and must not share
+schema or logic beyond the canvas layer.
 
 ### 16.9 Context packs
 
-Cada tarefa recebe um context pack pequeno, reproduzível, versionado e validado contendo task, critérios, capabilities, policies, contexto, ferramentas permitidas/proibidas, schema de saída, artefatos, handoffs, graph scope e token budget. O context pack é índice, não substituto para leitura do código.
+Each task receives a small, reproducible, versioned, and validated context pack containing task, criteria, capabilities, policies, context, allowed/forbidden tools, output schema, artifacts, handoffs, graph scope, and token budget. The context pack is an index, not a substitute for reading the code.
 
-## 17. Generators e scaffolding
+## 17. Generators and scaffolding
 
-### 17.1 Plugin local
+### 17.1 Local plugin
 
-Um plugin Nx local será criado depois que o scaffold inicial estabilizar.
+A local Nx plugin will be created after the initial scaffold stabilizes.
 
-Generators previstos:
+Planned generators:
 
 - `domain`;
 - `rust-crate`;
@@ -2142,111 +2143,111 @@ Generators previstos:
 - `adr`;
 - `benchmark`.
 
-### 17.2 Generator de domínio
+### 17.2 Domain generator
 
 Input:
 
-- nome;
+- name;
 - tags;
-- precisa de contrato?;
-- precisa de compute?;
-- precisa de binding público?;
+- needs a contract?;
+- needs compute?;
+- needs a public binding?;
 
-Output mínimo:
+Minimum output:
 
-- diretório;
-- manifest de membro;
+- directory;
+- member manifest;
 - `project.json`;
-- testes;
-- documentação local;
-- atualização de workspace;
-- dependências no grafo.
+- tests;
+- local documentation;
+- workspace update;
+- graph dependencies.
 
-Não criar bindings para todo domínio automaticamente. Preferir uma API agregada do engine.
+Do not create bindings for every domain automatically. Prefer an aggregated engine API.
 
-### 17.3 Regra de adoção
+### 17.3 Adoption rule
 
-Durante a fase bootstrap, a primeira estrutura pode ser criada manualmente pelo agente.
+During the bootstrap phase, the first structure can be created manually by the agent.
 
-Após o generator passar nos testes:
+After the generator passes its tests:
 
-- novos projetos padronizados devem usar generator;
-- alterações manuais na topologia devem ser justificadas;
-- generator deve ser atualizado quando a convenção mudar.
+- new standardized projects must use the generator;
+- manual topology changes must be justified;
+- the generator must be updated when the convention changes.
 
 ---
 
 ## 18. CI/CD
 
-### 18.1 Princípios
+### 18.1 Principles
 
-- instalação ocorre antes do Nx;
-- tarefas cacheáveis não fazem instalação;
-- runners usam lockfiles;
-- cache é particionado por OS, arquitetura, perfil e toolchain;
-- GPU real é testada separadamente de CPU CI;
-- publish/sign/deploy nunca são restaurados de cache.
+- installation happens before Nx;
+- cacheable tasks do not perform installation;
+- runners use lockfiles;
+- cache is partitioned by OS, architecture, profile, and toolchain;
+- real GPU is tested separately from CPU CI;
+- publish/sign/deploy are never restored from cache.
 
-### 18.2 Pipeline de Pull Request
+### 18.2 Pull Request pipeline
 
-Etapas:
+Steps:
 
 1. checkout;
-2. validar versões das toolchains;
+2. validate toolchain versions;
 3. `pnpm install --frozen-lockfile`;
 4. `uv lock --check`;
 5. `uv sync --locked`;
-6. `cargo metadata` e lock check;
-7. `dotnet restore --locked-mode`, quando aplicável;
+6. `cargo metadata` and lock check;
+7. `dotnet restore --locked-mode`, when applicable;
 8. codegen;
-9. `nx affected` para format/lint/typecheck/test/build;
-10. validar ABI e protocolo;
-11. extrair e validar Graph IR;
-12. bloquear relações arquiteturais proibidas;
-13. gerar context packs e documentação;
-14. validar `.ai/`, registries, skills e referências;
-15. compilar prompts e gerar adapters;
-16. detectar drift;
-17. executar evals rápidas;
-18. revisar expansão de permissões e MCPs;
-19. verificar artefatos inesperados.
+9. `nx affected` for format/lint/typecheck/test/build;
+10. validate ABI and protocol;
+11. extract and validate Graph IR;
+12. block forbidden architectural relations;
+13. generate context packs and documentation;
+14. validate `.ai/`, registries, skills, and references;
+15. compile prompts and generate adapters;
+16. detect drift;
+17. run quick evals;
+18. review permission and MCP expansion;
+19. check for unexpected artifacts.
 
-### 18.3 Matriz nativa
+### 18.3 Native matrix
 
-| Runner      | Artefatos                                 |
+| Runner      | Artifacts                                 |
 | ----------- | ----------------------------------------- |
-| Linux x64   | Wasm,`.so`, testes Rust/Python/TS       |
-| Windows x64 | `.dll`, wrapper C#, desktop V1          |
-| macOS arm64 | `.dylib`, validação Metal/wgpu futura |
+| Linux x64   | Wasm, `.so`, Rust/Python/TS tests       |
+| Windows x64 | `.dll`, C# wrapper, desktop V1          |
+| macOS arm64 | `.dylib`, future Metal/wgpu validation |
 
-Não assumir que um build Linux equivale a validar DirectX ou Metal.
+Do not assume a Linux build is equivalent to validating DirectX or Metal.
 
-### 18.4 Testes GPU
+### 18.4 GPU tests
 
-Pipeline normal:
+Normal pipeline:
 
-- valida WGSL;
-- compila backend;
-- testa CPU fallback;
-- executa testes sem exigir GPU dedicada.
+- validates WGSL;
+- compiles the backend;
+- tests CPU fallback;
+- runs tests without requiring a dedicated GPU.
 
-Pipeline GPU, nightly/manual:
+GPU pipeline, nightly/manual:
 
-- roda em hardware conhecido;
-- coleta adapter/features/limits;
-- executa benchmarks;
-- testa device loss quando possível;
-- compara resultado contra CPU dentro de tolerância;
-- publica relatório, não cacheia como verdade eterna.
+- runs on known hardware;
+- collects adapter/features/limits;
+- runs benchmarks;
+- tests device loss when possible;
+- compares result against CPU within tolerance;
+- publishes a report, not cached as eternal truth.
 
 ### 18.5 Release
 
-Enquanto tudo for interno:
+While everything is internal:
 
-- uma versão do produto;
-- manifest de artefatos;
-- versões separadas de ABI/protocolo;
-- build ID e git SHA;
+- one product version;
+- artifact manifest;
+- separate ABI/protocol versions;
+- build ID and git SHA;
 - checksums.
 
 Manifest:
@@ -2264,86 +2265,86 @@ Manifest:
 }
 ```
 
-Nx Release poderá coordenar versões e changelogs, mas publicação Cargo/NuGet/Python exigirá adaptadores explícitos. Não presumir publicação políglota automática.
+Nx Release may coordinate versions and changelogs, but Cargo/NuGet/Python publication will require explicit adapters. Do not assume automatic polyglot publication.
 
 ---
 
-## 19. Testes
+## 19. Testing
 
-### 19.1 Pirâmide
+### 19.1 Pyramid
 
-1. testes puros do domínio;
+1. pure domain tests;
 2. property-based tests;
-3. testes diferenciais CPU versus GPU;
-4. testes de contrato;
-5. testes ABI;
-6. testes de integração dos bindings;
-7. testes dos hosts;
+3. CPU versus GPU differential tests;
+4. contract tests;
+5. ABI tests;
+6. binding integration tests;
+7. host tests;
 8. e2e;
 9. benchmarks.
 
-### 19.2 Domínio
+### 19.2 Domain
 
-Testar:
+Test:
 
-- invariantes;
-- comandos inválidos;
-- transições;
-- RNG controlado;
+- invariants;
+- invalid commands;
+- transitions;
+- controlled RNG;
 - replay;
 - state hash;
 - snapshots.
 
 ### 19.3 CPU versus GPU
 
-Para cada kernel:
+For each kernel:
 
-- gerar casos pequenos;
-- executar CPU;
-- executar GPU;
-- comparar com tolerância;
-- incluir NaN, infinidade, vazio, limites;
-- testar devices com features mínimas.
+- generate small cases;
+- run on CPU;
+- run on GPU;
+- compare within tolerance;
+- include NaN, infinity, empty, boundary cases;
+- test devices with minimal features.
 
-Não exigir igualdade bit-a-bit de floating point sem justificativa matemática.
+Do not require bit-for-bit floating-point equality without mathematical justification.
 
 ### 19.4 ABI
 
-Testar:
+Test:
 
-- versão compatível;
-- major incompatível;
-- `struct_size` menor/maior;
-- handle inválido;
+- compatible version;
+- incompatible major;
+- smaller/larger `struct_size`;
+- invalid handle;
 - double release;
 - use-after-release;
 - null pointer;
-- buffer vazio;
-- panic interna;
-- shutdown com jobs pendentes;
-- biblioteca ausente;
-- arquitetura errada.
+- empty buffer;
+- internal panic;
+- shutdown with pending jobs;
+- missing library;
+- wrong architecture.
 
-### 19.5 Memória
+### 19.5 Memory
 
-Testar:
+Test:
 
-- leak;
-- crescimento de arena;
+- leaks;
+- arena growth;
 - leases;
-- pinning curto;
+- short pinning;
 - Worker termination;
 - `memory.grow`;
 - device loss;
-- liberação após cancelamento.
+- release after cancellation.
 
 ---
 
-## 20. Observabilidade
+## 20. Observability
 
-O core deve produzir eventos diagnósticos estruturados, não escrever diretamente em UI.
+The core must produce structured diagnostic events, not write directly to the UI.
 
-Campos:
+Fields:
 
 - severity;
 - subsystem;
@@ -2358,690 +2359,692 @@ Campos:
 - adapter;
 - build ID.
 
-Hosts decidem:
+Hosts decide:
 
 - console;
-- arquivo;
-- telemetria;
+- file;
+- telemetry;
 - overlay;
-- tracing distribuído.
+- distributed tracing.
 
-Dados sensíveis ou secretos não devem aparecer em logs.
+Sensitive or secret data must not appear in logs.
 
 ---
 
-## 21. Segurança e robustez
+## 21. Security and robustness
 
-### 21.1 Dados não confiáveis
+### 21.1 Untrusted data
 
-Todo payload de rede deve:
+Every network payload must:
 
-- ter limite de tamanho;
-- ser verificado;
-- validar versão;
-- validar command type;
-- validar autorização no host;
-- validar semântica no core;
-- recusar offsets inválidos.
+- have a size limit;
+- be verified;
+- validate version;
+- validate command type;
+- validate authorization on the host;
+- validate semantics in the core;
+- reject invalid offsets.
 
 ### 21.2 FFI
 
-Cada export deve:
+Every export must:
 
-- validar null;
-- validar comprimento;
-- validar overflow;
-- validar alinhamento quando necessário;
-- retornar status;
-- nunca fazer unwind pela fronteira.
+- validate null;
+- validate length;
+- validate overflow;
+- validate alignment when necessary;
+- return a status;
+- never unwind across the boundary.
 
 ### 21.3 GPU
 
-Limitar:
+Limit:
 
-- tamanho de buffers;
-- número de jobs;
+- buffer size;
+- number of jobs;
 - workgroups;
-- memória residente;
-- tempo máximo cooperativo;
-- fila por origem;
-- retries de device loss.
+- resident memory;
+- maximum cooperative time;
+- queue per origin;
+- device loss retries.
 
 ### 21.4 Supply chain
 
-- lockfiles commitados;
-- toolchains pinadas;
-- checksums para binários baixados;
-- dependências novas revisadas;
-- plugins Nx tratados como código executável;
-- cache remoto somente em domínio confiável.
+- committed lockfiles;
+- pinned toolchains;
+- checksums for downloaded binaries;
+- reviewed new dependencies;
+- Nx plugins treated as executable code;
+- remote cache only in a trusted domain.
 
 ---
 
-## 22. Fases de implementação
+## 22. Implementation phases
 
-A ordem mandatória unificada é:
+The unified mandatory order is:
 
 ```text
-decisões
-→ Knowledge Plane + Graph IR mínimo
-→ AI Control Plane mínimo
+decisions
+→ Knowledge Plane + minimal Graph IR
+→ minimal AI Control Plane
 → spikes
-→ workspace orientado a contexto
-→ core CPU
-→ bindings Isekai
-→ compute GPU
+→ context-oriented workspace
+→ CPU core
+→ Isekai bindings
+→ GPU compute
 → hosts
 → multiplayer
-→ solver proprietário
-→ AI Control Plane avançado
+→ proprietary solver
+→ advanced AI Control Plane
 ```
 
-### Fase 0 — Fechamento arquitetural e fundação de conhecimento
+### Phase 0 — Architectural closure and knowledge foundation
 
-Objetivo:
+Objective:
 
-- resolver gates;
-- provar riscos P0;
-- criar contratos para humanos e agentes;
-- não construir produto ainda.
+- resolve gates;
+- prove P0 risks;
+- create contracts for humans and agents;
+- not build the product yet.
 
-Entregáveis:
+Deliverables:
 
-- ADR do Knowledge & Automation Plane;
-- Grafting Graph IR v1 mínimo;
+- Knowledge & Automation Plane ADR;
+- minimal Grafting Graph IR v1;
 - `GRAFTING_MASTER_SOURCE.md`;
-- `AGENTS.md` raiz;
-- template `README.md` + `AGENTS.md` + metadata por projeto;
-- `.ai/` mínimo;
+- root `AGENTS.md`;
+- `README.md` + `AGENTS.md` + per-project metadata template;
+- minimal `.ai/`;
 - AI System Maintainer;
 - hooks via `uv`;
-- primeiro context pack;
-- `ai:validate` e drift check;
-- ADRs iniciais;
-- spike Rust → Wasm;
-- spike Rust DLL → C#;
-- spike `wgpu` nativo e Web;
-- benchmark de fronteira;
-- decisão de engine e host Web.
+- first context pack;
+- `ai:validate` and drift check;
+- initial ADRs;
+- Rust → Wasm spike;
+- Rust DLL → C# spike;
+- native and Web `wgpu` spike;
+- boundary benchmark;
+- engine and Web host decision.
 
-### Fase 1 — Workspace mínimo orientado a contexto
+### Phase 1 — Minimal context-oriented workspace
 
-Objetivo:
+Objective:
 
-- criar toolchains;
-- criar Nx;
-- criar projeto Rust puro;
-- validar cache;
-- validar o grafo e contratos operacionais.
+- create toolchains;
+- create Nx;
+- create a pure Rust project;
+- validate cache;
+- validate the graph and operational contracts.
 
-Entregáveis:
+Deliverables:
 
-- manifests raiz;
-- versões pinadas;
+- root manifests;
+- pinned versions;
 - bootstrap;
 - `nx graph`;
-- extrator Nx → Graph IR;
-- Studio read-only mínimo;
-- registry inicial de capabilities e agents;
-- projeto `domain-core`;
-- CI Linux básica.
+- Nx → Graph IR extractor;
+- minimal read-only Studio;
+- initial capabilities and agents registry;
+- `domain-core` project;
+- basic Linux CI.
 
-### Fase 2 — Contratos, core CPU, Prompt IR e evals mínimas
+### Phase 2 — Contracts, CPU core, Prompt IR, and minimal evals
 
-Objetivo:
+Objective:
 
-- implementar um vertical slice sem GPU;
-- provar o fluxo básico do AI Control Plane.
+- implement a vertical slice without GPU;
+- prove the AI Control Plane's basic flow.
 
-Entregáveis:
+Deliverables:
 
 - Command;
 - DomainEvent;
 - Snapshot;
 - codegen;
 - state hash;
-- testes puros;
-- backend CPU;
-- Prompt IR mínimo;
-- compilador/snapshot inicial;
+- pure tests;
+- CPU backend;
+- minimal Prompt IR;
+- initial compiler/snapshot;
 - Promptfoo;
-- cache de compilação.
+- compile cache.
 
-### Fase 3 — Isekai: bindings entre mundos
+### Phase 3 — Isekai: bindings between worlds
 
-Objetivo:
+Objective:
 
-- consumir o mesmo vertical slice em Web e C#.
+- consume the same vertical slice on Web and C#.
 
-Entregáveis:
+Deliverables:
 
 - C ABI v1;
-- wrapper C#;
+- C# wrapper;
 - Wasm Worker;
-- API de jobs;
-- testes de ciclo de vida.
+- job API;
+- lifecycle tests.
 
-### Fase 4 — Compute GPU
+### Phase 4 — GPU compute
 
-Objetivo:
+Objective:
 
-- acelerar um workload comprovadamente apropriado.
+- accelerate a workload proven to be appropriate.
 
-Entregáveis:
+Deliverables:
 
 - `compute-api`;
 - `compute-wgpu`;
-- kernel WGSL;
-- buffers residentes;
-- readback async;
-- comparação CPU/GPU;
+- WGSL kernel;
+- resident buffers;
+- async readback;
+- CPU/GPU comparison;
 - fallback.
 
-### Fase 5 — Hosts mínimos
+### Phase 5 — Minimal hosts
 
-Objetivo:
+Objective:
 
-- UI/render mínimos consumindo o core.
+- minimal UI/render consuming the core.
 
-Entregáveis:
+Deliverables:
 
-- VTT mostra estado do core;
-- Desktop mostra o mesmo estado;
-- nenhum domínio duplicado.
+- VTT shows the core's state;
+- Desktop shows the same state;
+- no duplicated domain.
 
-### Fase 6 — Multiplayer
+### Phase 6 — Multiplayer
 
-Objetivo:
+Objective:
 
-- host autoritativo mínimo.
+- minimal authoritative host.
 
-Entregáveis:
+Deliverables:
 
 - AcceptedCommand;
 - journal;
 - snapshot/recovery;
 - projection;
-- delta por cliente;
-- reconexão.
+- per-client delta;
+- reconnection.
 
-### Fase 7 — Solver proprietário
+### Phase 7 — Proprietary solver
 
-Objetivo:
+Objective:
 
-- framework de otimização reutilizável.
+- reusable optimization framework.
 
-Entregáveis:
+Deliverables:
 
-- modelo de problema;
-- backend CPU;
-- kernels GPU;
+- problem model;
+- CPU backend;
+- GPU kernels;
 - stopping criteria;
 - benchmark;
-- validação;
-- persistência de problemas residentes.
+- validation;
+- resident problem persistence.
 
-### Fase 8 — AI Control Plane avançado
+### Phase 8 — Advanced AI Control Plane
 
-Objetivo:
+Objective:
 
-- adicionar gateway, observabilidade, aprendizado e comunicação direta somente após a fundação estar medida.
+- add gateway, observability, learning, and direct communication only after the foundation has been measured.
 
-Entregáveis sujeitos a spike:
+Deliverables subject to spike:
 
 - Bifrost;
 - Langfuse;
 - LangMem;
 - GEPA/DSPy;
-- LLMLingua seletivo;
+- selective LLMLingua;
 - Context Broker MCP;
 - provider routing;
-- Graph IR avançado;
-- views de IA no Architecture Studio.
+- advanced Graph IR;
+- AI views in the Architecture Studio.
 
-## 23. Backlog inicial
+## 23. Initial backlog
 
-### Epic A — Decisões e provas de conceito
+### Epic A — Decisions and proofs of concept
 
-| ID    | Trabalho              | Depende de  | Critério de aceite                           |
-| ----- | --------------------- | ----------- | --------------------------------------------- |
-| A-001 | ADR do host Web       | —          | GATE-001 fechado com justificativa            |
-| A-002 | ADR da engine C#      | —          | GATE-002 fechado e risco de P/Invoke avaliado |
-| A-003 | ADR de plataformas V1 | —          | matriz explícita de OS/arch                  |
-| A-004 | ADR de determinismo   | —          | níveis exigidos definidos                    |
-| A-005 | Spike C ABI Rust/C#   | A-002       | create/execute/destroy e erro funcionam       |
-| A-006 | Spike Wasm/Worker     | A-001       | batch processado fora da main thread          |
-| A-007 | Spike`wgpu` nativo  | —          | compute + readback assíncrono                |
-| A-008 | Spike`wgpu` Web     | A-006       | mesmo WGSL executa em WebGPU                  |
-| A-009 | Benchmark de cópias  | A-005,A-006 | copy budget medido                            |
-| A-010 | Avaliar`@nx/dotnet` | A-002       | adotar ou registrar fallback                  |
+| ID    | Work              | Depends on  | Acceptance criteria                           |
+| ----- | ---------------------- | ----------- | --------------------------------------------- |
+| A-001 | Web host ADR       | —          | GATE-001 closed with justification            |
+| A-002 | C# engine ADR      | —          | GATE-002 closed and P/Invoke risk assessed |
+| A-003 | V1 platforms ADR | —          | explicit OS/arch matrix                  |
+| A-004 | Determinism ADR   | —          | required levels defined                    |
+| A-005 | Rust/C# C ABI spike   | A-002       | create/execute/destroy and error work       |
+| A-006 | Wasm/Worker spike   | A-001       | batch processed off the main thread          |
+| A-007 | Native `wgpu` spike  | —          | compute + async readback                |
+| A-008 | Web `wgpu` spike     | A-006       | same WGSL runs on WebGPU                  |
+| A-009 | Copy benchmark  | A-005,A-006 | copy budget measured                  |
+| A-010 | Evaluate `@nx/dotnet` | A-002       | adopt or record fallback                  |
 
-### Epic B — Fundação do workspace
+### Epic B — Workspace foundation
 
-| ID    | Trabalho                | Depende de   | Critério de aceite                       |
+| ID    | Work                | Depends on   | Acceptance criteria                       |
 | ----- | ----------------------- | ------------ | ----------------------------------------- |
-| B-001 | Criar workspace pnpm/Nx | A-001        | grafo executável                         |
-| B-002 | Criar workspace Cargo   | —           | `cargo check --workspace`               |
-| B-003 | Criar workspace uv      | —           | `uv lock --check` e pacote exemplo      |
-| B-004 | Criar solução .NET    | A-002        | restore/build mínimo                     |
-| B-005 | Pinar toolchains        | B-001..B-004 | versões reproduzíveis                   |
-| B-006 | Criar bootstrap         | B-005        | instala/sincroniza uma vez                |
-| B-007 | Configurar cache Nx     | B-001        | segundo build restaura output             |
-| B-008 | Configurar affected     | B-007        | mudança local executa apenas dependentes |
-| B-009 | CI Linux inicial        | B-006        | PR verde em clean checkout                |
-| B-010 | CI Windows inicial      | B-004,B-006  | DLL e testes C# verdes                    |
+| B-001 | Create pnpm/Nx workspace | A-001        | executable graph                         |
+| B-002 | Create Cargo workspace   | —           | `cargo check --workspace`               |
+| B-003 | Create uv workspace      | —           | `uv lock --check` and example package      |
+| B-004 | Create .NET solution    | A-002        | minimal restore/build                     |
+| B-005 | Pin toolchains        | B-001..B-004 | reproducible versions                   |
+| B-006 | Create bootstrap         | B-005        | installs/syncs once                |
+| B-007 | Configure Nx cache     | B-001        | second build restores output               |
+| B-008 | Configure affected     | B-007        | local change runs only dependents |
+| B-009 | Initial Linux CI        | B-006        | green PR on clean checkout                |
+| B-010 | Initial Windows CI      | B-004,B-006  | DLL and C# tests green                |
 
-### Epic C — Core e contratos
+### Epic C — Core and contracts
 
-| ID    | Trabalho                     | Depende de        | Critério de aceite             |
+| ID    | Work                     | Depends on        | Acceptance criteria             |
 | ----- | ---------------------------- | ----------------- | ------------------------------- |
-| C-001 | Criar`domain-core`         | B-002             | crate puro sem host/network/GPU |
-| C-002 | Definir Command mínimo      | C-001             | validação e teste             |
-| C-003 | Definir DomainEvent mínimo  | C-002             | evento semântico testado       |
-| C-004 | Definir Snapshot mínimo     | C-001             | round trip e hash               |
-| C-005 | Configurar`flatc`          | B-001,B-002,B-004 | TS/C#/Rust gerados              |
-| C-006 | Definir evolução de schema | C-005             | teste de compatibilidade        |
-| C-007 | Implementar state hash       | C-001             | replay reproduz hash            |
-| C-008 | Criar property tests         | C-002..C-004      | invariantes cobertos            |
+| C-001 | Create `domain-core`         | B-002             | pure crate with no host/network/GPU |
+| C-002 | Define minimal Command      | C-001             | validation and test             |
+| C-003 | Define minimal DomainEvent  | C-002             | tested semantic event       |
+| C-004 | Define minimal Snapshot     | C-001             | round trip and hash               |
+| C-005 | Configure `flatc`          | B-001,B-002,B-004 | TS/C#/Rust generated              |
+| C-006 | Define schema evolution | C-005             | compatibility test        |
+| C-007 | Implement state hash       | C-001             | replay reproduces hash             |
+| C-008 | Create property tests         | C-002..C-004      | invariants covered            |
 
-### Epic D — Isekai, ABI e bindings
+### Epic D — Isekai, ABI, and bindings
 
-| ID    | Trabalho                         | Depende de   | Critério de aceite                 |
+| ID    | Work                         | Depends on   | Acceptance criteria                 |
 | ----- | -------------------------------- | ------------ | ----------------------------------- |
-| D-001 | Definir`EngineAbiInfo`         | A-005        | compatibilidade testada             |
-| D-002 | Implementar handles              | C-001        | geração e double-release testados |
-| D-003 | Implementar engine lifecycle     | D-002        | estados e poison testados           |
-| D-004 | Implementar buffer lease         | D-002        | view/release sem leak               |
-| D-005 | Exportar`isekai-capi` v1       | D-001..D-004 | header e DLL                        |
-| D-006 | Criar`Grafting.Isekai.Interop` | D-005        | `SafeHandle` e smoke test         |
-| D-007 | Criar`isekai-wasm`             | C-001,D-002  | offsets/handles testados            |
-| D-008 | Criar`isekai-web-client`       | D-007        | Promise/job/cancel/shutdown         |
-| D-009 | Teste de memória                | D-006,D-008  | sem leak no cenário alvo           |
+| D-001 | Define `EngineAbiInfo`         | A-005        | compatibility tested             |
+| D-002 | Implement handles              | C-001        | generation and double-release tested |
+| D-003 | Implement engine lifecycle     | D-002        | states and poison tested           |
+| D-004 | Implement buffer lease         | D-002        | view/release without leak               |
+| D-005 | Export `isekai-capi` v1       | D-001..D-004 | header and DLL                        |
+| D-006 | Create `Grafting.Isekai.Interop` | D-005        | `SafeHandle` and smoke test         |
+| D-007 | Create `isekai-wasm`             | C-001,D-002  | offsets/handles tested            |
+| D-008 | Create `isekai-web-client`       | D-007        | Promise/job/cancel/shutdown         |
+| D-009 | Memory test                | D-006,D-008  | no leak in the target scenario           |
 
 ### Epic E — Compute
 
-| ID    | Trabalho                 | Depende de  | Critério de aceite              |
+| ID    | Work                 | Depends on  | Acceptance criteria              |
 | ----- | ------------------------ | ----------- | -------------------------------- |
-| E-001 | Criar`compute-api`     | C-001       | domínio não depende de`wgpu` |
-| E-002 | Criar`compute-cpu`     | E-001       | baseline correto                 |
-| E-003 | Escolher workload piloto | A-007,A-008 | dataset e métrica definidos     |
-| E-004 | Criar WGSL único        | E-003       | valida nativo e Web              |
-| E-005 | Criar`compute-wgpu`    | E-001,E-004 | device/pipeline/job              |
-| E-006 | Buffers persistentes     | E-005       | upload amortizado                |
-| E-007 | Readback assíncrono     | E-005       | nenhuma espera na UI             |
-| E-008 | Fallback CPU             | E-002,E-005 | capability switch testado        |
-| E-009 | Teste diferencial        | E-002,E-005 | tolerância aprovada             |
-| E-010 | Benchmark decisório     | E-006,E-007 | faixa em que GPU vence           |
+| E-001 | Create `compute-api`     | C-001       | domain does not depend on `wgpu` |
+| E-002 | Create `compute-cpu`     | E-001       | correct baseline                 |
+| E-003 | Choose pilot workload | A-007,A-008 | dataset and metric defined     |
+| E-004 | Create single WGSL        | E-003       | validates native and Web              |
+| E-005 | Create `compute-wgpu`    | E-001,E-004 | device/pipeline/job              |
+| E-006 | Persistent buffers     | E-005       | amortized upload                |
+| E-007 | Async readback     | E-005       | no wait on UI             |
+| E-008 | CPU fallback             | E-002,E-005 | capability switch tested        |
+| E-009 | Differential test        | E-002,E-005 | tolerance approved             |
+| E-010 | Decision benchmark     | E-006,E-007 | range in which GPU wins           |
 
 ### Epic F — Hosts
 
-| ID    | Trabalho                     | Depende de  | Critério de aceite          |
+| ID    | Work                     | Depends on  | Acceptance criteria          |
 | ----- | ---------------------------- | ----------- | ---------------------------- |
-| F-001 | Scaffold Web                 | A-001,B-001 | app inicia                   |
-| F-002 | Integrar Worker/Wasm         | D-008,F-001 | estado vem do Rust           |
-| F-003 | Integrar Three.js            | F-001       | renderer separado do compute |
-| F-004 | Scaffold Desktop             | A-002,B-004 | app inicia                   |
-| F-005 | Integrar DLL                 | D-006,F-004 | estado vem do Rust           |
-| F-006 | Packaging nativo             | F-005       | DLL correta por RID          |
-| F-007 | Vertical slice compartilhado | F-002,F-005 | comportamento equivalente    |
+| F-001 | Web scaffold                 | A-001,B-001 | app starts                   |
+| F-002 | Integrate Worker/Wasm         | D-008,F-001 | state comes from Rust           |
+| F-003 | Integrate Three.js            | F-001       | renderer separate from compute |
+| F-004 | Desktop scaffold             | A-002,B-004 | app starts                   |
+| F-005 | Integrate DLL                 | D-006,F-004 | state comes from Rust           |
+| F-006 | Native packaging             | F-005       | correct DLL per RID          |
+| F-007 | Shared vertical slice | F-002,F-005 | equivalent behavior    |
 
-### Epic G — Automação e documentação
+### Epic G — Automation and documentation
 
-| ID    | Trabalho                | Depende de  | Critério de aceite               |
+| ID    | Work                | Depends on  | Acceptance criteria               |
 | ----- | ----------------------- | ----------- | --------------------------------- |
-| G-001 | Criar`AGENTS.md`      | B-001       | regras e comandos corretos        |
-| G-002 | Criar`CLAUDE.md`      | G-001       | adaptador curto, sem duplicação |
-| G-003 | Gerar repo map          | B-001       | arquivo derivado reproduzível    |
-| G-004 | Gerar artifact manifest | D-001       | versões e target corretos        |
-| G-005 | Template de ADR         | —          | novo ADR padronizado              |
-| G-006 | Generator de crate      | B-001,B-002 | crate e grafo válidos            |
-| G-007 | Generator de domínio   | G-006,C-005 | slice completo                    |
-| G-008 | `docs:check`          | G-003,G-004 | CI detecta deriva                 |
+| G-001 | Create `AGENTS.md`      | B-001       | correct rules and commands        |
+| G-002 | Create `CLAUDE.md`      | G-001       | short adapter, no duplication |
+| G-003 | Generate repo map          | B-001       | reproducible derived file    |
+| G-004 | Generate artifact manifest | D-001       | correct versions and target        |
+| G-005 | ADR template         | —          | standardized new ADR              |
+| G-006 | Crate generator      | B-001,B-002 | valid crate and graph            |
+| G-007 | Domain generator   | G-006,C-005 | complete slice                    |
+| G-008 | `docs:check`          | G-003,G-004 | CI detects drift                 |
 
-### Epic H — Multiplayer futuro
+### Epic H — Future multiplayer
 
-| ID    | Trabalho                 | Depende de  | Critério de aceite           |
+| ID    | Work                 | Depends on  | Acceptance criteria           |
 | ----- | ------------------------ | ----------- | ----------------------------- |
-| H-001 | ADR do host autoritativo | GATE-004    | GATE-004 fechado              |
-| H-002 | AcceptedCommand          | C-002       | ordem/dedup testados          |
+| H-001 | Authoritative host ADR | GATE-004    | GATE-004 closed              |
+| H-002 | AcceptedCommand          | C-002       | order/dedup tested          |
 | H-003 | Journal                  | H-002       | append/recovery               |
-| H-004 | Snapshot recovery        | C-004,H-003 | hash validado                 |
-| H-005 | Projection core          | C-003       | informação privada isolada  |
-| H-006 | ReplicationDelta         | H-005       | delta específico por cliente |
-| H-007 | Transport adapter        | H-001,H-006 | core continua agnóstico      |
+| H-004 | Snapshot recovery        | C-004,H-003 | validated hash                 |
+| H-005 | Projection core          | C-003       | private information isolated  |
+| H-006 | ReplicationDelta         | H-005       | client-specific delta |
+| H-007 | Transport adapter        | H-001,H-006 | core remains agnostic      |
 
 ---
 
-### Epic I — Knowledge Plane e Graph IR
+### Epic I — Knowledge Plane and Graph IR
 
-| ID    | Trabalho                            | Depende de  | Critério de aceite                            |
+| ID    | Work                            | Depends on  | Acceptance criteria                            |
 | ----- | ----------------------------------- | ----------- | ---------------------------------------------- |
-| I-001 | ADR do Knowledge & Automation Plane | —          | autoridade e lifecycle documental definidos    |
-| I-002 | Graph IR v1                         | I-001       | schemas, IDs e evidência validados            |
-| I-003 | Template operacional por projeto    | I-001       | README, AGENTS e metadata gerados              |
-| I-004 | Extrator Nx → Graph IR             | I-002,B-001 | projetos/targets/edges reproduzíveis          |
-| I-005 | Context pack v1                     | I-002,G-001 | task gera pacote pequeno e rastreável         |
-| I-006 | Architecture Studio read-only       | I-002,I-004 | subgrafo navegável sem editar fatos derivados |
-| I-007 | Drift check                         | I-003,I-004 | CI detecta documentação/grafo desatualizado  |
+| I-001 | Knowledge & Automation Plane ADR | —          | authority and documentary lifecycle defined    |
+| I-002 | Graph IR v1                         | I-001       | schemas, IDs, and evidence validated            |
+| I-003 | Per-project operational template    | I-001       | README, AGENTS, and metadata generated              |
+| I-004 | Nx → Graph IR extractor             | I-002,B-001 | reproducible projects/targets/edges          |
+| I-005 | Context pack v1                     | I-002,G-001 | task generates a small, traceable package         |
+| I-006 | Read-only Architecture Studio       | I-002,I-004 | navigable subgraph without editing derived facts |
+| I-007 | Drift check                         | I-003,I-004 | CI detects outdated documentation/graph  |
 
 ### Epic J — AI Control Plane
 
-| ID    | Trabalho                          | Depende de        | Critério de aceite                                 |
-| ----- | --------------------------------- | ----------------- | --------------------------------------------------- |
-| J-001 | Criar estrutura`.ai/`           | I-001             | registry, policies, contracts e state válidos      |
-| J-002 | Instalar AI System Maintainer     | J-001,B-003       | observe/audit testados via uv                       |
-| J-003 | Registry de capabilities e agents | J-001             | IDs únicos e schemas válidos                      |
-| J-004 | Skill lifecycle e adapters        | J-003,G-001,G-002 | mesma skill localizável por Claude e Codex         |
-| J-005 | Prompt IR v1                      | J-001             | prompt compilado e hash reproduzível               |
-| J-006 | Promptfoo                         | J-005             | regressões e triggers avaliados                    |
-| J-007 | Gateway Bifrost spike             | J-005,J-006       | roteamento/custo/cache exato medidos                |
-| J-008 | Langfuse spike                    | J-005,J-006       | tracing com política de dados validada             |
-| J-009 | Learning candidates               | J-002,J-006       | evidência vira proposta, não mudança automática |
-| J-010 | LangMem/GEPA/DSPy spikes          | J-009             | variante avaliada em branch com rollback            |
-| J-011 | Context Broker MCP                | I-005,J-003       | tools mínimas testadas no MCP Inspector            |
-| J-012 | AI Graph IR extension             | I-002,J-003,J-005 | skills/prompts/runs aparecem com evidência         |
+| ID    | Work                          | Depends on        | Acceptance criteria                                 |
+| ----- | --------------------------------- | ----------------- | ----------------------------------------------------- |
+| J-001 | Create `.ai/` structure           | I-001             | valid registry, policies, contracts, and state      |
+| J-002 | Install AI System Maintainer     | J-001,B-003       | observe/audit tested via uv                       |
+| J-003 | Capabilities and agents registry | J-001             | unique IDs and valid schemas                      |
+| J-004 | Skill lifecycle and adapters        | J-003,G-001,G-002 | same skill locatable by Claude and Codex         |
+| J-005 | Prompt IR v1                      | J-001             | compiled prompt with reproducible hash               |
+| J-006 | Promptfoo                         | J-005       | evaluated regressions and triggers               |
+| J-007 | Bifrost gateway spike             | J-005,J-006       | routing/cost/exact cache measured                |
+| J-008 | Langfuse spike                    | J-005,J-006       | tracing with validated data policy             |
+| J-009 | Learning candidates               | J-002,J-006       | evidence becomes a proposal, not an automatic change |
+| J-010 | LangMem/GEPA/DSPy spikes          | J-009             | variant evaluated in a branch with rollback            |
+| J-011 | Context Broker MCP                | I-005,J-003       | minimal tools tested in MCP Inspector            |
+| J-012 | AI Graph IR extension             | I-002,J-003,J-005 | skills/prompts/runs appear with evidence         |
 
 ## 24. Definition of Done
 
-Uma tarefa só está concluída quando:
+A task is only complete when:
 
-- escopo solicitado foi implementado;
-- testes relevantes passam;
-- lint/format/typecheck passam;
-- inputs e outputs Nx estão corretos;
-- nenhuma tarefa cacheável ganhou side effect;
-- documentação afetada foi atualizada;
-- ADR foi criado quando houve decisão;
-- contrato/ABI foi versionado quando necessário;
-- código gerado é reproduzível;
-- não há lógica duplicada nos hosts;
-- erro e cleanup foram considerados;
-- o agente reportou arquivos e comandos executados;
-- mudança ficou pequena o suficiente para revisão;
-- `AGENTS.md`, `.ai/`, adapters e Graph IR não ficaram em drift;
-- mudanças de skill, prompt ou agente possuem eval aplicável;
-- tokens, cache e custo foram registrados quando houve chamada de modelo;
-- nenhuma permissão ou ferramenta foi expandida silenciosamente.
+- the requested scope has been implemented;
+- relevant tests pass;
+- lint/format/typecheck pass;
+- Nx inputs and outputs are correct;
+- no cacheable task gained a side effect;
+- affected documentation has been updated;
+- an ADR was created when there was a decision;
+- a contract/ABI was versioned when necessary;
+- generated code is reproducible;
+- there is no duplicated logic in the hosts;
+- error and cleanup were considered;
+- the agent reported the files and commands executed;
+- the change was small enough for review;
+- `AGENTS.md`, `.ai/`, adapters, and Graph IR did not drift;
+- skill, prompt, or agent changes have an applicable eval;
+- tokens, cache, and cost were recorded when there was a model call;
+- no permission or tool was silently expanded.
 
-Para performance:
+For performance:
 
-- benchmark anexado;
-- baseline comparável;
-- hardware e versões registrados;
-- resultado não é baseado em microbenchmark irrelevante.
+- benchmark attached;
+- comparable baseline;
+- hardware and versions recorded;
+- the result is not based on an irrelevant microbenchmark.
 
 ---
 
-## 25. Protocolo de trabalho para agentes Claude e GPT/Codex
+## 25. Working protocol for Claude and GPT/Codex agents
 
-### 25.1 Antes de escrever
+### 25.1 Before writing
 
-Todo agente deve:
+Every agent must:
 
-1. ler `AGENTS.md`;
-2. ler este documento;
-3. ler ADRs relacionados;
-4. inspecionar a árvore real;
-5. consultar o grafo Nx;
-6. identificar o ID exato da tarefa;
-7. listar decisões `OPEN` que bloqueiam;
-8. propor plano pequeno;
-9. aguardar decisão apenas quando realmente bloqueante.
+1. read `AGENTS.md`;
+2. read this document;
+3. read related ADRs;
+4. inspect the actual tree;
+5. consult the Nx graph;
+6. identify the exact task ID;
+7. list blocking `OPEN` decisions;
+8. propose a small plan;
+9. wait for a decision only when truly blocking.
 
-### 25.2 Durante a implementação
+### 25.2 During implementation
 
-Todo agente deve:
+Every agent must:
 
-- trabalhar em um ID de backlog por vez, salvo autorização;
-- usar toolchains nativas;
-- preservar alterações existentes;
-- não refatorar áreas não relacionadas;
-- adicionar teste junto da implementação;
-- registrar premissas;
-- fazer checkpoints em commits pequenos quando autorizado;
-- atualizar o plano se descobrir um risco.
+- work on one backlog ID at a time, unless authorized otherwise;
+- use native toolchains;
+- preserve existing changes;
+- not refactor unrelated areas;
+- add a test alongside the implementation;
+- record assumptions;
+- make small checkpoint commits when authorized;
+- update the plan upon discovering a risk.
 
-### 25.3 Formato de conclusão
+### 25.3 Completion format
 
-Ao concluir uma tarefa, responder:
+Upon completing a task, respond with:
 
 ```text
-Tarefa:
-Resultado:
-Arquivos alterados:
-Validações executadas:
-Decisões tomadas:
-Riscos ou pendências:
-Próxima tarefa desbloqueada:
+Task:
+Result:
+Files changed:
+Validations run:
+Decisions made:
+Risks or pending items:
+Next unblocked task:
 ```
 
 ### 25.4 Stop conditions
 
-O agente deve parar e pedir decisão quando:
+The agent must stop and request a decision when:
 
-- engine/framework não escolhido altera a estrutura;
-- a ação mudaria ABI major;
-- a ação quebraria protocolo persistido;
-- seria necessário compartilhar recursos GPU entre runtimes;
-- seria necessário um segundo lockfile/workspace;
-- credenciais ou publicação externa forem necessárias;
-- um teste demonstra que a arquitetura `LOCKED` é inviável;
-- escopo crescer materialmente além do ID selecionado.
+- an unchosen engine/framework changes the structure;
+- the action would change the ABI major version;
+- the action would break the persisted protocol;
+- it would be necessary to share GPU resources between runtimes;
+- a second lockfile/workspace would be necessary;
+- external credentials or publication are needed;
+- a test shows that a `LOCKED` architecture is unviable;
+- the scope grows materially beyond the selected ID.
 
-### 25.5 Prompt de bootstrap recomendado
+### 25.5 Recommended bootstrap prompt
 
 ```text
-Leia integralmente GRAFTING_MASTER_SOURCE.md.
+Read GRAFTING_MASTER_SOURCE.md in full.
 
-Sua missão atual é trabalhar somente na Fase 0. Não crie ainda a árvore
-definitiva das aplicações e não converta decisões OPEN em escolhas silenciosas.
+Your current mission is to work only on Phase 0. Do not yet create the
+definitive tree of the applications and do not silently turn OPEN decisions
+into choices.
 
-1. Extraia a tabela de decisões LOCKED, PROVISIONAL e OPEN.
-2. Faça uma análise adversarial das decisões P0:
-   - ownership da GPU;
+1. Extract the table of LOCKED, PROVISIONAL, and OPEN decisions.
+2. Perform an adversarial analysis of the P0 decisions:
+   - GPU ownership;
    - copy budget;
    - ABI/lifecycle;
    - multiplayer.
-3. Proponha os ADRs necessários para fechar GATE-001 a GATE-005.
-4. Proponha quatro spikes mínimos:
-   - Rust → Wasm em Worker;
+3. Propose the ADRs needed to close GATE-001 through GATE-005.
+4. Propose four minimal spikes:
+   - Rust → Wasm in a Worker;
    - Rust DLL → C#;
-   - mesmo WGSL em wgpu nativo e Web;
-   - benchmark de batching/cópias.
-5. Para cada spike, defina árvore mínima, comandos, teste e critério objetivo
-   de sucesso.
-6. Não implemente nada até apresentar o plano e os pontos que exigem decisão.
+   - the same WGSL on native and Web wgpu;
+   - a batching/copy benchmark.
+5. For each spike, define the minimal tree, commands, test, and objective
+   success criteria.
+6. Do not implement anything until you present the plan and the points that
+   require a decision.
 
-Ao encontrar conflito, cite a seção e apresente a menor alteração possível.
+When you find a conflict, cite the section and present the smallest possible change.
 ```
 
-### 25.6 Prompt após fechamento dos gates
+### 25.6 Prompt after gates close
 
 ```text
-Leia GRAFTING_MASTER_SOURCE.md, AGENTS.md raiz e local, o context pack e todos os ADRs aceitos.
+Read GRAFTING_MASTER_SOURCE.md, root and local AGENTS.md, the context pack, and all accepted ADRs.
 
-Execute somente a tarefa <ID>.
+Execute only task <ID>.
 
-Antes de editar:
-- confirme dependências;
-- mostre os arquivos que serão criados/alterados;
-- declare inputs e outputs Nx;
-- liste validações.
+Before editing:
+- confirm dependencies;
+- show the files that will be created/changed;
+- declare Nx inputs and outputs;
+- list validations.
 
-Durante a implementação:
-- mantenha toolchains nativas como fonte de verdade;
-- não replique lógica Rust;
-- não faça alterações arquiteturais silenciosas;
-- preserve alterações alheias.
+During implementation:
+- keep native toolchains as the source of truth;
+- do not replicate Rust logic;
+- do not make silent architectural changes;
+- preserve others' changes.
 
-Ao final, use o formato de conclusão definido na Seção 25.3.
+At the end, use the completion format defined in Section 25.3.
 ```
 
 ---
 
-### 25.7 Provedores, agentes e revisão
+### 25.7 Providers, agents, and review
 
-Claude e Codex compartilham skills, contracts, context packs e tarefas. Definições específicas de fornecedor permanecem adapters. Não fixar permanentemente que um provedor sempre planeja ou implementa. Usar `primary_agent`, `review_agent`, `verification_agent` e `synthesis_agent` conforme evals locais.
+Claude and Codex share skills, contracts, context packs, and tasks. Vendor-specific definitions remain adapters. Do not permanently fix that one provider always plans or implements. Use `primary_agent`, `review_agent`, `verification_agent`, and `synthesis_agent` according to local evals.
 
-O agente que implementou não pode ser o único revisor. Para trabalho paralelo, usar uma worktree por executor e um único proprietário por tarefa.
+The agent that implemented cannot be the sole reviewer. For parallel work, use one worktree per executor and a single owner per task.
 
-### 25.8 Formato estruturado de handoff
+### 25.8 Structured handoff format
 
-Todo handoff deve registrar task ID, remetente, destinatário, objetivo, contexto, critérios, restrições, incertezas, artefatos, proprietário atual, schema de retorno e próximo responsável.
+Every handoff must record task ID, sender, recipient, objective, context, criteria, constraints, uncertainties, artifacts, current owner, return schema, and next responsible party.
 
-## 26. Estratégia para aproveitar o crédito de agente
+## 26. Strategy for making the most of agent credit
 
-O crédito deve ser gasto em redução de incerteza e trabalho verificável, nesta ordem:
+Credit should be spent reducing uncertainty and on verifiable work, in this order:
 
-### Passo 1 — Revisão adversarial
+### Step 1 — Adversarial review
 
-Pedir ao Claude para tentar quebrar este blueprint:
+Ask Claude to try to break this blueprint:
 
-- contradições;
-- incompatibilidades de toolchain;
-- custos ocultos;
-- riscos de threading;
-- risco de ABI;
-- risco de device loss;
-- tarefas faltantes.
+- contradictions;
+- toolchain incompatibilities;
+- hidden costs;
+- threading risks;
+- ABI risk;
+- device loss risk;
+- missing tasks.
 
-Não permitir edição nessa passada.
+Do not allow editing in this pass.
 
-### Passo 2 — ADRs
+### Step 2 — ADRs
 
-Uma sessão por decisão grande:
+One session per major decision:
 
 - Web;
-- engine C#;
-- plataformas;
-- determinismo;
-- servidor.
+- C# engine;
+- platforms;
+- determinism;
+- server.
 
-Cada sessão deve terminar em ADR, não em código.
+Each session must end in an ADR, not in code.
 
-### Passo 3 — Spikes descartáveis
+### Step 3 — Throwaway spikes
 
-Spikes devem ser pequenos e mensuráveis. Eles não viram fundação automaticamente.
+Spikes must be small and measurable. They do not automatically become the foundation.
 
-Depois do resultado:
+After the result:
 
-- aceitar;
-- rejeitar;
-- reescrever como código de produção.
+- accept;
+- reject;
+- rewrite as production code.
 
-### Passo 4 — Scaffold
+### Step 4 — Scaffold
 
-Somente depois:
+Only afterward:
 
 - manifests;
 - workspace;
 - Nx;
-- core mínimo;
+- minimal core;
 - CI.
 
-### Passo 5 — Vertical slice
+### Step 5 — Vertical slice
 
-Entregar uma ação completa:
+Deliver one complete action:
 
 ```text
-input Web/C#
+Web/C# input
 → binding
 → Rust
-→ evento/resultado
+→ event/result
 → host
 ```
 
-Antes de criar dezenas de pacotes.
+Before creating dozens of packages.
 
-### Passo 6 — Automação
+### Step 6 — Automation
 
-Automatizar somente convenções já comprovadas:
+Automate only conventions already proven:
 
 - generators;
 - docs;
 - manifests;
 - release.
 
-### Práticas para reduzir desperdício
+### Practices to reduce waste
 
-- fornecer ID de tarefa em todo prompt;
-- não pedir “construa todo o monorepo”;
-- pedir plano e diff esperado;
-- manter `repo-map.md` atualizado;
-- separar revisão de implementação;
-- exigir critérios de aceite;
-- criar checkpoints;
-- não repetir o blueprint inteiro em arquivos de agente.
+- provide a task ID in every prompt;
+- do not ask to "build the whole monorepo";
+- ask for a plan and expected diff;
+- keep `repo-map.md` up to date;
+- separate review from implementation;
+- require acceptance criteria;
+- create checkpoints;
+- do not repeat the entire blueprint in agent files.
 
 ---
 
-## 27. Checklist de criação
+## 27. Creation checklist
 
-### Antes do scaffold
+### Before the scaffold
 
-- [x] GATE-001 fechado (`docs/adr/ADR-0001-host-web.md`, DEC-041).
-- [ ] GATE-002 fechado — aplica-se apenas ao scaffold do app desktop e ao wrapper
-      específico de engine; trabalho genérico de `isekai-capi`/`Grafting.Isekai.Interop`
-      e de Polymath não depende disso (`docs/adr/ADR-0002-engine-desktop.md`).
-- [x] GATE-003 fechado (`docs/adr/ADR-0003-platforms-v1.md`, DEC-043).
-- [x] GATE-004 pelo menos adiado formalmente (`docs/adr/ADR-0005-authoritative-host-deferral.md`).
-- [x] GATE-005 fechado (`docs/adr/ADR-0004-determinism.md`, DEC-044).
-- [ ] Spike Wasm aprovado.
-- [ ] Spike C ABI aprovado.
-- [ ] Spike wgpu Web/nativo aprovado.
-- [ ] Copy budget medido.
+- [x] GATE-001 closed (`docs/adr/ADR-0001-host-web.md`, DEC-041).
+- [ ] GATE-002 closed — applies only to the desktop app scaffold and the
+      engine-specific wrapper; generic work on `isekai-capi`/`Grafting.Isekai.Interop`
+      and Polymath does not depend on it (`docs/adr/ADR-0002-engine-desktop.md`).
+- [x] GATE-003 closed (`docs/adr/ADR-0003-platforms-v1.md`, DEC-043).
+- [x] GATE-004 at least formally deferred (`docs/adr/ADR-0005-authoritative-host-deferral.md`).
+- [x] GATE-005 closed (`docs/adr/ADR-0004-determinism.md`, DEC-044).
+- [ ] Wasm spike approved.
+- [ ] C ABI spike approved.
+- [ ] Web/native wgpu spike approved.
+- [ ] Copy budget measured.
 
 ### Workspace
 
-- [ ] pnpm e Nx pinados.
-- [ ] Cargo workspace válido.
-- [ ] uv workspace e lock válidos.
-- [ ] solução .NET válida.
-- [ ] `flatc` pinado.
-- [ ] bootstrap idempotente.
-- [ ] `.venv` fora do cache.
-- [ ] outputs determinísticos.
-- [ ] regra Polymath (DEC-042) — nenhuma inspeção de SO/runtime/RID fora de `polymath`,
-      `@grafting/polymath` ou `Grafting.Polymath` — documentada em `AGENTS.md` e, quando
-      houver CI, verificada por lint/ast-grep.
+- [ ] pnpm and Nx pinned.
+- [ ] valid Cargo workspace.
+- [ ] valid uv workspace and lock.
+- [ ] valid .NET solution.
+- [ ] `flatc` pinned.
+- [ ] idempotent bootstrap.
+- [ ] `.venv` outside the cache.
+- [ ] deterministic outputs.
+- [ ] Polymath rule (DEC-042) — no OS/runtime/RID inspection outside `polymath`,
+      `@grafting/polymath`, or `Grafting.Polymath` — documented in `AGENTS.md` and, when
+      there is CI, verified by lint/ast-grep.
 
 ### Core
 
-- [ ] domínio puro.
-- [ ] backend CPU.
+- [ ] pure domain.
+- [ ] CPU backend.
 - [ ] command/event/snapshot.
 - [ ] state hash.
-- [ ] testes de invariantes.
-- [ ] nenhum host importado.
+- [ ] invariant tests.
+- [ ] no host imported.
 
 ### FFI
 
 - [ ] ABI major/minor.
 - [ ] `struct_size`.
-- [ ] handles generacionais.
+- [ ] generational handles.
 - [ ] status codes.
-- [ ] panic protegida.
+- [ ] protected panic.
 - [ ] shutdown.
 - [ ] leases.
 - [ ] Worker.
-- [ ] wrapper C#.
+- [ ] C# wrapper.
 
 ### GPU
 
-- [ ] ownership privado.
+- [ ] private ownership.
 - [ ] capability negotiation.
-- [ ] fallback CPU.
-- [ ] buffers persistentes.
-- [ ] readback assíncrono.
+- [ ] CPU fallback.
+- [ ] persistent buffers.
+- [ ] async readback.
 - [ ] benchmark.
-- [ ] teste diferencial.
+- [ ] differential test.
 
-### CI e documentação
+### CI and documentation
 
 - [ ] affected.
-- [ ] cache por plataforma.
-- [ ] runners nativos.
-- [ ] docs geradas.
+- [ ] cache per platform.
+- [ ] native runners.
+- [ ] generated docs.
 - [ ] ADRs.
 - [ ] artifact manifest.
 - [ ] `AGENTS.md`.
@@ -3051,48 +3054,48 @@ Automatizar somente convenções já comprovadas:
 
 ### Knowledge & AI Control Plane
 
-- [ ] documento mestre adotado;
-- [ ] documentos substituídos arquivados;
+- [ ] master document adopted;
+- [ ] superseded documents archived;
 - [ ] Graph IR v1;
 - [ ] `grafting.graph.json`;
-- [ ] template README/AGENTS/metadata;
-- [x] `.ai/` mínimo (README + skill `task-completion`; demais diretórios do
-      layout canônico ainda não criados — seção 29.1);
-- [ ] AI System Maintainer testado via uv;
-- [ ] hooks sem chamada de modelo;
-- [ ] registry e schemas válidos;
-- [ ] primeiro context pack;
-- [ ] adapters Claude/Codex sem drift;
-- [ ] Prompt IR e snapshot reproduzível;
+- [ ] README/AGENTS/metadata template;
+- [x] minimal `.ai/` (README + `task-completion` skill; the other directories of
+      the canonical layout not yet created — section 29.1);
+- [ ] AI System Maintainer tested via uv;
+- [ ] hooks with no model call;
+- [ ] valid registry and schemas;
+- [ ] first context pack;
+- [ ] Claude/Codex adapters without drift;
+- [ ] Prompt IR and reproducible snapshot;
 - [ ] Promptfoo;
-- [ ] cache semântico desabilitado;
-- [ ] uma única fonte durável de tarefas;
-- [ ] aprovação para mudanças de controle;
-- [ ] rollback testado.
+- [ ] semantic cache disabled;
+- [ ] a single durable source of tasks;
+- [ ] approval for control changes;
+- [ ] tested rollback.
 
-## 28. Questões futuras deliberadamente fora da V1
+## 28. Future matters deliberately out of V1
 
-Não implementar sem demanda e ADR:
+Do not implement without demand and an ADR:
 
-- compartilhamento de textura/buffer entre `wgpu` e renderer;
+- texture/buffer sharing between `wgpu` and the renderer;
 - SharedArrayBuffer;
-- Event Sourcing completo;
-- microservices por domínio;
-- Bazel hermético;
+- full Event Sourcing;
+- microservices per domain;
+- hermetic Bazel;
 - Kubernetes;
-- publicação independente de todo crate/pacote;
-- plugin Nx universal para todas as linguagens;
-- transpilar Rust comum diretamente para WGSL;
-- renderer único em Rust;
-- execução distribuída do solver;
-- hot reload da biblioteca nativa;
-- migração automática de savegames arbitrariamente antigos.
+- independent publication of every crate/package;
+- a universal Nx plugin for all languages;
+- transpiling regular Rust directly to WGSL;
+- a single renderer in Rust;
+- distributed solver execution;
+- hot reload of the native library;
+- automatic migration of arbitrarily old savegames.
 
 ---
 
-## 29. AI Control Plane detalhado
+## 29. AI Control Plane in detail
 
-### 29.1 Estrutura
+### 29.1 Structure
 
 ```text
 .ai/
@@ -3120,15 +3123,15 @@ Não implementar sem demanda e ADR:
 └── scripts/
 ```
 
-`.ai/` é a fonte canônica do control plane, mas não substitui `AGENTS.md` como contrato operacional do projeto.
+`.ai/` is the canonical source of the control plane, but it does not replace `AGENTS.md` as the project's operational contract.
 
 ### 29.2 Progressive disclosure
 
-Inicialmente carregar apenas ID, nome, resumo, gatilhos, risco, custo e dependências. Corpo de skill, referências, scripts, schemas e tools entram somente após seleção.
+Initially load only ID, name, summary, triggers, risk, cost, and dependencies. Skill body, references, scripts, schemas, and tools are loaded only after selection.
 
 ### 29.3 Agent Skills
 
-Formato canônico:
+Canonical format:
 
 ```text
 skill-name/
@@ -3158,9 +3161,9 @@ discovered
 → archived
 ```
 
-Skills externas nunca entram diretamente como ativas.
+External skills never enter directly as active.
 
-### 29.4 Agentes iniciais do control plane
+### 29.4 Initial control plane agents
 
 - capability-curator;
 - skill-engineer;
@@ -3169,15 +3172,15 @@ Skills externas nunca entram diretamente como ativas.
 - repository-intelligence-agent;
 - graph-ir-architect.
 
-Cada agente define responsabilidades, permissões, limites, tools, contexto, schema de saída e evals.
+Each agent defines responsibilities, permissions, limits, tools, context, output schema, and evals.
 
 ### 29.5 AI System Maintainer
 
-Modos:
+Modes:
 
-- `observe`: após tools, sem modelo e sem alteração canônica;
-- `audit`: fim do turno, validação e relatório;
-- `evolve`: evidence-driven, com eval, revisão, aprovação e rollback.
+- `observe`: after tools, without a model and without a canonical change;
+- `audit`: end of turn, validation, and report;
+- `evolve`: evidence-driven, with eval, review, approval, and rollback.
 
 Hooks:
 
@@ -3187,74 +3190,74 @@ Stop        → audit
 SessionEnd  → finalize
 ```
 
-Execução Python:
+Python execution:
 
 ```bash
 uv run --locked --no-sync python <script>
 ```
 
-A própria skill, hooks, permissions, sandbox e MCPs só mudam em tarefa separada com aprovação humana.
+The skill itself, hooks, permissions, sandbox, and MCPs only change in a separate task with human approval.
 
 ### 29.6 Prompt IR
 
-Prompts canônicos vivem em `.ai/prompts/`. O compilador valida schema, resolve fragments, deduplica, preserva prioridade, gera adapters e snapshots, calcula hash e registra proveniência.
+Canonical prompts live in `.ai/prompts/`. The compiler validates schema, resolves fragments, deduplicates, preserves priority, generates adapters and snapshots, computes hash, and records provenance.
 
-BAML é spike opcional; não substitui a fonte Git.
+BAML is an optional spike; it does not replace the Git source.
 
-### 29.7 Gateway e cache
+### 29.7 Gateway and cache
 
-Bifrost é spike prioritário, executado inicialmente como contêiner pinado ou serviço externo e configurado em `tools/ai-gateway/`.
+Bifrost is a priority spike, initially run as a pinned container or external service and configured in `tools/ai-gateway/`.
 
-Caches distintos:
+Distinct caches:
 
-- compilação de prompt;
-- prompt caching nativo do provedor;
-- cache exato de resposta;
-- cache semântico.
+- prompt compilation;
+- the provider's native prompt caching;
+- exact response cache;
+- semantic cache.
 
-Cache semântico é desabilitado por padrão e proibido para implementação, debugging, review, segurança, incidentes, arquitetura, side effects e estado mutável.
+Semantic cache is disabled by default and prohibited for implementation, debugging, review, security, incidents, architecture, side effects, and mutable state.
 
-### 29.8 Economia de tokens
+### 29.8 Token economy
 
-Usar progressive disclosure, tool search, namespaces, context packs, deduplicação, summaries estruturados, cache e compressão seletiva.
+Use progressive disclosure, tool search, namespaces, context packs, deduplication, structured summaries, cache, and selective compression.
 
-LLMLingua não pode comprimir policies, permissions, AGENTS, CLAUDE, contracts, schemas, código, ABI, critérios de aceite, mensagens críticas ou configurações.
+LLMLingua must not compress policies, permissions, AGENTS, CLAUDE, contracts, schemas, code, ABI, acceptance criteria, critical messages, or configurations.
 
-### 29.9 Observabilidade e evals
+### 29.9 Observability and evals
 
-Langfuse é spike para tracing e datasets; `.ai/prompts/` continua fonte canônica.
+Langfuse is a spike for tracing and datasets; `.ai/prompts/` remains the canonical source.
 
-Promptfoo é o default para evals rápidas. Registrar correção, escopo, regressão, retrabalho, custo, latência, tokens, cache hit, tools, arquivos e side effects.
+Promptfoo is the default for quick evals. Record correctness, scope, regression, rework, cost, latency, tokens, cache hit, tools, files, and side effects.
 
-### 29.10 Aprendizado contínuo
+### 29.10 Continuous learning
 
 Pipeline:
 
 ```text
-execução
-→ observação
-→ evidência
-→ agrupamento
+execution
+→ observation
+→ evidence
+→ grouping
 → learning candidate
-→ proposta
+→ proposal
 → eval
-→ variante
-→ comparação
-→ revisão
-→ aprovação
-→ promoção
-→ monitoramento
+→ variant
+→ comparison
+→ review
+→ approval
+→ promotion
+→ monitoring
 ```
 
-Evidência mínima: pedido explícito, mesma correção duas vezes, incidente crítico, eval reproduzível, workflow equivalente três vezes ou drift objetivo.
+Minimum evidence: explicit request, the same fix twice, a critical incident, a reproducible eval, an equivalent workflow three times, or objective drift.
 
-LangMem, Hermes, GEPA e DSPy são referências/spikes; não promovem mudanças diretamente.
+LangMem, Hermes, GEPA, and DSPy are references/spikes; they do not promote changes directly.
 
-### 29.11 Comunicação entre agentes
+### 29.11 Communication between agents
 
-Fase 1: arquivos em `.ai/state/`.
+Phase 1: files in `.ai/state/`.
 
-Fase 2: Context Broker MCP com tools mínimas:
+Phase 2: Context Broker MCP with minimal tools:
 
 ```text
 capabilities.search
@@ -3268,9 +3271,9 @@ artifacts.publish
 events.append
 ```
 
-Fase 3: Claude e Codex chamam-se por MCP/wrappers com limites, tracing, schemas e aprovação para efeitos.
+Phase 3: Claude and Codex call each other via MCP/wrappers with limits, tracing, schemas, and approval for effects.
 
-## 30. Referências técnicas primárias
+## 30. Primary technical references
 
 ### Nx
 
@@ -3304,74 +3307,74 @@ Fase 3: Claude e Codex chamam-se por MCP/wrappers com limites, tracing, schemas 
 
 ---
 
-## 31. Resumo executivo final
+## 31. Final executive summary
 
-A arquitetura pretendida é viável:
+The intended architecture is viable:
 
-- um único core proprietário em Rust;
-- uma implementação de solver;
-- kernels WGSL reutilizados em Web e Desktop;
+- a single proprietary core in Rust;
+- one solver implementation;
+- WGSL kernels reused on Web and Desktop;
 - CPU fallback;
-- bindings finos;
-- Nx coordenando toolchains nativas;
-- Python gerenciado por uv;
-- contratos estruturados e arrays numéricos quentes;
-- ABI explícita;
-- GPU compute privada do core;
-- renderização privada dos hosts;
-- multiplayer autoritativo sem falsa nomenclatura de Event Sourcing.
+- thin bindings;
+- Nx coordinating native toolchains;
+- Python managed by uv;
+- structured contracts and hot numeric arrays;
+- explicit ABI;
+- GPU compute private to the core;
+- rendering private to the hosts;
+- authoritative multiplayer without falsely calling it Event Sourcing.
 
-O maior risco não é tecnológico. É tentar construir todas as camadas simultaneamente antes de validar:
+The biggest risk is not technological. It is trying to build all layers simultaneously before validating:
 
-- a engine C#;
-- o Worker Wasm;
-- a C ABI;
-- o `wgpu` Web;
-- o custo real das transferências.
+- the C# engine;
+- the Wasm Worker;
+- the C ABI;
+- Web `wgpu`;
+- the real cost of transfers.
 
-Por isso, a ordem mandatória é:
+That is why the mandatory order is:
 
 ```text
-decisões
-→ Knowledge Plane + Graph IR mínimo
-→ AI Control Plane mínimo
+decisions
+→ Knowledge Plane + minimal Graph IR
+→ minimal AI Control Plane
 → spikes
 → workspace
-→ core CPU
+→ CPU core
 → bindings
 → GPU
 → hosts
 → multiplayer
 → solver
-→ AI Control Plane avançado
+→ advanced AI Control Plane
 ```
 
-Essa sequência preserva o objetivo principal: criar um núcleo matemático realmente reaproveitável sem transformar o monorepo em um projeto de manutenção de build.
+This sequence preserves the main objective: creating a truly reusable mathematical core without turning the monorepo into a build-maintenance project.
 
 ---
 
-## 32. Manutenção desta fonte mestre
+## 32. Maintenance of this master source
 
-Toda alteração arquitetural deve:
+Every architectural change must:
 
-1. identificar seção afetada;
-2. citar task e ADR;
-3. atualizar versão;
-4. classificar decisão como `LOCKED`, `PROVISIONAL` ou `OPEN`;
-5. atualizar Graph IR;
-6. atualizar `AGENTS.md` quando comportamento operacional mudar;
-7. atualizar `.ai/` quando o AI Control Plane mudar;
-8. regenerar adapters;
-9. executar drift checks;
-10. preservar histórico Git.
+1. identify the affected section;
+2. cite the task and ADR;
+3. update the version;
+4. classify the decision as `LOCKED`, `PROVISIONAL`, or `OPEN`;
+5. update the Graph IR;
+6. update `AGENTS.md` when operational behavior changes;
+7. update `.ai/` when the AI Control Plane changes;
+8. regenerate adapters;
+9. run drift checks;
+10. preserve Git history.
 
-Documentos substituídos devem ir para:
+Superseded documents must go to:
 
 ```text
 docs/archive/superseded/
 ```
 
-com:
+with:
 
 ```text
 SUPERSEDED BY: GRAFTING_MASTER_SOURCE.md

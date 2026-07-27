@@ -1,92 +1,98 @@
-# Estado atual do planejamento
+# Current planning state
 
-> **Tipo:** estado operacional mutável
-> **Autoridade:** não altera a arquitetura; em conflito,
-> `GRAFTING_MASTER_SOURCE.md` vence.
-> **Atualizado em:** 26 de julho de 2026
+> **Type:** mutable operational status
+> **Authority:** does not alter the architecture; in case of conflict,
+> `GRAFTING_MASTER_SOURCE.md` wins.
+> **Updated on:** July 26, 2026
 
-## Situação
+## Situation
 
-- Repositório Git criado em 26 de julho de 2026; primeiro commit documental
-  realizado.
-- Existem `README.md`, `GRAFTING_MASTER_SOURCE.md` (v1.7.1),
-  `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `docs/adr/` (8
-  ADRs) e um `.ai/` mínimo (`README.md` + skill `task-completion`, ativa —
-  demais diretórios do layout canônico da seção 29.1 ainda não criados).
-- Não existem workspaces, lockfiles, aplicações, crates, pipelines,
-  toolchains instaladas (exceto git/node/dotnet no PC do proprietário) ou
-  infraestrutura em execução. A fase é exclusivamente de arquitetura e
-  preparação — nada disto deve ser tratado como implementado.
-- A fonte arquitetural ativa é `GRAFTING_MASTER_SOURCE.md`; `docs/adr/` é o
-  histórico de decisões que a alimenta.
+- Git repository created on July 26, 2026; first documentation commit made.
+- `README.md`, `GRAFTING_MASTER_SOURCE.md` (v1.8.0), `CURRENT_PLANNING_STATE.md`,
+  `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `docs/adr/` (8 ADRs), and a minimal
+  `.ai/` (`README.md` + the `task-completion` skill, active) all exist. The
+  remaining directories from the canonical `.ai/` layout (section 29.1) have
+  not been created yet.
+- English is now the default documentation language for the entire
+  repository (DEC-047): every pre-existing Portuguese document was
+  translated to English in this pass. This supersedes the earlier rule that
+  only required new files to be written in English going forward.
+- No workspaces, lockfiles, applications, crates, pipelines, installed
+  toolchains (except git/node/dotnet on the owner's machine), or running
+  infrastructure exist yet. The project is exclusively in the architecture
+  and preparation phase — none of this should be treated as implemented.
+- The active architectural source is `GRAFTING_MASTER_SOURCE.md`; `docs/adr/`
+  is the decision history that feeds it.
 
-## Fase atual
+## Current phase
 
 ```text
-planejamento
-→ revisão adversarial          (não executada formalmente ainda)
-→ fechamento dos Decision Gates   ← concluído hoje
-→ ADRs                            ← concluído hoje
-→ spikes descartáveis          ← próximo passo
+planning
+→ adversarial review           (not yet formally executed)
+→ closing the Decision Gates     ← done
+→ ADRs                            ← done
+→ full English translation pass   ← done
+→ disposable spikes                ← next step
 → scaffold
 ```
 
-## Decision Gates — estado consolidado
+## Decision Gates — consolidated status
 
-| Gate | Estado | Decisão | Registro |
+| Gate | Status | Decision | Record |
 | --- | --- | --- | --- |
-| GATE-001 | **fechado** | Host Web = Next.js; VTT é uma rota client-only, não o app inteiro | DEC-041 · ADR-0001 |
-| GATE-002 | aberto, **adiado formalmente** | Engine C# espera um jogo concreto; trabalho genérico de `isekai-capi`/`Grafting.Isekai.Interop` liberado | ADR-0002 |
-| GATE-003 | **fechado** | Cliente desktop V1 = Windows x64; Linux/macOS só build do core | DEC-043 · ADR-0003 |
-| GATE-004 | aberto, **adiado formalmente** | Host do servidor autoritativo espera a Fase 6 / Epic H | ADR-0005 |
-| GATE-005 | **fechado** | Determinismo de replay na mesma plataforma/build; GPU nunca escreve direto no state hash | DEC-044 · ADR-0004 |
-| GATE-007 | **fechado** | Monorepo único; "vender" um produto = empacotar o artefato daquele app, não dividir repositório | DEC-045 · ADR-0007 |
-| GATE-006, 008, 009 | abertos, sem prioridade | Fallback sem WebGPU; licença/proprietariedade; persistência do multiplayer | — |
+| GATE-001 | **closed** | Web host = Next.js; the VTT is a client-only route, not the whole app | DEC-041 · ADR-0001 |
+| GATE-002 | open, **formally deferred** | The C# engine choice awaits a concrete game; generic `isekai-capi`/`Grafting.Isekai.Interop` work is released | ADR-0002 |
+| GATE-003 | **closed** | V1 desktop client = Windows x64; Linux/macOS core-build only | DEC-043 · ADR-0003 |
+| GATE-004 | open, **formally deferred** | The authoritative server host choice awaits Phase 6 / Epic H | ADR-0005 |
+| GATE-005 | **closed** | Replay determinism on the same platform/build; GPU never writes directly to the state hash | DEC-044 · ADR-0004 |
+| GATE-007 | **closed** | Single monorepo; "selling" a product means packaging that app's artifact, not splitting the repository | DEC-045 · ADR-0007 |
+| GATE-006, 008, 009 | open, unprioritized | WebGPU-less fallback; license/proprietary policy; multiplayer persistence | — |
 
-Nenhum agente deve fechar GATE-002, GATE-004 ou qualquer gate de GATE-006 a
-GATE-009 sem decisão explícita do proprietário.
+No agent may close GATE-002, GATE-004, or any gate from GATE-006 to
+GATE-009 without an explicit decision from the owner.
 
-## Decisões estruturais complementares (não são gates numerados)
+## Complementary structural decisions (not numbered gates)
 
-| Decisão | Conteúdo | Registro |
+| Decision | Content | Record |
 | --- | --- | --- |
-| Polymath | Um pacote por runtime (`polymath`/`@grafting/polymath`/`Grafting.Polymath`) é o único lugar que pode inspecionar SO/runtime/RID | DEC-042 · ADR-0006 |
-| Fronteira `libs/` + mapa de domínios | Capacidade usada por >1 produto nasce em `libs/domains`/`packages/`, nunca duplicada num app. Mapa inicial: `narrative` e `session` genéricos; mapa X6 do VTT específico do produto (só `packages/x6-canvas` é compartilhado com o Architecture Studio); Discord e transcrição são integrações externas, não domínios | DEC-046 · ADR-0008 · fonte mestre §4.4 |
+| Polymath | One package per runtime (`polymath`/`@grafting/polymath`/`Grafting.Polymath`) is the only place allowed to inspect OS/runtime/RID | DEC-042 · ADR-0006 |
+| `libs/` boundary + domain map | A capability used by more than one product is born in `libs/domains`/`packages/`, never duplicated inside an app. Initial map: `narrative` and `session` are generic; the VTT's X6 map is product-specific (only `packages/x6-canvas` is shared with the Architecture Studio); Discord and transcription are external integrations, not domains | DEC-046 · ADR-0008 · master source §4.4 |
+| Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
 
-Pendente, mas não bloqueia a Fase 0: diretório-padrão de integrações
-externas (`apps/integrations/` vs. `tools/`) quando Discord/transcrição
-saírem do papel.
+Pending, but not blocking Phase 0: standard directory for external
+integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
+move from idea to implementation.
 
-Índice completo de ADRs, com status e link: `docs/adr/README.md`.
+Full ADR index, with status and links: `docs/adr/README.md`.
 
-## Spikes fundacionais previstos (Fase 0 — próximo passo)
+## Foundational spikes planned (Phase 0 — next step)
 
-1. Rust → Wasm em Dedicated Worker, sob o host Next.js (GATE-001);
-2. Rust C ABI/DLL → C# genérico (`isekai-capi` + `Grafting.Isekai.Interop`),
-   sem escolher engine — independente de GATE-002;
-3. mesmo WGSL em wgpu nativo e Web, respeitando o piso de determinismo do
-   GATE-005 (GPU nunca escreve direto no state hash);
-4. Polymath v0 (`libs/platform/polymath`, `packages/polymath`) — suporte
-   real só para Windows, stubs explícitos para as demais plataformas;
-5. benchmark de batching e copy budget;
-6. validação inicial de Nx e toolchains;
-7. Graph IR mínimo e visualização X6 read-only;
-8. AI Control Plane mínimo sem gateway ou autoevolução avançada.
+1. Rust → Wasm in a Dedicated Worker, under the Next.js host (GATE-001);
+2. generic Rust C ABI/DLL → C# (`isekai-capi` + `Grafting.Isekai.Interop`),
+   without choosing an engine — independent of GATE-002;
+3. the same WGSL shader in native and Web wgpu, respecting the GATE-005
+   determinism floor (GPU never writes directly to the state hash);
+4. Polymath v0 (`libs/platform/polymath`, `packages/polymath`) — real
+   support for Windows only, explicit stubs for other platforms;
+5. batching and copy-budget benchmark;
+6. initial Nx and toolchain validation;
+7. minimal Graph IR and read-only X6 visualization;
+8. minimal AI Control Plane, without a gateway or advanced self-evolution.
 
-Toolchain no PC do proprietário (verificado em 26/07/2026): git, node,
-dotnet instalados; **faltam** rustc/cargo, pnpm, uv, wasm-pack, flatc
-(este último só é necessário a partir da Fase 2).
+Toolchain on the owner's machine (verified 2026-07-26): git, node, and
+dotnet installed; **missing**: rustc/cargo, pnpm, uv, wasm-pack, flatc
+(the last one is only needed starting in Phase 2).
 
-## Próxima ação recomendada
+## Recommended next action
 
-Planejamento estrutural concluído — todos os gates prioritários e as
-decisões de reaproveitamento multi-produto estão resolvidos ou formalmente
-adiados. O próximo passo é instalar as toolchains faltantes e começar os
-spikes 1–4 acima, nessa ordem ou em paralelo.
+Structural planning is complete — every priority gate and the multi-product
+reuse decisions are either resolved or formally deferred, and the full
+repository documentation set is now in English (DEC-047). The next step is
+to install the missing toolchains and start spikes 1–4 above, in that order
+or in parallel.
 
-## Regra de atualização
+## Update rule
 
-Este arquivo registra apenas: estado real, fase corrente, próximos passos,
-bloqueios e decisões aguardando o proprietário. Decisões arquiteturais
-propriamente ditas vivem na fonte mestre ou em ADR — este arquivo aponta
-para elas, não as repete.
+This file records only: real status, current phase, next steps, blockers,
+and decisions awaiting the owner. Actual architectural decisions live in the
+master source or an ADR — this file points to them, it does not repeat them.

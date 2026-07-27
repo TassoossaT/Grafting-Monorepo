@@ -11,7 +11,7 @@ triggers:
 risk: low
 cost: low
 depends_on:
-  - AGENTS.md ("Formato de conclusão" section)
+  - AGENTS.md ("Completion format" section)
   - CURRENT_PLANNING_STATE.md
 status: active
 version: 1.0.0

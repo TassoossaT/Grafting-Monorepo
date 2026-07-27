@@ -20,29 +20,29 @@ repository easy to pick back up.
 ## Steps
 
 1. **Produce the completion report.**
-   Fill in the exact template from `AGENTS.md` → "Formato de conclusão".
+   Fill in the exact template from `AGENTS.md` → "Completion format".
    Do not skip fields — if a field is genuinely empty (e.g. no dependencies
    were touched), say so explicitly rather than omitting the line:
 
    ```text
-   Tarefa:
-   Resultado:
-   Arquivos criados:
-   Arquivos alterados:
-   Comandos executados:
-   Validações:
-   Decisões:
-   Dependências e licenças:
-   Contexto utilizado:
+   Task:
+   Result:
+   Files created:
+   Files changed:
+   Commands run:
+   Validations:
+   Decisions:
+   Dependencies and licenses:
+   Context used:
    Graph IR:
-   Riscos:
+   Risks:
    Rollback:
-   Próxima tarefa:
+   Next task:
    ```
 
-   `Validações` must reflect what was *actually* run (format/lint/typecheck/
+   `Validations` must reflect what was *actually* run (format/lint/typecheck/
    tests/build/codegen/schema validation/diff review/acceptance criteria/
-   docs/Graph IR/risks — per AGENTS.md → "Critério de conclusão"), not what
+   docs/Graph IR/risks — per AGENTS.md → "Completion criteria"), not what
    would ideally have been run. In the current planning-only phase this is
    usually "manual consistency review", not automated checks — say that
    plainly instead of implying CI ran.
@@ -57,7 +57,7 @@ repository easy to pick back up.
    - Collapse lists of individually-resolved items (e.g. gates closed one at
      a time across a session) into one consolidated table or list, not one
      bullet per historical decision moment.
-   - Update "Próxima ação recomendada" to the *actual* next concrete step,
+   - Update "Recommended next action" to the *actual* next concrete step,
      not a restatement of what was just finished.
 
 3. **Flag uncommitted state.**
