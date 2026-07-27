@@ -1,2 +1,11 @@
 node_modules/
 .next/
+
+# Rust build outputs
+target/
+
+# C#/.NET build and test outputs
+bin/
+obj/
+artifacts/
+TestResults/
