@@ -1,67 +1,67 @@
 # Grafting Monorepo
 
-Grafting é um monorepo políglota planejado para reunir:
+Grafting is a planned polyglot monorepo bringing together:
 
-- um Virtual Tabletop Web em TypeScript e Three.js;
-- um jogo desktop em C#/.NET;
-- um núcleo único em Rust para domínio, matemática, IA, pathfinding e solver;
-- ferramentas Python gerenciadas por uv;
-- interoperabilidade Rust/Wasm/TypeScript e Rust/C ABI/C# pelo subsistema Isekai;
-- compute GPU com wgpu/WGSL e fallback CPU;
-- Knowledge & Automation Plane;
-- Grafting Graph IR;
-- AI Control Plane compartilhado entre Claude e GPT/Codex.
+- a Web Virtual Tabletop in TypeScript and Three.js;
+- a desktop game in C#/.NET;
+- a single Rust core for domain, math, AI, pathfinding, and solver logic;
+- Python tooling managed by uv;
+- Rust/Wasm/TypeScript and Rust/C ABI/C# interop through the Isekai subsystem;
+- GPU compute with wgpu/WGSL and a CPU fallback;
+- a Knowledge & Automation Plane;
+- the Grafting Graph IR;
+- an AI Control Plane shared between Claude and GPT/Codex.
 
-## Estado atual
+## Current state
 
-O repositório ainda está em fase de planejamento. Não existe implementação,
-workspace ou histórico Git anterior.
+The repository is still in the planning phase. There is no implementation,
+workspace, or prior Git history beyond planning documents.
 
-O próximo marco é fechar os Decision Gates e executar os spikes da Fase 0 antes
-do scaffold definitivo.
+The next milestone is closing the Decision Gates and running the Phase 0
+spikes before the definitive scaffold.
 
-Consulte:
+See:
 
-- [`GRAFTING_MASTER_SOURCE.md`](GRAFTING_MASTER_SOURCE.md) — arquitetura,
-  decisões, backlog e plano canônicos;
-- [`CURRENT_PLANNING_STATE.md`](CURRENT_PLANNING_STATE.md) — situação corrente e
-  próximos passos;
-- [`AGENTS.md`](AGENTS.md) — contrato operacional para agentes;
-- [`docs/adr/`](docs/adr/) — decisões arquiteturais futuras;
-- [`.ai/README.md`](.ai/README.md) — escopo futuro do AI Control Plane.
+- [`GRAFTING_MASTER_SOURCE.md`](GRAFTING_MASTER_SOURCE.md) — canonical
+  architecture, decisions, backlog, and plan;
+- [`CURRENT_PLANNING_STATE.md`](CURRENT_PLANNING_STATE.md) — current status
+  and next steps;
+- [`AGENTS.md`](AGENTS.md) — operational contract for agents;
+- [`docs/adr/`](docs/adr/) — architectural decision records;
+- [`.ai/README.md`](.ai/README.md) — current scope of the AI Control Plane.
 
-## Autoridade documental
+## Documentation authority
 
-A ordem de autoridade é:
+The order of authority is:
 
 1. `GRAFTING_MASTER_SOURCE.md`;
-2. ADRs aprovados;
-3. contratos e schemas versionados;
-4. código, manifests e pipelines;
-5. `AGENTS.md` raiz e locais;
+2. approved ADRs;
+3. versioned contracts and schemas;
+4. code, manifests, and pipelines;
+5. root and local `AGENTS.md` files;
 6. `.ai/`;
-7. adapters de fornecedor;
-8. documentação gerada.
+7. vendor adapters;
+8. generated documentation.
 
-Arquivos resumidos não substituem a fonte mestre.
+Summary documents do not override the master source.
 
-## Ordem de criação
+## Build order
 
 ```text
-decisões
+decisions
 → ADRs
 → spikes
-→ workspace mínimo
-→ core CPU
-→ bindings Isekai
-→ compute GPU
+→ minimal workspace
+→ CPU core
+→ Isekai bindings
+→ GPU compute
 → hosts
 → multiplayer
 → solver
-→ AI Control Plane avançado
+→ advanced AI Control Plane
 ```
 
-## Regra central
+## Core rule
 
-Não construir todas as camadas simultaneamente. Primeiro reduzir incerteza,
-medir as fronteiras críticas e fechar as decisões que alteram a estrutura.
+Do not build all layers at once. First reduce uncertainty, measure the
+critical boundaries, and close the decisions that change the structure.

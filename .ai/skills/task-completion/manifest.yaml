@@ -1,0 +1,18 @@
+id: task-completion
+name: Task completion report
+summary: >
+  Produces the AGENTS.md completion report and refreshes
+  CURRENT_PLANNING_STATE.md so the next session starts from a clean,
+  non-redundant entry point.
+triggers:
+  - a tracked task is marked done
+  - the owner signals the work session is ending
+  - immediately before a commit that closes out planning/architecture work
+risk: low
+cost: low
+depends_on:
+  - AGENTS.md ("Formato de conclusão" section)
+  - CURRENT_PLANNING_STATE.md
+status: active
+version: 1.0.0
+owner: repository owner

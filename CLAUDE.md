@@ -1,21 +1,21 @@
 # CLAUDE.md
 
-Leia e siga:
+Read and follow, in order:
 
 1. `AGENTS.md`;
 2. `GRAFTING_MASTER_SOURCE.md`;
 3. `CURRENT_PLANNING_STATE.md`;
-4. ADRs e contratos aplicáveis.
+4. applicable ADRs and contracts.
 
-Este arquivo é apenas um adapter para Claude e não repete a arquitetura.
+This file is only an adapter for Claude and does not repeat the architecture.
 
-Enquanto o projeto estiver em planejamento:
+While the project is still in the planning phase:
 
-- trabalhe em decisões, ADRs, comparações e spikes;
-- não trate o monorepo planejado como já implementado;
-- não feche Decision Gates silenciosamente;
-- apresente evidência, riscos e critérios objetivos;
-- mantenha respostas e mudanças limitadas ao escopo solicitado.
+- work on decisions, ADRs, comparisons, and spikes;
+- do not treat the planned monorepo as already implemented;
+- do not close Decision Gates silently;
+- present evidence, risks, and objective criteria;
+- keep responses and changes limited to the requested scope.
 
-Quando houver implementação, use as toolchains nativas definidas na fonte
-mestre e siga o formato de trabalho de `AGENTS.md`.
+Once implementation begins, use the native toolchains defined in the master
+source and follow the working format in `AGENTS.md`.

@@ -1,114 +1,114 @@
-# AGENTS.md — Contrato operacional do Grafting Monorepo
+# AGENTS.md — Grafting Monorepo operational contract
 
-Este arquivo define como agentes devem trabalhar no repositório.
+This file defines how agents must work in this repository.
 
-## Leitura obrigatória
+## Required reading
 
-Antes de propor ou executar trabalho estrutural, leia nesta ordem:
+Before proposing or executing structural work, read in this order:
 
 1. `GRAFTING_MASTER_SOURCE.md`;
 2. `CURRENT_PLANNING_STATE.md`;
-3. ADRs relacionados;
-4. `AGENTS.md` mais próximo do escopo, quando existir;
-5. código, manifests, schemas e Graph IR aplicáveis.
+3. related ADRs;
+4. the nearest `AGENTS.md` to the scope, when one exists;
+5. applicable code, manifests, schemas, and Graph IR.
 
-## Estado inicial
+## Initial state
 
-Enquanto `CURRENT_PLANNING_STATE.md` informar que o monorepo ainda não existe:
+While `CURRENT_PLANNING_STATE.md` states that the monorepo does not yet exist:
 
-- não trate diretórios planejados como arquivos reais;
-- não assuma que Git, CI, Nx, Cargo, pnpm, uv ou .NET já estão configurados;
-- não invente resultados de comandos;
-- não declare uma implementação concluída;
-- produza planos, ADRs, spikes e critérios verificáveis.
+- do not treat planned directories as real files;
+- do not assume Git, CI, Nx, Cargo, pnpm, uv, or .NET are already configured;
+- do not invent command output;
+- do not declare an implementation complete;
+- produce plans, ADRs, spikes, and verifiable criteria.
 
-## Regras obrigatórias
+## Mandatory rules
 
-O agente NÃO DEVE:
+The agent MUST NOT:
 
-- fechar decisão `OPEN` silenciosamente;
-- substituir tecnologia `LOCKED`;
-- duplicar lógica Rust em TypeScript, C# ou Python;
-- expor tipos Rust diretamente pela ABI;
-- prometer zero-copy entre domínios distintos;
-- chamar replicação autoritativa de Event Sourcing;
-- criar segunda raiz de workspace ou lockfile sem ADR;
-- usar Nx para substituir toolchains nativas;
-- criar a árvore futura inteira vazia;
-- introduzir ferramenta, agente, skill ou MCP sem necessidade e avaliação;
-- modificar controles de segurança ou a própria manutenção sem aprovação;
-- tratar documentos resumidos como superiores à fonte mestre.
+- silently close an `OPEN` decision;
+- replace a `LOCKED` technology choice;
+- duplicate Rust logic in TypeScript, C#, or Python;
+- expose Rust types directly through the ABI;
+- promise zero-copy between distinct domains;
+- call authoritative replication "Event Sourcing";
+- create a second workspace root or lockfile without an ADR;
+- use Nx to replace native toolchains;
+- create the entire future tree empty;
+- introduce a tool, agent, skill, or MCP without need and evaluation;
+- modify security controls or its own maintenance without approval;
+- treat summary documents as superior to the master source.
 
-## Trabalho por tarefa
+## Task-based work
 
-Quando existir backlog implementado:
+Once there is an implemented backlog:
 
-- trabalhar em uma tarefa por vez;
-- manter um proprietário por tarefa;
-- usar worktree para execução paralela;
-- separar implementação de revisão independente;
-- preservar alterações não relacionadas.
+- work on one task at a time;
+- keep a single owner per task;
+- use a worktree for parallel execution;
+- separate implementation from independent review;
+- preserve unrelated changes.
 
-## Antes de editar
+## Before editing
 
 Declare:
 
 ```text
-Tarefa:
-Objetivo:
-Decisões aplicáveis:
-Decisões abertas:
-Arquivos afetados:
-Dependências:
-Inputs e outputs:
-Validações:
-Riscos:
+Task:
+Objective:
+Applicable decisions:
+Open decisions:
+Affected files:
+Dependencies:
+Inputs and outputs:
+Validations:
+Risks:
 ```
 
-## Critério de conclusão
+## Completion criteria
 
-Uma tarefa só pode ser declarada concluída com evidências aplicáveis:
+A task can only be declared complete with applicable evidence:
 
 - format;
 - lint;
 - typecheck;
-- testes;
+- tests;
 - build;
 - codegen;
-- validação de schema;
-- revisão do diff;
-- critérios de aceite;
-- documentação;
+- schema validation;
+- diff review;
+- acceptance criteria;
+- documentation;
 - Graph IR;
-- riscos e limitações.
+- risks and limitations.
 
-## Formato de conclusão
+## Completion format
 
 ```text
-Tarefa:
-Resultado:
-Arquivos criados:
-Arquivos alterados:
-Comandos executados:
-Validações:
-Decisões:
-Dependências e licenças:
-Contexto utilizado:
+Task:
+Result:
+Files created:
+Files changed:
+Commands run:
+Validations:
+Decisions:
+Dependencies and licenses:
+Context used:
 Graph IR:
-Riscos:
+Risks:
 Rollback:
-Próxima tarefa:
+Next task:
 ```
 
 ## Stop conditions
 
-Pare e solicite decisão quando:
+Stop and request a decision when:
 
-- um gate aberto alterar a estrutura;
-- houver mudança de ABI major;
-- protocolo persistido for quebrado;
-- compartilhamento GPU entre runtimes for necessário;
-- um novo workspace ou lockfile for necessário;
-- credenciais, publicação ou produção forem necessárias;
-- uma decisão `LOCKED` parecer inviável;
-- o escopo crescer materialmente.
+- an open gate would change the structure;
+- a major ABI change is involved;
+- a persisted protocol would be broken;
+- GPU sharing between runtimes is required;
+- a new workspace or lockfile is required;
+- credentials, publishing, or production access are required;
+- a `LOCKED` decision appears unviable;
+- the scope grows materially.
