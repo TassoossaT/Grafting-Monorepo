@@ -1,0 +1,42 @@
+{
+  "name": "engine-domain-core",
+  "root": "libs/engine/domain-core",
+  "projectType": "library",
+  "tags": ["scope:engine", "lang:rust", "platform:cross", "type:lib"],
+  "metadata": {
+    "graphIr": {
+      "_comment": "Placeholder only -- no Graph IR v1 schema exists yet (DEC-040/spike 7, not started). Superseded once a real Graph IR extractor lands; this satisfies DEC-028's 'every Nx project is born with ... Graph IR metadata' without inventing a fake schema.",
+      "id": "engine-domain-core",
+      "kind": "lib",
+      "tags": ["scope:engine", "lang:rust", "platform:cross"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo check -p grafting-domain-core"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p grafting-domain-core"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    }
+  }
+}

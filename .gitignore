@@ -1,5 +1,12 @@
 node_modules/
 .next/
+.nx/
+.venv/
+.vscode/
+.pytest_cache/
+dist/
+__pycache__/
+*.egg-info/
 
 # Rust build outputs
 target/
@@ -9,3 +16,6 @@ bin/
 obj/
 artifacts/
 TestResults/
+
+#spikes for tests
+spikes/

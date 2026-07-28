@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  linux:
+    # Master source S2.3: platform-dependent artifacts build on the
+    # corresponding system; the normal (non-native) build runs on Linux.
+    # No Windows/.NET job yet -- no dotnet root scaffolding exists (see
+    # CURRENT_PLANNING_STATE.md); that's B-010, still open.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        # rust-toolchain.toml pins channel/components/targets; running any
+        # cargo/rustup command in the repo root makes rustup install
+        # exactly that toolchain.
+        run: rustup show
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cargo check + test
+        run: |
+          cargo check --workspace
+          cargo test --workspace
+
+      - name: Nx check
+        run: pnpm exec nx run engine-domain-core:check
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.11.32"
+
+      - name: uv lock check + sync
+        run: |
+          uv lock --check
+          uv sync --locked
+
+      - name: Python tests
+        run: uv run --package automation pytest

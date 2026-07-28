@@ -1,0 +1,8 @@
+[package]
+name = "grafting-domain-core"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Pure domain core (state machine, Commands, DomainEvents, state hash). Real business logic lands in Epic C -- this crate currently only proves the workspace/Nx pipeline."
+
+[dependencies]

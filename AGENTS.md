@@ -37,7 +37,11 @@ The agent MUST NOT:
 - create the entire future tree empty;
 - introduce a tool, agent, skill, or MCP without need and evaluation;
 - modify security controls or its own maintenance without approval;
-- treat summary documents as superior to the master source.
+- treat summary documents as superior to the master source;
+- inspect `cfg(target_os)`, `navigator.gpu`, `process.platform`, or RID
+  directly outside `polymath` (Rust), `@grafting/polymath` (TypeScript), or
+  `Grafting.Polymath` (C#) — all platform/runtime inspection is centralized
+  there (DEC-042, `docs/adr/ADR-0006-polymath-platform-abstraction.md`).
 
 ## Task-based work
 

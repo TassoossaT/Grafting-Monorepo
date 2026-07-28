@@ -1,0 +1,10 @@
+{
+  "name": "grafting",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
+  "packageManager": "pnpm@11.17.0",
+  "devDependencies": {
+    "nx": "^23.1.0"
+  }
+}

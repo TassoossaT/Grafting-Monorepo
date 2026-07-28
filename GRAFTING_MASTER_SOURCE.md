@@ -2989,24 +2989,38 @@ Automate only conventions already proven:
 - [x] GATE-003 closed (`docs/adr/ADR-0003-platforms-v1.md`, DEC-043).
 - [x] GATE-004 at least formally deferred (`docs/adr/ADR-0005-authoritative-host-deferral.md`).
 - [x] GATE-005 closed (`docs/adr/ADR-0004-determinism.md`, DEC-044).
-- [ ] Wasm spike approved.
-- [ ] C ABI spike approved.
-- [ ] Web/native wgpu spike approved.
-- [ ] Copy budget measured.
+- [x] Wasm spike approved (2026-07-27, `spikes/wasm-worker-nextjs/README.md`).
+- [x] C ABI spike approved (2026-07-27, `spikes/rust-capi-dotnet/README.md`).
+- [x] Web/native wgpu spike approved (2026-07-27, `spikes/wgpu-native-web/README.md`).
+- [ ] Copy budget measured — **deliberately skipped**: the owner chose to
+      start the scaffold ahead of this spike (2026-07-27); see
+      `CURRENT_PLANNING_STATE.md` for the recorded deviation. Not silently
+      dropped — remains open for a later pass.
 
 ### Workspace
 
-- [ ] pnpm and Nx pinned.
-- [ ] valid Cargo workspace.
-- [ ] valid uv workspace and lock.
-- [ ] valid .NET solution.
-- [ ] `flatc` pinned.
-- [ ] idempotent bootstrap.
-- [ ] `.venv` outside the cache.
-- [ ] deterministic outputs.
-- [ ] Polymath rule (DEC-042) — no OS/runtime/RID inspection outside `polymath`,
-      `@grafting/polymath`, or `Grafting.Polymath` — documented in `AGENTS.md` and, when
-      there is CI, verified by lint/ast-grep.
+- [x] pnpm and Nx pinned (root `package.json` pins `pnpm@11.17.0`; Nx
+      resolved and installed 2026-07-27).
+- [x] valid Cargo workspace (`cargo check --workspace` passes; one member,
+      `libs/engine/domain-core`, deliberately empty of real domain logic —
+      Epic C's job, not this pass).
+- [x] valid uv workspace and lock (`uv lock --check` and `uv sync --locked`
+      pass; one example member, `python/automation`).
+- [ ] valid .NET solution — **deliberately not created yet**: ADR-0002
+      Track 1 clears real projects (`isekai-capi`, `Grafting.Isekai.Interop`),
+      not an empty root solution for its own sake; ties to Epic D, not this
+      workspace-foundation pass.
+- [ ] `flatc` pinned — Phase 2 scope, not needed yet (unchanged from the
+      original toolchain check).
+- [x] idempotent bootstrap (`tools/scripts/bootstrap.ps1`, verified by
+      running it twice).
+- [x] `.venv` outside the cache (uv-managed, gitignored, per-checkout as
+      DEC-019 requires).
+- [ ] deterministic outputs — no `dist/` convention exercised yet; nothing
+      produces a real publishable artifact at this stage.
+- [x] Polymath rule (DEC-042) documented in `AGENTS.md` (2026-07-27). Not
+      yet lint/ast-grep-verified — deferred until CI has something to
+      check it against, per the rule's own text ("when there is CI").
 
 ### Core
 

@@ -3,7 +3,7 @@
 > **Type:** mutable operational status
 > **Authority:** does not alter the architecture; in case of conflict,
 > `GRAFTING_MASTER_SOURCE.md` wins.
-> **Updated on:** July 26, 2026
+> **Updated on:** July 27, 2026
 
 ## Situation
 
@@ -17,10 +17,10 @@
   repository (DEC-047): every pre-existing Portuguese document was
   translated to English in this pass. This supersedes the earlier rule that
   only required new files to be written in English going forward.
-- No workspaces, lockfiles, applications, crates, pipelines, installed
-  toolchains (except git/node/dotnet on the owner's machine), or running
-  infrastructure exist yet. The project is exclusively in the architecture
-  and preparation phase — none of this should be treated as implemented.
+- **Epic B (workspace foundation) is now real, as of 2026-07-27** — see
+  "Workspace foundation (Epic B)" below for exactly what exists and what's
+  deliberately still missing. This supersedes the earlier "no workspaces,
+  lockfiles ... exist yet" statement.
 - The active architectural source is `GRAFTING_MASTER_SOURCE.md`; `docs/adr/`
   is the decision history that feeds it.
 
@@ -32,8 +32,8 @@ planning
 → closing the Decision Gates     ← done
 → ADRs                            ← done
 → full English translation pass   ← done
-→ disposable spikes                ← next step
-→ scaffold
+→ disposable spikes                ← done (4 of 4 foundational spikes)
+→ scaffold                          ← in progress (Epic B core done; see below)
 ```
 
 ## Decision Gates — consolidated status
@@ -65,31 +65,127 @@ move from idea to implementation.
 
 Full ADR index, with status and links: `docs/adr/README.md`.
 
-## Foundational spikes planned (Phase 0 — next step)
+## Foundational spikes planned (Phase 0)
 
-1. Rust → Wasm in a Dedicated Worker, under the Next.js host (GATE-001);
+**Owner decision, 2026-07-27: all four spikes below reviewed and
+accepted** — this is the accept/reject/rewrite call master source §26
+Step 3 reserves for the owner. None of the spike code itself is treated as
+production-ready; each README's "Disposition" section records what pattern
+should carry forward when the corresponding real work starts (Epic B–E).
+
+1. Rust → Wasm in a Dedicated Worker, under the Next.js host (GATE-001) —
+   **done, 2026-07-27, see `spikes/wasm-worker-nextjs/README.md`.** Boundary
+   proven end to end with a real (non-virtual-time) headless-browser check,
+   not just a build/type-check. Throwaway code; not yet the canonical
+   `isekai-wasm`/`isekai-web-client` scaffold.
 2. generic Rust C ABI/DLL → C# (`isekai-capi` + `Grafting.Isekai.Interop`),
-   without choosing an engine — independent of GATE-002;
+   without choosing an engine — **done, 2026-07-27, see
+   `spikes/rust-capi-dotnet/README.md`.** Opaque generational handles +
+   `catch_unwind` verified end to end from a plain .NET console harness over
+   P/Invoke, including a deliberate-panic path that returns an error status
+   without crashing the .NET process. No engine chosen; GATE-002 untouched.
 3. the same WGSL shader in native and Web wgpu, respecting the GATE-005
-   determinism floor (GPU never writes directly to the state hash);
+   determinism floor — **done, 2026-07-27, see
+   `spikes/wgpu-native-web/README.md`.** One shared `double.wgsl` file run
+   through native `wgpu` (Vulkan, real AMD GPU) and through `wgpu` compiled
+   to `wasm32-unknown-unknown` targeting WebGPU (verified in a real headless
+   browser session); both produced bit-identical results.
 4. Polymath v0 (`libs/platform/polymath`, `packages/polymath`) — real
-   support for Windows only, explicit stubs for other platforms;
+   support for Windows only, explicit stubs for other platforms — **done,
+   2026-07-27, see `spikes/polymath-v0/README.md`.** Rust `os`/`gpu` and
+   TypeScript `env`/`gpu`/`worker` modules built; Windows paths verified by
+   real tests, Linux/macOS `os` stubs verified to actually compile
+   (`cargo check --target x86_64-unknown-linux-gnu` /
+   `aarch64-apple-darwin`), and the TS module's Node-vs-browser divergence
+   (e.g. `SharedArrayBuffer` gated by cross-origin isolation in the browser
+   but not in Node) confirmed with and without COOP/COEP headers.
 5. batching and copy-budget benchmark;
 6. initial Nx and toolchain validation;
 7. minimal Graph IR and read-only X6 visualization;
 8. minimal AI Control Plane, without a gateway or advanced self-evolution.
 
-Toolchain on the owner's machine (verified 2026-07-26): git, node, and
-dotnet installed; **missing**: rustc/cargo, pnpm, uv, wasm-pack, flatc
-(the last one is only needed starting in Phase 2).
+Toolchain on the owner's machine (re-verified 2026-07-27): git, node, dotnet,
+rustc/cargo (1.97.1, with the `wasm32-unknown-unknown` target installed),
+pnpm (11.17.0), uv (0.11.32), and wasm-pack (0.15.0) are all installed. A
+real discrete GPU (AMD Radeon RX 5600 XT) is present with working
+Vulkan/DX12 drivers, and WebGPU works in a real (non-`about:blank`) page
+context in headless Edge. Nothing is missing for spikes 1–4; `flatc` and
+spikes 5–8 remain for later.
+
+All four throwaway spike directories (`spikes/wasm-worker-nextjs/`,
+`spikes/rust-capi-dotnet/`, `spikes/wgpu-native-web/`,
+`spikes/polymath-v0/`) are excluded from version control by the root
+`.gitignore`'s `spikes/` rule — none of this code is meant to be committed
+as-is; each spike's README documents the pattern that should carry forward
+into the real scaffold.
+
+## Workspace foundation (Epic B), 2026-07-27
+
+Owner explicitly chose to start the scaffold (master source §26 Step 4)
+ahead of spikes 5–8; see the AskUserQuestion exchange recorded implicitly
+by this section's existence. A Plan-mode review pass (subagent, cross-checked
+against the actual docs and actual repo/git state) corrected the first
+draft before anything was built — see `GRAFTING_MASTER_SOURCE.md` §27 for
+the corresponding checklist state.
+
+**Real and verified:**
+
+- Rust workspace: root `Cargo.toml` (resolver "3"), `rust-toolchain.toml`
+  pinned to `1.97.1`. One member, `libs/engine/domain-core`
+  (`grafting-domain-core`), deliberately empty of real domain logic — Epic
+  C's job. `cargo check --workspace` and `cargo test -p grafting-domain-core`
+  pass.
+- Node/pnpm + Nx workspace: root `package.json` (`packageManager` pinned to
+  `pnpm@11.17.0`), `pnpm-workspace.yaml`, `nx.json` (`defaultBase: "master"`
+  — verified against actual git state, not assumed "main"; no remote is
+  configured). Nx (23.1.0) sees `engine-domain-core` and its cache
+  demonstrably works: reset → first run 0% cache hit → second run 100%
+  cache hit → touching the source file invalidates it again.
+- Python/uv workspace: root `pyproject.toml`
+  (`[tool.uv.workspace] members = ["python/*"]`), `uv.lock`,
+  `.python-version` pinned to `3.12`. One example member,
+  `python/automation`. `uv lock --check`, `uv sync --locked`, and
+  `uv run --package automation pytest` all pass.
+- Bootstrap: `tools/scripts/bootstrap.ps1` (pnpm install → cargo check →
+  uv sync), verified idempotent by running it twice.
+- CI: `.github/workflows/ci.yml`, Linux-only, covers Rust + Node/Nx +
+  Python. YAML syntax validated locally (Python's `yaml` module). **Not
+  pushed** — nothing has been committed. Also: the repo's `.gitignore`
+  currently ignores `.github/` itself, which would silently prevent this
+  workflow file from ever being committed/tracked if left as-is — flagged
+  for the owner to decide (may be intentional, may be stale), not resolved
+  unilaterally.
+- `AGENTS.md` — added the explicit Polymath rule (DEC-042) closing that
+  §27 checklist item.
+
+**Deliberately not done, and why (see `GRAFTING_MASTER_SOURCE.md` §27 for
+the matching checklist annotations):**
+
+- No `.NET` root scaffolding (`global.json`/`System.sln`/`Directory.*.props`)
+  — ADR-0002 Track 1 clears real projects, not an empty root shell; ties to
+  Epic D, not this workspace-foundation pass. B-004/B-010 stay open.
+- No Windows/.NET CI job (B-010) — nothing to test yet.
+- `libs/engine/domain-core`'s `project.json` carries a placeholder
+  `metadata.graphIr` block, not a real Graph IR v1 schema (doesn't exist
+  yet) — satisfies DEC-028's letter without inventing a fake schema; to be
+  superseded when spike 7 (minimal Graph IR) happens.
+- Copy-budget benchmark (spike 5/A-009) — still skipped, per the owner's
+  earlier explicit choice; §27's "Before the scaffold" checklist still
+  shows this unchecked on purpose.
+- `flatc` — still Phase 2 scope, unchanged.
+- Nothing has been committed or pushed. All of the above exists only as
+  working-tree changes pending review.
 
 ## Recommended next action
 
-Structural planning is complete — every priority gate and the multi-product
-reuse decisions are either resolved or formally deferred, and the full
-repository documentation set is now in English (DEC-047). The next step is
-to install the missing toolchains and start spikes 1–4 above, in that order
-or in parallel.
+Two things need an explicit owner decision, not an agent assumption:
+
+1. **The `.gitignore` `.github/` entry** — confirm whether CI should
+   actually be trackable/committable, or whether that's deliberate for now.
+2. **What to do next**: review/commit the Epic B scaffold above, continue
+   with spikes 5–8, or start Epic C (real `domain-core` content) /
+   Epic D (`isekai-capi` + `Grafting.Isekai.Interop`, unblocked by
+   ADR-0002 Track 1) / Epic E (compute). Not recorded here yet.
 
 ## Update rule
 
