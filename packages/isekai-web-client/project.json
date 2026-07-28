@@ -1,0 +1,34 @@
+{
+  "name": "isekai-web-client",
+  "root": "packages/isekai-web-client",
+  "projectType": "library",
+  "tags": ["scope:engine", "lang:typescript", "platform:web", "type:lib"],
+  "implicitDependencies": ["isekai-wasm-bridge"],
+  "metadata": {
+    "graphIr": {
+      "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+      "id": "isekai-web-client",
+      "kind": "lib",
+      "tags": ["scope:engine", "lang:typescript", "platform:web"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit",
+        "cwd": "packages/isekai-web-client"
+      },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm --filter @grafting/isekai-web-client test"
+      },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    }
+  }
+}

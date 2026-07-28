@@ -1,0 +1,57 @@
+{
+  "name": "isekai-wasm-bridge",
+  "root": "libs/isekai/wasm-bridge",
+  "projectType": "library",
+  "tags": ["scope:engine", "lang:rust", "platform:web", "type:binding"],
+  "implicitDependencies": ["engine-domain-core"],
+  "metadata": {
+    "graphIr": {
+      "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+      "id": "isekai-wasm-bridge",
+      "kind": "binding",
+      "tags": ["scope:engine", "lang:rust", "platform:web"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo check -p grafting-isekai-wasm"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p grafting-isekai-wasm && wasm-pack test --node libs/isekai/wasm-bridge"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wasm-pack build --target web --out-dir ../../../packages/isekai-wasm/pkg libs/isekai/wasm-bridge"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ],
+      "outputs": ["{workspaceRoot}/packages/isekai-wasm/pkg"]
+    }
+  }
+}

@@ -5,4 +5,5 @@ members = [
     "libs/engine/compute-cpu",
     "libs/engine/domain-core",
     "libs/isekai/capi-bridge",
+    "libs/isekai/wasm-bridge",
 ]

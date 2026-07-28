@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>isekai-web-client -- real Worker+Wasm check</title>
+  </head>
+  <body>
+    <h1>isekai-web-client -- real Worker+Wasm check (D-007/D-008)</h1>
+    <pre id="out" data-testid="out">running...</pre>
+    <script type="module">
+      import { IsekaiEngine } from "/src/index.ts";
+      import initWasm, { WasmEngine } from "@grafting/isekai-wasm";
+
+      const out = document.getElementById("out");
+      const results = {};
+      function log(key, value) {
+        results[key] = value;
+        out.textContent = JSON.stringify(results, null, 2);
+      }
+
+      function seed(fill) {
+        return new Uint8Array(32).fill(fill);
+      }
+
+      async function main() {
+        // --- Part 1: the central empirical finding, directly against
+        // the real compiled crate, in a real browser (not Node, not the
+        // throwaway scratch probe) -- a panic in one WasmEngine must not
+        // affect an unrelated one.
+        await initWasm();
+        const poisoned = new WasmEngine(seed(10));
+        const healthy = new WasmEngine(seed(11));
+        poisoned.submit_increment(1n);
+        healthy.submit_increment(2n);
+
+        try {
+          poisoned.debug_trigger_panic();
+          log("panicIsolation", "UNEXPECTED: did not throw");
+        } catch (err) {
+          const job = healthy.submit_increment(3n);
+          const state = healthy.poll(job);
+          const buffer = healthy.take_result(job);
+          const bytes = healthy.buffer_view(buffer);
+          const view = new DataView(bytes.buffer, bytes.byteOffset, 8);
+          const newValue = view.getBigInt64(0, true);
+          log("panicIsolation", {
+            caughtPanic: true,
+            healthyEngineNewValue: newValue.toString(),
+            healthyEngineCompleted: state === 2, // JobStateCode.Completed
+          });
+        }
+
+        try {
+          poisoned.submit_increment(1n);
+          log("poisonedEngineStillUsable", "UNEXPECTED: did not throw");
+        } catch (err) {
+          log("poisonedEngineStillUsable", false);
+        }
+
+        // --- Part 2: the client-facing IsekaiEngine/Worker layer.
+        const a = await IsekaiEngine.create(seed(1));
+        const r1 = await a.increment(5n);
+        log("normalIncrement", { newValue: r1.newValue.toString(), hashLen: r1.stateHash.length });
+
+        const overflowEngine = await IsekaiEngine.create(seed(3));
+        await overflowEngine.increment(9223372036854775807n); // pushes to exactly i64::MAX
+        try {
+          await overflowEngine.increment(1n); // now overflows
+          log("overflow", "UNEXPECTED: did not reject");
+        } catch (err) {
+          log("overflow", { message: err.message, poisoned: err.poisoned });
+        }
+        overflowEngine.terminate();
+
+        a.terminate();
+        const b = await IsekaiEngine.create(seed(2));
+        const r2 = await b.increment(7n);
+        log("freshEngineAfterTerminate", { newValue: r2.newValue.toString() });
+        b.terminate();
+
+        log("done", true);
+      }
+
+      main().catch((err) => log("fatalError", String(err)));
+    </script>
+  </body>
+</html>

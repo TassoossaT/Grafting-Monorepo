@@ -346,16 +346,81 @@ scaffolding + `dotnet/Grafting.Isekai.Interop*`):
   build, out of reach this pass; flagged, not silently skipped.
 - Not committed yet — same standing rule as Epic B/C/E.
 
+## Isekai Wasm bridge + Web client (Epic D, continued: D-007, D-008), 2026-07-28
+
+Owner picked this next, to mirror the native `isekai-capi` work on the
+Web side. D-009 (memory test) stays a separate task.
+
+A Plan-subagent review raised a specific, high-stakes concern before
+anything was built: whether a Rust panic on `wasm32-unknown-unknown` is
+fatal to the *entire* Wasm instance (per `wasm-bindgen`'s own docs and a
+Cloudflare Workers postmortem) or scoped to the *specific object* being
+mutated — this determines the whole poisoning/recovery design, and the
+review cited real, reputable sources contradicting my first quick test.
+Rather than trust either side, this was re-verified with a deliberately
+more rigorous, realistic probe (real heap allocation — `Vec` push/grow,
+`String::format`, matching `apply_command`/`state_hash`'s actual shape),
+in **both** Node and a real headless-browser session, then re-verified a
+**third** time against the actual compiled crate itself (not just the
+throwaway scratch probe) via a real end-to-end browser check. All three
+rounds agree: **only the specific panicking object becomes unusable;
+everything else — other instances, other heap allocations, new
+allocations, the module itself — is completely unaffected.** This
+contradicts the cited external sources; documented as a known,
+unresolved discrepancy (most likely explanation: those describe a
+different failure category, e.g. `panic = "abort"`'s default or an older
+`wasm-bindgen` version) rather than silently trusted or silently
+dismissed. Re-verify with the same method if `wasm-bindgen` is ever
+upgraded.
+
+**Real and verified** (`libs/isekai/wasm-bridge`, `packages/isekai-wasm`,
+`packages/isekai-web-client`):
+
+- D-007 — `WasmEngine` (`wasm-bindgen` class, one `State` + one seeded
+  RNG), `submit_increment` (same one concretely-typed real operation as
+  the native side — no general wire format, same DEC-013 reasoning),
+  generational `Job`/`Buffer` handles (mirroring `isekai-capi-bridge`'s
+  table, duplicated not shared — ~150 lines, low risk). **No Rust-side
+  `Poisoned` state** — impossible to set one; see the panic-handling
+  finding above. 10 Rust tests, all passing (5 native, 5
+  `wasm-bindgen-test` via `wasm-pack test --node`).
+- `packages/isekai-wasm` — the compiled-output package. Correction from
+  review: `wasm-pack --scope` renames the *crate*, not to the desired
+  package name — hand-authored `package.json` wraps the raw `wasm-pack`
+  output instead.
+- D-008 — `IsekaiEngine` (one Worker = one engine for V1, `create`/
+  `increment`/`terminate`, Promise-per-job, transferred `stateHash`
+  bytes), with two distinct, documented failure paths: per-object
+  poisoning (caught in the Worker's normal message handler) and Worker
+  *crash* (`onerror`, S14.1/S19.5's explicit requirement, not just
+  voluntary termination). 2 Vitest tests (Node-only logic) +  a real
+  end-to-end browser check (`test/browser-check.html`, Vite-served,
+  verified via headless Edge) proving: panic isolation against the real
+  crate, a normal round trip, overflow rejection correctly *not* flagged
+  as poisoning, and a fresh engine after `terminate()`.
+
+**Deliberately not done, and why:**
+
+- **No general Command/DomainEvent wire format** — same as the native
+  side, same reasoning.
+- **D-009 (memory test)** — separate task.
+- **Worker-crash (`onerror`) path is implemented but not automated in a
+  test** — logic simple enough to review directly; flagged as a gap.
+- **Device-loss handling / cooperative cancellation** — not applicable
+  yet (no `wgpu::Device` in this Worker, PROV-006 still open;
+  `increment` completes in microseconds, nothing to interrupt).
+- Not committed yet — same standing rule as every prior task.
+
 ## Recommended next action
 
-Epic B is committed; Epic C, Epic E (partial), and Epic D (partial) are
-built and verified but not yet committed. Candidates for what's next, no
-decision recorded yet: review/commit the above; D-007/D-008/D-009
-(`isekai-wasm`/`isekai-web-client`, now that a real .NET side exists to
-mirror); C-005/C-006 (`flatc`, now genuinely unblocked by a real `.NET`
-solution — still needs the `flatc` toolchain installed); spikes 5–8; or
-resume Epic E toward E-003 (needs a real product decision on the pilot
-workload first).
+Epic B is committed; Epic C, Epic E (partial), and Epic D (now fully
+D-001..D-008, D-009 still open) are built and verified but not yet
+committed. Candidates for what's next, no decision recorded yet:
+review/commit the above; D-009 (memory test, closing out both Epic D
+sides together); C-005/C-006 (`flatc`, genuinely unblocked by a
+real `.NET` solution — still needs the `flatc` toolchain installed);
+spikes 5–8; or resume Epic E toward E-003 (needs a real product decision
+on the pilot workload first).
 
 ## Update rule
 

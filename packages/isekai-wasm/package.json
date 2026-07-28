@@ -1,0 +1,10 @@
+{
+  "name": "@grafting/isekai-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Technical package: compiled grafting-isekai-wasm .wasm + loader + TS types (master source S9.2). No domain logic here -- see libs/isekai/wasm-bridge for the Rust source. Regenerate with: wasm-pack build --target web --out-dir ../../packages/isekai-wasm/pkg (run from libs/isekai/wasm-bridge).",
+  "type": "module",
+  "main": "./pkg/grafting_isekai_wasm.js",
+  "types": "./pkg/grafting_isekai_wasm.d.ts",
+  "files": ["pkg"]
+}

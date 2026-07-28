@@ -3058,8 +3058,14 @@ Automate only conventions already proven:
       unpolled job).
 - [x] leases (D-004; buffer view/release, tested for leak-free
       round trip).
-- [ ] Worker -- D-007/D-008 (`isekai-wasm`/`isekai-web-client`), a
-      separate task; different surface (Wasm vs. this native cdylib).
+- [x] Worker (D-007/D-008, 2026-07-28; `isekai-wasm-bridge`'s `WasmEngine`
+      + `@grafting/isekai-web-client`'s `IsekaiEngine`, one Worker per
+      engine for V1; panic handling differs fundamentally from the native
+      side here -- empirically verified, see `isekai-wasm-bridge/src/engine.rs`
+      module docs -- `catch_unwind` does not work on `wasm32-unknown-unknown`;
+      poisoning is per-object via `wasm-bindgen`'s own guard, classified
+      in TypeScript, not a Rust-side `Poisoned` enum variant. D-009
+      memory test remains a separate task).
 - [x] C# wrapper (`Grafting.Isekai.Interop`, D-006; `SafeHandle` per kind,
       centralized status→exception translation, 13 smoke tests against
       the real DLL).

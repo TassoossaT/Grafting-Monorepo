@@ -1,0 +1,21 @@
+{
+  "name": "@grafting/isekai-web-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Idiomatic Worker/Promise wrapper over @grafting/isekai-wasm (master source S9.3). Never exposes memory offsets/handles to callers.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@grafting/isekai-wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

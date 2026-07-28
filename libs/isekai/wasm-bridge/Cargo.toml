@@ -1,0 +1,21 @@
+[package]
+name = "grafting-isekai-wasm"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Wasm bridge exposing grafting-domain-core to the Web host, for use inside a Dedicated Worker (DEC-015). Web-side mirror of grafting-isekai-capi."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+grafting-domain-core = { path = "../../engine/domain-core" }
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+# domain-core's DeterministicRng only ever seeds explicitly (never reads
+# OS entropy), but rand/rand_chacha still pull in getrandom transitively,
+# which refuses to pick a wasm32 backend without this explicit opt-in.
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
