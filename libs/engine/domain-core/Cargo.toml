@@ -6,3 +6,9 @@ publish = false
 description = "Pure domain core (state machine, Commands, DomainEvents, state hash). Real business logic lands in Epic C -- this crate currently only proves the workspace/Nx pipeline."
 
 [dependencies]
+rand = "0.10.2"
+rand_chacha = "0.10.0"
+sha2 = "0.11.0"
+
+[dev-dependencies]
+proptest = "1.11.0"

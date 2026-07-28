@@ -3024,12 +3024,19 @@ Automate only conventions already proven:
 
 ### Core
 
-- [ ] pure domain.
-- [ ] CPU backend.
-- [ ] command/event/snapshot.
-- [ ] state hash.
-- [ ] invariant tests.
-- [ ] no host imported.
+- [x] pure domain (`libs/engine/domain-core`, zero host/network/GPU deps;
+      example domain is deliberately generic, not real game content —
+      2026-07-27).
+- [ ] CPU backend — Epic E (`compute-cpu`), not started.
+- [x] command/event/snapshot (C-002/C-003/C-004, 2026-07-27; Snapshot's
+      round trip is `derive`-based, not FlatBuffers yet — C-005/C-006
+      blocked on B-004).
+- [x] state hash (C-007, SHA-256 over an explicit byte encoding,
+      2026-07-27).
+- [x] invariant tests (C-008, `proptest` property tests covering replay
+      determinism, no-panics, and snapshot-resume, 2026-07-27).
+- [x] no host imported (verified: crate's only dependencies are `rand`,
+      `rand_chacha`, `sha2`, plus `proptest` as a dev-dependency).
 
 ### FFI
 

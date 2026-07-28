@@ -119,21 +119,23 @@ All four throwaway spike directories (`spikes/wasm-worker-nextjs/`,
 as-is; each spike's README documents the pattern that should carry forward
 into the real scaffold.
 
-## Workspace foundation (Epic B), 2026-07-27
+## Workspace foundation (Epic B), 2026-07-27 — committed
 
 Owner explicitly chose to start the scaffold (master source §26 Step 4)
-ahead of spikes 5–8; see the AskUserQuestion exchange recorded implicitly
-by this section's existence. A Plan-mode review pass (subagent, cross-checked
+ahead of spikes 5–8. A Plan-mode review pass (subagent, cross-checked
 against the actual docs and actual repo/git state) corrected the first
 draft before anything was built — see `GRAFTING_MASTER_SOURCE.md` §27 for
-the corresponding checklist state.
+the corresponding checklist state. **Committed** (owner's own commit,
+`bb5e49e`, 2026-07-27) — all 24 files in one commit, `git status` clean
+afterward. Not pushed to any remote.
 
 **Real and verified:**
 
 - Rust workspace: root `Cargo.toml` (resolver "3"), `rust-toolchain.toml`
   pinned to `1.97.1`. One member, `libs/engine/domain-core`
-  (`grafting-domain-core`), deliberately empty of real domain logic — Epic
-  C's job. `cargo check --workspace` and `cargo test -p grafting-domain-core`
+  (`grafting-domain-core`) — at this point in the log, freshly scaffolded
+  and still empty of real domain logic. **Epic C (below, same day) filled
+  it in.** `cargo check --workspace` and `cargo test -p grafting-domain-core`
   pass.
 - Node/pnpm + Nx workspace: root `package.json` (`packageManager` pinned to
   `pnpm@11.17.0`), `pnpm-workspace.yaml`, `nx.json` (`defaultBase: "master"`
@@ -150,11 +152,10 @@ the corresponding checklist state.
   uv sync), verified idempotent by running it twice.
 - CI: `.github/workflows/ci.yml`, Linux-only, covers Rust + Node/Nx +
   Python. YAML syntax validated locally (Python's `yaml` module). **Not
-  pushed** — nothing has been committed. Also: the repo's `.gitignore`
-  currently ignores `.github/` itself, which would silently prevent this
-  workflow file from ever being committed/tracked if left as-is — flagged
-  for the owner to decide (may be intentional, may be stale), not resolved
-  unilaterally.
+  pushed** to any remote yet — it is committed locally, though. The
+  `.gitignore` `.github/` entry that would have silently blocked this from
+  ever being tracked was removed by the owner directly after being
+  flagged.
 - `AGENTS.md` — added the explicit Polymath rule (DEC-042) closing that
   §27 checklist item.
 
@@ -173,19 +174,69 @@ the matching checklist annotations):**
   earlier explicit choice; §27's "Before the scaffold" checklist still
   shows this unchecked on purpose.
 - `flatc` — still Phase 2 scope, unchanged.
-- Nothing has been committed or pushed. All of the above exists only as
-  working-tree changes pending review.
+
+## Domain core (Epic C), 2026-07-27
+
+Owner chose Epic C as the next task after Epic B was committed. A
+Plan-mode review pass (subagent) corrected the first draft before
+anything was built: dropped a `serde_json` Snapshot format that would
+have quietly worked around a `LOCKED` decision (DEC-013 names Snapshot
+for FlatBuffers explicitly, master source §10.1), cited the real reason
+C-005/C-006 stay out of scope (blocked on B-004, not just "Phase 2"), and
+reordered the work so the state hash (C-007) exists before `Snapshot`
+(C-004) embeds it.
+
+**Real and verified** (`libs/engine/domain-core`, all against a
+deliberately generic "tally counter" example domain — see the crate's own
+`README.md`, not a real game/VTT domain, since none is specified anywhere
+in the docs):
+
+- C-001 — already satisfied structurally by Epic B, no new work.
+- C-002 — `Command` (`Increment`/`Decrement`/`Reset`/`RollAndAdd`) +
+  typed `CommandError` validation, never a panic.
+- C-003 — `DomainEvent` + `apply_command` tying Command+State+RNG
+  together.
+- C-007 — SHA-256 state hash over an explicit, hand-written byte
+  encoding; a real replay-reproduces-hash test, not just "it compiles."
+- C-004 — `Snapshot` (state + RNG seed/position + sequence + hash +
+  `core_version`); round-trip via `derive(Clone, PartialEq)`, deliberately
+  **no** serialization crate (see above).
+- C-008 — `proptest` property tests
+  (`libs/engine/domain-core/tests/replay_determinism.rs`): replay
+  determinism, no-panics, and snapshot-resume-matches-continuous-replay,
+  each checked over hundreds of random command sequences, not fixed
+  examples alone.
+- 23 tests total (20 unit + 3 property-based), all passing.
+- Controlled RNG uses `ChaCha8Rng` (not `rand::StdRng`) specifically
+  because ChaCha8's algorithm is fixed by construction — `StdRng`'s is not
+  guaranteed stable across `rand` releases, which DEC-044's "RNG algorithm
+  fixed per build" needs.
+
+**Deliberately not done, and why:**
+
+- C-005 (flatc config) / C-006 (schema evolution) — genuinely blocked on
+  B-004 (.NET solution, still open, tied to Epic D), not a phase-label
+  choice.
+- No real VTT/game domain content — no product decision exists yet to
+  build against.
+- No multiplayer (`AcceptedCommand`, journal, `ReplicationDelta`,
+  transport) — Phase 6/Epic H.
+- No FFI/`isekai-capi` work — Epic D, a separate task.
+- **DEC-044's "same platform" is only partially captured.**
+  `Snapshot.core_version` is one of six axes ADR-0004 lists (build ID,
+  target, protocol/schema versions, features, numeric configuration, RNG
+  algorithm). No real "determinism manifest" covering all six exists
+  anywhere in this repo yet — recorded as a gap, not implied as solved.
+- Not committed yet — left as working-tree changes pending review, same
+  standing rule as Epic B.
 
 ## Recommended next action
 
-Two things need an explicit owner decision, not an agent assumption:
-
-1. **The `.gitignore` `.github/` entry** — confirm whether CI should
-   actually be trackable/committable, or whether that's deliberate for now.
-2. **What to do next**: review/commit the Epic B scaffold above, continue
-   with spikes 5–8, or start Epic C (real `domain-core` content) /
-   Epic D (`isekai-capi` + `Grafting.Isekai.Interop`, unblocked by
-   ADR-0002 Track 1) / Epic E (compute). Not recorded here yet.
+Epic B is committed; Epic C is built and verified but not yet committed.
+Candidates for what's next, no decision recorded yet: review/commit Epic
+C, continue with spikes 5–8, or start Epic D (`isekai-capi` +
+`Grafting.Isekai.Interop`, unblocked by ADR-0002 Track 1 — and would also
+unblock C-005/C-006 once a real .NET solution exists) / Epic E (compute).
 
 ## Update rule
 
