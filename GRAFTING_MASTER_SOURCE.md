@@ -3027,7 +3027,10 @@ Automate only conventions already proven:
 - [x] pure domain (`libs/engine/domain-core`, zero host/network/GPU deps;
       example domain is deliberately generic, not real game content —
       2026-07-27).
-- [ ] CPU backend — Epic E (`compute-cpu`), not started.
+- [x] CPU backend (`libs/engine/compute-cpu`, E-001/E-002, 2026-07-27;
+      synchronous reference implementation of `compute-api`'s
+      `ComputeBackend`; CPU-vs-GPU differential testing still structurally
+      unreachable — no `compute-wgpu` exists yet).
 - [x] command/event/snapshot (C-002/C-003/C-004, 2026-07-27; Snapshot's
       round trip is `derive`-based, not FlatBuffers yet — C-005/C-006
       blocked on B-004).

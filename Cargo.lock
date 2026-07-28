@@ -137,6 +137,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-compute-api"
+version = "0.0.0"
+
+[[package]]
+name = "grafting-compute-cpu"
+version = "0.0.0"
+dependencies = [
+ "grafting-compute-api",
+]
+
+[[package]]
 name = "grafting-domain-core"
 version = "0.0.0"
 dependencies = [

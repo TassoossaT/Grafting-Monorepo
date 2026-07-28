@@ -230,13 +230,65 @@ in the docs):
 - Not committed yet — left as working-tree changes pending review, same
   standing rule as Epic B.
 
+## Compute (Epic E, partial: E-001 + E-002), 2026-07-27
+
+Owner picked this over Epic D specifically because master source §22
+lists "CPU backend" as a Phase 2 deliverable alongside Command/
+DomainEvent/Snapshot/state hash — continuing Phase 2 rather than jumping
+to Phase 3 (Epic D). A Plan-mode review pass (subagent) corrected the
+first draft before anything was built: generalized a hard-coded "double"
+example op into a parametrized `ScaleF32 { factor }` (so it can't be
+misread as quietly pre-selecting E-003's pilot workload), confirmed a
+non-generational `JobHandle` is the right call (§11.3's generational
+scheme is FFI-boundary-only, not needed for this internal-Rust contract),
+and flagged that `ProblemHandle`/resident-state (§13.6) should be left
+out entirely rather than stubbed hollow.
+
+**Real and verified** (`libs/engine/compute-api` + `libs/engine/compute-cpu`):
+
+- E-001 — `ComputeCapabilities`, `JobHandle` (monotonic, not
+  generational — see crate docs for why), `JobState`
+  (`Pending`/`Running`/`Completed`/`Failed`/`Cancelled`), typed
+  `ComputeError`, `ComputeOp`/`ComputePlan`/`ComputeResult` (raw `Vec<f32>`
+  payloads, S10.1's hot numeric path — never FlatBuffers), and the
+  `ComputeBackend` trait. Zero dependencies — satisfies both "must not
+  expose concrete `wgpu` types" (S4.2) and E-001's literal criterion.
+- E-002 — `CpuBackend`: synchronous reference implementation. 8 tests,
+  all passing (capabilities, immediate completion, correct scaling, empty
+  input, non-finite-factor→`Failed` not a panic, unknown-handle rejection,
+  double-release rejection, post-release rejection).
+- `ComputeOp::ScaleF32 { factor }` is a **structural placeholder**, not
+  E-003's pilot workload — chosen because the earlier accepted spike
+  (`spikes/wgpu-native-web/`) already proved this operation family
+  (element-wise scale) runs identically on native and Web `wgpu`; that
+  bit-identical result is a property of trivial power-of-2 scaling, not
+  evidence of general GPU float determinism (§13.7, ADR-0004).
+
+**Deliberately not done, and why:**
+
+- E-003 (choose pilot workload) through E-010 — E-003's "dataset and
+  metric defined" criterion is a real product decision nothing in the
+  docs answers yet. Not invented under the generic-example umbrella the
+  way `domain-core`'s tally counter was, because a compute pilot workload
+  is supposed to be something real, unlike an abstract state machine.
+- No `ProblemHandle`/resident GPU state (§13.6) — Phase 7 solver
+  territory; a stateless per-plan op has nothing resident to manage.
+- No `compute-wgpu` (E-005) — so `Pending`/`Running`/`Cancelled` are
+  unreachable in `compute-cpu` (documented, not hidden), and CPU-vs-GPU
+  differential testing (E-009, also `compute-cpu`'s own §4.2
+  responsibility) is structurally impossible right now.
+- No FFI/`isekai-capi` — Epic D, separate.
+- Not committed yet — same standing rule as Epic B/C.
+
 ## Recommended next action
 
-Epic B is committed; Epic C is built and verified but not yet committed.
-Candidates for what's next, no decision recorded yet: review/commit Epic
-C, continue with spikes 5–8, or start Epic D (`isekai-capi` +
-`Grafting.Isekai.Interop`, unblocked by ADR-0002 Track 1 — and would also
-unblock C-005/C-006 once a real .NET solution exists) / Epic E (compute).
+Epic B is committed; Epic C and Epic E (partial) are built and verified
+but not yet committed. Candidates for what's next, no decision recorded
+yet: review/commit the above, continue with spikes 5–8, resume Epic E
+toward E-003 (needs a real product decision on the pilot workload first),
+or start Epic D (`isekai-capi` + `Grafting.Isekai.Interop`, unblocked by
+ADR-0002 Track 1 — and would also unblock C-005/C-006 once a real .NET
+solution exists).
 
 ## Update rule
 

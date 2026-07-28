@@ -1,0 +1,8 @@
+[package]
+name = "grafting-compute-api"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Backend-agnostic compute job contract (job lifecycle, batched numeric ops). Must not depend on or expose wgpu types (master source S4.2, S23 E-001)."
+
+[dependencies]

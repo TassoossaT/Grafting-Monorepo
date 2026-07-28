@@ -1,0 +1,9 @@
+[package]
+name = "grafting-compute-cpu"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Synchronous CPU reference implementation of the compute-api job contract (master source S4.2, S23 E-002)."
+
+[dependencies]
+grafting-compute-api = { path = "../compute-api" }
