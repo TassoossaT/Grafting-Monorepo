@@ -280,15 +280,82 @@ out entirely rather than stubbed hollow.
 - No FFI/`isekai-capi` — Epic D, separate.
 - Not committed yet — same standing rule as Epic B/C.
 
+## Isekai native ABI + .NET wrapper (Epic D, partial: D-001..D-006), 2026-07-28
+
+Owner picked this next. Given its size (9 backlog items spanning native
+ABI, .NET, and Wasm bindings), this pass covers D-001 through D-006 only
+(native C ABI + .NET wrapper + validation harness — ADR-0002 Track 1's
+explicit deliverable list); D-007/D-008 (`isekai-wasm`/`isekai-web-client`)
+and D-009 (memory test) are a separate task (different surface: Wasm/
+wasm-bindgen vs. this pass's native cdylib/P-Invoke).
+
+A Plan-mode review pass caught a near-repeat of a mistake already made
+and reversed once in this repo: the first draft proposed a hand-rolled
+byte codec for `Command`/`DomainEvent` crossing the C ABI — the same
+class of mistake as Epic C's reverted `serde_json` `Snapshot` format,
+since master source §10.1 names all three for FlatBuffers (`DEC-013`,
+`LOCKED`). Corrected: no general wire format was built. Real
+`domain-core` logic is still wrapped, just via one concretely-typed
+operation (`engine_submit_increment`) instead of a generic byte channel.
+
+**Real and verified** (`libs/isekai/capi-bridge` + root `.NET`
+scaffolding + `dotnet/Grafting.Isekai.Interop*`):
+
+- D-001 — `EngineAbiInfo`, scoped down from §12.3's full field list (no
+  build ID/target yet — no build pipeline produces one).
+- D-002 — kind-tagged generational handles (`Engine`/`Job`/`Buffer`
+  packed into one `u64`, not just index+generation — prevents cross-kind
+  handle reuse from silently misvalidating).
+- D-003 — explicit engine lifecycle
+  (`Creating`/`Ready`/`ShuttingDown`/`Destroyed`/`Poisoned`). A caught
+  panic sets `Poisoned` explicitly and refuses further work — **not**
+  `spikes/rust-capi-dotnet`'s mutex-poison recover-and-continue shortcut
+  (that spike's own README already flagged it as not the intended
+  production design).
+- D-004 — buffer lease (view/release), leak-free.
+- D-005 — `grafting-isekai-capi` v1 exported as a real `.dll`. 21 Rust
+  tests, all passing (handle packing/kind validation, lifecycle
+  transitions, panic→poison→refusal, overflow→`Failed` not a crash,
+  struct_size mismatch, null pointers, invalid/double-released handles).
+- D-006 — `Grafting.Isekai.Interop` (`SafeHandle` per kind, centralized
+  status→exception translation, buffer views scoped to a callback) +
+  `Grafting.Isekai.Interop.Tests` (xUnit, real DLL, not mocked). 13 tests,
+  all passing, including the actual proof that matters: a real panic
+  through the full P/Invoke boundary poisons the engine, the process
+  survives, and other engines keep working.
+- Root `.NET` scaffolding created (deferred in Epic B, unblocked here):
+  `global.json`, `Directory.Build.props`, `Directory.Packages.props`,
+  `System.sln` (classic format — `dotnet new sln`'s default is now
+  `.slnx` in this SDK; forced `-f sln` to match master source §6.1's
+  literal `System.sln` naming).
+- `tools/scripts/bootstrap.ps1` updated with a `dotnet restore
+  --locked-mode` step; re-verified idempotent.
+
+**Deliberately not done, and why:**
+
+- **No general Command/DomainEvent wire format** — see above; still
+  blocked on C-005/C-006 (`flatc`), which are themselves still blocked on
+  a real .NET solution existing... which now exists. C-005/C-006
+  themselves remain not started (a separate task).
+- **No `isekai-wasm`/`isekai-web-client`/memory test** (D-007-009) —
+  separate task, different surface.
+- **No `ProblemHandle`/resident state** — same call as Epic E's deferral.
+- **No `Grafting.Isekai.Protocol`** (FlatBuffers-generated .NET types) —
+  doesn't exist until C-005/C-006 do.
+- **"Wrong architecture" (§19.4) not tested** — needs a second-arch
+  build, out of reach this pass; flagged, not silently skipped.
+- Not committed yet — same standing rule as Epic B/C/E.
+
 ## Recommended next action
 
-Epic B is committed; Epic C and Epic E (partial) are built and verified
-but not yet committed. Candidates for what's next, no decision recorded
-yet: review/commit the above, continue with spikes 5–8, resume Epic E
-toward E-003 (needs a real product decision on the pilot workload first),
-or start Epic D (`isekai-capi` + `Grafting.Isekai.Interop`, unblocked by
-ADR-0002 Track 1 — and would also unblock C-005/C-006 once a real .NET
-solution exists).
+Epic B is committed; Epic C, Epic E (partial), and Epic D (partial) are
+built and verified but not yet committed. Candidates for what's next, no
+decision recorded yet: review/commit the above; D-007/D-008/D-009
+(`isekai-wasm`/`isekai-web-client`, now that a real .NET side exists to
+mirror); C-005/C-006 (`flatc`, now genuinely unblocked by a real `.NET`
+solution — still needs the `flatc` toolchain installed); spikes 5–8; or
+resume Epic E toward E-003 (needs a real product decision on the pilot
+workload first).
 
 ## Update rule
 

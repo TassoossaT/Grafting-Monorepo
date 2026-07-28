@@ -1,0 +1,12 @@
+[package]
+name = "grafting-isekai-capi"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Versioned C ABI exposing grafting-domain-core to native hosts (C#, generic P/Invoke). Never exposes Vec/String/trait objects/Rust enums across the boundary (master source S4.2, S11)."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+grafting-domain-core = { path = "../../engine/domain-core" }

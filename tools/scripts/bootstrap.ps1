@@ -6,9 +6,6 @@
     Installs/syncs all four ecosystems once, per master source S8.4's
     "bootstrap once, then run tasks in parallel with --no-sync/--frozen"
     pattern. Safe to re-run: every step here is idempotent.
-
-    Does not touch the .NET ecosystem yet (no root .NET scaffolding exists
-    -- see CURRENT_PLANNING_STATE.md).
 #>
 
 $ErrorActionPreference = "Stop"
@@ -26,5 +23,9 @@ if ($LASTEXITCODE -ne 0) { throw "cargo check --workspace failed" }
 Write-Host "==> uv sync --locked" -ForegroundColor Cyan
 uv sync --locked
 if ($LASTEXITCODE -ne 0) { throw "uv sync --locked failed" }
+
+Write-Host "==> dotnet restore --locked-mode" -ForegroundColor Cyan
+dotnet restore System.sln --locked-mode
+if ($LASTEXITCODE -ne 0) { throw "dotnet restore --locked-mode failed" }
 
 Write-Host "==> Bootstrap complete." -ForegroundColor Green

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <Description>Safe, generic P/Invoke wrapper over grafting-isekai-capi. No engine dependency (ADR-0002 Track 1).</Description>
+  </PropertyGroup>
+
+</Project>

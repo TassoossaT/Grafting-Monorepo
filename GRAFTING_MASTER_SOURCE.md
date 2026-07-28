@@ -3001,15 +3001,15 @@ Automate only conventions already proven:
 
 - [x] pnpm and Nx pinned (root `package.json` pins `pnpm@11.17.0`; Nx
       resolved and installed 2026-07-27).
-- [x] valid Cargo workspace (`cargo check --workspace` passes; one member,
-      `libs/engine/domain-core`, deliberately empty of real domain logic —
-      Epic C's job, not this pass).
+- [x] valid Cargo workspace (`cargo check --workspace` passes; members as
+      of 2026-07-27: `domain-core`, `compute-api`, `compute-cpu`,
+      `isekai-capi-bridge`).
 - [x] valid uv workspace and lock (`uv lock --check` and `uv sync --locked`
       pass; one example member, `python/automation`).
-- [ ] valid .NET solution — **deliberately not created yet**: ADR-0002
-      Track 1 clears real projects (`isekai-capi`, `Grafting.Isekai.Interop`),
-      not an empty root solution for its own sake; ties to Epic D, not this
-      workspace-foundation pass.
+- [x] valid .NET solution (`System.sln`, created 2026-07-27 alongside Epic
+      D once real projects — `Grafting.Isekai.Interop` +
+      `Grafting.Isekai.Interop.Tests` — existed to justify it; `dotnet
+      build`/`dotnet test` both pass).
 - [ ] `flatc` pinned — Phase 2 scope, not needed yet (unchanged from the
       original toolchain check).
 - [x] idempotent bootstrap (`tools/scripts/bootstrap.ps1`, verified by
@@ -3043,15 +3043,26 @@ Automate only conventions already proven:
 
 ### FFI
 
-- [ ] ABI major/minor.
-- [ ] `struct_size`.
-- [ ] generational handles.
-- [ ] status codes.
-- [ ] protected panic.
-- [ ] shutdown.
-- [ ] leases.
-- [ ] Worker.
-- [ ] C# wrapper.
+- [x] ABI major/minor (`EngineAbiInfo`, D-001, 2026-07-27; scoped-down v1
+      -- no build ID/target fields yet, see `isekai-capi-bridge/README.md`).
+- [x] `struct_size` (checked on `EngineCreateInfo` input; `engine_create`
+      rejects a mismatch with `StructSizeMismatch`, tested).
+- [x] generational handles (D-002; kind-tagged -- `Engine`/`Job`/`Buffer`
+      packed into one `u64` with a kind tag, not just index+generation,
+      so cross-kind handle reuse can't silently misvalidate).
+- [x] status codes (`EngineStatus`, fixed-width `#[repr(i32)]`).
+- [x] protected panic (D-003; `catch_unwind` around domain-logic calls
+      only, engine `Poisoned` explicitly on a caught panic, never
+      mutex-poison recover-and-continue -- see `engine.rs` module docs).
+- [x] shutdown (idempotent `engine_shutdown`, tested with a pending
+      unpolled job).
+- [x] leases (D-004; buffer view/release, tested for leak-free
+      round trip).
+- [ ] Worker -- D-007/D-008 (`isekai-wasm`/`isekai-web-client`), a
+      separate task; different surface (Wasm vs. this native cdylib).
+- [x] C# wrapper (`Grafting.Isekai.Interop`, D-006; `SafeHandle` per kind,
+      centralized status→exception translation, 13 smoke tests against
+      the real DLL).
 
 ### GPU
 

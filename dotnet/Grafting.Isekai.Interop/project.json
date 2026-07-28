@@ -1,0 +1,47 @@
+{
+  "name": "isekai-dotnet-interop",
+  "root": "dotnet/Grafting.Isekai.Interop",
+  "projectType": "library",
+  "tags": ["scope:engine", "lang:csharp", "platform:desktop", "type:binding"],
+  "implicitDependencies": ["isekai-capi-bridge"],
+  "metadata": {
+    "graphIr": {
+      "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+      "id": "isekai-dotnet-interop",
+      "kind": "binding",
+      "tags": ["scope:engine", "lang:csharp", "platform:desktop"]
+    }
+  },
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet build dotnet/Grafting.Isekai.Interop"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/System.sln",
+        "{workspaceRoot}/Directory.Build.props",
+        "{workspaceRoot}/Directory.Packages.props",
+        "{workspaceRoot}/global.json"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "dotnet test dotnet/Grafting.Isekai.Interop.Tests"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/dotnet/Grafting.Isekai.Interop.Tests/**/*",
+        "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+        "{workspaceRoot}/System.sln",
+        "{workspaceRoot}/Directory.Build.props",
+        "{workspaceRoot}/Directory.Packages.props",
+        "{workspaceRoot}/global.json"
+      ]
+    }
+  }
+}

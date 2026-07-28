@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Grafting.Isekai.Interop/Grafting.Isekai.Interop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copies the freshly built Rust cdylib next to the test binaries so
+         P/Invoke's default same-directory DLL search finds it (same
+         pattern spike 2, spikes/rust-capi-dotnet, already validated). -->
+    <Content Include="../../target/release/grafting_isekai_capi.dll" Link="grafting_isekai_capi.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
