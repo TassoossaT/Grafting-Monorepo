@@ -2,30 +2,44 @@
   "schema_version": 1,
   "task_id": "SECURITY-001-TOOLCHAIN-AUDIT",
   "title": "Remediate Vite and Nx dependency advisories",
-  "status": "planned",
-  "owner": null,
-  "revision": 1,
-  "updated_at": "2026-07-29T08:44:31-03:00",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-07-29T10:20:00-03:00",
   "objective": "Update or constrain the vulnerable Vite and Nx dependency paths identified by pnpm audit, then validate the workspace and Architecture Studio without weakening audit policy.",
   "affected_paths": [
     "package.json",
+    "pnpm-workspace.yaml",
     "pnpm-lock.yaml",
     "apps/architecture-studio/package.json",
-    "docs/generated/project-graph.json",
     "docs/generated/grafting.graph.spike.json",
+    ".ai/state/tasks/SECURITY-001-TOOLCHAIN-AUDIT.json",
     "CURRENT_PLANNING_STATE.md"
   ],
   "blockers": [],
   "validations": [
-    "pnpm audit on 2026-07-29 reported 6 high and 11 moderate advisories",
-    "affected package paths: vite, Nx to axios, and Nx to brace-expansion",
-    "Ajv 8.20.0 introduced by I-002 has no reported advisory in this audit"
+    "pnpm audit before: 17 advisories (6 high, 11 moderate) across vite (direct, apps/architecture-studio), axios and brace-expansion (both transitive via nx)",
+    "pnpm audit after: 'No known vulnerabilities found'",
+    "vite bumped 7.2.2 -> 7.3.6 (direct devDependency, apps/architecture-studio/package.json) -- patches all 5 Vite advisories (server.fs.deny bypass, arbitrary file read, Windows path bypass, optimized-deps .map path traversal, launch-editor NTLMv2)",
+    "axios and brace-expansion forced to ^1.18.1 / ^5.0.8 via pnpm-workspace.yaml's overrides field (not package.json's pnpm.overrides -- pnpm 11 no longer reads that location, confirmed by a real install warning, corrected before re-verifying) -- nx itself stays pinned at 23.1.0, still the latest stable release (23.2.0 has only beta/canary builds)",
+    "pnpm exec nx show projects: all 13 projects resolve correctly",
+    "pnpm --filter @grafting/architecture-studio check: tsc clean",
+    "pnpm --filter @grafting/architecture-studio build: real vite 7.3.6 production build succeeded (979 modules)",
+    "pnpm graph:generate: Graph IR candidate refreshed (this task's ownership/status change was itself the source of the staleness)",
+    "uv run --package automation python -m automation.coordination --root .: passed, 12 tasks",
+    "uv run --package automation python -m automation.control_plane --root .: passed, 0 model calls, 0 side effects, graph_candidate current"
   ],
-  "artifacts": [],
+  "artifacts": [
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    "apps/architecture-studio/package.json",
+    "docs/generated/grafting.graph.spike.json"
+  ],
   "risks": [
-    "Vite 7.2.2 advisories include development-server arbitrary file read and server.fs.deny bypasses, including Windows path handling.",
-    "Nx remediation may require a pinned version update and full affected/cache/project-graph revalidation.",
-    "Automated force-fixes could replace pinned toolchain versions or introduce incompatible major changes."
+    "pnpm's content-addressable store still holds the pre-override axios@1.16.1/brace-expansion@5.0.6 artifacts from before the override took effect in the correct location -- harmless (confirmed absent from pnpm-lock.yaml's actual resolved graph, which is what pnpm audit and the real dependency tree use), not cleaned up since store pruning is unrelated to this task's scope.",
+    "vite 7.2.2 -> 7.3.6 is a minor-version bump within the same major, not a full major upgrade -- low risk, verified by a real production build, but not exhaustively regression-tested beyond check+build.",
+    "Nx itself (23.1.0) was deliberately left on its current pinned version rather than bumped -- the transitive axios/brace-expansion advisories are patched via override instead, avoiding the unstable 23.2.0 beta/canary line the risk notes on this task already flagged as undesirable."
   ],
   "next_responsible_party": "repository-owner"
 }

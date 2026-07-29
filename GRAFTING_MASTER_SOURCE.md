@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.11.0`
+> Version: `1.11.1`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 — added DEC-051 for Rust-owned graph computation and per-package public API contracts.
+> Last updated: 2026-07-29 — started I-003 with the generated Rust public-API contract pilot.
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -2806,7 +2806,7 @@ Deliverables subject to spike:
 | ----- | ----------------------------------- | ----------- | ---------------------------------------------- |
 | I-001 | Knowledge & Automation Plane ADR | —          | authority and documentary lifecycle defined    |
 | I-002 | Graph IR v1                         | I-001       | schemas, IDs, and evidence validated            |
-| I-003 | Per-project operational template    | I-001       | README, AGENTS, and metadata generated              |
+| I-003 | Per-project operational/API template | I-001       | README, AGENTS, metadata, generated API baseline, `api-check`, and behavioral contracts validated |
 | I-004 | Nx → Graph IR extractor             | I-002,B-001 | reproducible projects/targets/edges          |
 | I-005 | Context pack v1                     | I-002,G-001 | task generates a small, traceable package         |
 | I-006 | Read-only Architecture Studio       | I-002,I-004 | navigable subgraph without editing derived facts |

@@ -1,0 +1,413 @@
+# Generated public API baseline
+
+Rustdoc toolchain: `nightly-2025-11-23`  
+Rustdoc JSON format: `57`  
+Documentation policy: `#![deny(missing_docs)]`
+
+## Signatures
+
+```text
+pub mod grafting_graph_core
+pub enum grafting_graph_core::GraphError
+pub grafting_graph_core::GraphError::CycleDetected
+pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>
+pub grafting_graph_core::GraphError::DuplicateEdge
+pub grafting_graph_core::GraphError::DuplicateEdge::id: grafting_graph_core::EdgeId
+pub grafting_graph_core::GraphError::DuplicateNode
+pub grafting_graph_core::GraphError::DuplicateNode::id: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::MissingSource
+pub grafting_graph_core::GraphError::MissingSource::edge: grafting_graph_core::EdgeId
+pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::MissingTarget
+pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId
+pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::UnknownNode
+pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId
+impl core::clone::Clone for grafting_graph_core::GraphError
+pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::GraphError
+impl core::cmp::Eq for grafting_graph_core::GraphError
+impl core::cmp::PartialEq for grafting_graph_core::GraphError
+pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
+impl core::error::Error for grafting_graph_core::GraphError
+impl core::fmt::Debug for grafting_graph_core::GraphError
+pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::GraphError
+pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::GraphError
+impl core::marker::Freeze for grafting_graph_core::GraphError
+impl core::marker::Send for grafting_graph_core::GraphError
+impl core::marker::Sync for grafting_graph_core::GraphError
+impl core::marker::Unpin for grafting_graph_core::GraphError
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::GraphError
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::GraphError
+pub enum grafting_graph_core::IdentifierError
+pub grafting_graph_core::IdentifierError::EmptyEdgeId
+pub grafting_graph_core::IdentifierError::EmptyNodeId
+impl core::clone::Clone for grafting_graph_core::IdentifierError
+pub fn grafting_graph_core::IdentifierError::clone(&self) -> grafting_graph_core::IdentifierError
+impl core::cmp::Eq for grafting_graph_core::IdentifierError
+impl core::cmp::PartialEq for grafting_graph_core::IdentifierError
+pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_core::IdentifierError) -> bool
+impl core::error::Error for grafting_graph_core::IdentifierError
+impl core::fmt::Debug for grafting_graph_core::IdentifierError
+pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::IdentifierError
+pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::IdentifierError
+impl core::marker::StructuralPartialEq for grafting_graph_core::IdentifierError
+impl core::marker::Freeze for grafting_graph_core::IdentifierError
+impl core::marker::Send for grafting_graph_core::IdentifierError
+impl core::marker::Sync for grafting_graph_core::IdentifierError
+impl core::marker::Unpin for grafting_graph_core::IdentifierError
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::IdentifierError
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::IdentifierError
+pub struct grafting_graph_core::Edge<E>
+impl<E> grafting_graph_core::Edge<E>
+pub fn grafting_graph_core::Edge<E>::data(&self) -> &E
+pub fn grafting_graph_core::Edge<E>::id(&self) -> &grafting_graph_core::EdgeId
+pub fn grafting_graph_core::Edge<E>::into_parts(self) -> (grafting_graph_core::EdgeId, grafting_graph_core::NodeId, grafting_graph_core::NodeId, E)
+pub fn grafting_graph_core::Edge<E>::new(id: grafting_graph_core::EdgeId, source: grafting_graph_core::NodeId, target: grafting_graph_core::NodeId, data: E) -> Self
+pub fn grafting_graph_core::Edge<E>::source(&self) -> &grafting_graph_core::NodeId
+pub fn grafting_graph_core::Edge<E>::target(&self) -> &grafting_graph_core::NodeId
+impl<E: core::clone::Clone> core::clone::Clone for grafting_graph_core::Edge<E>
+pub fn grafting_graph_core::Edge<E>::clone(&self) -> grafting_graph_core::Edge<E>
+impl<E: core::cmp::Eq> core::cmp::Eq for grafting_graph_core::Edge<E>
+impl<E: core::cmp::PartialEq> core::cmp::PartialEq for grafting_graph_core::Edge<E>
+pub fn grafting_graph_core::Edge<E>::eq(&self, other: &grafting_graph_core::Edge<E>) -> bool
+impl<E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::Edge<E>
+pub fn grafting_graph_core::Edge<E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<E> core::marker::StructuralPartialEq for grafting_graph_core::Edge<E>
+impl<E> core::marker::Freeze for grafting_graph_core::Edge<E> where E: core::marker::Freeze
+impl<E> core::marker::Send for grafting_graph_core::Edge<E> where E: core::marker::Send
+impl<E> core::marker::Sync for grafting_graph_core::Edge<E> where E: core::marker::Sync
+impl<E> core::marker::Unpin for grafting_graph_core::Edge<E> where E: core::marker::Unpin
+impl<E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::Edge<E> where E: core::panic::unwind_safe::RefUnwindSafe
+impl<E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::Edge<E> where E: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::EdgeId(_)
+impl grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::as_str(&self) -> &str
+pub fn grafting_graph_core::EdgeId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::IdentifierError>
+impl core::clone::Clone for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::clone(&self) -> grafting_graph_core::EdgeId
+impl core::cmp::Eq for grafting_graph_core::EdgeId
+impl core::cmp::Ord for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::cmp(&self, other: &grafting_graph_core::EdgeId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::eq(&self, other: &grafting_graph_core::EdgeId) -> bool
+impl core::cmp::PartialOrd for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::partial_cmp(&self, other: &grafting_graph_core::EdgeId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::AsRef<str> for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::as_ref(&self) -> &str
+impl core::fmt::Debug for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for grafting_graph_core::EdgeId
+pub fn grafting_graph_core::EdgeId::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
+impl core::marker::StructuralPartialEq for grafting_graph_core::EdgeId
+impl core::marker::Freeze for grafting_graph_core::EdgeId
+impl core::marker::Send for grafting_graph_core::EdgeId
+impl core::marker::Sync for grafting_graph_core::EdgeId
+impl core::marker::Unpin for grafting_graph_core::EdgeId
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::EdgeId
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::EdgeId
+pub struct grafting_graph_core::Graph<N, E>
+impl<N, E> grafting_graph_core::Graph<N, E>
+pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>
+pub fn grafting_graph_core::Graph<N, E>::edge_count(&self) -> usize
+pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>
+pub fn grafting_graph_core::Graph<N, E>::node_count(&self) -> usize
+pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+pub fn grafting_graph_core::Graph<N, E>::snapshot(&self) -> grafting_graph_core::GraphSnapshot<N, E> where N: core::clone::Clone, E: core::clone::Clone
+pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+pub fn grafting_graph_core::Graph<N, E>::topological_order(&self) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+pub fn grafting_graph_core::Graph<N, E>::try_from_parts(nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>, edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>) -> core::result::Result<Self, grafting_graph_core::GraphError>
+impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::Graph<N, E>
+pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<N, E> core::marker::Freeze for grafting_graph_core::Graph<N, E>
+impl<N, E> core::marker::Send for grafting_graph_core::Graph<N, E> where N: core::marker::Send, E: core::marker::Send
+impl<N, E> core::marker::Sync for grafting_graph_core::Graph<N, E> where N: core::marker::Sync, E: core::marker::Sync
+impl<N, E> core::marker::Unpin for grafting_graph_core::Graph<N, E> where N: core::marker::Unpin, E: core::marker::Unpin
+impl<N, E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::Graph<N, E> where N: core::panic::unwind_safe::RefUnwindSafe, E: core::panic::unwind_safe::RefUnwindSafe
+impl<N, E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::Graph<N, E> where N: core::panic::unwind_safe::UnwindSafe, E: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::GraphSnapshot<N, E>
+impl<N, E> grafting_graph_core::GraphSnapshot<N, E>
+pub fn grafting_graph_core::GraphSnapshot<N, E>::edges(&self) -> &[grafting_graph_core::Edge<E>]
+pub fn grafting_graph_core::GraphSnapshot<N, E>::into_parts(self) -> (alloc::vec::Vec<grafting_graph_core::Node<N>>, alloc::vec::Vec<grafting_graph_core::Edge<E>>)
+pub fn grafting_graph_core::GraphSnapshot<N, E>::nodes(&self) -> &[grafting_graph_core::Node<N>]
+impl<N, E> core::marker::StructuralPartialEq for grafting_graph_core::GraphSnapshot<N, E>
+impl<N: core::clone::Clone, E: core::clone::Clone> core::clone::Clone for grafting_graph_core::GraphSnapshot<N, E>
+pub fn grafting_graph_core::GraphSnapshot<N, E>::clone(&self) -> grafting_graph_core::GraphSnapshot<N, E>
+impl<N: core::cmp::Eq, E: core::cmp::Eq> core::cmp::Eq for grafting_graph_core::GraphSnapshot<N, E>
+impl<N: core::cmp::PartialEq, E: core::cmp::PartialEq> core::cmp::PartialEq for grafting_graph_core::GraphSnapshot<N, E>
+pub fn grafting_graph_core::GraphSnapshot<N, E>::eq(&self, other: &grafting_graph_core::GraphSnapshot<N, E>) -> bool
+impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::GraphSnapshot<N, E>
+pub fn grafting_graph_core::GraphSnapshot<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<N, E> core::marker::Freeze for grafting_graph_core::GraphSnapshot<N, E>
+impl<N, E> core::marker::Send for grafting_graph_core::GraphSnapshot<N, E> where N: core::marker::Send, E: core::marker::Send
+impl<N, E> core::marker::Sync for grafting_graph_core::GraphSnapshot<N, E> where N: core::marker::Sync, E: core::marker::Sync
+impl<N, E> core::marker::Unpin for grafting_graph_core::GraphSnapshot<N, E> where N: core::marker::Unpin, E: core::marker::Unpin
+impl<N, E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::GraphSnapshot<N, E> where N: core::panic::unwind_safe::RefUnwindSafe, E: core::panic::unwind_safe::RefUnwindSafe
+impl<N, E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::GraphSnapshot<N, E> where N: core::panic::unwind_safe::UnwindSafe, E: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::Node<N>
+impl<N> grafting_graph_core::Node<N>
+pub fn grafting_graph_core::Node<N>::data(&self) -> &N
+pub fn grafting_graph_core::Node<N>::id(&self) -> &grafting_graph_core::NodeId
+pub fn grafting_graph_core::Node<N>::into_parts(self) -> (grafting_graph_core::NodeId, N)
+pub fn grafting_graph_core::Node<N>::new(id: grafting_graph_core::NodeId, data: N) -> Self
+impl<N: core::clone::Clone> core::clone::Clone for grafting_graph_core::Node<N>
+pub fn grafting_graph_core::Node<N>::clone(&self) -> grafting_graph_core::Node<N>
+impl<N: core::cmp::Eq> core::cmp::Eq for grafting_graph_core::Node<N>
+impl<N: core::cmp::PartialEq> core::cmp::PartialEq for grafting_graph_core::Node<N>
+pub fn grafting_graph_core::Node<N>::eq(&self, other: &grafting_graph_core::Node<N>) -> bool
+impl<N: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::Node<N>
+pub fn grafting_graph_core::Node<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<N> core::marker::StructuralPartialEq for grafting_graph_core::Node<N>
+impl<N> core::marker::Freeze for grafting_graph_core::Node<N> where N: core::marker::Freeze
+impl<N> core::marker::Send for grafting_graph_core::Node<N> where N: core::marker::Send
+impl<N> core::marker::Sync for grafting_graph_core::Node<N> where N: core::marker::Sync
+impl<N> core::marker::Unpin for grafting_graph_core::Node<N> where N: core::marker::Unpin
+impl<N> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::Node<N> where N: core::panic::unwind_safe::RefUnwindSafe
+impl<N> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::Node<N> where N: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::NodeId(_)
+impl grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::as_str(&self) -> &str
+pub fn grafting_graph_core::NodeId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::IdentifierError>
+impl core::clone::Clone for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::clone(&self) -> grafting_graph_core::NodeId
+impl core::cmp::Eq for grafting_graph_core::NodeId
+impl core::cmp::Ord for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::cmp(&self, other: &grafting_graph_core::NodeId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::eq(&self, other: &grafting_graph_core::NodeId) -> bool
+impl core::cmp::PartialOrd for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::partial_cmp(&self, other: &grafting_graph_core::NodeId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::AsRef<str> for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::as_ref(&self) -> &str
+impl core::fmt::Debug for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for grafting_graph_core::NodeId
+pub fn grafting_graph_core::NodeId::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
+impl core::marker::StructuralPartialEq for grafting_graph_core::NodeId
+impl core::marker::Freeze for grafting_graph_core::NodeId
+impl core::marker::Send for grafting_graph_core::NodeId
+impl core::marker::Sync for grafting_graph_core::NodeId
+impl core::marker::Unpin for grafting_graph_core::NodeId
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::NodeId
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::NodeId
+```
+
+## Documentation evidence
+
+### `pub enum grafting_graph_core::GraphError`
+
+Structural or algorithm error returned through the Grafting graph contract.
+
+### `pub enum grafting_graph_core::IdentifierError`
+
+Failure to construct a stable graph identifier.
+
+### `pub fn grafting_graph_core::Edge<E>::data(&self) -> &E`
+
+Returns the caller-owned payload.
+
+### `pub fn grafting_graph_core::Edge<E>::id(&self) -> &grafting_graph_core::EdgeId`
+
+Returns the stable edge identity.
+
+### `pub fn grafting_graph_core::Edge<E>::into_parts(self) -> (grafting_graph_core::EdgeId, grafting_graph_core::NodeId, grafting_graph_core::NodeId, E)`
+
+Consumes the edge and returns its identity, endpoints, and payload.
+
+### `pub fn grafting_graph_core::Edge<E>::new(id: grafting_graph_core::EdgeId, source: grafting_graph_core::NodeId, target: grafting_graph_core::NodeId, data: E) -> Self`
+
+Creates a directed edge from `source` to `target`.
+
+### `pub fn grafting_graph_core::Edge<E>::source(&self) -> &grafting_graph_core::NodeId`
+
+Returns the source node identity.
+
+### `pub fn grafting_graph_core::Edge<E>::target(&self) -> &grafting_graph_core::NodeId`
+
+Returns the target node identity.
+
+### `pub fn grafting_graph_core::EdgeId::as_str(&self) -> &str`
+
+Returns the stable identifier text.
+
+### `pub fn grafting_graph_core::EdgeId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::IdentifierError>`
+
+Creates a non-empty identifier without applying product-specific
+normalization rules.
+
+### `pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>`
+
+Looks up an edge without exposing the storage engine's index type.
+
+### `pub fn grafting_graph_core::Graph<N, E>::edge_count(&self) -> usize`
+
+Number of edges in the graph.
+
+### `pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>`
+
+Looks up a node without exposing the storage engine's index type.
+
+### `pub fn grafting_graph_core::Graph<N, E>::node_count(&self) -> usize`
+
+Number of nodes in the graph.
+
+### `pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
+
+Returns unique predecessor IDs in deterministic identity order.
+
+### `pub fn grafting_graph_core::Graph<N, E>::snapshot(&self) -> grafting_graph_core::GraphSnapshot<N, E> where N: core::clone::Clone, E: core::clone::Clone`
+
+Clones an immutable snapshot sorted by stable identities.
+
+### `pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
+
+Returns unique successor IDs in deterministic identity order.
+
+### `pub fn grafting_graph_core::Graph<N, E>::topological_order(&self) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
+
+Returns a deterministic topological order or the nodes left blocked by a cycle.
+
+### `pub fn grafting_graph_core::Graph<N, E>::try_from_parts(nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>, edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>) -> core::result::Result<Self, grafting_graph_core::GraphError>`
+
+Validates identities and endpoints, then constructs the graph.
+
+### `pub fn grafting_graph_core::GraphSnapshot<N, E>::edges(&self) -> &[grafting_graph_core::Edge<E>]`
+
+Edges sorted by stable edge identity.
+
+### `pub fn grafting_graph_core::GraphSnapshot<N, E>::into_parts(self) -> (alloc::vec::Vec<grafting_graph_core::Node<N>>, alloc::vec::Vec<grafting_graph_core::Edge<E>>)`
+
+Consumes the snapshot and returns its ordered records.
+
+### `pub fn grafting_graph_core::GraphSnapshot<N, E>::nodes(&self) -> &[grafting_graph_core::Node<N>]`
+
+Nodes sorted by stable node identity.
+
+### `pub fn grafting_graph_core::Node<N>::data(&self) -> &N`
+
+Returns the caller-owned payload.
+
+### `pub fn grafting_graph_core::Node<N>::id(&self) -> &grafting_graph_core::NodeId`
+
+Returns the stable node identity.
+
+### `pub fn grafting_graph_core::Node<N>::into_parts(self) -> (grafting_graph_core::NodeId, N)`
+
+Consumes the node and returns its identity and payload.
+
+### `pub fn grafting_graph_core::Node<N>::new(id: grafting_graph_core::NodeId, data: N) -> Self`
+
+Creates a node from a Grafting identity and payload.
+
+### `pub fn grafting_graph_core::NodeId::as_str(&self) -> &str`
+
+Returns the stable identifier text.
+
+### `pub fn grafting_graph_core::NodeId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::IdentifierError>`
+
+Creates a non-empty identifier without applying product-specific
+normalization rules.
+
+### `pub grafting_graph_core::GraphError::CycleDetected`
+
+Topological ordering cannot consume every node because a cycle exists.
+
+### `pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>`
+
+Deterministically sorted nodes left blocked by one or more cycles.
+
+### `pub grafting_graph_core::GraphError::DuplicateEdge`
+
+Two input edges use the same stable identity.
+
+### `pub grafting_graph_core::GraphError::DuplicateEdge::id: grafting_graph_core::EdgeId`
+
+Identity that appeared more than once.
+
+### `pub grafting_graph_core::GraphError::DuplicateNode`
+
+Two input nodes use the same stable identity.
+
+### `pub grafting_graph_core::GraphError::DuplicateNode::id: grafting_graph_core::NodeId`
+
+Identity that appeared more than once.
+
+### `pub grafting_graph_core::GraphError::MissingSource`
+
+An edge refers to a source node that is not present.
+
+### `pub grafting_graph_core::GraphError::MissingSource::edge: grafting_graph_core::EdgeId`
+
+Edge containing the invalid endpoint.
+
+### `pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core::NodeId`
+
+Source identity that could not be resolved.
+
+### `pub grafting_graph_core::GraphError::MissingTarget`
+
+An edge refers to a target node that is not present.
+
+### `pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId`
+
+Edge containing the invalid endpoint.
+
+### `pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId`
+
+Target identity that could not be resolved.
+
+### `pub grafting_graph_core::GraphError::UnknownNode`
+
+A query refers to a node that is not present.
+
+### `pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::IdentifierError::EmptyEdgeId`
+
+An edge identifier must contain at least one character.
+
+### `pub grafting_graph_core::IdentifierError::EmptyNodeId`
+
+A node identifier must contain at least one character.
+
+### `pub mod grafting_graph_core`
+
+Generic graph structures and deterministic algorithms owned by Grafting.
+
+The public contract deliberately exposes only Grafting types. [`Graph`]
+currently uses `petgraph` privately, but consumers cannot depend on that
+implementation detail. Presentation data remains in callers; calculation
+inputs belong in node or edge payloads and cross explicit contracts.
+
+### `pub struct grafting_graph_core::Edge<E>`
+
+A directed graph edge with stable identity and caller-chosen payload.
+
+### `pub struct grafting_graph_core::EdgeId(_)`
+
+Stable Grafting edge identity.
+
+### `pub struct grafting_graph_core::Graph<N, E>`
+
+Generic directed multigraph with private storage and deterministic queries.
+
+### `pub struct grafting_graph_core::GraphSnapshot<N, E>`
+
+Immutable, deterministically ordered graph data safe to pass to adapters.
+
+### `pub struct grafting_graph_core::Node<N>`
+
+A graph node with a stable identity and caller-chosen calculation payload.
+
+### `pub struct grafting_graph_core::NodeId(_)`
+
+Stable Grafting node identity.

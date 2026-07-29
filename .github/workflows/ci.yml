@@ -22,6 +22,12 @@ jobs:
         # exactly that toolchain.
         run: rustup show
 
+      - name: Install pinned Rustdoc JSON toolchain
+        # Public API extraction needs nightly because rustdoc JSON is still
+        # unstable. This pin does not replace the repository's authoritative
+        # stable Rust toolchain and installation remains a CI setup effect.
+        run: rustup toolchain install "$(cat tools/rust-public-api-toolchain.txt)" --profile minimal
+
       - uses: pnpm/action-setup@v6
         with:
           version: 11.17.0
@@ -61,6 +67,9 @@ jobs:
         run: |
           cargo check --workspace
           cargo test --workspace
+
+      - name: Rust public API contract
+        run: pnpm exec nx run graph-core:api-check
 
       - name: Nx check
         run: pnpm exec nx run engine-domain-core:check

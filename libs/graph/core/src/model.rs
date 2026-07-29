@@ -176,12 +176,40 @@ impl<N, E> GraphSnapshot<N, E> {
 /// Structural or algorithm error returned through the Grafting graph contract.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphError {
-    DuplicateNode { id: NodeId },
-    DuplicateEdge { id: EdgeId },
-    MissingSource { edge: EdgeId, source: NodeId },
-    MissingTarget { edge: EdgeId, target: NodeId },
-    UnknownNode { id: NodeId },
-    CycleDetected { remaining: Vec<NodeId> },
+    /// Two input nodes use the same stable identity.
+    DuplicateNode {
+        /// Identity that appeared more than once.
+        id: NodeId,
+    },
+    /// Two input edges use the same stable identity.
+    DuplicateEdge {
+        /// Identity that appeared more than once.
+        id: EdgeId,
+    },
+    /// An edge refers to a source node that is not present.
+    MissingSource {
+        /// Edge containing the invalid endpoint.
+        edge: EdgeId,
+        /// Source identity that could not be resolved.
+        source: NodeId,
+    },
+    /// An edge refers to a target node that is not present.
+    MissingTarget {
+        /// Edge containing the invalid endpoint.
+        edge: EdgeId,
+        /// Target identity that could not be resolved.
+        target: NodeId,
+    },
+    /// A query refers to a node that is not present.
+    UnknownNode {
+        /// Identity that could not be resolved.
+        id: NodeId,
+    },
+    /// Topological ordering cannot consume every node because a cycle exists.
+    CycleDetected {
+        /// Deterministically sorted nodes left blocked by one or more cycles.
+        remaining: Vec<NodeId>,
+    },
 }
 
 impl fmt::Display for GraphError {

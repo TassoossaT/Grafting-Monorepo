@@ -664,24 +664,88 @@ an empty planned directory:
 Deliberately not done in GRAPH-001: no speculative mathematics dependency or
 unused algorithm catalog was added; no fine-grained Rust/Wasm calls were
 created; and the working `graph-x6` spike package was not removed before its
-Architecture Studio consumer is migrated atomically. I-003 still owns the
-generated, Git-tracked API baseline convention across languages; GRAPH-001
-provides the compile-time public API contract and behavioral tests now.
+Architecture Studio consumer is migrated atomically. GRAPH-001 supplied the
+compile-time consumer and behavioral contracts that I-003A now complements
+with the first generated, Git-tracked API baseline.
+
+## Toolchain security remediation (SECURITY-001), 2026-07-29
+
+Owner picked this up for Claude to run in parallel with Codex's I-003 work
+(claimed through `.ai/coordination/PROTOCOL.md`, not started informally).
+`pnpm audit` had 17 advisories (6 high, 11 moderate): 5 on `vite` (direct
+dependency of `apps/architecture-studio`), 1 high + 8 moderate on `axios`
+(transitive via `nx`), 2 high on `brace-expansion` (transitive via `nx`/
+`nx>minimatch`). Ajv (introduced by I-002) was already unaffected.
+
+**Real and verified:**
+
+- `vite` bumped `7.2.2` → `7.3.6` in `apps/architecture-studio/package.json`
+  -- patches all 5 Vite advisories (server.fs.deny bypass x2, arbitrary
+  file read, optimized-deps `.map` path traversal, launch-editor NTLMv2).
+  Real production build (979 modules) and `tsc --noEmit` both verified
+  clean afterward, not just "the version string changed."
+- `axios`/`brace-expansion` forced to `^1.18.1`/`^5.0.8` via
+  `pnpm-workspace.yaml`'s `overrides` field -- **not** `package.json`'s
+  `pnpm.overrides`, which a real `pnpm install` run showed a warning for
+  (pnpm 11 no longer reads that location; confirmed empirically, fixed
+  before re-verifying, not assumed from memory). `nx` itself stays
+  pinned at `23.1.0` -- still the latest *stable* release; `23.2.0` only
+  has beta/canary builds, which the task's own original risk notes
+  already flagged as undesirable to adopt for a "reproducible versions"
+  toolchain pin (B-005).
+- `pnpm audit` now reports "No known vulnerabilities found."
+- No second workspace root/lockfile created (would need an ADR per
+  `AGENTS.md`) -- `overrides` is a normal mechanism within the existing
+  pnpm workspace/lockfile.
+
+**Deliberately not done, and why:**
+
+- Leftover pre-override `axios@1.16.1`/`brace-expansion@5.0.6` artifacts
+  remain in pnpm's content-addressable store -- confirmed absent from
+  `pnpm-lock.yaml`'s actual resolved graph (what `pnpm audit` and the
+  real dependency tree use), so harmless; store pruning is unrelated to
+  this task's scope, not attempted.
+- Not committed yet -- same standing rule as every prior task.
+
+## Rust public API contract pilot (I-003A), 2026-07-29
+
+DEC-051's per-package contract convention is now proven on the real
+`grafting-graph-core` boundary:
+
+- a deterministic, Git-tracked report is generated from native Rustdoc JSON
+  and contains public names, signatures, inputs, outputs, trait guarantees,
+  and the authored Rustdoc obligations;
+- missing public documentation and broken Rustdoc links are compile errors;
+- `graph-core:api-check` compares the report without changing it, proves that
+  drift is rejected, and compiles the independent consumer contract;
+- the exact extraction libraries and `nightly-2025-11-23` are pinned while
+  stable Rust `1.97.1` remains the authoritative compiler; extraction tools
+  are development-only and do not enter the runtime API;
+- formatting, Clippy, all graph-core targets/features, Rustdoc, the generated
+  baseline, the consumer contract, and the entire locked Cargo workspace test
+  suite passed. CI now installs the extraction nightly explicitly before
+  running the same Nx API target.
+
+The rejected `nightly-2025-08-02` compatibility attempt and the chosen design
+are recorded in `docs/benchmarks/rust-public-api-contract-pilot-2026-07-29.md`.
+I-003A establishes the Rust template only; I-003B still needs to evaluate the
+native TypeScript, C#, and Python equivalents before I-003 can be called
+repository-wide complete.
 
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-I-001/DEC-050, I-002, and GRAPH-001/DEC-051 are complete. I-003 should now
-standardize generated public-API baselines and `api-check` behavior across
-consumed packages. I-004 then replaces the spike Graph IR output with the v1
-extractor. With those contracts/data in place, the Architecture Studio can
-atomically move the Graph IR presentation projection out of `graph-x6`, consume
-batched Rust graph results through the Wasm boundary, render through
-`@grafting/x6-canvas`, and remove the transitional package without an outage.
-SECURITY-001 remains a separate planned remediation for 6 high and 11 moderate
-Vite/Nx-path advisories; Ajv is not affected. ADR-0009's Decision section
-remains pending owner confirmation; `engine_submit(bytes)` and E-003 remain
-separately scoped future work.
+I-001/DEC-050, I-002, GRAPH-001/DEC-051, and the Rust pilot I-003A are
+complete. I-003B should now evaluate and standardize generated public-API
+baselines and `api-check` behavior for consumed TypeScript, C#, and Python
+packages. I-004 then replaces the spike Graph IR output with the v1 extractor.
+With those contracts/data in place, the Architecture Studio can atomically
+move the Graph IR presentation projection out of `graph-x6`, consume batched
+Rust graph results through the Wasm boundary, render through
+`@grafting/x6-canvas`, and remove the transitional package without an
+outage. SECURITY-001 is now complete (see above). ADR-0009's Decision
+section remains pending owner confirmation; `engine_submit(bytes)` and
+E-003 remain separately scoped future work.
 
 ## Update rule
 

@@ -887,12 +887,15 @@
                 "{projectRoot}/src/lib.rs",
                 "{projectRoot}/src/model.rs",
                 "{projectRoot}/tests/public_api_contract.rs",
+                "{projectRoot}/tests/public_api_snapshot.rs",
+                "{projectRoot}/tests/snapshots/public-api.txt",
                 "{workspaceRoot}/Cargo.toml",
                 "{workspaceRoot}/Cargo.lock",
-                "{workspaceRoot}/rust-toolchain.toml"
+                "{workspaceRoot}/rust-toolchain.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt"
               ],
               "options": {
-                "command": "cargo test -p grafting-graph-core --test public_api_contract"
+                "command": "cargo test --locked -p grafting-graph-core --test public_api_snapshot -- --ignored --exact generated_public_api_matches_snapshot && cargo test --locked -p grafting-graph-core --test public_api_snapshot -- --exact baseline_comparison_rejects_drift && cargo test --locked -p grafting-graph-core --test public_api_contract"
               },
               "configurations": {},
               "parallelism": true

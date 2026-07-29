@@ -19,7 +19,9 @@ JSON serialization remain Graph IR concerns. Do not make Graph IR the generic
 model and do not duplicate this crate's graph behavior in TypeScript, C#, or
 Python.
 
-Public API changes require `graph-core:api-check` and behavioral contract tests.
-I-003 will add the repository-wide generated API baseline convention; until
-then the compile-time public API contract test is mandatory and must not be
-weakened to accept an accidental breaking change.
+Public API changes require `graph-core:api-check`, a reviewed update to the
+generated `tests/snapshots/public-api.txt`, complete Rustdoc, and behavioral
+contract tests. The API check uses the separately pinned Rustdoc JSON nightly
+but MUST NOT install it or mutate the baseline during a normal validation run.
+The compile-time consumer contract remains complementary evidence and must not
+be weakened to accept an accidental breaking change.

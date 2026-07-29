@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "2c670e24f9afd0f71804095e0637a7b841605a75fd6de06373dda992b91700ee",
+  "inputHash": "3e2aaded4467eb40b0203dc43c49dee306eac5e4656b8c5c29ca3ea119d0cb48",
   "nodes": [
     {
       "id": "agent:claude",
@@ -254,11 +254,20 @@
       "source": ".ai/state/tasks/I-002-GRAPH-IR-V1.json"
     },
     {
+      "id": "task:I-003A-RUST-PUBLIC-API-PILOT",
+      "kind": "task",
+      "label": "I-003A-RUST-PUBLIC-API-PILOT",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-003A-RUST-PUBLIC-API-PILOT.json"
+    },
+    {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT",
       "kind": "task",
       "label": "SECURITY-001-TOOLCHAIN-AUDIT",
       "tags": [
-        "status:planned"
+        "status:completed"
       ],
       "source": ".ai/state/tasks/SECURITY-001-TOOLCHAIN-AUDIT.json"
     },
@@ -418,6 +427,20 @@
       "source": "task:I-002-GRAPH-IR-V1",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/I-002-GRAPH-IR-V1.json#/owner"
+    },
+    {
+      "id": "task:I-003A-RUST-PUBLIC-API-PILOT->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-003A-RUST-PUBLIC-API-PILOT",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-003A-RUST-PUBLIC-API-PILOT.json#/owner"
+    },
+    {
+      "id": "task:SECURITY-001-TOOLCHAIN-AUDIT->agent:claude:owned_by",
+      "kind": "owned_by",
+      "source": "task:SECURITY-001-TOOLCHAIN-AUDIT",
+      "target": "agent:claude",
+      "evidence": ".ai/state/tasks/SECURITY-001-TOOLCHAIN-AUDIT.json#/owner"
     },
     {
       "id": "task:SPIKE-005-COPY-BUDGET->agent:codex:owned_by",

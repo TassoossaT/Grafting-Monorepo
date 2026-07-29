@@ -5,6 +5,9 @@
 //! implementation detail. Presentation data remains in callers; calculation
 //! inputs belong in node or edge payloads and cross explicit contracts.
 
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
+
 mod model;
 
 pub use model::{Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId};
