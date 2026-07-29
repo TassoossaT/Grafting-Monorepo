@@ -14,8 +14,10 @@
 
 pub mod apply;
 pub mod command;
+pub mod contracts;
 pub mod event;
 pub mod hash;
 pub mod rng;
 pub mod snapshot;
 pub mod state;
+pub mod wire;

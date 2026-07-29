@@ -9,6 +9,11 @@ description = "Pure domain core (state machine, Commands, DomainEvents, state ha
 rand = "0.10.2"
 rand_chacha = "0.10.0"
 sha2 = "0.11.0"
+# Version tracks the pinned `flatc` release line (tools/flatc-version.txt)
+# -- the FlatBuffers project versions this runtime crate in lockstep with
+# the compiler, and a mismatch between generated code and this runtime
+# is a known footgun.
+flatbuffers = "25.12.19"
 
 [dev-dependencies]
 proptest = "1.11.0"

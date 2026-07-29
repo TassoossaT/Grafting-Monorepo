@@ -1,0 +1,44 @@
+// Wire schema for `domain-core::command::Command` (master source S10.1,
+// DEC-013, LOCKED). See contracts/README.md for why this is a `union`
+// of per-variant tables rather than one flat table with a discriminant.
+//
+// Not the source of truth -- `domain-core::command::Command` is. This
+// schema exists so `Command` can cross a process/language boundary;
+// nothing in this codebase does that yet (see contracts/README.md).
+
+namespace Grafting.Contracts;
+
+table Increment {
+  amount: int64 (id: 0);
+  // Added after v1 (C-006's evolution proof, see
+  // contracts/fixtures/command_v1.fbs and
+  // tests/flatbuffers_evolution.rs) -- next free explicit field ID,
+  // §10.4's "new table fields are added at the end or use explicit
+  // IDs." Not read/written by domain-core yet (no real use for it);
+  // exists purely to prove the evolution mechanics for real.
+  sequence_hint: uint64 (id: 1);
+}
+
+table Decrement {
+  amount: int64 (id: 0);
+}
+
+table Reset {}
+
+table RollAndAdd {
+  min: int64 (id: 0);
+  max: int64 (id: 1);
+}
+
+union CommandPayload {
+  Increment,
+  Decrement,
+  Reset,
+  RollAndAdd,
+}
+
+table CommandMessage {
+  payload: CommandPayload (id: 1);
+}
+
+root_type CommandMessage;

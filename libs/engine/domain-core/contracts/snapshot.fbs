@@ -1,0 +1,26 @@
+// Wire schema for `domain-core::snapshot::Snapshot` (master source
+// S10.1/S15.6, DEC-013, LOCKED). Not a sum type -- one table, no union.
+//
+// `rng_seed`/`state_hash` are fixed-length 32-byte arrays on the Rust
+// side, but FlatBuffers fixed-length arrays are a `struct`-only feature,
+// and `struct` is reserved for truly stable layouts (master source
+// §10.4) -- Snapshot is explicitly a "versionable message," so both
+// become `[ubyte]` vectors here, with `len() == 32` validated by hand on
+// decode (see `tests/flatbuffers_round_trip.rs`).
+
+namespace Grafting.Contracts;
+
+table StateTable {
+  value: int64 (id: 0);
+}
+
+table SnapshotMessage {
+  state: StateTable (id: 0);
+  rng_seed: [ubyte] (id: 1);
+  rng_word_pos: uint64 (id: 2);
+  sequence: uint64 (id: 3);
+  state_hash: [ubyte] (id: 4);
+  core_version: string (id: 5);
+}
+
+root_type SnapshotMessage;

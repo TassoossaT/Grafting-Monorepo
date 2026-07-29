@@ -3010,8 +3010,14 @@ Automate only conventions already proven:
       D once real projects — `Grafting.Isekai.Interop` +
       `Grafting.Isekai.Interop.Tests` — existed to justify it; `dotnet
       build`/`dotnet test` both pass).
-- [ ] `flatc` pinned — Phase 2 scope, not needed yet (unchanged from the
-      original toolchain check).
+- [x] `flatc` pinned (C-005, 2026-07-28; `tools/flatc-version.txt`,
+      `25.12.19`, checked by `bootstrap.ps1`; installed locally via
+      `winget`, on Linux CI via the matching GitHub release asset —
+      that CI step is written from verified real release-asset names
+      but not executed on a real runner during this task, flagged not
+      hidden. C# generation uses a *second*, older, separately-pinned
+      `flatc` — `Google.FlatBuffers` on NuGet lags the primary pin; see
+      `libs/engine/domain-core/contracts/README.md`).
 - [x] idempotent bootstrap (`tools/scripts/bootstrap.ps1`, verified by
       running it twice).
 - [x] `.venv` outside the cache (uv-managed, gitignored, per-checkout as
@@ -3031,9 +3037,18 @@ Automate only conventions already proven:
       synchronous reference implementation of `compute-api`'s
       `ComputeBackend`; CPU-vs-GPU differential testing still structurally
       unreachable — no `compute-wgpu` exists yet).
-- [x] command/event/snapshot (C-002/C-003/C-004, 2026-07-27; Snapshot's
-      round trip is `derive`-based, not FlatBuffers yet — C-005/C-006
-      blocked on B-004).
+- [x] command/event/snapshot (C-002/C-003/C-004, 2026-07-27; C-005/C-006,
+      2026-07-28, added the real FlatBuffers wire format —
+      `contracts/*.fbs`, generated Rust/TS/C#, a round-trip test
+      covering every `Command`/`DomainEvent` variant plus `Snapshot`,
+      and a real schema-evolution/compatibility test using a frozen
+      `command_v1.fbs` fixture, C-006. `Snapshot.core_version` changed
+      `&'static str` → `String` — a decoded snapshot's version is real
+      data read from bytes, never `'static`. `ReplicationDelta` still
+      not modeled anywhere — Phase 6/Epic H, not silently dropped from
+      DEC-013's list. The generic `engine_submit(bytes)` FFI entry point
+      (§11.6) stays deliberately out of scope — C-005/C-006's own
+      criteria are schema generation + an evolution test, not that).
 - [x] state hash (C-007, SHA-256 over an explicit byte encoding,
       2026-07-27).
 - [x] invariant tests (C-008, `proptest` property tests covering replay

@@ -13,6 +13,14 @@ cross-instance test); `increment(amount)` is one `postMessage` round trip
 = one `Promise` (S9.3); `terminate()`. Transferables: `stateHash`'s bytes
 are transferred, not copied, back to the main thread.
 
+C-005/C-006 (`libs/engine/domain-core/contracts/*.fbs`) generates TS
+into `src/generated/` (gitignored, regenerated via `pnpm exec nx run
+engine-domain-core:generate`) and adds the `flatbuffers` npm runtime
+dependency this package needs to import it -- verified compile-only
+(`tsc --noEmit`), since nothing here consumes these types yet either
+(`increment(amount)` still sends a plain number, not encoded bytes). See
+`libs/engine/domain-core/contracts/README.md`.
+
 Two distinct failure paths, both documented in `src/worker.ts` and
 `src/index.ts`:
 

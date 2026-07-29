@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <Description>Generated FlatBuffers C# code for Command/DomainEvent/Snapshot (master source S10.1/S10.2, DEC-013). No hand-written logic -- see Generated/README.md.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.FlatBuffers" />
+  </ItemGroup>
+
+</Project>

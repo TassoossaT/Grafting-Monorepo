@@ -1,0 +1,38 @@
+// FROZEN historical fixture (C-006, master source S10.4) -- a byte-for-
+// byte copy of `contracts/command.fbs` as it stood before that schema
+// gained `Increment.sequence_hint`. Deliberately NOT regenerated from
+// "the" current schema -- that's the whole point, it's the *old* one.
+// Its generated Rust code is committed (not gitignored), per §10.3's
+// documented exception -- see docs/adr/ADR-0009-committed-flatbuffers-fixture.md.
+// Never edit this file; if it needs a "v2" fixture later, freeze a new
+// copy instead.
+
+namespace Grafting.Contracts;
+
+table Increment {
+  amount: int64 (id: 0);
+}
+
+table Decrement {
+  amount: int64 (id: 0);
+}
+
+table Reset {}
+
+table RollAndAdd {
+  min: int64 (id: 0);
+  max: int64 (id: 1);
+}
+
+union CommandPayload {
+  Increment,
+  Decrement,
+  Reset,
+  RollAndAdd,
+}
+
+table CommandMessage {
+  payload: CommandPayload (id: 1);
+}
+
+root_type CommandMessage;

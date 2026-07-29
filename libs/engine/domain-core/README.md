@@ -26,18 +26,24 @@ requirement:
 - `hash::state_hash` -- SHA-256 over an explicit, hand-written byte
   encoding of `(state, sequence)`.
 - `snapshot::Snapshot` -- state + RNG seed/position + sequence + hash +
-  `core_version`. Round-trip is proven with `#[derive(Clone, PartialEq)]`,
-  **not** a serialization crate -- master source S10.1 names Snapshot for
-  FlatBuffers (DEC-044, `LOCKED`); a `serde`-based stand-in here, even
-  labeled temporary, would be a second real format for an already-decided
-  surface.
+  `core_version` (`String`, not `&'static str` -- a decoded snapshot's
+  version is real data read from bytes, not always the current build's).
+  Round-trip is proven two ways now: `#[derive(Clone, PartialEq)]` for
+  in-process cloning, and a real FlatBuffers encode/decode round trip
+  (`contracts::SnapshotMessage`, via `wire::encode_snapshot`/
+  `decode_snapshot`) for the wire format master source S10.1 names
+  Snapshot for (DEC-013, `LOCKED`) -- see `contracts/README.md`.
+- `contracts/*.fbs` + `wire.rs` -- C-005/C-006 done: FlatBuffers schemas
+  for `Command`/`DomainEvent`/`Snapshot`, generated Rust/TS/C# code, a
+  real round-trip test covering every variant
+  (`tests/flatbuffers_round_trip.rs`), and a real schema-evolution/
+  compatibility test (`tests/flatbuffers_evolution.rs`, C-006). See
+  `contracts/README.md` for the schema design and what's deliberately
+  not done yet (`ReplicationDelta`, the generic `engine_submit(bytes)`
+  FFI entry point, TS/C# live consumers).
 
 Real content still open, and why:
 
-- **C-005 (flatc config) / C-006 (schema evolution): blocked, not just
-  deferred.** C-005 depends on B-001, B-002, **B-004** (the .NET solution),
-  which is still open (tied to Epic D). No real FlatBuffers contract for
-  Command/DomainEvent/Snapshot exists yet.
 - **DEC-044's "same platform" is only partially captured.**
   `Snapshot.core_version` is one of six axes ADR-0004 lists (build ID,
   target, protocol/schema versions, features, numeric configuration, RNG
@@ -49,9 +55,14 @@ Real content still open, and why:
 
 ## Targets
 
+- `generate` -- regenerates `contracts/*.fbs` into Rust/TS/C# (see
+  `contracts/README.md`); a real `dependsOn` of `check`/`test` below,
+  not a manual step.
 - `check` -- `cargo check -p grafting-domain-core`
 - `test` -- `cargo test -p grafting-domain-core` (unit tests) plus
-  `tests/replay_determinism.rs` (property tests, `proptest`)
+  `tests/replay_determinism.rs` (property tests, `proptest`),
+  `tests/flatbuffers_round_trip.rs` (C-005), `tests/flatbuffers_evolution.rs`
+  (C-006)
 
 Run via Nx: `pnpm nx run engine-domain-core:check` /
 `pnpm nx run engine-domain-core:test`.

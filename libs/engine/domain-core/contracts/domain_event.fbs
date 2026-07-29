@@ -1,0 +1,37 @@
+// Wire schema for `domain-core::event::DomainEvent` (master source
+// S10.1, DEC-013, LOCKED). Mirrors command.fbs's union-of-tables design
+// -- see contracts/README.md.
+
+namespace Grafting.Contracts;
+
+table Incremented {
+  amount: int64 (id: 0);
+  new_value: int64 (id: 1);
+}
+
+table Decremented {
+  amount: int64 (id: 0);
+  new_value: int64 (id: 1);
+}
+
+table WasReset {
+  previous_value: int64 (id: 0);
+}
+
+table RolledAndAdded {
+  rolled: int64 (id: 0);
+  new_value: int64 (id: 1);
+}
+
+union DomainEventPayload {
+  Incremented,
+  Decremented,
+  WasReset,
+  RolledAndAdded,
+}
+
+table DomainEventMessage {
+  payload: DomainEventPayload (id: 1);
+}
+
+root_type DomainEventMessage;

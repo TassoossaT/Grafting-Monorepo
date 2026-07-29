@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grafting.Isekai.Interop", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grafting.Isekai.Interop.Tests", "dotnet\Grafting.Isekai.Interop.Tests\Grafting.Isekai.Interop.Tests.csproj", "{0F9DD38B-5F6E-4ABB-A342-0FC094839039}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Grafting.Isekai.Protocol", "dotnet\Grafting.Isekai.Protocol\Grafting.Isekai.Protocol.csproj", "{9080E61F-82F2-4D07-B45E-328F75A14AE1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{0F9DD38B-5F6E-4ABB-A342-0FC094839039}.Release|x64.Build.0 = Release|Any CPU
 		{0F9DD38B-5F6E-4ABB-A342-0FC094839039}.Release|x86.ActiveCfg = Release|Any CPU
 		{0F9DD38B-5F6E-4ABB-A342-0FC094839039}.Release|x86.Build.0 = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|x64.Build.0 = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Debug|x86.Build.0 = Debug|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|x64.ActiveCfg = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|x64.Build.0 = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|x86.ActiveCfg = Release|Any CPU
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{CFECEFB1-7BCA-4E0B-A240-344FA5A7F5C3} = {71E6E750-85FD-B5BC-4321-E01377EC6231}
 		{0F9DD38B-5F6E-4ABB-A342-0FC094839039} = {71E6E750-85FD-B5BC-4321-E01377EC6231}
+		{9080E61F-82F2-4D07-B45E-328F75A14AE1} = {71E6E750-85FD-B5BC-4321-E01377EC6231}
 	EndGlobalSection
 EndGlobal

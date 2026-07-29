@@ -19,3 +19,16 @@ TestResults/
 
 #spikes for tests
 spikes/
+
+# FlatBuffers generated output (master source S10.3: not the source of
+# truth, regenerated via `pnpm exec nx run engine-domain-core:generate`).
+# The *fixture* generated code under domain-core/tests/generated_v1/ is
+# deliberately NOT covered by this rule -- see docs/adr/ADR-0009.
+libs/engine/domain-core/src/generated/
+packages/isekai-web-client/src/generated/
+dotnet/Grafting.Isekai.Protocol/Generated/
+
+# Cached, version-matched flatc used only for C# generation (see
+# tools/scripts/get-flatc-csharp.ps1) -- downloaded on demand, not the
+# primary pinned flatc (tools/flatc-version.txt).
+tools/.flatc-csharp/

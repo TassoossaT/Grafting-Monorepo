@@ -12,10 +12,13 @@
 //!
 //! Round-trip is proven with `#[derive(Clone, PartialEq)]`, not a
 //! serialization crate: master source S10.1 explicitly names Snapshot for
-//! FlatBuffers (DEC-044, `LOCKED`) -- introducing `serde`/anything else
+//! FlatBuffers (DEC-013, `LOCKED`) -- introducing `serde`/anything else
 //! here, even "temporarily," would be a second real format for a decision
-//! that's already made. The real wire/save format arrives with C-005/
-//! C-006, once `flatc` is unblocked (currently blocked on B-004).
+//! that's already made. The real wire/save format is `contracts/snapshot.fbs`
+//! (C-005/C-006) -- this type stays the hand-written, canonical
+//! in-process representation; the generated FlatBuffers type
+//! (`contracts::SnapshotMessage`) is the wire form, converted to/from via
+//! `tests/flatbuffers_round_trip.rs`, not a replacement for this struct.
 
 use crate::hash::{StateHash, state_hash};
 use crate::rng::DeterministicRng;
@@ -28,7 +31,14 @@ pub struct Snapshot {
     pub rng_word_pos: u64,
     pub sequence: u64,
     pub state_hash: StateHash,
-    pub core_version: &'static str,
+    /// Owned, not `&'static str` -- a FlatBuffers-decoded snapshot's
+    /// `core_version` is real data read from bytes (possibly a much
+    /// older build's version, per S15.6's whole reason for this field
+    /// existing), never a `'static` string. A literal `&'static str`
+    /// could only be produced from decoded bytes by leaking memory on
+    /// every decode or silently substituting the *current* build's
+    /// version -- defeating the field's purpose (C-005/C-006).
+    pub core_version: String,
 }
 
 impl Snapshot {
@@ -44,7 +54,7 @@ impl Snapshot {
             rng_word_pos: rng.word_pos(),
             sequence,
             state_hash: state_hash(&state, sequence),
-            core_version: env!("CARGO_PKG_VERSION"),
+            core_version: env!("CARGO_PKG_VERSION").to_string(),
         }
     }
 

@@ -22,6 +22,7 @@ the project owner, per `AGENTS.md` and `CLAUDE.md`.
 | [ADR-0006](ADR-0006-polymath-platform-abstraction.md) | — (complements GATE-003/006) | Polymath package: platform and capability abstraction | **Accepted (DEC-042)** |
 | [ADR-0007](ADR-0007-repo-distribution-strategy.md) | GATE-007 | Multi-product repository/distribution strategy | **Accepted — closed (single monorepo)** |
 | [ADR-0008](ADR-0008-libs-boundary-and-domain-map.md) | — (structural, post GATE-007) | `libs/` boundary rule and domain map (narrative, session, X6, Discord, transcription) | **Accepted (DEC-046)** |
+| [ADR-0009](ADR-0009-committed-flatbuffers-fixture.md) | — (structural, §10.3 exception) | Commit C-006's frozen FlatBuffers evolution fixture's generated code | Proposed — pending owner decision |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for

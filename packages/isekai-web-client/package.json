@@ -10,7 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@grafting/isekai-wasm": "workspace:*"
+    "@grafting/isekai-wasm": "workspace:*",
+    "flatbuffers": "^25.9.23"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

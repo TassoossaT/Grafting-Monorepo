@@ -12,11 +12,30 @@
     }
   },
   "targets": {
+    "generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/scripts/generate-contracts.ps1"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/contracts/*.fbs",
+        "{workspaceRoot}/tools/flatc-version.txt",
+        "{workspaceRoot}/tools/scripts/generate-contracts.ps1",
+        "{workspaceRoot}/tools/scripts/get-flatc-csharp.ps1"
+      ],
+      "outputs": [
+        "{projectRoot}/src/generated",
+        "{workspaceRoot}/packages/isekai-web-client/src/generated",
+        "{workspaceRoot}/dotnet/Grafting.Isekai.Protocol/Generated"
+      ]
+    },
     "check": {
       "executor": "nx:run-commands",
       "options": {
         "command": "cargo check -p grafting-domain-core"
       },
+      "dependsOn": ["generate"],
       "cache": true,
       "inputs": [
         "{projectRoot}/**/*",
@@ -30,6 +49,7 @@
       "options": {
         "command": "cargo test -p grafting-domain-core"
       },
+      "dependsOn": ["generate"],
       "cache": true,
       "inputs": [
         "{projectRoot}/**/*",

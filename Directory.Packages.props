@@ -7,5 +7,15 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <!-- Latest published NuGet version as of this pin: lags the pinned
+         flatc release (tools/flatc-version.txt, 25.12.19) by several
+         releases. The FlatBuffers project does not publish each
+         ecosystem's runtime package in lockstep (verified: NuGet's
+         latest is 25.2.10, npm's is 25.9.23, Rust's crates.io is
+         25.12.19, three different lag amounts, not assumed equal).
+         Low risk here since the C# side is compile only verification
+         (no live round trip yet, see contracts/README.md), but flagged
+         rather than silently pinned. -->
+    <PackageVersion Include="Google.FlatBuffers" Version="25.2.10" />
   </ItemGroup>
 </Project>
