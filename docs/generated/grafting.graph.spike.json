@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "dfb36ddf0ca69f878fe4a0c88755cbc4842aaada3aec203e1f55a5ae370a1cb2",
+  "inputHash": "e40bc3c6c768d7db310cdd162ba672e2296e3c596e1c671c94edfbec657ba7eb",
   "nodes": [
     {
       "id": "agent:claude",
@@ -206,6 +206,15 @@
       "source": ".ai/state/tasks/COORDINATION-PHASE1.json"
     },
     {
+      "id": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE",
+      "kind": "task",
+      "label": "I-001-KNOWLEDGE-AUTOMATION-PLANE",
+      "tags": [
+        "status:blocked"
+      ],
+      "source": ".ai/state/tasks/I-001-KNOWLEDGE-AUTOMATION-PLANE.json"
+    },
+    {
       "id": "task:SPIKE-005-COPY-BUDGET",
       "kind": "task",
       "label": "SPIKE-005-COPY-BUDGET",
@@ -333,6 +342,13 @@
       "source": "task:COORDINATION-PHASE1",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/COORDINATION-PHASE1.json#/owner"
+    },
+    {
+      "id": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-001-KNOWLEDGE-AUTOMATION-PLANE.json#/owner"
     },
     {
       "id": "task:SPIKE-005-COPY-BUDGET->agent:codex:owned_by",

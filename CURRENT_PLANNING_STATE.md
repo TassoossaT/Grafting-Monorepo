@@ -30,7 +30,7 @@
 planning
 → adversarial review           (not yet formally executed)
 → closing the Decision Gates     ← done
-→ ADRs                            ← done
+→ foundational ADRs               ← done; I-001 proposal under review
 → full English translation pass   ← done
 → disposable spikes                ← done (8 accepted)
 → scaffold                          ← in progress (Epic B core done; see below)
@@ -637,11 +637,12 @@ that version range.
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-DEC-049/ADR-0011 records the owner's package-genericity, third-party isolation,
-and single-authoritative-implementation rules. The next implementation-planning
-task is I-001 for the Architecture Studio/Knowledge Plane. ADR-0009's Decision
-section also remains pending owner confirmation; `engine_submit(bytes)` and
-E-003 remain separately scoped future work.
+I-001 now has a proposed ADR defining Knowledge/Automation Plane authority,
+documentary lifecycle, `@grafting/graph` ports, and the `x6-canvas` adapter
+boundary. It awaits owner confirmation before the master source is changed or
+the transitional `graph-x6` package is migrated. ADR-0009's Decision section
+also remains pending owner confirmation; `engine_submit(bytes)` and E-003
+remain separately scoped future work.
 
 ## Update rule
 
