@@ -4,7 +4,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DataTable, EntitySummary, StatusBadge, Text } from "../dist/index.js";
+import { DataTable, EntitySummary, GridLayout, StatusBadge, Text } from "../dist/index.js";
 import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
@@ -12,6 +12,7 @@ test("exports only the deliberate Grafting component surface", async () => {
   assert.deepEqual(Object.keys(ui).sort(), [
     "DataTable",
     "EntitySummary",
+    "GridLayout",
     "StatusBadge",
     "Text",
     "mountEntitySummary",
@@ -125,4 +126,27 @@ test("renders bespoke React components inside vendor-neutral table cells", () =>
   assert.match(markup, /<table/);
   assert.match(markup, /@grafting\/ui/);
   assert.match(markup, /library/);
+});
+
+test("arranges caller-owned panels on a vendor-neutral dashboard grid", () => {
+  const markup = renderToStaticMarkup(
+    createElement(GridLayout, {
+      ariaLabel: "Studio dashboard",
+      panels: [
+        {
+          content: createElement("span", null, "Graph canvas"),
+          placement: { id: "canvas", x: 0, y: 0, width: 8, height: 6 },
+        },
+        {
+          content: createElement("span", null, "Entity list"),
+          placement: { id: "explorer", x: 8, y: 0, width: 4, height: 6, locked: true },
+        },
+      ],
+    }),
+  );
+
+  assert.match(markup, /aria-label="Studio dashboard"/);
+  assert.match(markup, /role="region"/);
+  assert.match(markup, /Graph canvas/);
+  assert.match(markup, /Entity list/);
 });

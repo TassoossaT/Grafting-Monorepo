@@ -36,7 +36,7 @@ authority.
 | Source, manifests, schemas, accepted ADRs | Canonical authored source | Read and link; never rewrite through this slice |
 | Tasks, handoffs, proposals | Operational authored state | Future read-only projection; no direct mutation in v1 |
 | Graph IR and validation reports | Derived evidence | Display with provenance; never edit |
-| Selection, filters, zoom, pan, panel size | Presentation state | May change locally; never enters Graph IR |
+| Selection, filters, zoom, pan, node position, panel size | Presentation state | May change locally; never enters Graph IR |
 
 Every displayed graph fact must remain traceable to `provenance.evidence`.
 Presentation labels, colors, icons, grouping, viewport, and local filter state
@@ -184,9 +184,10 @@ The Canvas:
 
 - renders only immutable Grafting-owned node and edge presentation data;
 - preserves the stable Graph IR IDs exactly;
-- allows pan, bounded zoom, centering, and read-only activation;
-- prohibits dragging nodes, creating/reconnecting edges, editing labels,
-  deletion, clipboard mutation, and vendor command access;
+- allows pan, bounded zoom, centering, local node repositioning, and read-only
+  activation;
+- prohibits creating/reconnecting edges, editing labels, deletion, clipboard
+  mutation, and vendor command access;
 - distinguishes node and edge kinds using text/icon/shape in addition to
   color;
 - exposes selected and keyboard-focused state through Grafting-owned
@@ -198,7 +199,10 @@ current `@grafting/ui` Ant Design Card mount, ports, smooth curves, arrow
 markers, compact relation labels, effects, canvas surface, and interaction
 policy to the neutral canvas adapter. Neither vendor API crosses the
 application contract. New visual shapes are application-owned view definitions
-and do not change graph structure, node placement, or canvas lifecycle code.
+and do not change graph structure or canvas lifecycle code. Dragging changes
+only the private position of a rendered node for the lifetime of the canvas;
+it does not mutate the immutable projection, the Rust layout snapshot, or
+Graph IR.
 
 A simple deterministic application-owned placement by kind may be used when it
 is purely presentation policy. Any graph-aware ranking, layered/DAG layout,
@@ -309,8 +313,9 @@ the Rust structural validator or Graph IR schema rules.
 ### Read-only guarantee
 
 - **FR-021:** No UI control may edit Graph IR or authored repository files.
-- **FR-022:** The rendered canvas must keep vendor editing interactions
-  disabled even when activation/selection is added.
+- **FR-022:** The rendered canvas may explicitly allow local node
+  repositioning, but must keep connection, edge, vertex, label, tool, and
+  graph-data editing interactions disabled.
 - **FR-023:** No public app or package API may return the mutable X6 graph,
   cells, events, options, errors, or configuration objects.
 - **FR-024:** Test/build execution belongs to the Automation Plane and is not a
@@ -401,7 +406,8 @@ read-only activation capability. The exact API name is decided in the
 implementation task, but its behavior must satisfy all of these constraints:
 
 1. input/output values use only Grafting-owned IDs and primitive/value types;
-2. activation does not enable dragging, connecting, editing, or deletion;
+2. activation does not implicitly enable movement, connecting, editing, or
+   deletion; node movement is a separate opt-in interaction policy;
 3. the consumer can distinguish node activation from edge activation;
 4. selection can be updated from outside the canvas so list and canvas remain
    synchronized;
@@ -536,11 +542,12 @@ Provisional guardrails:
   Inspector.
 - **AC-007:** The Inspector renders every present provenance/evidence field and
   copy actions return complete unmodified values.
-- **AC-008:** Center, Reset, filters, activation, URL restoration, and disposal
-  change presentation only; a before/after hash of the input Graph IR remains
-  identical.
-- **AC-009:** Drag, connect, reconnect, delete, label editing, and mutable
-  vendor graph access remain unavailable.
+- **AC-008:** Center, Reset, filters, activation, local node movement, URL
+  restoration, and disposal change presentation only; a before/after hash of
+  the input Graph IR remains identical.
+- **AC-009:** Node drag may update private canvas coordinates only. Connect,
+  reconnect, edge/vertex/label editing, delete, and mutable vendor graph access
+  remain unavailable.
 - **AC-010:** Empty results, unknown freshness, stale evidence, query failure,
   and canvas failure are observable and recoverable as specified.
 - **AC-011:** All core navigation and inspection tasks can be completed with a
@@ -555,8 +562,9 @@ Provisional guardrails:
   package checks/tests, and the production build all pass without relying on
   Nx cache.
 - **AC-015:** The real app is checked in a supported browser for list/canvas
-  synchronization, read-only behavior, provenance inspection, filters, zoom,
-  pan, Center, Reset, URL restoration, and absence of runtime/console errors.
+  synchronization, local node movement, structural read-only behavior,
+  provenance inspection, filters, zoom, pan, Center, Reset, URL restoration,
+  and absence of runtime/console errors.
 - **AC-016:** The bundle report records raw and gzip JavaScript plus separate
   Wasm size when applicable, and evaluates the provisional guardrails.
 
@@ -567,11 +575,11 @@ Provisional guardrails:
 | Graph IR loader | valid v1, unsupported version, malformed document, missing evidence, dangling edge |
 | Rust graph query | combined filters, neighborhood depth/direction, no matches, cycles where allowed, deterministic snapshot ordering |
 | Presentation projection | every v1 node/edge kind has generic presentation; stable IDs/fields preserved |
-| `x6-canvas` | activation, external selection, no editing, no vendor-type leakage, listener cleanup/disposal |
+| `x6-canvas` | activation, external selection, opt-in node movement with structural editing disabled, no vendor-type leakage, listener cleanup/disposal |
 | Explorer/Inspector | keyboard selection, copy-full-value, multiple evidence items, endpoint navigation |
 | URL state | lossless stable IDs, invalid/removed ID recovery, different-revision recovery |
 | Application | loading/error/empty/stale/unknown/ready states, real document, production build |
-| Browser acceptance | pan, bounded zoom, Center, Reset, filters, synchronized selection, read-only guarantee |
+| Browser acceptance | pan, node movement, bounded zoom, Center, Reset, filters, synchronized selection, structural read-only guarantee |
 
 Tests may independently repeat expected behavior. They must remain traceable to
 the canonical Graph IR schema and Grafting contracts rather than maintaining a

@@ -20,6 +20,7 @@ test("owns the concrete node, surface, ports, and interactions outside x6-canvas
   assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.surface.backgroundColor, "#f8fafc");
   assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.surface.grid.kind, "dot");
   assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.interaction.panning, true);
+  assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.interaction.movableNodes, true);
   assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.interaction.selectOnActivate, true);
   assert.equal(ARCHITECTURE_CANVAS_COMPOSITION.viewport.fitOnCreate, true);
 });

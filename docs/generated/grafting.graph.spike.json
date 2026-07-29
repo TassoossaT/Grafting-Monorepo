@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "19e55b7dd2b3bc142bf46d8af120b253c54262db30bc96141a0262b2a2862e33",
+  "inputHash": "d72b3081dd77fae793ad033659067640c6080e8a139a90c9053e852f902f2b57",
   "nodes": [
     {
       "id": "agent:claude",
@@ -218,6 +218,15 @@
       "source": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json"
     },
     {
+      "id": "task:AI-GIT-SAFETY-001",
+      "kind": "task",
+      "label": "AI-GIT-SAFETY-001",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/AI-GIT-SAFETY-001.json"
+    },
+    {
       "id": "task:ARCH-STUDIO-OSS-OPTIONS",
       "kind": "task",
       "label": "ARCH-STUDIO-OSS-OPTIONS",
@@ -407,6 +416,15 @@
       "source": ".ai/state/tasks/UI-001-GRAFTING-UI-FOUNDATION.json"
     },
     {
+      "id": "task:UI-002-DASHBOARD-GRID-LAYOUT",
+      "kind": "task",
+      "label": "UI-002-DASHBOARD-GRID-LAYOUT",
+      "tags": [
+        "status:in_progress"
+      ],
+      "source": ".ai/state/tasks/UI-002-DASHBOARD-GRID-LAYOUT.json"
+    },
+    {
       "id": "task:X6-002-PLUGGABLE-NODE-VIEWS",
       "kind": "task",
       "label": "X6-002-PLUGGABLE-NODE-VIEWS",
@@ -423,6 +441,15 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/X6-003-COMPOSABLE-CANVAS.json"
+    },
+    {
+      "id": "task:X6-004-MOVABLE-CARD-NODES",
+      "kind": "task",
+      "label": "X6-004-MOVABLE-CARD-NODES",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/X6-004-MOVABLE-CARD-NODES.json"
     }
   ],
   "edges": [
@@ -537,6 +564,13 @@
       "source": "task:ADR-0013-RUST-GRAPH-API-CONTRACTS",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json#/owner"
+    },
+    {
+      "id": "task:AI-GIT-SAFETY-001->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:AI-GIT-SAFETY-001",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/AI-GIT-SAFETY-001.json#/owner"
     },
     {
       "id": "task:ARCH-STUDIO-OSS-OPTIONS->agent:codex:owned_by",
@@ -686,6 +720,13 @@
       "evidence": ".ai/state/tasks/UI-001-GRAFTING-UI-FOUNDATION.json#/owner"
     },
     {
+      "id": "task:UI-002-DASHBOARD-GRID-LAYOUT->agent:claude:owned_by",
+      "kind": "owned_by",
+      "source": "task:UI-002-DASHBOARD-GRID-LAYOUT",
+      "target": "agent:claude",
+      "evidence": ".ai/state/tasks/UI-002-DASHBOARD-GRID-LAYOUT.json#/owner"
+    },
+    {
       "id": "task:X6-002-PLUGGABLE-NODE-VIEWS->agent:codex:owned_by",
       "kind": "owned_by",
       "source": "task:X6-002-PLUGGABLE-NODE-VIEWS",
@@ -698,6 +739,13 @@
       "source": "task:X6-003-COMPOSABLE-CANVAS",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/X6-003-COMPOSABLE-CANVAS.json#/owner"
+    },
+    {
+      "id": "task:X6-004-MOVABLE-CARD-NODES->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:X6-004-MOVABLE-CARD-NODES",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/X6-004-MOVABLE-CARD-NODES.json#/owner"
     }
   ]
 }

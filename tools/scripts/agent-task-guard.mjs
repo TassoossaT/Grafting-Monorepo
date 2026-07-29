@@ -106,6 +106,66 @@ export function isReadOnlyInspectionCommand(command) {
   );
 }
 
+const gitSubcommandPattern = (subcommands) =>
+  new RegExp(
+    `\\bgit(?:\\.exe)?\\s+(?:(?:-C|-c|--git-dir|--work-tree)\\s+\\S+\\s+)*(?:${subcommands.join("|")})\\b`,
+    "i",
+  );
+
+/** Enforces owner-approved Git history rules before ordinary task ownership. */
+export function evaluateAgentGitCommand(command) {
+  if (typeof command !== "string" || command.trim().length === 0) return allowed();
+
+  const commitProducing = gitSubcommandPattern([
+    "commit",
+    "commit-tree",
+    "merge",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "am",
+    "stash",
+    "notes",
+    "fast-import",
+    "filter-branch",
+  ]);
+  if (commitProducing.test(command)) {
+    return denied(
+      "AI agents must not create or rewrite Git commits; prepare an uncommitted change for the repository owner",
+    );
+  }
+
+  if (/\bgh\s+pr\s+merge\b/i.test(command)) {
+    return denied("AI agents may prepare or open a pull request but must not merge it");
+  }
+
+  const pullSegments = command.match(/\bgit(?:\.exe)?\s+pull\b[^;&|\r\n]*/gi) ?? [];
+  for (const segment of pullSegments) {
+    if (!/(?:^|\s)--ff-only(?:\s|$)/i.test(segment)) {
+      return denied("AI agents may run git pull only with --ff-only so it cannot create a merge commit");
+    }
+  }
+
+  const pushSegments = command.match(/\bgit(?:\.exe)?\s+push\b[^;&|\r\n]*/gi) ?? [];
+  for (const segment of pushSegments) {
+    if (/(?:^|\s)(?:-f|--force(?:-with-lease)?|--mirror|--all|--tags|--delete)(?:\s|$)/i.test(segment)) {
+      return denied("AI agents must not force, mirror, bulk, tag, or delete remote Git refs");
+    }
+    if (/(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?=$|\s)/i.test(segment)) {
+      return denied("AI agents must never push to main or master");
+    }
+    if (
+      !/(?:^|\s)(?:[^\s:]+:)?(?:refs\/heads\/)?ai\/[a-z0-9._/-]+(?=$|\s)/i.test(segment)
+    ) {
+      return denied(
+        "AI agents may push only an explicit isolated ai/<agent>/<task> branch containing human-authored commits",
+      );
+    }
+  }
+
+  return allowed();
+}
+
 export async function evaluateHook({ root, agent, hookInput }) {
   if (typeof agent !== "string" || agent.length === 0) return denied("agent ID is required");
   if (!hookInput || hookInput.hook_event_name !== "PreToolUse") {
@@ -152,9 +212,11 @@ export async function evaluateHook({ root, agent, hookInput }) {
   }
 
   if (tool === "Bash") {
+    const command = hookInput.tool_input?.command;
+    const gitDecision = evaluateAgentGitCommand(command);
+    if (!gitDecision.allowed) return gitDecision;
     const active = activeTaskFor(await loadTasks(root), agent);
     if (active.allowed) return allowed();
-    const command = hookInput.tool_input?.command;
     return isReadOnlyInspectionCommand(command) ? allowed() : active;
   }
 

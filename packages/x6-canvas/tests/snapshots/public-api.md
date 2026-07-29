@@ -238,6 +238,8 @@ export interface CanvasZoomOptions {
 export interface CanvasInteractionOptions {
     /** Whether ordinary primary-button dragging pans the surface. */
     readonly panning?: boolean;
+    /** Whether users may reposition nodes locally without changing graph structure or caller data. */
+    readonly movableNodes?: boolean;
     /** Movement tolerance that separates activation from panning. */
     readonly clickThreshold?: number;
     /** Optional wheel zoom behavior, or `false` to disable it. */

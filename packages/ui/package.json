@@ -18,7 +18,8 @@
     "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."
   },
   "dependencies": {
-    "antd": "6.5.2"
+    "antd": "6.5.2",
+    "react-grid-layout": "2.2.3"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

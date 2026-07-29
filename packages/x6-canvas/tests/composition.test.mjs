@@ -115,11 +115,24 @@ test("keeps neutral interaction defaults replaceable", async () => {
   const composed = toX6ReadOnlyInteractionOptions({
     clickThreshold: 7,
     panning: true,
+    movableNodes: true,
     zoom: { modifiers: ["control"], minScale: 0.2 },
   });
 
+  assert.equal(defaults.interacting.nodeMovable, false);
+  assert.equal(defaults.interacting.edgeMovable, false);
+  assert.equal(defaults.interacting.edgeLabelMovable, false);
+  assert.equal(defaults.interacting.arrowheadMovable, false);
+  assert.equal(defaults.interacting.vertexMovable, false);
+  assert.equal(defaults.interacting.vertexAddable, false);
+  assert.equal(defaults.interacting.vertexDeletable, false);
+  assert.equal(defaults.interacting.useEdgeTools, false);
+  assert.equal(defaults.interacting.magnetConnectable, false);
+  assert.equal(defaults.interacting.toolsAddable, false);
   assert.equal(defaults.panning.enabled, false);
   assert.equal(defaults.mousewheel.enabled, false);
+  assert.equal(composed.interacting.nodeMovable, true);
+  assert.equal(composed.interacting.edgeMovable, false);
   assert.equal(composed.clickThreshold, 7);
   assert.equal(composed.panning.enabled, true);
   assert.deepEqual(composed.mousewheel.modifiers, ["ctrl"]);

@@ -10,12 +10,15 @@ consumer supplies, per canvas instance:
 
 - node view definitions with dimensions, optional ports, and a DOM mount lifecycle;
 - edge presenters that choose terminals, curves, markers, labels, CSS effects, and selection treatment;
-- optional background, grid, pan, zoom, activation-selection, and fit policy.
+- optional background, grid, pan, local node movement, zoom,
+  activation-selection, and fit policy.
 
 Defaults are neutral and replaceable: transparent surface, no grid, no pan or
-zoom, no automatic activation selection, and no product view. A view may mount
-React, Web Components, SVG-backed DOM, plain HTML, or another DOM runtime; the
-contract exposes none of those library types.
+node movement, no zoom, no automatic activation selection, and no product
+view. Enabling `movableNodes` changes only the private canvas coordinates;
+edges, labels, ports, connections, caller-owned input, and graph structure stay
+non-editable. A view may mount React, Web Components, SVG-backed DOM, plain
+HTML, or another DOM runtime; the contract exposes none of those library types.
 
 The package contains no Card, Graph IR role, VTT semantic, product color,
 fixed edge theme, graph structure, query, or layout calculation. Coordinates

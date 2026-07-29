@@ -45,6 +45,8 @@ button:focus-visible { outline: 3px solid #7aa7ff; outline-offset: 2px; }
 .explorer { padding: 18px 14px; border-right: 1px solid #cbd4e4; }
 .inspector { padding: 18px; border-left: 1px solid #cbd4e4; }
 #graph { min-width: 0; min-height: 0; background: #f7f9fc; }
+.architecture-node-card { cursor: grab !important; user-select: none; }
+.architecture-node-card:active { cursor: grabbing !important; }
 
 h1, h2, h3, h4, p { margin-top: 0; }
 h1, h2 { margin-bottom: 8px; font-size: 18px; }

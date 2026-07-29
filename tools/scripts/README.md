@@ -99,7 +99,10 @@ whoever has a real one to add -- not something these tests do.
 ## AI coordination / Graph IR (Codex-authored, listed here for discoverability)
 
 - `agent-task-guard.mjs` (+ `.test.mjs`) -- provider-neutral runtime adapter
-  for task ownership. Claude Code invokes it through the project
+  for task ownership and the agent Git-write prohibition. It rejects explicit
+  or implicit commit creation, PR merges, unsafe pulls, non-isolated pushes,
+  and every push to `main`/`master`, even with an active task. Claude Code
+  invokes it through the project
   `PreToolUse` hook in `.claude/settings.json`; the canonical policy remains
   `.ai/coordination/PROTOCOL.md` and `.ai/state/tasks/`.
 - `generate-graph-ir.mjs` / `validate-graph-ir.mjs` (+ their `.test.mjs`

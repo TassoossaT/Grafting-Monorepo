@@ -1103,12 +1103,28 @@ ports, palette, curves, arrows, labels, effects, grid, pan, zoom, selection, and
 fit behavior. Another shape or arc can be added to the application composition
 without editing the generic canvas lifecycle.
 
+## Agent Git write prohibition (AI-GIT-SAFETY-001), 2026-07-29
+
+The repository owner accepted DEC-053/ADR-0015. Claude, Codex, Gemini, and
+future AI providers may inspect/stage Git changes, create isolated
+`ai/<agent>/<task-id>` branches, and assist with pull requests around
+human-authored commits, but agents never create, amend, rewrite, or merge a
+commit on any branch. They never push `main`/`master` or merge a pull request.
+
+The canonical rule is in the root operational contract and coordination
+protocol. Claude's existing provider-neutral runtime guard rejects direct and
+implicit commit-producing commands, unsafe pull, PR merge, implicit/forced
+pushes, and default-branch pushes even when Claude owns an active task. A
+repository-wide Git hook is deliberately absent so authorized human commits
+remain unaffected. Other providers remain bound by the canonical rule and may
+add thin enforcement adapters only through owner-approved tasks.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
 I-001/DEC-050, I-002, GRAPH-001/DEC-051, the Rust/TypeScript public-API
 pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, I-004, I-007/G-008, and
-X6-002, X6-003/DEC-052
+X6-002, X6-003/DEC-052, and AI-GIT-SAFETY-001/DEC-053
 are complete (see above). I-006A and I-006B are complete: the real Graph IR
 cutover, selection inspector, Rust/Wasm grouped layout, single projection
 configuration, and reusable AntD React cards inside X6 are implemented and

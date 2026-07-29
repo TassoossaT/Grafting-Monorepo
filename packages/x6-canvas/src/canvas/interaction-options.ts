@@ -7,7 +7,19 @@ const toX6Modifier = (modifier: CanvasInteractionModifier) =>
 export function toX6ReadOnlyInteractionOptions(options: CanvasInteractionOptions = {}) {
   const zoom = options.zoom === false || options.zoom === undefined ? undefined : options.zoom;
   return {
-    interacting: false as const,
+    interacting: {
+      edgeMovable: false as const,
+      edgeLabelMovable: false as const,
+      arrowheadMovable: false as const,
+      vertexMovable: false as const,
+      vertexAddable: false as const,
+      vertexDeletable: false as const,
+      useEdgeTools: false as const,
+      nodeMovable: options.movableNodes ?? false,
+      magnetConnectable: false as const,
+      stopDelegateOnDragging: false as const,
+      toolsAddable: false as const,
+    },
     clickThreshold: options.clickThreshold ?? 0,
     panning: {
       enabled: options.panning ?? false,

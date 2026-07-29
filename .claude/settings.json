@@ -9,7 +9,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/tools/scripts/agent-task-guard.mjs\" --root \"${CLAUDE_PROJECT_DIR}\" --agent claude",
             "timeout": 10,
-            "statusMessage": "Checking Grafting task ownership"
+            "statusMessage": "Checking Grafting task ownership and Git policy"
           }
         ]
       }

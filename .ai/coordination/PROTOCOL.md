@@ -67,6 +67,33 @@ settings. Verify the active `Project` hook through Claude Code's `/hooks`
 screen. Organization-level tamper resistance would require managed settings
 and is outside this repository's authority.
 
+## Git write policy
+
+AI agents never create, amend, rewrite, or implicitly produce Git commits.
+This prohibition applies on every branch, even when the agent owns an active
+task. In particular, agents do not run commit, merge, rebase, cherry-pick,
+revert, stash, commit-producing pull, or pull-request merge operations.
+
+Agents may:
+
+- inspect Git state and history;
+- stage or unstage changes when useful for review without committing them;
+- create or switch to an isolated `ai/<agent>/<task-id>` branch;
+- fetch and use `git pull --ff-only` when otherwise authorized;
+- prepare or open a pull request whose commits were authored by a human;
+- push only an explicit `ai/<agent>/<task-id>` branch containing
+  human-authored commits.
+
+Agents never push to `main` or `master`, never force/bulk/mirror/tag/delete
+remote refs, and never merge a pull request. Creating an isolated branch or
+requesting a PR does not authorize a commit. The repository owner remains the
+only party who may decide that a commit or merge is created.
+
+The provider-neutral task guard enforces this policy for every provider that
+adopts its runtime adapter. Canonical instructions govern providers without an
+adapter. A repository-wide pre-commit hook is deliberately not installed,
+because it would also interfere with authorized human commits.
+
 ## During work
 
 - Work on one task ID at a time and preserve unrelated changes.
@@ -76,8 +103,8 @@ and is outside this repository's authority.
   discoveries in the task record.
 - Do not communicate through generated files, editor settings, ignored files,
   or assumptions about another provider's chat history.
-- Do not commit another agent's changes unless the owner explicitly transfers
-  responsibility.
+- Do not commit any change. Hand off the uncommitted working tree or a patch to
+  the repository owner; ownership transfer never transfers commit authority.
 
 ## Handoffs
 

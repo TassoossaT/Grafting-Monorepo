@@ -6,6 +6,12 @@
       "status": "active",
       "source": ".ai/coordination/PROTOCOL.md",
       "summary": "Single-owner tasks and immutable structured handoffs across providers."
+    },
+    {
+      "id": "agent-git-write-prohibition-v1",
+      "status": "active",
+      "source": "docs/adr/ADR-0015-agent-git-write-policy.md",
+      "summary": "AI agents never create or merge commits and never push the default branch; Git inspection, isolated branches, and PR assistance remain available."
     }
   ]
 }

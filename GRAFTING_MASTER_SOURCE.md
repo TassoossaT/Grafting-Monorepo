@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.12.0`
+> Version: `1.12.1`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 - accepted composable capability packages and product-owned presentation (DEC-052).
+> Last updated: 2026-07-29 - prohibited agent-authored Git commits and default-branch pushes (DEC-053).
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -399,6 +399,7 @@ and ADR-0013.
 | DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. Graph computation, visual adaptation, and application presentation remain separate; the original TypeScript graph-package allocation is amended by DEC-051 (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
 | DEC-051 | Reusable graph structures, semantic validation, algorithms, ordering, queries, diffs, layout mathematics, and other significant calculations are authoritative in the Rust `grafting-graph-core` crate; callers own presentation enrichment, while `@grafting/x6-canvas` privately owns X6. Every consumed package has a generated public-API baseline, an `api-check` target, and behavioral contract tests, with native source declarations remaining authoritative (`docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`). |
 | DEC-052 | Reusable capability packages expose neutral mechanisms, Grafting-owned composition contracts, extension points, and only replaceable defaults; consuming applications own concrete visual identity, semantic roles, effects, and interaction policy. A package may privately adapt third-party code, but it must not hardcode one product's presentation or force consumers to bypass its boundary (`docs/adr/ADR-0014-composable-capability-packages.md`). |
+| DEC-053 | AI agents never create, amend, rewrite, merge, or implicitly produce Git commits on any branch. They may inspect/stage Git state, create isolated `ai/<agent>/<task-id>` branches, and assist with pull requests containing human-authored commits; only explicit isolated branches may be pushed, and agents never push to `main`/`master`, force remote refs, or merge pull requests (`docs/adr/ADR-0015-agent-git-write-policy.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -2988,6 +2989,13 @@ At the end, use the completion format defined in Section 25.3.
 Claude and Codex share skills, contracts, context packs, and tasks. Vendor-specific definitions remain adapters. Do not permanently fix that one provider always plans or implements. Use `primary_agent`, `review_agent`, `verification_agent`, and `synthesis_agent` according to local evals.
 
 The agent that implemented cannot be the sole reviewer. For parallel work, use one worktree per executor and a single owner per task.
+
+Agents never create or merge Git commits. They may inspect Git, prepare an
+uncommitted working tree or patch, create an isolated
+`ai/<agent>/<task-id>` branch, and assist with a pull request whose commits
+were created by a human. Agents never push to `main` or `master`; creating a
+branch, owning a task, or being asked to prepare a PR does not grant commit or
+merge authority. See DEC-053 and ADR-0015.
 
 ### 25.8 Structured handoff format
 

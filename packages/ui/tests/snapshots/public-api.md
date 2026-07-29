@@ -4,7 +4,7 @@ Package: `@grafting/ui`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: `antd`, `react-dom`
+Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`
 
 ## Declaration entry point
 
@@ -149,6 +149,59 @@ export interface DataTableProps<Row extends object> {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/** Stable caller-owned identity for one panel in a Grafting grid layout. */
+export type GridPanelId = string;
+/** Vendor-neutral position and size of one panel, in grid units, not pixels. */
+export interface GridPanelPlacement {
+    /** Stable identity matching the panel this placement belongs to. */
+    readonly id: GridPanelId;
+    /** Horizontal position in grid columns, zero-indexed from the left. */
+    readonly x: number;
+    /** Vertical position in grid rows, zero-indexed from the top. */
+    readonly y: number;
+    /** Width in grid columns. */
+    readonly width: number;
+    /** Height in grid rows. */
+    readonly height: number;
+    /** Optional minimum width in grid columns. */
+    readonly minWidth?: number;
+    /** Optional minimum height in grid rows. */
+    readonly minHeight?: number;
+    /** Optional maximum width in grid columns. */
+    readonly maxWidth?: number;
+    /** Optional maximum height in grid rows. */
+    readonly maxHeight?: number;
+    /** Whether the panel is fixed in place and excluded from drag or resize. */
+    readonly locked?: boolean;
+}
+/** One panel rendered by the Grafting grid layout. */
+export interface GridPanel {
+    /** Current placement of this panel. */
+    readonly placement: GridPanelPlacement;
+    /** Caller-owned content rendered inside the panel. */
+    readonly content: ReactNode;
+}
+/** Public inputs for the reusable Grafting dashboard grid layout. */
+export interface GridLayoutProps {
+    /** Immutable caller-owned panels and their current placements. */
+    readonly panels: readonly GridPanel[];
+    /** Accessible name for the grid region. */
+    readonly ariaLabel: string;
+    /** Number of columns the grid is divided into. */
+    readonly columns?: number;
+    /** Height of one grid row in CSS pixels. */
+    readonly rowHeight?: number;
+    /** Gap between panels in CSS pixels, applied both horizontally and vertically. */
+    readonly gap?: number;
+    /** Whether panels can be dragged to a new position. */
+    readonly draggable?: boolean;
+    /** Whether panels can be resized. */
+    readonly resizable?: boolean;
+    /** Receives the complete next placement for every panel after a drag, resize, or compaction. */
+    readonly onPlacementsChange?: (placements: readonly GridPanelPlacement[]) => void;
+    /** Optional caller-owned class name for layout composition. */
+    readonly className?: string;
+}
 /** Renders Grafting text without exposing the current component-library API. */
 export declare function Text(props: TextProps): ReactElement;
 /** Renders a compact semantic status without exposing the current component-library API. */
@@ -159,4 +212,14 @@ export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
 export declare function mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>;
 /** Renders a vendor-neutral data table whose cells may contain bespoke React components. */
 export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
+/**
+ * Renders a reusable dashboard grid layout with draggable, resizable panels.
+ *
+ * Consumers whose bundler does not already provide it must import
+ * `react-grid-layout/css/styles.css` once at the application level; this
+ * package does not import it as a side effect (it declares `sideEffects:
+ * false`), so the choice of when and whether to load that stylesheet stays
+ * with the consuming application.
+ */
+export declare function GridLayout(props: GridLayoutProps): ReactElement;
 ```

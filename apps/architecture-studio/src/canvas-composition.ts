@@ -55,6 +55,7 @@ const toEntitySummaryProps = (context: CanvasNodeRenderContext): EntitySummaryPr
     title: data.title,
     description: data.description,
     ariaLabel: `${data.title} (${data.description})`,
+    className: "architecture-node-card",
     accentColor: palette.accent,
     backgroundColor: palette.background,
     selectedColor: "#2563eb",
@@ -150,6 +151,7 @@ export const ARCHITECTURE_CANVAS_COMPOSITION: ReadOnlyCanvasOptions = Object.fre
   }),
   interaction: Object.freeze({
     panning: true,
+    movableNodes: true,
     clickThreshold: 4,
     zoom: Object.freeze({
       modifiers: Object.freeze(["control", "meta"] as const),

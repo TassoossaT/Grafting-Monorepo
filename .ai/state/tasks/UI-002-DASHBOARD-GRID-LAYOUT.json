@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-002-DASHBOARD-GRID-LAYOUT",
+  "title": "Composable dashboard grid-layout organism for @grafting/ui (react-grid-layout)",
+  "status": "in_progress",
+  "owner": "claude",
+  "revision": 1,
+  "updated_at": "2026-07-29T19:10:00-03:00",
+  "objective": "Add a vendor-isolated, Grafting-owned GridLayout organism to @grafting/ui, privately backed by react-grid-layout, so the planned Next.js documentation-and-tooling app (and any future consumer) can arrange draggable/resizable panels without ever receiving react-grid-layout's own types. The owner chose react-grid-layout over Gridstack.js in conversation because the destination app is React/Next.js-first from day one, so the vendor-isolation boundary must make a later engine swap (e.g. to Gridstack) a contained, single-file change.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-002-DASHBOARD-GRID-LAYOUT.json",
+    "packages/ui/package.json",
+    "packages/ui/project.json",
+    "packages/ui/src/index.ts",
+    "packages/ui/src/organisms/grid-layout.tsx",
+    "packages/ui/tests/ui.test.mjs",
+    "packages/ui/tests/snapshots/public-api.md",
+    "packages/ui/AGENTS.md",
+    "packages/ui/DECISIONS.md",
+    "packages/ui/README.md",
+    "pnpm-lock.yaml"
+  ],
+  "blockers": [],
+  "validations": [],
+  "artifacts": [],
+  "risks": [
+    "react-grid-layout shipped a v2 TypeScript rewrite very recently; conflicting summaries exist for its exact current API surface (grouped gridConfig object vs flat props, useContainerWidth return shape). The real installed package's own .d.ts files must be read directly before finalizing the wrapper, rather than trusting secondary sources.",
+    "This package does not touch apps/architecture-studio, packages/x6-canvas, or any path owned by codex's completed X6-002/X6-003 or in-progress I-006B tasks; scope is intentionally confined to packages/ui to avoid any collision with concurrent work.",
+    "Per DEC-053/ADR-0015, this task will prepare uncommitted changes only; the repository owner must review and create the actual Git commit."
+  ],
+  "next_responsible_party": "claude"
+}

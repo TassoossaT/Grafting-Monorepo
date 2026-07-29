@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { evaluateHook, isReadOnlyInspectionCommand } from "./agent-task-guard.mjs";
+import {
+  evaluateAgentGitCommand,
+  evaluateHook,
+  isReadOnlyInspectionCommand,
+} from "./agent-task-guard.mjs";
 
 const roots = [];
 
@@ -145,6 +149,56 @@ test("allows Bash only after a unique active claim", async () => {
   const root = await makeRoot([task("CLAUDE-TASK", "claude", ["tools/"])]);
   const decision = await evaluateHook({ root, agent: "claude", hookInput: hook("Bash") });
   assert.equal(decision.allowed, true);
+});
+
+test("rejects explicit and implicit agent commit operations even with an active task", async () => {
+  const root = await makeRoot([task("CLAUDE-TASK", "claude", ["tools/"])]);
+  const commands = [
+    'git commit -m "forbidden"',
+    "git merge feature",
+    "git rebase main",
+    "git cherry-pick abc123",
+    "git revert abc123",
+    "git stash push",
+    "git pull origin main",
+    "gh pr merge 17 --squash",
+  ];
+  for (const command of commands) {
+    const decision = await evaluateHook({
+      root,
+      agent: "claude",
+      hookInput: hook("Bash", { command }),
+    });
+    assert.equal(decision.allowed, false, command);
+  }
+});
+
+test("allows branch preparation and only explicit isolated-branch pushes", async () => {
+  const root = await makeRoot([task("CLAUDE-TASK", "claude", ["tools/"])]);
+  const branch = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Bash", { command: "git switch -c ai/claude/CLAUDE-TASK" }),
+  });
+  const push = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Bash", { command: "git push -u origin ai/claude/CLAUDE-TASK" }),
+  });
+  const defaultPush = evaluateAgentGitCommand("git push origin main");
+  const implicitPush = evaluateAgentGitCommand("git push");
+
+  assert.equal(branch.allowed, true);
+  assert.equal(push.allowed, true);
+  assert.equal(defaultPush.allowed, false);
+  assert.match(defaultPush.reason, /never push to main/);
+  assert.equal(implicitPush.allowed, false);
+  assert.match(implicitPush.reason, /explicit isolated/);
+});
+
+test("allows only fast-forward pulls", () => {
+  assert.equal(evaluateAgentGitCommand("git pull --ff-only origin main").allowed, true);
+  assert.equal(evaluateAgentGitCommand("git pull --rebase origin main").allowed, false);
 });
 
 test("rejects multiple simultaneous tasks owned by the same agent", async () => {

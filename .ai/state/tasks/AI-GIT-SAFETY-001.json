@@ -2,15 +2,17 @@
   "schema_version": 1,
   "task_id": "AI-GIT-SAFETY-001",
   "title": "Prohibit agent-authored Git commits",
-  "status": "in_progress",
+  "status": "completed",
   "owner": "codex",
-  "revision": 1,
-  "updated_at": "2026-07-29T18:50:17-03:00",
+  "revision": 4,
+  "updated_at": "2026-07-29T18:56:41-03:00",
   "objective": "Record and enforce the repository-owner rule that AI agents may inspect Git, prepare changes, create isolated branches, and assist with pull requests, but must never create a Git commit or cause an implicit commit; only humans commit, and the default branch is never an agent write target.",
   "affected_paths": [
     ".ai/state/tasks/AI-GIT-SAFETY-001.json",
     ".ai/coordination/PROTOCOL.md",
     ".ai/registry/policies.yaml",
+    ".claude/settings.json",
+    ".github/workflows/ci.yml",
     "AGENTS.md",
     "GRAFTING_MASTER_SOURCE.md",
     "CURRENT_PLANNING_STATE.md",
@@ -20,20 +22,32 @@
     "tools/scripts/agent-task-guard.test.mjs",
     "tools/scripts/README.md",
     "docs/generated/artifact-manifest.json",
+    "docs/generated/grafting.graph.json",
     "docs/generated/grafting.graph.spike.json"
   ],
   "blockers": [],
   "validations": [
-    "Canonical instructions prohibit all agent-authored commits and implicit commit operations",
-    "Default-branch push targets are denied while read-only Git inspection and isolated branch creation remain permitted",
-    "Claude's provider-neutral runtime guard rejects prohibited Git commands even when an active task exists",
-    "Guard tests, coordination validation, documentation drift checks, and git diff checks pass"
+    "Root AGENTS, master DEC-053, accepted ADR-0015, coordination protocol, policy registry, and current planning all prohibit agent-authored commits on every branch",
+    "node --test tools/scripts/agent-task-guard.test.mjs: 14/14 guard contracts passed, including direct/implicit commit denial, default-branch denial, isolated branch allowance, and ff-only pull",
+    "Claude's tracked PreToolUse configuration invokes the provider-neutral guard and now identifies both task ownership and Git policy",
+    "CI executes the guard contract suite before TypeScript behavior contracts",
+    "pnpm.cmd docs:check passed after regenerating derived Graph IR and artifact evidence",
+    "pnpm.cmd ai:check passed for 26 task records and pnpm.cmd ai:audit passed with zero model calls or side effects",
+    "git diff --check passed"
   ],
-  "artifacts": [],
+  "artifacts": [
+    "docs/adr/ADR-0015-agent-git-write-policy.md",
+    ".ai/coordination/PROTOCOL.md",
+    ".ai/registry/policies.yaml",
+    "tools/scripts/agent-task-guard.mjs",
+    "tools/scripts/agent-task-guard.test.mjs",
+    ".claude/settings.json",
+    ".github/workflows/ci.yml"
+  ],
   "risks": [
     "A repository Git hook would also block normal human commits, so enforcement must remain in agent policy/adapters rather than a global pre-commit hook.",
     "Shell command parsing is defense in depth and cannot replace canonical agent compliance for providers without a runtime adapter.",
     "Pull-request assistance is allowed only around branches containing human-authored commits; agents cannot manufacture a PR by committing themselves."
   ],
-  "next_responsible_party": "codex"
+  "next_responsible_party": "repository-owner"
 }

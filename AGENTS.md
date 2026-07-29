@@ -53,6 +53,11 @@ The agent MUST NOT:
 - promise zero-copy between distinct domains;
 - call authoritative replication "Event Sourcing";
 - create a second workspace root or lockfile without an ADR;
+- create, amend, rewrite, or implicitly produce a Git commit; agents may
+  inspect/stage changes, create `ai/<agent>/<task>` branches, and assist with
+  pull requests containing human-authored commits, but only humans commit and
+  merge, and agents never push to `main` or `master` (DEC-053,
+  `docs/adr/ADR-0015-agent-git-write-policy.md`);
 - use Nx to replace native toolchains;
 - create the entire future tree empty;
 - introduce a tool, agent, skill, or MCP without need and evaluation;

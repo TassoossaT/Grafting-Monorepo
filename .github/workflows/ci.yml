@@ -70,6 +70,7 @@ jobs:
 
       - name: TypeScript behavior contracts
         run: |
+          node --test tools/scripts/agent-task-guard.test.mjs
           pnpm exec nx run x6-canvas:check
           pnpm exec nx run x6-canvas:test
           pnpm exec nx run ui:check
