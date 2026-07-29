@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.8.0`
+> Version: `1.10.0`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 — added DEC-049 for package autonomy, external dependency isolation, and authoritative reuse.
+> Last updated: 2026-07-29 — added DEC-050 and the validated Graph IR v1 contract from I-002.
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -371,6 +371,7 @@ empty speculative tree. See DEC-049 and ADR-0011.
 | DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
 | DEC-048 | Phase 1 communication between Claude, Codex, Gemini, and future providers uses provider-neutral, versioned files under `.ai/state/`: one active owner per task, immutable structured handoffs, deterministic validation without model calls, and short vendor adapters that point to the canonical protocol instead of duplicating it (`docs/adr/ADR-0010-multi-agent-coordination.md`). |
 | DEC-049 | Reusable capabilities use the smallest useful consumer-agnostic boundary (internal tree, package, or host app); third-party runtime/library APIs remain inside that boundary and are exposed through Grafting-owned surfaces without vendor-type leakage; separate packages require real reuse/build/ownership/fork evidence; authoritative behavior has one implementation or canonical source, with explicit allowances for independent tests, generated bindings, frozen fixtures, thin boundary translations, and derived evidence (`docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`). |
+| DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. `@grafting/graph` owns vendor-neutral graph model/ports, `@grafting/x6-canvas` implements them and exclusively owns the X6 runtime API, and applications own composition and product projections (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -776,11 +777,8 @@ reviewed when closing `GATE-004` and `GATE-009`.
 │   ├── isekai-wasm/
 │   ├── isekai-web-client/
 │   ├── polymath/
-│   ├── x6-canvas/
-│   ├── graph-model/
-│   ├── graph-query/
-│   ├── graph-workflow/
-│   └── graph-x6/
+│   ├── graph/
+│   └── x6-canvas/
 ├── dotnet/
 │   ├── Grafting.Isekai.Interop/
 │   ├── Grafting.Isekai.Protocol/
@@ -2129,6 +2127,14 @@ The Graph IR represents projects, targets, modules, symbols, contracts, ABI, art
 
 Derived relations record extractor, version, file, symbol, hash, confidence, and evidence. The Graph IR is the canonical model for interchange and querying; the authority for a fact remains in the originating code, manifest, schema, or ADR.
 
+Per DEC-050, repository information is explicitly classified as canonical
+authored source, operational authored state, derived evidence, or presentation
+state. Derived evidence is read-only and traceable to its source. A future edit
+from the Architecture Studio creates a proposed source patch or structured
+command, validates it, presents a plan/diff for approval, applies it through the
+native owning toolchain, and then regenerates evidence. The viewer never writes
+Graph IR or generated evidence directly.
+
 Levels:
 
 | Level | Content                                    |
@@ -2139,6 +2145,19 @@ Levels:
 | L3     | call graph, dataflow, and runtime tracing       |
 
 Approximate call graphs are not normative truth.
+
+Graph IR v1 is defined by `docs/graph-ir/graph-ir-v1.schema.json` and its
+adjacent semantic validator. Version `1.0.0` requires stable namespaced node
+IDs, canonical relation IDs, one authority class per node, extractor identity
+and version, a graph-wide source revision, confidence, and at least one hashed
+evidence locator per node and edge. Arrays are deterministically ordered; IDs
+are unique; edge endpoints must exist; evidence paths are normalized and
+repository-relative. Viewer, X6, DOM, layout, color, and viewport concepts are
+excluded from the contract.
+
+I-002 accepts the contract and fixtures, not a live extractor. I-004 owns the
+atomic replacement of the spike candidate with the reproducible
+`docs/generated/grafting.graph.json` output.
 
 ### 16.8 AntV X6 and Architecture Studio
 
@@ -2153,16 +2172,20 @@ V1 views:
 5. Documentation Map;
 6. AI Capability Map.
 
-Per DEC-046, the X6 library itself is accessed through a generic wrapper
-(`packages/x6-canvas`), of which `graph-x6` (the Architecture Studio's Graph IR)
-is one specific consumer. A second consumer (a product's interactive map,
-such as the VTT's) reuses `x6-canvas` without reusing `graph-x6` — the
-two X6 applications have different domains and must not share
-schema or logic beyond the canvas layer.
+Per DEC-046, DEC-049, and DEC-050, the target visualization boundary has two
+reusable packages. `packages/graph` owns a small vendor-neutral immutable graph
+model and rendering/interaction ports. `packages/x6-canvas` depends on those
+contracts, implements the browser adapter, and is the exclusive owner of the
+external X6 API. Its public surface must not expose the mutable vendor graph or
+other X6-owned types. Applications depend on the graph contract and a chosen
+adapter, then own their product-specific projection and composition.
 
-Per DEC-049, `packages/x6-canvas` is the designated owner of the external X6
-API in this TypeScript visualization path. Its public surface uses Grafting
-types and must not expose the mutable vendor graph or other X6-owned types.
+The spike-era `packages/graph-x6` is transitional. It is migrated atomically
+after Graph IR v1 is defined: generic model/port behavior moves to
+`packages/graph`, the Architecture Studio owns its initial Graph IR projection,
+and the superseded package/path is removed so no second authoritative mapping
+remains. A VTT may reuse the graph contract and X6 adapter without sharing
+Architecture Studio or Graph IR semantics.
 
 ### 16.9 Context packs
 
@@ -3179,7 +3202,8 @@ Automate only conventions already proven:
 
 - [ ] master document adopted;
 - [ ] superseded documents archived;
-- [ ] Graph IR v1;
+- [x] Graph IR v1 schema, stable IDs, provenance, evidence, and semantic
+      validation (I-002, 2026-07-29);
 - [ ] `grafting.graph.json`;
 - [ ] README/AGENTS/metadata template;
 - [x] minimal `.ai/` (task-completion skill plus Phase 1 coordination protocol,

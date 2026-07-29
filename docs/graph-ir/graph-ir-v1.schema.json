@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grafting.local/schemas/graph-ir-v1.json",
+  "title": "Grafting Graph IR v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "graphId",
+    "sourceRevision",
+    "generator",
+    "nodes",
+    "edges"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "graphId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"
+    },
+    "sourceRevision": { "$ref": "#/$defs/sourceRevision" },
+    "generator": { "$ref": "#/$defs/generator" },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:git:[a-f0-9]{40}|workspace:sha256:[a-f0-9]{64})$"
+    },
+    "stableId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*:[A-Za-z0-9@._~+/#%-]+$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\).+$"
+    },
+    "jsonPointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+    },
+    "extractor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "inputHash"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "inputHash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "sha256"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "source",
+            "manifest",
+            "schema",
+            "generated",
+            "test",
+            "audit",
+            "manual"
+          ]
+        },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "pointer": { "$ref": "#/$defs/jsonPointer" },
+        "symbol": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "extractor",
+        "sourceRevision",
+        "confidence",
+        "evidence"
+      ],
+      "properties": {
+        "extractor": { "$ref": "#/$defs/extractor" },
+        "sourceRevision": { "$ref": "#/$defs/sourceRevision" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence" }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "authorityClass",
+        "label",
+        "tags",
+        "provenance"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "kind": {
+          "enum": [
+            "project",
+            "target",
+            "module",
+            "symbol",
+            "contract",
+            "abi",
+            "artifact",
+            "runtime",
+            "thread",
+            "document",
+            "adr",
+            "workflow",
+            "capability",
+            "skill",
+            "agent",
+            "prompt",
+            "tool",
+            "mcp",
+            "policy",
+            "eval",
+            "task",
+            "run",
+            "handoff"
+          ]
+        },
+        "authorityClass": {
+          "enum": [
+            "canonical_authored_source",
+            "operational_authored_state",
+            "derived_evidence",
+            "presentation_state"
+          ]
+        },
+        "level": { "enum": ["L0", "L1", "L2", "L3"] },
+        "label": { "type": "string", "minLength": 1 },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "source",
+        "target",
+        "relationClass",
+        "provenance"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "kind": {
+          "enum": [
+            "contains",
+            "depends_on",
+            "declares",
+            "implements",
+            "produces",
+            "consumes",
+            "owns",
+            "owned_by",
+            "governed_by",
+            "validates",
+            "generated_from",
+            "references",
+            "executes",
+            "uses",
+            "supersedes",
+            "related_to"
+          ]
+        },
+        "source": { "$ref": "#/$defs/stableId" },
+        "target": { "$ref": "#/$defs/stableId" },
+        "relationClass": {
+          "enum": ["declared", "derived", "approximate"]
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    }
+  }
+}

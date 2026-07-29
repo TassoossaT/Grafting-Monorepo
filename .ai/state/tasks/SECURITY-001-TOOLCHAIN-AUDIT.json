@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "SECURITY-001-TOOLCHAIN-AUDIT",
+  "title": "Remediate Vite and Nx dependency advisories",
+  "status": "planned",
+  "owner": null,
+  "revision": 1,
+  "updated_at": "2026-07-29T08:44:31-03:00",
+  "objective": "Update or constrain the vulnerable Vite and Nx dependency paths identified by pnpm audit, then validate the workspace and Architecture Studio without weakening audit policy.",
+  "affected_paths": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "apps/architecture-studio/package.json",
+    "docs/generated/project-graph.json",
+    "docs/generated/grafting.graph.spike.json",
+    "CURRENT_PLANNING_STATE.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "pnpm audit on 2026-07-29 reported 6 high and 11 moderate advisories",
+    "affected package paths: vite, Nx to axios, and Nx to brace-expansion",
+    "Ajv 8.20.0 introduced by I-002 has no reported advisory in this audit"
+  ],
+  "artifacts": [],
+  "risks": [
+    "Vite 7.2.2 advisories include development-server arbitrary file read and server.fs.deny bypasses, including Windows path handling.",
+    "Nx remediation may require a pinned version update and full affected/cache/project-graph revalidation.",
+    "Automated force-fixes could replace pinned toolchain versions or introduce incompatible major changes."
+  ],
+  "next_responsible_party": "repository-owner"
+}

@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "e40bc3c6c768d7db310cdd162ba672e2296e3c596e1c671c94edfbec657ba7eb",
+  "inputHash": "0d8dbfa99e224b412486b7f329e42d806202bd4be4d700183c9ce794e3b0fecf",
   "nodes": [
     {
       "id": "agent:claude",
@@ -210,9 +210,27 @@
       "kind": "task",
       "label": "I-001-KNOWLEDGE-AUTOMATION-PLANE",
       "tags": [
-        "status:blocked"
+        "status:completed"
       ],
       "source": ".ai/state/tasks/I-001-KNOWLEDGE-AUTOMATION-PLANE.json"
+    },
+    {
+      "id": "task:I-002-GRAPH-IR-V1",
+      "kind": "task",
+      "label": "I-002-GRAPH-IR-V1",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-002-GRAPH-IR-V1.json"
+    },
+    {
+      "id": "task:SECURITY-001-TOOLCHAIN-AUDIT",
+      "kind": "task",
+      "label": "SECURITY-001-TOOLCHAIN-AUDIT",
+      "tags": [
+        "status:planned"
+      ],
+      "source": ".ai/state/tasks/SECURITY-001-TOOLCHAIN-AUDIT.json"
     },
     {
       "id": "task:SPIKE-005-COPY-BUDGET",
@@ -349,6 +367,13 @@
       "source": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/I-001-KNOWLEDGE-AUTOMATION-PLANE.json#/owner"
+    },
+    {
+      "id": "task:I-002-GRAPH-IR-V1->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-002-GRAPH-IR-V1",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-002-GRAPH-IR-V1.json#/owner"
     },
     {
       "id": "task:SPIKE-005-COPY-BUDGET->agent:codex:owned_by",

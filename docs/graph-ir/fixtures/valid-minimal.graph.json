@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0.0",
+  "graphId": "grafting.fixture.minimal",
+  "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "generator": {
+    "id": "extractor:graph-ir-fixture",
+    "version": "1.0.0",
+    "inputHash": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "nodes": [
+    {
+      "id": "project:architecture-studio",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "Architecture Studio",
+      "tags": ["scope:knowledge", "type:app"],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:graph-ir-fixture",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/metadata/graphIr",
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:graph",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "Generic graph capability",
+      "tags": ["scope:shared", "type:lib"],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:graph-ir-fixture",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manual",
+            "path": "docs/adr/ADR-0012-knowledge-automation-plane.md",
+            "pointer": "/",
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Agraph",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:graph",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:graph-ir-fixture",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ]
+      }
+    }
+  ]
+}

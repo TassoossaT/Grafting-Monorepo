@@ -1,7 +1,9 @@
 # ADR-0012: Knowledge and Automation Plane authority, lifecycle, and graph ports
 
-- Status: **Proposed - pending repository-owner confirmation.**
+- Status: **Accepted.** Confirmed by the repository owner on 2026-07-29.
 - Proposal date: 2026-07-29.
+- Decision date: 2026-07-29.
+- Record: DEC-050.
 - Backlog item: I-001.
 - Related: DEC-028, DEC-040, DEC-046, DEC-048, DEC-049, ADR-0010,
   ADR-0011, and master source sections 16 and 25.
@@ -23,7 +25,7 @@ does not yet define:
 I-001 establishes those boundaries before Graph IR v1 (I-002) and the
 production read-only Studio (I-006).
 
-## Proposed decision
+## Decision
 
 ### Plane responsibilities
 
@@ -162,9 +164,9 @@ Rejected for now. No evidence justifies that package count. These concerns may
 start as modules within `@grafting/graph` and be separated only when DEC-049's
 reuse or ownership criteria are met.
 
-## Acceptance criteria
+## Owner confirmation
 
-I-001 is accepted when the repository owner confirms that:
+The repository owner confirmed that:
 
 - the four authority classes and lifecycle are correct;
 - derived evidence is read-only and traceable to authored sources;
@@ -194,11 +196,6 @@ I-001 is accepted when the repository owner confirms that:
   mapping. The migration needs one cutover and deletion of the superseded path.
 - Test evidence can become stale unless every record carries run identity,
   source revision, and freshness status in a later schema.
-
-## Decision
-
-Pending explicit confirmation from the repository owner. No package rename,
-move, or new Graph IR v1 contract is authorized by this proposal alone.
 
 ## Next steps after acceptance
 

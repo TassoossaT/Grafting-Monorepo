@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "I-001-KNOWLEDGE-AUTOMATION-PLANE",
   "title": "Knowledge and Automation Plane authority and lifecycle",
-  "status": "blocked",
+  "status": "completed",
   "owner": "codex",
-  "revision": 2,
-  "updated_at": "2026-07-29T08:27:27-03:00",
+  "revision": 4,
+  "updated_at": "2026-07-29T08:33:14-03:00",
   "objective": "Define the authoritative sources, documentary lifecycle, read-only evidence flow, and generic graph-port/X6-adapter boundary for the Architecture Studio before further implementation.",
   "affected_paths": [
     ".ai/state/tasks/I-001-KNOWLEDGE-AUTOMATION-PLANE.json",
@@ -15,10 +15,9 @@
     "CURRENT_PLANNING_STATE.md",
     "docs/generated/grafting.graph.spike.json"
   ],
-  "blockers": [
-    "ADR-0012 requires explicit repository-owner confirmation before I-001 can change the canonical master source or authorize the graph-x6 migration."
-  ],
+  "blockers": [],
   "validations": [
+    "repository owner explicitly confirmed ADR-0012 on 2026-07-29",
     "coordination validation passed with 7 tasks",
     "control-plane audit passed with zero model calls and zero side effects",
     "Graph IR generation and freshness check passed with 23 nodes and 18 edges",
@@ -28,6 +27,7 @@
   ],
   "artifacts": [
     "docs/adr/ADR-0012-knowledge-automation-plane.md",
+    "GRAFTING_MASTER_SOURCE.md",
     "CURRENT_PLANNING_STATE.md",
     "docs/generated/grafting.graph.spike.json"
   ],
@@ -36,5 +36,5 @@
     "Moving or renaming graph-x6 in the ADR task would mix planning with an unreviewed package migration.",
     "A viewer that edits derived evidence directly would violate the Knowledge Plane authority model."
   ],
-  "next_responsible_party": "repository-owner"
+  "next_responsible_party": "codex"
 }

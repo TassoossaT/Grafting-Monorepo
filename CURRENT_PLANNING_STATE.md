@@ -30,7 +30,8 @@
 planning
 → adversarial review           (not yet formally executed)
 → closing the Decision Gates     ← done
-→ foundational ADRs               ← done; I-001 proposal under review
+→ Knowledge/Automation Plane ADR   ← done (I-001, DEC-050)
+→ Graph IR v1 contract             ← done (I-002; extractor remains I-004)
 → full English translation pass   ← done
 → disposable spikes                ← done (8 accepted)
 → scaffold                          ← in progress (Epic B core done; see below)
@@ -60,6 +61,7 @@ GATE-009 without an explicit decision from the owner.
 | Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
 | Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
 | Capability autonomy and external isolation | Reusable capabilities use the smallest useful boundary (module tree, package, or host app); third-party APIs stay internal, package count remains evidence-driven, and authoritative behavior is implemented once | DEC-049 · ADR-0011 · master source §2.6 |
+| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; `@grafting/graph` owns generic graph ports, `@grafting/x6-canvas` implements them and exclusively owns X6, and the Studio owns composition | DEC-050 · ADR-0012 · master source §§16.7-16.8 |
 
 Pending, but not blocking Phase 0: standard directory for external
 integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
@@ -637,12 +639,15 @@ that version range.
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-I-001 now has a proposed ADR defining Knowledge/Automation Plane authority,
-documentary lifecycle, `@grafting/graph` ports, and the `x6-canvas` adapter
-boundary. It awaits owner confirmation before the master source is changed or
-the transitional `graph-x6` package is migrated. ADR-0009's Decision section
-also remains pending owner confirmation; `engine_submit(bytes)` and E-003
-remain separately scoped future work.
+I-001 is accepted as DEC-050/ADR-0012 and I-002 is complete with a validated
+Graph IR v1 contract. Before the atomic graph boundary migration, SECURITY-001
+should remediate the audit's 6 high and 11 moderate advisories through Vite and
+Nx dependency paths; Ajv is not affected. After that, create `@grafting/graph`,
+make `@grafting/x6-canvas` implement its port, move the Graph IR projection into
+Architecture Studio, and remove `graph-x6` without duplicated mapping. I-004
+then replaces the spike output with the real Graph IR v1 extractor. ADR-0009's
+Decision section remains pending owner confirmation; `engine_submit(bytes)` and
+E-003 remain separately scoped future work.
 
 ## Update rule
 

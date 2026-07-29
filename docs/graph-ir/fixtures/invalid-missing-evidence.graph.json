@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.0.0",
+  "graphId": "grafting.fixture.missing-evidence",
+  "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "generator": {
+    "id": "extractor:graph-ir-fixture",
+    "version": "1.0.0",
+    "inputHash": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "nodes": [
+    {
+      "id": "project:architecture-studio",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "label": "Architecture Studio",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:graph-ir-fixture",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confidence": 1
+      }
+    }
+  ],
+  "edges": []
+}
