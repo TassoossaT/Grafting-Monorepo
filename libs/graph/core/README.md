@@ -3,7 +3,9 @@
 Generic Grafting-owned graph structures and deterministic algorithms. The
 initial capability is a directed multigraph with stable node/edge identities,
 endpoint validation, deterministic predecessor/successor queries, immutable
-snapshots, and deterministic topological ordering with explicit cycle errors.
+snapshots, deterministic topological ordering with explicit cycle errors, and
+a deterministic one-level grouped-grid layout heuristic. Callers explicitly
+identify containment edges and own the dimensions; Rust owns placement math.
 
 The public API does not expose `petgraph`, `serde`, Graph IR, X6, DOM, or
 application presentation types. `petgraph` is the current private storage

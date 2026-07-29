@@ -897,10 +897,12 @@ anything was written, both fixed and re-verified before completion.
   Nx's own inference alone -- the real, static-only case is
   `isekai-web-client`->`@grafting/isekai-wasm`). The same declared/derived
   split applies to targets Nx infers via a plugin but that aren't literally
-  in a project's own manifest (`architecture-studio`'s `dev` target is the
-  one real case today) -- these get `authorityClass: "derived_evidence"`,
-  not `"canonical_authored_source"`, with evidence pointing at the Nx
-  export rather than a manifest key that doesn't actually exist.
+  in a project's own manifest get `authorityClass: "derived_evidence"`, not
+  `"canonical_authored_source"`, with evidence pointing at the Nx export
+  rather than a manifest key that doesn't actually exist. At I-004 completion,
+  `architecture-studio`'s inferred `dev` target was the real example; I-006B
+  later declared that target explicitly, so it is canonical authored source in
+  the current Graph IR.
 - `sourceRevision` (`git:<sha>` or `workspace:sha256:<fingerprint>`, per
   `docs/graph-ir/README.md`) is new logic with no prior implementation in
   this repo. A Plan-review pass caught that scoping the dirty-tree
@@ -1017,23 +1019,69 @@ two separate implementations. Claimed through
   from outside.
 - Not committed yet -- same standing rule as every prior task.
 
+## Architecture Studio real graph and Rust layout cutover (I-006B), 2026-07-29
+
+The owner manually accepted the initial real-graph viewer but identified its
+fixed four-column placement as an unstructured block. The active Codex task
+`I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER` now contains the full coherent cutover
+rather than creating one package per layer.
+
+**Implemented and automated-test verified:**
+
+- Architecture Studio consumes `docs/generated/grafting.graph.json` directly;
+  the frozen spike artifact is no longer in its production path, and the
+  transitional `@grafting/graph-x6` package was removed atomically.
+- `@grafting/x6-canvas` remains the only X6-owning boundary. The application
+  owns its labels, colors, inspector, viewport state, and Graph IR presentation
+  mapping without exposing vendor types.
+- `grafting-graph-core` now owns a deterministic one-level grouped-grid layout.
+  The app supplies the explicit grouping edge IDs; `contains` currently makes
+  each project a root with its targets directly below it. Standalone nodes are
+  retained, invalid/nested/multiple grouping is rejected, and coordinate
+  arithmetic is checked.
+- The layout crosses one batch JSON adapter in `grafting-isekai-wasm` and runs
+  in an app-owned Web Worker. TypeScript performs boundary translation and
+  presentation enrichment only; it does not duplicate graph calculation.
+- `apps/architecture-studio/src/presentation.ts#PROJECTION` is the single
+  authored projection configuration for node dimensions, colors, spacing,
+  columns, grouping relation kinds, and vendor-neutral visual roles. Repository entities remain dynamic:
+  regenerate the Nx export and `pnpm graph:extract`; new projects, targets, and
+  relations require no app-code changes.
+- Owner acceptance clarified that coordinate grouping alone was not enough:
+  `@grafting/x6-canvas` now privately maps generic node/relation roles to SVG
+  cards, subtle boundary ports, smooth hierarchy paths, smooth dependency
+  curves, modern arrow markers, label capsules, a responsive dotted canvas,
+  and fit-to-content centering. Repeated `contains` labels are suppressed by
+  the application projection to preserve visual hierarchy. No X6 type or Graph
+  IR-specific name entered the reusable public API.
+- Rust unit/contract tests, native Wasm adapter tests, TypeScript presentation
+  tests, typecheck, and a Vite production build pass. The build emits a separate
+  layout Worker and the Wasm asset. The Rust public-API baseline now protects
+  the new names and signatures.
+
+**Acceptance still open:**
+
+- The in-app browser integration exposes no browser backend in this session.
+  The owner's browser is serving the app at `http://127.0.0.1:4511/`; one manual
+  refresh/visual confirmation of the grouped result remains before closing the
+  task record.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
 I-001/DEC-050, I-002, GRAPH-001/DEC-051, the Rust/TypeScript public-API
 pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, I-004, and I-007/G-008
-are complete (see above). Codex is actively on `I-006A-X6-READONLY-SELECTION`
-(read-only activation/selection for `x6-canvas`); per Codex's own sequencing,
-`I-006B-RUST-GRAPH-VIEW` (grouped Rust query contracts -- filters,
-neighborhood, direction, depth, subgraph, immutable snapshot, deterministic
-ordering), `I-006C-GRAPH-WEB-BRIDGE` (Wasm/Worker bridge for those
-snapshots), `I-006D-ARCH-STUDIO-CUTOVER` (real Graph IR consumption,
-removing `graph-x6` and the spike file atomically), and
-`I-006E-INDEPENDENT-ACCEPTANCE` follow in that order. Python contract
-expansion waits for a consumed public boundary; C# remains in standby and
-does not block the Web path. ADR-0009's Decision section remains pending
-owner confirmation; `engine_submit(bytes)` and E-003 remain separately
-scoped future work.
+are complete (see above). I-006A is complete; I-006B's real Graph IR cutover,
+selection inspector, Rust/Wasm grouped layout, and single projection
+configuration are implemented, with owner visual confirmation still pending.
+After that confirmation, the next Architecture Studio slice is the grouped
+Rust query contract for filters, neighborhood, direction, depth, immutable
+subgraphs, and deterministic ordering; it should extend the existing batch
+boundary without duplicating algorithms in TypeScript. Python contract
+expansion waits for a consumed public boundary; C# remains in standby and does
+not block the Web path. ADR-0009's Decision section remains pending owner
+confirmation; `engine_submit(bytes)` and E-003 remain separately scoped future
+work.
 
 ## Update rule
 

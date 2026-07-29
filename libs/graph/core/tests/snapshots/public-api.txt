@@ -61,6 +61,35 @@ impl core::marker::Sync for grafting_graph_core::IdentifierError
 impl core::marker::Unpin for grafting_graph_core::IdentifierError
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::IdentifierError
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::IdentifierError
+pub enum grafting_graph_core::LayoutError
+pub grafting_graph_core::LayoutError::DimensionsOverflow
+pub grafting_graph_core::LayoutError::InvalidOption
+pub grafting_graph_core::LayoutError::InvalidOption::name: &'static str
+pub grafting_graph_core::LayoutError::MultipleGroups
+pub grafting_graph_core::LayoutError::MultipleGroups::first: grafting_graph_core::NodeId
+pub grafting_graph_core::LayoutError::MultipleGroups::node: grafting_graph_core::NodeId
+pub grafting_graph_core::LayoutError::MultipleGroups::second: grafting_graph_core::NodeId
+pub grafting_graph_core::LayoutError::NestedGroup
+pub grafting_graph_core::LayoutError::NestedGroup::node: grafting_graph_core::NodeId
+pub grafting_graph_core::LayoutError::UnknownGroupingEdge
+pub grafting_graph_core::LayoutError::UnknownGroupingEdge::id: grafting_graph_core::EdgeId
+impl core::clone::Clone for grafting_graph_core::LayoutError
+pub fn grafting_graph_core::LayoutError::clone(&self) -> grafting_graph_core::LayoutError
+impl core::cmp::Eq for grafting_graph_core::LayoutError
+impl core::cmp::PartialEq for grafting_graph_core::LayoutError
+pub fn grafting_graph_core::LayoutError::eq(&self, other: &grafting_graph_core::LayoutError) -> bool
+impl core::error::Error for grafting_graph_core::LayoutError
+impl core::fmt::Debug for grafting_graph_core::LayoutError
+pub fn grafting_graph_core::LayoutError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::LayoutError
+pub fn grafting_graph_core::LayoutError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::LayoutError
+impl core::marker::Freeze for grafting_graph_core::LayoutError
+impl core::marker::Send for grafting_graph_core::LayoutError
+impl core::marker::Sync for grafting_graph_core::LayoutError
+impl core::marker::Unpin for grafting_graph_core::LayoutError
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LayoutError
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LayoutError
 pub struct grafting_graph_core::Edge<E>
 impl<E> grafting_graph_core::Edge<E>
 pub fn grafting_graph_core::Edge<E>::data(&self) -> &E
@@ -122,6 +151,8 @@ pub fn grafting_graph_core::Graph<N, E>::snapshot(&self) -> grafting_graph_core:
 pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
 pub fn grafting_graph_core::Graph<N, E>::topological_order(&self) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
 pub fn grafting_graph_core::Graph<N, E>::try_from_parts(nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>, edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>) -> core::result::Result<Self, grafting_graph_core::GraphError>
+impl<N: core::clone::Clone, E: core::clone::Clone> grafting_graph_core::Graph<N, E>
+pub fn grafting_graph_core::Graph<N, E>::grouped_grid_layout(&self, grouping_edges: &[grafting_graph_core::EdgeId], options: grafting_graph_core::GroupedGridOptions) -> core::result::Result<grafting_graph_core::LayoutSnapshot, grafting_graph_core::LayoutError>
 impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::Graph<N, E>
 pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<N, E> core::marker::Freeze for grafting_graph_core::Graph<N, E>
@@ -149,6 +180,63 @@ impl<N, E> core::marker::Sync for grafting_graph_core::GraphSnapshot<N, E> where
 impl<N, E> core::marker::Unpin for grafting_graph_core::GraphSnapshot<N, E> where N: core::marker::Unpin, E: core::marker::Unpin
 impl<N, E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::GraphSnapshot<N, E> where N: core::panic::unwind_safe::RefUnwindSafe, E: core::panic::unwind_safe::RefUnwindSafe
 impl<N, E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::GraphSnapshot<N, E> where N: core::panic::unwind_safe::UnwindSafe, E: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::GroupedGridOptions
+impl grafting_graph_core::GroupedGridOptions
+pub fn grafting_graph_core::GroupedGridOptions::new(node_width: u32, node_height: u32, horizontal_gap: u32, vertical_gap: u32, group_gap: u32, padding: u32, group_columns: u32, member_columns: u32) -> core::result::Result<Self, grafting_graph_core::LayoutError>
+impl core::clone::Clone for grafting_graph_core::GroupedGridOptions
+pub fn grafting_graph_core::GroupedGridOptions::clone(&self) -> grafting_graph_core::GroupedGridOptions
+impl core::cmp::Eq for grafting_graph_core::GroupedGridOptions
+impl core::cmp::PartialEq for grafting_graph_core::GroupedGridOptions
+pub fn grafting_graph_core::GroupedGridOptions::eq(&self, other: &grafting_graph_core::GroupedGridOptions) -> bool
+impl core::fmt::Debug for grafting_graph_core::GroupedGridOptions
+pub fn grafting_graph_core::GroupedGridOptions::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::GroupedGridOptions
+impl core::marker::StructuralPartialEq for grafting_graph_core::GroupedGridOptions
+impl core::marker::Freeze for grafting_graph_core::GroupedGridOptions
+impl core::marker::Send for grafting_graph_core::GroupedGridOptions
+impl core::marker::Sync for grafting_graph_core::GroupedGridOptions
+impl core::marker::Unpin for grafting_graph_core::GroupedGridOptions
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::GroupedGridOptions
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::GroupedGridOptions
+pub struct grafting_graph_core::LayoutPosition
+impl grafting_graph_core::LayoutPosition
+pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId
+pub fn grafting_graph_core::LayoutPosition::x(&self) -> u32
+pub fn grafting_graph_core::LayoutPosition::y(&self) -> u32
+impl core::clone::Clone for grafting_graph_core::LayoutPosition
+pub fn grafting_graph_core::LayoutPosition::clone(&self) -> grafting_graph_core::LayoutPosition
+impl core::cmp::Eq for grafting_graph_core::LayoutPosition
+impl core::cmp::PartialEq for grafting_graph_core::LayoutPosition
+pub fn grafting_graph_core::LayoutPosition::eq(&self, other: &grafting_graph_core::LayoutPosition) -> bool
+impl core::fmt::Debug for grafting_graph_core::LayoutPosition
+pub fn grafting_graph_core::LayoutPosition::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::LayoutPosition
+impl core::marker::Freeze for grafting_graph_core::LayoutPosition
+impl core::marker::Send for grafting_graph_core::LayoutPosition
+impl core::marker::Sync for grafting_graph_core::LayoutPosition
+impl core::marker::Unpin for grafting_graph_core::LayoutPosition
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LayoutPosition
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LayoutPosition
+pub struct grafting_graph_core::LayoutSnapshot
+impl grafting_graph_core::LayoutSnapshot
+pub fn grafting_graph_core::LayoutSnapshot::height(&self) -> u32
+pub fn grafting_graph_core::LayoutSnapshot::into_parts(self) -> (alloc::vec::Vec<grafting_graph_core::LayoutPosition>, u32, u32)
+pub fn grafting_graph_core::LayoutSnapshot::positions(&self) -> &[grafting_graph_core::LayoutPosition]
+pub fn grafting_graph_core::LayoutSnapshot::width(&self) -> u32
+impl core::clone::Clone for grafting_graph_core::LayoutSnapshot
+pub fn grafting_graph_core::LayoutSnapshot::clone(&self) -> grafting_graph_core::LayoutSnapshot
+impl core::cmp::Eq for grafting_graph_core::LayoutSnapshot
+impl core::cmp::PartialEq for grafting_graph_core::LayoutSnapshot
+pub fn grafting_graph_core::LayoutSnapshot::eq(&self, other: &grafting_graph_core::LayoutSnapshot) -> bool
+impl core::fmt::Debug for grafting_graph_core::LayoutSnapshot
+pub fn grafting_graph_core::LayoutSnapshot::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::LayoutSnapshot
+impl core::marker::Freeze for grafting_graph_core::LayoutSnapshot
+impl core::marker::Send for grafting_graph_core::LayoutSnapshot
+impl core::marker::Sync for grafting_graph_core::LayoutSnapshot
+impl core::marker::Unpin for grafting_graph_core::LayoutSnapshot
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LayoutSnapshot
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LayoutSnapshot
 pub struct grafting_graph_core::Node<N>
 impl<N> grafting_graph_core::Node<N>
 pub fn grafting_graph_core::Node<N>::data(&self) -> &N
@@ -209,6 +297,10 @@ Structural or algorithm error returned through the Grafting graph contract.
 
 Failure to construct a stable graph identifier.
 
+### `pub enum grafting_graph_core::LayoutError`
+
+Invalid input or arithmetic failure from the grouped-grid heuristic.
+
 ### `pub fn grafting_graph_core::Edge<E>::data(&self) -> &E`
 
 Returns the caller-owned payload.
@@ -250,6 +342,15 @@ Looks up an edge without exposing the storage engine's index type.
 
 Number of edges in the graph.
 
+### `pub fn grafting_graph_core::Graph<N, E>::grouped_grid_layout(&self, grouping_edges: &[grafting_graph_core::EdgeId], options: grafting_graph_core::GroupedGridOptions) -> core::result::Result<grafting_graph_core::LayoutSnapshot, grafting_graph_core::LayoutError>`
+
+Places one-level groups in a deterministic grid and their members below
+the corresponding group root.
+
+`grouping_edges` explicitly identifies which existing graph edges mean
+containment for this calculation. All other edges remain structurally
+valid graph data but do not influence this presentation heuristic.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>`
 
 Looks up a node without exposing the storage engine's index type.
@@ -289,6 +390,38 @@ Consumes the snapshot and returns its ordered records.
 ### `pub fn grafting_graph_core::GraphSnapshot<N, E>::nodes(&self) -> &[grafting_graph_core::Node<N>]`
 
 Nodes sorted by stable node identity.
+
+### `pub fn grafting_graph_core::GroupedGridOptions::new(node_width: u32, node_height: u32, horizontal_gap: u32, vertical_gap: u32, group_gap: u32, padding: u32, group_columns: u32, member_columns: u32) -> core::result::Result<Self, grafting_graph_core::LayoutError>`
+
+Creates validated grouped-grid dimensions.
+
+### `pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId`
+
+Stable node identity associated with this position.
+
+### `pub fn grafting_graph_core::LayoutPosition::x(&self) -> u32`
+
+Horizontal coordinate in caller-defined presentation units.
+
+### `pub fn grafting_graph_core::LayoutPosition::y(&self) -> u32`
+
+Vertical coordinate in caller-defined presentation units.
+
+### `pub fn grafting_graph_core::LayoutSnapshot::height(&self) -> u32`
+
+Height required to contain every position and the configured padding.
+
+### `pub fn grafting_graph_core::LayoutSnapshot::into_parts(self) -> (alloc::vec::Vec<grafting_graph_core::LayoutPosition>, u32, u32)`
+
+Consumes the snapshot into its positions and bounds.
+
+### `pub fn grafting_graph_core::LayoutSnapshot::positions(&self) -> &[grafting_graph_core::LayoutPosition]`
+
+Positions sorted by stable node identity.
+
+### `pub fn grafting_graph_core::LayoutSnapshot::width(&self) -> u32`
+
+Width required to contain every position and the configured padding.
 
 ### `pub fn grafting_graph_core::Node<N>::data(&self) -> &N`
 
@@ -379,6 +512,50 @@ An edge identifier must contain at least one character.
 
 A node identifier must contain at least one character.
 
+### `pub grafting_graph_core::LayoutError::DimensionsOverflow`
+
+Requested dimensions exceeded the coordinate representation.
+
+### `pub grafting_graph_core::LayoutError::InvalidOption`
+
+A required dimension or column count was zero.
+
+### `pub grafting_graph_core::LayoutError::InvalidOption::name: &'static str`
+
+Stable option name suitable for an adapter error message.
+
+### `pub grafting_graph_core::LayoutError::MultipleGroups`
+
+One node was assigned to two different groups.
+
+### `pub grafting_graph_core::LayoutError::MultipleGroups::first: grafting_graph_core::NodeId`
+
+First group encountered in deterministic edge order.
+
+### `pub grafting_graph_core::LayoutError::MultipleGroups::node: grafting_graph_core::NodeId`
+
+Node with conflicting group ownership.
+
+### `pub grafting_graph_core::LayoutError::MultipleGroups::second: grafting_graph_core::NodeId`
+
+Conflicting second group.
+
+### `pub grafting_graph_core::LayoutError::NestedGroup`
+
+One grouping source is itself a member of another group.
+
+### `pub grafting_graph_core::LayoutError::NestedGroup::node: grafting_graph_core::NodeId`
+
+Group node that would require recursive layout semantics.
+
+### `pub grafting_graph_core::LayoutError::UnknownGroupingEdge`
+
+A grouping edge identity was not present in the graph.
+
+### `pub grafting_graph_core::LayoutError::UnknownGroupingEdge::id: grafting_graph_core::EdgeId`
+
+Missing grouping edge identity.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -403,6 +580,18 @@ Generic directed multigraph with private storage and deterministic queries.
 ### `pub struct grafting_graph_core::GraphSnapshot<N, E>`
 
 Immutable, deterministically ordered graph data safe to pass to adapters.
+
+### `pub struct grafting_graph_core::GroupedGridOptions`
+
+Caller-controlled dimensions for the deterministic grouped-grid heuristic.
+
+### `pub struct grafting_graph_core::LayoutPosition`
+
+Position assigned to one stable node by a graph layout snapshot.
+
+### `pub struct grafting_graph_core::LayoutSnapshot`
+
+Immutable deterministic output from a grouped-grid layout operation.
 
 ### `pub struct grafting_graph_core::Node<N>`
 

@@ -197,7 +197,7 @@
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
-                "{workspaceRoot}/docs/generated/grafting.graph.spike.json",
+                "{workspaceRoot}/docs/generated/grafting.graph.json",
                 "{workspaceRoot}/pnpm-lock.yaml"
               ],
               "options": {
@@ -210,11 +210,12 @@
               "cache": true,
               "executor": "nx:run-commands",
               "dependsOn": [
-                "graph-x6:build"
+                "isekai-wasm-bridge:build",
+                "x6-canvas:build"
               ],
               "inputs": [
                 "{projectRoot}/**/*",
-                "{workspaceRoot}/docs/generated/grafting.graph.spike.json",
+                "{workspaceRoot}/docs/generated/grafting.graph.json",
                 "{workspaceRoot}/pnpm-lock.yaml"
               ],
               "outputs": [
@@ -226,14 +227,29 @@
               "configurations": {},
               "parallelism": true
             },
-            "dev": {
-              "executor": "nx:run-script",
-              "metadata": {
-                "scriptContent": "vite --host 127.0.0.1 --port 4511",
-                "runCommand": "pnpm run dev"
-              },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/test/**/*",
+                "{projectRoot}/package.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
               "options": {
-                "script": "dev"
+                "command": "pnpm --filter @grafting/architecture-studio test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "dev": {
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "isekai-wasm-bridge:build"
+              ],
+              "cache": false,
+              "options": {
+                "command": "pnpm --filter @grafting/architecture-studio dev"
               },
               "configurations": {},
               "parallelism": true
@@ -249,14 +265,11 @@
             "type:app"
           ],
           "implicitDependencies": [
-            "graph-x6"
+            "isekai-wasm-bridge",
+            "x6-canvas"
           ],
           "metadata": {
-            "targetGroups": {
-              "NPM Scripts": [
-                "dev"
-              ]
-            },
+            "targetGroups": {},
             "js": {
               "packageName": "@grafting/architecture-studio",
               "packageVersion": "0.0.0",
@@ -626,7 +639,8 @@
             "type:binding"
           ],
           "implicitDependencies": [
-            "engine-domain-core"
+            "engine-domain-core",
+            "graph-core"
           ],
           "metadata": {
             "graphIr": {
@@ -776,90 +790,6 @@
           "implicitDependencies": []
         }
       },
-      "graph-x6": {
-        "name": "graph-x6",
-        "type": "lib",
-        "data": {
-          "root": "packages/graph-x6",
-          "targets": {
-            "check": {
-              "cache": true,
-              "executor": "nx:run-commands",
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/pnpm-lock.yaml"
-              ],
-              "options": {
-                "command": "pnpm --filter @grafting/graph-x6 check"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "cache": true,
-              "executor": "nx:run-commands",
-              "dependsOn": [
-                "x6-canvas:build"
-              ],
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/pnpm-lock.yaml"
-              ],
-              "outputs": [
-                "{projectRoot}/dist"
-              ],
-              "options": {
-                "command": "pnpm --filter @grafting/graph-x6 build"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "test": {
-              "cache": true,
-              "executor": "nx:run-commands",
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/pnpm-lock.yaml"
-              ],
-              "options": {
-                "command": "pnpm --filter @grafting/graph-x6 test"
-              },
-              "configurations": {},
-              "parallelism": true
-            }
-          },
-          "name": "graph-x6",
-          "projectType": "library",
-          "tags": [
-            "npm:private",
-            "scope:knowledge",
-            "lang:typescript",
-            "platform:web",
-            "type:visualization"
-          ],
-          "implicitDependencies": [
-            "x6-canvas"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@grafting/graph-x6",
-              "packageVersion": "0.0.0",
-              "packageExports": "./dist/index.js",
-              "isInPackageManagerWorkspaces": true
-            },
-            "graphIr": {
-              "id": "graph-x6",
-              "kind": "lib",
-              "tags": [
-                "scope:knowledge",
-                "lang:typescript",
-                "platform:web"
-              ]
-            }
-          }
-        }
-      },
       "graph-core": {
         "name": "graph-core",
         "type": "lib",
@@ -930,6 +860,7 @@
               "cache": true,
               "inputs": [
                 "{projectRoot}/src/lib.rs",
+                "{projectRoot}/src/layout.rs",
                 "{projectRoot}/src/model.rs",
                 "{projectRoot}/tests/public_api_contract.rs",
                 "{projectRoot}/tests/public_api_snapshot.rs",
@@ -982,6 +913,123 @@
           },
           "implicitDependencies": []
         }
+      },
+      "ui": {
+        "name": "ui",
+        "type": "lib",
+        "data": {
+          "root": "packages/ui",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/ui check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/ui build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/test/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/ui test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "api-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/project.json",
+                "{projectRoot}/tsconfig.json",
+                "{projectRoot}/tests/snapshots/public-api.md",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/ui api-check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "ui",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:shared",
+            "lang:typescript",
+            "platform:web",
+            "type:ui"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@grafting/ui",
+              "packageVersion": "0.0.0",
+              "packageExports": {
+                ".": {
+                  "types": "./dist/index.d.ts",
+                  "import": "./dist/index.js"
+                }
+              },
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "ui",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:typescript",
+                "platform:web",
+                "type:ui"
+              ]
+            },
+            "publicApi": {
+              "entryPoint": "src/index.ts",
+              "baseline": "tests/snapshots/public-api.md",
+              "forbiddenModules": [
+                "antd"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
       }
     },
     "dependencies": {
@@ -1014,12 +1062,22 @@
       "architecture-studio": [
         {
           "source": "architecture-studio",
-          "target": "graph-x6",
+          "target": "isekai-wasm-bridge",
           "type": "implicit"
         },
         {
           "source": "architecture-studio",
-          "target": "graph-x6",
+          "target": "x6-canvas",
+          "type": "implicit"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "@grafting/isekai-wasm",
+          "type": "static"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "x6-canvas",
           "type": "static"
         }
       ],
@@ -1044,23 +1102,17 @@
           "source": "isekai-wasm-bridge",
           "target": "engine-domain-core",
           "type": "implicit"
+        },
+        {
+          "source": "isekai-wasm-bridge",
+          "target": "graph-core",
+          "type": "implicit"
         }
       ],
       "@grafting/isekai-wasm": [],
       "x6-canvas": [],
-      "graph-x6": [
-        {
-          "source": "graph-x6",
-          "target": "x6-canvas",
-          "type": "implicit"
-        },
-        {
-          "source": "graph-x6",
-          "target": "x6-canvas",
-          "type": "static"
-        }
-      ],
-      "graph-core": []
+      "graph-core": [],
+      "ui": []
     }
   }
 }

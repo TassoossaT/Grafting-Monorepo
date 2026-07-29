@@ -9,12 +9,20 @@ Forbidden public modules: `@antv/x6`
 ## Declaration entry point
 
 ```ts
+/** Generic visual role for a canvas node, independent of the rendering vendor. */
+export type CanvasNodeRole = "group" | "item" | "note";
+/** Generic visual role for a canvas relation, independent of connector names. */
+export type CanvasEdgeRole = "hierarchy" | "dependency" | "reference";
 /** Immutable presentation data for one canvas node. */
 export interface CanvasNode {
     /** Stable caller-owned identity preserved by the adapter. */
     readonly id: string;
     /** Human-readable text rendered inside the node. */
     readonly label: string;
+    /** Optional secondary text rendered beneath the main node label. */
+    readonly caption?: string;
+    /** Optional generic role used to select a reusable node treatment. */
+    readonly role?: CanvasNodeRole;
     /** Horizontal presentation coordinate supplied by the caller. */
     readonly x: number;
     /** Vertical presentation coordinate supplied by the caller. */
@@ -36,6 +44,8 @@ export interface CanvasEdge {
     readonly target: string;
     /** Optional human-readable text rendered on the edge. */
     readonly label?: string;
+    /** Optional generic role used to select a reusable relation treatment. */
+    readonly role?: CanvasEdgeRole;
 }
 /** Stable reference to one caller-owned entity rendered on the canvas. */
 export interface CanvasEntityReference {

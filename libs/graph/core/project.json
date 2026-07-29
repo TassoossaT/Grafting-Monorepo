@@ -67,6 +67,7 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/src/lib.rs",
+        "{projectRoot}/src/layout.rs",
         "{projectRoot}/src/model.rs",
         "{projectRoot}/tests/public_api_contract.rs",
         "{projectRoot}/tests/public_api_snapshot.rs",

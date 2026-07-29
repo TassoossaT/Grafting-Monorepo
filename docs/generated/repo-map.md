@@ -25,9 +25,9 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
-| `architecture-studio` | application | `apps/architecture-studio` | `build`, `check`, `dev` |
-| `graph-x6` | library | `packages/graph-x6` | `build`, `check`, `test` |
+| `architecture-studio` | application | `apps/architecture-studio` | `build`, `check`, `dev`, `test` |
 | `isekai-web-client` | library | `packages/isekai-web-client` | `check`, `test` |
+| `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `test` |
 | `x6-canvas` | library | `packages/x6-canvas` | `api-check`, `build`, `check`, `test` |
 
 ## Other

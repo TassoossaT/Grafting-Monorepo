@@ -1,0 +1,63 @@
+{
+  "name": "ui",
+  "root": "packages/ui",
+  "projectType": "library",
+  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui"],
+  "metadata": {
+    "graphIr": {
+      "id": "ui",
+      "kind": "lib",
+      "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui"]
+    },
+    "publicApi": {
+      "entryPoint": "src/index.ts",
+      "baseline": "tests/snapshots/public-api.md",
+      "forbiddenModules": ["antd"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ui check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ui build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ui test" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/test/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "api-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/ui api-check"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/project.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/tests/snapshots/public-api.md",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
+    }
+  }
+}

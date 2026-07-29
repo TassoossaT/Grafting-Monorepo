@@ -1,5 +1,18 @@
 import { Graph, type EventArgs } from "@antv/x6";
 import { createReadOnlyCanvasHandle } from "./internal/read-only-canvas.js";
+import {
+  setX6NodeSelection,
+  toX6EdgeMetadata,
+  toX6NodeMetadata,
+  toX6ReadOnlyInteractionOptions,
+  X6_EDGE_SELECTION_HIGHLIGHT,
+} from "./internal/visual-style.js";
+
+/** Generic visual role for a canvas node, independent of the rendering vendor. */
+export type CanvasNodeRole = "group" | "item" | "note";
+
+/** Generic visual role for a canvas relation, independent of connector names. */
+export type CanvasEdgeRole = "hierarchy" | "dependency" | "reference";
 
 /** Immutable presentation data for one canvas node. */
 export interface CanvasNode {
@@ -7,6 +20,10 @@ export interface CanvasNode {
   readonly id: string;
   /** Human-readable text rendered inside the node. */
   readonly label: string;
+  /** Optional secondary text rendered beneath the main node label. */
+  readonly caption?: string;
+  /** Optional generic role used to select a reusable node treatment. */
+  readonly role?: CanvasNodeRole;
   /** Horizontal presentation coordinate supplied by the caller. */
   readonly x: number;
   /** Vertical presentation coordinate supplied by the caller. */
@@ -29,6 +46,8 @@ export interface CanvasEdge {
   readonly target: string;
   /** Optional human-readable text rendered on the edge. */
   readonly label?: string;
+  /** Optional generic role used to select a reusable relation treatment. */
+  readonly role?: CanvasEdgeRole;
 }
 
 /** Stable reference to one caller-owned entity rendered on the canvas. */
@@ -62,15 +81,34 @@ export interface ReadOnlyCanvas {
 const createCanvasController = (graph: Graph) => {
   let selectedCellId: string | undefined;
 
+  const setCellHighlight = (cellId: string, highlighted: boolean) => {
+    const cell = graph.getCellById(cellId);
+    if (cell === null) return;
+
+    const view = graph.findViewByCell(cell);
+    if (view === null) return;
+
+    if (cell.isNode()) {
+      setX6NodeSelection(view, highlighted);
+    } else if (highlighted) {
+      view.highlight(undefined, X6_EDGE_SELECTION_HIGHLIGHT);
+    } else {
+      view.unhighlight(undefined, X6_EDGE_SELECTION_HIGHLIGHT);
+    }
+  };
+
   const clearSelection = () => {
     if (selectedCellId !== undefined) {
-      graph.findViewByCell(selectedCellId)?.unhighlight();
+      setCellHighlight(selectedCellId, false);
       selectedCellId = undefined;
     }
   };
 
   return {
-    centerContent: () => graph.centerContent(),
+    centerContent: () => {
+      graph.zoomToFit({ padding: 64, maxScale: 1 });
+      graph.centerContent();
+    },
     setSelection: (selection: CanvasEntityReference | null) => {
       clearSelection();
       if (selection === null) return;
@@ -89,7 +127,7 @@ const createCanvasController = (graph: Graph) => {
         throw new Error(`canvas ${selection.kind} is not rendered: ${selection.id}`);
       }
 
-      view.highlight();
+      setCellHighlight(selection.id, true);
       selectedCellId = selection.id;
     },
     subscribeActivation: (listener: (entity: CanvasEntityReference) => void) => {
@@ -134,34 +172,29 @@ export function createReadOnlyCanvas(
 ): ReadOnlyCanvas {
   const graph = new Graph({
     container,
-    background: { color: "#f7f9fc" },
-    grid: { visible: true, size: 10 },
-    interacting: false,
-    panning: true,
-    mousewheel: { enabled: true, modifiers: ["ctrl", "meta"], minScale: 0.35, maxScale: 2 },
+    ...toX6ReadOnlyInteractionOptions(),
+    autoResize: true,
+    background: { color: "#f8fafc" },
+    grid: {
+      visible: true,
+      type: "dot",
+      size: 16,
+      args: { color: "#cbd5e1", thickness: 1 },
+    },
+    mousewheel: {
+      enabled: true,
+      modifiers: ["ctrl", "meta"],
+      factor: 1.08,
+      minScale: 0.3,
+      maxScale: 2.4,
+    },
   });
 
   graph.fromJSON({
-    nodes: nodes.map((node) => ({
-      id: node.id,
-      x: node.x,
-      y: node.y,
-      width: node.width ?? 220,
-      height: node.height ?? 48,
-      label: node.label,
-      attrs: {
-        body: { fill: node.color ?? "#ffffff", stroke: "#5b6b88", rx: 8, ry: 8 },
-        label: { fill: "#172033", fontSize: 12 },
-      },
-    })),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edge.label,
-      attrs: { line: { stroke: "#8795ad", targetMarker: "classic" } },
-    })),
+    nodes: nodes.map(toX6NodeMetadata),
+    edges: edges.map(toX6EdgeMetadata),
   });
+  graph.zoomToFit({ padding: 64, maxScale: 1 });
   graph.centerContent();
 
   return createReadOnlyCanvasHandle(

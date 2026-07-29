@@ -3,7 +3,7 @@
   "root": "libs/isekai/wasm-bridge",
   "projectType": "library",
   "tags": ["scope:engine", "lang:rust", "platform:web", "type:binding"],
-  "implicitDependencies": ["engine-domain-core"],
+  "implicitDependencies": ["engine-domain-core", "graph-core"],
   "metadata": {
     "graphIr": {
       "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",

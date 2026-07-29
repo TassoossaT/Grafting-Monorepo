@@ -72,6 +72,9 @@ jobs:
         run: |
           pnpm exec nx run x6-canvas:check
           pnpm exec nx run x6-canvas:test
+          pnpm exec nx run ui:check
+          pnpm exec nx run ui:test
+          pnpm exec nx run ui:api-check
 
       - name: Docs and Graph IR drift check (G-008/I-007)
         # Composes the real repo-map/artifact-manifest/Graph IR extractor

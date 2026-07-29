@@ -13,10 +13,12 @@ use wasm_bindgen::prelude::*;
 
 pub mod buffer;
 pub mod engine;
+mod graph_layout;
 pub mod handle;
 pub mod job;
 
 pub use engine::WasmEngine;
+pub use graph_layout::layout_graph_json;
 pub use job::JobStateCode;
 
 /// Test-only (D-009): the module's `WebAssembly.Memory` instance, so a

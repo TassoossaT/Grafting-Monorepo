@@ -20,4 +20,6 @@ default," extended here) -- regenerate it, don't hand-edit it.
 
 ## Consumers
 
-`packages/isekai-web-client` depends on this via `workspace:*`.
+`packages/isekai-web-client` uses the engine API and Architecture Studio uses
+the graph-layout batch adapter through this generated package. Both depend on
+it via `workspace:*`; neither owns or hand-edits `pkg/`.

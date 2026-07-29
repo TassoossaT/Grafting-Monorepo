@@ -31,8 +31,14 @@ export const jsonPointerEscape = (key) => key.replace(/~/g, "~0").replace(/\//g,
 const EXTRACTOR = { id: "extractor:nx-graph-ir", version: "1.0.0" };
 
 function git(args) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  // Porcelain status uses its first two columns as meaningful state. Preserve
+  // a leading workspace-column space on the first line while removing only
+  // Git's trailing newline.
+  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trimEnd();
 }
+
+export const pathsFromGitPorcelain = (status) =>
+  [...new Set(status.split("\n").filter(Boolean).map((line) => line.slice(3).trim()))].sort();
 
 /**
  * Builds the real Graph IR v1 document from the committed Nx project graph
@@ -92,12 +98,7 @@ export async function extractGraphIr({ check = false } = {}) {
   if (dirtyStatus === "") {
     sourceRevision = `git:${headSha}`;
   } else {
-    const dirtyPaths = [...new Set(
-      dirtyStatus
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => line.slice(3).trim()),
-    )].sort();
+    const dirtyPaths = pathsFromGitPorcelain(dirtyStatus);
     const lines = await Promise.all(dirtyPaths.map(async (path) => `${path} ${sha256(await readText(path))}`));
     sourceRevision = `workspace:sha256:${sha256(`${headSha}\n${lines.join("\n")}`)}`;
   }

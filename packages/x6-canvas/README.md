@@ -1,10 +1,18 @@
 # `@grafting/x6-canvas`
 
 Generic AntV X6 wrapper shared by graph-oriented products (DEC-046). Its first
-real consumer is the Graph IR viewer spike. The public API does not expose the
-mutable X6 `Graph`; it returns only counts, center, and dispose operations.
+real production consumer is Architecture Studio. The public API does not expose
+the mutable X6 `Graph`; it returns only immutable counts, centering, selection,
+activation, and disposal operations.
 
 The package contains no Graph IR or VTT domain logic.
+
+Consumers may supply vendor-neutral visual roles (`group`/`item`/`note` and
+`hierarchy`/`dependency`/`reference`). The private adapter maps those roles to
+reusable SVG cards, connection ports, label capsules, vertical hierarchy curves,
+horizontal dependency curves, markers, and a responsive dotted canvas. Connector
+names and all other X6 configuration remain internal. Coordinates and any
+future graph-aware edge waypoints remain Rust-owned.
 
 Targets:
 

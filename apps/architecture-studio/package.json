@@ -6,10 +6,12 @@
   "scripts": {
     "build": "vite build --outDir ../../dist/architecture-studio",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
     "dev": "vite --host 127.0.0.1 --port 4511"
   },
   "dependencies": {
-    "@grafting/graph-x6": "workspace:*"
+    "@grafting/isekai-wasm": "workspace:*",
+    "@grafting/x6-canvas": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3",

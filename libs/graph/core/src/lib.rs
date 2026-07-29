@@ -8,6 +8,8 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+mod layout;
 mod model;
 
+pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId};

@@ -91,6 +91,38 @@ test("activation still selects when no callback was supplied", () => {
   canvas.dispose();
 });
 
+test("publishes activation even if the private visual selection fails", () => {
+  const calls = [];
+  let activationListener;
+  const canvas = createReadOnlyCanvasHandle(
+    {
+      centerContent: () => undefined,
+      setSelection: () => {
+        calls.push("selection-failed");
+        throw new Error("private highlight failed");
+      },
+      subscribeActivation: (listener) => {
+        activationListener = listener;
+        return () => undefined;
+      },
+      dispose: () => undefined,
+    },
+    1,
+    0,
+    (entity) => calls.push(["activate", entity]),
+  );
+
+  assert.throws(
+    () => activationListener({ kind: "node", id: "node-1" }),
+    /private highlight failed/,
+  );
+  assert.deepEqual(calls, [
+    "selection-failed",
+    ["activate", { kind: "node", id: "node-1" }],
+  ]);
+  canvas.dispose();
+});
+
 test("disposal is idempotent, unsubscribes first, and rejects later operations", () => {
   const calls = [];
   const { controller, activate } = createController(calls);

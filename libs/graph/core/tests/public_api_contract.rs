@@ -1,5 +1,6 @@
 use grafting_graph_core::{
-    Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId,
+    Edge, EdgeId, Graph, GraphError, GraphSnapshot, GroupedGridOptions, IdentifierError,
+    LayoutError, LayoutPosition, LayoutSnapshot, Node, NodeId,
 };
 
 #[test]
@@ -29,6 +30,17 @@ fn public_names_and_signatures_remain_consumable() {
     let snapshot: GraphSnapshot<u32, &str> = graph.snapshot();
     let _: &[Node<u32>] = snapshot.nodes();
     let _: &[Edge<&str>] = snapshot.edges();
+
+    let layout_options: GroupedGridOptions =
+        GroupedGridOptions::new(220, 56, 24, 18, 72, 48, 3, 2).expect("valid layout");
+    let layout: LayoutSnapshot = graph
+        .grouped_grid_layout(&[], layout_options)
+        .expect("valid grouped layout");
+    let _: &[LayoutPosition] = layout.positions();
+    let _: u32 = layout.width();
+    let _: u32 = layout.height();
+    let _: (Vec<LayoutPosition>, u32, u32) = layout.into_parts();
+    let _: Option<LayoutError> = None;
 
     let _: Result<NodeId, IdentifierError> = NodeId::new(String::from("node:c"));
     let _: Result<EdgeId, IdentifierError> = EdgeId::new(String::from("edge:c"));

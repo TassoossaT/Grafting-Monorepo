@@ -30,8 +30,14 @@ item -- `packages/isekai-web-client/test/browser-check.html` uses
 `debug_memory()` to confirm `byteLength` plateaus under repetition
 against the real compiled crate, in a real browser.
 
-11 tests total, all passing (5 native `cargo test` for the handle table,
-6 `wasm-bindgen-test` for the engine, run via `wasm-pack test --node`).
+The bridge also exposes one batched `layout_graph_json` adapter for the
+Rust-owned `grafting-graph-core` grouped-grid heuristic. The adapter owns only
+JSON serialization across Wasm; the browser Worker owns transport and the app
+owns presentation configuration. Node placement mathematics remain in Rust.
+
+13 tests total, all passing (6 native `cargo test` and 7
+`wasm-bindgen-test` Node tests, including graph layout in both runtimes, run
+via `wasm-pack test --node`).
 
 ## The panic-handling difference from the native side is real and load-bearing
 

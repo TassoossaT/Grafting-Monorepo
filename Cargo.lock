@@ -331,6 +331,9 @@ dependencies = [
  "console_error_panic_hook",
  "getrandom 0.4.3",
  "grafting-domain-core",
+ "grafting-graph-core",
+ "serde",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]

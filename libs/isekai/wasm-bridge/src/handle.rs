@@ -87,7 +87,10 @@ impl<T> HandleTable<T> {
     /// why this alone isn't sufficient "no leak" evidence (D-009); pair
     /// with [`Self::slot_count`].
     pub fn len(&self) -> usize {
-        self.slots.iter().filter(|slot| slot.value.is_some()).count()
+        self.slots
+            .iter()
+            .filter(|slot| slot.value.is_some())
+            .count()
     }
 
     /// Total slots ever allocated (this table's own high-water mark) --

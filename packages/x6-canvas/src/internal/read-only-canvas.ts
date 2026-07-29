@@ -28,8 +28,11 @@ export function createReadOnlyCanvasHandle(
     if (disposed) return;
 
     const publicEntity = copyEntity(entity);
-    controller.setSelection(publicEntity);
-    onActivate?.(publicEntity);
+    try {
+      controller.setSelection(publicEntity);
+    } finally {
+      onActivate?.(publicEntity);
+    }
   });
 
   return Object.freeze({

@@ -192,10 +192,23 @@ The Canvas:
 - exposes selected and keyboard-focused state through Grafting-owned
   presentation contracts, not X6 objects.
 
+The implemented presentation maps Graph IR kinds to generic Grafting visual
+roles in the application's single projection configuration. The X6 boundary
+privately renders those roles as card-like SVG nodes, boundary ports, smooth
+hierarchy and dependency curves, arrow markers, and compact relation
+labels. This visual connector treatment does not own graph structure or node
+placement.
+
 A simple deterministic application-owned placement by kind may be used when it
 is purely presentation policy. Any graph-aware ranking, layered/DAG layout,
 crossing minimization, path-based placement, or reusable layout calculation
 belongs in Rust.
+
+The implemented initial heuristic follows that boundary: the application
+selects grouping relation kinds and presentation dimensions in one projection
+configuration, sends the corresponding stable IDs through one batched Worker/
+Wasm request, and receives an immutable grouped-grid snapshot calculated by
+`grafting-graph-core`. TypeScript does not calculate coordinates.
 
 ### 6.4 Inspector
 
@@ -345,8 +358,11 @@ The target dependency direction is:
 
 ```text
 docs/generated/grafting.graph.json
-  -> Architecture Studio Graph IR loader/presentation projection
-  -> batched grafting-graph-core query boundary when graph computation is needed
+  -> Architecture Studio Graph IR loader/single projection configuration
+  -> app-owned Web Worker
+  -> @grafting/isekai-wasm generated adapter
+  -> batched grafting-graph-core layout/query boundary
+  -> immutable layout snapshot + application presentation enrichment
   -> immutable Grafting canvas model
   -> @grafting/x6-canvas
   -> @antv/x6 (private)
@@ -357,14 +373,14 @@ layout, or each UI component without a demonstrated reuse/build/API boundary.
 They begin as coherent modules inside the owning application or existing Rust
 crate.
 
-The transitional direction below must disappear atomically during the cutover:
+The transitional direction below disappeared atomically during the cutover:
 
 ```text
 Architecture Studio -> @grafting/graph-x6 -> @grafting/x6-canvas
 ```
 
-The application becomes the sole owner of its Graph IR presentation mapping.
-No second mapping remains after migration.
+The application is now the sole owner of its Graph IR presentation mapping.
+No second mapping remains after migration; `@grafting/graph-x6` was removed.
 
 ## 10. Required `x6-canvas` contract evolution
 

@@ -10,8 +10,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 grafting-domain-core = { path = "../../engine/domain-core" }
+grafting-graph-core = { path = "../../graph/core" }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
 # domain-core's DeterministicRng only ever seeds explicitly (never reads
 # OS entropy), but rand/rand_chacha still pull in getrandom transitively,
 # which refuses to pick a wasm32 backend without this explicit opt-in.
