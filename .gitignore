@@ -2,7 +2,6 @@ node_modules/
 .next/
 .nx/
 .venv/
-.vscode/
 .pytest_cache/
 dist/
 __pycache__/

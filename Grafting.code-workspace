@@ -1,0 +1,125 @@
+{
+  "folders": [
+    {
+      "name": "🎯 Central (root, docs, ADRs, config)",
+      "path": "."
+    },
+    {
+      "name": "🦀 Rust",
+      "path": "libs"
+    },
+    {
+      "name": "📦 TypeScript — Packages",
+      "path": "packages"
+    },
+    {
+      "name": "🔷 C# / .NET",
+      "path": "dotnet"
+    },
+    {
+      "name": "🐍 Python",
+      "path": "python"
+    }
+  ],
+  "settings": {
+    // Noise shared across every folder above -- build outputs,
+    // toolchain caches, and generated code (master source S10.3:
+    // generated code is not the source of truth, regenerate on demand
+    // via `pnpm exec nx run engine-domain-core:generate`). Hiding
+    // libs/packages/dotnet/python *from the root folder specifically*
+    // (so they don't show up twice) is a separate, folder-scoped rule
+    // in .vscode/settings.json -- workspace-level files.exclude here
+    // applies to all five folders uniformly and can't single one out.
+    "files.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/.venv": true,
+      "**/bin": true,
+      "**/obj": true,
+      "**/artifacts": true,
+      "**/TestResults": true,
+      "**/dist": true,
+      "**/.next": true,
+      "**/.nx": true,
+      "**/.pytest_cache": true,
+      "**/__pycache__": true,
+      "**/*.egg-info": true,
+      "**/src/generated": true,
+      "**/Generated": true,
+      "**/packages/isekai-wasm/pkg": true,
+      "**/tools/.flatc-csharp": true
+    },
+    "search.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/.venv": true,
+      "**/bin": true,
+      "**/obj": true,
+      "**/dist": true,
+      "**/.nx": true,
+      "**/src/generated": true,
+      "**/Generated": true,
+      "**/packages/isekai-wasm/pkg": true,
+      "**/pnpm-lock.yaml": true,
+      "**/Cargo.lock": true,
+      "**/uv.lock": true,
+      "**/*.lock.json": true
+    },
+    "files.watcherExclude": {
+      "**/target/**": true,
+      "**/node_modules/**": true,
+      "**/.venv/**": true,
+      "**/bin/**": true,
+      "**/obj/**": true,
+      "**/.nx/**": true,
+      "**/src/generated/**": true,
+      "**/Generated/**": true
+    },
+
+    // Rust: one Cargo workspace at the repo root (libs/engine +
+    // libs/isekai are members, not standalone crates) -- point
+    // rust-analyzer at the root Cargo.toml explicitly so opening the
+    // "🦀 Rust" folder (libs/) alone still resolves workspace-wide
+    // paths/deps correctly.
+    "rust-analyzer.linkedProjects": ["${workspaceFolder:🎯 Central (root, docs, ADRs, config)}/Cargo.toml"],
+
+    // .NET: one solution, System.sln, at the repo root.
+    "dotnet.defaultSolution": "${workspaceFolder:🎯 Central (root, docs, ADRs, config)}/System.sln",
+
+    // Python: the uv-managed workspace venv (tools/scripts/bootstrap.ps1's
+    // `uv sync --locked`) -- one shared .venv for every python/* member,
+    // not a per-package venv.
+    "python.defaultInterpreterPath": "${workspaceFolder:🎯 Central (root, docs, ADRs, config)}/.venv/Scripts/python.exe",
+
+    // TypeScript: use the version pnpm actually installed for
+    // isekai-web-client, not whatever ships with the extension.
+    // `js/ts.tsdk.path` replaced `typescript.tsdk` (deprecated).
+    "js/ts.tsdk.path": "${workspaceFolder:🎯 Central (root, docs, ADRs, config)}/packages/isekai-web-client/node_modules/typescript/lib",
+
+    "[rust]": {
+      "editor.defaultFormatter": "rust-lang.rust-analyzer",
+      "editor.formatOnSave": true
+    },
+    "[csharp]": {
+      "editor.formatOnSave": true
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "vscode.typescript-language-features"
+    },
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.python"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "rust-lang.rust-analyzer",
+      "tamasfe.even-better-toml",
+      "ms-dotnettools.csdevkit",
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "vitest.explorer",
+      "nrwl.angular-console",
+      "redhat.vscode-yaml"
+    ]
+  }
+}

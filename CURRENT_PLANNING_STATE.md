@@ -513,15 +513,122 @@ reliability, not just the thing it's testing.
   non-experimental JS API to verify it from a test page.
 - Not committed yet — same standing rule as every prior task.
 
+## Epic C: `flatc` + FlatBuffers schemas (C-005/C-006), 2026-07-28
+
+Owner picked this next. C-005 ("Configure `flatc`," depends on
+B-001/B-002/B-004, all satisfied) and C-006 ("Define schema evolution,"
+depends on C-005) are both done — the blocker named in four places
+across this repo (`domain-core/snapshot.rs`, both Isekai crates' docs)
+is gone.
+
+A Plan-subagent review checked the draft against the actual source
+before anything was built and caught two problems the draft missed
+entirely, both fixed before implementation:
+
+- **CI would have silently broken.** `.github/workflows/ci.yml` runs
+  `cargo check`/`cargo test --workspace` directly on `ubuntu-latest`,
+  *before and outside* any Nx step — once `domain-core` had a test
+  depending on generated code, this currently-green job would fail the
+  moment it was pushed. Fixed with two new CI steps (install a
+  version-matched Linux `flatc`, then generate Rust code) before the
+  existing Cargo step. Verified against the real, published
+  `google/flatbuffers` GitHub release assets (not assumed) — but this
+  exact YAML was not executed on a real Actions runner during this
+  task; flagged, watch the first real push.
+- **`Snapshot.core_version: &'static str` could not survive a real
+  decode.** A FlatBuffers-decoded string is never `'static` — producing
+  one would mean leaking memory every decode or silently substituting
+  the current build's version, defeating the field's whole point (S15.6:
+  identify which build produced a snapshot). Fixed: `core_version`
+  changed to an owned `String`.
+
+A third issue surfaced empirically during implementation, not from the
+review: the C# side (`Google.FlatBuffers` on NuGet) turned out to lag
+the primary pinned `flatc` (25.12.19) — NuGet's latest is 25.2.10.
+flatc-generated C# embeds a version-marker call
+(`FlatBufferConstants.FLATBUFFERS_<version>()`) that only exists in a
+runtime package published by the *same* generator version, so generated
+C# genuinely failed to compile against the available NuGet package —
+confirmed by actually trying it, not assumed to be "low risk" as the
+plan first guessed. Fixed with a second, older, separately-pinned
+`flatc` used only for C# generation
+(`tools/scripts/get-flatc-csharp.ps1`, downloaded on demand) — the real
+fix, not a workaround, since the wire format itself is unchanged across
+that version range.
+
+**Real and verified:**
+
+- `flatc` installed (`winget`, version `25.12.19`) and pinned
+  (`tools/flatc-version.txt`, checked by `bootstrap.ps1`).
+- Three schemas (`libs/engine/domain-core/contracts/{command,domain_event,snapshot}.fbs`)
+  covering the three S10.1 types that actually exist in this codebase —
+  `Command`/`DomainEvent` as a `union` of per-variant tables (gets
+  `flatc`'s own structural verifier for free, S10.4's "untrusted
+  messages verified before use"), `Snapshot` as one table.
+  `rng_seed`/`state_hash` (`[u8;32]`) are `[ubyte]` vectors with
+  hand-written `len()==32` validation on decode, since FlatBuffers fixed
+  arrays are a `struct`-only feature and `struct` is excluded here
+  (S10.4: these are "versionable messages").
+- One Nx `generate` target (`engine-domain-core:generate`, a real
+  `dependsOn` of `check`/`test` and of the new consumers below) producing
+  Rust/TS/C# into the three literal example paths from S10.2. All three
+  gitignored.
+- `libs/engine/domain-core/src/wire.rs`: real hand-written
+  encode/decode conversions between the canonical `Command`/
+  `DomainEvent`/`Snapshot` and their generated wire types.
+  `tests/flatbuffers_round_trip.rs` proves every variant of both enums
+  plus `Snapshot` survives a genuine encode/decode round trip — the
+  real proof C-005 needs, not just "the schema compiles" — plus a
+  garbage-bytes-rejected test and a wrong-length-field-rejected test
+  (S10.4's verification requirement).
+- C-006: `contracts/fixtures/command_v1.fbs` is a frozen, committed copy
+  of `command.fbs` from before `Increment` gained `sequence_hint`; its
+  generated Rust code is committed too, via a documented S10.3 exception
+  (`docs/adr/ADR-0009-committed-flatbuffers-fixture.md`, Decision section
+  left open for the owner per this repo's own ADR convention).
+  `tests/flatbuffers_evolution.rs` proves both directions for real: old
+  writer → new reader (shared fields survive, new field defaults) and
+  new writer → old reader (shared fields survive, new field ignored).
+- New `dotnet/Grafting.Isekai.Protocol` project (added to `System.sln`,
+  own `project.json`) for the C# generated output — deliberately not
+  referenced by `Grafting.Isekai.Interop`, no live consumer on either
+  side yet.
+- `packages/isekai-web-client` gained the `flatbuffers` npm dependency
+  the generated TS actually imports (a real gap in the first draft, not
+  just missing polish) — `tsc --noEmit` passes.
+- All Rust tests pass (`cargo test --workspace`, includes the 7 new
+  FlatBuffers tests), `dotnet build System.sln` passes (3 projects now),
+  `tsc --noEmit` passes in `isekai-web-client`.
+
+**Deliberately not done, and why:**
+
+- **`ReplicationDelta`** — not modeled anywhere in this codebase yet
+  (Phase 6/Epic H); a schema can't be written for a type with no Rust
+  definition.
+- **The generic `engine_submit(bytes)` FFI entry point** (S11.6) —
+  separately-scoped future work; C-005/C-006's own criteria are schema
+  generation + an evolution test, not rewiring the FFI. Neither
+  `engine_submit_increment` nor `WasmEngine::submit_increment` was
+  touched.
+- **TS/C# round-trip consumers** — both verified compile-only (`tsc
+  --noEmit`, `dotnet build`), since neither has a real consumer of these
+  types yet either, same honesty as the "no live consumer" note above.
+- **CI YAML not runner-verified** — written from real, verified release
+  asset names, but no GitHub Actions runner was available to actually
+  execute it during this task.
+- **ADR-0009's Decision section** — left open for the owner, per this
+  repo's own ADR convention (`docs/adr/README.md`), even though the code
+  it documents is implemented and tested.
+
 ## Recommended next action
 
-Epic B is committed; Epic C, Epic E (partial), and Epic D (now fully
-D-001..D-009, all nine items) are built and verified but not yet
-committed. Candidates for what's next, no decision recorded yet:
-review/commit the above; C-005/C-006 (`flatc`, genuinely unblocked by a
-real `.NET` solution — still needs the `flatc` toolchain installed);
-spikes 5–8; or resume Epic E toward E-003 (needs a real product decision
-on the pilot workload first).
+Epic B, Epic D (D-001..D-009), and Epic C's C-005/C-006 are committed.
+Still open, no decision recorded yet: ADR-0009's Decision section (a
+quick owner confirmation, not new work); spikes 5–8; or resume Epic E
+toward E-003 (needs a real product decision on the pilot workload
+first). The generic `engine_submit(bytes)` FFI entry point is now
+genuinely unblocked (schemas exist) but isn't backlogged as its own
+item yet — worth a decision on whether/when to pick it up.
 
 ## Update rule
 

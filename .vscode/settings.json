@@ -1,0 +1,16 @@
+{
+  // Folder-scoped (applies only to the "🎯 Central" root folder in
+  // Grafting.code-workspace, since this file physically lives at the
+  // repo root) -- libs/packages/dotnet/python already have their own
+  // dedicated folder entries in the workspace, so hide them here to
+  // avoid seeing every language's content twice. docs/, tools/, and
+  // spikes/ stay visible -- they're the "central" repo-management
+  // content this folder exists for, not a language.
+  "files.exclude": {
+    "libs": true,
+    "packages": true,
+    "dotnet": true,
+    "python": true,
+    ".claude": true
+  }
+}
