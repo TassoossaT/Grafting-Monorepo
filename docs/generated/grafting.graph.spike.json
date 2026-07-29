@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "181bf619d2adf31574beb15a280258dab4655dc0b3e1692dee1339fc54246832",
+  "inputHash": "19e55b7dd2b3bc142bf46d8af120b253c54262db30bc96141a0262b2a2862e33",
   "nodes": [
     {
       "id": "agent:claude",
@@ -113,19 +113,6 @@
       "source": "libs/graph/core/project.json"
     },
     {
-      "id": "project:graph-x6",
-      "kind": "project",
-      "label": "graph-x6",
-      "tags": [
-        "lang:typescript",
-        "npm:private",
-        "platform:web",
-        "scope:knowledge",
-        "type:visualization"
-      ],
-      "source": "packages/graph-x6/project.json"
-    },
-    {
       "id": "project:isekai-capi-bridge",
       "kind": "project",
       "label": "isekai-capi-bridge",
@@ -185,6 +172,19 @@
         "type:lib"
       ],
       "source": "packages/isekai-web-client/project.json"
+    },
+    {
+      "id": "project:ui",
+      "kind": "project",
+      "label": "ui",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:shared",
+        "type:ui"
+      ],
+      "source": "packages/ui/project.json"
     },
     {
       "id": "project:x6-canvas",
@@ -312,7 +312,7 @@
       "kind": "task",
       "label": "I-004-GRAPH-IR-EXTRACTOR",
       "tags": [
-        "status:in_progress"
+        "status:completed"
       ],
       "source": ".ai/state/tasks/I-004-GRAPH-IR-EXTRACTOR.json"
     },
@@ -321,9 +321,36 @@
       "kind": "task",
       "label": "I-006-ARCH-STUDIO-SPEC",
       "tags": [
-        "status:in_progress"
+        "status:completed"
       ],
       "source": ".ai/state/tasks/I-006-ARCH-STUDIO-SPEC.json"
+    },
+    {
+      "id": "task:I-006A-X6-READONLY-SELECTION",
+      "kind": "task",
+      "label": "I-006A-X6-READONLY-SELECTION",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-006A-X6-READONLY-SELECTION.json"
+    },
+    {
+      "id": "task:I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER",
+      "kind": "task",
+      "label": "I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER.json"
+    },
+    {
+      "id": "task:I-007-G-008-DOCS-GRAPH-DRIFT",
+      "kind": "task",
+      "label": "I-007-G-008-DOCS-GRAPH-DRIFT",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-007-G-008-DOCS-GRAPH-DRIFT.json"
     },
     {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT",
@@ -369,21 +396,76 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/SPIKE-008-AI-CONTROL-PLANE.json"
+    },
+    {
+      "id": "task:UI-001-GRAFTING-UI-FOUNDATION",
+      "kind": "task",
+      "label": "UI-001-GRAFTING-UI-FOUNDATION",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/UI-001-GRAFTING-UI-FOUNDATION.json"
+    },
+    {
+      "id": "task:X6-002-PLUGGABLE-NODE-VIEWS",
+      "kind": "task",
+      "label": "X6-002-PLUGGABLE-NODE-VIEWS",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/X6-002-PLUGGABLE-NODE-VIEWS.json"
+    },
+    {
+      "id": "task:X6-003-COMPOSABLE-CANVAS",
+      "kind": "task",
+      "label": "X6-003-COMPOSABLE-CANVAS",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/X6-003-COMPOSABLE-CANVAS.json"
     }
   ],
   "edges": [
     {
-      "id": "project:architecture-studio->project:graph-x6:depends_on:implicit",
+      "id": "project:architecture-studio->project:@grafting/isekai-wasm:depends_on:static",
       "kind": "depends_on",
       "source": "project:architecture-studio",
-      "target": "project:graph-x6",
+      "target": "project:@grafting/isekai-wasm",
+      "evidence": "docs/generated/project-graph.json#static"
+    },
+    {
+      "id": "project:architecture-studio->project:isekai-wasm-bridge:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:isekai-wasm-bridge",
       "evidence": "docs/generated/project-graph.json#implicit"
     },
     {
-      "id": "project:architecture-studio->project:graph-x6:depends_on:static",
+      "id": "project:architecture-studio->project:ui:depends_on:implicit",
       "kind": "depends_on",
       "source": "project:architecture-studio",
-      "target": "project:graph-x6",
+      "target": "project:ui",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:architecture-studio->project:ui:depends_on:static",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:ui",
+      "evidence": "docs/generated/project-graph.json#static"
+    },
+    {
+      "id": "project:architecture-studio->project:x6-canvas:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:x6-canvas",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:architecture-studio->project:x6-canvas:depends_on:static",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:x6-canvas",
       "evidence": "docs/generated/project-graph.json#static"
     },
     {
@@ -392,20 +474,6 @@
       "source": "project:engine-compute-cpu",
       "target": "project:engine-compute-api",
       "evidence": "docs/generated/project-graph.json#implicit"
-    },
-    {
-      "id": "project:graph-x6->project:x6-canvas:depends_on:implicit",
-      "kind": "depends_on",
-      "source": "project:graph-x6",
-      "target": "project:x6-canvas",
-      "evidence": "docs/generated/project-graph.json#implicit"
-    },
-    {
-      "id": "project:graph-x6->project:x6-canvas:depends_on:static",
-      "kind": "depends_on",
-      "source": "project:graph-x6",
-      "target": "project:x6-canvas",
-      "evidence": "docs/generated/project-graph.json#static"
     },
     {
       "id": "project:isekai-capi-bridge->project:engine-domain-core:depends_on:implicit",
@@ -433,6 +501,13 @@
       "kind": "depends_on",
       "source": "project:isekai-wasm-bridge",
       "target": "project:engine-domain-core",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:isekai-wasm-bridge->project:graph-core:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-wasm-bridge",
+      "target": "project:graph-core",
       "evidence": "docs/generated/project-graph.json#implicit"
     },
     {
@@ -548,6 +623,27 @@
       "evidence": ".ai/state/tasks/I-006-ARCH-STUDIO-SPEC.json#/owner"
     },
     {
+      "id": "task:I-006A-X6-READONLY-SELECTION->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-006A-X6-READONLY-SELECTION",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-006A-X6-READONLY-SELECTION.json#/owner"
+    },
+    {
+      "id": "task:I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER.json#/owner"
+    },
+    {
+      "id": "task:I-007-G-008-DOCS-GRAPH-DRIFT->agent:claude:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-007-G-008-DOCS-GRAPH-DRIFT",
+      "target": "agent:claude",
+      "evidence": ".ai/state/tasks/I-007-G-008-DOCS-GRAPH-DRIFT.json#/owner"
+    },
+    {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT->agent:claude:owned_by",
       "kind": "owned_by",
       "source": "task:SECURITY-001-TOOLCHAIN-AUDIT",
@@ -581,6 +677,27 @@
       "source": "task:SPIKE-008-AI-CONTROL-PLANE",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/SPIKE-008-AI-CONTROL-PLANE.json#/owner"
+    },
+    {
+      "id": "task:UI-001-GRAFTING-UI-FOUNDATION->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:UI-001-GRAFTING-UI-FOUNDATION",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/UI-001-GRAFTING-UI-FOUNDATION.json#/owner"
+    },
+    {
+      "id": "task:X6-002-PLUGGABLE-NODE-VIEWS->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:X6-002-PLUGGABLE-NODE-VIEWS",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/X6-002-PLUGGABLE-NODE-VIEWS.json#/owner"
+    },
+    {
+      "id": "task:X6-003-COMPOSABLE-CANVAS->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:X6-003-COMPOSABLE-CANVAS",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/X6-003-COMPOSABLE-CANVAS.json#/owner"
     }
   ]
 }

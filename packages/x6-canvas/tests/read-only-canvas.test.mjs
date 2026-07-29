@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createReadOnlyCanvasHandle } from "../dist/internal/read-only-canvas.js";
+import { createReadOnlyCanvasHandle } from "../dist/canvas/handle.js";
 
 const createController = (calls) => {
   let activationListener;
@@ -22,7 +22,6 @@ const createController = (calls) => {
 test("exposes only the immutable Grafting canvas contract and delegates its actions", () => {
   const calls = [];
   const { controller } = createController(calls);
-
   const canvas = createReadOnlyCanvasHandle(controller, 3, 2);
 
   assert.equal(Object.isFrozen(canvas), true);
@@ -64,7 +63,7 @@ test("selects an activated entity before publishing its immutable reference", ()
   const canvas = createReadOnlyCanvasHandle(controller, 1, 1, (entity) => {
     calls.push(["activate", entity]);
     publishedEntity = entity;
-  });
+  }, true);
 
   activate({ kind: "edge", id: "edge-1" });
 
@@ -77,10 +76,10 @@ test("selects an activated entity before publishing its immutable reference", ()
   canvas.dispose();
 });
 
-test("activation still selects when no callback was supplied", () => {
+test("activation selection is an explicit replaceable policy", () => {
   const calls = [];
   const { controller, activate } = createController(calls);
-  const canvas = createReadOnlyCanvasHandle(controller, 1, 0);
+  const canvas = createReadOnlyCanvasHandle(controller, 1, 0, undefined, true);
 
   activate({ kind: "node", id: "node-1" });
 
@@ -110,6 +109,7 @@ test("publishes activation even if the private visual selection fails", () => {
     1,
     0,
     (entity) => calls.push(["activate", entity]),
+    true,
   );
 
   assert.throws(

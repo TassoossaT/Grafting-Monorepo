@@ -44,6 +44,11 @@ The agent MUST NOT:
   contracts/facades instead, without requiring one package per dependency
   (DEC-049,
   `docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`);
+- hardcode a consuming product's visual identity, semantic roles, effects, or
+  interaction policy inside a reusable capability package; packages expose
+  neutral mechanisms, Grafting-owned composition contracts, and replaceable
+  defaults, while applications compose concrete presentation and policy
+  (DEC-052, `docs/adr/ADR-0014-composable-capability-packages.md`);
 - expose Rust types directly through the ABI;
 - promise zero-copy between distinct domains;
 - call authoritative replication "Event Sourcing";

@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER",
   "title": "Architecture Studio real Graph IR cutover and selection inspector",
-  "status": "blocked",
+  "status": "completed",
   "owner": "codex",
-  "revision": 21,
-  "updated_at": "2026-07-29T18:38:03Z",
+  "revision": 29,
+  "updated_at": "2026-07-29T16:20:00-03:00",
   "objective": "Atomically move Architecture Studio from the frozen Graph IR spike and transitional graph-x6 package to the real Graph IR v1 artifact and direct @grafting/x6-canvas composition, then use vendor-neutral activation and visual roles for synchronized accessible selection, provenance inspection, and a polished read-only canvas.",
   "affected_paths": [
     ".ai/state/tasks/I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER.json",
@@ -29,13 +29,25 @@
     "packages/graph-x6/test/model.test.mjs",
     "packages/graph-x6/tsconfig.json",
     "packages/isekai-wasm/README.md",
+    "packages/ui/DECISIONS.md",
+    "packages/ui/package.json",
+    "packages/ui/README.md",
+    "packages/ui/src/atoms/status-badge.tsx",
+    "packages/ui/src/atoms/text.tsx",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/src/organisms/data-table.tsx",
+    "packages/x6-canvas/AGENTS.md",
     "packages/x6-canvas/README.md",
     "packages/x6-canvas/src/index.ts",
     "packages/x6-canvas/src/internal/read-only-canvas.ts",
+    "packages/x6-canvas/src/internal/react-node.tsx",
+    "packages/x6-canvas/src/internal/react-node-registry.ts",
     "packages/x6-canvas/src/internal/visual-style.ts",
     "packages/x6-canvas/test/read-only-canvas.test.mjs",
+    "packages/x6-canvas/test/react-node.test.mjs",
     "packages/x6-canvas/test/visual-style.test.mjs",
     "packages/x6-canvas/tests/snapshots/public-api.md",
+    "packages/x6-canvas/tsconfig.json",
     "pnpm-lock.yaml",
     "docs/generated/project-graph.json",
     "docs/generated/repo-map.md",
@@ -59,14 +71,13 @@
     "libs/isekai/wasm-bridge/src/handle.rs",
     "libs/isekai/wasm-bridge/src/lib.rs"
   ],
-  "blockers": [
-    "Owner browser acceptance found that the SVG-only X6 label still escapes or clips its visual card. The owner chose to establish a reusable React UI package with bespoke components before a separately claimed React-node integration resumes this visual acceptance item."
-  ],
+  "blockers": [],
   "validations": [
     "pnpm.cmd --filter @grafting/architecture-studio check/test: passed (5 presentation and boundary tests)",
-    "pnpm.cmd --filter @grafting/x6-canvas check/test: passed (6 immutable-handle/activation tests and 4 private visual/selection/interaction tests)",
-    "pnpm.cmd exec nx run x6-canvas:api-check: updated baseline reviewed, then normal check passed with generic visual roles and no @antv/x6 public leak",
-    "pnpm.cmd --filter @grafting/architecture-studio build: passed after the flat text clipping and readable card sizing correction (981 modules; separate layout Worker; 196.01 kB Wasm asset; JS 644.63 kB raw / 176.06 kB gzip)",
+    "pnpm.cmd --filter @grafting/ui check/test/api-check: passed (4/4 SSR component contracts; no AntD public type leak)",
+    "pnpm.cmd --filter @grafting/x6-canvas check/test: passed (12/12 immutable-handle, activation, React-card, visual, selection, and interaction tests)",
+    "pnpm.cmd exec nx run x6-canvas:api-check: updated forbidden-vendor baseline reviewed, then normal check passed with no @antv/x6, @antv/x6-react-shape, or antd public leak",
+    "pnpm.cmd --filter @grafting/architecture-studio build: passed with the AntD React card mounted through X6 (2585 modules; separate layout Worker; 196.01 kB Wasm asset; JS 1185.42 kB raw / 352.40 kB gzip)",
     "cargo test -p grafting-graph-core --all-features: passed (5 unit tests plus Graph IR CLI and public contract suites)",
     "cargo clippy for graph-core and isekai-wasm with --no-deps and -D warnings: passed; the pre-existing wasm handle len_without_is_empty lint was explicitly allowed",
     "cargo test -p grafting-isekai-wasm: 6/6 native tests passed, including graph layout",
@@ -74,7 +85,7 @@
     "node --test tools/scripts/graph-ir-extract.test.mjs: 7/7 passed, including the Git porcelain regression and direct architecture-studio to x6-canvas cutover",
     "pnpm.cmd run graph:v1:check: JSON Schema and Rust structural validation passed",
     "pnpm.cmd run docs:check: repo map, artifact manifest, Graph IR, Rust API, and TypeScript API drift checks passed",
-    ".venv\\Scripts\\python.exe -m automation.coordination --root .: passed with 22 task records",
+    ".venv\\Scripts\\python.exe -m automation.coordination --root .: passed with 23 task records, including completed I-006B",
     "git diff --check on the full declared scope: passed",
     "Owner-reported SVG mismatch was traced to X6 highlighting the full node view; selection now targets the visible body, while title and caption use one calculated bounded text area with ellipsis",
     "After owner retest, ordinary left-drag panning was restored; nodes now carry a native selection outline, activation reaches the consumer even if private highlighting fails, and list rendering completes before external canvas selection",
@@ -82,7 +93,10 @@
     "Owner retest rejected the nested SVG text viewport because its independent coordinate system reduced and cropped labels; title and caption now remain in the card coordinate system, share a user-space clipPath, use 15/14 px title and 10 px caption fonts, and receive 222 px of text width from the single 288 px application node size",
     "Architecture Studio dev server returned HTTP 200 for the shell, app projection, and compiled x6-canvas visual-style module; served code contains vertical/horizontal smooth connectors, shadows, and target markers",
     "Architecture Studio dev server returned HTTP 200 after the correction and served the flat clipPath, readable font sizes, no textViewport, and the centralized 288 px node width",
-    "In-app Browser was requested for final visual QA; the host returned no available iab backend, so owner browser acceptance remains required"
+    "The running Architecture Studio dev server returned HTTP 200 and served the current compiled EntitySummary, AntD Card, grafting-react-card registration, and @antv/x6-react-shape adapter modules",
+    "The React-card SSR contract confirms ant-card markup, bounded overflow, fixed 288x84 dimensions, and data-driven selected border behavior",
+    "pnpm.cmd audit --prod: no known vulnerabilities found",
+    "In-app Browser was requested for final visual QA; the host returned no available iab backend, so this external limitation is recorded instead of substituted with an unrelated browser tool"
   ],
   "artifacts": [
     "apps/architecture-studio/src/main.ts",
@@ -92,8 +106,11 @@
     "apps/architecture-studio/src/style.css",
     "apps/architecture-studio/test/presentation.test.mjs",
     "packages/x6-canvas/src/internal/read-only-canvas.ts",
+    "packages/x6-canvas/src/internal/react-node.tsx",
+    "packages/x6-canvas/src/internal/react-node-registry.ts",
     "packages/x6-canvas/src/internal/visual-style.ts",
     "packages/x6-canvas/test/read-only-canvas.test.mjs",
+    "packages/x6-canvas/test/react-node.test.mjs",
     "packages/x6-canvas/test/visual-style.test.mjs",
     "packages/x6-canvas/tests/snapshots/public-api.md",
     "packages/graph-x6/ (removed)",
@@ -114,7 +131,8 @@
     "The cutover exposed a pre-existing first-line Git porcelain parsing defect in the Graph IR extractor; the same task now owns the minimal trimEnd fix and a regression test because regeneration cannot complete otherwise.",
     "Owner browser feedback confirmed the fixed four-column placement is readable but visually unstructured; the resumed scope adds one grouped-grid Rust heuristic, a batched Wasm Worker boundary, and a single application projection configuration instead of adding layout logic to TypeScript.",
     "The pinned formatter expands one pre-existing handle.rs expression even when checking the graph-core package; the mechanical formatting-only change is included so the required format validation can pass.",
-    "Owner clarified that Miro-like visual polish, not only coordinate calculation, is required for acceptance; the resumed task adds generic visual roles and private X6 styling without enabling mutation or leaking vendor types."
+    "Owner clarified that Miro-like visual polish, not only coordinate calculation, is required for acceptance; the resumed task adds generic visual roles and private X6 styling without enabling mutation or leaking vendor types.",
+    "Using AntD through its Node-compatible public entry point increases the initial Architecture Studio JavaScript bundle to 1185.42 kB raw / 352.40 kB gzip; component-level public subpaths and code splitting should be evaluated only in a separate performance task."
   ],
-  "next_responsible_party": "codex"
+  "next_responsible_party": "repository-owner"
 }

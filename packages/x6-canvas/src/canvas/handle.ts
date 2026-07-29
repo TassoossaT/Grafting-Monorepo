@@ -1,21 +1,14 @@
-interface CanvasEntityReference {
-  readonly kind: "node" | "edge";
-  readonly id: string;
-}
+import type { CanvasEntityReference, ReadOnlyCanvas } from "../index.js";
+import type { CanvasController } from "../contracts/canvas.js";
 
-interface CanvasController {
-  centerContent(): void;
-  setSelection(selection: CanvasEntityReference | null): void;
-  subscribeActivation(listener: (entity: CanvasEntityReference) => void): () => void;
-  dispose(): void;
-}
-
+/** Builds the immutable public handle around a private canvas controller. */
 export function createReadOnlyCanvasHandle(
   controller: CanvasController,
   nodeCount: number,
   edgeCount: number,
   onActivate?: (entity: CanvasEntityReference) => void,
-) {
+  selectOnActivate = false,
+): ReadOnlyCanvas {
   let disposed = false;
   const assertActive = () => {
     if (disposed) {
@@ -29,7 +22,7 @@ export function createReadOnlyCanvasHandle(
 
     const publicEntity = copyEntity(entity);
     try {
-      controller.setSelection(publicEntity);
+      if (selectOnActivate) controller.setSelection(publicEntity);
     } finally {
       onActivate?.(publicEntity);
     }

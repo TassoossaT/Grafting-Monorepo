@@ -4,7 +4,7 @@ Package: `@grafting/ui`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: `antd`
+Forbidden public modules: `antd`, `react-dom`
 
 ## Declaration entry point
 
@@ -58,6 +58,33 @@ export interface EntitySummaryProps {
     readonly ariaLabel?: string;
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
+    /** Optional accent used for the complete card boundary. */
+    readonly accentColor?: string;
+    /** Optional background color for the complete card surface. */
+    readonly backgroundColor?: string;
+    /** Whether the card occupies the complete width and height of its container. */
+    readonly fillContainer?: boolean;
+    /** Whether the card should communicate pointer interaction. */
+    readonly interactive?: boolean;
+    /** Whether the card displays its selected treatment. */
+    readonly selected?: boolean;
+    /** Optional boundary color used when the component is selected. */
+    readonly selectedColor?: string;
+    /** Optional boundary width in CSS pixels. */
+    readonly borderWidth?: number;
+    /** Optional rounded-corner radius in CSS pixels. */
+    readonly borderRadius?: number;
+    /** Optional body padding in CSS pixels. */
+    readonly bodyPadding?: number;
+    /** Optional gap between the component's content regions. */
+    readonly contentGap?: number;
+}
+/** Vendor-neutral lifecycle returned by a UI component mounted into an existing DOM host. */
+export interface UiMountHandle<Props> {
+    /** Re-renders the mounted component with complete next inputs. */
+    update(props: Props): void;
+    /** Unmounts the component and releases the owned UI root. */
+    dispose(): void;
 }
 /** Stable key used to identify a table row independently of its position. */
 export type DataTableRowKey = string | number;
@@ -128,6 +155,8 @@ export declare function Text(props: TextProps): ReactElement;
 export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
 /** Renders a reusable entity identity card suitable for tables, canvases, and inspectors. */
 export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
+/** Mounts an EntitySummary into an existing DOM host without exposing ReactDOM. */
+export declare function mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>;
 /** Renders a vendor-neutral data table whose cells may contain bespoke React components. */
 export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
 ```

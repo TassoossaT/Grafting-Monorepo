@@ -6,8 +6,8 @@
 - Status: implementation-ready proposal; it does not close I-006
 - Product stage: first production read-only slice
 - Depends on: I-002 Graph IR v1 and I-004 Nx to Graph IR extractor
-- Related decisions: DEC-049, DEC-050, DEC-051
-- Related records: ADR-0011, ADR-0012, ADR-0013
+- Related decisions: DEC-049, DEC-050, DEC-051, DEC-052
+- Related records: ADR-0011, ADR-0012, ADR-0013, ADR-0014
 
 ## 1. Outcome
 
@@ -192,12 +192,13 @@ The Canvas:
 - exposes selected and keyboard-focused state through Grafting-owned
   presentation contracts, not X6 objects.
 
-The implemented presentation maps Graph IR kinds to generic Grafting visual
-roles in the application's single projection configuration. The X6 boundary
-privately renders those roles as card-like SVG nodes, boundary ports, smooth
-hierarchy and dependency curves, arrow markers, and compact relation
-labels. This visual connector treatment does not own graph structure or node
-placement.
+The implemented presentation maps Graph IR kinds to opaque application view
+data and stable application view IDs. `src/canvas-composition.ts` supplies the
+current `@grafting/ui` Ant Design Card mount, ports, smooth curves, arrow
+markers, compact relation labels, effects, canvas surface, and interaction
+policy to the neutral canvas adapter. Neither vendor API crosses the
+application contract. New visual shapes are application-owned view definitions
+and do not change graph structure, node placement, or canvas lifecycle code.
 
 A simple deterministic application-owned placement by kind may be used when it
 is purely presentation policy. Any graph-aware ranking, layered/DAG layout,
@@ -366,6 +367,14 @@ docs/generated/grafting.graph.json
   -> immutable Grafting canvas model
   -> @grafting/x6-canvas
   -> @antv/x6 (private)
+```
+
+Concrete presentation composes alongside that data flow:
+
+```text
+Architecture Studio canvas composition
+  -> @grafting/ui DOM mount lifecycle (Ant Design private)
+  -> @grafting/x6-canvas neutral node/edge contracts (X6 private)
 ```
 
 I-006 must not create separate packages for loader, filters, hooks, inspector,

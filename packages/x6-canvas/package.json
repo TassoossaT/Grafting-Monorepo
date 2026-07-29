@@ -8,13 +8,18 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run build && node --test test/*.test.mjs",
+    "test": "pnpm run build && node --test tests/*.test.mjs",
     "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."
   },
   "dependencies": {
-    "@antv/x6": "3.1.7"
+    "@antv/x6": "3.1.7",
+    "@antv/x6-react-shape": "3.0.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "typescript": "5.9.3"
   }
 }

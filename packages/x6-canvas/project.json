@@ -12,7 +12,7 @@
     "publicApi": {
       "entryPoint": "src/index.ts",
       "baseline": "tests/snapshots/public-api.md",
-      "forbiddenModules": ["@antv/x6"]
+      "forbiddenModules": ["@antv/x6", "@antv/x6-react-shape", "antd", "react", "react-dom"]
     }
   },
   "targets": {
@@ -33,7 +33,7 @@
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/x6-canvas test" },
       "cache": true,
-      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json", "{projectRoot}/tsconfig.json", "{workspaceRoot}/pnpm-lock.yaml"],
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/tests/**/*.test.mjs", "{projectRoot}/package.json", "{projectRoot}/tsconfig.json", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/dist"]
     },
     "api-check": {

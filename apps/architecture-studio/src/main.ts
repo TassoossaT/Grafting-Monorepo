@@ -4,6 +4,7 @@ import {
   type ReadOnlyCanvas,
 } from "@grafting/x6-canvas";
 import graphData from "../../../docs/generated/grafting.graph.json";
+import { ARCHITECTURE_CANVAS_COMPOSITION } from "./canvas-composition.js";
 import { requestGraphLayout } from "./layout-client.js";
 import {
   assertGraphIrV1,
@@ -184,6 +185,7 @@ const start = async () => {
   graph.edges.forEach(addEntityButton);
 
   view = createReadOnlyCanvas(graphContainer, presentation.nodes, presentation.edges, {
+    ...ARCHITECTURE_CANVAS_COMPOSITION,
     onActivate: (reference) => activateEntity(reference, false),
   });
   center.addEventListener("click", () => view?.center());

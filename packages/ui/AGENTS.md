@@ -24,6 +24,16 @@ consumers; the root entry point is the only public surface. Add a component only
 for a demonstrated consumer need and compose existing parts before introducing
 another implementation of the same meaning.
 
+When a UI component is used as a canvas node, the component itself owns the
+complete visible boundary. Canvas adapters MUST NOT add a second decorative
+wrapper that changes the component's size, border, or selection geometry.
+Any default visual treatment exposed by this package must remain replaceable;
+an application, not the generic canvas adapter, chooses which concrete UI
+component and appearance to compose (DEC-052).
+
+DOM-mountable components expose only Grafting-owned update/dispose handles.
+ReactDOM roots and renderer types remain private to this package.
+
 `DataTable` currently owns Ant Design Table internally. TanStack Table is an
 approved MIT headless alternative, not a simultaneous second table engine. It
 may replace the internal engine when a concrete requirement needs more visual

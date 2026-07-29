@@ -19,9 +19,14 @@ The app may own labels, colors, icons, viewport state, and other presentation
 metadata, but calculation-affecting data crosses an explicit Rust contract
 (DEC-051).
 
-`src/presentation.ts` is the single authored projection configuration and
-Graph IR-to-presentation mapping. Do not scatter colors, dimensions, generic
-visual-role assignments, grouping relation choices, or layout options through UI files. `src/layout-client.ts`
+`src/presentation.ts` owns Graph IR-to-canvas projection and the single
+Rust-layout request configuration. `src/canvas-views.ts` owns application view
+IDs/data contracts. `src/canvas-composition.ts` is the single concrete canvas
+composition and owns UI mounts, colors, ports, edge presentation, effects,
+surface, and interaction policy (DEC-052). Do not move those product choices
+back into `@grafting/x6-canvas` or duplicate them across UI files.
+
+`src/layout-client.ts`
 and `src/layout.worker.ts` are a thin app-owned batch boundary to the generated
 `@grafting/isekai-wasm` package; do not reproduce the Rust layout heuristic in
 TypeScript.

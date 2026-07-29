@@ -74,6 +74,8 @@ the ADR or Graph IR contract.
 | [ADR-0012](ADR-0012-knowledge-automation-plane.md) | I-001 | Knowledge/Automation Plane authority, lifecycle, and graph ports | **Accepted (DEC-050)** |
 | [ADR-0013](ADR-0013-rust-graph-core-and-api-contracts.md) | — (structural amendment) | Rust graph authority and generated public API contracts per consumed package | **Accepted (DEC-051)** |
 
+| [ADR-0014](ADR-0014-composable-capability-packages.md) | - (structural amendment) | Neutral composable capability packages and product-owned presentation | **Accepted (DEC-052)** |
+
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for
 each gate.

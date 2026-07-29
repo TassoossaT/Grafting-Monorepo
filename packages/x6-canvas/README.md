@@ -1,33 +1,52 @@
 # `@grafting/x6-canvas`
 
-Generic AntV X6 wrapper shared by graph-oriented products (DEC-046). Its first
-real production consumer is Architecture Studio. The public API does not expose
-the mutable X6 `Graph`; it returns only immutable counts, centering, selection,
-activation, and disposal operations.
+Generic AntV X6 adapter shared by canvas-oriented products (DEC-046, DEC-052).
+It owns X6 and React-shape integration privately while exposing only immutable
+Grafting contracts. The mutable X6 `Graph`, vendor types, and product semantics
+never cross its public API.
 
-The package contains no Graph IR or VTT domain logic.
+The package is a blank canvas capability, not a catalog of finished nodes. A
+consumer supplies, per canvas instance:
 
-Consumers may supply vendor-neutral visual roles (`group`/`item`/`note` and
-`hierarchy`/`dependency`/`reference`). The private adapter maps those roles to
-reusable SVG cards, connection ports, label capsules, vertical hierarchy curves,
-horizontal dependency curves, markers, and a responsive dotted canvas. Connector
-names and all other X6 configuration remain internal. Coordinates and any
-future graph-aware edge waypoints remain Rust-owned.
+- node view definitions with dimensions, optional ports, and a DOM mount lifecycle;
+- edge presenters that choose terminals, curves, markers, labels, CSS effects, and selection treatment;
+- optional background, grid, pan, zoom, activation-selection, and fit policy.
+
+Defaults are neutral and replaceable: transparent surface, no grid, no pan or
+zoom, no automatic activation selection, and no product view. A view may mount
+React, Web Components, SVG-backed DOM, plain HTML, or another DOM runtime; the
+contract exposes none of those library types.
+
+The package contains no Card, Graph IR role, VTT semantic, product color,
+fixed edge theme, graph structure, query, or layout calculation. Coordinates
+and significant graph computation remain Rust-owned under DEC-051.
+
+## Internal organization
+
+```text
+src/
+|- index.ts                 public neutral contracts and facade
+|- contracts/               private controller boundary
+|- canvas/                  catalogs, creation, interaction mapping, and handle
+|- edges/                   neutral-presentation to X6 mapping and selection
+`- nodes/                   generic DOM host, ports, metadata, and selection
+```
+
+`nodes/registry.ts` registers one technical React-shape host with no visible
+presentation. Concrete node components do not belong in this package. A
+consumer adds a format by adding another `CanvasNodeViewDefinition` to its own
+composition; canvas lifecycle code does not change.
 
 Targets:
 
-- `x6-canvas:check` — strict TypeScript checking;
-- `x6-canvas:build` — JavaScript and declaration output;
-- `x6-canvas:test` — behavioral contract for the immutable public handle;
-- `x6-canvas:api-check` — in-memory declaration emit, TSDoc enforcement,
-  forbidden-vendor-type scan, and comparison with the tracked baseline.
+- `x6-canvas:check` - strict TypeScript checking;
+- `x6-canvas:build` - JavaScript and declaration output;
+- `x6-canvas:test` - composition, mapping, interaction, selection, and disposal contracts;
+- `x6-canvas:api-check` - declaration/TSDoc validation, forbidden-vendor scan, and baseline comparison.
 
-The public API baseline is generated from the package's pinned TypeScript
-compiler and tracked at `tests/snapshots/public-api.md`. It contains the
-consumer-facing declaration entry point and its TSDoc. Internal modules and
-the private `@antv/x6` implementation are deliberately excluded.
-
-To intentionally update the baseline after changing the API or documentation:
+The generated public API baseline is tracked at
+`tests/snapshots/public-api.md`. To update it after an intentional reviewed
+contract change:
 
 ```powershell
 $env:UPDATE_SNAPSHOTS = "yes"
@@ -35,5 +54,4 @@ pnpm --filter @grafting/x6-canvas api-check
 Remove-Item Env:UPDATE_SNAPSHOTS
 ```
 
-Review the generated diff together with affected consumers and behavioral
-tests. A normal `api-check` never changes the baseline.
+Behavioral tests and API snapshots use the single `tests/` root.

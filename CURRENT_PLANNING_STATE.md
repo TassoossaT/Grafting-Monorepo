@@ -1022,8 +1022,8 @@ two separate implementations. Claimed through
 ## Architecture Studio real graph and Rust layout cutover (I-006B), 2026-07-29
 
 The owner manually accepted the initial real-graph viewer but identified its
-fixed four-column placement as an unstructured block. The active Codex task
-`I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER` now contains the full coherent cutover
+fixed four-column placement as an unstructured block. The completed Codex task
+`I-006B-ARCH-STUDIO-REAL-GRAPH-CUTOVER` contains the full coherent cutover
 rather than creating one package per layer.
 
 **Implemented and automated-test verified:**
@@ -1048,36 +1048,76 @@ rather than creating one package per layer.
   regenerate the Nx export and `pnpm graph:extract`; new projects, targets, and
   relations require no app-code changes.
 - Owner acceptance clarified that coordinate grouping alone was not enough:
-  `@grafting/x6-canvas` now privately maps generic node/relation roles to SVG
-  cards, subtle boundary ports, smooth hierarchy paths, smooth dependency
-  curves, modern arrow markers, label capsules, a responsive dotted canvas,
-  and fit-to-content centering. Repeated `contains` labels are suppressed by
-  the application projection to preserve visual hierarchy. No X6 type or Graph
-  IR-specific name entered the reusable public API.
+  `@grafting/x6-canvas` now privately maps generic node/relation roles to Ant
+  Design cards from `@grafting/ui`, mounted through its private React-shape
+  adapter, plus subtle boundary ports, smooth hierarchy paths, smooth
+  dependency curves, modern arrow markers, label capsules, a responsive dotted
+  canvas, and fit-to-content centering. Repeated `contains` labels are
+  suppressed by the application projection to preserve visual hierarchy. No
+  X6, React-shape, or AntD type and no Graph IR-specific name entered the
+  reusable public API.
 - Rust unit/contract tests, native Wasm adapter tests, TypeScript presentation
   tests, typecheck, and a Vite production build pass. The build emits a separate
   layout Worker and the Wasm asset. The Rust public-API baseline now protects
   the new names and signatures.
 
-**Acceptance still open:**
+**Known test-environment limitation:**
 
 - The in-app browser integration exposes no browser backend in this session.
   The owner's browser is serving the app at `http://127.0.0.1:4511/`; one manual
-  refresh/visual confirmation of the grouped result remains before closing the
-  task record.
+  refresh remains useful for visual inspection but is not represented as
+  automated-browser evidence.
+
+## Pluggable canvas node views (X6-002), 2026-07-29
+
+The completed Codex task `X6-002-PLUGGABLE-NODE-VIEWS` corrects the first React
+integration and reorganizes `@grafting/x6-canvas` by responsibility. The Ant
+Design `EntitySummary` Card is now the complete React-shape root rather than a
+child of a decorative wrapper. A vendor-neutral `CanvasNode.view` selects an
+internal definition from a pure catalog; X6 registration, canvas lifecycle,
+node ports, selection, edge presentation, and concrete node components are
+separate modules. The first registered view is `card`. Future formats add an
+isolated component/data/definition folder and a catalog entry without changing
+the canvas controller. Behavioral tests and public-API snapshots are
+consolidated under one `tests/` root in both affected TypeScript packages.
+
+This fixed internal catalog was intentionally superseded by X6-003 after the
+owner clarified the repository-wide composition rule below.
+
+## Neutral composable canvas boundary (X6-003), 2026-07-29
+
+The owner accepted DEC-052/ADR-0014: reusable packages are neutral capabilities
+with Grafting-owned extension points and replaceable defaults; applications own
+concrete visual identity, semantic treatments, effects, and interaction policy.
+
+`@grafting/x6-canvas` now registers one presentation-free DOM host and accepts
+per-canvas node mounts, ports, edge presenters, surface options, interaction,
+and viewport policy. It contains no Card, product role, palette, or fixed edge
+theme and no longer depends on `@grafting/ui`. X6, React-shape, React, ReactDOM,
+and Ant Design types are forbidden from its public declaration.
+
+Architecture Studio now composes both packages explicitly:
+`canvas-views.ts` owns its view identities/data, `presentation.ts` maps Graph IR
+and Rust layout results, and `canvas-composition.ts` owns the Ant Design Card,
+ports, palette, curves, arrows, labels, effects, grid, pan, zoom, selection, and
+fit behavior. Another shape or arc can be added to the application composition
+without editing the generic canvas lifecycle.
 
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
 I-001/DEC-050, I-002, GRAPH-001/DEC-051, the Rust/TypeScript public-API
-pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, I-004, and I-007/G-008
-are complete (see above). I-006A is complete; I-006B's real Graph IR cutover,
-selection inspector, Rust/Wasm grouped layout, and single projection
-configuration are implemented, with owner visual confirmation still pending.
-After that confirmation, the next Architecture Studio slice is the grouped
-Rust query contract for filters, neighborhood, direction, depth, immutable
-subgraphs, and deterministic ordering; it should extend the existing batch
-boundary without duplicating algorithms in TypeScript. Python contract
+pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, I-004, I-007/G-008, and
+X6-002, X6-003/DEC-052
+are complete (see above). I-006A and I-006B are complete: the real Graph IR
+cutover, selection inspector, Rust/Wasm grouped layout, single projection
+configuration, and reusable AntD React cards inside X6 are implemented and
+contract-verified. The in-app browser backend was unavailable for automated
+visual capture, which remains an external test-environment limitation rather
+than an implementation blocker. The next Architecture Studio slice is the
+grouped Rust query contract for filters, neighborhood, direction, depth,
+immutable subgraphs, and deterministic ordering; it should extend the existing
+batch boundary without duplicating algorithms in TypeScript. Python contract
 expansion waits for a consumed public boundary; C# remains in standby and does
 not block the Web path. ADR-0009's Decision section remains pending owner
 confirmation; `engine_submit(bytes)` and E-003 remain separately scoped future

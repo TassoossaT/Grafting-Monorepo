@@ -211,6 +211,7 @@
               "executor": "nx:run-commands",
               "dependsOn": [
                 "isekai-wasm-bridge:build",
+                "ui:build",
                 "x6-canvas:build"
               ],
               "inputs": [
@@ -230,6 +231,10 @@
             "test": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "ui:build",
+                "x6-canvas:build"
+              ],
               "inputs": [
                 "{projectRoot}/src/**/*",
                 "{projectRoot}/test/**/*",
@@ -245,7 +250,9 @@
             "dev": {
               "executor": "nx:run-commands",
               "dependsOn": [
-                "isekai-wasm-bridge:build"
+                "isekai-wasm-bridge:build",
+                "ui:build",
+                "x6-canvas:build"
               ],
               "cache": false,
               "options": {
@@ -266,6 +273,7 @@
           ],
           "implicitDependencies": [
             "isekai-wasm-bridge",
+            "ui",
             "x6-canvas"
           ],
           "metadata": {
@@ -719,7 +727,7 @@
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
-                "{projectRoot}/test/**/*",
+                "{projectRoot}/tests/**/*.test.mjs",
                 "{projectRoot}/package.json",
                 "{projectRoot}/tsconfig.json",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -783,7 +791,11 @@
               "entryPoint": "src/index.ts",
               "baseline": "tests/snapshots/public-api.md",
               "forbiddenModules": [
-                "@antv/x6"
+                "@antv/x6",
+                "@antv/x6-react-shape",
+                "antd",
+                "react",
+                "react-dom"
               ]
             }
           },
@@ -954,7 +966,7 @@
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
-                "{projectRoot}/test/**/*",
+                "{projectRoot}/tests/**/*.test.mjs",
                 "{projectRoot}/package.json",
                 "{projectRoot}/tsconfig.json",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -1024,7 +1036,8 @@
               "entryPoint": "src/index.ts",
               "baseline": "tests/snapshots/public-api.md",
               "forbiddenModules": [
-                "antd"
+                "antd",
+                "react-dom"
               ]
             }
           },
@@ -1067,12 +1080,22 @@
         },
         {
           "source": "architecture-studio",
+          "target": "ui",
+          "type": "implicit"
+        },
+        {
+          "source": "architecture-studio",
           "target": "x6-canvas",
           "type": "implicit"
         },
         {
           "source": "architecture-studio",
           "target": "@grafting/isekai-wasm",
+          "type": "static"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "ui",
           "type": "static"
         },
         {

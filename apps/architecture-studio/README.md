@@ -1,37 +1,33 @@
 # Architecture Studio
 
-Read-only repository explorer backed by the real Graph IR v1 artifact. The
-application owns its Graph IR presentation mapping, composes directly with
-`@grafting/x6-canvas`, and never imports X6 or edits generated facts. A Web
-Worker calls the Rust/Wasm graph core to calculate deterministic grouped
-positions without blocking the UI thread.
+Read-only repository explorer backed by the real Graph IR v1 artifact. A Web
+Worker calls the Rust/Wasm graph core for deterministic grouped positions; the
+TypeScript app enriches that immutable result for presentation only.
 
 The current slice provides a keyboard-accessible entity list, synchronized
-canvas selection, and complete provenance/evidence inspection. Freshness is
-reported as unknown until a runtime-consumable deterministic proof exists.
-Graph-aware filters, neighborhoods, ordering, and relation summaries remain a
-later Rust/Wasm query-boundary checkpoint; they are intentionally not
-reimplemented in TypeScript.
+canvas selection, and provenance/evidence inspection. It never imports X6 or
+Ant Design directly and never edits generated facts.
 
-## Dynamic projection
+## Dynamic projection and canvas composition
 
-The repository structure is dynamic: `pnpm graph:extract` regenerates
-`docs/generated/grafting.graph.json`, and the app consumes every project,
-target, and relation in that artifact. Adding a project or target does not
-require editing the app.
+Repository structure is dynamic. `pnpm graph:extract` regenerates
+`docs/generated/grafting.graph.json`; new projects, targets, and relations do
+not require a matching hardcoded list in the app.
 
-The one authored projection configuration is `src/presentation.ts`:
-`PROJECTION` controls node dimensions, colors, spacing, column counts, and
-which Graph IR kinds map to generic visual roles or grouping relations. The current
-heuristic treats `contains` as project membership, places each project as a
-group root, and places its targets below it. The calculation itself remains in
-`grafting-graph-core`; TypeScript only translates Graph IR and presentation
-metadata across the explicit batch contract.
+The responsibilities are deliberately separate:
 
-`@grafting/x6-canvas` renders those generic roles as reusable cards and paths:
-hierarchy relations are intentionally quiet vertical curves, while dependencies
-use smooth curves, arrow markers, and compact label capsules. X6 styling stays
-private to that adapter and no Graph IR kind is interpreted there.
+- `src/presentation.ts` maps Graph IR and Rust layout snapshots into immutable
+  canvas nodes/edges; it is the single authored Rust layout-request configuration;
+- `src/canvas-views.ts` owns stable application view IDs and opaque view-data contracts;
+- `src/canvas-composition.ts` combines `@grafting/x6-canvas` with
+  `@grafting/ui` and owns the current Card, ports, palette, curves, arrows,
+  labels, effects, grid, pan, zoom, selection, and fit policy.
+
+`@grafting/x6-canvas` remains a neutral mechanism. To add a circle, image,
+custom HTML node, another React component, or another arc treatment, add an
+application view/presenter to the composition. Do not edit the generic canvas
+package unless a genuinely reusable mechanism is missing. Graph-aware
+calculation still belongs in `grafting-graph-core`.
 
 Run locally:
 

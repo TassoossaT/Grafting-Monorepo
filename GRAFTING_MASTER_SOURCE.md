@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.11.2`
+> Version: `1.12.0`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 — completed the TypeScript public-API contract pilot for `@grafting/x6-canvas`.
+> Last updated: 2026-07-29 - accepted composable capability packages and product-owned presentation (DEC-052).
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -314,6 +314,15 @@ are allowed; they must not become alternate implementations of the same rule.
 Generic packages are created with a real capability and consumer, never as an
 empty speculative tree. See DEC-049 and ADR-0011.
 
+A reusable capability package is deliberately composable: it supplies neutral
+mechanisms, stable Grafting-owned contracts, extension points, and at most
+replaceable defaults. It must not decide a consuming product's visual identity,
+semantic roles, effects, or interaction policy. A package may privately own a
+third-party adapter while the application supplies concrete components and
+presentation through those neutral contracts. This keeps capabilities useful
+as blank building blocks that products can combine without forking or bypassing
+the package. See DEC-052 and ADR-0014.
+
 ### 2.7 Public API contracts
 
 Every package consumed by another project treats its source-language public
@@ -389,6 +398,7 @@ and ADR-0013.
 | DEC-049 | Reusable capabilities use the smallest useful consumer-agnostic boundary (internal tree, package, or host app); third-party runtime/library APIs remain inside that boundary and are exposed through Grafting-owned surfaces without vendor-type leakage; separate packages require real reuse/build/ownership/fork evidence; authoritative behavior has one implementation or canonical source, with explicit allowances for independent tests, generated bindings, frozen fixtures, thin boundary translations, and derived evidence (`docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`). |
 | DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. Graph computation, visual adaptation, and application presentation remain separate; the original TypeScript graph-package allocation is amended by DEC-051 (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
 | DEC-051 | Reusable graph structures, semantic validation, algorithms, ordering, queries, diffs, layout mathematics, and other significant calculations are authoritative in the Rust `grafting-graph-core` crate; callers own presentation enrichment, while `@grafting/x6-canvas` privately owns X6. Every consumed package has a generated public-API baseline, an `api-check` target, and behavioral contract tests, with native source declarations remaining authoritative (`docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`). |
+| DEC-052 | Reusable capability packages expose neutral mechanisms, Grafting-owned composition contracts, extension points, and only replaceable defaults; consuming applications own concrete visual identity, semantic roles, effects, and interaction policy. A package may privately adapt third-party code, but it must not hardcode one product's presentation or force consumers to bypass its boundary (`docs/adr/ADR-0014-composable-capability-packages.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 

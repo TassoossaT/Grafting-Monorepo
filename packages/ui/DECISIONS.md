@@ -56,12 +56,21 @@ than copied or represented by a complete X6 runtime node inside a table cell:
 caller-owned entity view data
 ├── EntitySummary inside DataTable
 ├── EntitySummary inside an inspector
-└── EntitySummary inside a future X6 React shape
+└── EntitySummary inside an X6 React shape
 ```
 
-The future X6 integration remains a separate task. `@grafting/x6-canvas` stays
-the only X6-owning boundary, while `@grafting/ui` owns React presentation. Stable
-caller-owned IDs synchronize selection between canvas, table, and inspector.
+The X6 integration is implemented by `@grafting/x6-canvas`, which stays the
+only X6-owning boundary and privately owns `@antv/x6-react-shape`.
+`@grafting/ui` owns reusable React presentation and privately owns Ant Design.
+Neither reusable package chooses the other: an application composes a UI DOM
+mount into a consumer-supplied canvas node view. Stable caller-owned IDs
+synchronize canvas, table, and inspector without leaking either vendor API.
+
+When a product chooses a Card node, `EntitySummary` owns the full visible node
+boundary, background, dimensions, accent, and selected treatment. The generic
+canvas supplies only a technical mount point and lifecycle. Ports and all
+concrete presentation are product composition. A decorative wrapper around
+the Card would create two competing node geometries and is prohibited.
 
 Full data tables should not be embedded in compact graph nodes. A node receives
 a bounded summary; detailed tables belong in an inspector or adjacent panel.
@@ -79,6 +88,8 @@ only presents those results.
 The initial dependency evaluation used registry metadata on 2026-07-29:
 
 - `antd` `6.5.2`: MIT; React and React DOM `>=18.0.0` peers;
+- `@antv/x6-react-shape` `3.0.1`: MIT; owned by `@grafting/x6-canvas`,
+  compatible with X6 3.x and React/React DOM `>=18.0.0`;
 - `@tanstack/react-table` `8.21.3`: MIT, evaluated but not installed;
 - React/React DOM: explicit peer runtime for this React-specific package.
 

@@ -1,24 +1,29 @@
-# AGENTS.md — `@grafting/x6-canvas`
+# AGENTS.md - `@grafting/x6-canvas`
 
 Scope-local addendum to the root `AGENTS.md`.
 
-This package is a generic X6 adapter. It MUST NOT contain Graph IR, VTT map,
-workflow, or product-specific semantics. It also MUST NOT own reusable graph
+This package is a generic, presentation-neutral X6 adapter. It MUST NOT contain
+Graph IR, VTT, workflow, or product semantics. It MUST NOT own graph
 structures, algorithms, ordering, queries, diffs, or layout mathematics; those
-belong to `grafting-graph-core`. It consumes immutable Grafting-owned
-presentation data. Read-only consumers MUST NOT receive the underlying mutable
-X6 `Graph` instance.
+belong to `grafting-graph-core` (DEC-051).
 
-This is the designated TypeScript owner of `@antv/x6` for Grafting canvas
-consumers. No X6-owned public type may cross its API; downstream projects use
-only Grafting-owned canvas contracts. This current package boundary is based on
-real reuse and is not a precedent for creating one package per dependency. A
-future modified X6 fork requires separate provenance/license maintenance
-(DEC-049).
+This is the designated owner of `@antv/x6` and `@antv/x6-react-shape` for
+Grafting canvas consumers. X6 and React-shape types remain private. The package
+MUST NOT depend on `@grafting/ui`, Ant Design, or a product component. An
+application composes this adapter with its chosen UI capability through the
+Grafting-owned DOM mount lifecycle (DEC-052).
+
+Node views, ports, edge curves, markers, labels, effects, surface styling, and
+interaction choices are supplied per canvas instance. Package defaults are
+neutral and replaceable. Canvas lifecycle code MUST NOT branch on concrete
+views or product roles. `nodes/registry.ts` registers only the technical host;
+that host may size its mount point but MUST NOT add a visible boundary, color,
+shape, text, selection style, or behavior policy.
 
 Every exported declaration and public member requires TSDoc. Public API
 changes require `x6-canvas:api-check`, a reviewed update to
-`tests/snapshots/public-api.md`, and applicable behavioral contract tests. A
-normal API check MUST generate declarations in memory, MUST NOT update the
-baseline, and MUST fail if `@antv/x6` or one of its subpaths appears in the
-public declaration entry point.
+`tests/snapshots/public-api.md`, and behavioral contract tests. The check MUST
+fail if `@antv/x6`, `@antv/x6-react-shape`, `react`, `react-dom`, `antd`, or a
+subpath leaks through the public declaration entry point.
+
+Use one `tests/` root. Do not recreate a parallel `test/` directory.

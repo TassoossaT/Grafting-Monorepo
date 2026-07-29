@@ -24,6 +24,9 @@ importers:
       '@grafting/isekai-wasm':
         specifier: workspace:*
         version: link:../../packages/isekai-wasm
+      '@grafting/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@grafting/x6-canvas':
         specifier: workspace:*
         version: link:../../packages/x6-canvas
@@ -86,7 +89,22 @@ importers:
       '@antv/x6':
         specifier: 3.1.7
         version: 3.1.7
+      '@antv/x6-react-shape':
+        specifier: 3.0.1
+        version: 3.0.1(@antv/x6@3.1.7)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.17)
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -127,6 +145,13 @@ packages:
     peerDependencies:
       react: ^0.14.0 || ^15.0.1 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^0.14.0 || ^15.0.1 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  '@antv/x6-react-shape@3.0.1':
+    resolution: {integrity: sha512-zLIJ0NMO6R3sXZGKQJKMUEZmaVwNDBxx3jYUMSXE9cZhKsvWV+P8WuiUCtJYNSVTezBLbxYLzrukA/QdQa/sKg==}
+    peerDependencies:
+      '@antv/x6': ^3.x
+      react: '>=18.0.0'
+      react-dom: '>= 18.0.0'
 
   '@antv/x6@3.1.7':
     resolution: {integrity: sha512-NLKXtbCK51oLbazfFD0XsD93rMmih08UBW4gAuEyLBpwAqHmHe+vP8VhOZDkl5O9jV1LSv85IJghr9CT5tZjWw==}
@@ -1847,6 +1872,12 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
       throttle-debounce: 5.0.2
+
+  '@antv/x6-react-shape@3.0.1(@antv/x6@3.1.7)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@antv/x6': 3.1.7
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
 
   '@antv/x6@3.1.7':
     dependencies:

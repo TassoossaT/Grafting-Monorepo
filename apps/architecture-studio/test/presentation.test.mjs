@@ -75,19 +75,23 @@ test("maps every stable ID through an immutable generic canvas presentation", ()
   assert.deepEqual(presentation.edges, [
     {
       id: "edge:a-future",
-      source: "project:a",
-      target: "module:future",
-      role: "hierarchy",
+      view: "architecture.relation",
+      source: { nodeId: "project:a", portId: "bottom" },
+      target: { nodeId: "module:future", portId: "top" },
+      data: { treatment: "hierarchy" },
     },
   ]);
   assert.equal(Object.isFrozen(presentation), true);
   assert.equal(Object.isFrozen(presentation.nodes[0]), true);
-  assert.equal(presentation.nodes[1].color, "#f2edff");
+  assert.deepEqual(presentation.nodes.map(({ view }) => view), [
+    "architecture.entity-summary",
+    "architecture.entity-summary",
+  ]);
   assert.deepEqual(
-    presentation.nodes.map(({ caption, role }) => ({ caption, role })),
+    presentation.nodes.map(({ data }) => data),
     [
-      { caption: "project", role: "group" },
-      { caption: "module", role: "note" },
+      { title: "a", description: "project", treatment: "project" },
+      { title: "future", description: "module", treatment: "other" },
     ],
   );
   assert.deepEqual(
@@ -109,7 +113,7 @@ test("creates one centralized Rust layout request from the Graph IR", () => {
   ]);
   assert.equal(request.options.groupColumns, 3);
   assert.equal(request.options.nodeWidth, 288);
-  assert.equal(request.options.nodeHeight, 72);
+  assert.equal(request.options.nodeHeight, 84);
   assert.equal(Object.isFrozen(request), true);
 });
 

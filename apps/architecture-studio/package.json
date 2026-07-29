@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@grafting/isekai-wasm": "workspace:*",
+    "@grafting/ui": "workspace:*",
     "@grafting/x6-canvas": "workspace:*"
   },
   "devDependencies": {

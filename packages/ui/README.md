@@ -9,8 +9,10 @@ Current components:
 
 - atom `Text`: bounded text with semantic tones and optional truncation;
 - atom `StatusBadge`: semantic status independent of Ant Design status names;
-- molecule `EntitySummary`: one reusable entity identity for tables, future
-  React canvas nodes, and inspectors;
+- molecule `EntitySummary`: one reusable Ant Design card for tables, X6 React
+  canvas nodes, and inspectors; optional fill, accent, interaction, and
+  selection props let the Card itself become a complete canvas node; its
+  border, selected color, radius, padding, and content gap are replaceable;
 - organism `DataTable`: immutable rows, stable keys, controlled selection,
   pagination, and bespoke React cell renderers through Grafting column types.
 
@@ -39,6 +41,14 @@ import { DataTable, EntitySummary } from "@grafting/ui";
 Do not import `src/atoms`, `src/molecules`, or `src/organisms` directly. Those
 paths describe maintainership, not separate public APIs.
 
+`mountEntitySummary(host, props)` offers a Grafting-owned update/dispose
+lifecycle for adapters that own an existing DOM host. ReactDOM remains private
+to this package. The generic canvas never assumes that this is the component a
+product will mount.
+
+Behavioral tests and generated API snapshots share the single `tests/` root.
+Snapshots remain under `tests/snapshots/`; they are not a second test suite.
+
 Targets:
 
 - `ui:check` — strict TypeScript checking;
@@ -59,4 +69,4 @@ Review the baseline together with affected consumers and behavioral tests. A
 normal `api-check` never changes it.
 
 See [DECISIONS.md](DECISIONS.md) for the evaluated AntD, TanStack, shadcn/ui,
-licensing, Atomic Design, and future X6/React-node conclusions.
+licensing, Atomic Design, and X6/React-node conclusions.

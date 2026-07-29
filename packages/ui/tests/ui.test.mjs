@@ -5,10 +5,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { DataTable, EntitySummary, StatusBadge, Text } from "../dist/index.js";
+import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
   const ui = await import("../dist/index.js");
-  assert.deepEqual(Object.keys(ui).sort(), ["DataTable", "EntitySummary", "StatusBadge", "Text"]);
+  assert.deepEqual(Object.keys(ui).sort(), [
+    "DataTable",
+    "EntitySummary",
+    "StatusBadge",
+    "Text",
+    "mountEntitySummary",
+  ]);
 });
 
 test("renders semantic atoms without exposing vendor configuration", () => {
@@ -42,6 +49,53 @@ test("keeps a long entity identity in a bounded reusable card", () => {
   assert.match(markup, /aria-label="Selected repository node"/);
   assert.match(markup, /overflow:hidden/);
   assert.match(markup, /A deliberately long repository node title/);
+});
+
+test("lets the AntD Card own a complete selected canvas-node boundary", () => {
+  const markup = renderToStaticMarkup(
+    createElement(EntitySummary, {
+      accentColor: "#4f46e5",
+      backgroundColor: "#eef4ff",
+      description: "project",
+      fillContainer: true,
+      interactive: true,
+      selected: true,
+      selectedColor: "#2563eb",
+      borderWidth: 3,
+      title: "Architecture Studio",
+    }),
+  );
+  const rootTag = markup.match(/^<[^>]+>/)?.[0] ?? "";
+
+  assert.match(rootTag, /class="ant-card/);
+  assert.match(rootTag, /data-selected="true"/);
+  assert.match(rootTag, /border:3px solid #2563eb/);
+  assert.match(rootTag, /height:100%/);
+  assert.match(rootTag, /cursor:pointer/);
+});
+
+test("updates and disposes a DOM mount through a ReactDOM-free public lifecycle", () => {
+  const calls = [];
+  const root = {
+    render: (element) => calls.push(["render", element.props.content]),
+    unmount: () => calls.push(["unmount"]),
+  };
+  const mounted = createReactViewHandle(
+    root,
+    { content: "first" },
+    (props) => createElement("span", props),
+  );
+
+  mounted.update({ content: "second" });
+  mounted.dispose();
+  mounted.dispose();
+
+  assert.deepEqual(calls, [
+    ["render", "first"],
+    ["render", "second"],
+    ["unmount"],
+  ]);
+  assert.throws(() => mounted.update({ content: "late" }), /disposed/);
 });
 
 test("renders bespoke React components inside vendor-neutral table cells", () => {
