@@ -29,6 +29,16 @@ The agent MUST NOT:
 - silently close an `OPEN` decision;
 - replace a `LOCKED` technology choice;
 - duplicate Rust logic in TypeScript, C#, or Python;
+- duplicate authoritative behavior across packages, applications, languages,
+  or adapters; independent tests, generated bindings, frozen fixtures, thin
+  boundary translations, and derived evidence must remain traceable to one
+  canonical source (DEC-049);
+- import a third-party runtime/library API outside its designated smallest
+  owning boundary (internal module tree, package, or host app), or expose
+  vendor-owned types through a Grafting public API; consumers use Grafting
+  contracts/facades instead, without requiring one package per dependency
+  (DEC-049,
+  `docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`);
 - expose Rust types directly through the ABI;
 - promise zero-copy between distinct domains;
 - call authoritative replication "Event Sourcing";

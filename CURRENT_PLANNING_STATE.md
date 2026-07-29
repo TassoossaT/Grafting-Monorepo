@@ -59,6 +59,7 @@ GATE-009 without an explicit decision from the owner.
 | `libs/` boundary + domain map | A capability used by more than one product is born in `libs/domains`/`packages/`, never duplicated inside an app. Initial map: `narrative` and `session` are generic; the VTT's X6 map is product-specific (only `packages/x6-canvas` is shared with the Architecture Studio); Discord and transcription are external integrations, not domains | DEC-046 · ADR-0008 · master source §4.4 |
 | Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
 | Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
+| Capability autonomy and external isolation | Reusable capabilities use the smallest useful boundary (module tree, package, or host app); third-party APIs stay internal, package count remains evidence-driven, and authoritative behavior is implemented once | DEC-049 · ADR-0011 · master source §2.6 |
 
 Pending, but not blocking Phase 0: standard directory for external
 integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
@@ -636,9 +637,9 @@ that version range.
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-The next structural task is to record the owner's package-genericity,
-third-party isolation, and single-authoritative-implementation rules, then
-start I-001 for the Architecture Studio/Knowledge Plane. ADR-0009's Decision
+DEC-049/ADR-0011 records the owner's package-genericity, third-party isolation,
+and single-authoritative-implementation rules. The next implementation-planning
+task is I-001 for the Architecture Studio/Knowledge Plane. ADR-0009's Decision
 section also remains pending owner confirmation; `engine_submit(bytes)` and
 E-003 remain separately scoped future work.
 

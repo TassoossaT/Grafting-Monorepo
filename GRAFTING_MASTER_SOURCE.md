@@ -5,7 +5,7 @@
 > Version: `1.8.0`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-26 — full English translation of all repository documentation; added DEC-047 (English as default documentation language).
+> Last updated: 2026-07-29 — added DEC-049 for package autonomy, external dependency isolation, and authoritative reuse.
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -285,6 +285,35 @@ In the first version:
 - results will cross an explicit CPU boundary;
 - external resource interop via D3D12/Vulkan/Metal can only be introduced after benchmarking and an ADR.
 
+### 2.6 Package autonomy and dependency isolation
+
+Every reusable boundary owns one coherent capability and exposes
+Grafting-owned contracts. The boundary may be an internal module tree, a
+package, or a host application. Separate packages are created only for a real
+cross-project reuse, public-API/dependency boundary, independent build/test
+ownership, or maintained fork; applications compose capabilities, present UI,
+and own host-specific integration.
+
+A third-party runtime/library API may be imported only inside its smallest
+useful owning boundary. Outside consumers use a Grafting facade, contract,
+function, or component, and external types must not cross that boundary. Host
+frameworks may remain inside their owning app, and native build/test toolchains
+remain directly operated under DEC-002; the rule isolates runtime APIs rather
+than wrapping commands mechanically or creating one package per dependency.
+
+Cloned or modified third-party source may justify its own package/tree only
+after a separate license, provenance, update, security, naming, and rollback
+review. It remains in the existing workspace/lockfile unless an ADR explicitly
+authorizes otherwise.
+
+Repository meaning has one authoritative implementation or canonical source.
+Independent tests, deterministic generated bindings, frozen compatibility
+fixtures, thin boundary translations, and evidence-backed derived projections
+are allowed; they must not become alternate implementations of the same rule.
+
+Generic packages are created with a real capability and consumer, never as an
+empty speculative tree. See DEC-049 and ADR-0011.
+
 ---
 
 ## 3. Summary decision log
@@ -341,6 +370,7 @@ In the first version:
 | DEC-046 | A capability is born in `libs/domains` or `packages/` — never duplicated inside an `app` — whenever more than one product needs it or it is reasonable to foresee that it will; an `app` only composes domains, presents UI, and integrates the host. Initial map: `narrative` and `session` are generic domains (`libs/domains`); the VTT's interactive map is product-specific, sharing only the `packages/x6-canvas` wrapper with the Architecture Studio; Discord and transcription are external integrations that consume contracts, never internal domains (`docs/adr/ADR-0008-libs-boundary-and-domain-map.md`). |
 | DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
 | DEC-048 | Phase 1 communication between Claude, Codex, Gemini, and future providers uses provider-neutral, versioned files under `.ai/state/`: one active owner per task, immutable structured handoffs, deterministic validation without model calls, and short vendor adapters that point to the canonical protocol instead of duplicating it (`docs/adr/ADR-0010-multi-agent-coordination.md`). |
+| DEC-049 | Reusable capabilities use the smallest useful consumer-agnostic boundary (internal tree, package, or host app); third-party runtime/library APIs remain inside that boundary and are exposed through Grafting-owned surfaces without vendor-type leakage; separate packages require real reuse/build/ownership/fork evidence; authoritative behavior has one implementation or canonical source, with explicit allowances for independent tests, generated bindings, frozen fixtures, thin boundary translations, and derived evidence (`docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -560,6 +590,12 @@ The map above follows the rule in section 4.3: `narrative` and `session` are
 born because there is already a declared intention for more than one
 product to need them; the VTT map remains within the app until a second
 product requires a map.
+
+DEC-049 strengthens this boundary: reusable capabilities expose Grafting-owned
+interfaces and isolate third-party runtime APIs inside the smallest useful
+owning module/project boundary. It does not require one package per dependency.
+Shared behavior is reused from its authoritative implementation rather than
+copied into a second module, package, or application.
 
 ---
 
@@ -2124,6 +2160,10 @@ such as the VTT's) reuses `x6-canvas` without reusing `graph-x6` — the
 two X6 applications have different domains and must not share
 schema or logic beyond the canvas layer.
 
+Per DEC-049, `packages/x6-canvas` is the designated owner of the external X6
+API in this TypeScript visualization path. Its public surface uses Grafting
+types and must not expose the mutable vendor graph or other X6-owned types.
+
 ### 16.9 Context packs
 
 Each task receives a small, reproducible, versioned, and validated context pack containing task, criteria, capabilities, policies, context, allowed/forbidden tools, output schema, artifacts, handoffs, graph scope, and token budget. The context pack is an index, not a substitute for reading the code.
@@ -2757,7 +2797,9 @@ A task is only complete when:
 - an ADR was created when there was a decision;
 - a contract/ABI was versioned when necessary;
 - generated code is reproducible;
-- there is no duplicated logic in the hosts;
+- there is no duplicated authoritative logic across hosts, apps, or packages;
+- third-party runtime APIs and types do not leak outside their designated
+  owning module/project boundary;
 - error and cleanup were considered;
 - the agent reported the files and commands executed;
 - the change was small enough for review;

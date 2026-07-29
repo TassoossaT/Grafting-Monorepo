@@ -24,6 +24,7 @@ the project owner, per `AGENTS.md` and `CLAUDE.md`.
 | [ADR-0008](ADR-0008-libs-boundary-and-domain-map.md) | — (structural, post GATE-007) | `libs/` boundary rule and domain map (narrative, session, X6, Discord, transcription) | **Accepted (DEC-046)** |
 | [ADR-0009](ADR-0009-committed-flatbuffers-fixture.md) | — (structural, §10.3 exception) | Commit C-006's frozen FlatBuffers evolution fixture's generated code | Proposed — pending owner decision |
 | [ADR-0010](ADR-0010-multi-agent-coordination.md) | — (AI Control Plane Phase 1) | Provider-neutral task ownership and structured handoffs | **Accepted** |
+| [ADR-0011](ADR-0011-package-autonomy-and-external-isolation.md) | — (structural) | Package autonomy, external dependency isolation, and authoritative reuse | **Accepted (DEC-049)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for

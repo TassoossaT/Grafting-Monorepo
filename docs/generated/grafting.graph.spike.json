@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "c7a631aaa58fd21946022e4eee0f17047dbe9b20e1b389ceea9f7903108c975f",
+  "inputHash": "dfb36ddf0ca69f878fe4a0c88755cbc4842aaada3aec203e1f55a5ae370a1cb2",
   "nodes": [
     {
       "id": "agent:claude",
@@ -188,6 +188,15 @@
       "source": "packages/x6-canvas/project.json"
     },
     {
+      "id": "task:ADR-0011-PACKAGE-BOUNDARIES",
+      "kind": "task",
+      "label": "ADR-0011-PACKAGE-BOUNDARIES",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/ADR-0011-PACKAGE-BOUNDARIES.json"
+    },
+    {
       "id": "task:COORDINATION-PHASE1",
       "kind": "task",
       "label": "COORDINATION-PHASE1",
@@ -310,6 +319,13 @@
       "source": "project:isekai-web-client",
       "target": "project:isekai-wasm-bridge",
       "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "task:ADR-0011-PACKAGE-BOUNDARIES->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:ADR-0011-PACKAGE-BOUNDARIES",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/ADR-0011-PACKAGE-BOUNDARIES.json#/owner"
     },
     {
       "id": "task:COORDINATION-PHASE1->agent:codex:owned_by",
