@@ -12,9 +12,26 @@ concretely-typed real operation as the native side's
 `engine_submit_increment` -- not a generic Command/DomainEvent channel;
 same DEC-013/FlatBuffers reasoning), a generational `Job`/`Buffer`
 `HandleTable` (mirroring `isekai-capi-bridge::handle`, duplicated rather
-than shared -- see `src/handle.rs`'s doc comment for why). 10 tests, all
-passing (5 native `cargo test` for the handle table, 5
-`wasm-bindgen-test` for the engine, run via `wasm-pack test --node`).
+than shared -- see `src/handle.rs`'s doc comment for why).
+
+D-009 (memory test) done too: one persistent engine driven through 5,000
+submit/poll/take/view/release cycles asserts `debug_job_count`/
+`debug_buffer_count` (occupied slots) **and** `debug_job_slot_count`/
+`debug_buffer_slot_count` (total slots ever allocated -- "arena growth";
+a broken free-slot-reuse scan could leave the occupied counts flat while
+these still climb) all stay at a constant throughout -- these four
+always-present debug accessors, plus a free `debug_memory()` function
+(wrapping `wasm_bindgen::memory()`) so a caller can read the module's
+`WebAssembly.Memory.buffer.byteLength` directly, exist solely for this.
+Wasm linear memory pages obtained via `memory.grow` are never returned to
+the browser even after Rust frees what grew them, so the logical
+handle-table counts alone can't speak to S19.5's literal "`memory.grow`"
+item -- `packages/isekai-web-client/test/browser-check.html` uses
+`debug_memory()` to confirm `byteLength` plateaus under repetition
+against the real compiled crate, in a real browser.
+
+11 tests total, all passing (5 native `cargo test` for the handle table,
+6 `wasm-bindgen-test` for the engine, run via `wasm-pack test --node`).
 
 ## The panic-handling difference from the native side is real and load-bearing
 
@@ -47,10 +64,14 @@ Deliberately not done, and why:
 - **No general Command/DomainEvent wire format** -- identical reasoning
   to `isekai-capi-bridge`.
 - **No `isekai-web-client`-level testing here** -- the client-facing
-  proof (including the panic-isolation finding re-verified against this
-  exact compiled crate in a real browser) lives in
-  `packages/isekai-web-client`'s own test suite.
-- **D-009 (memory test)** -- separate task.
+  proof (including the panic-isolation finding and the memory test's
+  `memory.grow` check, both re-verified against this exact compiled
+  crate in a real browser) lives in `packages/isekai-web-client`'s own
+  test suite.
+- **Device loss / release-after-cancellation** (S19.5, part of the
+  memory test's checklist elsewhere) -- no `wgpu::Device` here and
+  nothing to cancel with a synchronous backend; both already N/A
+  elsewhere for the same reasons.
 
 ## Targets
 

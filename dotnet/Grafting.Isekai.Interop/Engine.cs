@@ -148,6 +148,34 @@ public sealed class Engine : IDisposable
         throw new EngineException(status);
     }
 
+    /// <summary>Test-only (D-009): the engine's current outstanding job
+    /// count -- exists to observe whether a handle was really released
+    /// (e.g. by a <see cref="JobSafeHandle"/> finalizer) rather than
+    /// inferring it only from "nothing else broke".</summary>
+    public ulong DebugJobCount()
+    {
+        ThrowIfDisposed();
+        ulong count;
+        unsafe
+        {
+            ThrowIfNotOk(NativeMethods.engine_debug_job_count(_handle.Raw, &count));
+        }
+        return count;
+    }
+
+    /// <summary>Test-only (D-009): same as <see cref="DebugJobCount"/> for
+    /// the buffer table.</summary>
+    public ulong DebugBufferCount()
+    {
+        ThrowIfDisposed();
+        ulong count;
+        unsafe
+        {
+            ThrowIfNotOk(NativeMethods.engine_debug_buffer_count(_handle.Raw, &count));
+        }
+        return count;
+    }
+
     public void Shutdown()
     {
         ThrowIfDisposed();

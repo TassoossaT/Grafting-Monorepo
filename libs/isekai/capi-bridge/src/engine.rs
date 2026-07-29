@@ -216,6 +216,57 @@ pub extern "C" fn engine_debug_trigger_panic(engine: u64) -> EngineStatus {
     }
 }
 
+/// Test-only hook (D-009): the engine's current outstanding job count
+/// (`HandleTable::len`, i.e. inserted-but-not-yet-released). Exists so a
+/// caller (e.g. a .NET `SafeHandle` finalizer test) has a way to observe
+/// whether a handle was *really* released rather than inferring it only
+/// from "nothing else broke."
+///
+/// # Safety
+/// `out_count` must be a valid, writable `u64*`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn engine_debug_job_count(
+    engine: u64,
+    out_count: *mut u64,
+) -> EngineStatus {
+    if out_count.is_null() {
+        return EngineStatus::NullPointer;
+    }
+    let engines = registry().lock().unwrap_or_else(|e| e.into_inner());
+    let eng = match engines.get(engine) {
+        Some(e) => e,
+        None => return EngineStatus::InvalidHandle,
+    };
+    unsafe {
+        *out_count = eng.jobs.len() as u64;
+    }
+    EngineStatus::Ok
+}
+
+/// Test-only hook (D-009): same as [`engine_debug_job_count`] for the
+/// buffer table.
+///
+/// # Safety
+/// `out_count` must be a valid, writable `u64*`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn engine_debug_buffer_count(
+    engine: u64,
+    out_count: *mut u64,
+) -> EngineStatus {
+    if out_count.is_null() {
+        return EngineStatus::NullPointer;
+    }
+    let engines = registry().lock().unwrap_or_else(|e| e.into_inner());
+    let eng = match engines.get(engine) {
+        Some(e) => e,
+        None => return EngineStatus::InvalidHandle,
+    };
+    unsafe {
+        *out_count = eng.buffers.len() as u64;
+    }
+    EngineStatus::Ok
+}
+
 /// # Safety
 /// `out_state` must be a valid, writable `JobStateCode*`.
 #[unsafe(no_mangle)]
@@ -502,5 +553,117 @@ mod tests {
         // Neither polled nor taken before shutdown.
         assert_eq!(engine_shutdown(engine), EngineStatus::Ok);
         assert_eq!(engine_destroy(engine), EngineStatus::Ok);
+    }
+
+    /// D-009: the "target scenario" -- one persistent engine driven
+    /// through many submit/poll/take/view/release cycles -- must not grow
+    /// its job/buffer tables. Checks both occupied count (`len`, a plain
+    /// handle leak) and total slot count (`slot_count`, "arena growth" --
+    /// a broken free-slot-reuse scan could leave `len` flat while this
+    /// still climbs).
+    #[test]
+    fn repeated_increment_cycles_do_not_grow_the_job_or_buffer_tables() {
+        let engine = create_engine();
+
+        for i in 1..=5_000u64 {
+            let mut job = 0u64;
+            assert_eq!(
+                unsafe { engine_submit_increment(engine, 1, &mut job) },
+                EngineStatus::Ok
+            );
+
+            let mut state_code = JobStateCode::Pending;
+            assert_eq!(
+                unsafe { engine_job_poll(engine, job, &mut state_code) },
+                EngineStatus::Ok
+            );
+            assert_eq!(state_code, JobStateCode::Completed);
+
+            let mut buffer = 0u64;
+            assert_eq!(
+                unsafe { engine_job_take_result(engine, job, &mut buffer) },
+                EngineStatus::Ok
+            );
+
+            let mut data: *const u8 = std::ptr::null();
+            let mut length: u64 = 0;
+            assert_eq!(
+                unsafe { engine_buffer_view(engine, buffer, &mut data, &mut length) },
+                EngineStatus::Ok
+            );
+            let bytes = unsafe { std::slice::from_raw_parts(data, length as usize) };
+            let new_value = i64::from_le_bytes(bytes[0..8].try_into().unwrap());
+            assert_eq!(new_value, i as i64);
+
+            assert_eq!(engine_buffer_release(engine, buffer), EngineStatus::Ok);
+            assert_eq!(engine_job_release(engine, job), EngineStatus::Ok);
+
+            let engines = registry().lock().unwrap_or_else(|e| e.into_inner());
+            let eng = engines.get(engine).unwrap();
+            assert_eq!(eng.jobs.len(), 0, "iteration {i}: job table leaked an entry");
+            assert_eq!(
+                eng.buffers.len(),
+                0,
+                "iteration {i}: buffer table leaked an entry"
+            );
+            assert_eq!(
+                eng.jobs.slot_count(),
+                1,
+                "iteration {i}: job table's slot count grew (arena growth)"
+            );
+            assert_eq!(
+                eng.buffers.slot_count(),
+                1,
+                "iteration {i}: buffer table's slot count grew (arena growth)"
+            );
+        }
+
+        assert_eq!(engine_destroy(engine), EngineStatus::Ok);
+    }
+
+    /// D-009: repeated engine create+destroy must not grow the engine
+    /// table. Deliberately does **not** go through `registry()` --
+    /// `cargo test` runs tests in parallel and every other test in this
+    /// module shares that one process-wide static, several of them
+    /// (`null_pointers_are_rejected_everywhere_not_crashing`,
+    /// `overflow_fails_the_job_not_the_process`,
+    /// `a_panic_poisons_the_engine_and_the_process_survives`,
+    /// `submitting_after_shutdown_is_refused`) deliberately never destroy
+    /// the engine they create (each is a single-shot smoke test, not
+    /// meant to clean up after itself) -- confirmed empirically: an
+    /// earlier version of this test asserted against `registry()` and
+    /// failed intermittently for exactly this reason (observed a
+    /// baseline-vs-after mismatch caused by a concurrently-running
+    /// sibling test's permanent, by-design leftover engine, not an actual
+    /// leak). A local `HandleTable<Engine>` exercises the identical
+    /// `insert`/`remove` logic `registry()` itself wraps, without sharing
+    /// state with anything else -- the C-ABI `engine_create`/
+    /// `engine_destroy` wrapper logic (struct_size validation etc.) is
+    /// already covered once by other tests in this module; this test's
+    /// job is only to prove the table mechanism itself stays bounded
+    /// under repetition.
+    #[test]
+    fn repeated_engine_create_destroy_does_not_grow_the_engine_table() {
+        let mut table: HandleTable<Engine> = HandleTable::new(HandleKind::Engine);
+
+        for _ in 0..1_000 {
+            let engine = Engine {
+                lifecycle: EngineLifecycle::Ready,
+                state: State::new(),
+                rng: DeterministicRng::from_seed([1; 32]),
+                sequence: 0,
+                jobs: HandleTable::new(HandleKind::Job),
+                buffers: HandleTable::new(HandleKind::Buffer),
+            };
+            let handle = table.insert(engine);
+            assert!(table.remove(handle).is_some());
+        }
+
+        assert_eq!(table.len(), 0, "engine table leaked an entry");
+        assert_eq!(
+            table.slot_count(),
+            1,
+            "engine table's slot count grew (arena growth)"
+        );
     }
 }

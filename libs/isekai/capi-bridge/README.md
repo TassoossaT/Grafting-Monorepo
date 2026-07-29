@@ -11,7 +11,24 @@ engine lifecycle (`Creating`/`Ready`/`ShuttingDown`/`Destroyed`/`Poisoned`
 -- not a mutex-poison-recovery stand-in), buffer lease
 (`OwnedByRust`/`ViewLeased`/`Released`), and one real operation,
 `engine_submit_increment`, wrapping real `grafting-domain-core` logic
-(`apply_command` + `state_hash`). 21 tests, all passing.
+(`apply_command` + `state_hash`).
+
+D-009 (memory test) done too: a persistent engine driven through 5,000
+submit/poll/take/view/release cycles asserts both `HandleTable::len()`
+(occupied slots -- a plain leak) and `HandleTable::slot_count()` (total
+slots ever allocated -- "arena growth"; a broken free-slot-reuse scan
+could leave `len()` flat while this still climbs) stay at a constant
+1 throughout. A separate test proves the same for repeated engine
+create+destroy -- deliberately against a local, non-shared `HandleTable`
+rather than the real `registry()`, since every test in this module
+shares that one process-wide static and `cargo test` runs them in
+parallel; an earlier version of this test asserted against `registry()`
+directly and failed intermittently for exactly that reason (several
+sibling smoke tests deliberately never destroy the engine they create).
+Two new debug exports, `engine_debug_job_count`/`engine_debug_buffer_count`,
+exist solely so `Grafting.Isekai.Interop.Tests`' finalizer test can
+observe whether a forgotten `Dispose()` really released the native
+handle. 25 tests total, all passing.
 
 ### Why `engine_submit_increment`, not a generic `engine_submit(bytes)`
 
@@ -46,12 +63,17 @@ design"). `engine_debug_trigger_panic` exists solely to test this path.
 
 Deliberately not done, and why:
 
-- **`isekai-wasm`/`isekai-web-client`/memory test** (D-007-009) -- a
-  different technical surface (Wasm/wasm-bindgen vs. this crate's native
-  cdylib/P-Invoke), a separate task.
+- **`isekai-wasm`/`isekai-web-client`** (D-007/D-008) -- a different
+  technical surface (Wasm/wasm-bindgen vs. this crate's native
+  cdylib/P-Invoke); see `isekai-wasm-bridge/README.md` for its own,
+  separately-verified memory test.
 - **No `ProblemHandle`/resident state** (S13.6) -- same call as Epic E's
   deferral; nothing resident to manage yet.
 - **No general Command/DomainEvent wire format** -- see above.
+- **Device loss / release-after-cancellation** (S19.5) -- no
+  `wgpu::Device` here and nothing to cancel with a synchronous backend;
+  both already N/A elsewhere for the same reasons, not re-litigated by
+  the memory test.
 
 ## Targets
 

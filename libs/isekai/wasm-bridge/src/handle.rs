@@ -81,6 +81,21 @@ impl<T> HandleTable<T> {
         slot.generation = slot.generation.wrapping_add(1).max(1);
         Some(value)
     }
+
+    /// Occupied slots right now -- see
+    /// `capi-bridge/src/handle.rs::HandleTable::len`'s doc comment for
+    /// why this alone isn't sufficient "no leak" evidence (D-009); pair
+    /// with [`Self::slot_count`].
+    pub fn len(&self) -> usize {
+        self.slots.iter().filter(|slot| slot.value.is_some()).count()
+    }
+
+    /// Total slots ever allocated (this table's own high-water mark) --
+    /// catches "arena growth" (D-009, S19.5) that a flat [`Self::len`]
+    /// alone would miss.
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 impl<T> Default for HandleTable<T> {

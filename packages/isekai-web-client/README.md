@@ -30,6 +30,18 @@ Two distinct failure paths, both documented in `src/worker.ts` and
 Both end the same way: create a fresh `IsekaiEngine` for a working
 client.
 
+D-009 (memory test) done too: `test/browser-check.html` now also proves
+the "target scenario" (many repeated `increment()` cycles, not just one)
+stays leak-free -- both the mechanism (calling `@grafting/isekai-wasm`
+directly, checking its debug handle/slot counts and its linear memory's
+`byteLength` plateau) and the real production path (`IsekaiEngine.increment()`
+through the Worker, 2,000 cycles), plus 30 repeated `create()`+`terminate()`
+cycles proving no state bleeds across Worker instances. See
+`isekai-wasm-bridge/README.md` for what the underlying debug accessors
+prove and why. Whether the browser actually reclaims a terminated
+Worker's OS memory is a browser-engine guarantee this test page has no
+reliable, non-experimental JS API to check -- flagged, not verified here.
+
 ## Testing
 
 - `pnpm test` (Vitest, Node environment) -- only what doesn't need a real
@@ -45,15 +57,26 @@ client.
   # open http://localhost:4900/test/browser-check.html
   ```
 
-  Verified end to end (2026-07-28): a panic in one `WasmEngine` (via the
-  crate's own `debug_trigger_panic`, called directly against
-  `@grafting/isekai-wasm` to test the empirical finding against the real
-  compiled crate, not just the throwaway scratch probe that first
-  established it) leaves an unrelated, independently-created engine fully
-  correct and usable; the poisoned engine itself is confirmed unusable
-  afterward; a normal `increment` round trip, an overflow rejection
-  (`poisoned: false` -- confirmed distinct from real poisoning), and a
-  fresh engine after `terminate()` all behave correctly.
+  Verified end to end (2026-07-28, D-007/D-008): a panic in one
+  `WasmEngine` (via the crate's own `debug_trigger_panic`, called
+  directly against `@grafting/isekai-wasm` to test the empirical finding
+  against the real compiled crate, not just the throwaway scratch probe
+  that first established it) leaves an unrelated, independently-created
+  engine fully correct and usable; the poisoned engine itself is
+  confirmed unusable afterward; a normal `increment` round trip, an
+  overflow rejection (`poisoned: false` -- confirmed distinct from real
+  poisoning), and a fresh engine after `terminate()` all behave
+  correctly.
+
+  Extended and re-verified end to end (2026-07-28, D-009): 2,000
+  submit/poll/take/view/release cycles direct against `WasmEngine` leave
+  its debug job/buffer counts and slot counts unchanged at their
+  baseline every cycle, and the module's `WebAssembly.Memory.buffer.byteLength`
+  (via `debug_memory()`) plateaus rather than growing; 2,000
+  `IsekaiEngine.increment()` cycles through the real Worker/production
+  API produce the correct final value; 30 `create()`+`terminate()`
+  cycles each work correctly and reject a call made after their own
+  `terminate()`.
 
 Deliberately not automated in this pass: the Worker-crash (`onerror`)
 path is implemented (`src/index.ts`) but not exercised by an automated
@@ -68,3 +91,6 @@ gap, not silently skipped.
   microseconds; nothing to interrupt. `JobStateCode.Cancelled` stays part
   of the shared vocabulary, unreachable here (same pattern as
   `engine-compute-cpu`'s unreachable `Pending`/`Running`).
+- Whether a terminated Worker's OS memory is actually reclaimed by the
+  browser (D-009) -- a browser-engine guarantee with no reliable,
+  non-experimental JS API to verify it from a test page.

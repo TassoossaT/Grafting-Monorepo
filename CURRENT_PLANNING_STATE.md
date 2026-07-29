@@ -403,7 +403,6 @@ upgraded.
 
 - **No general Command/DomainEvent wire format** — same as the native
   side, same reasoning.
-- **D-009 (memory test)** — separate task.
 - **Worker-crash (`onerror`) path is implemented but not automated in a
   test** — logic simple enough to review directly; flagged as a gap.
 - **Device-loss handling / cooperative cancellation** — not applicable
@@ -411,13 +410,115 @@ upgraded.
   `increment` completes in microseconds, nothing to interrupt).
 - Not committed yet — same standing rule as every prior task.
 
+## Epic D memory test (D-009), 2026-07-28
+
+Owner picked this next, closing out the last open Epic D item. Depends
+on D-006 and D-008 per master source §23's backlog table; acceptance
+criterion "no leak in the target scenario." "Target scenario" wasn't
+treated as a new product decision (unlike E-003's pilot workload) — it's
+the realistic session shape D-001..D-008 already implies: one engine
+created once, then many repeated submit → poll → take_result → view →
+release cycles, the same shape `Engine.IncrementAndWait` and
+`worker.ts`'s message handler already exercise exactly once. D-009
+proves that shape stays bounded under *repetition*, not just correct on
+a single pass.
+
+A Plan-subagent review checked the draft against the actual source before
+anything was built and caught two things worth recording:
+
+- **§19.5's "arena growth" is a distinct failure mode from a plain
+  handle leak, and needed its own signal.** A table whose occupied count
+  (`len()`) stays flat every cycle doesn't prove its backing storage
+  isn't still growing — a broken free-slot-reuse scan would leave `len()`
+  flat (every cycle still calls `remove()` correctly) while the `Vec`
+  behind it grows unboundedly. Fixed by adding a second accessor,
+  `slot_count()` (total slots ever allocated), to both crates'
+  `HandleTable<T>`, and asserting it too.
+- **Wasm linear memory pages are never returned to the browser**, even
+  after Rust frees whatever grew them — so the logical handle-table
+  counts, however correct, cannot speak to §19.5's literal "`memory.grow`"
+  item. Fixed by adding a free `debug_memory()` function (wrapping
+  `wasm_bindgen::memory()`) so `test/browser-check.html` can read the
+  module's real `WebAssembly.Memory.buffer.byteLength` and confirm it
+  plateaus under repetition.
+
+A third issue surfaced empirically, not from the review: the first
+version of the native repeated-create/destroy test asserted against
+`capi-bridge`'s process-wide `registry()` static, expecting a return to
+its own pre-loop baseline. It failed intermittently in practice —
+`cargo test` runs tests in parallel, and several existing smoke tests in
+the same module (`null_pointers_are_rejected_everywhere_not_crashing`,
+`overflow_fails_the_job_not_the_process`,
+`a_panic_poisons_the_engine_and_the_process_survives`,
+`submitting_after_shutdown_is_refused`) deliberately never destroy the
+engine they create, so the registry's size genuinely, permanently moves
+for reasons unrelated to a leak. Fixed by testing a local, non-shared
+`HandleTable<Engine>` instance instead — the exact same `insert`/`remove`
+logic `registry()` wraps, without the shared-state race. A caught,
+concrete example of why the general project preference for "real
+evidence over assumption" also means re-verifying a test's *own*
+reliability, not just the thing it's testing.
+
+**Real and verified:**
+
+- Both crates' `HandleTable<T>` gain `len()` (occupied slots) and
+  `slot_count()` (total slots ever allocated). `capi-bridge` gains two
+  native debug exports, `engine_debug_job_count`/`engine_debug_buffer_count`,
+  wrapped as `Engine.DebugJobCount()`/`DebugBufferCount()` in
+  `Grafting.Isekai.Interop` (same "test-only but not cfg-gated"
+  convention as `engine_debug_trigger_panic`). `wasm-bridge` gains the
+  Wasm-side mirrors plus the module-level `debug_memory()` free function.
+- Rust: 5,000-cycle repeated submit/poll/take/view/release tests in both
+  `capi-bridge::engine` and `wasm-bridge::engine` (the latter as
+  `#[wasm_bindgen_test]`, run via `wasm-pack test --node`), each
+  asserting both occupied and total slot counts stay constant every
+  iteration. `capi-bridge` also gets the local-`HandleTable` repeated
+  create/destroy test described above. 25 capi-bridge tests, 6
+  wasm-bridge `wasm-bindgen-test`s (11 total with the 5 native
+  `handle.rs` tests), all passing.
+- .NET: new `MemorySmokeTests.cs` — a 5,000-cycle `IncrementAndWait` loop
+  proving no growth through the real P/Invoke boundary, and a
+  GC-finalizer test that deliberately abandons a `JobSafeHandle` without
+  disposing it (factored into a `[MethodImpl(MethodImplOptions.NoInlining)]`
+  helper so an unoptimized build's JIT can't keep it rooted), forces
+  `GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();`, and
+  confirms via the new debug exports that the native handle was really
+  released — not just that nothing else broke. Keeps its `Engine`
+  rooted for the whole test on purpose (`JobSafeHandle.ReleaseHandle()`
+  calls back into its owning `EngineSafeHandle`; .NET doesn't guarantee
+  finalization order between two objects that become garbage together).
+  15 tests total (13 existing + 2 new), all passing against the real
+  `grafting_isekai_capi.dll`.
+- Web/Wasm: `test/browser-check.html` extended with three new blocks —
+  2,000 cycles direct against `WasmEngine` checking debug counts stay at
+  their baseline and `debug_memory()`'s `byteLength` plateaus after an
+  initial warm-up sample; 2,000 `IsekaiEngine.increment()` cycles through
+  the real Worker/production API producing the correct final value; 30
+  `create()`+`terminate()` cycles each working correctly and rejecting a
+  post-`terminate()` call. Verified in a real headless Edge instance
+  driven over CDP (same methodology as every prior real-browser check in
+  this repo) — all existing D-007/D-008 checks on the same page still
+  pass unchanged.
+
+**Deliberately not done, and why:**
+
+- **Device loss / release-after-cancellation** — already N/A elsewhere
+  (no `wgpu::Device` yet; nothing to cancel with a synchronous backend),
+  not re-litigated here.
+- **"Short pinning"** — enforced by `WithBufferView<T>`'s callback-scoped
+  signature (no escape hatch exists to call), not a runtime check that
+  could regress and needs a test.
+- **Whether a terminated Worker's OS memory is actually reclaimed by the
+  browser** — a browser-engine guarantee with no reliable,
+  non-experimental JS API to verify it from a test page.
+- Not committed yet — same standing rule as every prior task.
+
 ## Recommended next action
 
 Epic B is committed; Epic C, Epic E (partial), and Epic D (now fully
-D-001..D-008, D-009 still open) are built and verified but not yet
+D-001..D-009, all nine items) are built and verified but not yet
 committed. Candidates for what's next, no decision recorded yet:
-review/commit the above; D-009 (memory test, closing out both Epic D
-sides together); C-005/C-006 (`flatc`, genuinely unblocked by a
+review/commit the above; C-005/C-006 (`flatc`, genuinely unblocked by a
 real `.NET` solution — still needs the `flatc` toolchain installed);
 spikes 5–8; or resume Epic E toward E-003 (needs a real product decision
 on the pilot workload first).

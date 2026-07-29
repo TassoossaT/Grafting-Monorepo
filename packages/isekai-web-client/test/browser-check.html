@@ -2,14 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>isekai-web-client -- real Worker+Wasm check</title>
   </head>
   <body>
-    <h1>isekai-web-client -- real Worker+Wasm check (D-007/D-008)</h1>
+    <h1>isekai-web-client -- real Worker+Wasm check (D-007/D-008, D-009)</h1>
     <pre id="out" data-testid="out">running...</pre>
     <script type="module">
       import { IsekaiEngine } from "/src/index.ts";
-      import initWasm, { WasmEngine } from "@grafting/isekai-wasm";
+      import initWasm, { WasmEngine, debug_memory } from "@grafting/isekai-wasm";
 
       const out = document.getElementById("out");
       const results = {};
@@ -77,6 +78,94 @@
         const r2 = await b.increment(7n);
         log("freshEngineAfterTerminate", { newValue: r2.newValue.toString() });
         b.terminate();
+
+        // --- Part 3 (D-009, "no leak in the target scenario"): repeated
+        // submit/poll/take/view/release cycles must not grow the handle
+        // tables or the linear memory backing them.
+
+        // 3a. Direct against the real compiled crate (bypassing the
+        // Worker, same pattern Part 1 already uses) -- the
+        // mechanism-level proof: logical handle counts stay bounded
+        // *and* WebAssembly linear memory plateaus rather than growing
+        // every cycle (memory.grow pages are never returned to the
+        // browser even after Rust frees what grew them, so the logical
+        // counts alone can't speak to this).
+        const memoryProbe = new WasmEngine(seed(20));
+        const memory = debug_memory();
+        const byteLengths = [memory.buffer.byteLength];
+        const CYCLES = 2000;
+        for (let i = 1; i <= CYCLES; i++) {
+          const job = memoryProbe.submit_increment(1n);
+          memoryProbe.poll(job);
+          const buffer = memoryProbe.take_result(job);
+          memoryProbe.buffer_view(buffer);
+          memoryProbe.buffer_release(buffer);
+          memoryProbe.job_release(job);
+
+          if (memoryProbe.debug_job_count() !== 0 || memoryProbe.debug_buffer_count() !== 0) {
+            throw new Error(`iteration ${i}: handle leaked (job=${memoryProbe.debug_job_count()}, buffer=${memoryProbe.debug_buffer_count()})`);
+          }
+          if (memoryProbe.debug_job_slot_count() !== 1 || memoryProbe.debug_buffer_slot_count() !== 1) {
+            throw new Error(`iteration ${i}: slot count grew (arena growth)`);
+          }
+          if (i % 500 === 0) {
+            byteLengths.push(memory.buffer.byteLength);
+          }
+        }
+        log("directHandleTablesStayBounded", {
+          cycles: CYCLES,
+          finalJobCount: memoryProbe.debug_job_count(),
+          finalBufferCount: memoryProbe.debug_buffer_count(),
+        });
+        log("linearMemoryByteLengthSamples", byteLengths);
+        // byteLengths[0] is pre-loop; byteLengths[1] is the first in-loop
+        // sample (500 cycles in) -- growth up to that point is expected
+        // (initial Vec allocations may trigger a memory.grow or two).
+        // Every sample after that must be identical: a real leak would
+        // keep growing every 500 cycles instead of plateauing.
+        const samplesAfterWarmup = byteLengths.slice(1);
+        log("linearMemoryPlateausAfterWarmup", samplesAfterWarmup.every((n) => n === samplesAfterWarmup[0]));
+
+        // 3b. Through the real production API (IsekaiEngine.increment(),
+        // via the Worker) -- the actual target scenario end-to-end.
+        const repeated = await IsekaiEngine.create(seed(21));
+        let lastNewValue = 0n;
+        for (let i = 1; i <= CYCLES; i++) {
+          const r = await repeated.increment(1n);
+          lastNewValue = r.newValue;
+        }
+        log("repeatedIncrementThroughWorker", {
+          cycles: CYCLES,
+          finalNewValue: lastNewValue.toString(),
+          correct: lastNewValue === BigInt(CYCLES),
+        });
+        repeated.terminate();
+
+        // 3c. Repeated Worker spin-up/teardown -- each new engine must
+        // work correctly and reject calls after its own terminate(),
+        // with no degradation/state bleed across instances. (Whether the
+        // browser actually reclaims a terminated Worker's OS memory is a
+        // browser-engine guarantee this test page has no reliable,
+        // non-experimental API to check -- flagged, not verified here.)
+        const TERMINATE_CYCLES = 30;
+        for (let i = 1; i <= TERMINATE_CYCLES; i++) {
+          const engine = await IsekaiEngine.create(seed(30 + (i % 5)));
+          const r = await engine.increment(BigInt(i));
+          if (r.newValue !== BigInt(i)) {
+            throw new Error(`terminate cycle ${i}: unexpected newValue ${r.newValue}`);
+          }
+          engine.terminate();
+          let rejectedAfterTerminate = false;
+          try {
+            await engine.increment(1n);
+          } catch (err) {
+            rejectedAfterTerminate = true;
+          }
+          if (!rejectedAfterTerminate) {
+            throw new Error(`terminate cycle ${i}: increment after terminate did not reject`);
+          }
+        }
+        log("repeatedWorkerCreateTerminateCycles", { cycles: TERMINATE_CYCLES, ok: true });
 
         log("done", true);
       }

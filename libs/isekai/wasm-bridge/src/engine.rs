@@ -174,6 +174,33 @@ impl WasmEngine {
         }
     }
 
+    /// Test-only (D-009): outstanding job count (`HandleTable::len`) --
+    /// exists so a caller can observe whether the job table stays bounded
+    /// under repeated submit/release cycles instead of only inferring it
+    /// from correctness.
+    pub fn debug_job_count(&self) -> usize {
+        self.jobs.len()
+    }
+
+    /// Test-only (D-009): the job table's total slot count
+    /// (`HandleTable::slot_count`) -- catches "arena growth" (a broken
+    /// free-slot-reuse scan) that a flat [`Self::debug_job_count`] alone
+    /// would miss.
+    pub fn debug_job_slot_count(&self) -> usize {
+        self.jobs.slot_count()
+    }
+
+    /// Test-only (D-009): same as [`Self::debug_job_count`] for buffers.
+    pub fn debug_buffer_count(&self) -> usize {
+        self.buffers.len()
+    }
+
+    /// Test-only (D-009): same as [`Self::debug_job_slot_count`] for
+    /// buffers.
+    pub fn debug_buffer_slot_count(&self) -> usize {
+        self.buffers.slot_count()
+    }
+
     /// Test-only: deliberately panics (after real mutation, matching the
     /// scratch probe that established this module's panic-handling
     /// design) to exercise `wasm-bindgen`'s per-object poisoning. Always
@@ -241,6 +268,48 @@ mod tests {
         let mut engine = WasmEngine::new(seed(5)).unwrap();
         engine.shutdown();
         assert!(engine.submit_increment(1).is_err());
+    }
+
+    /// D-009: the "target scenario" -- one persistent engine driven
+    /// through many submit/poll/take/view/release cycles -- must not grow
+    /// its job/buffer tables. Checks both occupied count (a plain handle
+    /// leak) and total slot count ("arena growth" -- a broken
+    /// free-slot-reuse scan could leave the occupied count flat while
+    /// this still climbs). Mirrors
+    /// `capi-bridge::engine::repeated_increment_cycles_do_not_grow_the_job_or_buffer_tables`.
+    #[wasm_bindgen_test]
+    fn repeated_increment_cycles_do_not_grow_the_job_or_buffer_tables() {
+        let mut engine = WasmEngine::new(seed(6)).unwrap();
+
+        for i in 1..=5_000i64 {
+            let job = engine.submit_increment(1).unwrap();
+            assert_eq!(engine.poll(job).unwrap(), JobStateCode::Completed);
+
+            let buffer = engine.take_result(job).unwrap();
+            let bytes = engine.buffer_view(buffer).unwrap();
+            let new_value = i64::from_le_bytes(bytes[0..8].try_into().unwrap());
+            assert_eq!(new_value, i);
+
+            engine.buffer_release(buffer).unwrap();
+            engine.job_release(job).unwrap();
+
+            assert_eq!(engine.debug_job_count(), 0, "iteration {i}: job leaked");
+            assert_eq!(
+                engine.debug_buffer_count(),
+                0,
+                "iteration {i}: buffer leaked"
+            );
+            assert_eq!(
+                engine.debug_job_slot_count(),
+                1,
+                "iteration {i}: job table's slot count grew (arena growth)"
+            );
+            assert_eq!(
+                engine.debug_buffer_slot_count(),
+                1,
+                "iteration {i}: buffer table's slot count grew (arena growth)"
+            );
+        }
     }
 
     // Deliberately NOT tested here: "does a panic in one WasmEngine leave

@@ -132,6 +132,26 @@ impl<T> HandleTable<T> {
         slot.generation = slot.generation.wrapping_add(1).max(1);
         Some(value)
     }
+
+    /// Occupied slots right now. A table that's always balanced (one
+    /// `insert` per `remove`) should hold this flat across repeated
+    /// cycles (D-009's "no leak" signal) -- but flat `len()` alone can't
+    /// tell "leak-free" apart from a broken free-slot-reuse scan that
+    /// leaves this table's own bookkeeping growing regardless; pair with
+    /// [`Self::slot_count`] for that.
+    pub fn len(&self) -> usize {
+        self.slots.iter().filter(|slot| slot.value.is_some()).count()
+    }
+
+    /// Total slots ever allocated (this table's own high-water mark),
+    /// distinct from [`Self::len`]'s occupied count -- catches "arena
+    /// growth" (D-009, S19.5): a table whose `insert()` stopped reusing
+    /// freed slots would still show a flat `len()` every cycle (each
+    /// cycle still calls `remove()` correctly) while this number climbs
+    /// unboundedly.
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 #[cfg(test)]

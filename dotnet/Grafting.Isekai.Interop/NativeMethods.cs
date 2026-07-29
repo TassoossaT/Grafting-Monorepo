@@ -57,6 +57,12 @@ internal static partial class NativeMethods
     public static partial EngineStatus engine_debug_trigger_panic(ulong engine);
 
     [LibraryImport(LibraryName)]
+    public static unsafe partial EngineStatus engine_debug_job_count(ulong engine, ulong* outCount);
+
+    [LibraryImport(LibraryName)]
+    public static unsafe partial EngineStatus engine_debug_buffer_count(ulong engine, ulong* outCount);
+
+    [LibraryImport(LibraryName)]
     public static unsafe partial EngineStatus engine_job_poll(ulong engine, ulong job, JobStateCode* outState);
 
     [LibraryImport(LibraryName)]

@@ -3056,19 +3056,39 @@ Automate only conventions already proven:
       mutex-poison recover-and-continue -- see `engine.rs` module docs).
 - [x] shutdown (idempotent `engine_shutdown`, tested with a pending
       unpolled job).
-- [x] leases (D-004; buffer view/release, tested for leak-free
-      round trip).
+- [x] leases (D-004, 2026-07-27; buffer view/release, tested for a
+      *single* leak-free round trip -- D-009, below, extends this to
+      repeated cycles).
 - [x] Worker (D-007/D-008, 2026-07-28; `isekai-wasm-bridge`'s `WasmEngine`
       + `@grafting/isekai-web-client`'s `IsekaiEngine`, one Worker per
       engine for V1; panic handling differs fundamentally from the native
       side here -- empirically verified, see `isekai-wasm-bridge/src/engine.rs`
       module docs -- `catch_unwind` does not work on `wasm32-unknown-unknown`;
       poisoning is per-object via `wasm-bindgen`'s own guard, classified
-      in TypeScript, not a Rust-side `Poisoned` enum variant. D-009
-      memory test remains a separate task).
+      in TypeScript, not a Rust-side `Poisoned` enum variant).
 - [x] C# wrapper (`Grafting.Isekai.Interop`, D-006; `SafeHandle` per kind,
       centralized status→exception translation, 13 smoke tests against
       the real DLL).
+- [x] memory test (D-009, 2026-07-28; "no leak in the target scenario" --
+      repeated submit/poll/take/view/release cycles, not just the single
+      pass D-004/D-007 already proved. Covers S19.5's leaks, arena growth
+      (a table's total slot count, not just its occupied count -- a
+      broken free-slot-reuse scan could otherwise hide behind a flat
+      occupied count), leases, Worker termination, and `memory.grow`
+      (linear memory's `byteLength` plateaus under repetition, checked
+      directly since Wasm pages are never returned to the browser even
+      after Rust frees what grew them -- the logical handle counts alone
+      can't speak to this). Native side adds a GC-finalizer test proving
+      a *forgotten* `Dispose()` still releases the handle (via new
+      `engine_debug_job_count`/`engine_debug_buffer_count` debug exports,
+      since nothing else could observe that). Not covered, flagged not
+      hidden: device loss (no `wgpu::Device` yet, PROV-006 open) and
+      release-after-cancellation (nothing to cancel with a synchronous
+      backend) -- both already N/A elsewhere; short pinning (enforced by
+      `WithBufferView<T>`'s callback-scoped signature, not a runtime
+      check to regression-test); and whether a terminated Worker's OS
+      memory is actually reclaimed by the browser, which has no reliable
+      non-experimental JS API to verify from a test page).
 
 ### GPU
 
