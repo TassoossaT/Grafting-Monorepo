@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "SPIKE-007-GRAPH-IR-X6",
   "title": "Minimal Graph IR candidate and read-only X6 viewer spike",
-  "status": "blocked",
+  "status": "completed",
   "owner": "codex",
-  "revision": 2,
-  "updated_at": "2026-07-29T00:05:00-03:00",
+  "revision": 4,
+  "updated_at": "2026-07-29T07:59:24-03:00",
   "objective": "Generate a deterministic Graph IR candidate from Nx and coordination state, then render it through a generic X6 wrapper with editing disabled.",
   "affected_paths": [
     "docs/graph-ir/",
@@ -17,14 +17,13 @@
     "package.json",
     "pnpm-lock.yaml"
   ],
-  "blockers": [
-    "The in-app browser reported no available browser instances, so read-only interaction and runtime rendering could not be accepted in a real browser."
-  ],
+  "blockers": [],
   "validations": [
     "pnpm graph:generate",
     "pnpm graph:check",
-    "pnpm exec nx run-many -t check,build,test --projects=x6-canvas,graph-x6,architecture-studio",
-    "real browser read-only interaction check"
+    "x6-canvas and graph-x6 typecheck/build passed; graph-x6 mapping test passed",
+    "architecture-studio typecheck and Vite production build passed",
+    "owner-run real browser read-only X6 interaction check: accepted"
   ],
   "artifacts": [
     "docs/graph-ir/graph-ir-candidate.schema.json",
@@ -37,7 +36,8 @@
   ],
   "risks": [
     "The candidate schema is spike evidence and must not be mistaken for the accepted Graph IR v1 of I-002.",
-    "The new X6 dependency must be pinned, licensed, and supply-chain checked."
+    "The browser product/version was not captured, so this is not a compatibility matrix.",
+    "The unoptimized spike bundle is approximately 592 KiB and needs a product budget during I-006."
   ],
-  "next_responsible_party": "codex"
+  "next_responsible_party": "repository-owner"
 }

@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "09f46e1200a782f42b4af7e0582f8dddfadc24126a161ba68a44f2a42bf2fd03",
+  "inputHash": "c7a631aaa58fd21946022e4eee0f17047dbe9b20e1b389ceea9f7903108c975f",
   "nodes": [
     {
       "id": "agent:claude",
@@ -219,7 +219,7 @@
       "kind": "task",
       "label": "SPIKE-007-GRAPH-IR-X6",
       "tags": [
-        "status:blocked"
+        "status:completed"
       ],
       "source": ".ai/state/tasks/SPIKE-007-GRAPH-IR-X6.json"
     },

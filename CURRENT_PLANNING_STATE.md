@@ -32,7 +32,7 @@ planning
 → closing the Decision Gates     ← done
 → ADRs                            ← done
 → full English translation pass   ← done
-→ disposable spikes                ← 7 accepted; spike 7 awaits browser checks
+→ disposable spikes                ← done (8 accepted)
 → scaffold                          ← in progress (Epic B core done; see below)
 ```
 
@@ -108,9 +108,10 @@ should carry forward when the corresponding real work starts (Epic B–E).
    nine-project baseline graph, affected selection, 0%→100% cache proof, and
    the explicit `@nx/dotnet` fallback were validated. Evidence:
    `docs/benchmarks/toolchain-nx-validation-2026-07-28.md`.
-7. minimal Graph IR and read-only X6 visualization — **generator, candidate
-   schema, packages, tests, and production build done; real-browser interaction
-   check pending.** The `0.1-spike` name deliberately does not close I-002.
+7. minimal Graph IR and read-only X6 visualization — **done, 2026-07-29.**
+   Generator, candidate schema, packages, tests, production build, and
+   owner-run real-browser read-only interaction check passed. The `0.1-spike`
+   name deliberately does not close I-002.
    Evidence: `docs/benchmarks/graph-ir-x6-spike-2026-07-28.md`.
 8. minimal AI Control Plane, without a gateway or advanced self-evolution —
    **done, 2026-07-29.** File-based coordination and deterministic audit are
@@ -122,8 +123,8 @@ rustc/cargo (1.97.1, with the `wasm32-unknown-unknown` target installed),
 pnpm (11.17.0), uv (0.11.32), and wasm-pack (0.15.0) are all installed. A
 real discrete GPU (AMD Radeon RX 5600 XT) is present with working
 Vulkan/DX12 drivers, and WebGPU works in a real (non-`about:blank`) page
-context in headless Edge. `flatc` is now pinned and installed. Only the real-
-browser acceptance step for spike 7 remains.
+context in headless Edge. `flatc` is now pinned and installed. All eight
+foundational spikes are accepted.
 
 All five throwaway spike directories (`spikes/wasm-worker-nextjs/`,
 `spikes/rust-capi-dotnet/`, `spikes/wgpu-native-web/`,
@@ -179,10 +180,10 @@ the matching checklist annotations):**
   — ADR-0002 Track 1 clears real projects, not an empty root shell; ties to
   Epic D, not this workspace-foundation pass. B-004/B-010 stay open.
 - No Windows/.NET CI job (B-010) — nothing to test yet.
-- `libs/engine/domain-core`'s `project.json` carries a placeholder
-  `metadata.graphIr` block, not a real Graph IR v1 schema (doesn't exist
-  yet) — satisfies DEC-028's letter without inventing a fake schema; to be
-  superseded when spike 7 (minimal Graph IR) happens.
+- `libs/engine/domain-core`'s `project.json` carries pre-I-002
+  `metadata.graphIr`; spike 7 produced a validated candidate, not the accepted
+  Graph IR v1. The metadata is superseded during I-002/I-004, not silently by
+  the spike.
 - Copy-budget benchmark (spike 5/A-009) was skipped during this historical
   scaffold pass; it was subsequently completed and accepted on 2026-07-29.
 - `flatc` — still Phase 2 scope, unchanged.
@@ -634,11 +635,12 @@ that version range.
 
 ## Recommended next action
 
-Run the remaining read-only Architecture Studio browser interaction check
-(spike 7). Spikes 5, 6, and 8 are accepted. GATE-002 stays in indefinite
-standby. After browser acceptance, the next product decision is either
-ADR-0009's Decision section or E-003's real pilot workload; the generic
-`engine_submit(bytes)` entry point is unblocked but not separately backlogged.
+All foundational spikes are accepted. GATE-002 stays in indefinite standby.
+The next structural task is to record the owner's package-genericity,
+third-party isolation, and single-authoritative-implementation rules, then
+start I-001 for the Architecture Studio/Knowledge Plane. ADR-0009's Decision
+section also remains pending owner confirmation; `engine_submit(bytes)` and
+E-003 remain separately scoped future work.
 
 ## Update rule
 

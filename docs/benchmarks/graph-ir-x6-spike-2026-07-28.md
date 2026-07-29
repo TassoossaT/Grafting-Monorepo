@@ -1,8 +1,7 @@
 # Minimal Graph IR + read-only X6 spike — 2026-07-28
 
-Status: **implementation/build complete; real-browser acceptance blocked because
-the in-app browser was unavailable in this session.** The spike is not marked
-accepted until the built viewer is inspected in a real browser.
+Status: **accepted on 2026-07-29.** Implementation, build, and owner-run
+real-browser interaction validation are complete.
 
 ## What exists
 
@@ -43,13 +42,14 @@ canvas editing. Graph IR evidence remains derived and read-only.
 - TypeScript checks passed for all three new projects.
 - `graph-x6` unit test passed, preserving every node/edge identifier.
 - Nx dependency-ordered build passed.
-- Vite production build passed: 979 modules, 592.14 KiB JS / 170.14 KiB gzip.
+- Vite production build passed: 979 modules, 592.15 KiB JS / 170.14 KiB gzip
+  at the final closure run.
 - Nx cache and declared cross-project dependencies were exercised.
 
 The current bundle is intentionally unoptimized spike output; its size is not a
 production budget.
 
-## Browser validation still required
+## Browser validation
 
 Run:
 
@@ -57,13 +57,18 @@ Run:
 pnpm --filter @grafting/architecture-studio dev
 ```
 
-Then open `http://127.0.0.1:4511/` and verify:
+The owner opened `http://127.0.0.1:4511/` in a real browser and confirmed the
+X6 viewer was operating correctly against the following acceptance criteria:
 
 - the status reports the node/edge counts and input hash;
 - projects, tasks, and agents render in separate columns;
 - nodes and edges cannot be moved, connected, deleted, or edited;
 - panning, Ctrl/Command+wheel zoom, and “Center graph” work;
 - no console/runtime error occurs.
+
+The browser product/version was not captured, so this is acceptance evidence
+for the spike on the owner's machine rather than a browser compatibility
+matrix.
 
 ## Dependencies and supply chain
 
@@ -83,6 +88,6 @@ to `false` in `pnpm-workspace.yaml`; no security exception was granted.
 
 ## Disposition
 
-The schema/extractor and package boundary are suitable evidence for I-002/I-004
-planning. Formal acceptance waits only on the real-browser check and a later
-owner decision about promoting the candidate schema to Graph IR v1.
+The spike is accepted. The schema/extractor and package boundary are suitable
+evidence for I-002/I-004 planning. This does not promote the candidate schema
+to Graph IR v1; that remains a separate owner-reviewed architectural task.
