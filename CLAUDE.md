@@ -5,9 +5,13 @@ Read and follow, in order:
 1. `AGENTS.md`;
 2. `GRAFTING_MASTER_SOURCE.md`;
 3. `CURRENT_PLANNING_STATE.md`;
-4. applicable ADRs and contracts.
+4. `.ai/coordination/PROTOCOL.md` and current task/handoff state;
+5. applicable ADRs and contracts.
 
 This file is only an adapter for Claude and does not repeat the architecture.
+Claude must claim or receive a task through the canonical coordination
+protocol before editing. Chat context is not a substitute for repository
+state.
 
 While the project is still in the planning phase:
 

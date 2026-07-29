@@ -1,9 +1,4 @@
-"""Example uv workspace member (Epic B / Phase 1 scaffold proof).
-
-Not yet used for real automation -- master source S8.1 lists the intended
-uses (HTTP requests, CI tools, docs, maintenance scripts) for when real
-work starts here.
-"""
+"""Deterministic repository automation for the Grafting monorepo."""
 
 
 def placeholder_version() -> str:

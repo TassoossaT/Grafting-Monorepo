@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "agents": [
+    {
+      "id": "repository-owner",
+      "provider": "human",
+      "summary": "Owns product decisions, approvals, and OPEN Decision Gates."
+    },
+    {
+      "id": "claude",
+      "provider": "anthropic",
+      "summary": "General planning, implementation, review, or verification agent selected per task."
+    },
+    {
+      "id": "codex",
+      "provider": "openai",
+      "summary": "General planning, implementation, review, or verification agent selected per task."
+    },
+    {
+      "id": "gemini",
+      "provider": "google",
+      "summary": "General planning, implementation, review, or verification agent selected per task."
+    }
+  ]
+}

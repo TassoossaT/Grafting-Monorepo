@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "policies": [
+    {
+      "id": "multi-agent-coordination-v1",
+      "status": "active",
+      "source": ".ai/coordination/PROTOCOL.md",
+      "summary": "Single-owner tasks and immutable structured handoffs across providers."
+    }
+  ]
+}

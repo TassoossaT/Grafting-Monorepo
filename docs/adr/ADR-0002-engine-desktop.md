@@ -1,7 +1,8 @@
 # ADR-0002: Desktop game engine in C# (GATE-002)
 
-- Status: **Partially resolved — engine decision formally deferred; generic ABI work
-  cleared to proceed.** This ADR does not close the gate.
+- Status: **Engine decision in indefinite standby; generic ABI feasibility proven.**
+  This ADR does not close the gate. Work resumes only when the owner explicitly starts a
+  concrete C# game project.
 - Date: 2026-07-26 (proposed and revised on the same day)
 - Related gate: `GATE-002`
 - Already-`LOCKED` decisions that constrain the choice space: DEC-001 (Rust is the single
@@ -35,6 +36,13 @@ This is exactly the situation the master source already anticipated: "the core m
 assume Unity, Godot, or another engine until the gate closes" (section 5). The correct
 response is not to invent a choice, nor to lock all C#-related work — it is to separate what
 is generic by construction from what is engine-specific.
+
+### Standby confirmation (2026-07-28)
+
+The owner confirmed that GATE-002 remains paused for an indefinite period. The implemented
+C ABI and generic C# interop were intended to prove feasibility; that objective is now met.
+No engine comparison, desktop scaffold, engine-specific wrapper, or further C# game work is
+authorized until the owner explicitly resumes this gate with a concrete game project.
 
 ### Two tracks
 
@@ -143,11 +151,15 @@ sense with a real game to calibrate against.
 > `isekai-capi` crate and the generic `Grafting.Isekai.Interop` library validated by a
 > .NET harness without an engine. No agent should choose an engine by default nor treat this
 > ADR as closing the gate.
+>
+> **Confirmed on 2026-07-28:** Track 1 is complete and the remaining Track 2 is in
+> indefinite standby. Time passing, new agent sessions, or unrelated C# maintenance do not
+> implicitly resume it.
 
 ## Next steps
 
-- Now: implement `isekai-capi` (Track 1) and the generic validation harness, covering the
-  original acceptance criterion of spike A-005 without depending on an engine.
+- [x] Implement `isekai-capi` (Track 1) and the generic validation harness, covering the
+      original acceptance criterion of spike A-005 without depending on an engine.
 - Once a C# game project is defined: reopen this ADR, run spike A-005 specifically against
   the candidate engine(s), and only then fill in Track 2.
 - Close `GATE-008` (license) alongside the engine choice, if it depends on that.

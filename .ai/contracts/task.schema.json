@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grafting.local/schemas/ai-task-v1.json",
+  "title": "Grafting multi-agent task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "task_id", "title", "status", "owner", "revision",
+    "updated_at", "objective", "affected_paths", "blockers", "validations",
+    "artifacts", "risks", "next_responsible_party"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "task_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9-]{2,63}$" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["planned", "in_progress", "blocked", "completed", "cancelled"] },
+    "owner": { "type": ["string", "null"] },
+    "revision": { "type": "integer", "minimum": 1 },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "objective": { "type": "string", "minLength": 1 },
+    "affected_paths": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "blockers": { "type": "array", "items": { "type": "string" } },
+    "validations": { "type": "array", "items": { "type": "string" } },
+    "artifacts": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "next_responsible_party": { "type": ["string", "null"] }
+  }
+}

@@ -340,6 +340,7 @@ In the first version:
 | DEC-045 | Monorepo distribution is monolithic: a single workspace, multiple products as distinct `apps/`, with no satellite repositories per product. "Selling" a product means packaging that app's build artifact (`dist/<app>`), not splitting repositories (GATE-007, `docs/adr/ADR-0007-repo-distribution-strategy.md`). |
 | DEC-046 | A capability is born in `libs/domains` or `packages/` — never duplicated inside an `app` — whenever more than one product needs it or it is reasonable to foresee that it will; an `app` only composes domains, presents UI, and integrates the host. Initial map: `narrative` and `session` are generic domains (`libs/domains`); the VTT's interactive map is product-specific, sharing only the `packages/x6-canvas` wrapper with the Architecture Studio; Discord and transcription are external integrations that consume contracts, never internal domains (`docs/adr/ADR-0008-libs-boundary-and-domain-map.md`). |
 | DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
+| DEC-048 | Phase 1 communication between Claude, Codex, Gemini, and future providers uses provider-neutral, versioned files under `.ai/state/`: one active owner per task, immutable structured handoffs, deterministic validation without model calls, and short vendor adapters that point to the canonical protocol instead of duplicating it (`docs/adr/ADR-0010-multi-agent-coordination.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -588,9 +589,10 @@ client-only Next.js route, without participating in SSR.
 
 ### GATE-002 — Desktop Engine
 
-Status: **open, formally deferred until there is a concrete C# game project** (see
-`docs/adr/ADR-0002-engine-desktop.md`). There is currently no specific game or engine to
-evaluate; forcing this choice now would mean deciding without evidence.
+Status: **open and in indefinite standby until the owner explicitly resumes C# game
+development** (see `docs/adr/ADR-0002-engine-desktop.md`). The generic C ABI and .NET
+interop feasibility work is complete; there is currently no specific game or engine to
+evaluate, and no further engine-specific work is planned while the gate is in standby.
 
 The choice, when resumed, needs to evaluate:
 

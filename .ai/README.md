@@ -7,24 +7,35 @@ for agent behavior rules.
 
 ## Current state
 
-This is a **minimal** bootstrap, not the full structure described in §29.1.
-Only what has real content today exists on disk:
+This is a **minimal operational control plane**, not the full structure
+described in §29.1. Only directories with real content exist. Phase 1
+multi-agent communication is now active through versioned files:
 
 ```text
 .ai/
 ├── README.md
+├── coordination/
+├── contracts/
+├── registry/
+├── state/
 └── skills/
     └── task-completion/
         ├── SKILL.md
         └── manifest.yaml
 ```
 
-The remaining directories from the canonical layout (`registry/`,
-`policies/`, `agents/`, `prompts/`, `workflows/`, `context/`, `contracts/`,
-`adapters/`, `evals/`, `catalog/`, `state/`, `reports/`, `scripts/`) are
-intentionally not created yet — per §4.3, directories are not scaffolded
-empty ahead of a real need. They are added one at a time as Fase 0/1 work
-actually produces content for them.
+The remaining directories from the canonical layout (`policies/`, `agents/`,
+`prompts/`, `workflows/`, `context/`, `adapters/`, `evals/`, `catalog/`,
+`reports/`, `scripts/`) are intentionally not created yet. They are added one
+at a time when real work produces content for them.
+
+## Coordination
+
+`.ai/coordination/PROTOCOL.md` is the provider-neutral workflow. Task records
+under `.ai/state/tasks/` establish ownership; handoff records under
+`.ai/state/handoffs/` transfer discoveries and responsibility without relying
+on private chat history. Contracts and registries are JSON-compatible YAML or
+JSON so validation needs no model call and no external service.
 
 ## Skills
 

@@ -53,6 +53,29 @@ Once there is an implemented backlog:
 - separate implementation from independent review;
 - preserve unrelated changes.
 
+## Multi-agent coordination
+
+Claude, Codex, Gemini, and any future provider use the same repository state.
+Vendor adapters (`CLAUDE.md`, `GEMINI.md`, and equivalent files) may only
+point to canonical instructions; they must not restate or override them.
+
+Before starting implementation, every agent MUST read
+`.ai/coordination/PROTOCOL.md` and inspect `.ai/state/tasks/` and
+`.ai/state/handoffs/`. The protocol is mandatory whenever more than one agent
+or session can touch the repository.
+
+- one task has exactly one active owner;
+- an agent must claim or receive a task before editing its scope;
+- an agent must not edit files owned by another active task;
+- discoveries that affect another task are sent through a structured handoff;
+- task and handoff records are repository state, not architectural authority;
+- changing the protocol, registries, policies, hooks, permissions, skills, or
+  MCPs requires a separate task and explicit owner approval;
+- provider chat history is never treated as shared state or evidence;
+- before writing a task record, re-read it and refuse the write if ownership or
+  revision changed unexpectedly;
+- run the repository's AI-state validation before reporting completion.
+
 ## Before editing
 
 Declare:

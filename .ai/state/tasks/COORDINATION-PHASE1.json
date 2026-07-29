@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task_id": "COORDINATION-PHASE1",
+  "title": "Provider-neutral file-based agent coordination",
+  "status": "completed",
+  "owner": "codex",
+  "revision": 2,
+  "updated_at": "2026-07-28T23:12:22-03:00",
+  "objective": "Keep Claude, Codex, and Gemini aligned through one canonical protocol, single-owner task records, and structured handoffs.",
+  "affected_paths": [
+    ".ai/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "docs/adr/ADR-0010-multi-agent-coordination.md",
+    "python/automation/"
+  ],
+  "blockers": [],
+  "validations": [
+    "uv run --package automation pytest",
+    "uv run --package automation python -m automation.coordination --root .",
+    "manual adapter drift review"
+  ],
+  "artifacts": [
+    ".ai/coordination/PROTOCOL.md",
+    ".ai/contracts/task.schema.json",
+    ".ai/contracts/handoff.schema.json",
+    ".ai/registry/agents.yaml",
+    ".ai/registry/policies.yaml",
+    "docs/adr/ADR-0010-multi-agent-coordination.md",
+    "python/automation/src/automation/coordination.py"
+  ],
+  "risks": [
+    "Concurrent edits cannot be made atomic by Git files alone; ownership and revision checks are cooperative controls."
+  ],
+  "next_responsible_party": "repository-owner"
+}
