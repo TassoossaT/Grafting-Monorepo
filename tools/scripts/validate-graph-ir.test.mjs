@@ -23,27 +23,16 @@ test("rejects records without evidence at the schema boundary", async () => {
   );
 });
 
-test("rejects dangling edge endpoints", async () => {
-  await assert.rejects(
-    validateGraphIrFile("docs/graph-ir/fixtures/invalid-dangling-edge.graph.json"),
-    /references missing target project:missing/,
-  );
-});
-
 test("rejects non-canonical edge IDs", async () => {
   const document = await validDocument();
   document.edges[0].id = "edge:wrong";
   await assert.rejects(validateGraphIrDocument(document), /id is not canonical/);
 });
 
-test("rejects unsorted and duplicate node IDs", async () => {
+test("rejects unsorted node IDs", async () => {
   const unsorted = await validDocument();
   unsorted.nodes.reverse();
   await assert.rejects(validateGraphIrDocument(unsorted), /nodes must be sorted by ID/);
-
-  const duplicate = await validDocument();
-  duplicate.nodes.push(structuredClone(duplicate.nodes[0]));
-  await assert.rejects(validateGraphIrDocument(duplicate), /nodes IDs must be unique/);
 });
 
 test("rejects evidence path traversal", async () => {

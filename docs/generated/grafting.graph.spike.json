@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "0d8dbfa99e224b412486b7f329e42d806202bd4be4d700183c9ce794e3b0fecf",
+  "inputHash": "2c670e24f9afd0f71804095e0637a7b841605a75fd6de06373dda992b91700ee",
   "nodes": [
     {
       "id": "agent:claude",
@@ -99,6 +99,18 @@
         "type:lib"
       ],
       "source": "libs/engine/domain-core/project.json"
+    },
+    {
+      "id": "project:graph-core",
+      "kind": "project",
+      "label": "graph-core",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:shared",
+        "type:lib"
+      ],
+      "source": "libs/graph/core/project.json"
     },
     {
       "id": "project:graph-x6",
@@ -197,6 +209,15 @@
       "source": ".ai/state/tasks/ADR-0011-PACKAGE-BOUNDARIES.json"
     },
     {
+      "id": "task:ADR-0013-RUST-GRAPH-API-CONTRACTS",
+      "kind": "task",
+      "label": "ADR-0013-RUST-GRAPH-API-CONTRACTS",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json"
+    },
+    {
       "id": "task:COORDINATION-PHASE1",
       "kind": "task",
       "label": "COORDINATION-PHASE1",
@@ -204,6 +225,15 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/COORDINATION-PHASE1.json"
+    },
+    {
+      "id": "task:GRAPH-001-RUST-CORE",
+      "kind": "task",
+      "label": "GRAPH-001-RUST-CORE",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/GRAPH-001-RUST-CORE.json"
     },
     {
       "id": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE",
@@ -355,11 +385,25 @@
       "evidence": ".ai/state/tasks/ADR-0011-PACKAGE-BOUNDARIES.json#/owner"
     },
     {
+      "id": "task:ADR-0013-RUST-GRAPH-API-CONTRACTS->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:ADR-0013-RUST-GRAPH-API-CONTRACTS",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json#/owner"
+    },
+    {
       "id": "task:COORDINATION-PHASE1->agent:codex:owned_by",
       "kind": "owned_by",
       "source": "task:COORDINATION-PHASE1",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/COORDINATION-PHASE1.json#/owner"
+    },
+    {
+      "id": "task:GRAPH-001-RUST-CORE->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:GRAPH-001-RUST-CORE",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/GRAPH-001-RUST-CORE.json#/owner"
     },
     {
       "id": "task:I-001-KNOWLEDGE-AUTOMATION-PLANE->agent:codex:owned_by",

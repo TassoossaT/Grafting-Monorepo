@@ -33,11 +33,11 @@
       }
     },
     {
-      "id": "project:graph",
+      "id": "project:graph-core",
       "kind": "project",
       "authorityClass": "canonical_authored_source",
       "level": "L0",
-      "label": "Generic graph capability",
+      "label": "Rust graph core",
       "tags": ["scope:shared", "type:lib"],
       "provenance": {
         "extractor": {
@@ -49,8 +49,8 @@
         "evidence": [
           {
             "kind": "manual",
-            "path": "docs/adr/ADR-0012-knowledge-automation-plane.md",
-            "pointer": "/",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/metadata/graphIr",
             "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
           }
         ]
@@ -59,10 +59,10 @@
   ],
   "edges": [
     {
-      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Agraph",
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Agraph-core",
       "kind": "depends_on",
       "source": "project:architecture-studio",
-      "target": "project:graph",
+      "target": "project:graph-core",
       "relationClass": "declared",
       "provenance": {
         "extractor": {

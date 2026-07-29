@@ -1,0 +1,35 @@
+use grafting_graph_core::{
+    Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId,
+};
+
+#[test]
+fn public_names_and_signatures_remain_consumable() {
+    let node_id = NodeId::new("node:a").expect("valid node ID");
+    let target_id = NodeId::new("node:b").expect("valid node ID");
+    let edge_id = EdgeId::new("edge:a-b").expect("valid edge ID");
+    let nodes = vec![
+        Node::new(node_id.clone(), 10_u32),
+        Node::new(target_id.clone(), 20_u32),
+    ];
+    let edges = vec![Edge::new(
+        edge_id.clone(),
+        node_id.clone(),
+        target_id.clone(),
+        "depends_on",
+    )];
+
+    let graph: Graph<u32, &str> = Graph::try_from_parts(nodes, edges).expect("valid graph");
+    let _: usize = graph.node_count();
+    let _: usize = graph.edge_count();
+    let _: Option<&Node<u32>> = graph.node(&node_id);
+    let _: Option<&Edge<&str>> = graph.edge(&edge_id);
+    let _: Result<Vec<NodeId>, GraphError> = graph.successors(&node_id);
+    let _: Result<Vec<NodeId>, GraphError> = graph.predecessors(&target_id);
+    let _: Result<Vec<NodeId>, GraphError> = graph.topological_order();
+    let snapshot: GraphSnapshot<u32, &str> = graph.snapshot();
+    let _: &[Node<u32>] = snapshot.nodes();
+    let _: &[Edge<&str>] = snapshot.edges();
+
+    let _: Result<NodeId, IdentifierError> = NodeId::new(String::from("node:c"));
+    let _: Result<EdgeId, IdentifierError> = EdgeId::new(String::from("edge:c"));
+}

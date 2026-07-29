@@ -814,6 +814,126 @@
             }
           }
         }
+      },
+      "graph-core": {
+        "name": "graph-core",
+        "type": "lib",
+        "data": {
+          "root": "libs/graph/core",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-graph-core --all-targets --all-features"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml",
+                "{workspaceRoot}/docs/graph-ir/fixtures/**/*"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-graph-core --all-features"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo clippy -p grafting-graph-core --all-targets --all-features -- -D warnings"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "format": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo fmt -p grafting-graph-core -- --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "api-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/lib.rs",
+                "{projectRoot}/src/model.rs",
+                "{projectRoot}/tests/public_api_contract.rs",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-graph-core --test public_api_contract"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-ir-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/docs/graph-ir/fixtures/valid-minimal.graph.json"
+              ],
+              "options": {
+                "command": "cargo run -p grafting-graph-core --features graph-ir-cli --bin validate-graph-ir -- docs/graph-ir/fixtures/valid-minimal.graph.json"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "graph-core",
+          "projectType": "library",
+          "tags": [
+            "scope:shared",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "id": "graph-core",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
       }
     },
     "dependencies": {
@@ -891,7 +1011,8 @@
           "target": "x6-canvas",
           "type": "static"
         }
-      ]
+      ],
+      "graph-core": []
     }
   }
 }

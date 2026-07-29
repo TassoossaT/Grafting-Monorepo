@@ -58,17 +58,21 @@ confidence below `1` and can never be presented as normative truth.
 
 ## Deterministic invariants
 
-The JSON Schema validates record shape. The adjacent semantic validator also
-enforces constraints JSON Schema cannot express locally:
+The JSON Schema validates document shape. The adjacent Graph IR adapter
+enforces format-specific invariants JSON Schema cannot express locally:
 
-- unique node and edge IDs;
-- node ID prefix matches node kind;
+- node ID prefixes match node kinds;
 - canonical edge IDs match source/kind/target;
-- all edge endpoints exist;
-- node and edge arrays are sorted by ID;
+- node and edge arrays are serialized in ID order;
 - evidence paths are relative, normalized, and traversal-free;
 - record revisions match the root source revision;
 - confidence agrees with declared or approximate relation class.
+
+The Rust `grafting-graph-core` is authoritative for reusable graph semantics,
+including unique node and edge identities, endpoint existence, traversal,
+cycle handling, deterministic graph algorithms, and future graph mathematics.
+The validation command runs both layers; TypeScript must not duplicate the Rust
+rules (DEC-051).
 
 Run:
 

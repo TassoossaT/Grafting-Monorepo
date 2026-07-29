@@ -29,6 +29,11 @@ The agent MUST NOT:
 - silently close an `OPEN` decision;
 - replace a `LOCKED` technology choice;
 - duplicate Rust logic in TypeScript, C#, or Python;
+- implement reusable graph structures, semantic validation, algorithms,
+  ordering, queries, diffs, layout mathematics, or other significant graph
+  calculations outside `grafting-graph-core`; callers may own presentation
+  enrichment but must use explicit Rust contracts for computation (DEC-051,
+  `docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`);
 - duplicate authoritative behavior across packages, applications, languages,
   or adapters; independent tests, generated bindings, frozen fixtures, thin
   boundary translations, and derived evidence must remain traceable to one
@@ -48,6 +53,9 @@ The agent MUST NOT:
 - introduce a tool, agent, skill, or MCP without need and evaluation;
 - modify security controls or its own maintenance without approval;
 - treat summary documents as superior to the master source;
+- change a consumed package's public names, required inputs, outputs, or
+  documented obligations without updating its public-API baseline, running its
+  `api-check`, and preserving its behavioral contract tests (DEC-051);
 - inspect `cfg(target_os)`, `navigator.gpu`, `process.platform`, or RID
   directly outside `polymath` (Rust), `@grafting/polymath` (TypeScript), or
   `Grafting.Polymath` (C#) — all platform/runtime inspection is centralized

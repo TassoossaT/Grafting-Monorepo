@@ -32,6 +32,7 @@ planning
 → closing the Decision Gates     ← done
 → Knowledge/Automation Plane ADR   ← done (I-001, DEC-050)
 → Graph IR v1 contract             ← done (I-002; extractor remains I-004)
+→ generic Rust graph core          ← done (GRAPH-001, DEC-051)
 → full English translation pass   ← done
 → disposable spikes                ← done (8 accepted)
 → scaffold                          ← in progress (Epic B core done; see below)
@@ -61,7 +62,8 @@ GATE-009 without an explicit decision from the owner.
 | Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
 | Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
 | Capability autonomy and external isolation | Reusable capabilities use the smallest useful boundary (module tree, package, or host app); third-party APIs stay internal, package count remains evidence-driven, and authoritative behavior is implemented once | DEC-049 · ADR-0011 · master source §2.6 |
-| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; `@grafting/graph` owns generic graph ports, `@grafting/x6-canvas` implements them and exclusively owns X6, and the Studio owns composition | DEC-050 · ADR-0012 · master source §§16.7-16.8 |
+| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; graph computation, visual adaptation, and application presentation are separate responsibilities. The original TypeScript graph-package allocation is amended by DEC-051 | DEC-050 · ADR-0012 · master source §§16.7-16.8 |
+| Rust graph authority and API contracts | Rust owns reusable graph structures/calculations; callers own presentation enrichment; every consumed package has a generated API baseline plus behavioral contract tests | DEC-051 · ADR-0013 · master source §§2.7, 16.8 |
 
 Pending, but not blocking Phase 0: standard directory for external
 integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
@@ -636,18 +638,50 @@ that version range.
   repo's own ADR convention (`docs/adr/README.md`), even though the code
   it documents is implemented and tested.
 
+## Generic Rust graph core (GRAPH-001), 2026-07-29
+
+DEC-051 is implemented as a real Cargo/Nx project at `libs/graph/core`, not as
+an empty planned directory:
+
+- `grafting-graph-core` is a generic directed multigraph with Grafting-owned
+  node/edge IDs, generic calculation payloads, private storage, endpoint and
+  identity validation, deterministic predecessor/successor queries, immutable
+  sorted snapshots, and deterministic topological ordering with explicit cycle
+  errors;
+- `petgraph 0.8.3` is pinned and private. Its types do not cross the public API;
+  optional pinned `serde`/`serde_json` dependencies exist only for the Graph IR
+  CLI adapter. All three dependencies are MIT OR Apache-2.0;
+- `graph-core:format`, `check`, `lint`, `test`, `api-check`, and
+  `graph-ir-check` are real Nx targets. Six Rust tests cover structure,
+  determinism, cycles, the public names/signatures, and positive/negative
+  Graph IR CLI behavior;
+- Graph IR shape and format-specific provenance/canonicalization stay in JSON
+  Schema/JavaScript. Duplicate identities and missing endpoints now run only
+  through the Rust core, so the prior cross-language behavior copy is gone;
+- `pnpm graph:v1:check` and `pnpm graph:v1:test` execute both the Graph IR layer
+  and the Rust structural layer.
+
+Deliberately not done in GRAPH-001: no speculative mathematics dependency or
+unused algorithm catalog was added; no fine-grained Rust/Wasm calls were
+created; and the working `graph-x6` spike package was not removed before its
+Architecture Studio consumer is migrated atomically. I-003 still owns the
+generated, Git-tracked API baseline convention across languages; GRAPH-001
+provides the compile-time public API contract and behavioral tests now.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-I-001 is accepted as DEC-050/ADR-0012 and I-002 is complete with a validated
-Graph IR v1 contract. Before the atomic graph boundary migration, SECURITY-001
-should remediate the audit's 6 high and 11 moderate advisories through Vite and
-Nx dependency paths; Ajv is not affected. After that, create `@grafting/graph`,
-make `@grafting/x6-canvas` implement its port, move the Graph IR projection into
-Architecture Studio, and remove `graph-x6` without duplicated mapping. I-004
-then replaces the spike output with the real Graph IR v1 extractor. ADR-0009's
-Decision section remains pending owner confirmation; `engine_submit(bytes)` and
-E-003 remain separately scoped future work.
+I-001/DEC-050, I-002, and GRAPH-001/DEC-051 are complete. I-003 should now
+standardize generated public-API baselines and `api-check` behavior across
+consumed packages. I-004 then replaces the spike Graph IR output with the v1
+extractor. With those contracts/data in place, the Architecture Studio can
+atomically move the Graph IR presentation projection out of `graph-x6`, consume
+batched Rust graph results through the Wasm boundary, render through
+`@grafting/x6-canvas`, and remove the transitional package without an outage.
+SECURITY-001 remains a separate planned remediation for 6 high and 11 moderate
+Vite/Nx-path advisories; Ajv is not affected. ADR-0009's Decision section
+remains pending owner confirmation; `engine_submit(bytes)` and E-003 remain
+separately scoped future work.
 
 ## Update rule
 

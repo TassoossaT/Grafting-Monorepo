@@ -1,0 +1,91 @@
+{
+  "name": "graph-core",
+  "root": "libs/graph/core",
+  "projectType": "library",
+  "tags": ["scope:shared", "lang:rust", "platform:cross", "type:lib"],
+  "metadata": {
+    "graphIr": {
+      "id": "graph-core",
+      "kind": "lib",
+      "tags": ["scope:shared", "lang:rust", "platform:cross"]
+    }
+  },
+  "targets": {
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo fmt -p grafting-graph-core -- --check"
+      },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/rust-toolchain.toml"]
+    },
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo check -p grafting-graph-core --all-targets --all-features"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo clippy -p grafting-graph-core --all-targets --all-features -- -D warnings"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p grafting-graph-core --all-features"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml",
+        "{workspaceRoot}/docs/graph-ir/fixtures/**/*"
+      ]
+    },
+    "api-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p grafting-graph-core --test public_api_contract"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/lib.rs",
+        "{projectRoot}/src/model.rs",
+        "{projectRoot}/tests/public_api_contract.rs",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "graph-ir-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo run -p grafting-graph-core --features graph-ir-cli --bin validate-graph-ir -- docs/graph-ir/fixtures/valid-minimal.graph.json"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/docs/graph-ir/fixtures/valid-minimal.graph.json"
+      ]
+    }
+  }
+}

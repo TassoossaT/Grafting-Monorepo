@@ -1,0 +1,21 @@
+[package]
+name = "grafting-graph-core"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Generic graph structures and deterministic algorithms owned by Grafting."
+
+[features]
+default = []
+graph-ir-cli = ["dep:serde", "dep:serde_json"]
+
+[dependencies]
+petgraph = "=0.8.3"
+serde = { version = "=1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "=1.0.151", optional = true }
+
+[[bin]]
+name = "validate-graph-ir"
+path = "src/bin/validate_graph_ir.rs"
+required-features = ["graph-ir-cli"]

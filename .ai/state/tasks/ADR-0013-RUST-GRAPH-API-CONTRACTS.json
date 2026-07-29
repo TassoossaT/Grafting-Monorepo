@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "ADR-0013-RUST-GRAPH-API-CONTRACTS",
+  "title": "Rust graph authority and per-package API contracts",
+  "status": "completed",
+  "owner": "codex",
+  "revision": 2,
+  "updated_at": "2026-07-29T09:23:42-03:00",
+  "objective": "Record the owner's decision that reusable graph structures and calculations are authoritative in Rust while callers own presentation enrichment, and require generated public-API baselines plus behavioral contract tests for consumed packages.",
+  "affected_paths": [
+    ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json",
+    "docs/adr/ADR-0012-knowledge-automation-plane.md",
+    "docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md",
+    "docs/adr/README.md",
+    "AGENTS.md",
+    "packages/x6-canvas/AGENTS.md",
+    "packages/graph-x6/AGENTS.md",
+    "apps/architecture-studio/AGENTS.md",
+    "docs/graph-ir/AGENTS.md",
+    "docs/graph-ir/README.md",
+    "GRAFTING_MASTER_SOURCE.md",
+    "CURRENT_PLANNING_STATE.md",
+    "docs/generated/grafting.graph.spike.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "repository owner explicitly required Rust authority for graph structures and calculations on 2026-07-29",
+    "coordination validation passed with 10 tasks",
+    "control-plane audit passed with zero model calls and zero side effects",
+    "Graph IR candidate generation and freshness check passed with 26 nodes and 20 edges",
+    "manual authority, dependency-direction, vendor-isolation, and API-contract review passed",
+    "git diff whitespace check passed"
+  ],
+  "artifacts": [
+    "docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md",
+    "docs/adr/ADR-0012-knowledge-automation-plane.md",
+    "GRAFTING_MASTER_SOURCE.md",
+    "CURRENT_PLANNING_STATE.md",
+    "AGENTS.md",
+    "docs/graph-ir/AGENTS.md",
+    "docs/graph-ir/README.md",
+    "docs/generated/grafting.graph.spike.json"
+  ],
+  "risks": [
+    "A manually maintained universal IDL would duplicate native public APIs and drift.",
+    "Exposing petgraph, nalgebra, X6, or other vendor types would make Grafting contracts depend on replaceable implementations.",
+    "API signature snapshots cannot prove behavior; consumed packages also require behavioral contract tests."
+  ],
+  "next_responsible_party": "codex"
+}

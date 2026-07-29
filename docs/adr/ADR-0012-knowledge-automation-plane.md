@@ -4,6 +4,9 @@
 - Proposal date: 2026-07-29.
 - Decision date: 2026-07-29.
 - Record: DEC-050.
+- Amendment: DEC-051/ADR-0013 moves the generic graph model and calculations
+  from the originally proposed TypeScript package into the Rust
+  `grafting-graph-core` crate. The authority/lifecycle decision remains valid.
 - Backlog item: I-001.
 - Related: DEC-028, DEC-040, DEC-046, DEC-048, DEC-049, ADR-0010,
   ADR-0011, and master source sections 16 and 25.
@@ -79,55 +82,31 @@ The Studio must not write generated Graph IR, generated bindings, test output,
 or audit output directly. It may remember presentation state without treating
 that state as repository truth.
 
-### Generic graph port and X6 adapter
+### Rust graph core and X6 adapter
 
-The target TypeScript dependency direction is:
+DEC-051 amends the originally proposed TypeScript graph package. The target
+dependency direction is:
 
 ```text
-                         +--------------------+
-Graph IR projection ---> | @grafting/graph    |
-                         | model + ports      |
-                         +---------^----------+
-                                   |
-                         implements| GraphCanvasPort
-                                   |
-                         +---------+----------+
-                         | @grafting/x6-canvas|
-                         | X6 adapter         |
-                         +---------+----------+
-                                   |
-                                @antv/x6
-
-apps/architecture-studio composes the projection, graph contract, and adapter.
+Graph IR / product inputs
+  -> grafting-graph-core (Rust model, validation, algorithms, math)
+  -> immutable result/snapshot through Isekai/Wasm when required
+  -> application presentation enrichment
+  -> @grafting/x6-canvas
+  -> @antv/x6
 ```
 
-Using the owner's connector analogy, `@grafting/graph` owns the stable female
-socket and `@grafting/x6-canvas` supplies the matching male plug. Concretely:
+`grafting-graph-core` owns vendor-neutral graph structures and reusable or
+significant calculations. `@grafting/x6-canvas` owns only the Grafting visual
+interface and the private X6 adapter. The application owns labels, colors,
+icons, components, viewport state, and product metadata that does not affect a
+shared calculation. Calculation-affecting data crosses an explicit Rust-owned
+command or parameter contract.
 
-- `@grafting/graph` owns the vendor-neutral immutable node/edge model and the
-  ports used to render, select, inspect, and dispose graph views;
-- graph extension points are framework-neutral ports and callbacks first;
-  React hooks or other framework bindings are added only with a real consumer;
-- `@grafting/graph` knows neither Graph IR nor X6, DOM containers, VTT rules,
-  documentation routes, or product presentation;
-- `@grafting/x6-canvas` depends on the graph contract, imports `@antv/x6`, and
-  implements the browser adapter without exporting vendor types or the mutable
-  X6 `Graph`;
-- `apps/architecture-studio` initially owns its Graph IR-to-generic-graph
-  projection as an internal module because it is the only real consumer;
-- if that projection gains another real consumer, it is promoted as one
-  coherent capability instead of being copied.
-
-The current `@grafting/graph-x6` spike package is transitional. A later
-implementation task will migrate its generic model/port behavior into
-`@grafting/graph`, move the Graph IR projection to the Studio's owning boundary,
-and retire or rename `graph-x6` atomically. The repository must not retain both
-old and new authoritative mapping paths.
-
-This creates two reusable packages because there are two demonstrated
-boundaries: a vendor-neutral graph contract and a replaceable X6 runtime
-adapter. It does not establish a package-per-layer or package-per-dependency
-rule.
+The current `@grafting/graph-x6` spike package is transitional. Its generic
+graph semantics move to Rust, Graph IR presentation mapping moves into the
+Studio, and the superseded package is removed atomically. No TypeScript graph
+implementation remains alongside Rust.
 
 ### Initial Architecture Studio scope
 
@@ -160,9 +139,10 @@ outside the Architecture Studio, including another graph-oriented product.
 
 ### Create separate packages for model, queries, hooks, layout, ports, and X6
 
-Rejected for now. No evidence justifies that package count. These concerns may
-start as modules within `@grafting/graph` and be separated only when DEC-049's
-reuse or ownership criteria are met.
+Rejected for now. No evidence justifies that package count. Graph concerns
+start as modules within one Rust crate; X6 remains one visual adapter package.
+They are separated further only when DEC-049's reuse or ownership criteria are
+met.
 
 ## Owner confirmation
 
@@ -171,8 +151,10 @@ The repository owner confirmed that:
 - the four authority classes and lifecycle are correct;
 - derived evidence is read-only and traceable to authored sources;
 - proposed edits target authored sources through plan/diff and approval;
-- `@grafting/graph` owns vendor-neutral ports and model;
-- `@grafting/x6-canvas` implements those ports and exclusively owns the X6 API;
+- the Rust graph core owns vendor-neutral model and calculations (as amended by
+  DEC-051);
+- `@grafting/x6-canvas` owns only the visual adapter and exclusively owns the
+  X6 API;
 - the Studio owns composition and its initial Graph IR projection;
 - the `graph-x6` migration happens atomically in a separately validated task.
 
@@ -180,8 +162,8 @@ The repository owner confirmed that:
 
 - I-002 can define Graph IR v1 without embedding viewer-library concepts.
 - Test and documentation views share provenance rules instead of custom copies.
-- X6 can be replaced or forked without changing the graph contract when that
-  contract remains valid.
+- X6 can be replaced or forked without changing Rust graph calculations or
+  their contracts.
 - A future renderer can implement the same graph port without changing the
   Knowledge Plane.
 - Presentation state and repository truth remain separate.
@@ -202,5 +184,6 @@ The repository owner confirmed that:
 1. record the accepted decision in the master source and current state;
 2. execute I-002 to define Graph IR v1 authority, identifiers, provenance, and
    evidence schemas;
-3. plan the atomic `graph-x6` to `graph` boundary migration against Graph IR v1;
+3. plan the atomic migration of reusable `graph-x6` semantics to the Rust graph
+   core and its presentation projection to the Studio against Graph IR v1;
 4. continue I-004 and I-006 with drift checks and a read-only Studio slice.

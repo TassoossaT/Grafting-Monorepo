@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.10.0`
+> Version: `1.11.0`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 — added DEC-050 and the validated Graph IR v1 contract from I-002.
+> Last updated: 2026-07-29 — added DEC-051 for Rust-owned graph computation and per-package public API contracts.
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -314,6 +314,22 @@ are allowed; they must not become alternate implementations of the same rule.
 Generic packages are created with a real capability and consumer, never as an
 empty speculative tree. See DEC-049 and ADR-0011.
 
+### 2.7 Public API contracts
+
+Every package consumed by another project treats its source-language public
+declarations and documentation as the authoritative API. A generated,
+Git-tracked API baseline records names, signatures, required inputs, outputs,
+errors/types, and documentation evidence. An `api-check` target fails when the
+regenerated baseline differs without review. Behavioral contract tests protect
+guarantees a signature cannot express.
+
+The baseline is derived evidence, not a second manually maintained interface.
+Intentional incompatible changes update code, baseline, documentation,
+affected consumers, and the applicable version/decision together. Native tools
+extract Rust, TypeScript, C#, and Python APIs; versioned schemas/IDLs remain
+authoritative only at actual ABI, protocol, or process boundaries. See DEC-051
+and ADR-0013.
+
 ---
 
 ## 3. Summary decision log
@@ -371,7 +387,8 @@ empty speculative tree. See DEC-049 and ADR-0011.
 | DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
 | DEC-048 | Phase 1 communication between Claude, Codex, Gemini, and future providers uses provider-neutral, versioned files under `.ai/state/`: one active owner per task, immutable structured handoffs, deterministic validation without model calls, and short vendor adapters that point to the canonical protocol instead of duplicating it (`docs/adr/ADR-0010-multi-agent-coordination.md`). |
 | DEC-049 | Reusable capabilities use the smallest useful consumer-agnostic boundary (internal tree, package, or host app); third-party runtime/library APIs remain inside that boundary and are exposed through Grafting-owned surfaces without vendor-type leakage; separate packages require real reuse/build/ownership/fork evidence; authoritative behavior has one implementation or canonical source, with explicit allowances for independent tests, generated bindings, frozen fixtures, thin boundary translations, and derived evidence (`docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`). |
-| DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. `@grafting/graph` owns vendor-neutral graph model/ports, `@grafting/x6-canvas` implements them and exclusively owns the X6 runtime API, and applications own composition and product projections (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
+| DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. Graph computation, visual adaptation, and application presentation remain separate; the original TypeScript graph-package allocation is amended by DEC-051 (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
+| DEC-051 | Reusable graph structures, semantic validation, algorithms, ordering, queries, diffs, layout mathematics, and other significant calculations are authoritative in the Rust `grafting-graph-core` crate; callers own presentation enrichment, while `@grafting/x6-canvas` privately owns X6. Every consumed package has a generated public-API baseline, an `api-check` target, and behavioral contract tests, with native source declarations remaining authoritative (`docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -770,6 +787,8 @@ reviewed when closing `GATE-004` and `GATE-009`.
 │   │   └── capi-bridge/
 │   ├── platform/
 │   │   └── polymath/
+│   ├── graph/
+│   │   └── core/
 │   └── domains/
 │       ├── narrative/
 │       └── session/
@@ -777,7 +796,6 @@ reviewed when closing `GATE-004` and `GATE-009`.
 │   ├── isekai-wasm/
 │   ├── isekai-web-client/
 │   ├── polymath/
-│   ├── graph/
 │   └── x6-canvas/
 ├── dotnet/
 │   ├── Grafting.Isekai.Interop/
@@ -2172,20 +2190,24 @@ V1 views:
 5. Documentation Map;
 6. AI Capability Map.
 
-Per DEC-046, DEC-049, and DEC-050, the target visualization boundary has two
-reusable packages. `packages/graph` owns a small vendor-neutral immutable graph
-model and rendering/interaction ports. `packages/x6-canvas` depends on those
-contracts, implements the browser adapter, and is the exclusive owner of the
-external X6 API. Its public surface must not expose the mutable vendor graph or
-other X6-owned types. Applications depend on the graph contract and a chosen
-adapter, then own their product-specific projection and composition.
+Per DEC-046, DEC-049, DEC-050, and DEC-051, reusable graph structures and
+calculations live in `libs/graph/core`. The Rust crate exposes Grafting-owned
+IDs, commands, results, errors, and immutable snapshots without leaking vendor
+graph or mathematics types. Significant operations cross runtime boundaries in
+batches rather than as individual arithmetic calls.
+
+`packages/x6-canvas` owns the Grafting visual input contract and is the
+exclusive owner of the external X6 API. Its public surface must not expose the
+mutable vendor graph or other X6-owned types. Applications enrich immutable
+results with labels, colors, icons, components, selection, and viewport state;
+data that affects a shared calculation is an explicit Rust input.
 
 The spike-era `packages/graph-x6` is transitional. It is migrated atomically
-after Graph IR v1 is defined: generic model/port behavior moves to
-`packages/graph`, the Architecture Studio owns its initial Graph IR projection,
-and the superseded package/path is removed so no second authoritative mapping
-remains. A VTT may reuse the graph contract and X6 adapter without sharing
-Architecture Studio or Graph IR semantics.
+after Graph IR v1 is defined: generic graph semantics move to Rust, the
+Architecture Studio owns its initial Graph IR presentation projection, and the
+superseded package/path is removed so no second authoritative mapping remains.
+A VTT may reuse the Rust graph core and X6 adapter without sharing Architecture
+Studio or Graph IR semantics.
 
 ### 16.9 Context packs
 
@@ -2821,6 +2843,8 @@ A task is only complete when:
 - a contract/ABI was versioned when necessary;
 - generated code is reproducible;
 - there is no duplicated authoritative logic across hosts, apps, or packages;
+- consumed packages have current generated public-API baselines and behavioral
+  contract tests for their documented guarantees;
 - third-party runtime APIs and types do not leak outside their designated
   owning module/project boundary;
 - error and cleanup were considered;

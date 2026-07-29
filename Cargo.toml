@@ -4,6 +4,7 @@ members = [
     "libs/engine/compute-api",
     "libs/engine/compute-cpu",
     "libs/engine/domain-core",
+    "libs/graph/core",
     "libs/isekai/capi-bridge",
     "libs/isekai/wasm-bridge",
 ]

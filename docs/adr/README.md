@@ -26,6 +26,7 @@ the project owner, per `AGENTS.md` and `CLAUDE.md`.
 | [ADR-0010](ADR-0010-multi-agent-coordination.md) | — (AI Control Plane Phase 1) | Provider-neutral task ownership and structured handoffs | **Accepted** |
 | [ADR-0011](ADR-0011-package-autonomy-and-external-isolation.md) | — (structural) | Package autonomy, external dependency isolation, and authoritative reuse | **Accepted (DEC-049)** |
 | [ADR-0012](ADR-0012-knowledge-automation-plane.md) | I-001 | Knowledge/Automation Plane authority, lifecycle, and graph ports | **Accepted (DEC-050)** |
+| [ADR-0013](ADR-0013-rust-graph-core-and-api-contracts.md) | — (structural amendment) | Rust graph authority and generated public API contracts per consumed package | **Accepted (DEC-051)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for

@@ -7,8 +7,8 @@
   "scripts": {
     "graph:generate": "node tools/scripts/generate-graph-ir.mjs",
     "graph:check": "node tools/scripts/generate-graph-ir.mjs --check",
-    "graph:v1:check": "node tools/scripts/validate-graph-ir.mjs docs/graph-ir/fixtures/valid-minimal.graph.json",
-    "graph:v1:test": "node --test tools/scripts/validate-graph-ir.test.mjs",
+    "graph:v1:check": "node tools/scripts/validate-graph-ir.mjs docs/graph-ir/fixtures/valid-minimal.graph.json && cargo run -p grafting-graph-core --features graph-ir-cli --bin validate-graph-ir -- docs/graph-ir/fixtures/valid-minimal.graph.json",
+    "graph:v1:test": "node --test tools/scripts/validate-graph-ir.test.mjs && cargo test -p grafting-graph-core --all-features",
     "ai:check": "uv run --package automation python -m automation.coordination --root .",
     "ai:audit": "uv run --package automation python -m automation.control_plane --root ."
   },

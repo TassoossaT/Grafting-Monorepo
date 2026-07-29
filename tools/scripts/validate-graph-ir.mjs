@@ -27,9 +27,8 @@ function canonicalEdgeId(edge) {
   return `edge:${encodeURIComponent(edge.source)}--${edge.kind}--${encodeURIComponent(edge.target)}`;
 }
 
-function validateSortedUnique(records, name, errors) {
+function validateSorted(records, name, errors) {
   const ids = records.map((record) => record.id);
-  if (new Set(ids).size !== ids.length) errors.push(`${name} IDs must be unique`);
   const sorted = [...ids].sort();
   if (ids.some((id, index) => id !== sorted[index])) {
     errors.push(`${name} must be sorted by ID`);
@@ -59,10 +58,9 @@ function validateProvenance(provenance, sourceRevision, location, errors) {
 
 function validateSemantics(document) {
   const errors = [];
-  validateSortedUnique(document.nodes, "nodes", errors);
-  validateSortedUnique(document.edges, "edges", errors);
+  validateSorted(document.nodes, "nodes", errors);
+  validateSorted(document.edges, "edges", errors);
 
-  const nodeIds = new Set(document.nodes.map((node) => node.id));
   document.nodes.forEach((node, index) => {
     if (!node.id.startsWith(`${node.kind}:`)) {
       errors.push(`nodes[${index}].id must start with ${node.kind}:`);
@@ -74,8 +72,6 @@ function validateSemantics(document) {
     if (edge.id !== canonicalEdgeId(edge)) {
       errors.push(`edges[${index}].id is not canonical for its source/kind/target tuple`);
     }
-    if (!nodeIds.has(edge.source)) errors.push(`edges[${index}] references missing source ${edge.source}`);
-    if (!nodeIds.has(edge.target)) errors.push(`edges[${index}] references missing target ${edge.target}`);
     if (edge.relationClass === "declared" && edge.provenance.confidence !== 1) {
       errors.push(`edges[${index}] declared relations must have confidence 1`);
     }
@@ -121,7 +117,11 @@ async function main() {
   }
   for (const path of paths) {
     const document = await validateGraphIrFile(path);
-    console.log(`Graph IR v1 valid: ${path} (${document.nodes.length} nodes, ${document.edges.length} edges)`);
+    const nodeLabel = document.nodes.length === 1 ? "node" : "nodes";
+    const edgeLabel = document.edges.length === 1 ? "edge" : "edges";
+    console.log(
+      `Graph IR v1 valid: ${path} (${document.nodes.length} ${nodeLabel}, ${document.edges.length} ${edgeLabel})`,
+    );
   }
 }
 
