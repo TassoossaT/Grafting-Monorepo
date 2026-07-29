@@ -39,9 +39,14 @@ Write-Host "==> flatc version check" -ForegroundColor Cyan
 $flatcPinned = (Get-Content (Join-Path $PSScriptRoot "../flatc-version.txt")).Trim()
 $flatcCmd = Get-Command flatc -ErrorAction SilentlyContinue
 if (-not $flatcCmd) {
-    throw "flatc not found on PATH. Install version $flatcPinned (see tools/flatc-version.txt) and re-run bootstrap."
+    $flatcCmd = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Google.flatbuffers_*\flatc.exe" `
+        -File -ErrorAction SilentlyContinue | Select-Object -First 1
 }
-$flatcVersionOutput = & flatc --version
+if (-not $flatcCmd) {
+    throw "flatc not found. Install version $flatcPinned (see tools/flatc-version.txt) and re-run bootstrap."
+}
+$flatcPath = if ($flatcCmd.Source) { $flatcCmd.Source } else { $flatcCmd.FullName }
+$flatcVersionOutput = & $flatcPath --version
 if ($flatcVersionOutput -notmatch [regex]::Escape($flatcPinned)) {
     throw "flatc version mismatch: found '$flatcVersionOutput', expected $flatcPinned (see tools/flatc-version.txt)."
 }

@@ -323,7 +323,7 @@ In the first version:
 | DEC-028 | Every Nx project is born with `project.json`, `README.md`, `AGENTS.md`, Graph IR metadata, and `src/`.                        |
 | DEC-029 | Capabilities, skills, tools, and context are loaded on demand.                                                         |
 | DEC-030 | Agent Skills is the base interoperable skill format.                                                                         |
-| DEC-031 | There will be a single durable source of tasks; Backlog.md is the initial default.                                                   |
+| DEC-031 | There is a single durable source of executable task state: one validated record per task under `.ai/state/tasks/`. Architectural backlog definitions remain in this master source; provider chat and generated Graph IR are not task authority (ADR-0010). |
 | DEC-032 | Each task has a single executing owner at a time; parallel executors use distinct worktrees.                      |
 | DEC-033 | The implementer cannot be the sole reviewer of their own change.                                                             |
 | DEC-034 | Continuous learning is evidence-driven, evaluated, and approval-gated.                                                             |
@@ -346,7 +346,7 @@ In the first version:
 
 | ID       | Decision to validate                                                                            |
 | -------- | --------------------------------------------------------------------------------------------- |
-| PROV-001 | Use the official `@nx/dotnet` plugin, currently subject to maturity validation in the spike. |
+| PROV-001 | Re-evaluate the official `@nx/dotnet` plugin when GATE-002 resumes or manual .NET metadata becomes costly. A-010 validated that the plugin is available and compatible, but the current small, generic C# surface deliberately retains explicit `nx:run-commands` targets as its documented fallback (`docs/benchmarks/toolchain-nx-validation-2026-07-28.md`). |
 | PROV-002 | Use `wasm-pack` as the initial packager for the Wasm binding.                                   |
 | PROV-003 | Use FlatBuffers for Commands, DomainEvents, ReplicationDeltas, and Snapshots.                  |
 | PROV-004 | Maintain a single `uv.lock` for the workspace's compatible Python packages.                 |
@@ -2985,19 +2985,20 @@ Automate only conventions already proven:
 ### Before the scaffold
 
 - [x] GATE-001 closed (`docs/adr/ADR-0001-host-web.md`, DEC-041).
-- [ ] GATE-002 closed — applies only to the desktop app scaffold and the
-      engine-specific wrapper; generic work on `isekai-capi`/`Grafting.Isekai.Interop`
-      and Polymath does not depend on it (`docs/adr/ADR-0002-engine-desktop.md`).
+- [ ] GATE-002 closed — **indefinite standby confirmed 2026-07-28.** Generic
+      C ABI/.NET feasibility is proven; the desktop scaffold, engine choice,
+      and engine-specific wrapper resume only on the owner's explicit request
+      (`docs/adr/ADR-0002-engine-desktop.md`).
 - [x] GATE-003 closed (`docs/adr/ADR-0003-platforms-v1.md`, DEC-043).
 - [x] GATE-004 at least formally deferred (`docs/adr/ADR-0005-authoritative-host-deferral.md`).
 - [x] GATE-005 closed (`docs/adr/ADR-0004-determinism.md`, DEC-044).
 - [x] Wasm spike approved (2026-07-27, `spikes/wasm-worker-nextjs/README.md`).
 - [x] C ABI spike approved (2026-07-27, `spikes/rust-capi-dotnet/README.md`).
 - [x] Web/native wgpu spike approved (2026-07-27, `spikes/wgpu-native-web/README.md`).
-- [ ] Copy budget measured — **deliberately skipped**: the owner chose to
-      start the scaffold ahead of this spike (2026-07-27); see
-      `CURRENT_PLANNING_STATE.md` for the recorded deviation. Not silently
-      dropped — remains open for a later pass.
+- [x] Copy budget measured — **accepted 2026-07-29:** native,
+      managed/unmanaged, and real-browser Web/Worker clone-vs-transfer paths
+      have recorded evidence and a provisional budget. See
+      `docs/benchmarks/copy-budget-2026-07-28.md`.
 
 ### Workspace
 
@@ -3024,8 +3025,9 @@ Automate only conventions already proven:
       running it twice).
 - [x] `.venv` outside the cache (uv-managed, gitignored, per-checkout as
       DEC-019 requires).
-- [ ] deterministic outputs — no `dist/` convention exercised yet; nothing
-      produces a real publishable artifact at this stage.
+- [ ] deterministic publishable outputs — `dist/architecture-studio` is now
+      exercised by the Graph IR/X6 spike, but no product release artifact or
+      artifact manifest exists yet.
 - [x] Polymath rule (DEC-042) documented in `AGENTS.md` (2026-07-27). Not
       yet lint/ast-grep-verified — deferred until CI has something to
       check it against, per the rule's own text ("when there is CI").
@@ -3119,14 +3121,15 @@ Automate only conventions already proven:
 
 ### CI and documentation
 
-- [ ] affected.
+- [x] affected (representative `domain-core` and `compute-api` file sets select
+      only their real dependents locally; CI wiring remains separate).
 - [ ] cache per platform.
 - [ ] native runners.
 - [ ] generated docs.
 - [ ] ADRs.
 - [ ] artifact manifest.
-- [ ] `AGENTS.md`.
-- [ ] `CLAUDE.md`.
+- [x] `AGENTS.md` (canonical provider-neutral contract, including coordination).
+- [x] `CLAUDE.md` (short adapter; drift checked alongside `GEMINI.md`).
 
 ---
 
@@ -3137,18 +3140,24 @@ Automate only conventions already proven:
 - [ ] Graph IR v1;
 - [ ] `grafting.graph.json`;
 - [ ] README/AGENTS/metadata template;
-- [x] minimal `.ai/` (README + `task-completion` skill; the other directories of
-      the canonical layout not yet created — section 29.1);
+- [x] minimal `.ai/` (task-completion skill plus Phase 1 coordination protocol,
+      contracts, registries, tasks/handoffs, capabilities, and workflows;
+      unused canonical directories remain absent);
 - [ ] AI System Maintainer tested via uv;
 - [ ] hooks with no model call;
-- [ ] valid registry and schemas;
+- [x] valid registry and schemas (standard-library validator, no model call);
 - [ ] first context pack;
-- [ ] Claude/Codex adapters without drift;
+- [x] Claude/Codex/Gemini adapters without drift (Codex consumes `AGENTS.md`
+      directly; Claude/Gemini short adapters are audited by hash and required
+      canonical references);
 - [ ] Prompt IR and reproducible snapshot;
 - [ ] Promptfoo;
-- [ ] semantic cache disabled;
-- [ ] a single durable source of tasks;
-- [ ] approval for control changes;
+- [x] semantic cache disabled (no cache implementation exists; DEC-036 remains
+      the enforced policy);
+- [x] a single durable source of tasks (`.ai/state/tasks/`, one file/owner per
+      task; replaces the earlier unimplemented `Backlog.md` default);
+- [x] approval for control changes (ADR-0010 and the coordination protocol
+      require a separate task and explicit owner approval);
 - [ ] tested rollback.
 
 ## 28. Future matters deliberately out of V1

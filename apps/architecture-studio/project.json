@@ -1,0 +1,30 @@
+{
+  "name": "architecture-studio",
+  "root": "apps/architecture-studio",
+  "projectType": "application",
+  "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
+  "implicitDependencies": ["graph-x6"],
+  "metadata": {
+    "graphIr": {
+      "id": "architecture-studio",
+      "kind": "app",
+      "tags": ["scope:knowledge", "lang:typescript", "platform:web"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/architecture-studio check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.spike.json", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
+      "dependsOn": ["graph-x6:build"],
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.spike.json", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{workspaceRoot}/dist/architecture-studio"]
+    }
+  }
+}

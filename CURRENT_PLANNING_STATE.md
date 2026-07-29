@@ -3,16 +3,16 @@
 > **Type:** mutable operational status
 > **Authority:** does not alter the architecture; in case of conflict,
 > `GRAFTING_MASTER_SOURCE.md` wins.
-> **Updated on:** July 27, 2026
+> **Updated on:** July 29, 2026
 
 ## Situation
 
 - Git repository created on July 26, 2026; first documentation commit made.
-- `README.md`, `GRAFTING_MASTER_SOURCE.md` (v1.8.0), `CURRENT_PLANNING_STATE.md`,
-  `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `docs/adr/` (8 ADRs), and a minimal
-  `.ai/` (`README.md` + the `task-completion` skill, active) all exist. The
-  remaining directories from the canonical `.ai/` layout (section 29.1) have
-  not been created yet.
+- The provider-neutral AI Control Plane is operational at its minimal Phase 1
+  level: canonical coordination protocol, registered Claude/Codex/Gemini
+  identities, single-owner task records, immutable structured handoffs,
+  schemas, capabilities/workflows, and deterministic validation/audit. It has
+  no gateway, MCP, hook, model call, or self-evolution (DEC-048/ADR-0010).
 - English is now the default documentation language for the entire
   repository (DEC-047): every pre-existing Portuguese document was
   translated to English in this pass. This supersedes the earlier rule that
@@ -32,7 +32,7 @@ planning
 → closing the Decision Gates     ← done
 → ADRs                            ← done
 → full English translation pass   ← done
-→ disposable spikes                ← done (4 of 4 foundational spikes)
+→ disposable spikes                ← 7 accepted; spike 7 awaits browser checks
 → scaffold                          ← in progress (Epic B core done; see below)
 ```
 
@@ -41,7 +41,7 @@ planning
 | Gate | Status | Decision | Record |
 | --- | --- | --- | --- |
 | GATE-001 | **closed** | Web host = Next.js; the VTT is a client-only route, not the whole app | DEC-041 · ADR-0001 |
-| GATE-002 | open, **formally deferred** | The C# engine choice awaits a concrete game; generic `isekai-capi`/`Grafting.Isekai.Interop` work is released | ADR-0002 |
+| GATE-002 | open, **indefinite standby** | Generic C ABI/.NET feasibility is proven; no engine/game work resumes without the owner's explicit instruction | ADR-0002 |
 | GATE-003 | **closed** | V1 desktop client = Windows x64; Linux/macOS core-build only | DEC-043 · ADR-0003 |
 | GATE-004 | open, **formally deferred** | The authoritative server host choice awaits Phase 6 / Epic H | ADR-0005 |
 | GATE-005 | **closed** | Replay determinism on the same platform/build; GPU never writes directly to the state hash | DEC-044 · ADR-0004 |
@@ -58,6 +58,7 @@ GATE-009 without an explicit decision from the owner.
 | Polymath | One package per runtime (`polymath`/`@grafting/polymath`/`Grafting.Polymath`) is the only place allowed to inspect OS/runtime/RID | DEC-042 · ADR-0006 |
 | `libs/` boundary + domain map | A capability used by more than one product is born in `libs/domains`/`packages/`, never duplicated inside an app. Initial map: `narrative` and `session` are generic; the VTT's X6 map is product-specific (only `packages/x6-canvas` is shared with the Architecture Studio); Discord and transcription are external integrations, not domains | DEC-046 · ADR-0008 · master source §4.4 |
 | Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
+| Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
 
 Pending, but not blocking Phase 0: standard directory for external
 integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
@@ -99,22 +100,34 @@ should carry forward when the corresponding real work starts (Epic B–E).
    `aarch64-apple-darwin`), and the TS module's Node-vs-browser divergence
    (e.g. `SharedArrayBuffer` gated by cross-origin isolation in the browser
    but not in Node) confirmed with and without COOP/COEP headers.
-5. batching and copy-budget benchmark;
-6. initial Nx and toolchain validation;
-7. minimal Graph IR and read-only X6 visualization;
-8. minimal AI Control Plane, without a gateway or advanced self-evolution.
+5. batching and copy-budget benchmark — **done, 2026-07-29.** Native,
+   managed/unmanaged, and real-browser clone-vs-transfer paths were measured;
+   A-009 is accepted with a provisional copy budget. Tracked evidence:
+   `docs/benchmarks/copy-budget-2026-07-28.md`.
+6. initial Nx and toolchain validation — **done, 2026-07-28.** Exact pins,
+   nine-project baseline graph, affected selection, 0%→100% cache proof, and
+   the explicit `@nx/dotnet` fallback were validated. Evidence:
+   `docs/benchmarks/toolchain-nx-validation-2026-07-28.md`.
+7. minimal Graph IR and read-only X6 visualization — **generator, candidate
+   schema, packages, tests, and production build done; real-browser interaction
+   check pending.** The `0.1-spike` name deliberately does not close I-002.
+   Evidence: `docs/benchmarks/graph-ir-x6-spike-2026-07-28.md`.
+8. minimal AI Control Plane, without a gateway or advanced self-evolution —
+   **done, 2026-07-29.** File-based coordination and deterministic audit are
+   accepted for Phase 1. Evidence:
+   `docs/benchmarks/ai-control-plane-spike-2026-07-29.md`.
 
 Toolchain on the owner's machine (re-verified 2026-07-27): git, node, dotnet,
 rustc/cargo (1.97.1, with the `wasm32-unknown-unknown` target installed),
 pnpm (11.17.0), uv (0.11.32), and wasm-pack (0.15.0) are all installed. A
 real discrete GPU (AMD Radeon RX 5600 XT) is present with working
 Vulkan/DX12 drivers, and WebGPU works in a real (non-`about:blank`) page
-context in headless Edge. Nothing is missing for spikes 1–4; `flatc` and
-spikes 5–8 remain for later.
+context in headless Edge. `flatc` is now pinned and installed. Only the real-
+browser acceptance step for spike 7 remains.
 
-All four throwaway spike directories (`spikes/wasm-worker-nextjs/`,
+All five throwaway spike directories (`spikes/wasm-worker-nextjs/`,
 `spikes/rust-capi-dotnet/`, `spikes/wgpu-native-web/`,
-`spikes/polymath-v0/`) are excluded from version control by the root
+`spikes/polymath-v0/`, `spikes/copy-budget/`) are excluded from version control by the root
 `.gitignore`'s `spikes/` rule — none of this code is meant to be committed
 as-is; each spike's README documents the pattern that should carry forward
 into the real scaffold.
@@ -170,9 +183,8 @@ the matching checklist annotations):**
   `metadata.graphIr` block, not a real Graph IR v1 schema (doesn't exist
   yet) — satisfies DEC-028's letter without inventing a fake schema; to be
   superseded when spike 7 (minimal Graph IR) happens.
-- Copy-budget benchmark (spike 5/A-009) — still skipped, per the owner's
-  earlier explicit choice; §27's "Before the scaffold" checklist still
-  shows this unchecked on purpose.
+- Copy-budget benchmark (spike 5/A-009) was skipped during this historical
+  scaffold pass; it was subsequently completed and accepted on 2026-07-29.
 - `flatc` — still Phase 2 scope, unchanged.
 
 ## Domain core (Epic C), 2026-07-27
@@ -622,13 +634,11 @@ that version range.
 
 ## Recommended next action
 
-Epic B, Epic D (D-001..D-009), and Epic C's C-005/C-006 are committed.
-Still open, no decision recorded yet: ADR-0009's Decision section (a
-quick owner confirmation, not new work); spikes 5–8; or resume Epic E
-toward E-003 (needs a real product decision on the pilot workload
-first). The generic `engine_submit(bytes)` FFI entry point is now
-genuinely unblocked (schemas exist) but isn't backlogged as its own
-item yet — worth a decision on whether/when to pick it up.
+Run the remaining read-only Architecture Studio browser interaction check
+(spike 7). Spikes 5, 6, and 8 are accepted. GATE-002 stays in indefinite
+standby. After browser acceptance, the next product decision is either
+ADR-0009's Decision section or E-003's real pilot workload; the generic
+`engine_submit(bytes)` entry point is unblocked but not separately backlogged.
 
 ## Update rule
 

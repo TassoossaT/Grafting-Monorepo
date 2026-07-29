@@ -4,7 +4,13 @@
   "private": true,
   "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
   "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "graph:generate": "node tools/scripts/generate-graph-ir.mjs",
+    "graph:check": "node tools/scripts/generate-graph-ir.mjs --check",
+    "ai:check": "uv run --package automation python -m automation.coordination --root .",
+    "ai:audit": "uv run --package automation python -m automation.control_plane --root ."
+  },
   "devDependencies": {
-    "nx": "^23.1.0"
+    "nx": "23.1.0"
   }
 }

@@ -1,0 +1,8 @@
+html, body { height: 100%; margin: 0; }
+body { display: grid; grid-template-rows: 58px 1fr 34px; font: 14px/1.4 system-ui; color: #172033; background: #f7f9fc; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 0 18px; background: #16223b; color: white; }
+header div { display: flex; gap: 14px; align-items: baseline; }
+header span { color: #b9c7df; font-size: 12px; }
+button { border: 1px solid #6e82a8; border-radius: 7px; padding: 7px 11px; color: white; background: #263c66; cursor: pointer; }
+#graph { min-height: 0; }
+footer { padding: 7px 18px; border-top: 1px solid #ccd3df; background: white; color: #53627a; }

@@ -4,4 +4,7 @@ packages:
   - "packages/*"
   - "tools/*"
 allowBuilds:
+  # Vite works through esbuild's platform package without its install script.
+  # Keep dependency scripts denied unless separately reviewed and approved.
+  esbuild: false
   nx: true

@@ -1,0 +1,350 @@
+{
+  "schemaVersion": "0.1-spike",
+  "generator": {
+    "id": "grafting-graph-ir-spike",
+    "version": 1
+  },
+  "inputHash": "09f46e1200a782f42b4af7e0582f8dddfadc24126a161ba68a44f2a42bf2fd03",
+  "nodes": [
+    {
+      "id": "agent:claude",
+      "kind": "agent",
+      "label": "claude",
+      "tags": [
+        "provider:anthropic"
+      ],
+      "source": ".ai/registry/agents.yaml"
+    },
+    {
+      "id": "agent:codex",
+      "kind": "agent",
+      "label": "codex",
+      "tags": [
+        "provider:openai"
+      ],
+      "source": ".ai/registry/agents.yaml"
+    },
+    {
+      "id": "agent:gemini",
+      "kind": "agent",
+      "label": "gemini",
+      "tags": [
+        "provider:google"
+      ],
+      "source": ".ai/registry/agents.yaml"
+    },
+    {
+      "id": "agent:repository-owner",
+      "kind": "agent",
+      "label": "repository-owner",
+      "tags": [
+        "provider:human"
+      ],
+      "source": ".ai/registry/agents.yaml"
+    },
+    {
+      "id": "project:@grafting/isekai-wasm",
+      "kind": "project",
+      "label": "@grafting/isekai-wasm",
+      "tags": [
+        "npm:private"
+      ],
+      "source": "packages/isekai-wasm/project.json"
+    },
+    {
+      "id": "project:architecture-studio",
+      "kind": "project",
+      "label": "architecture-studio",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:knowledge",
+        "type:app"
+      ],
+      "source": "apps/architecture-studio/project.json"
+    },
+    {
+      "id": "project:engine-compute-api",
+      "kind": "project",
+      "label": "engine-compute-api",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "source": "libs/engine/compute-api/project.json"
+    },
+    {
+      "id": "project:engine-compute-cpu",
+      "kind": "project",
+      "label": "engine-compute-cpu",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "source": "libs/engine/compute-cpu/project.json"
+    },
+    {
+      "id": "project:engine-domain-core",
+      "kind": "project",
+      "label": "engine-domain-core",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "source": "libs/engine/domain-core/project.json"
+    },
+    {
+      "id": "project:graph-x6",
+      "kind": "project",
+      "label": "graph-x6",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:knowledge",
+        "type:visualization"
+      ],
+      "source": "packages/graph-x6/project.json"
+    },
+    {
+      "id": "project:isekai-capi-bridge",
+      "kind": "project",
+      "label": "isekai-capi-bridge",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:binding"
+      ],
+      "source": "libs/isekai/capi-bridge/project.json"
+    },
+    {
+      "id": "project:isekai-dotnet-interop",
+      "kind": "project",
+      "label": "isekai-dotnet-interop",
+      "tags": [
+        "lang:csharp",
+        "platform:desktop",
+        "scope:engine",
+        "type:binding"
+      ],
+      "source": "dotnet/Grafting.Isekai.Interop/project.json"
+    },
+    {
+      "id": "project:isekai-dotnet-protocol",
+      "kind": "project",
+      "label": "isekai-dotnet-protocol",
+      "tags": [
+        "lang:csharp",
+        "platform:desktop",
+        "scope:engine",
+        "type:contracts"
+      ],
+      "source": "dotnet/Grafting.Isekai.Protocol/project.json"
+    },
+    {
+      "id": "project:isekai-wasm-bridge",
+      "kind": "project",
+      "label": "isekai-wasm-bridge",
+      "tags": [
+        "lang:rust",
+        "platform:web",
+        "scope:engine",
+        "type:binding"
+      ],
+      "source": "libs/isekai/wasm-bridge/project.json"
+    },
+    {
+      "id": "project:isekai-web-client",
+      "kind": "project",
+      "label": "isekai-web-client",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:engine",
+        "type:lib"
+      ],
+      "source": "packages/isekai-web-client/project.json"
+    },
+    {
+      "id": "project:x6-canvas",
+      "kind": "project",
+      "label": "x6-canvas",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:shared",
+        "type:ui-adapter"
+      ],
+      "source": "packages/x6-canvas/project.json"
+    },
+    {
+      "id": "task:COORDINATION-PHASE1",
+      "kind": "task",
+      "label": "COORDINATION-PHASE1",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/COORDINATION-PHASE1.json"
+    },
+    {
+      "id": "task:SPIKE-005-COPY-BUDGET",
+      "kind": "task",
+      "label": "SPIKE-005-COPY-BUDGET",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/SPIKE-005-COPY-BUDGET.json"
+    },
+    {
+      "id": "task:SPIKE-006-TOOLCHAINS-NX",
+      "kind": "task",
+      "label": "SPIKE-006-TOOLCHAINS-NX",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/SPIKE-006-TOOLCHAINS-NX.json"
+    },
+    {
+      "id": "task:SPIKE-007-GRAPH-IR-X6",
+      "kind": "task",
+      "label": "SPIKE-007-GRAPH-IR-X6",
+      "tags": [
+        "status:blocked"
+      ],
+      "source": ".ai/state/tasks/SPIKE-007-GRAPH-IR-X6.json"
+    },
+    {
+      "id": "task:SPIKE-008-AI-CONTROL-PLANE",
+      "kind": "task",
+      "label": "SPIKE-008-AI-CONTROL-PLANE",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/SPIKE-008-AI-CONTROL-PLANE.json"
+    }
+  ],
+  "edges": [
+    {
+      "id": "project:architecture-studio->project:graph-x6:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:graph-x6",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:architecture-studio->project:graph-x6:depends_on:static",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:graph-x6",
+      "evidence": "docs/generated/project-graph.json#static"
+    },
+    {
+      "id": "project:engine-compute-cpu->project:engine-compute-api:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:engine-compute-cpu",
+      "target": "project:engine-compute-api",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:graph-x6->project:x6-canvas:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:graph-x6",
+      "target": "project:x6-canvas",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:graph-x6->project:x6-canvas:depends_on:static",
+      "kind": "depends_on",
+      "source": "project:graph-x6",
+      "target": "project:x6-canvas",
+      "evidence": "docs/generated/project-graph.json#static"
+    },
+    {
+      "id": "project:isekai-capi-bridge->project:engine-domain-core:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-capi-bridge",
+      "target": "project:engine-domain-core",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:isekai-dotnet-interop->project:isekai-capi-bridge:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-dotnet-interop",
+      "target": "project:isekai-capi-bridge",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:isekai-dotnet-protocol->project:engine-domain-core:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-dotnet-protocol",
+      "target": "project:engine-domain-core",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:isekai-wasm-bridge->project:engine-domain-core:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-wasm-bridge",
+      "target": "project:engine-domain-core",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "project:isekai-web-client->project:@grafting/isekai-wasm:depends_on:static",
+      "kind": "depends_on",
+      "source": "project:isekai-web-client",
+      "target": "project:@grafting/isekai-wasm",
+      "evidence": "docs/generated/project-graph.json#static"
+    },
+    {
+      "id": "project:isekai-web-client->project:isekai-wasm-bridge:depends_on:implicit",
+      "kind": "depends_on",
+      "source": "project:isekai-web-client",
+      "target": "project:isekai-wasm-bridge",
+      "evidence": "docs/generated/project-graph.json#implicit"
+    },
+    {
+      "id": "task:COORDINATION-PHASE1->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:COORDINATION-PHASE1",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/COORDINATION-PHASE1.json#/owner"
+    },
+    {
+      "id": "task:SPIKE-005-COPY-BUDGET->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:SPIKE-005-COPY-BUDGET",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/SPIKE-005-COPY-BUDGET.json#/owner"
+    },
+    {
+      "id": "task:SPIKE-006-TOOLCHAINS-NX->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:SPIKE-006-TOOLCHAINS-NX",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/SPIKE-006-TOOLCHAINS-NX.json#/owner"
+    },
+    {
+      "id": "task:SPIKE-007-GRAPH-IR-X6->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:SPIKE-007-GRAPH-IR-X6",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/SPIKE-007-GRAPH-IR-X6.json#/owner"
+    },
+    {
+      "id": "task:SPIKE-008-AI-CONTROL-PLANE->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:SPIKE-008-AI-CONTROL-PLANE",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/SPIKE-008-AI-CONTROL-PLANE.json#/owner"
+    }
+  ]
+}

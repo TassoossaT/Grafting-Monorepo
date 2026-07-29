@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "workflows": [
+    {
+      "id": "task-lifecycle-v1",
+      "status": "active",
+      "summary": "Provider-neutral claim, implement, validate, handoff, and completion lifecycle.",
+      "policy": ".ai/coordination/PROTOCOL.md",
+      "steps": ["inspect", "claim", "declare", "implement", "validate", "handoff-or-complete"]
+    },
+    {
+      "id": "control-plane-audit-v1",
+      "status": "active",
+      "summary": "Read-only deterministic audit; never evolves policy or invokes a model.",
+      "policy": "docs/adr/ADR-0010-multi-agent-coordination.md",
+      "steps": ["validate-registries", "validate-state", "check-adapters", "check-graph", "report"]
+    }
+  ]
+}

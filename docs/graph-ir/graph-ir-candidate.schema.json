@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://grafting.local/schemas/graph-ir-candidate-0.1.json",
+  "title": "Grafting Graph IR candidate (spike only)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generator", "inputHash", "nodes", "edges"],
+  "properties": {
+    "schemaVersion": { "const": "0.1-spike" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "const": "grafting-graph-ir-spike" },
+        "version": { "const": 1 }
+      }
+    },
+    "inputHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "label", "tags", "source"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["project", "agent", "task"] },
+          "label": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "source", "target", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["depends_on", "owned_by"] },
+          "source": { "type": "string", "minLength": 1 },
+          "target": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

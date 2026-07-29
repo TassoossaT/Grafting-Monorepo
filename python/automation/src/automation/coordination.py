@@ -133,7 +133,7 @@ def _validate_policy_registry(root: Path) -> None:
 
 
 def _validate_schema_documents(root: Path) -> None:
-    for name in ("task.schema.json", "handoff.schema.json"):
+    for name in ("task.schema.json", "handoff.schema.json", "capability.schema.json"):
         path = root / ".ai" / "contracts" / name
         schema = _read_object(path)
         if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
@@ -144,6 +144,61 @@ def _validate_schema_documents(root: Path) -> None:
             raise CoordinationValidationError(f"{path}: schema requires required/properties")
         if set(schema["required"]) != set(schema["properties"]):
             raise CoordinationValidationError(f"{path}: every property must be required in v1")
+
+
+def _validate_capability_registry(root: Path) -> None:
+    path = root / ".ai" / "registry" / "capabilities.yaml"
+    registry = _read_object(path)
+    capabilities = registry.get("capabilities")
+    if registry.get("schema_version") != 1 or not isinstance(capabilities, list):
+        raise CoordinationValidationError(f"{path}: invalid registry envelope")
+    fields = {"id", "summary", "command", "risk", "side_effects", "sources"}
+    ids: list[str] = []
+    for index, capability in enumerate(capabilities):
+        if not isinstance(capability, dict) or set(capability) != fields:
+            raise CoordinationValidationError(f"{path}: capabilities[{index}] has invalid fields")
+        for field in ("id", "summary", "command"):
+            _require_string(path, capability[field], f"capabilities[{index}].{field}")
+        if not re.fullmatch(r"[a-z][a-z0-9.-]+", capability["id"]):
+            raise CoordinationValidationError(f"{path}: invalid capability ID {capability['id']!r}")
+        if capability["risk"] not in {"low", "medium", "high"}:
+            raise CoordinationValidationError(f"{path}: invalid capability risk")
+        if not isinstance(capability["side_effects"], bool):
+            raise CoordinationValidationError(f"{path}: side_effects must be boolean")
+        _require_string_list(path, capability["sources"], "sources", unique=True)
+        if not capability["sources"]:
+            raise CoordinationValidationError(f"{path}: every capability requires a source")
+        for source in capability["sources"]:
+            if not (root / source).exists():
+                raise CoordinationValidationError(f"{path}: missing capability source {source}")
+        ids.append(capability["id"])
+    if len(ids) != len(set(ids)):
+        raise CoordinationValidationError(f"{path}: capability IDs must be unique")
+
+
+def _validate_workflow_registry(root: Path) -> None:
+    path = root / ".ai" / "registry" / "workflows.yaml"
+    registry = _read_object(path)
+    workflows = registry.get("workflows")
+    if registry.get("schema_version") != 1 or not isinstance(workflows, list):
+        raise CoordinationValidationError(f"{path}: invalid registry envelope")
+    fields = {"id", "status", "summary", "policy", "steps"}
+    ids: list[str] = []
+    for index, workflow in enumerate(workflows):
+        if not isinstance(workflow, dict) or set(workflow) != fields:
+            raise CoordinationValidationError(f"{path}: workflows[{index}] has invalid fields")
+        for field in ("id", "status", "summary", "policy"):
+            _require_string(path, workflow[field], f"workflows[{index}].{field}")
+        if workflow["status"] != "active":
+            raise CoordinationValidationError(f"{path}: only active workflows belong in the minimal registry")
+        if not (root / workflow["policy"]).is_file():
+            raise CoordinationValidationError(f"{path}: missing workflow policy {workflow['policy']}")
+        _require_string_list(path, workflow["steps"], "steps", unique=True)
+        if not workflow["steps"]:
+            raise CoordinationValidationError(f"{path}: workflow requires at least one step")
+        ids.append(workflow["id"])
+    if len(ids) != len(set(ids)):
+        raise CoordinationValidationError(f"{path}: workflow IDs must be unique")
 
 
 def _validate_task(path: Path, value: dict[str, Any], agent_ids: set[str]) -> str:
@@ -205,6 +260,8 @@ def validate_repository(root: Path) -> list[str]:
     _validate_schema_documents(root)
     agent_ids = _load_agent_ids(root)
     _validate_policy_registry(root)
+    _validate_capability_registry(root)
+    _validate_workflow_registry(root)
 
     task_dir = root / ".ai" / "state" / "tasks"
     task_paths = sorted(task_dir.glob("*.json"))

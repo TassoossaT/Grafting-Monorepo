@@ -1,0 +1,897 @@
+{
+  "graph": {
+    "nodes": {
+      "isekai-dotnet-protocol": {
+        "name": "isekai-dotnet-protocol",
+        "type": "lib",
+        "data": {
+          "root": "dotnet/Grafting.Isekai.Protocol",
+          "targets": {
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "engine-domain-core:generate"
+              ],
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/System.sln",
+                "{workspaceRoot}/Directory.Build.props",
+                "{workspaceRoot}/Directory.Packages.props",
+                "{workspaceRoot}/global.json"
+              ],
+              "options": {
+                "command": "dotnet build dotnet/Grafting.Isekai.Protocol"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "isekai-dotnet-protocol",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:csharp",
+            "platform:desktop",
+            "type:contracts"
+          ],
+          "implicitDependencies": [
+            "engine-domain-core"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "isekai-dotnet-protocol",
+              "kind": "contracts",
+              "tags": [
+                "scope:engine",
+                "lang:csharp",
+                "platform:desktop"
+              ]
+            }
+          }
+        }
+      },
+      "isekai-dotnet-interop": {
+        "name": "isekai-dotnet-interop",
+        "type": "lib",
+        "data": {
+          "root": "dotnet/Grafting.Isekai.Interop",
+          "targets": {
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/System.sln",
+                "{workspaceRoot}/Directory.Build.props",
+                "{workspaceRoot}/Directory.Packages.props",
+                "{workspaceRoot}/global.json"
+              ],
+              "options": {
+                "command": "dotnet build dotnet/Grafting.Isekai.Interop"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/dotnet/Grafting.Isekai.Interop.Tests/**/*",
+                "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+                "{workspaceRoot}/System.sln",
+                "{workspaceRoot}/Directory.Build.props",
+                "{workspaceRoot}/Directory.Packages.props",
+                "{workspaceRoot}/global.json"
+              ],
+              "options": {
+                "command": "dotnet test dotnet/Grafting.Isekai.Interop.Tests"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "isekai-dotnet-interop",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:csharp",
+            "platform:desktop",
+            "type:binding"
+          ],
+          "implicitDependencies": [
+            "isekai-capi-bridge"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "isekai-dotnet-interop",
+              "kind": "binding",
+              "tags": [
+                "scope:engine",
+                "lang:csharp",
+                "platform:desktop"
+              ]
+            }
+          }
+        }
+      },
+      "isekai-web-client": {
+        "name": "isekai-web-client",
+        "type": "lib",
+        "data": {
+          "root": "packages/isekai-web-client",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "tsc --noEmit",
+                "cwd": "packages/isekai-web-client"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/isekai-web-client test"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "isekai-web-client",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:engine",
+            "lang:typescript",
+            "platform:web",
+            "type:lib"
+          ],
+          "implicitDependencies": [
+            "isekai-wasm-bridge"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Idiomatic Worker/Promise wrapper over @grafting/isekai-wasm (master source S9.3). Never exposes memory offsets/handles to callers.",
+            "js": {
+              "packageName": "@grafting/isekai-web-client",
+              "packageVersion": "0.0.0",
+              "packageMain": "./src/index.ts",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "isekai-web-client",
+              "kind": "lib",
+              "tags": [
+                "scope:engine",
+                "lang:typescript",
+                "platform:web"
+              ]
+            }
+          }
+        }
+      },
+      "architecture-studio": {
+        "name": "architecture-studio",
+        "type": "app",
+        "data": {
+          "root": "apps/architecture-studio",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/docs/generated/grafting.graph.spike.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/architecture-studio check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "graph-x6:build"
+              ],
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/docs/generated/grafting.graph.spike.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{workspaceRoot}/dist/architecture-studio"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/architecture-studio build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "dev": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "vite --host 127.0.0.1 --port 4511",
+                "runCommand": "pnpm run dev"
+              },
+              "options": {
+                "script": "dev"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "architecture-studio",
+          "projectType": "application",
+          "tags": [
+            "npm:private",
+            "scope:knowledge",
+            "lang:typescript",
+            "platform:web",
+            "type:app"
+          ],
+          "implicitDependencies": [
+            "graph-x6"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "dev"
+              ]
+            },
+            "js": {
+              "packageName": "@grafting/architecture-studio",
+              "packageVersion": "0.0.0",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "architecture-studio",
+              "kind": "app",
+              "tags": [
+                "scope:knowledge",
+                "lang:typescript",
+                "platform:web"
+              ]
+            }
+          }
+        }
+      },
+      "engine-compute-api": {
+        "name": "engine-compute-api",
+        "type": "lib",
+        "data": {
+          "root": "libs/engine/compute-api",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-compute-api"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-compute-api"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "engine-compute-api",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "engine-compute-api",
+              "kind": "lib",
+              "tags": [
+                "scope:engine",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "engine-compute-cpu": {
+        "name": "engine-compute-cpu",
+        "type": "lib",
+        "data": {
+          "root": "libs/engine/compute-cpu",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-compute-cpu"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-compute-cpu"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "engine-compute-cpu",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "implicitDependencies": [
+            "engine-compute-api"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "engine-compute-cpu",
+              "kind": "lib",
+              "tags": [
+                "scope:engine",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          }
+        }
+      },
+      "engine-domain-core": {
+        "name": "engine-domain-core",
+        "type": "lib",
+        "data": {
+          "root": "libs/engine/domain-core",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "generate"
+              ],
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-domain-core"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "generate"
+              ],
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-domain-core"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "generate": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/contracts/*.fbs",
+                "{workspaceRoot}/tools/flatc-version.txt",
+                "{workspaceRoot}/tools/scripts/generate-contracts.ps1",
+                "{workspaceRoot}/tools/scripts/get-flatc-csharp.ps1"
+              ],
+              "outputs": [
+                "{projectRoot}/src/generated",
+                "{workspaceRoot}/packages/isekai-web-client/src/generated",
+                "{workspaceRoot}/dotnet/Grafting.Isekai.Protocol/Generated"
+              ],
+              "options": {
+                "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/scripts/generate-contracts.ps1"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "engine-domain-core",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet (DEC-040/spike 7, not started). Superseded once a real Graph IR extractor lands; this satisfies DEC-028's 'every Nx project is born with ... Graph IR metadata' without inventing a fake schema.",
+              "id": "engine-domain-core",
+              "kind": "lib",
+              "tags": [
+                "scope:engine",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "isekai-capi-bridge": {
+        "name": "isekai-capi-bridge",
+        "type": "lib",
+        "data": {
+          "root": "libs/isekai/capi-bridge",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-isekai-capi"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{workspaceRoot}/target/release/grafting_isekai_capi.dll"
+              ],
+              "options": {
+                "command": "cargo build --release -p grafting-isekai-capi"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-isekai-capi"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "isekai-capi-bridge",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:rust",
+            "platform:cross",
+            "type:binding"
+          ],
+          "implicitDependencies": [
+            "engine-domain-core"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "isekai-capi-bridge",
+              "kind": "binding",
+              "tags": [
+                "scope:engine",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          }
+        }
+      },
+      "isekai-wasm-bridge": {
+        "name": "isekai-wasm-bridge",
+        "type": "lib",
+        "data": {
+          "root": "libs/isekai/wasm-bridge",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-isekai-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{workspaceRoot}/packages/isekai-wasm/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir ../../../packages/isekai-wasm/pkg libs/isekai/wasm-bridge"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-isekai-wasm && wasm-pack test --node libs/isekai/wasm-bridge"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "isekai-wasm-bridge",
+          "projectType": "library",
+          "tags": [
+            "scope:engine",
+            "lang:rust",
+            "platform:web",
+            "type:binding"
+          ],
+          "implicitDependencies": [
+            "engine-domain-core"
+          ],
+          "metadata": {
+            "graphIr": {
+              "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
+              "id": "isekai-wasm-bridge",
+              "kind": "binding",
+              "tags": [
+                "scope:engine",
+                "lang:rust",
+                "platform:web"
+              ]
+            }
+          }
+        }
+      },
+      "@grafting/isekai-wasm": {
+        "name": "@grafting/isekai-wasm",
+        "type": "lib",
+        "data": {
+          "root": "packages/isekai-wasm",
+          "name": "@grafting/isekai-wasm",
+          "tags": [
+            "npm:private"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Technical package: compiled grafting-isekai-wasm .wasm + loader + TS types (master source S9.2). No domain logic here -- see libs/isekai/wasm-bridge for the Rust source. Regenerate with: wasm-pack build --target web --out-dir ../../packages/isekai-wasm/pkg (run from libs/isekai/wasm-bridge).",
+            "js": {
+              "packageName": "@grafting/isekai-wasm",
+              "packageVersion": "0.0.0",
+              "packageMain": "./pkg/grafting_isekai_wasm.js",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "targets": {},
+          "implicitDependencies": []
+        }
+      },
+      "x6-canvas": {
+        "name": "x6-canvas",
+        "type": "lib",
+        "data": {
+          "root": "packages/x6-canvas",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/x6-canvas check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/x6-canvas build"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "x6-canvas",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:shared",
+            "lang:typescript",
+            "platform:web",
+            "type:ui-adapter"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@grafting/x6-canvas",
+              "packageVersion": "0.0.0",
+              "packageExports": "./dist/index.js",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "x6-canvas",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:typescript",
+                "platform:web"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "graph-x6": {
+        "name": "graph-x6",
+        "type": "lib",
+        "data": {
+          "root": "packages/graph-x6",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/graph-x6 check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "x6-canvas:build"
+              ],
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/graph-x6 build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/graph-x6 test"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "graph-x6",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:knowledge",
+            "lang:typescript",
+            "platform:web",
+            "type:visualization"
+          ],
+          "implicitDependencies": [
+            "x6-canvas"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@grafting/graph-x6",
+              "packageVersion": "0.0.0",
+              "packageExports": "./dist/index.js",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "graph-x6",
+              "kind": "lib",
+              "tags": [
+                "scope:knowledge",
+                "lang:typescript",
+                "platform:web"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "dependencies": {
+      "isekai-dotnet-protocol": [
+        {
+          "source": "isekai-dotnet-protocol",
+          "target": "engine-domain-core",
+          "type": "implicit"
+        }
+      ],
+      "isekai-dotnet-interop": [
+        {
+          "source": "isekai-dotnet-interop",
+          "target": "isekai-capi-bridge",
+          "type": "implicit"
+        }
+      ],
+      "isekai-web-client": [
+        {
+          "source": "isekai-web-client",
+          "target": "isekai-wasm-bridge",
+          "type": "implicit"
+        },
+        {
+          "source": "isekai-web-client",
+          "target": "@grafting/isekai-wasm",
+          "type": "static"
+        }
+      ],
+      "architecture-studio": [
+        {
+          "source": "architecture-studio",
+          "target": "graph-x6",
+          "type": "implicit"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "graph-x6",
+          "type": "static"
+        }
+      ],
+      "engine-compute-api": [],
+      "engine-compute-cpu": [
+        {
+          "source": "engine-compute-cpu",
+          "target": "engine-compute-api",
+          "type": "implicit"
+        }
+      ],
+      "engine-domain-core": [],
+      "isekai-capi-bridge": [
+        {
+          "source": "isekai-capi-bridge",
+          "target": "engine-domain-core",
+          "type": "implicit"
+        }
+      ],
+      "isekai-wasm-bridge": [
+        {
+          "source": "isekai-wasm-bridge",
+          "target": "engine-domain-core",
+          "type": "implicit"
+        }
+      ],
+      "@grafting/isekai-wasm": [],
+      "x6-canvas": [],
+      "graph-x6": [
+        {
+          "source": "graph-x6",
+          "target": "x6-canvas",
+          "type": "implicit"
+        },
+        {
+          "source": "graph-x6",
+          "target": "x6-canvas",
+          "type": "static"
+        }
+      ]
+    }
+  }
+}

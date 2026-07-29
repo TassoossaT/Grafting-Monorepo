@@ -1,0 +1,28 @@
+{
+  "name": "x6-canvas",
+  "root": "packages/x6-canvas",
+  "projectType": "library",
+  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui-adapter"],
+  "metadata": {
+    "graphIr": {
+      "id": "x6-canvas",
+      "kind": "lib",
+      "tags": ["scope:shared", "lang:typescript", "platform:web"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/x6-canvas check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/x6-canvas build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    }
+  }
+}

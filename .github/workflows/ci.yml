@@ -10,8 +10,8 @@ jobs:
   linux:
     # Master source S2.3: platform-dependent artifacts build on the
     # corresponding system; the normal (non-native) build runs on Linux.
-    # No Windows/.NET job yet -- no dotnet root scaffolding exists (see
-    # CURRENT_PLANNING_STATE.md); that's B-010, still open.
+    # No Windows/.NET job yet; the root scaffold now exists, so B-010 is
+    # actionable but remains a separate task.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install Node dependencies
@@ -65,7 +65,7 @@ jobs:
       - name: Nx check
         run: pnpm exec nx run engine-domain-core:check
 
-      - uses: astral-sh/setup-uv@v9
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: "0.11.32"
 

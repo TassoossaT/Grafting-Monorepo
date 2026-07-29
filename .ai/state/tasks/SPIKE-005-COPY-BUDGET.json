@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "SPIKE-005-COPY-BUDGET",
+  "title": "Batching and copy-budget spike",
+  "status": "completed",
+  "owner": "codex",
+  "revision": 3,
+  "updated_at": "2026-07-29T00:26:37-03:00",
+  "objective": "Measure representative native, managed/unmanaged, and Web Worker copy paths and define an evidence-backed provisional copy budget.",
+  "affected_paths": [
+    "spikes/copy-budget/",
+    "docs/benchmarks/copy-budget-2026-07-28.md",
+    "CURRENT_PLANNING_STATE.md",
+    "GRAFTING_MASTER_SOURCE.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "cargo run --release --manifest-path spikes/copy-budget/native/Cargo.toml",
+    "dotnet run --configuration Release --project spikes/copy-budget/dotnet/CopyBudget.csproj",
+    "real browser Worker benchmark: PASS with clone and transferable ArrayBuffer results from 4 KiB through 16 MiB",
+    "manual result consistency review: clone cost grows with payload size; transfer remains the required large-payload path"
+  ],
+  "artifacts": [
+    "docs/benchmarks/copy-budget-2026-07-28.md",
+    "spikes/copy-budget/"
+  ],
+  "risks": [
+    "Synthetic throughput does not predict a future solver workload or every browser and device."
+  ],
+  "next_responsible_party": "repository-owner"
+}
