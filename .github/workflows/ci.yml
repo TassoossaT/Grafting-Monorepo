@@ -71,6 +71,12 @@ jobs:
       - name: Rust public API contract
         run: pnpm exec nx run graph-core:api-check
 
+      - name: TypeScript public API and behavior contracts
+        run: |
+          pnpm exec nx run x6-canvas:check
+          pnpm exec nx run x6-canvas:test
+          pnpm exec nx run x6-canvas:api-check
+
       - name: Nx check
         run: pnpm exec nx run engine-domain-core:check
 

@@ -6,7 +6,23 @@ publish = false
 description = "Versioned C ABI exposing grafting-domain-core to native hosts (C#, generic P/Invoke). Never exposes Vec/String/trait objects/Rust enums across the boundary (master source S4.2, S11)."
 
 [lib]
-crate-type = ["cdylib"]
+# "rlib" alongside "cdylib" lets same-package bin/test targets link
+# against this library normally (a cdylib alone produces no rlib to link
+# against) -- same pattern `isekai-wasm-bridge` already uses for its own
+# integration tests.
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "abi-info-cli"
+path = "src/bin/abi_info_cli.rs"
+required-features = ["abi-info-cli"]
+
+[features]
+# Test/tooling-only: prints EngineAbiInfo::current() as JSON for
+# tools/scripts/generate-artifact-manifest.mjs (G-004) to read the real
+# runtime value instead of re-deriving it by parsing Rust source. Never
+# enabled for the real cdylib build.
+abi-info-cli = []
 
 [dependencies]
 grafting-domain-core = { path = "../../engine/domain-core" }

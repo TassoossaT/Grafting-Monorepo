@@ -728,24 +728,145 @@ DEC-051's per-package contract convention is now proven on the real
 
 The rejected `nightly-2025-08-02` compatibility attempt and the chosen design
 are recorded in `docs/benchmarks/rust-public-api-contract-pilot-2026-07-29.md`.
-I-003A establishes the Rust template only; I-003B still needs to evaluate the
-native TypeScript, C#, and Python equivalents before I-003 can be called
-repository-wide complete.
+I-003A establishes the Rust template; the TypeScript pilot follows below.
+Python remains a future evidence-driven expansion, and C# remains in standby.
+
+## Repo tooling: repo map, artifact manifest, crate/domain generators (G-003/G-004/G-006/G-007), 2026-07-29
+
+Owner picked Epic G's repo-tooling items for Claude to run alongside
+Codex's I-003B. Claimed through `.ai/coordination/PROTOCOL.md`
+(`.ai/state/tasks/G-TOOLING-REPO-MAP-AND-GENERATORS.json`). G-005 (ADR
+template) and G-008 (`docs:check` CI wiring) were *not* picked up --
+explicitly out of scope this pass, though G-008 is now a small, natural
+follow-on since G-003/G-004 both already have the `--check` mechanism it
+would wire into CI.
+
+**Real and verified:**
+
+- G-003: `tools/scripts/generate-repo-map.mjs` (`pnpm graph:map`/
+  `graph:map:check`) produces `docs/generated/repo-map.md` -- every real
+  Nx project (13 today), grouped by ecosystem tag, read from
+  `docs/generated/project-graph.json`. Mirrors `generate-graph-ir.mjs`'s
+  established deterministic-output/`--check` convention exactly, not a
+  new one.
+- G-004: `tools/scripts/generate-artifact-manifest.mjs` (`pnpm
+  graph:manifest`/`graph:manifest:check`) produces
+  `docs/generated/artifact-manifest.json`, matching S18.5's literal
+  example shape (`productVersion`/`coreVersion`/`abi`/`protocol`/
+  `gitSha`/`target`/`profile`/`features`) exactly -- `target` is a single
+  string, live-derived from `rustc -vV`'s `host:` line, not a guessed/
+  hardcoded value (a Plan-subagent review caught that an earlier draft's
+  "Windows + wasm32" pair wasn't backed by real evidence -- `rustc-vV`'s
+  host line is honest regardless of which machine/CI runner generates
+  it). `abi`/`protocol`/`features` come from a real runtime value --
+  `libs/isekai/capi-bridge` gained a new `abi-info-cli` bin (behind an
+  `abi-info-cli` Cargo feature, never in the real `cdylib`;
+  `EngineAbiInfo::current()` widened from `pub(crate)` to `pub` so the
+  bin, technically a separate crate within the same package, can call
+  it) that prints the same review-caught reason as C-005/C-006's own
+  `abi-info`/`graph-ir-cli` precedent: parsing Rust source with regex
+  would duplicate logic that already exists and drift as it grows (e.g.
+  once GPU support lands).
+- G-006: `tools/scripts/generate-rust-crate.mjs` scaffolds a new Rust
+  crate matching every existing crate's exact shape (`Cargo.toml`,
+  `src/lib.rs`, `README.md`, `AGENTS.md`, `project.json` with `check`/
+  `test` targets, no stale placeholder `_comment` in `metadata.graphIr`
+  -- matching `graph-core`'s newer convention, not the older crates'
+  wording), and appends the new path to root `Cargo.toml`'s explicit
+  `members` array (a real, tested text transform -- insertion at start/
+  middle/end, idempotent on re-insertion).
+- G-007: `tools/scripts/generate-domain.mjs` reuses G-006's scaffolding
+  logic for `libs/domains/<name>`, per S17.2's exact input/output spec.
+  Refuses to scaffold a public binding unless `--force-binding` is
+  explicitly passed -- S17.2, verbatim: "do not create bindings for
+  every domain automatically." `--contract` scaffolds a starter `.fbs`
+  placeholder + a Rust-only `generate` Nx target (no TS/C# generation --
+  no known consumer needs it yet for a domain nobody has asked for).
+  `--compute` adds a real `implicitDependencies: ["engine-domain-core"]`
+  graph edge, not just a comment.
+- **Both generators' own tests genuinely prove their literal acceptance
+  criteria** ("valid crate **and graph**" / "complete slice"), not just
+  "the files look right": a Plan-subagent review caught that a true OS
+  temp directory (or `spikes/`, already `.gitignore`d) would be
+  structurally invisible to Nx's default project-graph construction (it
+  only crawls the real, non-ignored repo tree) -- confirmed empirically
+  before writing the tests. Fixed: `generate-rust-crate.test.mjs`/
+  `generate-domain.test.mjs` scaffold into a uniquely-named, in-repo,
+  non-ignored scratch directory (`libs/.generator-*-test-<id>/`), run a
+  real `cargo check` inside it (after appending a local, test-only empty
+  `[workspace]` table -- confirmed empirically that Cargo otherwise
+  refuses to check a crate nested inside the real workspace tree that
+  isn't a declared member), run `pnpm exec nx show projects --json` and
+  assert the scratch project is actually discovered, then delete it --
+  confirmed absent afterward via `git status --short`. `pnpm exec`
+  itself needed `CI=true` in the test's own environment (confirmed
+  empirically: without an inherited TTY it aborts asking to
+  interactively purge `node_modules`, per pnpm's own error message).
+- `tools/scripts/README.md` (new) documents every script in the
+  directory, including Codex's Graph IR/coordination ones, for
+  discoverability as the script list grows.
+
+**Deliberately not done, and why:**
+
+- G-005 (ADR template) and G-008 (`docs:check` CI wiring) -- not
+  selected for this pass.
+- The `@nx/devkit`-based local Nx plugin S17.1 describes ("will be
+  created after the initial scaffold stabilizes") -- explicitly future
+  work; every existing "generate a file" tool in this repo is a plain
+  Node script, and these two match that convention rather than adding
+  new, heavier infrastructure.
+- No real crate or domain was actually created under the permanent tree
+  -- master source S4.3 (`LOCKED`): "Empty directories must not be
+  created ahead of time." No real product need exists yet; using either
+  generator for real is a decision for whoever has one.
+- Not committed yet -- same standing rule as every prior task.
+
+## TypeScript public API contract pilot (I-003B-TS), 2026-07-29
+
+DEC-051's TypeScript convention is now proven on the real consumed boundary
+`@grafting/x6-canvas`, without adding a package or dependency:
+
+- the package's pinned TypeScript 5.9.3 compiler emits its declaration entry
+  point entirely in memory; the generated and Git-tracked
+  `tests/snapshots/public-api.md` contains consumer-visible names, required and
+  optional inputs, outputs, operations, and TSDoc;
+- `project.json#metadata.publicApi` holds only the entry point, baseline path,
+  and forbidden external modules, so the checker is reusable rather than
+  X6-specific;
+- every directly exported declaration and public member requires meaningful
+  TSDoc, and `@antv/x6` or any subpath in the emitted public declaration fails
+  the check. The only runtime import remains inside `x6-canvas`;
+- `x6-canvas:api-check` runs five checker tests (including negative drift,
+  missing/empty documentation, forbidden modules, and path containment) and
+  compares the baseline without changing its hash or timestamp;
+- a private behavior seam owns construction of the frozen read-only handle.
+  Its contract test proves that only `nodeCount`, `edgeCount`, `center`, and
+  `dispose` are exposed and that actions delegate to the private controller;
+- Nx check/test/api-check passed without cache, `@grafting/graph-x6` passed
+  check/test, and Architecture Studio passed typecheck plus a real Vite 7.3.6
+  production build (980 modules). CI now runs the same x6-canvas contracts.
+
+The selected design and the deferred API Extractor alternative are recorded in
+`docs/benchmarks/typescript-public-api-contract-pilot-2026-07-29.md`.
+TypeScript is complete for this pilot. Python remains evidence-driven until a
+consumed public package boundary needs the convention; C# remains in indefinite
+standby by owner decision and was not touched.
 
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-I-001/DEC-050, I-002, GRAPH-001/DEC-051, and the Rust pilot I-003A are
-complete. I-003B should now evaluate and standardize generated public-API
-baselines and `api-check` behavior for consumed TypeScript, C#, and Python
-packages. I-004 then replaces the spike Graph IR output with the v1 extractor.
-With those contracts/data in place, the Architecture Studio can atomically
-move the Graph IR presentation projection out of `graph-x6`, consume batched
-Rust graph results through the Wasm boundary, render through
+I-001/DEC-050, I-002, GRAPH-001/DEC-051, and the Rust/TypeScript public-API
+pilots are complete. I-004 should now replace the spike Graph IR output with
+the v1 extractor. Python contract expansion waits for a consumed public
+boundary; C# remains in standby and does not block the Web path. With the
+current contracts and I-004 data in place, the Architecture Studio can
+atomically move the Graph IR presentation projection out of `graph-x6`,
+consume batched Rust graph results through the Wasm boundary, render through
 `@grafting/x6-canvas`, and remove the transitional package without an
-outage. SECURITY-001 is now complete (see above). ADR-0009's Decision
-section remains pending owner confirmation; `engine_submit(bytes)` and
-E-003 remain separately scoped future work.
+outage. SECURITY-001 and G-003/G-004/G-006/G-007 (repo tooling) are now
+complete (see above). G-005/G-008 remain open, not selected this pass.
+ADR-0009's Decision section remains pending owner confirmation;
+`engine_submit(bytes)` and E-003 remain separately scoped future work.
 
 ## Update rule
 

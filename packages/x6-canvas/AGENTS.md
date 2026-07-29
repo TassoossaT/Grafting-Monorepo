@@ -15,3 +15,10 @@ only Grafting-owned canvas contracts. This current package boundary is based on
 real reuse and is not a precedent for creating one package per dependency. A
 future modified X6 fork requires separate provenance/license maintenance
 (DEC-049).
+
+Every exported declaration and public member requires TSDoc. Public API
+changes require `x6-canvas:api-check`, a reviewed update to
+`tests/snapshots/public-api.md`, and applicable behavioral contract tests. A
+normal API check MUST generate declarations in memory, MUST NOT update the
+baseline, and MUST fail if `@antv/x6` or one of its subpaths appears in the
+public declaration entry point.

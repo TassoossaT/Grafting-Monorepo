@@ -1,0 +1,18 @@
+{
+  "productVersion": "0.0.0",
+  "coreVersion": "0.0.0",
+  "abi": {
+    "major": 1,
+    "minor": 0
+  },
+  "protocol": {
+    "major": 0,
+    "minor": 0
+  },
+  "gitSha": "a408fabe17c85994df696fe8394cebde498becb3",
+  "target": "x86_64-pc-windows-msvc",
+  "profile": "dev",
+  "features": [
+    "cpu"
+  ]
+}

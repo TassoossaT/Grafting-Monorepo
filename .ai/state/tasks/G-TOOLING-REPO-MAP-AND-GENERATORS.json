@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "G-TOOLING-REPO-MAP-AND-GENERATORS",
+  "title": "Repo map, artifact manifest, crate generator, domain generator (G-003/G-004/G-006/G-007)",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-29T11:05:00-03:00",
+  "objective": "Implement master source Epic G's repo-tooling backlog: a deterministic repo map (G-003), a deterministic artifact manifest sourced from real ABI data (G-004), a Rust crate scaffolding generator (G-006), and a domain scaffolding generator (G-007) that reuses it, without creating any permanent speculative crate/domain in the real tree.",
+  "affected_paths": [
+    ".ai/state/tasks/G-TOOLING-REPO-MAP-AND-GENERATORS.json",
+    "libs/isekai/capi-bridge/Cargo.toml",
+    "libs/isekai/capi-bridge/src/abi_info.rs",
+    "libs/isekai/capi-bridge/src/bin/abi_info_cli.rs",
+    "tools/scripts/generate-repo-map.mjs",
+    "tools/scripts/generate-artifact-manifest.mjs",
+    "tools/scripts/generate-rust-crate.mjs",
+    "tools/scripts/generate-rust-crate.test.mjs",
+    "tools/scripts/generate-domain.mjs",
+    "tools/scripts/generate-domain.test.mjs",
+    "tools/scripts/README.md",
+    "docs/generated/repo-map.md",
+    "docs/generated/artifact-manifest.json",
+    "package.json",
+    "GRAFTING_MASTER_SOURCE.md",
+    "CURRENT_PLANNING_STATE.md",
+    ".ai/state/handoffs/20260729T140418Z--I-003B-TYPESCRIPT-PUBLIC-API-PILOT--claude-to-codex.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "cargo test --workspace: all green (includes capi-bridge's 23 tests, unaffected by EngineAbiInfo::current()'s pub(crate) -> pub widening)",
+    "cargo check --workspace: clean (abi-info-cli feature-gated bin does not affect the default/real cdylib build)",
+    "cargo run -p grafting-isekai-capi --features abi-info-cli --bin abi-info-cli: real JSON output confirmed matching EngineAbiInfo::current()",
+    "node tools/scripts/generate-repo-map.mjs then --check: current, 13 real projects",
+    "node tools/scripts/generate-artifact-manifest.mjs then --check: current (excluding gitSha/target, which legitimately vary per run/machine)",
+    "node --test tools/scripts/generate-rust-crate.test.mjs tools/scripts/generate-domain.test.mjs: 5/5 passing, including real pnpm exec nx show projects --json discoverability assertions against in-repo scratch crates, and real cargo check against them",
+    "git status --short confirmed no leftover scratch directories after generator tests ran",
+    "uv run --package automation python -m automation.coordination --root .: passed"
+  ],
+  "artifacts": [
+    "tools/scripts/generate-repo-map.mjs",
+    "tools/scripts/generate-artifact-manifest.mjs",
+    "tools/scripts/generate-rust-crate.mjs",
+    "tools/scripts/generate-rust-crate.test.mjs",
+    "tools/scripts/generate-domain.mjs",
+    "tools/scripts/generate-domain.test.mjs",
+    "tools/scripts/README.md",
+    "libs/isekai/capi-bridge/src/bin/abi_info_cli.rs",
+    "docs/generated/repo-map.md",
+    "docs/generated/artifact-manifest.json"
+  ],
+  "risks": [
+    "Nx's default project-graph construction does not scan OS temp directories or .gitignore'd paths -- generator tests scaffold into a real, non-ignored, in-repo scratch location to actually prove Nx discoverability, not a true OS tmpdir (confirmed empirically before writing the tests).",
+    "Root Cargo.toml's [workspace] members array is explicit, not a glob -- the crate/domain generators' members-array append logic is real, load-bearing text manipulation, tested separately (start/middle/end insertion, idempotency) against a scratch copy, never the real file during tests.",
+    "A scratch crate nested inside the real repo tree is not automatically a standalone Cargo unit -- Cargo refuses to check it as an implicit workspace member unless it opts out via its own empty [workspace] table (confirmed empirically); the tests append that only after asserting the real generator template's content, so it never affects what a real invocation scaffolds.",
+    "Codex's concurrently in-progress I-003B-TYPESCRIPT-PUBLIC-API-PILOT also declared CURRENT_PLANNING_STATE.md/GRAFTING_MASTER_SOURCE.md and sent a codex-to-claude handoff asking to defer edits to them -- received after this task's edits to both files had already landed. Verified directly (grep) that no I-003B narrative content existed yet in either file at that point and that G-TOOLING's own new sections are intact, not duplicated or corrupted; sent a claude-to-codex response handoff explaining the actual sequencing and confirming both paths are now released (no further edits planned from this task).",
+    "abi-info-cli's JSON output is hand-written (no serde_json dependency added to capi-bridge purely for this CLI) -- low risk given the flat, small shape, but would need revisiting if the manifest's real shape ever grows nested/complex."
+  ],
+  "next_responsible_party": "repository-owner"
+}

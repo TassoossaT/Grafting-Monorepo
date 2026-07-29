@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "3e2aaded4467eb40b0203dc43c49dee306eac5e4656b8c5c29ca3ea119d0cb48",
+  "inputHash": "741fbb8865de036b88a2da96a2ec26c8d491c35639191a764ed8e4bbcbfce3f7",
   "nodes": [
     {
       "id": "agent:claude",
@@ -227,6 +227,15 @@
       "source": ".ai/state/tasks/COORDINATION-PHASE1.json"
     },
     {
+      "id": "task:G-TOOLING-REPO-MAP-AND-GENERATORS",
+      "kind": "task",
+      "label": "G-TOOLING-REPO-MAP-AND-GENERATORS",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/G-TOOLING-REPO-MAP-AND-GENERATORS.json"
+    },
+    {
       "id": "task:GRAPH-001-RUST-CORE",
       "kind": "task",
       "label": "GRAPH-001-RUST-CORE",
@@ -261,6 +270,15 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/I-003A-RUST-PUBLIC-API-PILOT.json"
+    },
+    {
+      "id": "task:I-003B-TYPESCRIPT-PUBLIC-API-PILOT",
+      "kind": "task",
+      "label": "I-003B-TYPESCRIPT-PUBLIC-API-PILOT",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/I-003B-TYPESCRIPT-PUBLIC-API-PILOT.json"
     },
     {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT",
@@ -408,6 +426,13 @@
       "evidence": ".ai/state/tasks/COORDINATION-PHASE1.json#/owner"
     },
     {
+      "id": "task:G-TOOLING-REPO-MAP-AND-GENERATORS->agent:claude:owned_by",
+      "kind": "owned_by",
+      "source": "task:G-TOOLING-REPO-MAP-AND-GENERATORS",
+      "target": "agent:claude",
+      "evidence": ".ai/state/tasks/G-TOOLING-REPO-MAP-AND-GENERATORS.json#/owner"
+    },
+    {
       "id": "task:GRAPH-001-RUST-CORE->agent:codex:owned_by",
       "kind": "owned_by",
       "source": "task:GRAPH-001-RUST-CORE",
@@ -434,6 +459,13 @@
       "source": "task:I-003A-RUST-PUBLIC-API-PILOT",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/I-003A-RUST-PUBLIC-API-PILOT.json#/owner"
+    },
+    {
+      "id": "task:I-003B-TYPESCRIPT-PUBLIC-API-PILOT->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-003B-TYPESCRIPT-PUBLIC-API-PILOT",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-003B-TYPESCRIPT-PUBLIC-API-PILOT.json#/owner"
     },
     {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT->agent:claude:owned_by",

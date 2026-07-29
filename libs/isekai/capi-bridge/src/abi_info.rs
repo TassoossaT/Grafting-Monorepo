@@ -29,7 +29,12 @@ pub struct EngineAbiInfo {
 }
 
 impl EngineAbiInfo {
-    pub(crate) fn current() -> Self {
+    /// `pub`, not `pub(crate)`: a `#[repr(C)]` value return, not an ABI
+    /// boundary crossing -- also called from `src/bin/abi_info_cli.rs`
+    /// (technically a separate crate within this package, per Cargo's
+    /// own bin/lib split) so tooling reads this real runtime value
+    /// (G-004) instead of duplicating its logic by re-deriving it.
+    pub fn current() -> Self {
         EngineAbiInfo {
             struct_size: std::mem::size_of::<EngineAbiInfo>() as u32,
             abi_major: ABI_MAJOR,

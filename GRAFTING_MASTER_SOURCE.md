@@ -2,10 +2,10 @@
 
 > **Unified canonical document for product, architecture, creation, and AI Control Plane.**
 >
-> Version: `1.11.1`
+> Version: `1.11.2`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 — started I-003 with the generated Rust public-API contract pilot.
+> Last updated: 2026-07-29 — completed the TypeScript public-API contract pilot for `@grafting/x6-canvas`.
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -3214,9 +3214,21 @@ Automate only conventions already proven:
       only their real dependents locally; CI wiring remains separate).
 - [ ] cache per platform.
 - [ ] native runners.
-- [ ] generated docs.
-- [ ] ADRs.
-- [ ] artifact manifest.
+- [x] generated docs (G-003, 2026-07-29: `docs/generated/repo-map.md`,
+      a deterministic Nx-project-grouped-by-ecosystem table, via
+      `tools/scripts/generate-repo-map.mjs`, `pnpm graph:map`/
+      `graph:map:check`, mirroring `generate-graph-ir.mjs`'s established
+      convention. G-008's CI drift-check wiring for it is a separate,
+      not-yet-done follow-on -- flagged, not silently implied).
+- [ ] ADRs (G-005, ADR template, still open).
+- [x] artifact manifest (G-004, 2026-07-29: `docs/generated/artifact-manifest.json`,
+      matching S18.5's literal shape exactly; `abi`/`protocol`/`features`
+      come from a real runtime value -- `libs/isekai/capi-bridge`'s new
+      `abi-info-cli` bin, behind an `abi-info-cli` feature so it never
+      ships in the real `cdylib` -- not from parsing Rust source;
+      `gitSha`/`target` computed live. Via
+      `tools/scripts/generate-artifact-manifest.mjs`, `pnpm graph:manifest`/
+      `graph:manifest:check`).
 - [x] `AGENTS.md` (canonical provider-neutral contract, including coordination).
 - [x] `CLAUDE.md` (short adapter; drift checked alongside `GEMINI.md`).
 
