@@ -49,6 +49,24 @@ it.
   and its Architecture Studio spike-viewer consumer are untouched; see
   `docs/graph-ir/README.md`/`AGENTS.md`.
 
+## Unified drift check (I-007, G-008)
+
+- `pnpm docs:check` -- one entry point, no duplicated drift logic. Chains
+  five already-existing, already-tested checks (a plain `&&` sequence in
+  root `package.json`, not a new script): `graph:map:check` (G-003),
+  `graph:manifest:check` (G-004), `graph:extract:check` (I-004, the real
+  `grafting.graph.json` -- not the frozen spike's `graph:check`, and not
+  `graph:v1:check`, which validates a static fixture rather than repo
+  state), `nx run graph-core:api-check` (I-003A, Rust public-API baseline),
+  `nx run x6-canvas:api-check` (I-003B, TypeScript public-API baseline).
+  Fails fast on the first stale check, naming the actual stale file (each
+  underlying script's own error message). `.github/workflows/ci.yml` runs
+  it as one "Docs and Graph IR drift check" step, replacing what used to
+  be two separate/bundled `api-check` invocations -- same coverage, same
+  relative order, consolidated. CI still never regenerates
+  `docs/generated/project-graph.json` itself; that's a pre-existing gap,
+  not something this closes.
+
 ## Scaffolding generators (G-006, G-007)
 
 - `generate-rust-crate.mjs` -- scaffolds a new Rust crate (`Cargo.toml`,

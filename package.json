@@ -15,6 +15,7 @@
     "graph:manifest:check": "node tools/scripts/generate-artifact-manifest.mjs --check",
     "graph:extract": "node tools/scripts/graph-ir-extract.mjs",
     "graph:extract:check": "node tools/scripts/graph-ir-extract.mjs --check",
+    "docs:check": "pnpm run graph:map:check && pnpm run graph:manifest:check && pnpm run graph:extract:check && pnpm exec nx run graph-core:api-check && pnpm exec nx run x6-canvas:api-check",
     "ai:check": "uv run --package automation python -m automation.coordination --root .",
     "ai:audit": "uv run --package automation python -m automation.control_plane --root ."
   },

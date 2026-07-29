@@ -3218,9 +3218,10 @@ Automate only conventions already proven:
       a deterministic Nx-project-grouped-by-ecosystem table, via
       `tools/scripts/generate-repo-map.mjs`, `pnpm graph:map`/
       `graph:map:check`, mirroring `generate-graph-ir.mjs`'s established
-      convention. G-008's CI drift-check wiring for it is a separate,
-      not-yet-done follow-on -- flagged, not silently implied).
-- [ ] ADRs (G-005, ADR template, still open).
+      convention. G-008's CI drift-check wiring for it is done -- see
+      below).
+- [x] ADRs (G-005, 2026-07-29: `docs/adr/TEMPLATE.md` and
+      `docs/adr/README.md`, Codex).
 - [x] artifact manifest (G-004, 2026-07-29: `docs/generated/artifact-manifest.json`,
       matching S18.5's literal shape exactly; `abi`/`protocol`/`features`
       come from a real runtime value -- `libs/isekai/capi-bridge`'s new
@@ -3231,6 +3232,13 @@ Automate only conventions already proven:
       `graph:manifest:check`).
 - [x] `AGENTS.md` (canonical provider-neutral contract, including coordination).
 - [x] `CLAUDE.md` (short adapter; drift checked alongside `GEMINI.md`).
+- [x] `docs:check`/CI drift detection (I-007 + G-008, 2026-07-29: one
+      entry point, `pnpm docs:check`, chaining the real
+      `graph:map:check`/`graph:manifest:check`/`graph:extract:check`/
+      `graph-core:api-check`/`x6-canvas:api-check` checks rather than a
+      second implementation; wired into `.github/workflows/ci.yml` as one
+      step, replacing the two previously separate/bundled `api-check`
+      invocations with no coverage change).
 
 ---
 

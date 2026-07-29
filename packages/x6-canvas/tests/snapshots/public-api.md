@@ -37,6 +37,18 @@ export interface CanvasEdge {
     /** Optional human-readable text rendered on the edge. */
     readonly label?: string;
 }
+/** Stable reference to one caller-owned entity rendered on the canvas. */
+export interface CanvasEntityReference {
+    /** Kind of rendered entity referenced by the caller-owned identifier. */
+    readonly kind: "node" | "edge";
+    /** Stable caller-owned identifier preserved by the adapter. */
+    readonly id: string;
+}
+/** Optional read-only interaction callbacks for a canvas instance. */
+export interface ReadOnlyCanvasOptions {
+    /** Receives the immutable entity reference when a rendered entity is activated. */
+    readonly onActivate?: (entity: CanvasEntityReference) => void;
+}
 /** Read-only controls returned to a canvas consumer. */
 export interface ReadOnlyCanvas {
     /** Number of nodes supplied when the canvas was created. */
@@ -45,6 +57,8 @@ export interface ReadOnlyCanvas {
     readonly edgeCount: number;
     /** Centers the current rendered content in the viewport. */
     center(): void;
+    /** Selects one rendered entity by its caller-owned identity, or clears the selection. */
+    setSelection(selection: CanvasEntityReference | null): void;
     /** Releases the canvas resources owned by this adapter instance. */
     dispose(): void;
 }
@@ -57,8 +71,9 @@ export interface ReadOnlyCanvas {
  * @param container - Browser element that will own the rendered canvas.
  * @param nodes - Immutable node presentation data.
  * @param edges - Immutable edge presentation data.
+ * @param options - Optional callbacks for read-only canvas interactions.
  * @returns A frozen Grafting-owned handle with read-only canvas operations.
  * @throws When the browser canvas cannot be initialized from the supplied data.
  */
-export declare function createReadOnlyCanvas(container: HTMLElement, nodes: readonly CanvasNode[], edges: readonly CanvasEdge[]): ReadOnlyCanvas;
+export declare function createReadOnlyCanvas(container: HTMLElement, nodes: readonly CanvasNode[], edges: readonly CanvasEdge[], options?: ReadOnlyCanvasOptions): ReadOnlyCanvas;
 ```

@@ -953,22 +953,87 @@ anything was written, both fixed and re-verified before completion.
   convention only; indexing it is later work per that task's own handoff.
 - Not committed yet -- same standing rule as every prior task.
 
+## Unified docs/Graph IR drift check (I-007 + G-008), 2026-07-29
+
+Owner split remaining work between Claude and Codex again, following
+Codex's own proposed division: Codex took `I-006A-X6-READONLY-SELECTION`
+(`packages/x6-canvas/**` only); Claude took the unification of I-007
+("Drift check") and G-008 ("`docs:check`") into one entry point instead of
+two separate implementations. Claimed through
+`.ai/coordination/PROTOCOL.md`
+(`.ai/state/tasks/I-007-G-008-DOCS-GRAPH-DRIFT.json`).
+
+**Real and verified:**
+
+- `pnpm docs:check` (root `package.json`) chains five already-existing,
+  already-tested checks -- a plain `&&` sequence, not a new script --
+  `graph:map:check` (G-003), `graph:manifest:check` (G-004),
+  `graph:extract:check` (I-004, the real `grafting.graph.json`),
+  `nx run graph-core:api-check` (I-003A), `nx run x6-canvas:api-check`
+  (I-003B). `graph:v1:check` (fixture-only validation) and `graph:check`
+  (the frozen spike) are deliberately excluded -- neither is real
+  generated-doc drift in the I-007/G-008 sense.
+- Real gap closed: reading `.github/workflows/ci.yml` end to end showed
+  none of G-003/G-004/I-004's three `--check` scripts ran in CI at all
+  before this task; the two API-baseline checks did run, but scattered
+  across two separate/bundled steps. `.github/workflows/ci.yml` now runs
+  one "Docs and Graph IR drift check" step (`pnpm run docs:check`) after
+  the Cargo build step; the old "Rust public API contract" step is gone
+  and `x6-canvas:api-check` moved out of the TypeScript step (now
+  "TypeScript behavior contracts," `check`+`test` only) -- same coverage,
+  same relative order, one named step instead of three. YAML re-parsed
+  successfully (Python's `yaml` module); no GitHub Actions runner was
+  available to execute it for real, same limitation as every prior CI
+  edit this session.
+- Drift detection proven for real, not assumed: `docs/generated/repo-map.md`
+  and `docs/generated/artifact-manifest.json` were each deliberately
+  hand-corrupted in turn; `pnpm docs:check` failed both times, naming the
+  actual stale file via the underlying script's own error message;
+  regenerating (`pnpm graph:map` / `graph:manifest`) restored a passing
+  run each time. `grafting.graph.json` was caught genuinely stale by real
+  concurrent drift (Codex's parallel work changing task records/manifests
+  mid-task) rather than a manufactured test -- regenerating
+  (`pnpm graph:extract`) fixed it the same way.
+- `tools/scripts/README.md` documents the new entry point.
+  `GRAFTING_MASTER_SOURCE.md` S27 now records `docs:check`/CI drift
+  detection as done, and (a small in-scope courtesy while already editing
+  this exact section) checks off the stale `ADRs (G-005...)` line --
+  Codex completed G-005 earlier this session but it was never marked here.
+
+**Deliberately not done, and why:**
+
+- CI still never regenerates `docs/generated/project-graph.json` itself --
+  a pre-existing gap (already true of `graph:map:check`/
+  `graph:manifest:check` before this task), not something either backlog
+  item's literal criterion asks this task to fix.
+- No new automated test file wrapping `docs:check` -- it is a plain
+  `&&`-chain of five commands that each already have their own drift-proof
+  coverage; the aggregate behavior was proven with real command
+  transcripts instead (see above), not a test with nothing of its own to
+  unit-test.
+- `packages/x6-canvas/` and `apps/architecture-studio/` untouched --
+  confirmed via a live task-registry check that I-006A owns the former
+  exclusively; `docs:check` only calls its existing `api-check` target
+  from outside.
+- Not committed yet -- same standing rule as every prior task.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
 I-001/DEC-050, I-002, GRAPH-001/DEC-051, the Rust/TypeScript public-API
-pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, and I-004 are complete
-(see above). I-006 should now move next: with I-004's real Graph IR data in
-place, the Architecture Studio can atomically move the Graph IR
-presentation projection out of `graph-x6`, consume batched Rust graph
-results through the Wasm boundary, render through `@grafting/x6-canvas`,
-and remove the transitional package and the frozen spike file without an
-outage. G-008 (`docs:check` CI wiring) is a small, natural follow-on now
-that G-003/G-004/I-004 all have their own `--check` mechanism. Python
-contract expansion waits for a consumed public boundary; C# remains in
-standby and does not block the Web path. ADR-0009's Decision section
-remains pending owner confirmation; `engine_submit(bytes)` and E-003 remain
-separately scoped future work.
+pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, I-004, and I-007/G-008
+are complete (see above). Codex is actively on `I-006A-X6-READONLY-SELECTION`
+(read-only activation/selection for `x6-canvas`); per Codex's own sequencing,
+`I-006B-RUST-GRAPH-VIEW` (grouped Rust query contracts -- filters,
+neighborhood, direction, depth, subgraph, immutable snapshot, deterministic
+ordering), `I-006C-GRAPH-WEB-BRIDGE` (Wasm/Worker bridge for those
+snapshots), `I-006D-ARCH-STUDIO-CUTOVER` (real Graph IR consumption,
+removing `graph-x6` and the spike file atomically), and
+`I-006E-INDEPENDENT-ACCEPTANCE` follow in that order. Python contract
+expansion waits for a consumed public boundary; C# remains in standby and
+does not block the Web path. ADR-0009's Decision section remains pending
+owner confirmation; `engine_submit(bytes)` and E-003 remain separately
+scoped future work.
 
 ## Update rule
 
