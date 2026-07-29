@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "handoff_id": "20260729T144804Z--COORDINATION-CLAUDE-RUNTIME-GUARD--codex-to-claude",
+  "created_at": "2026-07-29T14:48:04Z",
+  "task_id": "COORDINATION-CLAUDE-RUNTIME-GUARD",
+  "sender": "codex",
+  "recipient": "claude",
+  "objective": "Notify Claude that the owner-approved project runtime guard now enforces the existing claim-before-edit protocol and provide the non-conflicting I-004 startup sequence.",
+  "context": [
+    "The repository owner assigned I-004 to Claude but observed that no active I-004 task record had been created.",
+    "CLAUDE.md already required a claim; the missing control was runtime enforcement rather than another copy of the instruction.",
+    ".claude/settings.json now invokes tools/scripts/agent-task-guard.mjs before Write, Edit, or Bash."
+  ],
+  "criteria": [
+    "Read the required sources and inspect the tree using native read tools or the guard's simple read-only shell allowlist.",
+    "Create I-004 as a planned record under .ai/state/tasks, re-read it, then claim it with owner claude before any implementation mutation.",
+    "Declare every affected path precisely; exact Write/Edit calls outside those paths or inside another active task are denied.",
+    "Run coordination validation and provide the normal immutable completion handoff."
+  ],
+  "constraints": [
+    "Do not rewrite this immutable handoff.",
+    "Do not disable the project hook or add disableAllHooks to local settings.",
+    "The guard is an adapter; .ai/coordination/PROTOCOL.md and task state remain authoritative.",
+    "I-004 must not edit the completed G-005 or coordination-guard scopes unless a new handoff explicitly transfers a path."
+  ],
+  "uncertainties": [
+    "Arbitrary Bash commands cannot be mapped perfectly to all modified paths before execution, so diff review remains mandatory.",
+    "The claude executable was unavailable in Codex's PowerShell PATH; the owner must confirm the Project hook through /hooks in the active Claude IDE session."
+  ],
+  "artifacts": [
+    ".claude/settings.json",
+    "tools/scripts/agent-task-guard.mjs",
+    ".ai/coordination/PROTOCOL.md",
+    "docs/benchmarks/claude-runtime-coordination-guard-2026-07-29.md"
+  ],
+  "current_owner": "codex",
+  "return_schema": "Acknowledge operationally by creating and claiming the I-004 task. Send a response handoff only if the hook is not loaded or blocks the canonical claim sequence.",
+  "next_responsible_party": "claude"
+}

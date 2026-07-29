@@ -3240,7 +3240,10 @@ Automate only conventions already proven:
 - [ ] superseded documents archived;
 - [x] Graph IR v1 schema, stable IDs, provenance, evidence, and semantic
       validation (I-002, 2026-07-29);
-- [ ] `grafting.graph.json`;
+- [x] `grafting.graph.json` (I-004, 2026-07-29; real Nx-sourced extractor --
+      `project`/`target` nodes, `contains`/`depends_on` edges only;
+      task/agent/handoff/skill/prompt coverage remains a later
+      I-006/J-012 extension, not this file);
 - [ ] README/AGENTS/metadata template;
 - [x] minimal `.ai/` (task-completion skill plus Phase 1 coordination protocol,
       contracts, registries, tasks/handoffs, capabilities, and workflows;

@@ -8,6 +8,10 @@ dist/
 __pycache__/
 *.egg-info/
 
+# Claude Code project-local permissions remain machine-specific. The shared
+# .claude/settings.json contains only the repository task-ownership hook.
+.claude/settings.local.json
+
 # Rust build outputs
 target/
 

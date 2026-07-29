@@ -24,5 +24,17 @@ Agents MUST:
   (DEC-051).
 
 `graph-ir-candidate.schema.json` and `grafting.graph.spike.json` are frozen
-spike-era artifacts during migration. They MUST NOT be relabeled as v1. I-004
-owns the real extractor and `docs/generated/grafting.graph.json` cutover.
+spike-era artifacts during migration. They MUST NOT be relabeled as v1.
+
+I-004 delivered the real extractor: `tools/scripts/graph-ir-extract.mjs`
+(`pnpm graph:extract` / `graph:extract:check`) reads the committed Nx project
+graph and each project's manifest and produces the real
+`docs/generated/grafting.graph.json`, covering `project`/`target` nodes and
+`contains`/`depends_on` edges only -- the Nx-sourced slice of the contract.
+It self-checks against both validation layers (the JS schema/semantic
+validator and the Rust `graph-ir-cli` structural layer, per DEC-051) before
+writing. `grafting.graph.spike.json` and the Architecture Studio spike
+viewer that reads it are untouched and stay frozen until I-006 does the real
+viewer cutover -- I-004 does not migrate or remove them. Task/agent/handoff/
+skill/prompt coverage (`.ai/`-sourced, not Nx-sourced) remains out of this
+extractor's scope; see I-006/J-012.

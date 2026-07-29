@@ -13,6 +13,8 @@
     "graph:map:check": "node tools/scripts/generate-repo-map.mjs --check",
     "graph:manifest": "node tools/scripts/generate-artifact-manifest.mjs",
     "graph:manifest:check": "node tools/scripts/generate-artifact-manifest.mjs --check",
+    "graph:extract": "node tools/scripts/graph-ir-extract.mjs",
+    "graph:extract:check": "node tools/scripts/graph-ir-extract.mjs --check",
     "ai:check": "uv run --package automation python -m automation.coordination --root .",
     "ai:audit": "uv run --package automation python -m automation.control_plane --root ."
   },

@@ -85,7 +85,14 @@ Schema compilation uses Ajv `8.20.0` as a pinned MIT-licensed development
 dependency. It is a toolchain validator and is not included in application
 runtime code.
 
-I-002 defines and validates the contract. I-004 will implement the real Nx to
-Graph IR v1 extractor and generate `docs/generated/grafting.graph.json`. Until
-that atomic cutover, `grafting.graph.spike.json` remains explicitly
-experimental rather than being relabeled as v1.
+I-002 defined and validated the contract. I-004 implemented the real Nx to
+Graph IR v1 extractor (`tools/scripts/graph-ir-extract.mjs`, `pnpm
+graph:extract` / `graph:extract:check`), generating the real
+`docs/generated/grafting.graph.json` from the committed Nx project graph and
+each project's manifest -- `project`/`target` nodes and
+`contains`/`depends_on` edges, the Nx-sourced slice of the contract.
+`grafting.graph.spike.json` remains explicitly experimental and frozen; the
+Architecture Studio spike viewer keeps reading it until I-006 does the real,
+separate viewer cutover onto the v1 file. Task/agent/handoff/skill/prompt
+coverage (`.ai/`-sourced, not Nx-sourced) is out of I-004's scope; see
+I-006/J-012.

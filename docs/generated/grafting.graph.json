@@ -1,0 +1,2163 @@
+{
+  "schemaVersion": "1.0.0",
+  "graphId": "grafting.workspace",
+  "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+  "generator": {
+    "id": "extractor:nx-graph-ir",
+    "version": "1.0.0",
+    "inputHash": "f5271a61c229b5ff0233ae51851286c2339bf736682d1a6b6cd197a88c746c38"
+  },
+  "nodes": [
+    {
+      "id": "project:@grafting/isekai-wasm",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "@grafting/isekai-wasm",
+      "tags": [
+        "npm:private"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-wasm/package.json",
+            "pointer": "/name",
+            "sha256": "9250121a291163f81b89a154ce1cc17600b6128dde9045d86a4e82ab3e8ea347"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:architecture-studio",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "architecture-studio",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:knowledge",
+        "type:app"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/name",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:engine-compute-api",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "engine-compute-api",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-api/project.json",
+            "pointer": "/name",
+            "sha256": "f7773f8bb55f54b629dd688880654de14700ec798424a69b4292d5de8e3a90ad"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:engine-compute-cpu",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "engine-compute-cpu",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/name",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:engine-domain-core",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "engine-domain-core",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/name",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:graph-core",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "graph-core",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:shared",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/name",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:graph-x6",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "graph-x6",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:knowledge",
+        "type:visualization"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/name",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:isekai-capi-bridge",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "isekai-capi-bridge",
+      "tags": [
+        "lang:rust",
+        "platform:cross",
+        "scope:engine",
+        "type:binding"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/name",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:isekai-dotnet-interop",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "isekai-dotnet-interop",
+      "tags": [
+        "lang:csharp",
+        "platform:desktop",
+        "scope:engine",
+        "type:binding"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/name",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:isekai-dotnet-protocol",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "isekai-dotnet-protocol",
+      "tags": [
+        "lang:csharp",
+        "platform:desktop",
+        "scope:engine",
+        "type:contracts"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Protocol/project.json",
+            "pointer": "/name",
+            "sha256": "8e83164cf5ea5f838d957800e306f100fc00fec02880abc98491a315667c50ac"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:isekai-wasm-bridge",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "isekai-wasm-bridge",
+      "tags": [
+        "lang:rust",
+        "platform:web",
+        "scope:engine",
+        "type:binding"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/name",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:isekai-web-client",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "isekai-web-client",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:engine",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/name",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:x6-canvas",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "x6-canvas",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:shared",
+        "type:ui-adapter"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/name",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:architecture-studio/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/targets/build",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:architecture-studio/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/targets/check",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:architecture-studio/dev",
+      "kind": "target",
+      "authorityClass": "derived_evidence",
+      "label": "dev",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/architecture-studio/data/targets/dev",
+            "sha256": "2d0ac1f4e613f25a665a8042c352dd8d950c7706ebb0b5c82d4f0ca6f16c9621"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-compute-api/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-api/project.json",
+            "pointer": "/targets/check",
+            "sha256": "f7773f8bb55f54b629dd688880654de14700ec798424a69b4292d5de8e3a90ad"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-compute-api/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-api/project.json",
+            "pointer": "/targets/test",
+            "sha256": "f7773f8bb55f54b629dd688880654de14700ec798424a69b4292d5de8e3a90ad"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-compute-cpu/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/targets/check",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-compute-cpu/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/targets/test",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-domain-core/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/check",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-domain-core/generate",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "generate",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/generate",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:engine-domain-core/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/test",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/api-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "api-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/format",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "format",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/format",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/graph-ir-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "graph-ir-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/graph-ir-check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/lint",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "lint",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/lint",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-core/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-x6/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-x6/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:graph-x6/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-capi-bridge/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-capi-bridge/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/check",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-capi-bridge/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/test",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-dotnet-interop/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-dotnet-interop/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-dotnet-protocol/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Protocol/project.json",
+            "pointer": "/targets/build",
+            "sha256": "8e83164cf5ea5f838d957800e306f100fc00fec02880abc98491a315667c50ac"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-wasm-bridge/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-wasm-bridge/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-wasm-bridge/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-web-client/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/targets/check",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-web-client/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/targets/test",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:x6-canvas/api-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "api-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:x6-canvas/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/build",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:x6-canvas/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/check",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:x6-canvas/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/test",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge:project%3Aarchitecture-studio--contains--target%3Aarchitecture-studio%2Fbuild",
+      "kind": "contains",
+      "source": "project:architecture-studio",
+      "target": "target:architecture-studio/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/targets/build",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--contains--target%3Aarchitecture-studio%2Fcheck",
+      "kind": "contains",
+      "source": "project:architecture-studio",
+      "target": "target:architecture-studio/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/targets/check",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--contains--target%3Aarchitecture-studio%2Fdev",
+      "kind": "contains",
+      "source": "project:architecture-studio",
+      "target": "target:architecture-studio/dev",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/architecture-studio/data/targets/dev",
+            "sha256": "2d0ac1f4e613f25a665a8042c352dd8d950c7706ebb0b5c82d4f0ca6f16c9621"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Agraph-x6",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:graph-x6",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "28a792b6c2dfaea0376b3e245ce70b3074400d12f788e5db6f9f610cf42c5d8e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-compute-api--contains--target%3Aengine-compute-api%2Fcheck",
+      "kind": "contains",
+      "source": "project:engine-compute-api",
+      "target": "target:engine-compute-api/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-api/project.json",
+            "pointer": "/targets/check",
+            "sha256": "f7773f8bb55f54b629dd688880654de14700ec798424a69b4292d5de8e3a90ad"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-compute-api--contains--target%3Aengine-compute-api%2Ftest",
+      "kind": "contains",
+      "source": "project:engine-compute-api",
+      "target": "target:engine-compute-api/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-api/project.json",
+            "pointer": "/targets/test",
+            "sha256": "f7773f8bb55f54b629dd688880654de14700ec798424a69b4292d5de8e3a90ad"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-compute-cpu--contains--target%3Aengine-compute-cpu%2Fcheck",
+      "kind": "contains",
+      "source": "project:engine-compute-cpu",
+      "target": "target:engine-compute-cpu/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/targets/check",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-compute-cpu--contains--target%3Aengine-compute-cpu%2Ftest",
+      "kind": "contains",
+      "source": "project:engine-compute-cpu",
+      "target": "target:engine-compute-cpu/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/targets/test",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-compute-cpu--depends_on--project%3Aengine-compute-api",
+      "kind": "depends_on",
+      "source": "project:engine-compute-cpu",
+      "target": "project:engine-compute-api",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/compute-cpu/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "bf445930838a920676824c660ccd98b3bcad44872a5adfabf8e86aa1c2a47624"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-domain-core--contains--target%3Aengine-domain-core%2Fcheck",
+      "kind": "contains",
+      "source": "project:engine-domain-core",
+      "target": "target:engine-domain-core/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/check",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-domain-core--contains--target%3Aengine-domain-core%2Fgenerate",
+      "kind": "contains",
+      "source": "project:engine-domain-core",
+      "target": "target:engine-domain-core/generate",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/generate",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aengine-domain-core--contains--target%3Aengine-domain-core%2Ftest",
+      "kind": "contains",
+      "source": "project:engine-domain-core",
+      "target": "target:engine-domain-core/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/engine/domain-core/project.json",
+            "pointer": "/targets/test",
+            "sha256": "0dbe452affcab2582509dcfa66e2ab2fe1a1e5256f580bcda9e5906028861584"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Fapi-check",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/api-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Fcheck",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Fformat",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/format",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/format",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Fgraph-ir-check",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/graph-ir-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/graph-ir-check",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Flint",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/lint",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/lint",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-core--contains--target%3Agraph-core%2Ftest",
+      "kind": "contains",
+      "source": "project:graph-core",
+      "target": "target:graph-core/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/graph/core/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6fee969db3b4449ecbebba1493992a128ec7eb24d2dd96032595ed5e9b0c5b2a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-x6--contains--target%3Agraph-x6%2Fbuild",
+      "kind": "contains",
+      "source": "project:graph-x6",
+      "target": "target:graph-x6/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-x6--contains--target%3Agraph-x6%2Fcheck",
+      "kind": "contains",
+      "source": "project:graph-x6",
+      "target": "target:graph-x6/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-x6--contains--target%3Agraph-x6%2Ftest",
+      "kind": "contains",
+      "source": "project:graph-x6",
+      "target": "target:graph-x6/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agraph-x6--depends_on--project%3Ax6-canvas",
+      "kind": "depends_on",
+      "source": "project:graph-x6",
+      "target": "project:x6-canvas",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/graph-x6/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "6f5d983477a8acee0c3f7b9bfb1d814b9ae28be182f82237af911de5de120b52"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-capi-bridge--contains--target%3Aisekai-capi-bridge%2Fbuild",
+      "kind": "contains",
+      "source": "project:isekai-capi-bridge",
+      "target": "target:isekai-capi-bridge/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-capi-bridge--contains--target%3Aisekai-capi-bridge%2Fcheck",
+      "kind": "contains",
+      "source": "project:isekai-capi-bridge",
+      "target": "target:isekai-capi-bridge/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/check",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-capi-bridge--contains--target%3Aisekai-capi-bridge%2Ftest",
+      "kind": "contains",
+      "source": "project:isekai-capi-bridge",
+      "target": "target:isekai-capi-bridge/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/targets/test",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-capi-bridge--depends_on--project%3Aengine-domain-core",
+      "kind": "depends_on",
+      "source": "project:isekai-capi-bridge",
+      "target": "project:engine-domain-core",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/capi-bridge/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "cc7f7b164d7ef5ec86fb3439210b24da6979f4301f359a9580babb1807348489"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-dotnet-interop--contains--target%3Aisekai-dotnet-interop%2Fbuild",
+      "kind": "contains",
+      "source": "project:isekai-dotnet-interop",
+      "target": "target:isekai-dotnet-interop/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-dotnet-interop--contains--target%3Aisekai-dotnet-interop%2Ftest",
+      "kind": "contains",
+      "source": "project:isekai-dotnet-interop",
+      "target": "target:isekai-dotnet-interop/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-dotnet-interop--depends_on--project%3Aisekai-capi-bridge",
+      "kind": "depends_on",
+      "source": "project:isekai-dotnet-interop",
+      "target": "project:isekai-capi-bridge",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Interop/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "6444270ad7e4a22a77c47c8cdcfe1f90e15b95a5832e0022e7cf2a1c0087e9d0"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-dotnet-protocol--contains--target%3Aisekai-dotnet-protocol%2Fbuild",
+      "kind": "contains",
+      "source": "project:isekai-dotnet-protocol",
+      "target": "target:isekai-dotnet-protocol/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Protocol/project.json",
+            "pointer": "/targets/build",
+            "sha256": "8e83164cf5ea5f838d957800e306f100fc00fec02880abc98491a315667c50ac"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-dotnet-protocol--depends_on--project%3Aengine-domain-core",
+      "kind": "depends_on",
+      "source": "project:isekai-dotnet-protocol",
+      "target": "project:engine-domain-core",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "dotnet/Grafting.Isekai.Protocol/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "8e83164cf5ea5f838d957800e306f100fc00fec02880abc98491a315667c50ac"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-wasm-bridge--contains--target%3Aisekai-wasm-bridge%2Fbuild",
+      "kind": "contains",
+      "source": "project:isekai-wasm-bridge",
+      "target": "target:isekai-wasm-bridge/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-wasm-bridge--contains--target%3Aisekai-wasm-bridge%2Fcheck",
+      "kind": "contains",
+      "source": "project:isekai-wasm-bridge",
+      "target": "target:isekai-wasm-bridge/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/check",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-wasm-bridge--contains--target%3Aisekai-wasm-bridge%2Ftest",
+      "kind": "contains",
+      "source": "project:isekai-wasm-bridge",
+      "target": "target:isekai-wasm-bridge/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/test",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-wasm-bridge--depends_on--project%3Aengine-domain-core",
+      "kind": "depends_on",
+      "source": "project:isekai-wasm-bridge",
+      "target": "project:engine-domain-core",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "6565db27a0e3eee517d3e4760c94e30407446e8c08899ef869f3b0459729a256"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-web-client--contains--target%3Aisekai-web-client%2Fcheck",
+      "kind": "contains",
+      "source": "project:isekai-web-client",
+      "target": "target:isekai-web-client/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/targets/check",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-web-client--contains--target%3Aisekai-web-client%2Ftest",
+      "kind": "contains",
+      "source": "project:isekai-web-client",
+      "target": "target:isekai-web-client/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/targets/test",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-web-client--depends_on--project%3A%40grafting%2Fisekai-wasm",
+      "kind": "depends_on",
+      "source": "project:isekai-web-client",
+      "target": "project:@grafting/isekai-wasm",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/dependencies/isekai-web-client",
+            "sha256": "2d0ac1f4e613f25a665a8042c352dd8d950c7706ebb0b5c82d4f0ca6f16c9621"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-web-client--depends_on--project%3Aisekai-wasm-bridge",
+      "kind": "depends_on",
+      "source": "project:isekai-web-client",
+      "target": "project:isekai-wasm-bridge",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/isekai-web-client/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "7812db8b636291ebc0636f8c02062d2d27ddb4c597effd5a0f8b59732b52fc00"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Ax6-canvas--contains--target%3Ax6-canvas%2Fapi-check",
+      "kind": "contains",
+      "source": "project:x6-canvas",
+      "target": "target:x6-canvas/api-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Ax6-canvas--contains--target%3Ax6-canvas%2Fbuild",
+      "kind": "contains",
+      "source": "project:x6-canvas",
+      "target": "target:x6-canvas/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/build",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Ax6-canvas--contains--target%3Ax6-canvas%2Fcheck",
+      "kind": "contains",
+      "source": "project:x6-canvas",
+      "target": "target:x6-canvas/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/check",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Ax6-canvas--contains--target%3Ax6-canvas%2Ftest",
+      "kind": "contains",
+      "source": "project:x6-canvas",
+      "target": "target:x6-canvas/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "git:7a8f117ad3fd3b85ff6d8a103af7dd9997ca7ad8",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/x6-canvas/project.json",
+            "pointer": "/targets/test",
+            "sha256": "670804911b041cfff93a185da33eb682df6c969831dafbd2a267a5cd73a86cb1"
+          }
+        ]
+      }
+    }
+  ]
+}

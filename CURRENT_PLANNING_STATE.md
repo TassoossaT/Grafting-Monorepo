@@ -852,21 +852,123 @@ TypeScript is complete for this pilot. Python remains evidence-driven until a
 consumed public package boundary needs the convention; C# remains in indefinite
 standby by owner decision and was not touched.
 
+## ADR template (G-005), 2026-07-29
+
+Codex completed G-005 in parallel with I-004: `docs/adr/TEMPLATE.md` (11
+ordered metadata fields, 12 required sections, controlled statuses, Graph
+IR v1-compatible relation mappings) and `docs/adr/README.md`. `TEMPLATE.md`
+deliberately does not match the real ADR discovery pattern
+(`ADR-[0-9]{4}-[a-z0-9-]+.md`); full ADR indexing into Graph IR remains a
+later I-006-or-later extractor extension, not part of I-004's Nx-sourced
+scope. Recorded here per Codex's own completion handoff
+(`.ai/state/handoffs/20260729T143032Z--G-005-ADR-TEMPLATE--codex-to-claude.json`),
+which asked the next editor of this shared file to note it rather than
+requiring a second concurrent edit. G-008 (`docs:check` CI wiring) remains
+open, not selected in any pass yet.
+
+## Nx to Graph IR v1 extractor (I-004), 2026-07-29
+
+Claimed through `.ai/coordination/PROTOCOL.md`
+(`.ai/state/tasks/I-004-GRAPH-IR-EXTRACTOR.json`) after the owner split
+remaining work between Claude (I-004) and Codex in parallel again. A
+Plan-subagent review pass caught two real correctness problems before
+anything was written, both fixed and re-verified before completion.
+
+**Real and verified:**
+
+- `tools/scripts/graph-ir-extract.mjs` (`pnpm graph:extract` /
+  `graph:extract:check`) reads the committed `docs/generated/project-graph.json`
+  and each project's manifest, and produces the real
+  `docs/generated/grafting.graph.json`: `project`/`target` nodes and
+  `contains`/`depends_on` edges -- the Nx-sourced slice of the v1 contract,
+  matching the backlog item's own title ("Nx -> Graph IR extractor") and
+  criterion ("reproducible projects/targets/edges"). Task/agent/handoff/
+  skill/prompt coverage stays out of scope (`.ai/`-sourced, not
+  Nx-sourced; independently confirmed by Codex's own G-005 handoff, which
+  names the same boundary) -- see I-006/J-012.
+- Real, current data drove two design corrections a naive port of the
+  existing spike generator would have gotten wrong: Nx records the same
+  `(source,target)` dependency pair under two different types at once in
+  real cases today (`architecture-studio`->`graph-x6`,
+  `graph-x6`->`x6-canvas`, both `implicit`+`static`) -- the v1 schema's
+  canonical edge ID has no room for a type suffix, so these collapse to one
+  `depends_on` edge per pair (`declared`/confidence 1 if an authored
+  `implicitDependencies` entry exists, else `derived`/confidence 0.95 from
+  Nx's own inference alone -- the real, static-only case is
+  `isekai-web-client`->`@grafting/isekai-wasm`). The same declared/derived
+  split applies to targets Nx infers via a plugin but that aren't literally
+  in a project's own manifest (`architecture-studio`'s `dev` target is the
+  one real case today) -- these get `authorityClass: "derived_evidence"`,
+  not `"canonical_authored_source"`, with evidence pointing at the Nx
+  export rather than a manifest key that doesn't actually exist.
+- `sourceRevision` (`git:<sha>` or `workspace:sha256:<fingerprint>`, per
+  `docs/graph-ir/README.md`) is new logic with no prior implementation in
+  this repo. A Plan-review pass caught that scoping the dirty-tree
+  fingerprint to a whole-repo `git status` scan (the first draft) is
+  self-referential: the generator's own output becomes part of the working
+  tree the moment it's first written, so a later run's fingerprint would
+  never match the one already embedded in the file, and `--check` could
+  never converge -- confirmed live against a real dirty tree carrying
+  unrelated concurrent work from Codex's own tasks. Fixed by scoping the
+  fingerprint strictly to the extractor's own real inputs (the same file
+  set `generator.inputHash` already correctly used), never its own output
+  path.
+- Self-checks its own output against both Graph IR validation layers
+  before writing: the JS schema/semantic validator
+  (`validate-graph-ir.mjs`) and the real Rust `graph-ir-cli` structural
+  layer (`cargo run -p grafting-graph-core --features graph-ir-cli --bin
+  validate-graph-ir`) -- per DEC-051, unique-ID and edge-endpoint-existence
+  invariants are authoritative in Rust, not reimplemented in TypeScript (a
+  Plan-review pass caught that the first draft's own ad hoc JS
+  duplicate-ID guard would have been exactly that duplication).
+- 6 Node tests (`graph-ir-extract.test.mjs`) pass: end-to-end schema/Rust
+  validation of the real generated document, the two collision-case
+  assertions above, direct unit coverage of the JSON Pointer escaping
+  helper (RFC 6901; a Plan-review pass found the original claim that
+  `@grafting/isekai-wasm`'s real data exercises this today was overstated
+  -- that project currently has no targets or dependencies, so nothing
+  routes its `/`-containing name through a pointer segment yet -- fixed by
+  testing the helper directly instead), and `--check` convergence
+  immediately after a fresh generate. Manually confirmed `--check` also
+  fails after a hand-edit and recovers after regenerating.
+- Real output today: 47 nodes, 43 edges, `sourceRevision:
+  git:<40-hex>` (this task's own inputs were clean at generation time even
+  though the wider tree carried unrelated concurrent work).
+- `docs/graph-ir/README.md`/`AGENTS.md` updated from future to past tense;
+  both state plainly that `grafting.graph.spike.json` and the Architecture
+  Studio spike viewer are untouched and stay frozen until I-006's separate
+  viewer cutover. `GRAFTING_MASTER_SOURCE.md` S27's
+  `- [ ] grafting.graph.json;` line is now checked.
+
+**Deliberately not done, and why:**
+
+- Task/agent/handoff/skill/prompt Graph IR coverage -- `.ai/`-sourced, not
+  Nx-sourced; a later I-006-or-later/J-012 extractor extension, not this
+  one.
+- The Architecture Studio spike viewer migration itself (moving off
+  `grafting.graph.spike.json` onto the real v1 file, removing
+  `graph-x6`) -- I-006, a separate backlog item, now genuinely unblocked
+  by this data existing but not started here.
+- ADR extraction into Graph IR -- G-005 published the authoring
+  convention only; indexing it is later work per that task's own handoff.
+- Not committed yet -- same standing rule as every prior task.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
-I-001/DEC-050, I-002, GRAPH-001/DEC-051, and the Rust/TypeScript public-API
-pilots are complete. I-004 should now replace the spike Graph IR output with
-the v1 extractor. Python contract expansion waits for a consumed public
-boundary; C# remains in standby and does not block the Web path. With the
-current contracts and I-004 data in place, the Architecture Studio can
-atomically move the Graph IR presentation projection out of `graph-x6`,
-consume batched Rust graph results through the Wasm boundary, render through
-`@grafting/x6-canvas`, and remove the transitional package without an
-outage. SECURITY-001 and G-003/G-004/G-006/G-007 (repo tooling) are now
-complete (see above). G-005/G-008 remain open, not selected this pass.
-ADR-0009's Decision section remains pending owner confirmation;
-`engine_submit(bytes)` and E-003 remain separately scoped future work.
+I-001/DEC-050, I-002, GRAPH-001/DEC-051, the Rust/TypeScript public-API
+pilots, SECURITY-001, G-003/G-004/G-005/G-006/G-007, and I-004 are complete
+(see above). I-006 should now move next: with I-004's real Graph IR data in
+place, the Architecture Studio can atomically move the Graph IR
+presentation projection out of `graph-x6`, consume batched Rust graph
+results through the Wasm boundary, render through `@grafting/x6-canvas`,
+and remove the transitional package and the frozen spike file without an
+outage. G-008 (`docs:check` CI wiring) is a small, natural follow-on now
+that G-003/G-004/I-004 all have their own `--check` mechanism. Python
+contract expansion waits for a consumed public boundary; C# remains in
+standby and does not block the Web path. ADR-0009's Decision section
+remains pending owner confirmation; `engine_submit(bytes)` and E-003 remain
+separately scoped future work.
 
 ## Update rule
 

@@ -24,6 +24,31 @@ it.
   compares everything else, since those two legitimately vary per
   run/machine.
 
+## Graph IR v1 extractor (I-004)
+
+- `graph-ir-extract.mjs` (`pnpm graph:extract` / `graph:extract:check`) --
+  the real Nx to Graph IR v1 extractor. Reads the committed
+  `docs/generated/project-graph.json` and each project's manifest
+  (`project.json`, falling back to `package.json` for the one real project
+  without one) and produces `docs/generated/grafting.graph.json`:
+  `project`/`target` nodes and `contains`/`depends_on` edges, the
+  Nx-sourced slice of the v1 contract (task/agent/handoff/skill/prompt
+  coverage stays `.ai/`-sourced and out of scope; see I-006/J-012).
+  Collapses Nx's own `implicit`+`static` dependency-type duplication into
+  one `depends_on` edge per project pair (`declared`/confidence 1 if an
+  authored `implicitDependencies` entry exists, else `derived`/confidence
+  0.95 from Nx's inference alone); the same declared/derived split applies
+  to Nx-plugin-inferred targets absent from a project's own manifest (e.g.
+  `architecture-studio`'s `dev` target). `sourceRevision` is scoped
+  strictly to this extractor's own real inputs, never a whole-repo `git
+  status` scan (a repo-wide scan is self-referential once the generated
+  output itself becomes part of the working tree). Self-checks its own
+  output against both Graph IR validation layers (JS schema/semantics via
+  `validate-graph-ir.mjs`, Rust structural invariants via
+  `graph-ir-cli`, per DEC-051) before writing. `grafting.graph.spike.json`
+  and its Architecture Studio spike-viewer consumer are untouched; see
+  `docs/graph-ir/README.md`/`AGENTS.md`.
+
 ## Scaffolding generators (G-006, G-007)
 
 - `generate-rust-crate.mjs` -- scaffolds a new Rust crate (`Cargo.toml`,
@@ -55,6 +80,10 @@ whoever has a real one to add -- not something these tests do.
 
 ## AI coordination / Graph IR (Codex-authored, listed here for discoverability)
 
+- `agent-task-guard.mjs` (+ `.test.mjs`) -- provider-neutral runtime adapter
+  for task ownership. Claude Code invokes it through the project
+  `PreToolUse` hook in `.claude/settings.json`; the canonical policy remains
+  `.ai/coordination/PROTOCOL.md` and `.ai/state/tasks/`.
 - `generate-graph-ir.mjs` / `validate-graph-ir.mjs` (+ their `.test.mjs`
   files) -- `pnpm graph:generate` / `graph:check`, `pnpm graph:v1:check`
   / `graph:v1:test`. See `docs/graph-ir/README.md`.

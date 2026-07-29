@@ -4,7 +4,7 @@
     "id": "grafting-graph-ir-spike",
     "version": 1
   },
-  "inputHash": "741fbb8865de036b88a2da96a2ec26c8d491c35639191a764ed8e4bbcbfce3f7",
+  "inputHash": "181bf619d2adf31574beb15a280258dab4655dc0b3e1692dee1339fc54246832",
   "nodes": [
     {
       "id": "agent:claude",
@@ -218,6 +218,24 @@
       "source": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json"
     },
     {
+      "id": "task:ARCH-STUDIO-OSS-OPTIONS",
+      "kind": "task",
+      "label": "ARCH-STUDIO-OSS-OPTIONS",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/ARCH-STUDIO-OSS-OPTIONS.json"
+    },
+    {
+      "id": "task:COORDINATION-CLAUDE-RUNTIME-GUARD",
+      "kind": "task",
+      "label": "COORDINATION-CLAUDE-RUNTIME-GUARD",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/COORDINATION-CLAUDE-RUNTIME-GUARD.json"
+    },
+    {
       "id": "task:COORDINATION-PHASE1",
       "kind": "task",
       "label": "COORDINATION-PHASE1",
@@ -225,6 +243,15 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/COORDINATION-PHASE1.json"
+    },
+    {
+      "id": "task:G-005-ADR-TEMPLATE",
+      "kind": "task",
+      "label": "G-005-ADR-TEMPLATE",
+      "tags": [
+        "status:completed"
+      ],
+      "source": ".ai/state/tasks/G-005-ADR-TEMPLATE.json"
     },
     {
       "id": "task:G-TOOLING-REPO-MAP-AND-GENERATORS",
@@ -279,6 +306,24 @@
         "status:completed"
       ],
       "source": ".ai/state/tasks/I-003B-TYPESCRIPT-PUBLIC-API-PILOT.json"
+    },
+    {
+      "id": "task:I-004-GRAPH-IR-EXTRACTOR",
+      "kind": "task",
+      "label": "I-004-GRAPH-IR-EXTRACTOR",
+      "tags": [
+        "status:in_progress"
+      ],
+      "source": ".ai/state/tasks/I-004-GRAPH-IR-EXTRACTOR.json"
+    },
+    {
+      "id": "task:I-006-ARCH-STUDIO-SPEC",
+      "kind": "task",
+      "label": "I-006-ARCH-STUDIO-SPEC",
+      "tags": [
+        "status:in_progress"
+      ],
+      "source": ".ai/state/tasks/I-006-ARCH-STUDIO-SPEC.json"
     },
     {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT",
@@ -419,11 +464,32 @@
       "evidence": ".ai/state/tasks/ADR-0013-RUST-GRAPH-API-CONTRACTS.json#/owner"
     },
     {
+      "id": "task:ARCH-STUDIO-OSS-OPTIONS->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:ARCH-STUDIO-OSS-OPTIONS",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/ARCH-STUDIO-OSS-OPTIONS.json#/owner"
+    },
+    {
+      "id": "task:COORDINATION-CLAUDE-RUNTIME-GUARD->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:COORDINATION-CLAUDE-RUNTIME-GUARD",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/COORDINATION-CLAUDE-RUNTIME-GUARD.json#/owner"
+    },
+    {
       "id": "task:COORDINATION-PHASE1->agent:codex:owned_by",
       "kind": "owned_by",
       "source": "task:COORDINATION-PHASE1",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/COORDINATION-PHASE1.json#/owner"
+    },
+    {
+      "id": "task:G-005-ADR-TEMPLATE->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:G-005-ADR-TEMPLATE",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/G-005-ADR-TEMPLATE.json#/owner"
     },
     {
       "id": "task:G-TOOLING-REPO-MAP-AND-GENERATORS->agent:claude:owned_by",
@@ -466,6 +532,20 @@
       "source": "task:I-003B-TYPESCRIPT-PUBLIC-API-PILOT",
       "target": "agent:codex",
       "evidence": ".ai/state/tasks/I-003B-TYPESCRIPT-PUBLIC-API-PILOT.json#/owner"
+    },
+    {
+      "id": "task:I-004-GRAPH-IR-EXTRACTOR->agent:claude:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-004-GRAPH-IR-EXTRACTOR",
+      "target": "agent:claude",
+      "evidence": ".ai/state/tasks/I-004-GRAPH-IR-EXTRACTOR.json#/owner"
+    },
+    {
+      "id": "task:I-006-ARCH-STUDIO-SPEC->agent:codex:owned_by",
+      "kind": "owned_by",
+      "source": "task:I-006-ARCH-STUDIO-SPEC",
+      "target": "agent:codex",
+      "evidence": ".ai/state/tasks/I-006-ARCH-STUDIO-SPEC.json#/owner"
     },
     {
       "id": "task:SECURITY-001-TOOLCHAIN-AUDIT->agent:claude:owned_by",
