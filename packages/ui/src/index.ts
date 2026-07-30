@@ -1,10 +1,12 @@
 import type { ReactElement, ReactNode } from "react";
 
+import { ButtonView } from "./atoms/button.js";
+import { CardView } from "./atoms/card.js";
+import { GridLayoutView } from "./atoms/grid-layout.js";
 import { StatusBadgeView } from "./atoms/status-badge.js";
 import { TextView } from "./atoms/text.js";
 import { EntitySummaryView } from "./molecules/entity-summary.js";
-import { DataTableView } from "./organisms/data-table.js";
-import { GridLayoutView } from "./organisms/grid-layout.js";
+import { DataTableView } from "./atoms/data-table.js";
 import { mountReactView } from "./hosts/mount-react-view.js";
 
 /** Semantic statuses supported by Grafting UI components. */
@@ -37,6 +39,53 @@ export interface StatusBadgeProps {
   readonly status: UiStatus;
   /** Human-readable status label. */
   readonly label: string;
+  /** Optional caller-owned class name for layout composition. */
+  readonly className?: string;
+}
+
+/** Geometric outline of a card surface. */
+export type CardShape = "rectangle" | "pill" | "circle" | "hexagon";
+
+/** Public inputs for a compact, clickable action. */
+export interface ButtonProps {
+  /** Human-readable button label. */
+  readonly label: string;
+  /** Invoked when the button is activated. */
+  readonly onClick?: () => void;
+  /** Optional semantic emphasis. */
+  readonly tone?: "default" | "accent";
+  /** Optional caller-owned class name for layout composition. */
+  readonly className?: string;
+}
+
+/** Public inputs for the smallest reusable bounded surface: a generic card. */
+export interface CardProps {
+  /** Geometric outline of the card; defaults to a rounded rectangle. */
+  readonly shape?: CardShape;
+  /** Caller-owned content rendered inside the card. */
+  readonly children: ReactNode;
+  /** Optional accessible name for the card. */
+  readonly ariaLabel?: string;
+  /** Optional accent used for the card boundary. */
+  readonly accentColor?: string;
+  /** Optional background color for the card surface. */
+  readonly backgroundColor?: string;
+  /** Whether the card occupies the complete width and height of its container. */
+  readonly fillContainer?: boolean;
+  /** Whether the card should communicate pointer interaction. */
+  readonly interactive?: boolean;
+  /** Whether the card displays its selected treatment. */
+  readonly selected?: boolean;
+  /** Optional boundary color used when the card is selected. */
+  readonly selectedColor?: string;
+  /** Optional boundary width in CSS pixels. */
+  readonly borderWidth?: number;
+  /** Optional rounded-corner radius in CSS pixels. */
+  readonly borderRadius?: number;
+  /** Optional padding in CSS pixels. */
+  readonly padding?: number;
+  /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
+  readonly glowColor?: string;
   /** Optional caller-owned class name for layout composition. */
   readonly className?: string;
 }
@@ -79,6 +128,16 @@ export interface EntitySummaryProps {
   readonly bodyPadding?: number;
   /** Optional gap between the component's content regions. */
   readonly contentGap?: number;
+  /** Optional short caller-owned labels rendered as compact badges below the identity. */
+  readonly tags?: readonly string[];
+  /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
+  readonly glowColor?: string;
+  /** Geometric outline of the card; defaults to a rounded rectangle. */
+  readonly shape?: CardShape;
+  /** Optional label for a compact action button rendered in the card. */
+  readonly actionLabel?: string;
+  /** Invoked when the action button is activated. */
+  readonly onAction?: () => void;
 }
 
 /** Vendor-neutral lifecycle returned by a UI component mounted into an existing DOM host. */
@@ -223,6 +282,16 @@ export function Text(props: TextProps): ReactElement {
 /** Renders a compact semantic status without exposing the current component-library API. */
 export function StatusBadge(props: StatusBadgeProps): ReactElement {
   return StatusBadgeView(props);
+}
+
+/** Renders a compact clickable action without exposing the current component-library API. */
+export function Button(props: ButtonProps): ReactElement {
+  return ButtonView(props);
+}
+
+/** Renders a generic bounded card surface without exposing the current component-library API. */
+export function Card(props: CardProps): ReactElement {
+  return CardView(props);
 }
 
 /** Renders a reusable entity identity card suitable for tables, canvases, and inspectors. */

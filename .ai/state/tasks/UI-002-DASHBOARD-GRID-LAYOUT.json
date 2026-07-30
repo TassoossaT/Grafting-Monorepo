@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "UI-002-DASHBOARD-GRID-LAYOUT",
   "title": "Composable dashboard grid-layout organism for @grafting/ui (react-grid-layout)",
-  "status": "in_progress",
+  "status": "completed",
   "owner": "claude",
-  "revision": 1,
-  "updated_at": "2026-07-29T19:10:00-03:00",
+  "revision": 2,
+  "updated_at": "2026-07-29T19:45:00-03:00",
   "objective": "Add a vendor-isolated, Grafting-owned GridLayout organism to @grafting/ui, privately backed by react-grid-layout, so the planned Next.js documentation-and-tooling app (and any future consumer) can arrange draggable/resizable panels without ever receiving react-grid-layout's own types. The owner chose react-grid-layout over Gridstack.js in conversation because the destination app is React/Next.js-first from day one, so the vendor-isolation boundary must make a later engine swap (e.g. to Gridstack) a contained, single-file change.",
   "affected_paths": [
     ".ai/state/tasks/UI-002-DASHBOARD-GRID-LAYOUT.json",

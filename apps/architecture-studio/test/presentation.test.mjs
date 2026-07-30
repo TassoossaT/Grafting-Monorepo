@@ -90,8 +90,8 @@ test("maps every stable ID through an immutable generic canvas presentation", ()
   assert.deepEqual(
     presentation.nodes.map(({ data }) => data),
     [
-      { title: "a", description: "project", treatment: "project" },
-      { title: "future", description: "module", treatment: "other" },
+      { title: "a", description: "project", treatment: "project", tags: ["lang:rust"] },
+      { title: "future", description: "module", treatment: "other", tags: [] },
     ],
   );
   assert.deepEqual(

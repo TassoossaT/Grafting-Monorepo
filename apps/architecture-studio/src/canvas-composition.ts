@@ -66,6 +66,7 @@ const toEntitySummaryProps = (context: CanvasNodeRenderContext): EntitySummaryPr
     fillContainer: true,
     interactive: true,
     selected: context.selected,
+    tags: data.tags,
   });
 };
 

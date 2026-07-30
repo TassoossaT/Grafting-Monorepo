@@ -12,10 +12,18 @@ Grafting-owned vocabulary. Ant Design components, column types, tokens, themes,
 and configuration objects MUST remain private. React is the explicit UI runtime
 of this package; no claim is made that these components are framework-neutral.
 
-Use Atomic Design as an internal organization rule:
+Use Atomic Design as an internal organization rule, decided by composition, not
+by visual complexity: a component that composes no other Grafting component is
+an atom, even if it privately wraps a vendor library. A component that
+composes one or more Grafting atoms is a molecule. A component that composes
+molecules (or coordinates a reusable group of atoms and molecules) is an
+organism. Reclassify a component's folder the moment its composition changes;
+folder placement must track actual composition, not history.
 
-- atoms are indivisible presentation primitives;
-- molecules combine atoms into one reusable identity or interaction;
+- atoms are indivisible presentation primitives that compose no other Grafting
+  component (`Text`, `StatusBadge`, `Card`, `GridLayout`);
+- molecules combine atoms into one reusable identity or interaction
+  (`EntitySummary` composes `Card`, `Text`, and `StatusBadge`);
 - organisms coordinate reusable groups such as a data table;
 - templates and higher levels are created only when a real component exists.
 
@@ -39,6 +47,25 @@ approved MIT headless alternative, not a simultaneous second table engine. It
 may replace the internal engine when a concrete requirement needs more visual
 control or headless state composition; the Grafting public contract should stay
 stable across that replacement.
+
+`Card` is a dependency-free atom: a bounded surface (background, accent or
+selected boundary, radius, padding, fill, and interaction cursor) built from a
+plain element, not a vendor component. It was extracted from `EntitySummary`,
+which no longer imports Ant Design's `Card` directly and instead composes this
+atom; `EntitySummary`'s own public props did not change. Prefer composing
+`Card` over adding a vendor card component when a future need only requires a
+bounded, styleable surface rather than vendor-specific behavior such as a
+cover image or a built-in loading skeleton.
+
+`GridLayout` privately owns `react-grid-layout`. Its Grafting-owned
+`GridPanel`/`GridPanelPlacement` vocabulary is the only public surface;
+`react-grid-layout`'s `Layout`/`LayoutItem` types and its `/legacy` import path
+are an internal implementation detail that must remain swappable (for example
+for Gridstack.js) without a public contract change. This package does not
+import `react-grid-layout/css/styles.css` as a side effect — it declares
+`sideEffects: false`, and a hidden CSS side effect would contradict that and
+could be silently dropped by an aggressive bundler. Consumers that need the
+stylesheet import it once at the application level.
 
 Every exported declaration and public member requires TSDoc. Public API changes
 require `ui:api-check`, a reviewed update to

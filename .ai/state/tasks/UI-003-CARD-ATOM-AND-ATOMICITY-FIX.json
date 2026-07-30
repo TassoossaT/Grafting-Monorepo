@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-003-CARD-ATOM-AND-ATOMICITY-FIX",
+  "title": "Reclassify GridLayout as an atom and extract a dependency-free Card atom from EntitySummary",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-29T20:35:00-03:00",
+  "objective": "Apply the owner's Atomic Design rule (a component that composes no other Grafting component is an atom; a component that composes an atom is a molecule, and so on) to this package: move GridLayout from organisms/ to atoms/ since it only wraps react-grid-layout directly, and extract the antd Card usage inside EntitySummary into its own reusable Card atom so EntitySummary becomes a molecule that composes Card + Text + StatusBadge instead of wrapping antd Card directly. The Card atom is meant for the owner to compose into Architecture Studio's X6 node view in place of the current EntitySummary-as-node-view, as a container that will receive more content over time.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-003-CARD-ATOM-AND-ATOMICITY-FIX.json",
+    "packages/ui/src/index.ts",
+    "packages/ui/src/atoms/grid-layout.tsx",
+    "packages/ui/src/organisms/grid-layout.tsx",
+    "packages/ui/src/atoms/card.tsx",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/tests/ui.test.mjs",
+    "packages/ui/tests/snapshots/public-api.md",
+    "packages/ui/AGENTS.md",
+    "packages/ui/DECISIONS.md",
+    "packages/ui/README.md"
+  ],
+  "blockers": [],
+  "validations": [],
+  "artifacts": [],
+  "risks": [
+    "This task intentionally does not touch apps/architecture-studio or packages/x6-canvas; the owner asked for the Card atom specifically so they can compose it into the X6 node view themselves.",
+    "EntitySummary's public props (EntitySummaryProps) must not change; only its private implementation moves from a raw antd Card to the new Card atom, so existing consumers (the X6 canvas React-node bridge) remain unaffected.",
+    "Per DEC-053/ADR-0015, this task will prepare uncommitted changes only; the repository owner must review and create the actual Git commit."
+  ],
+  "next_responsible_party": "claude"
+}

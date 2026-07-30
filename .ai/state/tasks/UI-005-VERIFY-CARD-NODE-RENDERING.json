@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-005-VERIFY-CARD-NODE-RENDERING",
+  "title": "Verify Architecture Studio node cards actually render the new Card/tags composition in a real browser",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-29T21:50:00-03:00",
+  "objective": "The owner reports the Architecture Studio nodes still look unchanged after UI-003/UI-004 and expected the old element to be visibly replaced. Launch the real dev server and inspect the rendered output in a browser to find out whether this is a stale build/cache issue, a real wiring defect, or a misunderstanding about what already changed, then fix whatever is actually wrong.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-005-VERIFY-CARD-NODE-RENDERING.json"
+  ],
+  "blockers": [],
+  "validations": [],
+  "artifacts": [],
+  "risks": [
+    "This task's affected_paths will be widened if a real code defect is found and needs fixing; investigation-only paths are declared for now."
+  ],
+  "next_responsible_party": "claude"
+}

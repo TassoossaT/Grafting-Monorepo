@@ -9,10 +9,17 @@ Current components:
 
 - atom `Text`: bounded text with semantic tones and optional truncation;
 - atom `StatusBadge`: semantic status independent of Ant Design status names;
-- molecule `EntitySummary`: one reusable Ant Design card for tables, X6 React
-  canvas nodes, and inspectors; optional fill, accent, interaction, and
-  selection props let the Card itself become a complete canvas node; its
-  border, selected color, radius, padding, and content gap are replaceable;
+- atom `Card`: a dependency-free bounded surface (background, accent or
+  selected boundary, radius, padding, fill, interaction cursor); composes no
+  other component and no vendor library;
+- atom `GridLayout`: draggable, resizable dashboard panels described by
+  Grafting-owned `GridPanel`/`GridPanelPlacement` inputs, privately backed by
+  `react-grid-layout`;
+- molecule `EntitySummary`: composes `Card`, `Text`, and `StatusBadge` into one
+  reusable identity card for tables, X6 React canvas nodes, and inspectors;
+  optional fill, accent, interaction, and selection props let it become a
+  complete canvas node; its border, selected color, radius, padding, and
+  content gap are replaceable;
 - organism `DataTable`: immutable rows, stable keys, controlled selection,
   pagination, and bespoke React cell renderers through Grafting column types.
 
@@ -40,6 +47,46 @@ import { DataTable, EntitySummary } from "@grafting/ui";
 
 Do not import `src/atoms`, `src/molecules`, or `src/organisms` directly. Those
 paths describe maintainership, not separate public APIs.
+
+`Card` is a plain bounded surface for content this package does not yet have a
+named molecule for. Compose it directly when a future need is only a
+styleable container:
+
+```tsx
+import { Card } from "@grafting/ui";
+
+<Card ariaLabel="Task status" accentColor="#0f9f6e">
+  <TaskChecklist />
+</Card>;
+```
+
+`GridLayout` needs `react-grid-layout`'s stylesheet for resize-handle and
+placeholder presentation. This package does not import it as a side effect
+(it declares `sideEffects: false`), so consuming applications import it once,
+themselves:
+
+```ts
+import "react-grid-layout/css/styles.css";
+```
+
+```tsx
+import { GridLayout } from "@grafting/ui";
+
+<GridLayout
+  ariaLabel="Studio dashboard"
+  panels={[
+    {
+      content: <GraphCanvas />,
+      placement: { id: "canvas", x: 0, y: 0, width: 8, height: 6 },
+    },
+    {
+      content: <EntityExplorer />,
+      placement: { id: "explorer", x: 8, y: 0, width: 4, height: 6 },
+    },
+  ]}
+  onPlacementsChange={(placements) => savePanelLayout(placements)}
+/>;
+```
 
 `mountEntitySummary(host, props)` offers a Grafting-owned update/dispose
 lifecycle for adapters that own an existing DOM host. ReactDOM remains private
@@ -69,4 +116,5 @@ Review the baseline together with affected consumers and behavioral tests. A
 normal `api-check` never changes it.
 
 See [DECISIONS.md](DECISIONS.md) for the evaluated AntD, TanStack, shadcn/ui,
-licensing, Atomic Design, and X6/React-node conclusions.
+grid-layout, Card atom, licensing, Atomic Design, and X6/React-node
+conclusions.

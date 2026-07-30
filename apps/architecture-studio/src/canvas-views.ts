@@ -15,6 +15,7 @@ export interface ArchitectureNodeViewData {
   readonly title: string;
   readonly description: string;
   readonly treatment: ArchitectureNodeTreatment;
+  readonly tags: readonly string[];
 }
 
 /** Product-owned visual treatments derived from Graph IR relation kinds. */
@@ -33,7 +34,8 @@ export function readArchitectureNodeViewData(value: unknown): ArchitectureNodeVi
     value === null ||
     typeof (value as Partial<ArchitectureNodeViewData>).title !== "string" ||
     typeof (value as Partial<ArchitectureNodeViewData>).description !== "string" ||
-    typeof (value as Partial<ArchitectureNodeViewData>).treatment !== "string"
+    typeof (value as Partial<ArchitectureNodeViewData>).treatment !== "string" ||
+    !Array.isArray((value as Partial<ArchitectureNodeViewData>).tags)
   ) {
     throw new Error("Architecture Studio node view received invalid data");
   }

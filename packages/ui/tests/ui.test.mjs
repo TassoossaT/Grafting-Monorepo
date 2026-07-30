@@ -4,12 +4,13 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { DataTable, EntitySummary, GridLayout, StatusBadge, Text } from "../dist/index.js";
+import { Card, DataTable, EntitySummary, GridLayout, StatusBadge, Text } from "../dist/index.js";
 import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
   const ui = await import("../dist/index.js");
   assert.deepEqual(Object.keys(ui).sort(), [
+    "Card",
     "DataTable",
     "EntitySummary",
     "GridLayout",
@@ -17,6 +18,17 @@ test("exports only the deliberate Grafting component surface", async () => {
     "Text",
     "mountEntitySummary",
   ]);
+});
+
+test("renders a dependency-free bounded surface", () => {
+  const markup = renderToStaticMarkup(
+    createElement(Card, { ariaLabel: "Panel", children: createElement("span", null, "Content") }),
+  );
+
+  assert.match(markup, /^<div/);
+  assert.doesNotMatch(markup, /ant-/);
+  assert.match(markup, /aria-label="Panel"/);
+  assert.match(markup, /Content/);
 });
 
 test("renders semantic atoms without exposing vendor configuration", () => {
@@ -52,7 +64,7 @@ test("keeps a long entity identity in a bounded reusable card", () => {
   assert.match(markup, /A deliberately long repository node title/);
 });
 
-test("lets the AntD Card own a complete selected canvas-node boundary", () => {
+test("lets the Card atom own a complete selected canvas-node boundary", () => {
   const markup = renderToStaticMarkup(
     createElement(EntitySummary, {
       accentColor: "#4f46e5",
@@ -68,11 +80,26 @@ test("lets the AntD Card own a complete selected canvas-node boundary", () => {
   );
   const rootTag = markup.match(/^<[^>]+>/)?.[0] ?? "";
 
-  assert.match(rootTag, /class="ant-card/);
+  assert.match(rootTag, /^<div/);
+  assert.doesNotMatch(rootTag, /ant-/);
   assert.match(rootTag, /data-selected="true"/);
   assert.match(rootTag, /border:3px solid #2563eb/);
   assert.match(rootTag, /height:100%/);
   assert.match(rootTag, /cursor:pointer/);
+});
+
+test("shows a capped row of caller-owned tags below the entity identity", () => {
+  const markup = renderToStaticMarkup(
+    createElement(EntitySummary, {
+      tags: ["lang:rust", "scope:shared", "type:lib", "platform:web"],
+      title: "grafting-graph-core",
+    }),
+  );
+
+  assert.match(markup, /lang:rust/);
+  assert.match(markup, /scope:shared/);
+  assert.match(markup, /type:lib/);
+  assert.doesNotMatch(markup, /platform:web/);
 });
 
 test("updates and disposes a DOM mount through a ReactDOM-free public lifecycle", () => {

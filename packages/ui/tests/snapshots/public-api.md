@@ -40,6 +40,33 @@ export interface StatusBadgeProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/** Public inputs for the smallest reusable bounded surface: a generic card. */
+export interface CardProps {
+    /** Caller-owned content rendered inside the card. */
+    readonly children: ReactNode;
+    /** Optional accessible name for the card. */
+    readonly ariaLabel?: string;
+    /** Optional accent used for the card boundary. */
+    readonly accentColor?: string;
+    /** Optional background color for the card surface. */
+    readonly backgroundColor?: string;
+    /** Whether the card occupies the complete width and height of its container. */
+    readonly fillContainer?: boolean;
+    /** Whether the card should communicate pointer interaction. */
+    readonly interactive?: boolean;
+    /** Whether the card displays its selected treatment. */
+    readonly selected?: boolean;
+    /** Optional boundary color used when the card is selected. */
+    readonly selectedColor?: string;
+    /** Optional boundary width in CSS pixels. */
+    readonly borderWidth?: number;
+    /** Optional rounded-corner radius in CSS pixels. */
+    readonly borderRadius?: number;
+    /** Optional padding in CSS pixels. */
+    readonly padding?: number;
+    /** Optional caller-owned class name for layout composition. */
+    readonly className?: string;
+}
 /** Public inputs for a reusable entity summary shown in canvases, tables, or inspectors. */
 export interface EntitySummaryProps {
     /** Primary human-readable entity name. */
@@ -78,6 +105,8 @@ export interface EntitySummaryProps {
     readonly bodyPadding?: number;
     /** Optional gap between the component's content regions. */
     readonly contentGap?: number;
+    /** Optional short caller-owned labels rendered as compact badges below the identity. */
+    readonly tags?: readonly string[];
 }
 /** Vendor-neutral lifecycle returned by a UI component mounted into an existing DOM host. */
 export interface UiMountHandle<Props> {
@@ -206,6 +235,8 @@ export interface GridLayoutProps {
 export declare function Text(props: TextProps): ReactElement;
 /** Renders a compact semantic status without exposing the current component-library API. */
 export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
+/** Renders a generic bounded card surface without exposing the current component-library API. */
+export declare function Card(props: CardProps): ReactElement;
 /** Renders a reusable entity identity card suitable for tables, canvases, and inspectors. */
 export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
 /** Mounts an EntitySummary into an existing DOM host without exposing ReactDOM. */

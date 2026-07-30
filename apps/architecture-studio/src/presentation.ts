@@ -139,6 +139,7 @@ export function toCanvasPresentation(
         title: node.label,
         description: node.kind,
         treatment: nodeTreatment(node.kind),
+        tags: node.tags,
       }),
     } satisfies CanvasNode);
   });

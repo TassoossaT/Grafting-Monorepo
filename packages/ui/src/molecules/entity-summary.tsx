@@ -1,44 +1,33 @@
-import { Card, Flex } from "antd";
+import { Flex } from "antd";
 
+import { ButtonView } from "../atoms/button.js";
+import { CardView } from "../atoms/card.js";
 import { StatusBadgeView } from "../atoms/status-badge.js";
 import { TextView } from "../atoms/text.js";
 import type { EntitySummaryProps } from "../index.js";
 
+/** The card keeps a fixed, compact height; only the first few tags are shown. */
+const MAX_VISIBLE_TAGS = 3;
+
 export function EntitySummaryView(props: EntitySummaryProps) {
   const hasStatus = props.status !== undefined && props.statusLabel !== undefined;
-  const usesAccentBoundary = props.accentColor !== undefined;
+  const tags = props.tags?.slice(0, MAX_VISIBLE_TAGS) ?? [];
 
   return (
-    <Card
-      aria-label={props.ariaLabel}
+    <CardView
+      accentColor={props.accentColor}
+      ariaLabel={props.ariaLabel}
+      backgroundColor={props.backgroundColor}
+      borderRadius={props.borderRadius}
+      borderWidth={props.borderWidth}
       className={props.className}
-      data-selected={props.selected === undefined ? undefined : String(props.selected)}
-      size="small"
-      styles={{
-        body: {
-          boxSizing: "border-box",
-          height: props.fillContainer ? "100%" : undefined,
-          minWidth: 0,
-          padding: props.bodyPadding ?? 12,
-        },
-      }}
-      style={{
-        background: props.backgroundColor,
-        border: usesAccentBoundary
-          ? `${props.borderWidth ?? 1}px solid ${
-              props.selected && props.selectedColor !== undefined
-                ? props.selectedColor
-                : props.accentColor
-            }`
-          : undefined,
-        borderRadius: props.borderRadius,
-        boxSizing: "border-box",
-        cursor: props.interactive ? "pointer" : undefined,
-        height: props.fillContainer ? "100%" : undefined,
-        minWidth: 0,
-        overflow: "hidden",
-        width: "100%",
-      }}
+      fillContainer={props.fillContainer}
+      glowColor={props.glowColor}
+      interactive={props.interactive}
+      shape={props.shape}
+      padding={props.bodyPadding}
+      selected={props.selected}
+      selectedColor={props.selectedColor}
     >
       <Flex align="center" gap={props.contentGap ?? 10} style={{ minWidth: 0 }}>
         {props.leading}
@@ -51,8 +40,18 @@ export function EntitySummaryView(props: EntitySummaryProps) {
         {hasStatus ? (
           <StatusBadgeView label={props.statusLabel} status={props.status} />
         ) : null}
+        {props.actionLabel === undefined ? null : (
+          <ButtonView label={props.actionLabel} onClick={props.onAction} tone="accent" />
+        )}
         {props.actions}
       </Flex>
-    </Card>
+      {tags.length === 0 ? null : (
+        <Flex gap={4} style={{ flexWrap: "wrap", marginTop: 6, minWidth: 0 }}>
+          {tags.map((tag) => (
+            <StatusBadgeView key={tag} label={tag} status="neutral" />
+          ))}
+        </Flex>
+      )}
+    </CardView>
   );
 }

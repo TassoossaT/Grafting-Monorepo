@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-006-CARD-USES-ANTD",
+  "title": "Revert the Card atom to privately use Ant Design's Card",
+  "status": "in_progress",
+  "owner": "claude",
+  "revision": 1,
+  "updated_at": "2026-07-29T22:00:00-03:00",
+  "objective": "The owner explicitly asked to change card.tsx to use antd's Card, overriding the dependency-free design from UI-003. Reimplement CardView with antd's Card while keeping the public CardProps contract in index.ts unchanged, so EntitySummary and every other consumer are unaffected.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-006-CARD-USES-ANTD.json",
+    "packages/ui/src/atoms/card.tsx",
+    "packages/ui/src/atoms/button.tsx",
+    "packages/ui/src/index.ts",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/tests/ui.test.mjs",
+    "packages/ui/AGENTS.md",
+    "packages/ui/DECISIONS.md",
+    "apps/architecture-studio/src/canvas-composition.ts"
+  ],
+  "blockers": [],
+  "validations": [],
+  "artifacts": [],
+  "risks": [
+    "CardProps and the Card() function signature do not change, so the public API declaration and its tracked baseline are expected to stay identical; api-check still runs to confirm no antd type leaks now that antd is imported again.",
+    "Per DEC-053/ADR-0015, this task prepares uncommitted changes only; the repository owner reviews and creates the actual Git commit."
+  ],
+  "next_responsible_party": "claude"
+}

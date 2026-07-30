@@ -42,8 +42,8 @@ export function GridLayoutView(props: GridLayoutProps): ReactElement {
     <div aria-label={props.ariaLabel} className={props.className} role="region">
       <ResizableDraggableGrid
         cols={props.columns ?? 12}
-        isDraggable={props.draggable ?? true}
-        isResizable={props.resizable ?? true}
+        isDraggable={props.draggable}
+        isResizable={props.resizable}
         layout={props.panels.map((panel) => toLayoutItem(panel.placement))}
         margin={[gap, gap]}
         onLayoutChange={(layout: Layout) => props.onPlacementsChange?.(toLayout(layout))}
