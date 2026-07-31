@@ -2,11 +2,11 @@
   "schema_version": 1,
   "task_id": "UI-006-CARD-USES-ANTD",
   "title": "Revert the Card atom to privately use Ant Design's Card",
-  "status": "in_progress",
+  "status": "completed",
   "owner": "claude",
-  "revision": 1,
-  "updated_at": "2026-07-29T22:00:00-03:00",
-  "objective": "The owner explicitly asked to change card.tsx to use antd's Card, overriding the dependency-free design from UI-003. Reimplement CardView with antd's Card while keeping the public CardProps contract in index.ts unchanged, so EntitySummary and every other consumer are unaffected.",
+  "revision": 2,
+  "updated_at": "2026-07-29T23:05:00-03:00",
+  "objective": "Owner-directed live iteration in conversation: swap Card between antd and dependency-free implementations to prove the build pipeline updates visibly (glowColor test), add a Card shape prop and test different shapes per node treatment, add a Button atom and wire a click-through test action into Architecture Studio nodes, then revert every test-only value (glow, per-treatment shapes, test button) once the owner confirmed the pipeline works, while keeping the underlying Card shape/glow, Button atom, and EntitySummary action-slot capabilities in @grafting/ui for future use.",
   "affected_paths": [
     ".ai/state/tasks/UI-006-CARD-USES-ANTD.json",
     "packages/ui/src/atoms/card.tsx",
@@ -14,13 +14,26 @@
     "packages/ui/src/index.ts",
     "packages/ui/src/molecules/entity-summary.tsx",
     "packages/ui/tests/ui.test.mjs",
+    "packages/ui/tests/snapshots/public-api.md",
     "packages/ui/AGENTS.md",
     "packages/ui/DECISIONS.md",
     "apps/architecture-studio/src/canvas-composition.ts"
   ],
   "blockers": [],
-  "validations": [],
-  "artifacts": [],
+  "validations": [
+    "pnpm --filter @grafting/ui check/build/test: 9/9 passed, including the export-surface test updated for the new Button export",
+    "UPDATE_SNAPSHOTS=yes pnpm --filter @grafting/ui api-check then normal api-check: baseline updated and reviewed, no forbidden vendor module leaked (Button/ButtonProps/CardShape/glowColor/actionLabel/onAction added)",
+    "pnpm --filter @grafting/architecture-studio check/test: passed (8/8), confirming the reverted canvas-composition.ts (no test glow/shape/action values) still compiles and behaves",
+    "Live verification in the running dev server, confirmed by the owner directly: the neon glow test, the three per-treatment card shapes, and the alert-producing test button all rendered and worked as expected before being reverted"
+  ],
+  "artifacts": [
+    "packages/ui/src/atoms/card.tsx",
+    "packages/ui/src/atoms/button.tsx",
+    "packages/ui/src/index.ts",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/tests/ui.test.mjs",
+    "packages/ui/tests/snapshots/public-api.md"
+  ],
   "risks": [
     "CardProps and the Card() function signature do not change, so the public API declaration and its tracked baseline are expected to stay identical; api-check still runs to confirm no antd type leaks now that antd is imported again.",
     "Per DEC-053/ADR-0015, this task prepares uncommitted changes only; the repository owner reviews and creates the actual Git commit."

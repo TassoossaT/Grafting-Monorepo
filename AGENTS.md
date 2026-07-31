@@ -133,7 +133,11 @@ A task can only be declared complete with applicable evidence:
 - schema validation;
 - diff review;
 - acceptance criteria;
-- documentation;
+- documentation — if `affected_paths` touch a documented project's `src/`
+  (TypeScript: `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that
+  project's scoped API-reference evidence and run the `docs-quality-check`
+  skill on it before declaring completion (`.ai/coordination/PROTOCOL.md`
+  rule 6, `tools/scripts/README.md`);
 - Graph IR;
 - risks and limitations.
 

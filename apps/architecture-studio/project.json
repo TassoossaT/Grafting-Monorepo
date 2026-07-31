@@ -38,6 +38,23 @@
       "dependsOn": ["ui:build", "x6-canvas:build"],
       "cache": true,
       "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs architecture-studio" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs architecture-studio --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/project.json",
+        "{workspaceRoot}/docs/generated/api/ts/architecture-studio.api.md",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
     }
   }
 }

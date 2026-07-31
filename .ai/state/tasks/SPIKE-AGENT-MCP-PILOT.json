@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "SPIKE-AGENT-MCP-PILOT",
+  "title": "Isolated pilot of rinadelph/Agent-MCP outside the tracked repository tree",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T01:05:00-03:00",
+  "objective": "Owner-directed: pilot https://github.com/rinadelph/Agent-MCP (AGPL-3.0) to evaluate it as a possible future replacement for the current file-based .ai/state/tasks coordination protocol. Per the owner's explicit choice, this pilot must not touch anything the existing protocol, guard, or other agents (Codex, Gemini) depend on. All clone/install/run activity happens entirely under the session scratchpad, outside the tracked Grafting Monorepo tree; this task record exists only to satisfy the coordination guard's Bash gate, since none of the real work touches repository-tracked files.",
+  "affected_paths": [
+    ".ai/state/tasks/SPIKE-AGENT-MCP-PILOT.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "Cloned rinadelph/Agent-MCP (--depth 1) entirely under the session scratchpad, outside the tracked Grafting Monorepo tree",
+    "Built and ran the agent-mcp-node (TypeScript) implementation: npm install, npm run build, then CI=true npm run server -- --port 4400 --mode full --project-dir <scratchpad>",
+    "Server came up for real: GET /health and /stats both returned live JSON confirming 39 registered tools across all 10 categories, sqlite-vec vector search enabled, SQLite schema initialized",
+    "Confirmed via the server's own log that OpenAI-based RAG is inactive without OPENAI_API_KEY (expected, flagged in advance); every other category (agent/task management, file locking, messaging, session state) reports enabled",
+    "Nothing under the tracked Grafting Monorepo tree was touched by this pilot; .ai/state/tasks, the guard, and PROTOCOL.md are unchanged"
+  ],
+  "artifacts": [
+    "Ephemeral: Agent-MCP clone and running server instance live only under the session scratchpad, not part of the tracked repository"
+  ],
+  "risks": [
+    "Agent-MCP is AGPL-3.0; fine for internal/local use, but network-hosting a modified version for others would trigger its source-disclosure obligation. Not a concern for this local pilot.",
+    "Its RAG/shared-memory feature requires an OPENAI_API_KEY; without one, only the non-memory parts of the pilot (agent/task creation, dashboard, file locking) can be demonstrated.",
+    "This pilot intentionally does not touch .ai/state/tasks, tools/scripts/agent-task-guard.mjs, or .ai/coordination/PROTOCOL.md; nothing here changes how Codex or Gemini coordinate today.",
+    "No screenshot capability is available in this environment (confirmed earlier this session); the demo is verified via direct HTTP/API calls against the running local server, not a visual screenshot."
+  ],
+  "next_responsible_party": "claude"
+}

@@ -4,6 +4,9 @@
   "private": true,
   "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
   "packageManager": "pnpm@11.17.0",
+  "nx": {
+    "includedScripts": []
+  },
   "scripts": {
     "graph:generate": "node tools/scripts/generate-graph-ir.mjs",
     "graph:check": "node tools/scripts/generate-graph-ir.mjs --check",
@@ -15,12 +18,18 @@
     "graph:manifest:check": "node tools/scripts/generate-artifact-manifest.mjs --check",
     "graph:extract": "node tools/scripts/graph-ir-extract.mjs",
     "graph:extract:check": "node tools/scripts/graph-ir-extract.mjs --check",
-    "docs:check": "pnpm run graph:map:check && pnpm run graph:manifest:check && pnpm run graph:extract:check && pnpm exec nx run graph-core:api-check && pnpm exec nx run x6-canvas:api-check",
+    "docs:api:ts:generate": "node tools/scripts/generate-api-docs.mjs",
+    "docs:api:ts:check": "node tools/scripts/generate-api-docs.mjs --check",
+    "docs:api:rust:generate": "node tools/scripts/generate-rust-api-docs.mjs",
+    "docs:api:rust:check": "node tools/scripts/generate-rust-api-docs.mjs --check",
+    "docs:check": "pnpm run graph:map:check && pnpm run graph:manifest:check && pnpm run graph:extract:check && pnpm run docs:api:ts:check && pnpm run docs:api:rust:check && pnpm exec nx run graph-core:api-check && pnpm exec nx run x6-canvas:api-check",
     "ai:check": "uv run --package automation python -m automation.coordination --root .",
-    "ai:audit": "uv run --package automation python -m automation.control_plane --root ."
+    "ai:audit": "uv run --package automation python -m automation.control_plane --root .",
+    "toolchains:check": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/scripts/validate-toolchains.ps1"
   },
   "devDependencies": {
     "ajv": "8.20.0",
-    "nx": "23.1.0"
+    "nx": "23.1.0",
+    "typedoc": "0.28.20"
   }
 }

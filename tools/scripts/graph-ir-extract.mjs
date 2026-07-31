@@ -61,10 +61,15 @@ export async function extractGraphIr({ check = false } = {}) {
   // Resolve each project's manifest: prefer project.json, fall back to
   // package.json for the one real case with no project.json
   // (@grafting/isekai-wasm -- confirmed empirically; every other current
-  // project has project.json).
+  // project has project.json). The repo-root project's own Nx root is
+  // "." (the "grafting" project, G-TOOLING-NX-ROOT-TARGETS) -- joining
+  // that with a leading "./" produces a "." path segment, which
+  // validate-graph-ir.mjs's validateEvidencePath rejects as unnormalized;
+  // join without a separator in that one case instead.
+  const joinRepoRelative = (projectRoot, file) => (projectRoot === "." ? file : `${projectRoot}/${file}`);
   const manifestRelativeFor = (projectRoot) => {
-    const projectJson = `${projectRoot}/project.json`;
-    return existsSync(resolve(root, projectJson)) ? projectJson : `${projectRoot}/package.json`;
+    const projectJson = joinRepoRelative(projectRoot, "project.json");
+    return existsSync(resolve(root, projectJson)) ? projectJson : joinRepoRelative(projectRoot, "package.json");
   };
 
   const manifestByProject = new Map();

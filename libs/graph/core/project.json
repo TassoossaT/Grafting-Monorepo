@@ -90,6 +90,26 @@
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/docs/graph-ir/fixtures/valid-minimal.graph.json"
       ]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-graph-core" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-graph-core --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-graph-core.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+        "sharedGlobals"
+      ]
     }
   }
 }

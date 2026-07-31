@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "G-DOCS-API-AUTODISCOVERY-AND-NOISE-FILTER",
+  "title": "Auto-discover doc targets from Nx project.json / Cargo workspace members, and filter derive-impl noise from Rust output",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-30T01:00:00-03:00",
+  "objective": "Owner-directed follow-up to G-DOCS-API-COVERAGE-EXPANSION. Two confirmed fixes: (1) generate-rust-api-docs.mjs and generate-api-docs.mjs currently use hardcoded target lists -- a new package/crate gets no generated docs until someone manually edits the script. Replace with discovery from data already authoritative in the repo: each TS project's project.json (projectType + metadata.publicApi.entryPoint, falling back to package.json main/types for libraries without that metadata yet; multi-file src/**/*.ts discovery for projectType=application), and the root Cargo.toml's [workspace] members list (skipping members with no src/lib.rs, e.g. tools/rust-api-docgen itself, which is bin-only). (2) The owner inspected docs/generated/api/rust/grafting-compute-api.json directly and found over half its entries are undocumented derive-generated impls/methods (Clone/Debug/Eq/Hash/marker::*/etc) -- real signal (rich module/type doc comments) is buried in that noise. Filter those out in tools/rust-api-docgen so only documented items or structurally meaningful undocumented public declarations remain.",
+  "affected_paths": [
+    ".ai/state/tasks/G-DOCS-API-AUTODISCOVERY-AND-NOISE-FILTER.json",
+    "tools/rust-api-docgen/src/main.rs",
+    "tools/scripts/generate-api-docs.mjs",
+    "tools/scripts/generate-rust-api-docs.mjs",
+    "tools/scripts/README.md",
+    "docs/generated/api/ts/ui.api.json",
+    "docs/generated/api/ts/x6-canvas.api.json",
+    "docs/generated/api/ts/isekai-web-client.api.json",
+    "docs/generated/api/ts/architecture-studio.api.json",
+    "docs/generated/api/rust/grafting-graph-core.json",
+    "docs/generated/api/rust/grafting-compute-api.json",
+    "docs/generated/api/rust/grafting-compute-cpu.json",
+    "docs/generated/api/rust/grafting-domain-core.json",
+    "docs/generated/api/rust/grafting-isekai-capi.json",
+    "docs/generated/api/rust/grafting-isekai-wasm.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "Rust noise filter: tested against the exact file the owner inspected (grafting-compute-api.json) -- 134 items -> 33, all remaining entries are real struct/enum/field/method/trait declarations or documented items; verified by direct read, not just a size check.",
+    "cargo build -p grafting-rust-api-docgen: compiles clean after adding is_undocumented_derive_noise (including the generic-parameter-vs-`::`-in-bound edge case, e.g. `hash<__H: core::hash::Hasher>`, fixed via split_once('<') before rsplit('::'))",
+    "TS discovery: confirmed via direct Glob that all 4 real TS projects (ui, x6-canvas, isekai-web-client, architecture-studio) have project.json with the expected projectType/tags/metadata shape, and packages/isekai-wasm has none -- discovery output matched this exactly, no manual target list left",
+    "Rust discovery: confirmed via a standalone script run that Cargo.toml member-parsing + src/lib.rs existence check correctly identifies the same 6 real crates and correctly skips tools/rust-api-docgen itself (bin-only, no src/lib.rs)",
+    "node tools/scripts/generate-api-docs.mjs and generate-rust-api-docs.mjs (no args): both produce the identical 10-file set (git status/find confirmed, same filenames as G-DOCS-API-COVERAGE-EXPANSION) from discovery instead of hardcoded lists",
+    "Size after both fixes: Rust total 234 KB -> 160 KB (grafting-domain-core.json: 132 KB -> 97 KB); TS unchanged in shape, still 91-97 KB each",
+    "--check converges clean immediately after generation on both sides",
+    "Real drift proof repeated on both sides post-rewrite (not assumed to still work): hand-corrupted docs/generated/api/ts/ui.api.json's top-level name field -> --check failed naming it -> regenerated -> --check passed again",
+    "pnpm run docs:check: full 7-step chain passes end to end after all changes",
+    "git status --short / find docs/generated/api -type f: exactly the same 10 generated files as before, only content changed; only this task's declared affected_paths touched"
+  ],
+  "artifacts": [
+    "tools/rust-api-docgen/src/main.rs (is_undocumented_derive_noise filter)",
+    "tools/scripts/generate-api-docs.mjs (project.json-driven discovery, no hardcoded targets array)",
+    "tools/scripts/generate-rust-api-docs.mjs (Cargo.toml-workspace-driven discovery, no hardcoded crates array)",
+    "tools/scripts/README.md (updated to describe discovery mechanism and the noise-filter fix, with the real before/after sizes)",
+    "docs/generated/api/ts/*.api.json and docs/generated/api/rust/*.json (regenerated, smaller/cleaner content, same 10 filenames)"
+  ],
+  "risks": [
+    "Derive-noise filter is a denylist heuristic (impl-block declarations, plus a fixed set of derive-only method names: clone/eq/ne/fmt/hash/cmp/partial_cmp/default), not a semantic analysis -- a hand-written fmt/eq/clone impl with real behavior but no doc comment would also be dropped. Accepted tradeoff, same as the owner's own stated goal (signal over completeness); a future doc comment on such a method makes it reappear.",
+    "TS auto-discovery depends on project.json's projectType field and metadata.publicApi.entryPoint / package.json types-main fallback; a project.json that is missing or malformed silently drops that project from coverage rather than erroring loudly -- acceptable for this repo's current small project count, worth revisiting if that becomes a real gap.",
+    "Output file set is expected to stay identical to G-DOCS-API-COVERAGE-EXPANSION's (4 TS, 6 Rust) since no new packages/crates exist yet; this task proves the discovery mechanism produces the same set dynamically, not a coverage change."
+  ],
+  "next_responsible_party": "claude"
+}

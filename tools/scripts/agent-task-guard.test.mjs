@@ -102,6 +102,72 @@ test("rejects mutation of completed and foreign-owned task records", async () =>
   assert.match(foreign.reason, /belongs to codex/);
 });
 
+test("allows a same-status, same-owner correction of a completed task record", async () => {
+  const root = await makeRoot([
+    { task_id: "DONE-TASK", status: "completed", owner: "claude", affected_paths: [], validations: [] },
+  ]);
+  const path = resolve(root, ".ai/state/tasks/DONE-TASK.json");
+  const viaEdit = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Edit", {
+      file_path: path,
+      old_string: '"validations": []',
+      new_string: '"validations": ["real evidence"]',
+    }),
+  });
+  const viaWrite = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Write", {
+      file_path: path,
+      content: JSON.stringify({
+        task_id: "DONE-TASK",
+        status: "completed",
+        owner: "claude",
+        affected_paths: [],
+        validations: ["real evidence"],
+      }),
+    }),
+  });
+  assert.equal(viaEdit.allowed, true);
+  assert.equal(viaWrite.allowed, true);
+});
+
+test("still rejects a completed task write that changes status or owner", async () => {
+  const root = await makeRoot([
+    { task_id: "DONE-TASK", status: "completed", owner: "claude", affected_paths: [] },
+  ]);
+  const path = resolve(root, ".ai/state/tasks/DONE-TASK.json");
+  const reopen = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Edit", {
+      file_path: path,
+      old_string: '"status": "completed"',
+      new_string: '"status": "in_progress"',
+    }),
+  });
+  const reassign = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Edit", {
+      file_path: path,
+      old_string: '"owner": "claude"',
+      new_string: '"owner": "codex"',
+    }),
+  });
+  const noProof = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Edit", { file_path: path }),
+  });
+  assert.equal(reopen.allowed, false);
+  assert.match(reopen.reason, /same-status, same-owner correction/);
+  assert.equal(reassign.allowed, false);
+  assert.equal(noProof.allowed, false);
+});
+
 test("allows exact and directory-scoped writes owned by the active task", async () => {
   const root = await makeRoot([
     task("CLAUDE-TASK", "claude", ["README.md", "tools/extractor/"]),

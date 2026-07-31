@@ -62,6 +62,19 @@ reads canonical state and blocks a tool call with an actionable reason. Other
 providers remain governed by this protocol and may add their own thin runtime
 adapter only through a separate owner-approved task.
 
+A `completed` or `cancelled` task record accepts exactly one further kind of
+write: a same-status, same-owner correction, where the resulting `status` and
+`owner` are byte-identical to what is already on disk. This exists so an agent
+that closed a task before finishing its own bookkeeping (for example, setting
+`status: "completed"` in one edit and only then trying to fill in
+`validations`/`artifacts` in a second edit) can fix that record instead of
+leaving it permanently thin. It is not a reopening mechanism: any write that
+would change `status` or `owner` on an already-closed record is still denied,
+and genuinely new work always requires a new task record. Set the final
+`status`, `validations`, `artifacts`, `risks`, and `next_responsible_party`
+together in one write whenever possible; the correction path is a safety net,
+not the normal flow.
+
 Project hooks can be disabled by a user's higher-precedence local Claude
 settings. Verify the active `Project` hook through Claude Code's `/hooks`
 screen. Organization-level tamper resistance would require managed settings
@@ -130,6 +143,34 @@ Existing handoff files are never rewritten.
 4. Apply the completion format in root `AGENTS.md`.
 5. Implementation and independent review should have different agents when a
    review is required; a self-review must not be represented as independent.
+6. If any `affected_paths` fall under a documented project's `src/`
+   (TypeScript: `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that
+   project's API-reference evidence in `docs/generated/api/` before setting
+   `status: "completed"`, and include the regenerated file(s) in
+   `affected_paths`/`artifacts`. Scope the regeneration to only the
+   project(s) actually touched, not a full-repo `docs:check` run, so this
+   stays cheap as the repository grows. The primary, always-available way
+   to do this is calling the generator directly with that project's own
+   `project.json` `name` (TypeScript) or Cargo package name (Rust):
+   `node tools/scripts/generate-api-docs.mjs <name>` /
+   `node tools/scripts/generate-rust-api-docs.mjs <name>`. This needs no
+   per-project setup and works immediately for a project created in the
+   same task, since target discovery itself is dynamic (reads
+   `project.json`/`Cargo.toml`, not a hardcoded list; see
+   `tools/scripts/README.md`). Where a matching `nx run
+   <project>:docs-generate`/`docs-check` target already exists (every
+   project scaffolded by `generate-rust-crate.mjs`, and every project
+   documented before this rule was added), prefer that -- but its absence
+   on a brand-new project is not a blocker; the direct script call always
+   works. The full-repo `docs:api:ts:check`/`docs:api:rust:check` (already
+   inside `docs:check` and CI) remains the backstop for anything skipped.
+   After regenerating, run the `docs-quality-check` skill
+   (`.claude/skills/docs-quality-check/SKILL.md`) against the regenerated
+   file before setting `status: "completed"`. It only reads and reports --
+   it cannot edit the generated file or the generator itself
+   (`disallowed-tools: Write, Edit` in its own frontmatter) -- so a real
+   finding becomes a suggested generator fix for the owner to confirm, not
+   a silent change.
 
 ## Validation
 

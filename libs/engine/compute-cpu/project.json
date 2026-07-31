@@ -38,6 +38,26 @@
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/rust-toolchain.toml"
       ]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-cpu" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-cpu --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-compute-cpu.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+        "sharedGlobals"
+      ]
     }
   }
 }

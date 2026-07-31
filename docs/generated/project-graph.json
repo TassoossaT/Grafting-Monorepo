@@ -150,6 +150,31 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/isekai-web-client.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "isekai-web-client",
@@ -260,6 +285,31 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs architecture-studio"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/architecture-studio.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs architecture-studio --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "architecture-studio",
@@ -330,6 +380,34 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-api"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-compute-api.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-api --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "engine-compute-api",
@@ -387,6 +465,34 @@
               ],
               "options": {
                 "command": "cargo test -p grafting-compute-cpu"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-cpu"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-compute-cpu.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-compute-cpu --check"
               },
               "configurations": {},
               "parallelism": true
@@ -478,6 +584,34 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-domain-core"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-domain-core.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-domain-core --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "engine-domain-core",
@@ -553,6 +687,34 @@
               ],
               "options": {
                 "command": "cargo test -p grafting-isekai-capi"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-capi"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-isekai-capi.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-capi --check"
               },
               "configurations": {},
               "parallelism": true
@@ -633,6 +795,34 @@
               ],
               "options": {
                 "command": "cargo test -p grafting-isekai-wasm && wasm-pack test --node libs/isekai/wasm-bridge"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-isekai-wasm.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-wasm --check"
               },
               "configurations": {},
               "parallelism": true
@@ -756,6 +946,31 @@
               ],
               "options": {
                 "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/x6-canvas api-check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs x6-canvas"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/x6-canvas.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs x6-canvas --check"
               },
               "configurations": {},
               "parallelism": true
@@ -902,6 +1117,34 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-graph-core"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-graph-core.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-graph-core --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "graph-core",
@@ -998,6 +1241,31 @@
               },
               "configurations": {},
               "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs ui"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/ui.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs ui --check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "name": "ui",
@@ -1037,8 +1305,246 @@
               "baseline": "tests/snapshots/public-api.md",
               "forbiddenModules": [
                 "antd",
-                "react-dom"
+                "react-dom",
+                "react-grid-layout"
               ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "grafting": {
+        "name": "grafting",
+        "type": "lib",
+        "data": {
+          "root": ".",
+          "name": "grafting",
+          "includedScripts": [],
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:root",
+            "type:tooling"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
+            "js": {
+              "packageName": "grafting",
+              "packageVersion": "0.0.0",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "targets": {
+            "graph-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run graph:generate"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/grafting.graph.spike.json",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-v1-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/graph-ir/**/*",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:v1:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-v1-test": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/graph-ir/**/*",
+                "{workspaceRoot}/tools/scripts/validate-graph-ir*.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:v1:test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-map": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run graph:map"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-map-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/repo-map.md",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:map:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-manifest": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run graph:manifest"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-manifest-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/artifact-manifest.json",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:manifest:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-extract": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run graph:extract"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "graph-extract-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/grafting.graph.json",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run graph:extract:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-api-ts-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run docs:api:ts:generate"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-api-ts-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/packages/ui/src/**/*",
+                "{workspaceRoot}/packages/ui/tsconfig.json",
+                "{workspaceRoot}/packages/x6-canvas/src/**/*",
+                "{workspaceRoot}/packages/x6-canvas/tsconfig.json",
+                "{workspaceRoot}/packages/isekai-web-client/src/**/*",
+                "{workspaceRoot}/packages/isekai-web-client/tsconfig.json",
+                "{workspaceRoot}/apps/architecture-studio/src/**/*",
+                "{workspaceRoot}/apps/architecture-studio/tsconfig.json",
+                "{workspaceRoot}/docs/generated/api/ts/**/*",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run docs:api:ts:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-api-rust-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run docs:api:rust:generate"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-api-rust-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/libs/**/src/**/*",
+                "{workspaceRoot}/libs/**/Cargo.toml",
+                "{workspaceRoot}/tools/rust-api-docgen/**/*",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/**/*",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "pnpm run docs:api:rust:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run docs:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "ai-check": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run ai:check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "ai-audit": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run ai:audit"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "toolchains-check": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run toolchains:check"
+              },
+              "configurations": {},
+              "parallelism": true
             }
           },
           "implicitDependencies": []
@@ -1135,7 +1641,8 @@
       "@grafting/isekai-wasm": [],
       "x6-canvas": [],
       "graph-core": [],
-      "ui": []
+      "ui": [],
+      "grafting": []
     }
   }
 }

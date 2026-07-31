@@ -68,7 +68,33 @@ const activeTaskFor = (tasks, agent) => {
   return { allowed: true, reason: "", task: owned[0] };
 };
 
-const evaluateTaskRecordWrite = (root, path, agent) => {
+/**
+ * Best-effort reconstruction of the JSON a Write or Edit call would produce,
+ * used only to decide whether a write to an already-closed task record is a
+ * same-status/same-owner correction. Returns null on anything it cannot
+ * confidently resolve, which the caller treats as "not a proven correction".
+ */
+const resolveNextTaskContent = (absolute, tool, toolInput) => {
+  try {
+    if (tool === "Write") {
+      if (typeof toolInput.content !== "string") return null;
+      return JSON.parse(toolInput.content);
+    }
+    if (tool === "Edit") {
+      const { old_string: oldString, new_string: newString, replace_all: replaceAll } = toolInput;
+      if (typeof oldString !== "string" || typeof newString !== "string") return null;
+      const current = readFileSync(absolute, "utf8");
+      if (!current.includes(oldString)) return null;
+      const next = replaceAll ? current.split(oldString).join(newString) : current.replace(oldString, newString);
+      return JSON.parse(next);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const evaluateTaskRecordWrite = (root, path, agent, tool, toolInput) => {
   const match = TASK_RECORD.exec(path);
   if (!match) return denied(`invalid task record path: ${path}`);
   const absolute = resolve(root, path);
@@ -80,11 +106,17 @@ const evaluateTaskRecordWrite = (root, path, agent) => {
   } catch {
     return allowed();
   }
-  if (["completed", "cancelled"].includes(task.status)) {
-    return denied(`task ${task.task_id ?? match[1]} is ${task.status} and cannot be reused for new work`);
-  }
   if (task.owner && task.owner !== agent) {
     return denied(`task ${task.task_id ?? match[1]} belongs to ${task.owner}, not ${agent}`);
+  }
+  if (["completed", "cancelled"].includes(task.status)) {
+    const next = resolveNextTaskContent(absolute, tool, toolInput);
+    if (next && next.status === task.status && next.owner === task.owner) {
+      return allowed();
+    }
+    return denied(
+      `task ${task.task_id ?? match[1]} is ${task.status} and cannot be reused for new work; only a same-status, same-owner correction (e.g. filling in validations left blank by a split edit) is allowed`,
+    );
   }
   return allowed();
 };
@@ -178,7 +210,9 @@ export async function evaluateHook({ root, agent, hookInput }) {
     const target = normalizeRepositoryPath(root, candidate);
     if (target === null) return denied(`tool target is outside the repository: ${candidate ?? "missing"}`);
 
-    if (TASK_RECORD.test(target)) return evaluateTaskRecordWrite(root, target, agent);
+    if (TASK_RECORD.test(target)) {
+      return evaluateTaskRecordWrite(root, target, agent, tool, hookInput.tool_input ?? {});
+    }
 
     const tasks = await loadTasks(root);
     const active = activeTaskFor(tasks, agent);

@@ -10,6 +10,7 @@ import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 test("exports only the deliberate Grafting component surface", async () => {
   const ui = await import("../dist/index.js");
   assert.deepEqual(Object.keys(ui).sort(), [
+    "Button",
     "Card",
     "DataTable",
     "EntitySummary",

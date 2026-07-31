@@ -52,6 +52,26 @@
         "{workspaceRoot}/rust-toolchain.toml"
       ],
       "outputs": ["{workspaceRoot}/packages/isekai-wasm/pkg"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-wasm" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-isekai-wasm --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-isekai-wasm.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+        "sharedGlobals"
+      ]
     }
   }
 }

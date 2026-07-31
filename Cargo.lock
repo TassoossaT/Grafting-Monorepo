@@ -339,6 +339,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-rust-api-docgen"
+version = "0.0.0"
+dependencies = [
+ "public-api",
+ "rustdoc-json",
+ "rustdoc-types",
+ "serde_json",
+]
+
+[[package]]
 name = "hashbag"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

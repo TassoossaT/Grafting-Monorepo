@@ -98,6 +98,28 @@ if ($flatc) {
     }
 } else { throw "flatc $flatcExpected is pinned but not installed" }
 
+$nxExpected = $packageJson.devDependencies.nx
+$nxVersionOutput = (& pnpm.cmd exec nx --version) -join "`n"
+if ($nxVersionOutput -notmatch 'Local:\s*v?([0-9][0-9.]*)') {
+    throw "could not parse local nx version from: $nxVersionOutput"
+}
+$actualNxLocal = $Matches[1]
+if ($actualNxLocal -ne $nxExpected) {
+    throw "nx (local, node_modules) $actualNxLocal != pin $nxExpected"
+}
+Write-Host "== nx (local) =="
+Write-Host "v$actualNxLocal (pinned in package.json#devDependencies.nx, matches)"
+if ($nxVersionOutput -match 'Global:\s*v?([0-9][0-9.]*)') {
+    $actualNxGlobal = $Matches[1]
+    if ($actualNxGlobal -ne $nxExpected) {
+        Write-Host "note: global nx ($actualNxGlobal) differs from the pinned local nx ($nxExpected); harmless, because running 'nx' inside this repo defers to the local version, not the global one"
+    } else {
+        Write-Host "global nx matches the pin too ($actualNxGlobal)"
+    }
+} else {
+    Write-Host "global nx: not installed (fine; the local pin governs everything inside this repo)"
+}
+
 if (-not $SkipWorkspaceChecks) {
     Invoke-Checked 'Cargo workspace check' { cargo check --workspace }
     Invoke-Checked 'uv lock check' { & $uv lock --check }

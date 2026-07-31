@@ -50,6 +50,23 @@
         "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
         "{workspaceRoot}/pnpm-lock.yaml"
       ]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs x6-canvas" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs x6-canvas --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/project.json",
+        "{workspaceRoot}/docs/generated/api/ts/x6-canvas.api.md",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
     }
   }
 }

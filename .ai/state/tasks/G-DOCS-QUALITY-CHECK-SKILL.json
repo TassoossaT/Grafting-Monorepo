@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "G-DOCS-QUALITY-CHECK-SKILL",
+  "title": "Link the per-project doc-regen rule into AGENTS.md and add a docs-quality-check skill that reviews generated docs and suggests generator fixes",
+  "status": "in_progress",
+  "owner": "claude",
+  "revision": 1,
+  "updated_at": "2026-07-31T01:00:00-03:00",
+  "objective": "Owner-directed, explicit approval given in-conversation for introducing a new skill (root AGENTS.md's mandatory rules gate this: 'introduce a tool, agent, skill, or MCP without need and evaluation' is forbidden without it; 'changing the protocol, registries, policies, hooks, permissions, skills, or MCPs requires a separate task and explicit owner approval' -- this task record plus the owner's direct request satisfies both). Two parts: (1) cross-reference the G-DOCS-PER-PROJECT-REGEN-RULE completion step from root AGENTS.md, the first file every agent reads, not just PROTOCOL.md three files deep; (2) add a new project-scoped Claude Code skill (.claude/skills/docs-quality-check/SKILL.md, verified file-format/frontmatter against the real Claude Code skills spec via the claude-code-guide agent before authoring, not guessed) that re-analyzes a just-regenerated docs/generated/api/ file for size/emptiness/noise-ratio/formatting problems -- the same categories of real bug already found and fixed by hand this session (raw JSON bloat, derive-impl noise, full-path module names) -- and reports a concrete suggested generator fix rather than hand-editing the generated file. Uses disallowed-tools: Write, Edit in the skill's own frontmatter to make 'suggest, do not apply' a real tool-level constraint, not just an instruction that could be ignored. PROTOCOL.md rule 6 is extended to name this skill as the step after regenerating scoped docs, before marking a task complete.",
+  "affected_paths": [
+    ".ai/state/tasks/G-DOCS-QUALITY-CHECK-SKILL.json",
+    "AGENTS.md",
+    ".ai/coordination/PROTOCOL.md",
+    ".claude/skills/docs-quality-check/SKILL.md",
+    "tools/scripts/README.md"
+  ],
+  "blockers": [],
+  "validations": [],
+  "artifacts": [],
+  "risks": [
+    "Skill file format/frontmatter (path convention, disallowed-tools syntax, description-driven auto-invocation) verified against the real current Claude Code skills spec via a dedicated claude-code-guide agent call before writing the file, not assumed from general knowledge -- avoids shipping a skill Claude Code would not actually discover or load correctly.",
+    "disallowed-tools: Write, Edit only holds while this specific skill is the active turn (clears on the next user message, per the verified spec) -- it constrains the skill's own review turn, not the agent's ability to act on the suggestion afterward under a real task, which is intentional (the fix itself still goes through the normal claim/affected_paths process, same as every other generator change this session).",
+    "The skill's problem categories (size outlier, empty output, undocumented-noise ratio, formatting artifacts) are exactly the four real bug classes found by hand this session, not a speculative/generic checklist -- deliberately narrow and simple per the owner's explicit 'simples' framing rather than a large general-purpose doc-linter."
+  ],
+  "next_responsible_party": "claude"
+}

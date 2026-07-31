@@ -1,0 +1,13 @@
+[package]
+name = "grafting-rust-api-docgen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Curated public-API JSON extractor for any Grafting workspace crate, generalizing the Rustdoc JSON + public-api curation grafting-graph-core's own public-API drift check already proves."
+
+[dependencies]
+public-api = { version = "=0.52.1", default-features = false }
+rustdoc-json = "=0.9.10"
+rustdoc-types = "=0.57.4"
+serde_json = "=1.0.151"

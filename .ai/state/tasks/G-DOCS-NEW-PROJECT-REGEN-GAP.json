@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "G-DOCS-NEW-PROJECT-REGEN-GAP",
+  "title": "Close the gap in the per-project doc-regen rule for brand-new packages/crates",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T00:30:00-03:00",
+  "objective": "Owner asked directly what happens under G-DOCS-PER-PROJECT-REGEN-RULE's new PROTOCOL.md rule when a brand-new package/app/crate is added. Real answer found: target discovery (generate-api-docs.mjs's project.json scan, generate-rust-api-docs.mjs's Cargo.toml workspace-members scan) is already fully dynamic and needs no edit for a new project -- but the convenience Nx docs-generate/docs-check target only exists on the 10 projects it was hand-added to; a new project has neither. PROTOCOL.md rule 6 currently reads as if `nx run <project>:docs-generate` is the way, which would fail for a project not yet wired. Fix: reword rule 6 so the always-available, zero-setup direct script invocation (`node tools/scripts/generate-api-docs.mjs <name>` / generate-rust-api-docs.mjs <name>`) is the primary documented mechanism, with the Nx target noted as an existing convenience wrapper, not a requirement; and add the docs-generate/docs-check targets to generate-rust-crate.mjs's scaffold template (the one place new Rust crates get a project.json from a generator) so future crates get the Nx convenience target for free, matching its existing check/test targets. No TS package scaffolding generator exists in this repo to update equivalently -- documented as a manual copy-the-pattern step instead.",
+  "affected_paths": [
+    ".ai/state/tasks/G-DOCS-NEW-PROJECT-REGEN-GAP.json",
+    ".ai/coordination/PROTOCOL.md",
+    "tools/scripts/generate-rust-crate.mjs",
+    "tools/scripts/README.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Confirmed generate-rust-crate.test.mjs only asserts targets.check/targets.test exist (read before editing, not assumed), so adding docs-generate/docs-check needed no test-file change to stay green.",
+    "node --test tools/scripts/generate-rust-crate.test.mjs: 3/3 passing after the scaffold-template change, including the real end-to-end test (scaffolds a scratch crate, runs real cargo check, confirms Nx discoverability).",
+    "node --test tools/scripts/generate-domain.test.mjs: 2/2 passing -- generate-domain.mjs calls scaffoldCrateFiles from generate-rust-crate.mjs, so it inherits the new targets automatically with no separate edit, confirmed rather than assumed.",
+    "pnpm run docs:check: full 7-step chain still passes end to end after both changes."
+  ],
+  "artifacts": [
+    ".ai/coordination/PROTOCOL.md (rule 6 reworded: direct script call is the primary always-available mechanism, Nx target is a convenience where it exists)",
+    "tools/scripts/generate-rust-crate.mjs (scaffold template now includes docs-generate/docs-check targets, inherited by generate-domain.mjs)",
+    "tools/scripts/README.md (cross-referenced in both the API-reference extractors section and the scaffolding-generators section)"
+  ],
+  "risks": [
+    "generate-rust-crate.test.mjs only asserts targets.check and targets.test exist (checked directly before editing), not the full targets object shape -- adding docs-generate/docs-check does not need a test-file change to stay green, but the test suite is still re-run to confirm.",
+    "No TS-package scaffolding generator exists in this repo (packages/ui, x6-canvas, isekai-web-client were all hand-authored, not generated) -- there is nothing equivalent to update for the TS side; the fix there is purely the PROTOCOL.md wording making the direct script call the documented primary path, which needs no per-project setup at all."
+  ],
+  "next_responsible_party": "claude"
+}

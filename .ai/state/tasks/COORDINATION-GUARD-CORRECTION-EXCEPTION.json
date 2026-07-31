@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "COORDINATION-GUARD-CORRECTION-EXCEPTION",
+  "title": "Allow correcting a completed/cancelled task record's own bookkeeping without reopening it",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-30T00:05:00-03:00",
+  "objective": "The owner observed this session that agent-task-guard.mjs's blanket denial of any write to a completed/cancelled task record made it impossible to fix a task closed with status set before its validations/artifacts were filled in (happened four times this session). Owner-directed fix: allow a write to a completed/cancelled task record only when the resulting status and owner are byte-identical to what is already on disk (a same-agent correction of its own already-accurate closure), and continue denying any write that changes status or owner (reopening or reassigning a closed task for new work stays blocked).",
+  "affected_paths": [
+    ".ai/state/tasks/COORDINATION-GUARD-CORRECTION-EXCEPTION.json",
+    "tools/scripts/agent-task-guard.mjs",
+    "tools/scripts/agent-task-guard.test.mjs",
+    ".ai/coordination/PROTOCOL.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "node --test tools/scripts/agent-task-guard.test.mjs: 16/16 passed, including 2 new tests (allows a same-status/same-owner correction via both Edit and Write; still rejects any write that changes status or owner on a closed record)",
+    "pnpm run ai:check: coordination validation passed with 34 task records",
+    "git diff --check: passed (only pre-existing LF/CRLF checkout warnings)",
+    "Real-world dogfood: this exact edit (adding validations after a separate status='completed' edit) was denied by the pre-change guard four times earlier this session; after this fix it was allowed because status and owner stayed unchanged"
+  ],
+  "artifacts": [
+    "tools/scripts/agent-task-guard.mjs",
+    "tools/scripts/agent-task-guard.test.mjs",
+    ".ai/coordination/PROTOCOL.md"
+  ],
+  "risks": [
+    "This changes the runtime coordination guard's PreToolUse behavior; per root AGENTS.md this class of change normally requires a separate task and explicit owner approval -- present here as the owner's direct in-conversation instruction.",
+    "The Edit-tool branch of the new logic simulates the edit (old_string/new_string replacement) to inspect the resulting JSON before deciding, since the real Edit tool does not receive full post-edit content in its hook input; this is an approximation of the real Edit tool's matching semantics, not a byte-perfect replica, and errs toward denial when the simulation cannot parse.",
+    "Per DEC-053/ADR-0015, this task prepares uncommitted changes only; the repository owner reviews and creates the actual Git commit."
+  ],
+  "next_responsible_party": "claude"
+}

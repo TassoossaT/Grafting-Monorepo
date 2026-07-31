@@ -1,0 +1,131 @@
+{
+  "name": "grafting",
+  "root": ".",
+  "projectType": "library",
+  "tags": ["scope:root", "type:tooling"],
+  "targets": {
+    "graph-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:generate" },
+      "cache": false
+    },
+    "graph-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:check" },
+      "cache": true,
+      "inputs": ["{workspaceRoot}/docs/generated/grafting.graph.spike.json", "sharedGlobals"]
+    },
+    "graph-v1-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:v1:check" },
+      "cache": true,
+      "inputs": ["{workspaceRoot}/docs/graph-ir/**/*", "sharedGlobals"]
+    },
+    "graph-v1-test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:v1:test" },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/docs/graph-ir/**/*",
+        "{workspaceRoot}/tools/scripts/validate-graph-ir*.mjs",
+        "sharedGlobals"
+      ]
+    },
+    "graph-map": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:map" },
+      "cache": false
+    },
+    "graph-map-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:map:check" },
+      "cache": true,
+      "inputs": ["{workspaceRoot}/docs/generated/repo-map.md", "sharedGlobals"]
+    },
+    "graph-manifest": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:manifest" },
+      "cache": false
+    },
+    "graph-manifest-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:manifest:check" },
+      "cache": true,
+      "inputs": ["{workspaceRoot}/docs/generated/artifact-manifest.json", "sharedGlobals"]
+    },
+    "graph-extract": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:extract" },
+      "cache": false
+    },
+    "graph-extract-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run graph:extract:check" },
+      "cache": true,
+      "inputs": ["{workspaceRoot}/docs/generated/grafting.graph.json", "sharedGlobals"]
+    },
+    "docs-api-ts-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run docs:api:ts:generate" },
+      "cache": false
+    },
+    "docs-api-ts-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run docs:api:ts:check" },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/packages/ui/src/**/*",
+        "{workspaceRoot}/packages/ui/tsconfig.json",
+        "{workspaceRoot}/packages/x6-canvas/src/**/*",
+        "{workspaceRoot}/packages/x6-canvas/tsconfig.json",
+        "{workspaceRoot}/packages/isekai-web-client/src/**/*",
+        "{workspaceRoot}/packages/isekai-web-client/tsconfig.json",
+        "{workspaceRoot}/apps/architecture-studio/src/**/*",
+        "{workspaceRoot}/apps/architecture-studio/tsconfig.json",
+        "{workspaceRoot}/docs/generated/api/ts/**/*",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
+    },
+    "docs-api-rust-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run docs:api:rust:generate" },
+      "cache": false
+    },
+    "docs-api-rust-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run docs:api:rust:check" },
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/libs/**/src/**/*",
+        "{workspaceRoot}/libs/**/Cargo.toml",
+        "{workspaceRoot}/tools/rust-api-docgen/**/*",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/**/*",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "sharedGlobals"
+      ]
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run docs:check" },
+      "cache": false
+    },
+    "ai-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run ai:check" },
+      "cache": false
+    },
+    "ai-audit": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run ai:audit" },
+      "cache": false
+    },
+    "toolchains-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run toolchains:check" },
+      "cache": false
+    }
+  }
+}
