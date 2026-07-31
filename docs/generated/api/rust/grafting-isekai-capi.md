@@ -113,20 +113,6 @@ a bare Rust enum without a fixed representation (S11.2).
 
 ### `#[repr(u8)] pub enum grafting_isekai_capi::handle::HandleKind`
 
-### `impl<T> core::marker::Freeze for grafting_isekai_capi::handle::HandleTable<T>`
-
-### `impl<T> core::marker::Send for grafting_isekai_capi::handle::HandleTable<T> where T: core::marker::Send`
-
-### `impl<T> core::marker::Sync for grafting_isekai_capi::handle::HandleTable<T> where T: core::marker::Sync`
-
-### `impl<T> core::marker::Unpin for grafting_isekai_capi::handle::HandleTable<T> where T: core::marker::Unpin`
-
-### `impl<T> core::panic::unwind_safe::RefUnwindSafe for grafting_isekai_capi::handle::HandleTable<T> where T: core::panic::unwind_safe::RefUnwindSafe`
-
-### `impl<T> core::panic::unwind_safe::UnwindSafe for grafting_isekai_capi::handle::HandleTable<T> where T: core::panic::unwind_safe::UnwindSafe`
-
-### `impl<T> grafting_isekai_capi::handle::HandleTable<T>`
-
 ### `pub const grafting_isekai_capi::abi_info::ABI_MAJOR: u32`
 
 ### `pub const grafting_isekai_capi::abi_info::ABI_MINOR: u32`

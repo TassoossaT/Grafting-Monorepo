@@ -30,7 +30,14 @@ const DERIVE_ONLY_METHOD_NAMES: &[&str] =
     &["clone", "eq", "ne", "fmt", "hash", "cmp", "partial_cmp", "default"];
 
 fn is_undocumented_derive_noise(signature: &str) -> bool {
-    if signature.starts_with("impl ") {
+    // "impl " (a concrete impl, e.g. "impl Clone for X") and "impl<"
+    // (a generic impl, e.g. "impl<'a, T> Clone for X<'a, T>", the shape
+    // FlatBuffers-generated builder types produce) are both impl-block
+    // declarations -- found via docs-quality-check: 250 of
+    // grafting-domain-core.md's 671 entries were unfiltered generic impl
+    // noise from generated FlatBuffers builders, because this check only
+    // matched the concrete "impl " form.
+    if signature.starts_with("impl ") || signature.starts_with("impl<") {
         return true;
     }
     let Some(function_signature) = signature.strip_prefix("pub fn ") else {

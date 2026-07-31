@@ -106,6 +106,16 @@ No argument processes every discovered target, which is what the root
 CI) still calls, as the backstop that catches anything an agent's
 per-project step missed.
 
+After regenerating, run the `docs-quality-check` skill
+(`.claude/skills/docs-quality-check/SKILL.md`, G-DOCS-QUALITY-CHECK-SKILL)
+against the regenerated file before marking the task complete. It reviews
+the file for the same four bug categories already found and fixed by
+hand in these generators (size outliers, silently-empty output,
+undocumented-noise ratio, formatting artifacts) and reports a suggested
+generator fix if it finds one -- `disallowed-tools: Write, Edit` in its
+own frontmatter means it can only suggest, never hand-edit the generated
+file or the generator itself.
+
 Output is Markdown (`### signature` header, doc paragraph below), not
 JSON, matching the shape `libs/graph/core/tests/snapshots/public-api.txt`
 already proved for this repo. The owner asked directly whether an LLM

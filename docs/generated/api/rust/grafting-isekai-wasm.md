@@ -1,21 +1,5 @@
 # grafting-isekai-wasm
 
-### `impl<T> core::default::Default for grafting_isekai_wasm::handle::HandleTable<T>`
-
-### `impl<T> core::marker::Freeze for grafting_isekai_wasm::handle::HandleTable<T>`
-
-### `impl<T> core::marker::Send for grafting_isekai_wasm::handle::HandleTable<T> where T: core::marker::Send`
-
-### `impl<T> core::marker::Sync for grafting_isekai_wasm::handle::HandleTable<T> where T: core::marker::Sync`
-
-### `impl<T> core::marker::Unpin for grafting_isekai_wasm::handle::HandleTable<T> where T: core::marker::Unpin`
-
-### `impl<T> core::panic::unwind_safe::RefUnwindSafe for grafting_isekai_wasm::handle::HandleTable<T> where T: core::panic::unwind_safe::RefUnwindSafe`
-
-### `impl<T> core::panic::unwind_safe::UnwindSafe for grafting_isekai_wasm::handle::HandleTable<T> where T: core::panic::unwind_safe::UnwindSafe`
-
-### `impl<T> grafting_isekai_wasm::handle::HandleTable<T>`
-
 ### `pub enum grafting_isekai_wasm::JobStateCode`
 
 The JS-facing state code. `wasm-bindgen` exposes a plain C-style enum
