@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-MULTIPLAYER-ARCHITECTURE-CORRECTION",
+  "title": "Correct docs/research/vtt-product-scope-map.md: multiplayer/networking is not 'Not discussed' -- it is one of the master source's most thoroughly pre-architected areas (section 15, DEC-016, PROV-003, Phase 6/Epic H, GATE-004/ADR-0005)",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T01:35:00-03:00",
+  "objective": "Owner asked how they would do the multiplayer part. Before proposing anything, read GRAFTING_MASTER_SOURCE.md's section 15 (Multiplayer), the DEC list, GATE-004, ADR-0005-authoritative-host-deferral.md, and the actual libs/engine/domain-core source (command.rs, event.rs, wire.rs, hash.rs) to check what already exists, per this repository's established discipline of verifying before claiming. Found: multiplayer is NOT a blank slate. DEC-016 (LOCKED) names the exact architecture pattern ('authoritative replication with a journal of accepted commands and periodic snapshots,' explicitly not Event Sourcing); section 15.2-15.7 specifies five distinct types (ClientCommand/AcceptedCommand/DomainEvent/ReplicationDelta/Snapshot), the exact pipeline flow, the transport-agnostic core boundary, and minimum journal/snapshot record contents; PROV-003 already picked FlatBuffers as the wire format for all four wire types; domain-core's own source code already has forward-referencing comments naming Phase 6/Epic H and the ClientCommand/AcceptedCommand/ReplicationDelta split, and already implements (and tests) the Command/DomainEvent/Snapshot/state-hash/FlatBuffers-wire-round-trip pieces of this pipeline in a transport-agnostic, generic form. The one genuinely open item is GATE-004 (authoritative host language/runtime), formally deferred by ADR-0005 to the start of Phase 6/Epic H, with three options already recorded but none chosen, and an explicit instruction that no agent should choose one before then. This means docs/research/vtt-product-scope-map.md's earlier 'Not discussed' status for Multiplayer & Networking was wrong and needs correcting to reflect the real state: pattern Decided/Locked at the engine level, host-language genuinely Open and deliberately deferred, and VTT-specific work (which Commands are GM-only, how map/token/rules domain models plug into this pipeline) not yet done.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-MULTIPLAYER-ARCHITECTURE-CORRECTION.json",
+    "docs/research/vtt-product-scope-map.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Corrected the 'Multiplayer & Networking' section of docs/research/vtt-product-scope-map.md: replaced the 'Not discussed' framing with an accurate description citing GRAFTING_MASTER_SOURCE.md section 15, DEC-016, PROV-003, Phase 6/Epic H's task list (H-001 through H-007), and GATE-004/ADR-0005's deliberate deferral of only the host-language choice.",
+    "Did not choose a value for GATE-004 (authoritative host language) -- explicitly out of scope per ADR-0005's own instruction that no agent should choose this before the owner does, at the start of Phase 6.",
+    "Verified directly against source: libs/engine/domain-core's command.rs/event.rs/wire.rs/hash.rs already implement and test the transport-agnostic Command/DomainEvent/Snapshot/state-hash/FlatBuffers-wire pieces (against a generic placeholder domain, not yet the VTT's real domain); the network-facing ClientCommand/AcceptedCommand/ReplicationDelta types and the journal/projection/transport layers are explicitly not modeled yet, matching the master source's own Phase 6/Epic H sequencing.",
+    "No dependency installed, no code written, no ADR reopened, no GATE closed -- documentation correction only, consistent with AGENTS.md's rule against silently closing an OPEN decision."
+  ],
+  "artifacts": [
+    "docs/research/vtt-product-scope-map.md (Multiplayer & Networking section corrected)"
+  ],
+  "risks": [
+    "Documentation correction only -- GATE-004 remains open and undecided, exactly as the master source requires.",
+    "This correction concerns the generic engine-level architecture (domain-core); the VTT-specific application of it (which map/token/rules Commands exist, which are GM-only) is still genuinely undesigned and remains an open item, not resolved by this correction."
+  ],
+  "next_responsible_party": "repository-owner"
+}

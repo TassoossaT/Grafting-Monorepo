@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-PHYSICS-COLLISION-AND-WATER",
+  "title": "Research collision/grounding-only physics (parry) and water/river rendering + procedural placement, extending the map/terrain document",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T05:00:00-03:00",
+  "objective": "Owner chose to model physics and water/rivers next, and explicitly scoped physics down to collision/grounding only (no full rigid-body engine), matching this project's VTT needs (not even Foundry has real physics). Researched via WebSearch: (1) parry2d/parry3d (Dimforge, Apache-2.0) is a collision-detection-only library (raycasting, shape queries) with no dynamics/forces -- the successor to ncollide, actively maintained, and from the same team/ecosystem as the full Rapier physics engine (a natural, same-vendor upgrade path if full rigid-body physics is ever wanted later, without switching ecosystems). This is the right-sized candidate for 'token/object rests at the correct height on terrain, doesn't pass through walls' -- no full physics simulation needed. Because token/entity position is authoritative multiplayer state (per the already-established Phase 6/DEC-016 replication architecture), this collision/grounding computation must run in Rust against domain-core's own authoritative terrain/wall geometry, not as a client-side Three.js Raycaster query -- otherwise different clients could disagree about where a token ends up, breaking both replay determinism and the authoritative-state model. (2) Water rendering: Three.js ships an official `Water` addon (`three/addons/objects/Water.js`, reflective water plane for WebGLRenderer; `WaterMesh` is the WebGPURenderer equivalent) -- a built-in, no-new-dependency technique, consistent with this project's established pattern of preferring Three.js-native/addon techniques over custom engineering. (3) Procedural river/lake placement: no mature, focused Rust crate was found; the actual technique (flow accumulation / drainage-basin simulation -- water flows downhill via steepest descent over the heightmap, accumulates volume flowing into it, forms a river where accumulation crosses a threshold and a lake where it pools in a basin) is well-documented in reference sources (Red Blob Games' 'Procedural river drainage basins', Nick McDonald's 'Procedural Hydrology' blog) and is implementable directly on top of this project's own noise-rs-generated heightmap seed -- no new dependency needed, just an algorithm built on data already produced. Water-body computation should run on the continuous heightmap seed before it gets quantized into the discrete WFC-driven elevation grid (per the existing terrain-elevation reconciliation), carrying the resulting water mask through into the discrete grid alongside elevation.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-PHYSICS-COLLISION-AND-WATER.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md",
+    "docs/research/vtt-product-scope-map.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added a 'Physics: collision and grounding only (not a full engine)' section to docs/research/vtt-map-and-terrain-construction-options.md documenting parry2d/parry3d as the candidate, why this computation must run in Rust/domain-core rather than client-side Three.js for authoritative-multiplayer reasons, and explicitly scoping out full rigid-body dynamics as out of scope for now (with parry's own ecosystem, Rapier, noted as the natural upgrade path if that scope ever changes).",
+    "Added a 'Water and rivers' section documenting Three.js's official Water/WaterMesh addons for rendering (no new dependency) and the flow-accumulation/drainage-basin technique for procedural river/lake placement on top of the existing heightmap-seed pipeline, citing Red Blob Games and Nick McDonald's writeups as reference-only technique sources (not code to copy).",
+    "Updated docs/research/RESEARCH-DECISIONS-REGISTRY.md with rows for parry2d/parry3d and the Three.js Water addon, and a reference-only row for the flow-accumulation technique sources.",
+    "Updated docs/research/vtt-product-scope-map.md's Map & World section to add Light sources (visual illumination, distinct from the already-covered fog-of-war vision-blocking), Water/rivers, and Physics/collision as explicit rows, since none of the three existed as distinct items before this conversation.",
+    "No dependency installed, no code written, no ADR reopened -- documentation research only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (two new sections)",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (new rows)",
+    "docs/research/vtt-product-scope-map.md (Map & World section extended)"
+  ],
+  "risks": [
+    "Web research reflects sources found today (2026-08-01) and may drift, per every sibling document's existing dated-facts caveat.",
+    "No mature, focused Rust crate was found for river/lake placement specifically -- the technique is well-documented but not yet implemented as a spike or prototype.",
+    "No dependency installed, no code written -- research/documentation only."
+  ],
+  "next_responsible_party": "repository-owner"
+}

@@ -24,6 +24,24 @@ export function normalizeRepositoryPath(root, candidate) {
   return repositoryRelative.replaceAll("\\", "/");
 }
 
+const HARNESS_MEMORY_PATH = /(?:^|[\\/])\.claude[\\/]projects[\\/][^\\/]+[\\/]memory(?:[\\/]|$)/i;
+const HARNESS_PLANS_PATH = /(?:^|[\\/])\.claude[\\/]plans(?:[\\/]|$)/i;
+
+/**
+ * The coordination protocol this guard enforces governs repository state
+ * only (master source precedence says as much: task/handoff records are
+ * "repository state, not architectural authority"). The Claude Code
+ * harness's own cross-session memory directory and plan-mode plan-file
+ * directory are deliberately outside any repository -- memory persists
+ * across projects, and a plan file exists before a task claim would even
+ * make sense. Matched by path segment, not a hardcoded absolute prefix, so
+ * this does not depend on one specific user home directory.
+ */
+export function isHarnessManagedPath(candidate) {
+  if (typeof candidate !== "string" || candidate.length === 0) return false;
+  return HARNESS_MEMORY_PATH.test(candidate) || HARNESS_PLANS_PATH.test(candidate);
+}
+
 export function affectedPathMatches(affectedPath, repositoryRelativePath) {
   if (typeof affectedPath !== "string" || affectedPath.length === 0) return false;
   const portable = affectedPath.replaceAll("\\", "/");
@@ -208,7 +226,10 @@ export async function evaluateHook({ root, agent, hookInput }) {
   if (tool === "Write" || tool === "Edit") {
     const candidate = targetPathFrom(hookInput);
     const target = normalizeRepositoryPath(root, candidate);
-    if (target === null) return denied(`tool target is outside the repository: ${candidate ?? "missing"}`);
+    if (target === null) {
+      if (isHarnessManagedPath(candidate)) return allowed();
+      return denied(`tool target is outside the repository: ${candidate ?? "missing"}`);
+    }
 
     if (TASK_RECORD.test(target)) {
       return evaluateTaskRecordWrite(root, target, agent, tool, hookInput.tool_input ?? {});

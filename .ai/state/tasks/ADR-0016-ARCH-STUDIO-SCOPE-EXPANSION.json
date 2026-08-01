@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "ADR-0016-ARCH-STUDIO-SCOPE-EXPANSION",
+  "title": "Draft ADR-0016 (Proposed): expand Architecture Studio to host a VTT procedural-generation test/visualization surface and an agent-orchestration surface, alongside the unchanged read-only Graph IR explorer",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T07:20:00-03:00",
+  "objective": "Owner-directed, reached via a plan-mode session with explicit sign-off: expand apps/architecture-studio's scope to add (1) a VTT procedural-generation test/visualization surface (hosting the Rust/Wasm generation experiments already researched in docs/research/vtt-map-and-terrain-construction-options.md, rendered via Three.js, laid out via @grafting/ui's GridLayout) and (2) an agent-orchestration surface (a Node backend executing MCP-based agent workflows, per the framework research in docs/research/ai-agent-context-and-multi-agent-management-options.md Part 3) -- both explicitly in scope now, per the owner's own choice when asked whether to build a separate app instead (packages/ui/DECISIONS.md shows GridLayout was actually built for a different, not-yet-created 'Next.js documentation-and-tooling app') and whether to defer agent management (chose not to defer). Architecture Studio's scope is currently locked read-only by the accepted docs/adr/ADR-0012-knowledge-automation-plane.md and its companion docs/specs/architecture-studio-read-only-v1.md -- per AGENTS.md's rule that changing accepted protocol/ADR scope requires a dedicated task and owner approval, and per its 'stop conditions' (open gate changing structure; scope growing materially), this task's only deliverable is drafting a new ADR (Status: Proposed, per docs/adr/TEMPLATE.md's own rule that only the repository owner may change status from Proposed or fill the final Decision section) plus the companion-document edits an honest ADR needs to avoid leaving contradictions in the app's own scope-local contract -- not backend code, not a framework pick, not the Wasm-compile spike itself, all of which are sequenced as later phases pending this ADR's formal acceptance. Two factual corrections were made during planning before drafting: GATE-001/DEC-041 do not make the VTT a standalone app (DEC-041: 'the VTT is a client-only route within [the Next.js web host], not a standalone app') even though section 4.4's domain-map table still uses the label apps/web-vtt -- this ADR flags that inconsistency rather than silently resolving it; and no spikes/ directory currently exists on disk (spikes are disposable/gitignored), so this ADR cites the real, verified docs/benchmarks/graph-ir-x6-spike-2026-07-28.md and docs/benchmarks/ai-control-plane-spike-2026-07-29.md as the actual spike-then-benchmark precedent, not a nonexistent spike directory.",
+  "affected_paths": [
+    ".ai/state/tasks/ADR-0016-ARCH-STUDIO-SCOPE-EXPANSION.json",
+    "docs/adr/ADR-0016-architecture-studio-scope-expansion.md",
+    "docs/specs/architecture-studio-read-only-v1.md",
+    "apps/architecture-studio/AGENTS.md",
+    "packages/ui/DECISIONS.md",
+    "GRAFTING_MASTER_SOURCE.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Drafted docs/adr/ADR-0016-architecture-studio-scope-expansion.md from docs/adr/TEMPLATE.md with Status: Proposed (not Accepted -- only the repository owner may change this), defining three named surfaces (unchanged Graph IR explorer; new VTT procedural-generation test/visualization surface; new agent-orchestration surface) rather than one blended scope, with clause-by-clause supersession of ADR-0012's 'Initial Architecture Studio scope' sentence limited to the two new surfaces only, an explicit license-risk policy clause for agent-orchestration frameworks (Mastra's ee/ subtree must never be reachable from a shipped build; VoltAgent as the MIT-clean alternative; validate against raw @modelcontextprotocol/sdk before committing to either), and an explicit 'stays out of scope' list (Graph IR explorer's read-only guarantees; no standing write authority over canonical sources for the new agent surface; no redefinition of Epic J's Context Broker MCP; no change to GATE-001/DEC-041).",
+    "Added a short, dated amendment note to the top of docs/specs/architecture-studio-read-only-v1.md (not a rewrite) stating it remains authoritative for the Graph-IR-explorer surface only.",
+    "Replaced apps/architecture-studio/AGENTS.md's line 9 ('It does not import raw X6 or VTT map semantics.') with a version scoped explicitly to the graph-explorer surface, naming ADR-0016 and stating the new VTT surface must not reuse/extend @grafting/x6-canvas or leak VTT logic into presentation.ts/canvas-composition.ts/canvas-views.ts.",
+    "Added a dated addendum to packages/ui/DECISIONS.md's 'Grid layout decision' section noting Architecture Studio is now also a confirmed GridLayout consumer per ADR-0016, and that this is Architecture Studio's first app-level React root (main.ts is plain DOM today).",
+    "Added a footnote to GRAFTING_MASTER_SOURCE.md section 4.4's domain-map table distinguishing the existing x6-canvas-sharing relationship from the new generation-testing-surface relationship, flagging (not resolving) the apps/web-vtt labeling inconsistency against DEC-041, and one sentence in section 29.11 distinguishing this product feature's MCP usage from Epic J's J-011 Context Broker MCP (same protocol, independent implementations, DEC-049 no-duplicated-authority rule applies).",
+    "Did NOT update docs/adr/README.md's ADR index or add a DEC-054 decision-log row -- both happen only after the owner formally accepts this ADR, per the template's own workflow and this document's own established convention.",
+    "No dependency installed, no application/backend code written, no other accepted ADR's own text rewritten (only additive amendment notes) -- documentation/proposal only, consistent with AGENTS.md's rule against silently closing an open decision."
+  ],
+  "artifacts": [
+    "docs/adr/ADR-0016-architecture-studio-scope-expansion.md (new, Proposed)",
+    "docs/specs/architecture-studio-read-only-v1.md (amendment note added)",
+    "apps/architecture-studio/AGENTS.md (line 9 rescoped)",
+    "packages/ui/DECISIONS.md (addendum added)",
+    "GRAFTING_MASTER_SOURCE.md (section 4.4 and 29.11 footnotes added)"
+  ],
+  "risks": [
+    "This ADR is Proposed, not Accepted -- it has no governing authority until the repository owner formally accepts it; no backend, framework, or generation-visualization code should be written against it until then.",
+    "The apps/web-vtt vs. 'VTT is a route within the Next.js web host' labeling inconsistency (DEC-041 vs. section 4.4's table) is flagged, not resolved, in this ADR -- a separate clarification may be needed from the owner.",
+    "The license-risk policy clause names Mastra/VoltAgent as candidates based on prior research dated 2026-07-31; license terms should be re-verified at the point a framework is actually selected, not assumed still accurate from this record alone.",
+    "No dependency installed, no code written -- documentation/ADR-drafting only."
+  ],
+  "next_responsible_party": "repository-owner"
+}

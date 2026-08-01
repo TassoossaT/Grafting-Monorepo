@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "COORDINATION-GUARD-HARNESS-MEMORY-EXCEPTION",
+  "title": "Add an explicit, narrow exception to agent-task-guard.mjs so Write/Edit calls targeting the Claude Code harness's own cross-session memory directory or plan-mode plan-file directory are allowed, while every other outside-repository path stays denied",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T07:45:00-03:00",
+  "objective": "Owner-directed, explicit approval given: earlier in this session, a Write to the Claude Code harness's own cross-session memory directory (outside the repository, at a path like C:\\Users\\<user>\\.claude\\projects\\<project-slug>\\memory\\*.md) and, separately, a Write to the harness's plan-mode plan file (outside the repository, at a path like C:\\Users\\<user>\\.claude\\plans\\*.md) were both denied by agent-task-guard.mjs's blanket 'tool target is outside the repository' rule in evaluateHook/normalizeRepositoryPath. The owner asked why, was told the guard's entire task-ownership model is scoped to this repository and has no representation for authorizing anything outside it, was asked whether to add an exception, said not yet ('mais para frente'), and then explicitly confirmed now: 'adicione essa exceção, as regras daqui so se aplicam para o repositorio' (add this exception, these rules only apply to the repository). This task adds a narrow, path-segment-based exception (matching `.claude/projects/<any>/memory/...` and `.claude/plans/...` regardless of the OS-specific home-directory prefix, so it is not hardcoded to one machine/user) that allows Write/Edit against those two harness-owned locations specifically, bypassing both the outside-repository denial and the active-task-ownership check (since neither applies to files that are not repository coordination state at all) -- while leaving every other outside-repository path denied exactly as before, and leaving all inside-repository task-ownership/conflict logic completely unchanged.",
+  "affected_paths": [
+    ".ai/state/tasks/COORDINATION-GUARD-HARNESS-MEMORY-EXCEPTION.json",
+    "tools/scripts/agent-task-guard.mjs",
+    "tools/scripts/agent-task-guard.test.mjs"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added an exported isHarnessManagedPath(candidate) function to tools/scripts/agent-task-guard.mjs using path-segment regexes (not a hardcoded absolute prefix) to match '.claude/projects/<slug>/memory/...' and '.claude/plans/...' on either path-separator style, so the exception is not tied to one specific user home directory.",
+    "In evaluateHook's Write/Edit branch, when normalizeRepositoryPath returns null (target is outside the repository), the candidate is now checked against isHarnessManagedPath before denying; a match returns allowed() immediately, bypassing the active-task-ownership check entirely (consistent with these paths not being repository coordination state); a non-match still returns the original 'tool target is outside the repository' denial unchanged.",
+    "No other branch of evaluateHook (task-record writes, handoff writes, in-repository conflict/ownership checks, the Bash git-safety rules) was touched.",
+    "Added 4 unit tests to tools/scripts/agent-task-guard.test.mjs: isHarnessManagedPath's own matching on both separator styles; a Write to a '.claude/projects/some-project/memory/note.md'-shaped absolute path is allowed even with zero active tasks; a Write to a '.claude/plans/plan.md'-shaped absolute path is allowed even with zero active tasks; a Write to an unrelated outside-repository path that merely contains the substring 'plans' but not under '.claude' still fails exactly as before, proving the exception is narrow, not a general outside-repository bypass.",
+    "Ran `node --test tools/scripts/agent-task-guard.test.mjs` directly: 20/20 tests pass (16 pre-existing + 4 new), no regressions."
+  ],
+  "artifacts": [
+    "tools/scripts/agent-task-guard.mjs (new isHarnessManagedPath export, evaluateHook exception)",
+    "tools/scripts/agent-task-guard.test.mjs (three new tests)"
+  ],
+  "risks": [
+    "This narrows a security-relevant guard's scope, per AGENTS.md's own rule that changing hooks requires a separate task and explicit owner approval -- both were satisfied here (this task record, and the owner's explicit 'adicione essa excecao' instruction).",
+    "The exception is intentionally narrow (only the two named harness-managed path shapes) -- it must not be broadened to a general 'anything outside the repo is fine' rule without a further, separate owner decision.",
+    "No dependency installed -- a targeted change to one existing hook script and its test file."
+  ],
+  "next_responsible_party": "repository-owner"
+}

@@ -151,12 +151,19 @@ Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
 | GeoLibre (whole platform) | MIT | Discarded | Real-world GIS analysis platform (SQL geoprocessing, satellite imagery, planetary basemaps) — wrong domain for fantasy map construction |
 | Tauri (pulled from GeoLibre) | MIT/Apache-2.0 | Standby | Relevant to the still-open `GATE-002`/`GATE-003` Desktop client question, not decided; would reuse the same web frontend on desktop |
 | Turf.js (pulled from GeoLibre) | MIT | Standby | Lightweight spatial math (distance, buffer, area) — useful for VTT distance/AoE/line-of-sight independent of any GIS framework |
-| `ghx_proc_gen` | Dual MIT/Apache-2.0 | **Decided** | 3D Wave Function Collapse/Model Synthesis, Rust, matches the Townscaper-style generation model chosen as the reference |
-| `fast-surface-nets-rs` | MIT OR Apache-2.0 | **Decided** | Smooth/organic terrain meshing |
-| `block-mesh-rs` | MIT OR Apache-2.0 | Standby, blocky alternative | Alternative to `fast-surface-nets-rs` if a blockier look is wanted instead |
-| `noise-rs` | Dual MIT/Apache-2.0 | **Decided** | Base noise feeding the meshing crates |
+| `ghx_proc_gen` | Dual MIT/Apache-2.0 | **Decided** | 3D Wave Function Collapse/Model Synthesis, Rust, matches the Townscaper-style generation model chosen as the reference; the crate's own examples show real results from as few as 4 tiles, evidence a V1 tileset can be small |
+| `bevy_ghx_proc_gen` | Dual MIT/Apache-2.0 (same crate family) | Standby, prototyping tool only | The same crate's Bevy integration — a disposable, fast-feedback tool for iterating on tileset/adjacency design, not proposed as a project dependency |
+| Kenney.nl "Modular Buildings" / "Building Kit" | **CC0** | Standby, leading V1 asset candidate | 100 + 80 low-poly assets respectively, free for commercial use, no attribution required — reduces V1 tile-modeling work; still needs adjacency/socket tagging for `ghx_proc_gen`, which no ready-made pack provides |
+| Kay Lousberg's KayKit (Dungeon Pack, Prototype Bits, others) | **CC0-equivalent** (no resale of unmodified assets) | Standby, leading V1 asset candidate | Dungeon Pack fits this project's interior-generation need directly; Prototype Bits is explicitly meant for this kind of early blockout |
+| `fast-surface-nets-rs` | MIT OR Apache-2.0 | **Decided**, narrowed role | Confirmed Townscaper itself has no true terrain sculpting (building-height stacking + shoreline stepping only); the buildable area's own elevation now uses a discrete WFC terrain-block tileset on `ghx_proc_gen` instead. This crate's role narrows to (1) seeding a heightmap that gets quantized into that discrete grid, and (2) rendering distant background scenery outside the buildable area |
+| `block-mesh-rs` | MIT OR Apache-2.0 | Standby, blocky alternative | Same narrowed role as `fast-surface-nets-rs` above if a blockier background-scenery look is wanted instead |
+| `noise-rs` | Dual MIT/Apache-2.0 | **Decided**, narrowed role | Base noise feeding the (now narrower) heightmap-seed and background-scenery role of the meshing crates above |
 | Interior/room generation (WFC + BSP, `path constraint`, `fixed tiles`) | — (design pattern, not a dependency) | Standby — proposed, not implemented | Confirmed Townscaper itself has no interior generation; closing that gap reuses the already-`Decided` `ghx_proc_gen` with a second interior-specific tileset/pass, not a new crate — see `docs/research/vtt-map-and-terrain-construction-options.md`'s "Interior generation" section |
+| `parry2d`/`parry3d` (Dimforge) | Apache-2.0 | Standby, leading candidate | Collision-detection-only (raycasting/shape queries, no dynamics) — matches the owner's explicit "collision/grounding only, not a full physics engine" scope; same ecosystem as the full Rapier engine if that scope ever changes |
+| Three.js `Water`/`WaterMesh` addon | Same as Three.js core (MIT) | Standby, leading candidate | Built into Three.js's own addons — no new dependency; reflective water plane for `WebGLRenderer`/`WebGPURenderer` respectively |
+| Flow accumulation / drainage-basin technique (Red Blob Games, Nick McDonald) | — (technique reference, not a dependency) | Reference only (concept) | Well-documented procedural river/lake placement technique, implementable directly on the already-chosen `noise-rs` heightmap seed — no crate found or needed |
 | `dominguerilla/wfc-dun-gen` | Unverified | Reference only — unverified | Found via search as a WFC dungeon-generation project; language/license/API not confirmed in this pass (README fetch failed) — not adopted or license-cleared |
+| Universal VTT (UVTT / `.dd2vtt`/`.df2vtt`) | No formal license — de facto community convention | Standby, leading Tier 2 import candidate | JSON-in-image map format (walls/portals/lights) widely supported across Foundry/Fantasy Grounds/Roll20/AboveVTT/Arkenforge; its wall/light/portal schema maps directly onto this project's own proposed vision/dynamic-lighting mechanism; no official spec/license/governance, recorded honestly rather than treated as a governed standard |
 | `building-blocks` | MIT/Apache-2.0 dual | Discarded | Archived/unmaintained; superseded by `block-mesh-rs`/`fast-surface-nets-rs` |
 | Godot Voxel module | MIT | Reference only | Tightly coupled to Godot 4; study the generator-graph/editing-layer design, don't depend on it |
 | Veloren | **GPL-3.0** | Reference only, code reuse excluded | Copyleft — architecture/algorithm reference only, per this repository's standing policy |
@@ -191,3 +198,26 @@ dedicated `docs/research/*.md` file.
 
 Not yet formally confirmed by the owner as a final pick — recorded as the
 leading candidate, not a decision.
+
+## VTT rules and character system
+
+Full reasoning: `docs/research/vtt-rules-and-character-system-options.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| `ndm` | Dual MIT/Apache-2.0 | Standby, leading candidate | Dice-notation parsing, actively maintained (last release 2026-01-23), supports keep/drop; actual rolling should still use `domain-core`'s existing `DeterministicRng`, not the crate's own RNG, to preserve replay determinism |
+| `dice-parser` (marcell-ziegler) | **GPL-3.0** | Reference only, code reuse excluded | Same standing copyleft policy as Veloren/Blender Geometry Nodes — its `Keep::Highest()` API shape is worth studying, not copying |
+| `dice-command-parser`, `dices`, `dndice`, `dice_forge`, `rust-dice`, `lib_dice` | Not verified | Reference only — unverified | Found via search, not evaluated in depth |
+| `hecs` | Dual MIT/Apache-2.0 | Standby | Minimalist, embeddable ECS — candidate for flexible/system-agnostic character-entity data modeling |
+| `specs` | Dual Apache-2.0/MIT | Standby | Classic, mature ECS alternative to `hecs` |
+| Bevy ECS | Dual Apache-2.0/MIT | Standby, heavier | Usable standalone, but its natural home is the full Bevy engine |
+| `legion` | Dual MIT/Apache-2.0 | Discarded | Unmaintained (its home, Amethyst, is also unmaintained) |
+| **PlanarAlly** (Kruptein) | MIT (confirmed from its `LICENSE` file) | Reference only | Real production VTT; system-agnostic by design; its own "Visibility" triangulation module for dynamic lighting is complex enough that its maintainers want to port it to Wasm themselves — independent validation of this project's Isekai/Wasm direction; MIT means its algorithms are legitimate candidates for close study/porting via the third-party-attribution system if actually copied |
+| Foundry VTT | Commercial/proprietary EULA (confirmed) | Reference only — benchmark, not a code source | Source (where licensed at all) remains Foundry's sole property; reverse engineering prohibited — correctly treated throughout this planning process as the feature/UX bar to beat, never a dependency |
+| Vassal | **LGPLv2+** (confirmed) | Discarded for this use | Board/card-game engine, not TTRPG-character-sheet-focused; copyleft regardless |
+| MapTool (RPTools), Rolisteam | Believed GPL/LGPL, **not independently re-verified** | Reference only — unverified license | Well-known long-running open-source VTTs; verify precisely before treating as more than a UX reference |
+| Ogres, Cauldron VTT, Open-VTT (Khazlor) | Not verified | Reference only — unverified | Found via search, not evaluated in depth; note a name collision exists between the Cauldron VTT project and an unrelated `dequelabs/cauldron` UI library |
+| Foundry `dnd5e` system | Code MIT, content CC-BY-4.0 | Reference only — genuinely safe combination | Both axes (code + game content) are conventional, attribution-only open licenses; the cleanest real example of a reusable Foundry system found |
+| Foundry `pf2e` system | Code Apache-2.0, content under a Foundry Gaming LLC/Paizo partnership | Reference only — content licensing unverified for third-party reuse | Code license is clean; the content permission is specific to that partnership and may not transfer — verify directly against Paizo's own OGL/CUP terms before relying on its content |
+| Foundry GURPS community systems (e.g. `crnormand/gurps`) | Steve Jackson Games Online Policy (personal use only) | Discarded for content reuse | **Not a real open-source license** — corrects an initial owner assumption that "free on GitHub" meant safe to reuse; risky for a closed-source commercial product |
+| Foundry core patterns (Active Effects, Combat/Combatant, DataModel/`template.json`, VisionSource) | N/A — documented API concepts, not code (Foundry core itself is proprietary) | Reference only (concept) | Same treatment as Sylves/Townscaper: safe to study the documented pattern and reimplement fresh in Rust; no code or copyrighted content is touched, so no third-party-attribution entry is needed |

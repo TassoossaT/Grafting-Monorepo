@@ -15,7 +15,11 @@
   that supports it. Distinct from `docs/research/architecture-studio-open-source-options.md`
   (Studio's own document/canvas/search/tracing surface) and
   `docs/research/ai-agent-context-and-multi-agent-management-options.md`
-  (AI agent context/coordination) — see those for their own topics
+  (AI agent context/coordination) — see those for their own topics. For how
+  this fits into the *whole* VTT product (tokens, rules engine, multiplayer,
+  GM/player tools, deployment), see
+  `docs/research/vtt-product-scope-map.md`, which indexes this document
+  rather than repeating it
 
 ## Product vision
 
@@ -112,7 +116,7 @@ deck.gl:
 | Need (deck.gl's demonstration) | Three.js-native equivalent |
 | --- | --- |
 | Building/structure relief (`PolygonLayer`, `extruded: true`) | **`THREE.ExtrudeGeometry`** — built into Three.js core, no porting needed at all for this specific piece |
-| Real (non-flat) terrain (`TerrainLayer`) | **`THREE.PlaneGeometry` + vertex displacement from a heightmap** — the standard, well-documented Three.js terrain technique, fed by the same heightmap data the Rust meshing crates below produce |
+| Real (non-flat) terrain (`TerrainLayer`) | **`THREE.PlaneGeometry` + vertex displacement from a heightmap** — the standard, well-documented Three.js terrain technique, fed by the same heightmap data the Rust meshing crates below produce. Scoped to **distant background scenery** outside the buildable area — the buildable area's own elevation uses a discrete WFC terrain-block tileset instead, see "Terrain elevation" below |
 | Encaixing other features onto that terrain (`TerrainExtension`) | Sample the same heightmap at each feature's XZ position to compute its Y position — plain math, no library needed |
 | Route/flow visualization (`TripsLayer`/`ArcLayer`) | **`Line2`/`LineGeometry`/`LineMaterial`** (official Three.js addon, `three/addons/lines/Line2.js`) gives real world-width lines; the animated fading-trail effect itself is a custom shader inspired by deck.gl's technique, layered on top |
 | Density/analytical overlays (`HexagonLayer`) | **`THREE.InstancedMesh`** + a hexagonal `ExtrudeGeometry` — no built-in equivalent by name, but straightforward with primitives Three.js already has |
@@ -290,6 +294,53 @@ Additional confirmed details (web research, 2026-08-01, primarily
   verification spike (open item 6 below) needs to measure real solve time,
   not just "does it compile."
 
+### Platforms, camera modes, and color as a generation input
+
+Further web research (2026-08-01), primarily
+[Wikipedia](https://en.wikipedia.org/wiki/Townscaper),
+[UploadVR's Townscaper VR coverage](https://www.uploadvr.com/townscaper-vr-arrives-october/),
+a [Steam Community guide on custom color palettes](https://steamcommunity.com/sharedfiles/filedetails/?id=2585484672),
+and the [`latunda/townscaper`](https://github.com/latunda/townscaper) GitHub repository:
+
+- **Townscaper shipped a VR mode** (Meta Quest and Pico, October 2023) — a
+  real, successful precedent for this project's just-decided free-camera
+  requirement. The reference model itself proves free 3D navigation (up to
+  and including VR) works for this exact building style; nothing about the
+  Townscaper aesthetic depends on a locked camera.
+- **Camera controls are player-driven, not automated**: rotate, zoom, and a
+  **manual time-of-day/lighting adjustment** are explicit player controls —
+  confirmed independently in two sources. There is no automatic day-night
+  cycle; mood lighting is a dial the player turns, not a simulation. Cheap
+  and effective — worth carrying directly into our GM-view tooling as a
+  manual lighting control rather than building a full day-night simulation
+  first.
+- **Color/type is itself a generation input, not just cosmetic** — a
+  concrete, useful precedent for this document's own "grid as a
+  configuration/parameter layer" idea (see "Guided construction mode"
+  above). The mechanism: exactly 16 block types, stored as a literal 1×16
+  pixel palette image; players can reassign the whole palette (community
+  palette-sharing exists, e.g. `latunda/townscaper`) but not add types past
+  16. Adjacent blocks of the *same* type merge into larger uniform runs;
+  *alternating* types at a boundary triggers different architectural rules
+  (more doors/lighthouses/arches vs. more windows on a uniform run). Type
+  selection is functionally a constraint the player paints onto the grid,
+  exactly the same shape as our own hex-grid parameter-layer idea — this is
+  independent confirmation the pattern works in a shipped product, not just
+  a design analogy.
+- **No traditional undo/redo is documented anywhere for Townscaper** — a
+  real UX gap in the reference model itself, not something we should
+  silently copy. This project's own `libs/engine/domain-core`
+  (Command → DomainEvent → Snapshot, already built) gives undo/redo for
+  free across every construction tier, since every edit is already an
+  event in a replayable log — a concrete place this project can exceed the
+  reference model's own UX, not just match it.
+- **Checked for an open-source engine shortcut, found none**: `latunda/townscaper`
+  looked promising by name but is confirmed to be only a community
+  resource repository (custom color palettes as PNGs, shared world-save
+  files) — not a reimplementation or clone of Townscaper's engine. No
+  open-source Townscaper-equivalent engine exists to build on top of;
+  `ghx_proc_gen` plus our own tileset authoring remains the real path.
+
 ### Interior generation: a confirmed gap, and how to close it
 
 The owner explicitly noticed this was missing. Confirmed directly, not
@@ -366,6 +417,335 @@ Found but **not verified** in this pass: [`dominguerilla/wfc-dun-gen`](https://g
 license, and whether it's a standalone library or engine-coupled were not
 confirmed (its README could not be fetched in this pass); recorded here as
 a candidate to inspect later, not adopted or license-cleared.
+
+### Terrain elevation: Townscaper's real limit, and the same fix pattern
+
+The owner's own read is correct, and worth stating precisely: Townscaper's
+documented "vertical relief" (above) is building-height stacking plus a
+marching-cubes-style step resolving the shoreline/waterline boundary between
+filled and empty cells — **not** a general sculptable terrain surface. The
+base land plane itself does not roll into hills or valleys; what reads as
+elevation is floors stacking upward and a stepped edge against water. There
+is no true terrain-sculpting system in the reference model. This confirms,
+rather than corrects, this document's own earlier research — the owner's
+observation just states it more sharply than this document had.
+
+The fix follows the **exact same pattern already designed for interior
+generation**: a third tileset category on the same already-Decided
+`ghx_proc_gen` engine, not a different tool. A "terrain" block stacks
+vertically exactly like a building block, but resolves against a
+natural-terrain tileset (grass slopes, rock faces, dirt, stepped cliffs)
+instead of an architectural one — the same vertical-layer WFC/marching-cubes
+machinery, a different set of tiles. This keeps one unified interaction
+model (pick a block type — building, terrain, interior-fixture — and click;
+the same engine resolves all three), rather than bolting on a second,
+disconnected terrain system. It is also the closer aesthetic match: TaleSpire's
+own elevation in this document's reference-games table below ("scroll-wheel
+while a tile is picked up, auto-stacking, stepped hex elevation") is the same
+discrete-level idea, not smooth heightmap sculpting either.
+
+This **reconciles, rather than discards**, the heightmap-based crates already
+chosen (`fast-surface-nets-rs`, `noise-rs`, `block-mesh-rs`): their role
+narrows from "the terrain system" to two still-real, narrower jobs:
+
+1. **Seeding the discrete grid** — a heightmap/noise pass proposes a
+   starting elevation pattern (where hills, valleys, and water naturally
+   sit) before the player touches anything, feeding Tier 0's "great
+   default," which then gets **quantized into the same discrete stacked-layer
+   grid** the terrain-block tileset builds on, rather than staying a
+   separate continuous surface.
+2. **Distant background scenery** — land far outside the actual buildable/
+   walkable area (mountains on the horizon, a coastline the player will
+   never click on) has no reason to pay for per-cell WFC resolution; a
+   continuous heightmap mesh remains the right, cheaper tool there, matching
+   the deck.gl `TerrainLayer` inspiration noted in the rendering-architecture
+   table above (that table's "Real (non-flat) terrain" row now refers
+   specifically to this background-scenery use, not the buildable area).
+
+Not yet designed: the actual terrain tileset (tile count, adjacency rules
+that produce believable slopes/cliffs rather than blocky staircases) and the
+quantization step from a noise/heightmap seed into discrete stacked levels —
+recorded as a new open item.
+
+### Physics: collision and grounding only (not a full engine)
+
+The owner explicitly scoped this down: token/object placement needs to
+rest at the correct height and not pass through walls — not a full
+rigid-body physics simulation (no falling, stacking, or true dynamics).
+This matches how even Foundry itself works (no physics engine at all).
+
+**Candidate: [`parry2d`/`parry3d`](https://parry.rs/)** (Dimforge,
+**Apache-2.0**) — a collision-detection-**only** library: shape queries,
+raycasting, broad/narrow-phase collision, with **no dynamics or forces**
+attached. It is the successor to Dimforge's earlier `ncollide`, and shares
+its ecosystem with the full **Rapier** physics engine (same team, same
+underlying geometry code) — meaning if this project's physics needs ever
+grow into real rigid-body dynamics later, there's a same-vendor upgrade
+path rather than a vendor switch.
+
+**Why this must run in Rust (`domain-core`), not as a client-side Three.js
+`Raycaster` query**: a token's position is authoritative multiplayer state
+(per `DEC-016`/section 15 of `GRAFTING_MASTER_SOURCE.md`, already
+discussed). If grounding/collision were computed independently on each
+player's own Three.js scene, different clients could disagree about where
+a token actually ends up — breaking both replay determinism (`DEC-044`)
+and the single-authoritative-state model the whole multiplayer
+architecture depends on. The pattern: a `MoveToken`-style command carries
+an intended position; `domain-core` resolves the actual resulting position
+by raycasting against its own authoritative terrain/wall geometry (via
+`parry`), and only that resolved position becomes the `DomainEvent` every
+client renders — Three.js's own `Raycaster` stays useful client-side for
+things that don't need to be authoritative (e.g. hover previews, cursor
+picking), but not for resolving where a token actually lands.
+
+This reuses the exact same wall/floor geometry already designed for
+vision/LOS blocking (see `docs/research/vtt-rules-and-character-system-options.md`) —
+one set of wall segments serves both "blocks sight" and "blocks movement,"
+not two separate representations.
+
+**`parry` vs. Three.js's own `Raycaster` — the real difference isn't raw
+speed.** Three.js's `Raycaster` is brute-force per-triangle by default,
+but the well-known community plugin
+[`three-mesh-bvh`](https://github.com/gkjohnson/three-mesh-bvh) (gkjohnson)
+adds a Bounding Volume Hierarchy on top and reaches strong performance
+(500 rays against an 80,000-polygon mesh at 60fps) — so raw client-side
+raycasting speed is a solved problem already, for the client-side purposes
+`Raycaster` is actually suited to (hover previews, cursor picking, other
+non-authoritative UI queries). The distinction that actually matters here
+is architectural, not a speed contest: `Raycaster` queries Three.js's own
+rendered scene graph, per client, in JavaScript, with no concept of
+authoritative state at all. `parry` is an engine-agnostic Rust geometry
+library that can run inside `domain-core` itself — meaning collision and
+grounding get exactly **one** authoritative answer every client then
+renders, instead of each client computing its own answer that could, in
+principle, disagree.
+
+`parry3d`'s own shape vocabulary maps directly onto this project's
+geometry: **`HeightField`** (exactly the terrain heightmap already
+produced), **`TriMesh`** (arbitrary WFC-generated building/interior
+geometry, with its own internal BVH for queries — the same acceleration
+idea as `three-mesh-bvh`, just on the Rust/authoritative side), **`Compound`**
+shapes (decomposing a complex WFC building mesh into convex parts), and
+**`SharedShape`** (reference-counted sharing of one expensive shape — e.g.
+one terrain heightfield — across every token colliding against it, rather
+than duplicating the shape data per token).
+
+### Water and rivers
+
+A genuinely new topic, in two parts: rendering technique, and procedural
+placement.
+
+**Rendering**: Three.js ships this natively — no new dependency. The
+official [`Water`](https://threejs.org/docs/pages/Water.html) addon
+(`three/addons/objects/Water.js`) provides a reflective water plane for
+`WebGLRenderer`; `WaterMesh` is the equivalent for `WebGPURenderer`. More
+elaborate effects (foam, caustics, real wave simulation) exist as
+community shader examples if ever wanted, but the built-in addon is
+sufficient for a first pass — the same "prefer the Three.js-native
+technique first" pattern already applied throughout this document (e.g.
+`ExtrudeGeometry` for buildings, `Line2` for routes).
+
+**Procedural placement (rivers/lakes on top of the terrain already
+designed)**: no mature, focused Rust crate was found for this
+specifically. The technique itself is well-documented and doesn't need
+one: **flow accumulation / drainage-basin simulation** — water is
+simulated flowing downhill across the heightmap via steepest descent,
+accumulating volume as it flows and as tributaries merge; a river forms
+where accumulated flow crosses a threshold, a lake forms where flow pools
+in a basin instead of draining further. Reference technique sources
+(concept only, not code to copy — same treatment as Sylves/Townscaper):
+[Red Blob Games' "Procedural river drainage basins"](https://www.redblobgames.com/x/1723-procedural-river-growing/)
+and [Nick McDonald's "Procedural Hydrology"](https://nickmcd.me/2020/04/15/procedural-hydrology/).
+This runs directly on top of this project's own `noise-rs`-generated
+heightmap seed (see "Terrain elevation" above) — **before** that seed gets
+quantized into the discrete WFC-driven elevation grid, since flow
+accumulation needs continuous elevation data to behave correctly; the
+resulting water-body mask then carries through into the discrete grid
+alongside elevation, the same seeding step already described.
+
+### How the generation pipeline fits together, end to end
+
+Each piece above (buildings, terrain, water) was designed on its own; this
+section is the concrete order they run in and how they hand off to each
+other, so the whole thing reads as one pipeline rather than separate
+ideas. Nothing new is decided here — every step below links back to the
+section that actually designed it.
+
+1. **Continuous heightmap seed** — `noise-rs` generates a continuous
+   elevation value across the whole map area (see "Procedural-generation
+   crates" above). Nothing discrete yet.
+2. **Water mask, still on the continuous seed** — flow-accumulation runs
+   on that same continuous heightmap (see "Water and rivers" above),
+   producing which points are river, lake, or dry land, **before**
+   anything gets quantized — the algorithm needs continuous elevation to
+   behave correctly.
+3. **Quantization into the discrete grid** — the continuous heightmap and
+   water mask both get snapped into the discrete stacked-layer grid the
+   WFC systems actually operate on (see "Terrain elevation" above); a
+   water-marked point becomes a "water" cell instead of a buildable-land
+   cell in that same grid.
+4. **Terrain WFC pass** — every non-water discrete cell resolves through
+   the terrain-block tileset (natural slopes/cliffs/grass — see "Terrain
+   elevation") into actual 3D terrain geometry, stacked and stepped per
+   that section's design.
+5. **Water rendering** — every water-marked cell gets a Three.js `Water`/
+   `WaterMesh` plane instead of terrain geometry (see "Water and rivers"),
+   at the height the surrounding terrain implies.
+6. **Building/exterior WFC pass** — on buildable land cells, the player's
+   block placement resolves through the Townscaper-style exterior tileset
+   (see "Reference model: Townscaper" and "Guided construction mode"
+   above) — a **separate tileset from terrain's**, running on top of
+   whatever terrain elevation already resolved at that location.
+7. **Interior WFC pass** — for each floor of a resolved building, a
+   further pass with an interior-specific tileset resolves room layout and
+   furniture (see "Interior generation" above) — again a separate tileset,
+   same underlying `ghx_proc_gen` engine.
+8. **Manual/freeform layer, on top of everything** — Tier 1 fixed-tile
+   pre-placement (pin a specific module before a re-solve) and freeform
+   prop placement (see the next section) both sit above every generated
+   layer, at any point in this pipeline.
+
+### Who authors each tile module, and can a wall bypass the system?
+
+A question this document had not answered directly: where do the actual
+wall/roof/stair/terrain shapes come from? **They are hand-authored 3D
+assets** — someone models each module (in a normal 3D tool, exported the
+way any game asset would be) and tags it with the socket/adjacency
+metadata `ghx_proc_gen` needs to know what can connect to what. This is a
+real content-creation task, not something generated automatically — the
+same content-creation reality Townscaper's own ~500 hand-crafted modules
+represent (see "Platforms, camera modes, and color as a generation input"
+above). It connects directly to the still-open "asset pipeline" item in
+`docs/research/vtt-product-scope-map.md`'s Content Creation section: the
+tileset *is* the asset pipeline's first real deliverable, not a separate
+concern.
+
+**Can someone build a wall that doesn't follow the tileset system at
+all?** This is a genuine fork, not resolved here — this document's own
+reference-games table already contains the precedent for both sides:
+**TaleSpire** supports hard-grid structural tiles *and* separately,
+freeform (non-gridded) decor props that ignore the grid entirely. That
+split maps onto two real options for this project:
+
+- **Option 1 — everything structural is an authored tileset module.** A
+  wall is, by definition, a `ghx_proc_gen` module with proper adjacency
+  tags. Consistent and predictable (every wall automatically blocks
+  vision via the `VisionSource`-style system and blocks movement via
+  `parry`, because tileset modules already carry that metadata) but
+  limited to whatever shapes have been authored.
+- **Option 2 — TaleSpire-style freeform structural props.** A player can
+  place any arbitrary mesh as a "wall," entirely bypassing WFC. This is
+  more flexible, but the automatic behavior stops: a freeform wall does
+  **not** automatically block vision or movement just by looking like a
+  wall — someone (a system, or the player) has to manually attach those
+  mechanical properties (a collision shape for `parry`, a line segment for
+  the vision system), since none of that metadata comes bundled with an
+  arbitrary mesh the way it does with an authored tileset module.
+
+Both are real, working patterns (TaleSpire ships exactly this split
+today) — which one, or whether both coexist the way TaleSpire's own
+structural-tiles-plus-freeform-decor split does, is an open decision for
+the owner, not resolved by this document.
+
+### Category + socket tile authoring: the engine cares about connectors, not shape
+
+The owner proposed: define generation **categories** (pillar, wall, roof),
+have the engine only care about category and connection points, not a
+piece's visual shape/form/length — so a flat, a triangular, and a curved
+wall could all be interchangeable "wall" pieces, with the engine
+generating combinations from category-level rules rather than needing a
+distinct rule per unique mesh.
+
+**This is exactly right, and it isn't a new invention to build from
+scratch** — it's the "socket" pattern already cited above:
+`ghx_proc_gen`'s own description is literally "socket-based adjacency,"
+and Townscaper's own tiles are documented (see "Reference model:
+Townscaper" above) as "modular corner pieces that flexibly conform to
+irregular grid cells" rather than unique, hardcoded shapes. The owner's
+"category" is, concretely, **a group of tiles that all share a compatible
+connector (socket) geometry at their connecting edges** — the engine
+genuinely does not know or care what a piece "is" (pillar, wall, roof),
+only whether one tile's socket on a given face is compatible with the
+neighboring tile's socket on the facing side.
+
+**The concrete mechanism, with a physical analogy**: think of Lego bricks.
+Any Lego brick connects to any other because the **stud/socket interface
+is a fixed, standardized geometry** — even though the bricks themselves
+come in wildly different shapes (flat plates, curved slopes, arches). The
+standardized connector is what makes them combinable; the rest of the
+shape is completely free. A tileset built this way needs a small,
+fixed vocabulary of socket types (e.g. "flat-wall-socket," "roof-edge-
+socket," "open/void-socket") — every new mesh added to the "wall" category
+just needs its connecting edges to match one of those existing socket
+geometries; everything else about the mesh (flat, triangular, curved,
+tall, short) is free to vary, exactly as the owner described.
+
+**What this eliminates, and what it does not.** Eliminated: authoring a
+separate adjacency rule per unique mesh pair (the traditional, laborious
+WFC-tileset trap) — a mesh only needs to declare which socket type it
+exposes on each face, once, not how it relates to every other individual
+mesh. **Still real work**: defining the socket vocabulary itself (a small,
+one-time task — a handful of connector types, not hundreds of rules), and
+making sure each new mesh's connecting edges actually match its declared
+socket's geometry — two pieces both labeled "wall" but with
+differently-shaped connecting edges will still show a visible gap or
+overlap when placed together, since the category label alone doesn't
+guarantee physical fit; the socket geometry is what has to actually agree.
+
+**This also reshapes the earlier structural-vs-freeform fork.** A
+well-designed category/socket system delivers a large share of the visual
+variety that made TaleSpire-style freeform props (Option 2 above)
+appealing — flat, triangular, and curved walls all coexisting — while
+staying entirely inside the systematic Option 1 (every piece is a proper
+tileset module, so vision-blocking and collision keep coming for free from
+its metadata). It doesn't eliminate the fork entirely — a player wanting a
+truly one-off shape outside any socket the tileset defines still hits
+Option 2's territory — but it substantially narrows how often that
+escape hatch is actually needed.
+
+### Reducing V1 modeling work: ready-made CC0 asset packs
+
+The owner asked whether hand-modeling a whole tileset is really necessary
+for a first prototype. It isn't, on two fronts:
+
+**The 3D modeling itself doesn't have to start from zero.** Confirmed via
+direct license check:
+
+- **[Kenney.nl](https://kenney.nl/assets/modular-buildings)** — "Modular
+  Buildings" (100 assets) and "Building Kit" (80 assets), both **CC0**:
+  free for commercial and non-commercial use, **no attribution required**,
+  low-poly, engine-agnostic (exports to formats any engine including
+  Three.js can consume).
+- **Kay Lousberg's KayKit** — the Dungeon Pack (fits this project's own
+  interior-generation need directly) and the "Prototype Bits" pack
+  (explicitly meant for exactly this kind of early blockout), both
+  **CC0-equivalent**: free for personal and commercial use, no attribution
+  required, the only restriction being not reselling the assets unmodified
+  as one's own.
+
+Both match the chunky, stylized, low-poly look already wanted — not
+photorealistic — so this isn't just a placeholder aesthetic, it's a
+reasonable fit even for a V1. Neither pack comes pre-tagged with the
+adjacency/socket metadata `ghx_proc_gen` needs — that tagging work is real
+and not eliminated by using ready-made meshes — but modeling the meshes
+themselves is the larger of the two tasks, and that part is now optional.
+
+**The tileset itself doesn't need to be nearly as large as Townscaper's
+~500 modules.** `ghx_proc_gen`'s own GitHub examples demonstrate real,
+varied generative results from a **4-tile** set (a void block, a pillar
+base, a pillar core, a pillar top) producing pillars of different heights
+and arrangements — direct evidence, from the crate's own authors, that a
+V1 tileset of perhaps 10-20 hand-tagged pieces (built from the Kenney/KayKit
+meshes above) is enough to produce satisfying results, not hundreds.
+
+**A lower-risk workflow for V1**: `bevy_ghx_proc_gen` (the same crate's
+Bevy-engine integration) gives fast visual feedback for iterating on
+tileset/adjacency design inside Bevy's own renderer — a separate,
+disposable prototyping tool for validating a tileset's adjacency rules
+before wiring the finished tileset into this project's real Rust/Isekai/
+Three.js pipeline, decoupling "does this tileset produce good results" from
+"is it correctly integrated," per the adoption checklist's own
+disposable-spike principle below.
 
 ### Other reference games surveyed
 
@@ -451,6 +831,135 @@ technologies are independently relevant, pulled out on their own:
   deck.gl once the owner's actual visual reference (extruded buildings +
   animated flow) matched deck.gl's flagship use cases far more precisely.
 
+## Import (Tier 2): Universal VTT (UVTT)
+
+The four-tier construction model's Tier 2 (import existing maps/images) had
+no research at all until now. Found: **Universal VTT (UVTT** — also seen as
+`.dd2vtt`/`.df2vtt`, the same format under different tool-of-origin
+extensions**)**, a JSON-in-image map-interchange format created by
+Megasploot (developer of Wonderdraft and Dungeondraft) and widely supported
+across *competing commercial* VTTs and map-authoring tools: Foundry,
+Fantasy Grounds Unity, Roll20, AboveVTT, Arkenforge, Dungeon Alchemist,
+DungeonFog, and BBEG Maps.
+
+Schema (confirmed via
+[Arkenforge's own documentation](https://arkenforge.com/universal-vtt-files/)):
+
+- `[Format]` — a decimal version number
+- `[Resolution]` — `map_origin` (x/y), `map_size` (x/y, in grid squares),
+  `pixels_per_grid`
+- `[line_of_sight]` — an array of wall/obstacle line segments (x/y
+  coordinates), plus a separate `[objects_line_of_sight]` for
+  object-specific blocking geometry
+- `[portals]` — position, bounds, rotation (radians), `closed`/
+  `freestanding` booleans (doors/windows)
+- `[environment]` — `baked_lighting` (boolean), `ambient_light` (hex color)
+- `[lights]` — position, range, intensity, color, `shadows` (boolean)
+- `[image]` — base64-encoded PNG or WEBP
+
+**Why this matters beyond "importing a picture"**: this schema's
+`line_of_sight`/`portals`/`lights` fields map directly onto the
+vision/dynamic-lighting mechanism already proposed in
+`docs/research/vtt-rules-and-character-system-options.md`'s "Proposed
+consolidated agnostic architecture" (a point-source polygon computation
+against wall geometry). Supporting UVTT import means a GM-imported map
+arrives with **working walls, doors, and lights already annotated** by
+whoever built it in Dungeondraft/DungeonFog/etc. — a genuinely interactive
+map on day one, not just a flat picture needing to be hand-annotated again.
+
+**Honesty check on openness**: unlike this project's other candidates,
+UVTT has **no official public specification document, license, or
+governance body** — it is a de facto, community-documented convention
+(independently described in near-identical terms by Arkenforge's docs, the
+Roll20 wiki, and the Dungeondraft community encyclopedia, which is itself
+evidence the field set is a stable, real convention, not a rumor). Parsing
+a JSON data-format convention is a different, and generally safer,
+situation than reusing someone's copyrighted source code — but this is
+recorded honestly as an informal convention, not overclaimed as a governed
+open standard.
+
+**Confirmed limitation, not just suspected: UVTT is fundamentally 2D.**
+Every coordinate in its schema (`Resolution`'s `map_origin`/`map_size`,
+`line_of_sight`'s wall segments, `lights`' and `portals`' positions) is
+x/y only — there is no height/elevation field anywhere in the format, and
+the image itself is a flat top-down texture. This is inherent to its
+origin serving classic top-down 2D VTTs. Concretely, this means:
+
+- Imported walls are 2D lines, not 3D geometry — they need to be
+  **extruded** into an actual wall mesh by assigning a height (a sensible
+  default, or GM-configurable per scene).
+- Imported lights have no Z position — a height needs to be assigned (e.g.
+  a default "torch height" above the floor) for them to look believable
+  in a genuinely free 3D camera, unlike the fixed top-down view UVTT was
+  designed for.
+- **Multi-floor buildings are not represented in one file** — each UVTT
+  file is exactly one flat floor. This matches how Foundry's own
+  community "Levels" module handles multi-story buildings today: stacking
+  multiple separate flat Scenes at different simulated elevations, not one
+  file with real 3D structure.
+
+**The reconciliation**: this project's own procedural generation already
+represents buildings as **stacked 2D layers extruded vertically**
+(Townscaper-style, see above) and interiors as **a per-floor WFC pass**
+(see "Interior generation" above) — structurally the exact same shape as
+"a 2D floor plan plus a rule for turning it into 3D." Rather than building
+a separate import-specific data model, an imported UVTT file becomes **one
+manually-provided floor layer** in the same stacked-layer structure Tier
+0/1 procedural generation already produces (wall segments, floor texture,
+lights, and portals together, each layer assigned a height/Z-offset) — a multi-story
+import just means importing several UVTT files and assigning each one to
+a layer, the same way a WFC-generated building's floors already stack.
+This means the renderer and the vision/dynamic-lighting system (both
+already designed to consume this per-floor-layer shape) do not need to
+know or care whether a given floor was generated, hand-built, or
+imported — directly satisfying this document's own opening "Unifying
+substrate" principle that all four construction tiers feed the same
+underlying model, not four parallel ones.
+
+**One file per floor, or one consolidated file?** This question actually
+spans three distinct layers, with a different answer at each:
+
+1. **The import boundary** — necessarily one-file-per-floor, because that
+   is how external tools (Dungeondraft, DungeonFog, Foundry's own
+   community "Levels" module) already hand us the data. Not a choice this
+   project gets to make; it's dictated by the ecosystem being imported
+   from.
+2. **This project's own authoritative runtime state** — already a single
+   unified `Snapshot` with a journal (`DEC-016`, section 15 of
+   `GRAFTING_MASTER_SOURCE.md`), not per-entity files. A floor is just an
+   entity/region with a Z-offset attribute inside that one state.
+   Introducing "one file per floor" at this layer would be a step
+   backward from the already-decided single-`Snapshot` architecture, not
+   an extension of it.
+3. **A future authoring/export/sharing file format** (if GMs are ever
+   meant to export or share a building as a portable file, independent of
+   the running Snapshot) — here, **one consolidated file per building is
+   the better default**, with each floor as an internal item (reusing
+   UVTT-shaped per-floor fields for simplicity) rather than N separate
+   files plus a manifest. A single file guarantees floor-to-floor
+   referential integrity (Z-offsets, stairwell connections, building-wide
+   metadata) by construction; N files need a separate manifest kept in
+   sync by hand, a real source of drift bugs for no real benefit here
+   (unlike the import boundary, nothing forces fragmentation at this
+   layer).
+
+So: keep importing one UVTT file per floor because that's how they arrive,
+but do not carry that fragmentation into this project's own storage or
+sharing format — consolidate there.
+
+## Recommended next practical step
+
+Of everything catalogued in this document, one concrete action is
+cheapest to take and most informative to take **first**, before investing
+time authoring a tileset (even a small, 10-20-piece V1 one, per "Reducing
+V1 modeling work" above): **the Wasm-compile verification spike** (open
+item 6 below) — confirming `ghx_proc_gen`, `fast-surface-nets-rs`,
+`block-mesh-rs`, and `noise-rs` actually compile to `wasm32-unknown-unknown`
+and run correctly inside a real Worker, via the already-proven
+Isekai/Wasm pathway. If any of these crates fail to compile cleanly, that
+changes the plan materially — better to find out before spending effort
+on tileset authoring than after.
+
 ## Open items (not resolved by this document)
 
 1. **`ADR-0008` follow-up amendment** — its "VTT's interactive map reuses
@@ -458,7 +967,10 @@ technologies are independently relevant, pulled out on their own:
    as the VTT's sole real renderer (both player and GM views), with X6
    remaining Architecture-Studio-only. Flagged here, not rewritten, pending
    the owner's explicit sign-off on the ADR text itself.
-2. **Import format/mechanism (Tier 2)** — no research done yet.
+2. **Import format/mechanism (Tier 2)** — Universal VTT (UVTT) identified as
+   a strong candidate (see "Import (Tier 2)" above), but not adopted; how it
+   reconciles with this project's own free-3D/discrete-elevation terrain
+   model is still undesigned.
 3. **AI/prompt tool-interface design (Tier 3)** — no design done yet; should
    build on this repository's existing MCP/agent-orchestration research
    (`docs/research/ai-agent-context-and-multi-agent-management-options.md`,
@@ -491,6 +1003,11 @@ technologies are independently relevant, pulled out on their own:
    as a relevant reference project, not verified in this pass (its README
    could not be fetched); needs a real look before citing it as more than a
    name.
+10. **Terrain-block tileset and heightmap-to-discrete-level quantization are
+    proposed, not designed** — see "Terrain elevation" above: the actual
+    tile count/adjacency rules for natural slopes/cliffs, and the algorithm
+    for turning a noise/heightmap seed into the discrete stacked-layer grid,
+    are not yet worked out.
 
 ## Adoption checklist
 

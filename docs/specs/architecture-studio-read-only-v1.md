@@ -9,6 +9,15 @@
 - Related decisions: DEC-049, DEC-050, DEC-051, DEC-052
 - Related records: ADR-0011, ADR-0012, ADR-0013, ADR-0014
 
+> **Amendment note (2026-08-01, `ADR-0016`, Proposed):** this document
+> remains the authoritative functional/interaction contract for the
+> **Graph IR explorer surface only** — every requirement and constraint
+> below still applies to it verbatim. `ADR-0016` (pending owner acceptance)
+> proposes two additional Architecture Studio surfaces (a VTT
+> procedural-generation test/visualization surface, and an agent-orchestration
+> surface); each gets its own later FR/AC specification once concrete enough
+> to specify against, rather than being folded into this one.
+
 ## 1. Outcome
 
 Architecture Studio v1 is a repository-backed, read-only graph explorer. It

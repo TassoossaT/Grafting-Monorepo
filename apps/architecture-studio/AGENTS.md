@@ -6,7 +6,14 @@ Derived Graph IR is read-only. This app MUST NOT edit generated facts or bypass
 schema/policy/plan review for authored workflows. It maps Graph IR and
 application-owned presentation enrichment directly to `@grafting/x6-canvas`;
 the transitional `graph-x6` boundary was removed by the Graph IR v1 cutover.
-It does not import raw X6 or VTT map semantics.
+The read-only Graph IR explorer surface described in this file does not
+import raw X6 or VTT map semantics. `ADR-0016` (Proposed, pending owner
+acceptance) proposes a separate, explicitly scoped VTT procedural-generation
+test/visualization surface that may render VTT generation output via
+Three.js and a dedicated Rust/Wasm domain crate; it must not reuse or extend
+`@grafting/x6-canvas`'s X6 adapter, and VTT map/domain logic must not leak
+into this surface's own modules (`presentation.ts`, `canvas-composition.ts`,
+`canvas-views.ts`).
 
 The app only composes and presents capabilities. Reusable repository,
 documentation, test-evidence, and graph logic belongs in Grafting packages.

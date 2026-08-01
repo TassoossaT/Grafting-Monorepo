@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-PARRY-VS-RAYCASTER-CLARIFICATION",
+  "title": "Clarify the concrete difference between parry (Rust) and Three.js's own Raycaster, and document parry3d's specific shape types relevant to this project's terrain/building geometry",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T05:15:00-03:00",
+  "objective": "Owner asked whether parry2d/parry3d is actually better than Three.js's own Raycaster and what the difference is. Researched via WebSearch to answer precisely rather than restate the prior authoritative-multiplayer reasoning alone: (1) Three.js's Raycaster is brute-force per-triangle by default with no built-in acceleration structure, but the well-known community plugin `three-mesh-bvh` (gkjohnson) adds a Bounding Volume Hierarchy, achieving strong performance (500 rays against an 80,000-polygon mesh at 60fps) -- confirming that client-side raycasting performance for legitimate client-side uses (hover previews, cursor picking) is a solved problem if ever needed, not a reason to avoid Raycaster for those specific non-authoritative purposes. (2) parry3d's actual shape vocabulary directly fits this project's geometry: `HeightField` (matches the terrain heightmap exactly), `TriMesh` (arbitrary WFC-generated building/interior geometry) with its own internal BVH for queries, `Compound` shapes (decomposition of complex meshes into convex parts, relevant for complex WFC building shapes), and `SharedShape` (reference-counted sharing of one expensive shape, e.g. one terrain heightfield, across many colliders/tokens querying against it, rather than duplicating the shape data per token). The real, substantive difference is not raw speed (both can be made fast) but where each one runs and what it operates on: Raycaster queries Three.js's own rendered scene graph, per-client, in JavaScript, with no concept of authoritative state; parry is an engine-agnostic Rust geometry library that can run inside domain-core itself (native or via the existing Isekai/Wasm pathway), making it possible for collision/grounding to have exactly one authoritative answer that every client then renders, instead of N independent per-client computations that could disagree.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-PARRY-VS-RAYCASTER-CLARIFICATION.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Extended the 'Physics: collision and grounding only' section of docs/research/vtt-map-and-terrain-construction-options.md with a concrete comparison: three-mesh-bvh's role in Raycaster's own performance story (so the distinction isn't framed as 'parry is faster', it's framed accurately as 'where it runs and what counts as authoritative'), and parry3d's specific shape types (HeightField/TriMesh/Compound/SharedShape) mapped directly onto this project's own terrain/building/token geometry.",
+    "Did not overstate the comparison as a performance argument when the real distinguishing factor is architectural (authoritative single-source-of-truth vs. per-client rendering-side query) -- both tools can be made fast.",
+    "No dependency installed, no code written, no ADR reopened -- documentation clarification only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (Physics section extended with the parry-vs-Raycaster clarification)"
+  ],
+  "risks": [
+    "Documentation clarification only -- no code, no dependency, no ADR change.",
+    "three-mesh-bvh itself was not independently license-checked in this pass since it's noted only as context for Raycaster's own performance ceiling, not proposed as a dependency of this project."
+  ],
+  "next_responsible_party": "repository-owner"
+}

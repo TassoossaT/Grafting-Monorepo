@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-TERRAIN-ELEVATION-RECONCILIATION",
+  "title": "Reconcile terrain elevation: confirm Townscaper has no true terrain sculpting, adopt a third WFC tileset (terrain blocks) as the primary buildable-area elevation mechanism, and narrow the role of the already-chosen heightmap crates",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T00:50:00-03:00",
+  "objective": "Owner-directed: the owner correctly observed that Townscaper itself is flat (no true terrain elevation/hill-sculpting), and proposed fixing this with a distinct 'terrain' block type. This confirms this document's own prior research: Townscaper's documented 'vertical relief' is building-height stacking plus a marching-cubes-style shoreline/waterline step between filled/empty cells, not a general sculptable terrain surface. The owner's proposed fix follows the exact same pattern already designed for interior generation: a third tileset category on the same already-Decided ghx_proc_gen engine (buildings, interiors, and now terrain, each their own tileset/adjacency set on one WFC engine) rather than a separate tool -- a 'terrain' block stacks vertically like a building block but resolves against a natural-terrain tileset (slopes, rock, cliffs) instead of an architectural one. This reconciles rather than discards the already-chosen heightmap-based crates (fast-surface-nets-rs, noise-rs, block-mesh-rs): their role narrows from 'the terrain system' to (1) seeding a starting elevation pattern that gets quantized into the discrete stacked-layer grid, feeding Tier 0's default, and (2) rendering distant background scenery outside the actual buildable/walkable area where per-cell WFC resolution isn't worth its cost -- both still real, still-needed jobs for the same crates, just narrower than originally scoped.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-TERRAIN-ELEVATION-RECONCILIATION.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added a 'Terrain elevation: Townscaper's real limit, and the same fix pattern' subsection to docs/research/vtt-map-and-terrain-construction-options.md: confirms the owner's observation precisely, proposes the third-tileset-on-ghx_proc_gen fix (mirroring the interior-generation pattern already documented), and explains the narrowed-but-still-real role of fast-surface-nets-rs/noise-rs/block-mesh-rs (heightmap seed for quantization into discrete levels; distant background scenery only).",
+    "Added a cross-reference clarifying note to the existing deck.gl-equivalents table row for 'Real (non-flat) terrain' so it doesn't read as contradicting the new subsection -- that Three.js/PlaneGeometry+heightmap technique now applies to distant background scenery, not the primary buildable-area elevation mechanism.",
+    "Added open item 10: the actual terrain tileset (tile count, adjacency rules for believable slopes/cliffs) and the heightmap-to-discrete-level quantization step are proposed, not designed.",
+    "Updated docs/research/RESEARCH-DECISIONS-REGISTRY.md's fast-surface-nets-rs/noise-rs/block-mesh-rs rows' reasoning text to reflect the narrowed role, without changing their Decided/Standby status -- they remain real, adopted-in-plan crates for a narrower job, not discarded.",
+    "No dependency installed, no code written, no ADR reopened -- documentation reconciliation only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (new terrain-elevation-reconciliation subsection; deck.gl-equivalents table row clarified; open items updated)",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (fast-surface-nets-rs/noise-rs/block-mesh-rs reasoning text updated)"
+  ],
+  "risks": [
+    "Documentation-only reconciliation -- no code, no dependency change, no ADR change.",
+    "The narrowed role for the heightmap crates is a design proposal, not yet implemented or spiked -- consistent with this document's existing non-normative research-catalog status."
+  ],
+  "next_responsible_party": "repository-owner"
+}

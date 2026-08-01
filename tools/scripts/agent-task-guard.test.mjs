@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   evaluateAgentGitCommand,
   evaluateHook,
+  isHarnessManagedPath,
   isReadOnlyInspectionCommand,
 } from "./agent-task-guard.mjs";
 
@@ -316,6 +317,54 @@ test("rejects Write targets outside the repository", async () => {
     root,
     agent: "claude",
     hookInput: hook("Write", { file_path: resolve(root, "../outside.md") }),
+  });
+  assert.equal(decision.allowed, false);
+  assert.match(decision.reason, /outside the repository/);
+});
+
+test("isHarnessManagedPath recognizes memory and plan directories on either separator style", () => {
+  assert.equal(
+    isHarnessManagedPath("C:\\Users\\someone\\.claude\\projects\\my-project\\memory\\note.md"),
+    true,
+  );
+  assert.equal(isHarnessManagedPath("/home/someone/.claude/projects/my-project/memory/note.md"), true);
+  assert.equal(isHarnessManagedPath("C:\\Users\\someone\\.claude\\plans\\mellow-drifting-nova.md"), true);
+  assert.equal(isHarnessManagedPath("/home/someone/.claude/plans/plan.md"), true);
+  assert.equal(isHarnessManagedPath("C:\\Users\\someone\\Desktop\\outside.md"), false);
+  assert.equal(isHarnessManagedPath(""), false);
+  assert.equal(isHarnessManagedPath(undefined), false);
+});
+
+test("allows a Write to the harness memory directory even with zero active tasks", async () => {
+  const root = await makeRoot();
+  const decision = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Write", {
+      file_path: resolve(tmpdir(), ".claude", "projects", "some-project", "memory", "note.md"),
+    }),
+  });
+  assert.equal(decision.allowed, true);
+});
+
+test("allows a Write to the harness plan directory even with zero active tasks", async () => {
+  const root = await makeRoot();
+  const decision = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Write", {
+      file_path: resolve(tmpdir(), ".claude", "plans", "some-plan.md"),
+    }),
+  });
+  assert.equal(decision.allowed, true);
+});
+
+test("still rejects an unrelated outside-repository path even though the harness exception exists", async () => {
+  const root = await makeRoot();
+  const decision = await evaluateHook({
+    root,
+    agent: "claude",
+    hookInput: hook("Write", { file_path: resolve(tmpdir(), "not-claude", "plans", "some-plan.md") }),
   });
   assert.equal(decision.allowed, false);
   assert.match(decision.reason, /outside the repository/);

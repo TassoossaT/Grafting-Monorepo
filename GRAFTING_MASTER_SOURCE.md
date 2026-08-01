@@ -620,6 +620,17 @@ born because there is already a declared intention for more than one
 product to need them; the VTT map remains within the app until a second
 product requires a map.
 
+> **Footnote (2026-08-01, `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`,
+> Proposed):** the "VTT interactive map (X6)" row's `apps/web-vtt` label
+> reads as inconsistent with `DEC-041` ("the VTT is a client-only route
+> within [the Next.js Web host], not a standalone app") — flagged here, not
+> resolved. Separately, ADR-0016 proposes that `apps/architecture-studio`
+> also host a **generation-testing and visualization surface** for the VTT's
+> procedural-generation pipeline (Rust/Wasm crates rendered via Three.js) —
+> a distinct relationship from the one this table row already describes
+> (sharing `packages/x6-canvas`): the new surface shares the VTT's Rust
+> domain crate and the Isekai/Wasm pathway instead, not `x6-canvas`.
+
 DEC-049 strengthens this boundary: reusable capabilities expose Grafting-owned
 interfaces and isolate third-party runtime APIs inside the smallest useful
 owning module/project boundary. It does not require one package per dependency.
@@ -3472,6 +3483,15 @@ Minimum evidence: explicit request, the same fix twice, a critical incident, a r
 LangMem, Hermes, GEPA, and DSPy are references/spikes; they do not promote changes directly.
 
 ### 29.11 Communication between agents
+
+> **Note (2026-08-01, `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`,
+> Proposed):** `ADR-0016` proposes a Studio *product feature* (agent
+> orchestration surfaced through the Architecture Studio UI) that uses MCP.
+> This is independent of the Context Broker MCP described below, which
+> coordinates Claude/Codex/Gemini working on this repository itself. Both
+> may eventually share the same `@modelcontextprotocol/sdk` dependency, but
+> must not share one implementation unless a later task explicitly merges
+> them (DEC-049: no duplicated authoritative behavior).
 
 Phase 1: files in `.ai/state/`.
 

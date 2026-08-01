@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-SOCKET-CATEGORY-TILE-AUTHORING",
+  "title": "Confirm and clarify the owner's category+socket tile-authoring idea: the engine cares about connector compatibility, not visual shape -- this is the established WFC 'socket' pattern, not a new invention",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T06:30:00-03:00",
+  "objective": "Owner proposed defining generation categories (pillar, wall, roof) where the engine only cares about category and connection points, not visual shape/form/length -- so a flat, triangular, and curved wall could all be interchangeable 'wall' pieces the engine treats identically for generation purposes, reducing the per-piece adjacency-authoring burden. Confirming this is exactly the established 'socket' pattern already referenced in this document (ghx_proc_gen's own 'socket-based adjacency', and Townscaper's own tiles being 'modular corner pieces that flexibly conform to grid cells' rather than unique hardcoded shapes) -- not a novel invention needed from scratch, but a correct application of already-cited technique. Explaining the mechanism concretely with a Lego-brick analogy: a fixed, standardized connector geometry (the socket) is what makes pieces combinable, while everything else about a piece's shape is free to vary -- meaning the owner's 'category' is really a group of tiles sharing compatible socket geometry at their connecting edges, not merely a shared label. Being honest about what work this approach eliminates (per-pair adjacency rules, one rule per unique mesh combination) versus what remains (defining the socket vocabulary itself -- a small, one-time task; ensuring each new mesh's connecting edges actually match its declared socket's geometry, since two 'wall' pieces with a differently-shaped connecting edge would create a visible gap even if both are correctly labeled 'wall'). Also connecting this back to the earlier-surfaced structural-vs-freeform fork: a well-designed socket/category system delivers much of the visual variety that made 'freeform structural props' (Option 2) appealing, while staying inside the systematic, auto-tagged Option 1 -- reducing, though not eliminating, the pressure to choose Option 2 at all.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-SOCKET-CATEGORY-TILE-AUTHORING.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added a 'Category + socket tile authoring: the engine cares about connectors, not shape' section to docs/research/vtt-map-and-terrain-construction-options.md, confirming the owner's proposed approach matches the already-cited socket-based-adjacency pattern (ghx_proc_gen) and Townscaper's own modular-corner-piece tile design, rather than presenting it as a new technique needing separate validation.",
+    "Explained the mechanism with a concrete Lego-brick analogy (fixed connector geometry, free-form everything else) to make the abstraction tangible.",
+    "Was explicit about what work this eliminates (per-pair/per-mesh adjacency authoring) versus what remains (defining the socket vocabulary itself; ensuring each mesh's connecting edges geometrically match its declared socket, since mismatched connector geometry creates visible gaps even with correct category labels) -- not overclaiming zero remaining work.",
+    "Cross-referenced the earlier structural-vs-freeform fork (Option 1 vs Option 2 in the 'Who authors each tile module' section), noting a well-designed socket/category system reduces, without eliminating, the pressure to choose the freeform escape hatch.",
+    "No dependency installed, no code written, no ADR reopened -- documentation clarification only; no new external research was needed since this confirms/deepens an already-cited technique (ghx_proc_gen's socket-based adjacency) rather than introducing a new one."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (new section clarifying category/socket tile authoring)"
+  ],
+  "risks": [
+    "Documentation clarification only -- no code, no dependency, no ADR change.",
+    "This is a design clarification, not validated against ghx_proc_gen's actual concrete API surface (e.g. exact socket-declaration syntax) -- that remains part of the still-open Wasm-compile verification spike and general implementation work."
+  ],
+  "next_responsible_party": "repository-owner"
+}

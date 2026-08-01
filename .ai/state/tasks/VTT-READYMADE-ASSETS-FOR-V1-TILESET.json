@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-READYMADE-ASSETS-FOR-V1-TILESET",
+  "title": "Research ready-made free/CC0 low-poly asset packs to reduce V1 tileset-modeling work, and confirm ghx_proc_gen's own examples show small tilesets already work",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T06:10:00-03:00",
+  "objective": "Owner said hand-authoring a full tileset (Townscaper's own ~500 modules) is too much work for a V1 prototype, and asked what ready-made free alternative exists to reduce that work, explicitly not needing the same visual richness as the original. Researched via WebSearch: (1) Kenney.nl's 'Modular Buildings' (100 assets) and 'Building Kit' (80 assets) packs are confirmed CC0 -- free for commercial and non-commercial use, no attribution required, low-poly and engine-agnostic (works with any 3D engine including Three.js via glTF export); (2) Kay Lousberg's KayKit packs (Dungeon Pack, Prototype Bits, and others) are confirmed CC0-equivalent (free for personal and commercial use, no attribution required, only restriction is not reselling unmodified copies as one's own) -- Dungeon Pack fits this project's own interior-generation need directly, and Prototype Bits is explicitly designed for exactly this early-blockout use case; both match the chunky/stylized low-poly aesthetic already wanted (not photorealistic), not just a generic placeholder; (3) confirmed via ghx_proc_gen's own GitHub examples that its authors themselves demonstrate real generative results from tiny tilesets -- one example uses only 4 models (a void block, a pillar base, a pillar core, a pillar top) to generate varied pillar structures, directly validating that a V1 tileset does not need Townscaper's ~500-module richness to produce satisfying results, a much smaller hand-tagged set (perhaps 10-20 pieces) built from Kenney/KayKit meshes is enough to start; (4) noted bevy_ghx_proc_gen (the same crate's Bevy integration) as a fast, separate prototyping tool for iterating on tileset/adjacency design with quick visual feedback in Bevy's own renderer, before wiring a validated tileset into this project's real Rust/Isekai/Three.js pipeline -- a lower-risk way to attack tileset design as its own separate step. The adjacency/socket tagging work itself is not eliminated by any of these packs (no ready-made pack comes pre-tagged for ghx_proc_gen specifically), but the 3D modeling work is substantially reduced by starting from ready-made CC0 meshes instead of modeling from scratch.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-READYMADE-ASSETS-FOR-V1-TILESET.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Extended the 'Who authors each tile module' section of docs/research/vtt-map-and-terrain-construction-options.md with a 'Reducing V1 modeling work: ready-made CC0 asset packs' subsection covering Kenney.nl (Modular Buildings, Building Kit) and KayKit (Dungeon Pack, Prototype Bits) with confirmed license terms, the ghx_proc_gen 4-tile pillar-example finding as evidence a small V1 tileset is genuinely sufficient, and bevy_ghx_proc_gen noted as a separate fast-prototyping tool for tileset/adjacency iteration.",
+    "Was explicit that adjacency/socket tagging is still real, unavoidable work -- these packs reduce the 3D-modeling burden, not the tagging burden -- rather than overclaiming a fully ready-made solution.",
+    "Updated docs/research/RESEARCH-DECISIONS-REGISTRY.md with rows for Kenney.nl's packs, KayKit's packs, and bevy_ghx_proc_gen.",
+    "No dependency installed, no code written, no ADR reopened -- documentation research only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (new subsection)",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (new rows)"
+  ],
+  "risks": [
+    "Web research reflects sources found today (2026-08-01) and may drift, per every sibling document's existing dated-facts caveat.",
+    "These generic low-poly packs are not tailored to the project's specific Ordem-Paranormal-adjacent horror aesthetic -- explicitly framed as a V1/prototype placeholder, swappable later since the tileset is decoupled from the WFC engine itself.",
+    "No dependency installed, no code written -- research/documentation only."
+  ],
+  "next_responsible_party": "repository-owner"
+}

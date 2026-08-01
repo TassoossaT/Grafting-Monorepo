@@ -106,6 +106,17 @@ would contradict that declaration and risks silent removal by an aggressive
 bundler. The consuming application imports the stylesheet once, the same way
 it would for any other CSS-dependent dependency it takes on directly.
 
+**Addendum (2026-08-01, `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`,
+Proposed, pending owner acceptance):** `apps/architecture-studio` is proposed
+as an additional `GridLayout` consumer, alongside the originally anticipated
+Next.js documentation-and-tooling app referenced above. `GridLayout`'s public
+contract does not change — it was already consumer-agnostic — but this is
+worth recording because `apps/architecture-studio` has no existing
+app-level React root today (`src/main.ts` is plain DOM; React currently
+only exists privately inside `@grafting/x6-canvas`'s per-node mounts), so
+wiring `GridLayout` in is a first-time integration decision for that app,
+not routine reuse of an established pattern.
+
 ## shadcn/ui conclusion
 
 shadcn/ui is a source distribution approach rather than a mandatory runtime

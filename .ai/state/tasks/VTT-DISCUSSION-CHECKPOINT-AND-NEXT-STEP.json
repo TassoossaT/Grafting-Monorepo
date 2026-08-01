@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-DISCUSSION-CHECKPOINT-AND-NEXT-STEP",
+  "title": "Checkpoint: confirm the Townscaper mechanism + ready-to-use inventory recap as settled, and record the Wasm-compile verification spike as the explicit recommended first practical step before tileset authoring",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T06:50:00-03:00",
+  "objective": "Owner explicitly asked to save the preceding discussion as defined. The preceding recap (Townscaper's construction mechanism, and the concrete inventory of already-available pieces: ghx_proc_gen, bevy_ghx_proc_gen for fast tileset prototyping, Kenney.nl/KayKit CC0 assets, noise-rs/fast-surface-nets-rs/block-mesh-rs, parry2d/parry3d, Three.js's native Water/ExtrudeGeometry/PlaneGeometry/Line2/InstancedMesh/Raycaster, and the already-built libs/engine/domain-core + libs/isekai/wasm-bridge pathway) was itself a synthesis of content already recorded across docs/research/vtt-map-and-terrain-construction-options.md and its siblings -- nothing new to add there. The one genuinely new element from that recap is an explicit sequencing recommendation that had not been stated as such anywhere yet: the Wasm-compile verification spike (confirming ghx_proc_gen/fast-surface-nets-rs/block-mesh-rs/noise-rs actually compile to wasm32-unknown-unknown and run inside a real Worker) should be the first practical step taken, before investing time authoring a tileset (10-20 hand-tagged pieces), since a compile failure there would change the whole plan. Recording this prioritization explicitly as this document's recommended next action, superseding its prior framing of the Wasm spike as merely one item in an unordered open-items list.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-DISCUSSION-CHECKPOINT-AND-NEXT-STEP.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added a 'Recommended next practical step' note to docs/research/vtt-map-and-terrain-construction-options.md, near the open items list, explicitly sequencing the Wasm-compile verification spike before tileset authoring investment, with the reasoning (a compile failure would change the whole plan, so it is the cheapest, highest-information first move).",
+    "Did not re-document the Townscaper mechanism or the ready-to-use inventory again -- both were already fully recorded in prior sessions of this same conversation; only the new sequencing/prioritization call needed to be added.",
+    "No dependency installed, no code written, no ADR reopened -- documentation checkpoint only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (recommended-next-step note added)"
+  ],
+  "risks": [
+    "Documentation checkpoint only -- no code, no dependency, no ADR change.",
+    "The actual Wasm-compile spike itself has not been run yet; this task only records the recommendation to run it first, it does not perform it."
+  ],
+  "next_responsible_party": "repository-owner"
+}
