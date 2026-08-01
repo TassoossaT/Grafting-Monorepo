@@ -143,8 +143,9 @@ Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
 | Candidate | License | Status | Note |
 | --- | --- | --- | --- |
 | Three.js | — | **Decided** | Already a `Closed` rule in `GRAFTING_MASTER_SOURCE.md` for the Web VTT's renderer; not new, this session initially mistook it for new information |
-| **deck.gl** | MIT (OpenJS Foundation / vis.gl) | **Decided, GM-overview view** | Building extrusion, real (non-flat) terrain via `TerrainLayer`+`TerrainExtension`, route/flow via `TripsLayer`/`ArcLayer`, density via `HexagonLayer`, free 3D camera via `OrbitView` |
-| `@deck.gl-community/editable-layers` | Likely MIT (same `visgl` org as deck.gl core; not independently re-verified) | **Decided, route/polygon editing** | Actively-maintained successor to Uber's unmaintained `nebula.gl` |
+| **deck.gl** | MIT (OpenJS Foundation / vis.gl) | **Reference only — superseded** | Was briefly decided as a GM-overview dependency; now demoted to a technique/visual reference. Its capabilities (extrusion, terrain, routes, density) have direct or near-direct Three.js-native equivalents (`ExtrudeGeometry`, heightmap `PlaneGeometry`, `Line2`), so Three.js became the sole renderer for both views instead of adopting a second library |
+| `@deck.gl-community/editable-layers` | Likely MIT (same `visgl` org as deck.gl core; not independently re-verified) | Reference only — superseded | Same reasoning as deck.gl above; the editing UX is now custom work over Three.js's `Raycaster` instead |
+| **Sylves** (BorisTheBrave) | MIT | Reference only (concept) | C#, not usable as a Rust dependency (DEC-001) — a uniform multi-grid-topology abstraction (hex/square/triangular), directly documented against Townscaper's own grid; concept reference for letting a configuration grid not limit the generated output's shape |
 | `Tile3DLayer` | MIT (part of deck.gl) | Discarded for this use | Bound to the OGC 3D Tiles/ESRI I3S standard (real-provider formats); the generic `TileLayer` + `SimpleMeshLayer`/`ScenegraphLayer` underneath are the reusable pieces for custom procedural streaming |
 | MapLibre GL JS | BSD-style (via GeoLibre) | Discarded for GM-overview role | Superseded once deck.gl's building-extrusion/flow-visualization matched the owner's actual visual reference more precisely |
 | GeoLibre (whole platform) | MIT | Discarded | Real-world GIS analysis platform (SQL geoprocessing, satellite imagery, planetary basemaps) — wrong domain for fantasy map construction |
@@ -154,6 +155,8 @@ Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
 | `fast-surface-nets-rs` | MIT OR Apache-2.0 | **Decided** | Smooth/organic terrain meshing |
 | `block-mesh-rs` | MIT OR Apache-2.0 | Standby, blocky alternative | Alternative to `fast-surface-nets-rs` if a blockier look is wanted instead |
 | `noise-rs` | Dual MIT/Apache-2.0 | **Decided** | Base noise feeding the meshing crates |
+| Interior/room generation (WFC + BSP, `path constraint`, `fixed tiles`) | — (design pattern, not a dependency) | Standby — proposed, not implemented | Confirmed Townscaper itself has no interior generation; closing that gap reuses the already-`Decided` `ghx_proc_gen` with a second interior-specific tileset/pass, not a new crate — see `docs/research/vtt-map-and-terrain-construction-options.md`'s "Interior generation" section |
+| `dominguerilla/wfc-dun-gen` | Unverified | Reference only — unverified | Found via search as a WFC dungeon-generation project; language/license/API not confirmed in this pass (README fetch failed) — not adopted or license-cleared |
 | `building-blocks` | MIT/Apache-2.0 dual | Discarded | Archived/unmaintained; superseded by `block-mesh-rs`/`fast-surface-nets-rs` |
 | Godot Voxel module | MIT | Reference only | Tightly coupled to Godot 4; study the generator-graph/editing-layer design, don't depend on it |
 | Veloren | **GPL-3.0** | Reference only, code reuse excluded | Copyleft — architecture/algorithm reference only, per this repository's standing policy |

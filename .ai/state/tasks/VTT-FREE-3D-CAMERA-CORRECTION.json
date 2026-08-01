@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-FREE-3D-CAMERA-CORRECTION",
+  "title": "Correct the VTT product-vision document: the world is genuinely free-camera 3D, not 2.5D; 2.5D is demoted to an optional per-asset representation technique for tokens/items",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T00:05:00-03:00",
+  "objective": "Owner-directed correction: docs/research/vtt-map-and-terrain-construction-options.md's Product Vision section currently states the VTT targets a '2.5D look' achieved via a fixed isometric-ish camera (the TaleSpire framing). The owner explicitly rejected this: the world (terrain, buildings, environment) must support a genuinely free 3D camera -- top-down, side-on, orbit, any angle, no fixed/locked presentation. 2.5D is not discarded entirely, but rescoped to an optional representation technique for specific asset classes only (tokens/characters, some items) that may render as flat/billboarded 2D art standing inside the fully 3D environment, analogous to tabletop-miniature standees or billboarded sprites in a 3D world (Doom-style billboarding, Octopath Traveler's HD-2D). This does not change the already-Decided rendering architecture (Three.js remains the sole renderer for both views) -- free camera navigation and sprite billboarding are both native, ordinary Three.js capabilities (OrbitControls-style free camera, THREE.Sprite for billboards), so no dependency or architecture decision is affected, only the product-vision narrative and its downstream implications for asset-authoring guidance.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-FREE-3D-CAMERA-CORRECTION.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Corrected the 'Product vision' section's opening paragraph and 'Key clarification' paragraph: removed the claim that the VTT targets a scene-wide 2.5D look via a fixed isometric-ish camera; replaced with a correction stating the environment (terrain/buildings/scene) is genuinely free 3D with an unrestricted camera, and 2.5D is rescoped to an optional per-asset representation technique (tokens/items only), noting THREE.Sprite billboarding as the native Three.js mechanism for that technique.",
+    "Confirmed via grep that '2.5D' only appeared in this one document, contained to the Product Vision section (lines ~20-35) -- no other research document or registry entry needed correction.",
+    "No change to the already-Decided rendering-architecture table (Three.js sole renderer for both views) -- free camera and billboarding are both ordinary Three.js capabilities, not a new dependency or architectural fork.",
+    "No dependency installed, no code written, no ADR reopened -- documentation correction only.",
+    "Checked docs/research/RESEARCH-DECISIONS-REGISTRY.md per the PostToolUse research-registry-reminder hook: grepped for '2.5D'/'isometric'/'camera', no matches -- the registry only tracks tool/candidate adoption status (Adopted/Standby/Discarded/Reference only), and no candidate's status changed by this correction (Three.js remains the sole Decided renderer), so no registry edit was needed."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (Product Vision section corrected)"
+  ],
+  "risks": [
+    "Documentation-only correction -- no code, no dependency, no ADR change.",
+    "Downstream sections of the same document (guided construction mode, reference-game table, etc.) were written assuming a free-3D world already (they describe full terrain relief, orbit-relevant techniques like InstancedMesh hexagons, Raycaster-based editing) and do not need further correction from this change -- verified by re-reading the full document before editing."
+  ],
+  "next_responsible_party": "repository-owner"
+}

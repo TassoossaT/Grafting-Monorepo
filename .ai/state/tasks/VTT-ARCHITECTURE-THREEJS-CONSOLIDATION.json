@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-ARCHITECTURE-THREEJS-CONSOLIDATION",
+  "title": "Update the VTT map/terrain research document to reflect Three.js as the sole renderer, and register the Isekai/Wasm procedural-generation pathway and remaining tool-finalization items",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T13:30:00-03:00",
+  "objective": "Owner-directed: since the last registration pass, the conversation resolved several open items and changed one prior decision: (1) deck.gl is no longer planned as a dependency for the GM view -- it is demoted to a visual/technique reference, since its capabilities (building extrusion, terrain relief, route visualization, density aggregation) have direct or near-direct Three.js-native equivalents (THREE.ExtrudeGeometry is built into Three.js core; heightmap-displaced PlaneGeometry is the standard Three.js terrain technique; Line2/LineGeometry is an official Three.js addon for width-real lines) -- Three.js becomes the sole renderer for both the player's immersive view and the GM's overview view, fully consistent with the master source's already-Closed rendering rule, avoiding both the fragile deck.gl+Three.js shared-WebGL-context integration and the much larger Rust/wgpu-replaces-Three.js pivot; (2) Sylves (BorisTheBrave, C#, MIT) was found as a grid-topology-abstraction reference directly connected to Townscaper (the author documents modeling Townscaper's own grid with it) -- concept-only reference, not a Rust-usable dependency; (3) the Isekai/Wasm/Worker pathway (already built for libs/engine/domain-core) was confirmed as the integration mechanism for the procedural-generation Rust crates, with an actual Wasm-compile verification spike flagged as necessary future work, not yet done; (4) 'interactable constructions' were tied explicitly to the existing Command/DomainEvent engine (a generated/imported/AI-created building's door/container/trigger must be a real domain entity, not just decorative geometry); (5) a refined 'guided construction mode' design was captured (select an area + parameters, a grid such as hexagons configures parameters like elevation, the actual generated visual output uses Townscaper-style organic relaxation, not literally the configuration grid's shape). This task updates docs/research/vtt-map-and-terrain-construction-options.md and docs/research/RESEARCH-DECISIONS-REGISTRY.md to reflect all of this, superseding the prior 'deck.gl decided for GM view' entries rather than leaving them stale.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-ARCHITECTURE-THREEJS-CONSOLIDATION.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Updated docs/research/vtt-map-and-terrain-construction-options.md: rendering-architecture table now shows Three.js as sole renderer for both player and GM views, deck.gl demoted to reference-only with an explicit 'superseded from this document's earlier draft' note explaining why (not silently overwritten); replaced the deck.gl-capability list with a two-column 'need -> Three.js-native equivalent' table (ExtrudeGeometry, heightmap PlaneGeometry, Line2, InstancedMesh, Raycaster); added Sylves as a concept-only grid-topology reference with the third-party-attribution nuance (code-copying requires a notice, reimplementing a design pattern likely does not); added the refined guided-construction-mode design (grid as configuration layer, Townscaper-style relaxation as output); added the interactable-constructions-tie-to-Command/DomainEvent note; added the Isekai/Wasm/Worker pathway as the confirmed integration mechanism for the procedural-generation crates, with the Wasm-compile verification spike explicitly recorded as future work, not done.",
+    "Updated the open-items list: removed the now-moot 'deck.gl + Three.js coexistence' item (resolved by not using deck.gl as a dependency at all), added the Wasm-compile verification spike and the unconfirmed ghx_proc_gen hex-grid-topology-support item.",
+    "Updated docs/research/RESEARCH-DECISIONS-REGISTRY.md: deck.gl and @deck.gl-community/editable-layers rows changed from 'Decided' to 'Reference only -- superseded' with the reasoning; added a new Sylves row.",
+    "No dependency installed, no code written, no ADR reopened or rewritten -- documentation/consolidation only."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (rendering architecture superseded to Three.js-only; Sylves, guided-construction-mode, interactable-constructions, and Isekai/Wasm-pathway sections added; open items updated)",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (deck.gl/editable-layers status updated, Sylves added)"
+  ],
+  "risks": [
+    "Research/documentation only -- no dependency installed, no code written, no ADR reopened or rewritten.",
+    "Supersedes this document's own prior 'deck.gl decided for GM view' statement -- recorded as a revision within the same document (the doc's own status header already allows for 'Decided' items to reflect the latest owner direction), not silently overwritten without explanation."
+  ],
+  "next_responsible_party": "repository-owner"
+}
