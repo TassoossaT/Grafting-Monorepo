@@ -108,7 +108,8 @@
     },
     "[python]": {
       "editor.defaultFormatter": "ms-python.python"
-    }
+    },
+    "powershell.cwd": "🎯 Central (root, docs, ADRs, config)"
   },
   "extensions": {
     "recommendations": [
