@@ -121,3 +121,70 @@ Not decided by any research so far: whether Architecture Studio should even
 gain a Node-side backend, or be allowed to execute MCP tool calls rather than
 only display read-only derived knowledge. That decision precedes the library
 choice above.
+
+## Graph/diagram libraries (Architecture Studio code graph, future character webs)
+
+Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| **React Flow (xyflow)** | MIT | **Decided, top pick** | Symmetric `nodeTypes`/`edgeTypes` (both first-class React components) — X6 cannot do this for edges, confirmed via its own official docs (`x6-react-shape` is node-only by design) |
+| AntV X6 | MIT | Decided — Architecture-Studio-only, dropped from the VTT | Real remaining advantages (shared SVG document, raw SVG port attrs already built, first-party layout, higher perf ceiling) don't outweigh the node/edge symmetry requirement; still valid for Architecture Studio's existing `packages/x6-canvas` |
+| JointJS | MPL-2.0 core + paid JointJS+ | Discarded | X6 is a superset of this model with a bigger community and no paid tier |
+| maxGraph (draw.io engine) | Apache-2.0 | Discarded | Deepest low-level control and only one with built-in layout, but verbose old-school API and much smaller community than X6 |
+| Cytoscape.js | MIT | Discarded | Network-science/analysis oriented (Canvas + fixed style model), weak fit for rich custom nodes |
+| GoJS | Commercial | Discarded | Not free |
+| **Rete.js** | MIT | Standby, conditional | Wrong category for a static graph (it's an editor *framework* with real execution semantics, not a diagramming library) — the right tool only if a genuinely editable/executing pipeline is built: most concretely, a visual editor for the procedural-generation crates below. Has a real, verified 3D mode (`rete-area-3d-plugin`, built on Three.js) |
+
+## VTT map, terrain, and rendering
+
+Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| Three.js | — | **Decided** | Already a `Closed` rule in `GRAFTING_MASTER_SOURCE.md` for the Web VTT's renderer; not new, this session initially mistook it for new information |
+| **deck.gl** | MIT (OpenJS Foundation / vis.gl) | **Decided, GM-overview view** | Building extrusion, real (non-flat) terrain via `TerrainLayer`+`TerrainExtension`, route/flow via `TripsLayer`/`ArcLayer`, density via `HexagonLayer`, free 3D camera via `OrbitView` |
+| `@deck.gl-community/editable-layers` | Likely MIT (same `visgl` org as deck.gl core; not independently re-verified) | **Decided, route/polygon editing** | Actively-maintained successor to Uber's unmaintained `nebula.gl` |
+| `Tile3DLayer` | MIT (part of deck.gl) | Discarded for this use | Bound to the OGC 3D Tiles/ESRI I3S standard (real-provider formats); the generic `TileLayer` + `SimpleMeshLayer`/`ScenegraphLayer` underneath are the reusable pieces for custom procedural streaming |
+| MapLibre GL JS | BSD-style (via GeoLibre) | Discarded for GM-overview role | Superseded once deck.gl's building-extrusion/flow-visualization matched the owner's actual visual reference more precisely |
+| GeoLibre (whole platform) | MIT | Discarded | Real-world GIS analysis platform (SQL geoprocessing, satellite imagery, planetary basemaps) — wrong domain for fantasy map construction |
+| Tauri (pulled from GeoLibre) | MIT/Apache-2.0 | Standby | Relevant to the still-open `GATE-002`/`GATE-003` Desktop client question, not decided; would reuse the same web frontend on desktop |
+| Turf.js (pulled from GeoLibre) | MIT | Standby | Lightweight spatial math (distance, buffer, area) — useful for VTT distance/AoE/line-of-sight independent of any GIS framework |
+| `ghx_proc_gen` | Dual MIT/Apache-2.0 | **Decided** | 3D Wave Function Collapse/Model Synthesis, Rust, matches the Townscaper-style generation model chosen as the reference |
+| `fast-surface-nets-rs` | MIT OR Apache-2.0 | **Decided** | Smooth/organic terrain meshing |
+| `block-mesh-rs` | MIT OR Apache-2.0 | Standby, blocky alternative | Alternative to `fast-surface-nets-rs` if a blockier look is wanted instead |
+| `noise-rs` | Dual MIT/Apache-2.0 | **Decided** | Base noise feeding the meshing crates |
+| `building-blocks` | MIT/Apache-2.0 dual | Discarded | Archived/unmaintained; superseded by `block-mesh-rs`/`fast-surface-nets-rs` |
+| Godot Voxel module | MIT | Reference only | Tightly coupled to Godot 4; study the generator-graph/editing-layer design, don't depend on it |
+| Veloren | **GPL-3.0** | Reference only, code reuse excluded | Copyleft — architecture/algorithm reference only, per this repository's standing policy |
+| Voxelis | Dual MIT/Apache-2.0 | Standby | Smaller/newer sparse voxel octree DAG; license-clean fallback for the manual-editing/storage layer |
+| Houdini | Commercial | Discarded | Ruled out as embeddable tech; UX-paradigm reference only |
+| Blender Geometry Nodes | GPL | Reference only | Same standing GPL policy as Veloren — inspiration for the node-graph paradigm, never embeddable |
+| Babylon.js NodeGeometry | Apache-2.0 | Discarded | Conceptually closest "geometry nodes on the web," but JS-side logic conflicts with DEC-001 (Rust owns logic) |
+| Graphite | Apache-2.0 | Reference only | Closest architectural example of "Rust core + web node-graph editor," but 2D vector/compositing, not 3D geometry |
+
+No genuinely open-source, Houdini-equivalent, Rust-backed node-graph engine
+for 3D procedural generation exists today — recorded as a real gap, not an
+oversight, per `docs/research/vtt-map-and-terrain-construction-options.md`.
+
+## Component preview tooling (`packages/ui`, shared across apps)
+
+Full reasoning: discussed in conversation 2026-07-31; not (yet) captured in a
+dedicated `docs/research/*.md` file.
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| **Storybook** | MIT | Standby, owner's stated preference | v9 (2025) addressed the historical bloat complaint; richest addon/controls ecosystem of the candidates found |
+| Ladle | MIT | Discarded | Lighter/faster, but owner preferred Storybook's visual polish |
+| Bit | Apache-2.0 core (separate paid cloud layer) | Discarded | Most visually rich, but wants to own the whole build pipeline — disproportionate cost just for a nicer preview |
+| React Cosmos | MIT | Discarded | Reasonable middle ground, not chosen |
+| Playroom (SEEK) | MIT | Discarded | Different niche (live JSX scratchpad across themes/breakpoints), not a persistent component catalog |
+| React Styleguidist | MIT | Discarded | Maintenance slowing, hard-wired to Webpack, no Vite support |
+| Docusaurus + `theme-live-codeblock` | MIT | Reference only | Better fit for a future documentation-viewer feature, not component/props testing |
+| Histoire | MIT | Discarded | Vue/Svelte-first, no React support |
+| Docz | — | Discarded | Archived (dead), Nov 2025 |
+| Backlight.dev | — | Discarded | Shut down, Jun 2025 |
+| Gardenjs | MIT | Discarded | Real but tiny (~44 stars), too niche to depend on |
+
+Not yet formally confirmed by the owner as a final pick — recorded as the
+leading candidate, not a decision.

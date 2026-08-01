@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "THIRD-PARTY-ATTRIBUTION-SYSTEM",
+  "title": "Create a canonical third-party code attribution record, a marker convention, a deterministic check script, and a content-aware reminder hook",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T12:15:00-03:00",
+  "objective": "Owner-directed: given the plan to adapt/port MIT-licensed deck.gl code into a Three.js-native implementation, the owner committed to never erasing attribution and asked for (1) a canonical place recording it (referenced from the README), and (2) a tool that, every time third-party code is copied/adapted at this level, helps ensure attribution with a link to the original project is added. Design: THIRD_PARTY_NOTICES.md is the canonical record; a documented header-comment marker convention (`Adapted from <Project> (<url>). Original license: <SPDX-id>.`) is required on any file containing adapted third-party code; tools/scripts/check-third-party-notices.mjs deterministically scans git-tracked files for that marker and verifies a matching entry exists in THIRD_PARTY_NOTICES.md (a real, automatable --check, not just a soft reminder); tools/scripts/third-party-attribution-reminder.mjs is a content-aware (not just path-aware, unlike the existing research-registry-reminder.mjs) PostToolUse hook that inspects the actual Write/Edit content for the marker phrase pattern and reminds to run the check/update the notices file -- advisory only, never blocks, per the same design constraints as the existing hook. Rule cross-referenced into AGENTS.md/PROTOCOL.md so it's provider-neutral, matching how the existing docs-regen and research-registry rules are documented. AGENTS.md's 'introduce a tool/hook without need and evaluation' and 'changing hooks requires a separate task and explicit owner approval' gates are satisfied by this task record plus the owner's direct, explicit request.",
+  "affected_paths": [
+    ".ai/state/tasks/THIRD-PARTY-ATTRIBUTION-SYSTEM.json",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "AGENTS.md",
+    ".ai/coordination/PROTOCOL.md",
+    "tools/scripts/check-third-party-notices.mjs",
+    "tools/scripts/check-third-party-notices.test.mjs",
+    "tools/scripts/third-party-attribution-reminder.mjs",
+    "tools/scripts/third-party-attribution-reminder.test.mjs",
+    ".claude/settings.json",
+    ".github/workflows/ci.yml",
+    "package.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "Created THIRD_PARTY_NOTICES.md (canonical record, header-marker convention documented, notice-entry template, currently empty since no third-party code has been ported yet) and linked it from README.md's file index.",
+    "Created tools/scripts/check-third-party-notices.mjs: scans git-tracked files (via `git ls-files`, automatically respecting .gitignore; skips lockfiles and common binary extensions) for the 'Adapted from <project> (<url>)' marker and fails if a marked file's project has no matching THIRD_PARTY_NOTICES.md entry. 6 unit tests in check-third-party-notices.test.mjs.",
+    "Created tools/scripts/third-party-attribution-reminder.mjs: content-aware (inspects actual Write content / Edit new_string, not just file path -- a different technique than the existing path-only research-registry-reminder.mjs) PostToolUse hook; reminds via additionalContext when the marker phrase is detected, never blocks (PostToolUse cannot block an already-completed tool call). 6 unit tests in third-party-attribution-reminder.test.mjs.",
+    "Ran node --test on both new test files together: 12/12 pass. Ran the live check script against the current repo: '0 marked file(s), all have a matching notice' (correct, since no adaptation has happened yet).",
+    "Wired the reminder hook into .claude/settings.json as a second PostToolUse hook entry alongside the existing research-registry reminder; validated the file still parses as JSON.",
+    "Added both test invocations plus a live check-script invocation to .github/workflows/ci.yml, and a `licenses:third-party-check` npm script to package.json for discoverability.",
+    "Documented the rule (marker convention, when to add a notice entry, the check script, the advisory-only hook) as PROTOCOL.md rule 8 and cross-referenced it into AGENTS.md's completion-criteria bullet, provider-neutral (Claude's hook is a convenience; the written rule plus the deterministic check script are what actually govern every provider).",
+    "No third-party code has actually been adapted/copied yet in this task -- this builds the attribution infrastructure ahead of the planned deck.gl-to-Three.js porting work, per the owner's explicit request to have it ready first."
+  ],
+  "artifacts": [
+    "THIRD_PARTY_NOTICES.md (new)",
+    "README.md (pointer added)",
+    "tools/scripts/check-third-party-notices.mjs (new) + check-third-party-notices.test.mjs (new)",
+    "tools/scripts/third-party-attribution-reminder.mjs (new) + third-party-attribution-reminder.test.mjs (new)",
+    ".claude/settings.json (new PostToolUse hook entry)",
+    ".github/workflows/ci.yml (new test + check invocations)",
+    "package.json (new licenses:third-party-check script)",
+    ".ai/coordination/PROTOCOL.md (new rule 8)",
+    "AGENTS.md (completion-criteria bullet extended)"
+  ],
+  "risks": [
+    "The reminder hook is a best-effort heuristic (regex over Write/Edit content for an 'Adapted from ... (url)' phrase pattern) -- it cannot semantically detect all possible phrasings of 'this code came from elsewhere,' the same honest limitation already documented for the existing research-registry-reminder.mjs hook. The deterministic check script is the real enforcement; the hook is only a nudge.",
+    "Advisory only: the hook never blocks a tool call (PostToolUse cannot block an already-completed action), matching the existing hook's design.",
+    "No dependency installed, no third-party code actually copied/adapted yet in this task -- this builds the attribution infrastructure ahead of that work, per the owner's explicit request."
+  ],
+  "next_responsible_party": "repository-owner"
+}

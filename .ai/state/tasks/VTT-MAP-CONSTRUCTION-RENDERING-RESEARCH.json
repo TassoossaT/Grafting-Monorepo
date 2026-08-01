@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "VTT-MAP-CONSTRUCTION-RENDERING-RESEARCH",
+  "title": "Consolidate the VTT map/terrain construction and rendering architecture research and decisions into a durable document before continuing to plan",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T11:00:00-03:00",
+  "objective": "Owner-directed: a long conversational planning session covered the VTT product vision (better than Foundry, TaleSpire-inspired ease of building, Ordem Paranormal/Celbit visual bar, 2.5D aesthetic via art direction/camera rather than avoiding 3D tech), a four-tier construction model (great procedural defaults, manual construction/editing, import, AI/prompt-driven editing), reference games for building/terrain systems, Rust procedural-generation crate candidates, a resolved rendering split (Three.js for the player's immersive view, already locked in GRAFTING_MASTER_SOURCE.md; deck.gl for the GM's analytical/editable overview; React Flow for Architecture Studio's code graph and future character-relationship webs; Rete.js as an optional procedural-generation-authoring UI), a real X6 node/edge React-symmetry limitation found via official docs, and a from-GeoLibre spin-off (Tauri, Turf.js, MapLibre as independently-relevant candidates). The owner asked to register all of this in a durable document before continuing to plan next steps. This task creates docs/research/vtt-map-and-terrain-construction-options.md (new, following the same non-normative candidate-catalog doctrine as the other two docs/research/*.md files) and updates docs/research/RESEARCH-DECISIONS-REGISTRY.md with a new section pointing to it. It also flags, without silently rewriting, that docs/adr/ADR-0008-libs-boundary-and-domain-map.md's proposal to reuse packages/x6-canvas for the VTT's interactive map needs a follow-up amendment now that Three.js/deck.gl are confirmed as the VTT's actual renderers -- amending the ADR itself is left for explicit owner confirmation, not done unilaterally in this pass.",
+  "affected_paths": [
+    ".ai/state/tasks/VTT-MAP-CONSTRUCTION-RENDERING-RESEARCH.json",
+    "docs/research/vtt-map-and-terrain-construction-options.md",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Created docs/research/vtt-map-and-terrain-construction-options.md consolidating: product vision (VTT better than Foundry, TaleSpire-inspired building, Ordem Paranormal/Celbit visual bar, 2.5D as art-direction/camera choice not a tech-avoidance requirement), the four-tier construction model (defaults/manual/import/AI), the Command/DomainEvent unifying-substrate insight (reusing the already-built libs/engine/domain-core), the resolved rendering split (Three.js player view -- already Closed in the master source, corrected from this session's earlier mistaken treatment of it as new -- and deck.gl GM view), the React Flow vs X6 vs Rete.js node/edge-library decision grounded in this repo's actual packages/x6-canvas code and X6's own official docs, the full Townscaper/Valheim/Manor-Lords/No-Man's-Sky/Zelda-TotK/Besiege/Astroneer/TaleSpire reference-game survey, the Rust procedural-generation crate choices (ghx_proc_gen, fast-surface-nets-rs, block-mesh-rs, noise-rs) with license verification, the GeoLibre spin-off findings (Tauri, Turf.js, MapLibre pulled out independently; GeoLibre itself discarded as wrong-domain), and the deep deck.gl technical verification (TerrainLayer/TerrainExtension non-flat terrain, editable-layers route editing, Tile3DLayer's real scope limits, Effects system for fog-of-war/dark-vision, precise polygon-vs-heightmap-vs-point distinctions).",
+    "Updated docs/research/RESEARCH-DECISIONS-REGISTRY.md with three new sections (graph/diagram libraries, VTT map/terrain/rendering, component preview tooling) covering ~45 additional candidates with status/license/one-line reasoning, keeping the registry the single consolidated index per its own stated purpose.",
+    "Flagged, without unilaterally rewriting, that docs/adr/ADR-0008-libs-boundary-and-domain-map.md's X6-for-VTT-map proposal needs a follow-up amendment now that Three.js/deck.gl are confirmed as the VTT's actual renderers -- recorded as an explicit open item requiring the owner's sign-off on the ADR text itself, consistent with AGENTS.md's approval requirement for changing accepted decisions.",
+    "Six items explicitly recorded as still open/undecided (ADR-0008 amendment, import format, AI/prompt tool-interface design, deck.gl+Three.js coexistence, Storybook final confirmation, whether Rete.js is actually built) rather than silently resolved.",
+    "No dependency installed, no code written, no ADR reopened or rewritten -- consolidation/documentation only, per CLAUDE.md's planning-phase discipline."
+  ],
+  "artifacts": [
+    "docs/research/vtt-map-and-terrain-construction-options.md (new)",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (three new sections added)"
+  ],
+  "risks": [
+    "Research/consolidation only -- no dependency installed, no code written, no ADR reopened or rewritten. ADR-0008's tension with the Three.js/deck.gl rendering decision is flagged as a pending follow-up amendment, requiring the owner's explicit sign-off, not silently resolved here.",
+    "The VTT product vision and rendering architecture captured here emerged from an extended conversational session; several items remain explicitly open (import format, AI/prompt tool-interface design, deck.gl+Three.js data sync, Storybook-vs-Ladle final pick, Tauri for the still-open GATE-002/GATE-003 Desktop question) and are recorded as open, not decided."
+  ],
+  "next_responsible_party": "repository-owner"
+}

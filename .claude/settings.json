@@ -23,6 +23,12 @@
             "command": "node \"${CLAUDE_PROJECT_DIR}/tools/scripts/research-registry-reminder.mjs\" --root \"${CLAUDE_PROJECT_DIR}\"",
             "timeout": 10,
             "statusMessage": "Checking whether the research decisions registry needs an update"
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/tools/scripts/third-party-attribution-reminder.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Checking whether adapted third-party code needs an attribution notice"
           }
         ]
       }

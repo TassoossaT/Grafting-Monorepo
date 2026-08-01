@@ -140,7 +140,11 @@ A task can only be declared complete with applicable evidence:
   rule 6, `tools/scripts/README.md`); if `affected_paths` touch a
   `docs/research/*.md` file, update
   `docs/research/RESEARCH-DECISIONS-REGISTRY.md` when a candidate's status
-  changed (`.ai/coordination/PROTOCOL.md` rule 7);
+  changed (`.ai/coordination/PROTOCOL.md` rule 7); if `affected_paths`
+  include code copied or adapted from an external open-source project, add
+  the header marker and a matching `THIRD_PARTY_NOTICES.md` entry, then run
+  `node tools/scripts/check-third-party-notices.mjs`
+  (`.ai/coordination/PROTOCOL.md` rule 8);
 - Graph IR;
 - risks and limitations.
 

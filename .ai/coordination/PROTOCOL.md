@@ -183,6 +183,25 @@ Existing handoff files are never rewritten.
    and never blocks or edits the registry itself, so providers without an
    equivalent hook remain cooperatively governed by this rule the same way
    the rest of this protocol works.
+8. If any file under `affected_paths` contains code copied or adapted from
+   an external open-source project (not an ordinary declared dependency --
+   source that was read and rewritten/ported into this repository), add the
+   header marker `Adapted from <Project Name> (<source URL>).` /
+   `Original license: <SPDX-License-Identifier>. See THIRD_PARTY_NOTICES.md.`
+   to the top of that file, and add a matching entry to
+   `THIRD_PARTY_NOTICES.md` (template inside that file) before setting
+   `status: "completed"`. Run
+   `node tools/scripts/check-third-party-notices.mjs` -- it deterministically
+   scans every Git-tracked file for the marker and fails if a marked file's
+   project has no matching notice entry; this is a real check, not only a
+   reminder. Claude Code also carries a content-aware `PostToolUse` hook
+   (`tools/scripts/third-party-attribution-reminder.mjs`) that reminds when a
+   `Write`/`Edit` introduces the marker phrase; it only reminds and never
+   blocks, the same non-enforcing design as the research-registry hook, so
+   providers without an equivalent hook remain governed by this rule and the
+   check script directly. Attribution is never removed regardless of the
+   source project's license permissions around commercial or closed-source
+   use.
 
 ## Validation
 

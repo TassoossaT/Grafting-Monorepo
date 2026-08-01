@@ -72,6 +72,9 @@ jobs:
         run: |
           node --test tools/scripts/agent-task-guard.test.mjs
           node --test tools/scripts/research-registry-reminder.test.mjs
+          node --test tools/scripts/check-third-party-notices.test.mjs
+          node --test tools/scripts/third-party-attribution-reminder.test.mjs
+          node tools/scripts/check-third-party-notices.mjs
           pnpm exec nx run x6-canvas:check
           pnpm exec nx run x6-canvas:test
           pnpm exec nx run ui:check

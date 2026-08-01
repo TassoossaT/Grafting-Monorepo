@@ -28,7 +28,10 @@ See:
   and next steps;
 - [`AGENTS.md`](AGENTS.md) — operational contract for agents;
 - [`docs/adr/`](docs/adr/) — architectural decision records;
-- [`.ai/README.md`](.ai/README.md) — current scope of the AI Control Plane.
+- [`.ai/README.md`](.ai/README.md) — current scope of the AI Control Plane;
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — record of external
+  open-source code copied or adapted into this repository, with attribution
+  and license.
 
 ## Documentation authority
 
