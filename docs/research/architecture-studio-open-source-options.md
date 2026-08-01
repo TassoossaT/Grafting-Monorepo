@@ -4,6 +4,10 @@
 - Status: non-normative candidate catalog
 - Decision authority: none; inclusion here does not approve or adopt a tool
 - Product direction: repository-backed knowledge, project, validation, and AI-run review surface
+- Scope note: this document covers the Studio's own document/canvas/search/tracing
+  integrations. For AI agent context-management and multi-agent coordination
+  candidates (Serena, Repomix, Agent-MCP, and others), see
+  `docs/research/ai-agent-context-and-multi-agent-management-options.md`
 
 ## Purpose
 
@@ -69,7 +73,9 @@ Any future evaluation or adoption must preserve these accepted decisions:
 
 | Candidate | License | Potential role | Admission condition |
 | --- | --- | --- | --- |
-| [Qdrant](https://github.com/qdrant/qdrant) | Apache-2.0 | Vector and semantic retrieval, including a Rust implementation and local/edge options. | Tantivy plus graph queries must first prove insufficient for a measured use case |
+| [Qdrant](https://github.com/qdrant/qdrant) | Apache-2.0 | Full vector-database server (collections, replication, filtering, Rust-implemented). Superseded in preference by the two embedded alternatives below, found in a later research pass (2026-07-31); keep only if a full server-based deployment is specifically wanted. | Tantivy plus graph queries must first prove insufficient for a measured use case |
+| [Zvec](https://github.com/alibaba/zvec) | Apache-2.0 | **Preferred alternative to Qdrant.** In-process embedded vector database built on Alibaba's Proxima engine: HNSW/HNSW-RaBitQ/Flat/sparse indexes, INT8/INT4 quantization, WAL-backed durability, bindings for Python/Node/Go/Rust/Dart. No separate server process to run or operate, which fits this document's "smallest owning boundary" preference better than Qdrant. | Same as Qdrant: Tantivy plus graph queries must first prove insufficient for a measured use case |
+| [TurboVec](https://github.com/RyanCodrai/turbovec) | MIT | Narrower embedded alternative: Rust core with Python bindings, implements Google Research's TurboQuant compression algorithm specifically (10M-document corpus: 31GB float32 shrinks to 4GB), hand-tuned SIMD (AVX-512/NEON) kernels, no training step. Worth a look if Zvec's broader feature set (WAL, multiple index types, five language bindings) is more than actually needed. | Same admission condition as Qdrant/Zvec |
 | [Yrs/Y-CRDT](https://github.com/y-crdt/y-crdt) | MIT | Rust/Yjs-compatible collaborative documents with Rust and Wasm boundaries. | Real-time multi-user editing is approved and the persistence/sync model is decided |
 | [Excalidraw](https://github.com/excalidraw/excalidraw) | MIT | Free-form sketches stored as documents or attachments related to graph evidence. | A sketching use case exists that X6 semantic views should not serve |
 | [Tree-sitter](https://github.com/tree-sitter/tree-sitter) | MIT | Incremental multi-language syntax parsing for symbol and call-relationship views. | Native manifests, Rustdoc JSON, TypeScript declarations, and language-native extractors cannot satisfy a concrete cross-language navigation need |
@@ -170,4 +176,3 @@ Before any candidate becomes a dependency or deployed integration:
 6. define build, runtime, bundle, memory, and data-retention costs;
 7. run a disposable spike with acceptance and rollback criteria;
 8. update an ADR only when adoption changes an architectural decision.
-

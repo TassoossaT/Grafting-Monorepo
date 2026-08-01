@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "AGENT-MGMT-MCP-AGENT-NAME-COLLISION",
+  "title": "Record that lastmile-ai/mcp-agent (Apache-2.0) is a different project from rinadelph/Agent-MCP and does not fill the coordination-tool gap",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T12:25:00-03:00",
+  "objective": "Owner-directed: owner pointed at github.com/lastmile-ai/mcp-agent, correctly noting its Apache-2.0 license is fine for a future closed-source commercial sale, as a possible fit for the multi-agent-coordination gap left after dropping rinadelph/Agent-MCP (AGPL-3.0). Verified via WebFetch against the actual README: mcp-agent is a same-process Python framework implementing Anthropic's 'Building Effective Agents' composable patterns (router, orchestrator-workers, evaluator-optimizer) over MCP servers as tools -- it has no task-claiming, file-locking, or shared-coordination-state feature for concurrent agents editing the same files. It is the same functional shape as the already-deferred in-process frameworks (CrewAI, AutoGen/AG2, LangGraph, Camel-AI, OpenAI Agents SDK), not a stand-in for what Agent-MCP provided. License is confirmed fine (Apache-2.0, ~8.5k stars, active, 767 commits) but that does not change the shape mismatch. Recording this in docs/research/ai-agent-context-and-multi-agent-management-options.md so the near-identical name (Agent-MCP vs mcp-agent) doesn't cause re-research or confusion later.",
+  "affected_paths": [
+    ".ai/state/tasks/AGENT-MGMT-MCP-AGENT-NAME-COLLISION.json",
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Verified via WebFetch against the actual github.com/lastmile-ai/mcp-agent README and license badge: Apache-2.0 confirmed, ~8.5k stars, 872 forks, 767 commits, actively maintained.",
+    "Confirmed its core purpose in its own words ('Build effective agents with Model Context Protocol using simple, composable patterns') is a same-process Python agent-building framework, not a coordinator for independent CLI agent sessions -- no task-claiming, file-locking, or shared-coordination-state feature found.",
+    "Added it to the Part 2 in-process-frameworks table (7th entry) with an explicit name-collision warning against rinadelph/Agent-MCP, updated all '6 in-process frameworks' references in the document to '7', and added it to the 'not recommended further' and recommended-evaluation-order lists.",
+    "No dependency installed, no ADR touched, no code changed."
+  ],
+  "artifacts": [
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md (added mcp-agent as a 7th in-process framework with explicit name-collision note)"
+  ],
+  "risks": [
+    "Research only; no dependency added, no ADR touched, no code changed."
+  ],
+  "next_responsible_party": "repository-owner"
+}

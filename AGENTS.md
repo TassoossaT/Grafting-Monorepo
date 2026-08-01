@@ -137,7 +137,10 @@ A task can only be declared complete with applicable evidence:
   (TypeScript: `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that
   project's scoped API-reference evidence and run the `docs-quality-check`
   skill on it before declaring completion (`.ai/coordination/PROTOCOL.md`
-  rule 6, `tools/scripts/README.md`);
+  rule 6, `tools/scripts/README.md`); if `affected_paths` touch a
+  `docs/research/*.md` file, update
+  `docs/research/RESEARCH-DECISIONS-REGISTRY.md` when a candidate's status
+  changed (`.ai/coordination/PROTOCOL.md` rule 7);
 - Graph IR;
 - risks and limitations.
 

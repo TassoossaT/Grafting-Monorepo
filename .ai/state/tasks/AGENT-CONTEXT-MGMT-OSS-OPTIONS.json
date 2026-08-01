@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "AGENT-CONTEXT-MGMT-OSS-OPTIONS",
+  "title": "Research free/open-source options for AI agent context management and multi-agent management, and whether generated repo docs can feed them",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T10:45:00-03:00",
+  "objective": "Owner-directed: the owner tried to find a ready-made tool to integrate for 'a more sophisticated agent manager', did not find one that fit, and asked for an evaluation of free/open-source options that could be merged into this repository for (1) context management for AI agents and (2) management of different AI agents, plus whether the already-generated documentation (TypeDoc/Rust API Markdown under docs/generated/api/, Graph IR under docs/generated/) could integrate with these tools' terms. This continues the original Agent-MCP-adjacent research thread (PROV-014 in GRAFTING_MASTER_SOURCE.md already provisionally names Serena and ast-grep; SPIKE-AGENT-MCP-PILOT/SPIKE-AGENT-MCP-PERMANENT-CLONE already piloted rinadelph/Agent-MCP in a separate session) but is scoped to context-management and multi-agent-orchestration candidates specifically, distinct from docs/research/architecture-studio-open-source-options.md (owned by codex, ARCH-STUDIO-OSS-OPTIONS, scoped to the Studio's document/canvas/search/tracing surface only -- does not cover Serena, Kit, or agent-orchestration frameworks). Research only: produce a non-normative candidate catalog following the same doctrine as the existing Studio research doc (DEC-050 authored files remain authoritative; adoption checklist; license-aware; no dependency actually added). No code changes, no dependency installs, no ADR closure -- planning-phase research per CLAUDE.md.",
+  "affected_paths": [
+    ".ai/state/tasks/AGENT-CONTEXT-MGMT-OSS-OPTIONS.json",
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md",
+    "docs/research/architecture-studio-open-source-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Researched via two parallel background research passes verifying current license/maturity/integration-surface facts (not assumed from training data): context-management candidates Serena, Kit, Repomix, gitingest, Aider's repo-map; multi-agent candidates CrewAI, AutoGen/AG2, LangGraph, OpenHands/ACP, Camel-AI, OpenAI Agents SDK, cross-checked against the already-piloted Agent-MCP.",
+    "Confirmed the single most important fact the owner asked about (doc integration): Repomix ingests our generated docs/generated/api/**/*.md and Graph IR JSON for free via plain glob packing; Serena has a separate memories/*.md system that could be pre-seeded from them (the concrete PROV-014 spike that was never actually run); Kit, gitingest, and Aider's repo-map have no path to consume pre-existing generated docs, only raw-source-derived indexing.",
+    "Confirmed all six in-process multi-agent frameworks (CrewAI, AutoGen, AG2, LangGraph, Camel-AI, OpenAI Agents SDK) are the wrong shape for this repo's independent-CLI-agent setup; OpenHands/ACP is the one outlier that spawns Claude Code/Codex/Gemini CLI as external subprocesses, but has no file-locking/task-claim layer comparable to Agent-MCP or .ai/state/tasks.",
+    "Noted governance-relevant facts not previously in this repo's state: microsoft/autogen is in maintenance mode since Oct 2025 (AG2 is the maintained fork); OpenHands-Cloud is separately non-OSS-licensed from its MIT self-hosted core.",
+    "Cross-referenced against and did not duplicate/contradict docs/research/architecture-studio-open-source-options.md (owned by codex, different scope) or PROV-014/SPIKE-AGENT-MCP-PILOT/SPIKE-AGENT-MCP-PERMANENT-CLONE (left untouched, still provisional/completed respectively -- this task does not close PROV-014 or decide on Agent-MCP adoption).",
+    "No dependency installed, no ADR closed, no code changed -- planning-phase research only, per CLAUDE.md and the adoption checklist reused from the existing Studio research doc."
+  ],
+  "artifacts": [
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md (new)",
+    "docs/research/architecture-studio-open-source-options.md (added a scope-note cross-reference to the new document; fixed a pre-existing trailing-blank-line lint warning at end of file)"
+  ],
+  "risks": [
+    "Research only; no dependency is installed and no ADR is closed by this task.",
+    "Project features, maturity, and licenses can change after the research date and must be re-audited before any real adoption, per the existing adoption checklist."
+  ],
+  "next_responsible_party": "repository-owner"
+}

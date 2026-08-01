@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "AGENT-MGMT-PERMISSIVE-ALTERNATIVES",
+  "title": "Search for additional permissively-licensed multi-agent-management options to fill the gap left by dropping Agent-MCP (AGPL-3.0)",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T12:00:00-03:00",
+  "objective": "Owner-directed: after AGENT-CONTEXT-MGMT-COMMERCIAL-FIT dropped Agent-MCP for AGPL-3.0 conflicting with a future closed-source commercial sale, the owner asked to resume searching for options. This task researches additional free/open-source, permissively-licensed (non-copyleft) candidates specifically for managing multiple independent CLI coding agents (Claude Code, Codex CLI, Gemini CLI) on a shared repository -- the category Agent-MCP occupied -- since the prior pass (AGENT-CONTEXT-MGMT-OSS-OPTIONS) only found one real match for that category and it had to be dropped. Candidates: git-worktree-based parallel-agent orchestration UIs (Crystal, Claude Squad, Vibe Kanban, and any others found) and agent-facing task-management tools (Task Master AI / claude-task-master, Shrimp Task Manager). Must be read against docs/adr/ADR-0010-multi-agent-coordination.md, which already explicitly rejected introducing an MCP broker immediately ('adds service, security, and operational surface before file-based coordination has been evaluated') and DEC-032 (each task has a single executing owner; parallel executors use distinct worktrees) -- so candidates are evaluated as potential *complements* to the existing .ai/state/tasks protocol, not as replacements, unless a candidate is overwhelmingly compelling. Research/documentation only -- no dependency added, no ADR reopened.",
+  "affected_paths": [
+    ".ai/state/tasks/AGENT-MGMT-PERMISSIVE-ALTERNATIVES.json",
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Researched via one background research pass verifying current license/maturity/coordination-substance facts for 11 candidates: Crystal, Claude Squad, Vibe Kanban, Conductor, Task Master AI, Shrimp Task Manager, plus 5 found via broader search (Gas Town, Guild, wit, Agent Orchestrator, code-conductor).",
+    "Found two permissively-licensed candidates that functionally match what Agent-MCP provided (task-claiming, merge serialization across concurrent agents): Gas Town (MIT, ~17.4k stars, very active, git-backed) and Guild (Apache-2.0, smaller/lighter). Neither piloted yet; both flagged for the same disposable-spike treatment as the Agent-MCP pilot before any adoption decision.",
+    "Found Claude Squad is also AGPL-3.0 (same disqualifying reason as Agent-MCP) and Task Master AI is 'MIT License with Commons Clause' (forbids selling the software or a substantially-derived product) -- both flagged as carrying the same commercial-sale risk despite sounding permissive.",
+    "Found Crystal (deprecated Feb 2026) and Vibe Kanban (sunsetting per its own README) are permissively licensed but winding down -- a viability problem, not a license one. Confirmed Conductor (conductor.build) is fully proprietary, not open source, and excluded outright (distinct from an unrelated same-named Apache-2.0 Netflix workflow engine).",
+    "Updated docs/research/ai-agent-context-and-multi-agent-management-options.md: added a 'Follow-up pass' subsection under Part 2, revised the two live-questions synthesis, the license-cautions list, and the recommended-evaluation-order to reflect Gas Town/Guild as the next things to spike and the newly-found disqualified candidates.",
+    "Framed as read against ADR-0010 (MCP broker deferred until file coordination proves insufficient) and DEC-032 (distinct worktrees per parallel owner) -- Gas Town/Guild presented as complements to spike, not a decided replacement for .ai/state/tasks.",
+    "No dependency installed, no ADR reopened, no code changed."
+  ],
+  "artifacts": [
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md (added follow-up-pass candidates: Gas Town and Guild as promising permissive alternatives; 9 other candidates researched and ruled out with reasons recorded)"
+  ],
+  "risks": [
+    "Research only; no dependency added, no ADR reopened, no code changed.",
+    "Must not silently reopen or contradict ADR-0010's accepted decision to defer an MCP broker; any candidate is framed as a complement to .ai/state/tasks, not a replacement, unless flagged explicitly for separate owner review."
+  ],
+  "next_responsible_party": "repository-owner"
+}

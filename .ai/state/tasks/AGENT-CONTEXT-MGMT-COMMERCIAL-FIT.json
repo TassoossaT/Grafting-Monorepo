@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "AGENT-CONTEXT-MGMT-COMMERCIAL-FIT",
+  "title": "Add an explicit commercial-distribution-safety constraint to the AI agent context/multi-agent research, and revise the Agent-MCP recommendation accordingly",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-07-31T11:15:00-03:00",
+  "objective": "Owner-directed follow-up to AGENT-CONTEXT-MGMT-OSS-OPTIONS: the owner clarified that the reason Agent-MCP (AGPL-3.0) was rejected is specifically that AGPL blocks merging it into code intended for a future closed-source commercial sale. Update docs/research/ai-agent-context-and-multi-agent-management-options.md to (1) state this as an explicit hard evaluation axis, not just a general license caution, (2) explain the internal-tool-use vs. distributed/networked-component distinction that determines whether AGPL actually reaches a shipped product, and (3) revise the recommendation to explicitly deprioritize/drop Agent-MCP given this stated goal, favoring the already-identified MIT/Apache-2.0 candidates (Serena, Repomix, and the in-process frameworks on license grounds alone, separate from their architecture-fit issues). Research/documentation only -- no dependency added, no ADR closed, not legal advice (recommend real legal review before an actual commercial launch decision, consistent with the existing adoption checklist).",
+  "affected_paths": [
+    ".ai/state/tasks/AGENT-CONTEXT-MGMT-COMMERCIAL-FIT.json",
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "Added a 'Hard constraint: must not block a future closed-source commercial sale' subsection explaining the AGPL-3.0 distribution/network-service trigger mechanism (internal-tool use vs. distributed/embedded use), grounded in the existing copyleft caution already present in docs/research/architecture-studio-open-source-options.md.",
+    "Revised the Agent-MCP table row, the 'what this means' analysis, the license-cautions entry, and the recommended-evaluation-order step to explicitly recommend dropping Agent-MCP (not merely deferring it) given the owner's stated goal, while noting every other candidate in the document (Serena, Repomix, Kit, OpenHands core, all six in-process frameworks) is MIT/Apache-2.0 and carries no such risk.",
+    "Explicitly framed as reasoning to bring to a real legal review before an actual commercial-launch decision, not as legal advice itself.",
+    "No dependency installed, no ADR closed, no code changed."
+  ],
+  "artifacts": [
+    "docs/research/ai-agent-context-and-multi-agent-management-options.md (revised: commercial-distribution constraint added, Agent-MCP recommendation changed from defer to drop)"
+  ],
+  "risks": [
+    "Not legal advice; license-mechanism explanation only. Owner should get real legal review before any actual commercial launch decision that depends on this reading of AGPL-3.0.",
+    "Research only; no dependency added, no ADR closed."
+  ],
+  "next_responsible_party": "repository-owner"
+}

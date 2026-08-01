@@ -171,6 +171,18 @@ Existing handoff files are never rewritten.
    (`disallowed-tools: Write, Edit` in its own frontmatter) -- so a real
    finding becomes a suggested generator fix for the owner to confirm, not
    a silent change.
+7. If any `affected_paths` include a `docs/research/*.md` file other than
+   `docs/research/RESEARCH-DECISIONS-REGISTRY.md` itself, and the edit
+   changed a candidate's status (adopted, discarded, or standby/deferred),
+   update that candidate's row in the registry before setting
+   `status: "completed"`, and include the registry in
+   `affected_paths`/`artifacts`. The registry is a hand-maintained index, not
+   generated -- there is no script to run. Claude Code carries a `PostToolUse`
+   hook (`tools/scripts/research-registry-reminder.mjs`, wired in
+   `.claude/settings.json`) that reminds after such an edit; it only reminds
+   and never blocks or edits the registry itself, so providers without an
+   equivalent hook remain cooperatively governed by this rule the same way
+   the rest of this protocol works.
 
 ## Validation
 
