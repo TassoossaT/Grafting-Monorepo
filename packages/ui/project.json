@@ -24,10 +24,15 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm --filter @grafting/ui build" },
+      "options": {
+        "command": "pnpm --filter @grafting/ui build && node packages/ui/scripts/export-doc-mesh.mjs"
+      },
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
-      "outputs": ["{projectRoot}/dist"]
+      "outputs": [
+        "{projectRoot}/dist",
+        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
+      ]
     },
     "test": {
       "executor": "nx:run-commands",
@@ -74,6 +79,22 @@
         "{workspaceRoot}/docs/generated/api/ts/ui.api.md",
         "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
         "sharedGlobals"
+      ]
+    },
+    "docs-mesh-export": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node packages/ui/scripts/export-doc-mesh.mjs"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/index.ts",
+        "{projectRoot}/documentation/mesh/ui-doc-mesh.meta.v1.json",
+        "{projectRoot}/scripts/export-doc-mesh.mjs",
+        "{projectRoot}/project.json"
+      ],
+      "outputs": [
+        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
       ]
     }
   }

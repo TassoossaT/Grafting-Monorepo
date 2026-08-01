@@ -1,0 +1,469 @@
+{
+  "schemaVersion": "ui-doc-mesh/v1",
+  "package": "@grafting/ui",
+  "generatedAt": "source-controlled",
+  "components": [
+    {
+      "id": "atom.text",
+      "name": "Text",
+      "layer": "atom",
+      "summary": "Bounded text with semantic tone and optional truncation.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "content",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "tone",
+          "type": "TextTone",
+          "required": false
+        },
+        {
+          "name": "strong",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "truncate",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "tooltip",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "maxWidth",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "text-default",
+          "title": "Default text",
+          "snippet": "<Text content=\"Example label\" />"
+        }
+      ]
+    },
+    {
+      "id": "atom.status-badge",
+      "name": "StatusBadge",
+      "layer": "atom",
+      "summary": "Semantic status marker with Grafting-owned status names.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "status",
+          "type": "UiStatus",
+          "required": true
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "status-ready",
+          "title": "Ready status",
+          "snippet": "<StatusBadge status=\"success\" label=\"Ready\" />"
+        }
+      ]
+    },
+    {
+      "id": "atom.button",
+      "name": "Button",
+      "layer": "atom",
+      "summary": "Compact action button for lightweight command triggers.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "onClick",
+          "type": "() => void",
+          "required": false
+        },
+        {
+          "name": "tone",
+          "type": "\"default\" | \"accent\"",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "button-default",
+          "title": "Default button",
+          "snippet": "<Button label=\"Run\" />"
+        }
+      ]
+    },
+    {
+      "id": "atom.card",
+      "name": "Card",
+      "layer": "atom",
+      "summary": "Dependency-free bounded surface with replaceable accent and selection styles.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "shape",
+          "type": "CardShape",
+          "required": false
+        },
+        {
+          "name": "children",
+          "type": "ReactNode",
+          "required": true
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "accentColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "backgroundColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fillContainer",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "interactive",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "selected",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "selectedColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "borderWidth",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "borderRadius",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "padding",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "glowColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "card-basic",
+          "title": "Basic card",
+          "snippet": "<Card ariaLabel=\"Task status\">Body</Card>"
+        }
+      ]
+    },
+    {
+      "id": "molecule.entity-summary",
+      "name": "EntitySummary",
+      "layer": "molecule",
+      "summary": "Composable identity card built from Card, Text, and StatusBadge.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "UiStatus",
+          "required": false
+        },
+        {
+          "name": "statusLabel",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "leading",
+          "type": "ReactNode",
+          "required": false
+        },
+        {
+          "name": "actions",
+          "type": "ReactNode",
+          "required": false
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "accentColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "backgroundColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "fillContainer",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "interactive",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "selected",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "selectedColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "borderWidth",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "borderRadius",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "bodyPadding",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "contentGap",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "tags",
+          "type": "readonly string[]",
+          "required": false
+        },
+        {
+          "name": "glowColor",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "shape",
+          "type": "CardShape",
+          "required": false
+        },
+        {
+          "name": "actionLabel",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "onAction",
+          "type": "() => void",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "entity-summary-default",
+          "title": "Entity card",
+          "snippet": "<EntitySummary title=\"architecture-studio\" description=\"project\" />"
+        }
+      ]
+    },
+    {
+      "id": "organism.data-table",
+      "name": "DataTable",
+      "layer": "organism",
+      "summary": "Immutable rows table with controlled selection and custom renderers.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "rows",
+          "type": "readonly Row[]",
+          "required": true
+        },
+        {
+          "name": "columns",
+          "type": "readonly DataTableColumn<Row>[]",
+          "required": true
+        },
+        {
+          "name": "rowKey",
+          "type": "(row: Row) => DataTableRowKey",
+          "required": true
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "selection",
+          "type": "DataTableSelection",
+          "required": false
+        },
+        {
+          "name": "pagination",
+          "type": "DataTablePagination | false",
+          "required": false
+        },
+        {
+          "name": "density",
+          "type": "\"compact\" | \"regular\"",
+          "required": false
+        },
+        {
+          "name": "emptyMessage",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "loading",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "table-repo-nodes",
+          "title": "Repository nodes table",
+          "snippet": "<DataTable ariaLabel=\"Repository nodes\" rows={rows} rowKey={(row) => row.id} columns={columns} />"
+        }
+      ]
+    },
+    {
+      "id": "atom.grid-layout",
+      "name": "GridLayout",
+      "layer": "atom",
+      "summary": "Draggable/resizable dashboard layout using Grafting-owned panel contracts.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "panels",
+          "type": "readonly GridPanel[]",
+          "required": true
+        },
+        {
+          "name": "ariaLabel",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "columns",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "rowHeight",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "gap",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "draggable",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "resizable",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "onPlacementsChange",
+          "type": "(placements: readonly GridPanelPlacement[]) => void",
+          "required": false
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "id": "grid-dashboard",
+          "title": "Dashboard grid",
+          "snippet": "<GridLayout ariaLabel=\"Studio dashboard\" panels={panels} />"
+        }
+      ]
+    }
+  ]
+}

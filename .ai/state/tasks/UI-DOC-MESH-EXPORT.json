@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-DOC-MESH-EXPORT",
+  "title": "Add Storybook-independent UI documentation mesh export for Architecture Studio consumption",
+  "status": "completed",
+  "owner": "codex",
+  "revision": 2,
+  "updated_at": "2026-08-01T23:52:00Z",
+  "objective": "Implement an Nx-run documentation mesh export in packages/ui so Architecture Studio can consume structured UI documentation data without requiring Storybook.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-DOC-MESH-EXPORT.json",
+    "packages/ui/project.json",
+    "packages/ui/README.md",
+    "packages/ui/documentation/mesh/ui-doc-mesh.v1.json",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "docs/generated/meshes/ui-doc-mesh.v1.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: .\\node_modules\\.bin\\nx run ui:docs-mesh-export generated docs/generated/meshes/ui-doc-mesh.v1.json successfully.",
+    "DONE: rerun of .\\node_modules\\.bin\\nx run ui:docs-mesh-export produced a 100% Nx cache hit, confirming deterministic output.",
+    "DONE: no Storybook dependency/config was introduced; export path is plain JSON + Node script + Nx target only."
+  ],
+  "artifacts": [
+    ".ai/state/tasks/UI-DOC-MESH-EXPORT.json",
+    "packages/ui/project.json",
+    "packages/ui/README.md",
+    "packages/ui/documentation/mesh/ui-doc-mesh.v1.json",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "docs/generated/meshes/ui-doc-mesh.v1.json"
+  ],
+  "risks": [
+    "Mesh schema starts minimal and may need extension as Architecture Studio documentation surfaces evolve.",
+    "Source-of-truth remains manually curated JSON for now; automated extraction from TS props is intentionally out of scope."
+  ],
+  "next_responsible_party": "repository-owner"
+}

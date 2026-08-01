@@ -99,10 +99,23 @@ Snapshots remain under `tests/snapshots/`; they are not a second test suite.
 Targets:
 
 - `ui:check` — strict TypeScript checking;
-- `ui:build` — JavaScript and declaration output;
+- `ui:build` — JavaScript and declaration output, plus automatic export of the
+  documentation mesh to `docs/generated/meshes/ui-doc-mesh.v1.json`;
 - `ui:test` — server-rendered behavioral component contracts;
+- `ui:docs-mesh-export` — exports a Storybook-independent JSON mesh for
+  documentation/preview consumers (`docs/generated/meshes/ui-doc-mesh.v1.json`)
+  by extracting exported components and their `*Props` contracts from
+  `packages/ui/src/index.ts`, then merging optional editorial metadata from
+  `packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.json` (summary,
+  status, layer, examples);
 - `ui:api-check` — declaration generation, TSDoc enforcement, AntD leak scan,
   and comparison with the tracked public API baseline.
+
+The documentation mesh no longer requires maintaining a full manual component
+list. Add a new exported component in `src/index.ts` following the existing
+pattern (`export function Component(props: ComponentProps): ReactElement`) and
+it appears in the generated mesh automatically. Only optional editorial fields
+need metadata updates.
 
 To intentionally update the API baseline:
 
