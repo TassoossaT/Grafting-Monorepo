@@ -1,0 +1,89 @@
+{
+  "name": "generation-wasm",
+  "root": "libs/vtt/generation-wasm",
+  "projectType": "library",
+  "tags": [
+    "scope:vtt",
+    "lang:rust",
+    "platform:web",
+    "type:lib"
+  ],
+  "metadata": {
+    "graphIr": {
+      "id": "generation-wasm",
+      "kind": "lib",
+      "tags": [
+        "scope:vtt",
+        "lang:rust",
+        "platform:web",
+        "type:lib"
+      ]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo check -p grafting-vtt-generation-wasm"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo test -p grafting-vtt-generation-wasm"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "wasm-pack build --target web --out-dir ../../../packages/vtt-generation-wasm/pkg libs/vtt/generation-wasm"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain.toml"
+      ],
+      "outputs": ["{workspaceRoot}/packages/vtt-generation-wasm/pkg"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm"
+      },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm --check"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-vtt-generation-wasm.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+        "sharedGlobals"
+      ]
+    }
+  }
+}

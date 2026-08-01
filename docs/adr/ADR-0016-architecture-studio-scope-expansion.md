@@ -1,9 +1,9 @@
 # ADR-0016: Architecture Studio scope expansion — VTT generation-test surface and agent orchestration
 
-- Status: Proposed
+- Status: Accepted
 - Proposal date: 2026-08-01
-- Decision date: None
-- Record: None
+- Decision date: 2026-08-01
+- Record: DEC-054
 - Backlog item: ADR-0016-ARCH-STUDIO-SCOPE-EXPANSION
 - Related gate: None
 - Supersedes: None
@@ -70,6 +70,19 @@ a client-only route within [the Next.js Web host], not a standalone app,"
 while section 4.4's domain-map table still labels the VTT's row `apps/web-vtt`
 as if it were a separate application directory. This ADR does not depend on
 resolving that inconsistency and does not attempt to.
+
+**Correction (2026-08-01):** an earlier draft of this ADR stated "no `spikes/`
+directory currently exists on disk." That was wrong — a non-recursive
+directory listing was misread as the directory being empty. `spikes/wasm-worker-nextjs/`
+is real, fully documented, already-run precedent: it proves the exact
+Rust → Wasm → Dedicated-Worker → Next.js-client-route boundary (App Router,
+Next.js 16.2.12, `wasm-pack build --target web` output copied as a static
+asset and loaded via a runtime-variable `import(/* webpackIgnore: true */ ...)`,
+validated under both `next build`/Turbopack and `next dev` with a real
+headless-browser check) that the VTT generation-test surface's implementation
+reuses. The spike's own disposition note explicitly invites this reuse: "the
+wasm-pkg-as-static-asset-with-`webpackIgnore` pattern demonstrated here is
+what should carry forward into the real design."
 
 ## Scope
 
@@ -165,16 +178,13 @@ explicit direction.
 
 ## Decision
 
-Pending repository-owner decision.
+Accepted. The repository owner confirmed Option B directly (expand
+Architecture Studio itself to add both the VTT procedural-generation
+test/visualization surface and the agent-orchestration surface, with agent
+orchestration in scope now rather than deferred), then separately confirmed
+formal acceptance of this ADR once implementation was ready to begin.
 
-The repository owner has indicated, in the conversation that produced this
-ADR, a preference for Option B (expand Architecture Studio itself to add
-both the VTT procedural-generation test/visualization surface and the
-agent-orchestration surface, with agent orchestration in scope now rather
-than deferred). This ADR records that preference as the proposed decision
-for formal acceptance; it is not yet an accepted architectural decision.
-
-When accepted, Architecture Studio's scope becomes three named surfaces:
+Architecture Studio's scope is now three named surfaces:
 
 1. **Graph IR explorer** (existing, unchanged) — governed exactly as today
    by `docs/specs/architecture-studio-read-only-v1.md`.
@@ -265,11 +275,11 @@ existing explorer surface depends on. No existing consumer of
 
 ## Validation and evidence
 
-- Acceptance criterion: this ADR's `Status` field is changed to `Accepted`
-  by the repository owner, with a `Decision date` and `Record` (a `DEC-0NN`
-  number) filled in — an agent must not perform this step.
-- Acceptance criterion: after acceptance, the four companion-document
-  amendment notes described above exist and each names this ADR by ID.
+- Acceptance criterion (met): this ADR's `Status` field was changed to
+  `Accepted` by the repository owner's explicit direction, with `Decision
+  date` 2026-08-01 and `Record` `DEC-054` filled in.
+- Acceptance criterion (met): the four companion-document amendment notes
+  described above exist and each names this ADR by ID.
 - Evidence for the underlying research this ADR builds on:
   `docs/research/vtt-map-and-terrain-construction-options.md`,
   `docs/research/ai-agent-context-and-multi-agent-management-options.md`,
@@ -292,19 +302,15 @@ existing explorer surface depends on. No existing consumer of
 - **License drift.** Mitigation: the `ee/`-boundary re-verification
   requirement on every Mastra upgrade, stated explicitly in the license
   policy above, not left as a one-time check.
-- **This ADR is Proposed, not Accepted, and has no governing authority until
-  formally accepted.** Mitigation: the task record for this ADR explicitly
-  states no backend, framework, or generation-visualization code should be
-  written against it until acceptance.
 
 ## Rollback
 
-Reverting this ADR (setting `Status` back to a rejected/withdrawn state, or
-simply never accepting it) leaves `apps/architecture-studio` exactly as it is
-today — no code, dependency, or other document beyond this ADR and its four
-companion amendment notes would exist yet, since this task deliberately
-stops before any implementation. Removing the four amendment notes restores
-each companion document to its pre-ADR-0016 text.
+Reverting this decision (a future ADR setting this one's `Status` to
+`Superseded`, per `docs/adr/README.md`'s allowed-status rule) would leave any
+already-built surface-2/surface-3 code and dependencies to be removed
+explicitly by that later task; it does not retroactively undo work performed
+while this ADR was in effect. Removing the four companion-document amendment
+notes restores each document to its pre-ADR-0016 text.
 
 ## Follow-up work
 

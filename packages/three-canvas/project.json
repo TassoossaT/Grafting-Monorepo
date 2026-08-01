@@ -1,0 +1,72 @@
+{
+  "name": "three-canvas",
+  "root": "packages/three-canvas",
+  "projectType": "library",
+  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui-adapter"],
+  "metadata": {
+    "graphIr": {
+      "id": "three-canvas",
+      "kind": "lib",
+      "tags": ["scope:shared", "lang:typescript", "platform:web"]
+    },
+    "publicApi": {
+      "entryPoint": "src/index.ts",
+      "baseline": "tests/snapshots/public-api.md",
+      "forbiddenModules": ["three"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/three-canvas check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/three-canvas build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/three-canvas test" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/tests/**/*.test.mjs", "{projectRoot}/package.json", "{projectRoot}/tsconfig.json", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "api-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/three-canvas api-check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/project.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/tests/snapshots/public-api.md",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs three-canvas" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs three-canvas --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/project.json",
+        "{workspaceRoot}/docs/generated/api/ts/three-canvas.api.md",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
+    }
+  }
+}

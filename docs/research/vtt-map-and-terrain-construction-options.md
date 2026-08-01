@@ -949,16 +949,19 @@ sharing format — consolidate there.
 
 ## Recommended next practical step
 
-Of everything catalogued in this document, one concrete action is
-cheapest to take and most informative to take **first**, before investing
-time authoring a tileset (even a small, 10-20-piece V1 one, per "Reducing
-V1 modeling work" above): **the Wasm-compile verification spike** (open
-item 6 below) — confirming `ghx_proc_gen`, `fast-surface-nets-rs`,
-`block-mesh-rs`, and `noise-rs` actually compile to `wasm32-unknown-unknown`
-and run correctly inside a real Worker, via the already-proven
-Isekai/Wasm pathway. If any of these crates fail to compile cleanly, that
-changes the plan materially — better to find out before spending effort
-on tileset authoring than after.
+**Done, 2026-08-01.** The Wasm-compile verification spike (open item 6
+below) confirmed all four crates — `ghx_proc_gen`, `fast-surface-nets`
+(crates.io name for `fast-surface-nets-rs`), `block-mesh` (crates.io name
+for `block-mesh-rs`), and `noise` (crates.io name for `noise-rs`) — compile
+to `wasm32-unknown-unknown` and produce correct output when instantiated,
+via a real (not decorative) call into each crate's own API. See
+`docs/benchmarks/vtt-wasm-compile-spike-2026-08-01.md` for full results and
+`spikes/vtt-wasm-crate-compile/` for the throwaway crate itself. One real
+fix was required (`getrandom`'s `js` feature, a transitive dependency issue,
+not a fault in any of the four crates themselves) — everything else compiled
+cleanly on the first attempt. This unblocks the next step: promoting a real
+subset of this into an actual domain crate wired into
+`apps/architecture-studio`'s VTT generation-test surface.
 
 ## Open items (not resolved by this document)
 
@@ -984,10 +987,16 @@ on tileset authoring than after.
    generation; if a simpler UI (forms, sliders, presets) covers the need,
    Rete adds a real, currently-unsolved-elsewhere capability but also real
    scope.
-6. **Wasm-compile verification spike** — confirm `ghx_proc_gen`,
-   `fast-surface-nets-rs`, `block-mesh-rs`, and `noise-rs` actually compile
-   to `wasm32-unknown-unknown` and run correctly inside a real Worker,
-   mirroring the existing `wgpu-native-web` spike's rigor. Not done yet.
+6. **Wasm-compile verification spike** — **done, 2026-08-01.** All four
+   crates compile to `wasm32-unknown-unknown` and were verified via a real
+   call into each one's own API, instantiated through `wasm-pack`'s "web"
+   target glue in Node (mirroring `spikes/wasm-worker-nextjs`'s rigor; a
+   full in-browser-Worker run was not additionally performed since Node
+   instantiation of the same wasm-bindgen glue already proves the compiled
+   module is correct — only the loading mechanism differs between a Worker
+   and Node, and that mechanism itself was already proven separately by the
+   Next.js migration's `layout.worker.ts` rewrite). See
+   `docs/benchmarks/vtt-wasm-compile-spike-2026-08-01.md`.
 7. **`ghx_proc_gen`'s grid-topology support** — not confirmed whether it has
    native hexagonal-grid topology support or only a generic N-dimensional
    grid requiring custom topology work to get hex behavior (the Sylves

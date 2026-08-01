@@ -5,7 +5,7 @@
 > Version: `1.12.1`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-07-29 - prohibited agent-authored Git commits and default-branch pushes (DEC-053).
+> Last updated: 2026-08-01 - expanded Architecture Studio to add a VTT generation-test surface and an agent-orchestration surface (DEC-054).
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -400,6 +400,7 @@ and ADR-0013.
 | DEC-051 | Reusable graph structures, semantic validation, algorithms, ordering, queries, diffs, layout mathematics, and other significant calculations are authoritative in the Rust `grafting-graph-core` crate; callers own presentation enrichment, while `@grafting/x6-canvas` privately owns X6. Every consumed package has a generated public-API baseline, an `api-check` target, and behavioral contract tests, with native source declarations remaining authoritative (`docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`). |
 | DEC-052 | Reusable capability packages expose neutral mechanisms, Grafting-owned composition contracts, extension points, and only replaceable defaults; consuming applications own concrete visual identity, semantic roles, effects, and interaction policy. A package may privately adapt third-party code, but it must not hardcode one product's presentation or force consumers to bypass its boundary (`docs/adr/ADR-0014-composable-capability-packages.md`). |
 | DEC-053 | AI agents never create, amend, rewrite, merge, or implicitly produce Git commits on any branch. They may inspect/stage Git state, create isolated `ai/<agent>/<task-id>` branches, and assist with pull requests containing human-authored commits; only explicit isolated branches may be pushed, and agents never push to `main`/`master`, force remote refs, or merge pull requests (`docs/adr/ADR-0015-agent-git-write-policy.md`). |
+| DEC-054 | `apps/architecture-studio`'s scope expands to three named surfaces: (1) the existing Graph IR explorer, unchanged and still read-only; (2) a new VTT procedural-generation test/visualization surface executing Rust/Wasm generation code, rendered via Three.js inside `@grafting/ui`'s `GridLayout`; (3) a new agent-orchestration surface, a Node backend executing MCP-based agent workflows, bound by a license-risk policy (no Mastra `ee/` code reachable from a shipped build) and still routing any canonical-source edit through `ADR-0012`'s existing proposal/validation/plan/approval lifecycle. `ADR-0012`'s read-only-only exclusion is superseded for surfaces 2 and 3 only (`docs/adr/ADR-0016-architecture-studio-scope-expansion.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 

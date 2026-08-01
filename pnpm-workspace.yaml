@@ -8,6 +8,7 @@ allowBuilds:
   # Keep dependency scripts denied unless separately reviewed and approved.
   esbuild: false
   nx: true
+  sharp: set this to true or false
 overrides:
   # SECURITY-001: nx's own dependency tree still resolves these two
   # transitively; nx 23.1.0 is the latest stable release (23.2.0 only

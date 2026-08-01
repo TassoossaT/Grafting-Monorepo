@@ -7,5 +7,6 @@ members = [
     "libs/graph/core",
     "libs/isekai/capi-bridge",
     "libs/isekai/wasm-bridge",
+    "libs/vtt/generation-wasm",
     "tools/rust-api-docgen",
 ]

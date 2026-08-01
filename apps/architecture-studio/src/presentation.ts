@@ -1,5 +1,5 @@
 import type { CanvasEdge, CanvasEntityReference, CanvasNode } from "@grafting/x6-canvas";
-import type { GraphLayoutRequest, GraphLayoutSnapshot } from "./layout-client.js";
+import type { GraphLayoutRequest, GraphLayoutSnapshot } from "./layout-client.ts";
 import {
   ARCHITECTURE_CANVAS_VIEWS,
   ARCHITECTURE_NODE_SIZE,

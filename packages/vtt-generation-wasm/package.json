@@ -1,0 +1,10 @@
+{
+  "name": "@grafting/vtt-generation-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Technical package: compiled grafting-vtt-generation-wasm .wasm + loader + TS types. No domain logic here -- see libs/vtt/generation-wasm for the Rust source. Regenerate with: wasm-pack build --target web --out-dir ../../packages/vtt-generation-wasm/pkg (run from libs/vtt/generation-wasm).",
+  "type": "module",
+  "main": "./pkg/grafting_vtt_generation_wasm.js",
+  "types": "./pkg/grafting_vtt_generation_wasm.d.ts",
+  "files": ["pkg"]
+}

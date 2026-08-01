@@ -1,5 +1,19 @@
 # architecture-studio
 
+### `interface architecture-studio.generation.worker.HeightmapWorkerRequest`
+
+### `property architecture-studio.generation.worker.HeightmapWorkerRequest.height: number`
+
+### `property architecture-studio.generation.worker.HeightmapWorkerRequest.scale: number`
+
+### `property architecture-studio.generation.worker.HeightmapWorkerRequest.seed: number`
+
+### `property architecture-studio.generation.worker.HeightmapWorkerRequest.type: "generate"`
+
+### `property architecture-studio.generation.worker.HeightmapWorkerRequest.width: number`
+
+### `type architecture-studio.generation.worker.HeightmapWorkerResponse = { height: number; type: "result"; values: Float32Array; width: number } | { message: string; type: "error" }`
+
 ### `variable architecture-studio.canvas-composition.ARCHITECTURE_CANVAS_COMPOSITION: ReadOnlyCanvasOptions`
 
 Complete product-owned composition consumed by the generic canvas package.
