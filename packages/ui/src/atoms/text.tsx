@@ -6,7 +6,10 @@ export type TextTone = "default" | "muted" | "accent" | "danger";
 
 /** Public inputs for the smallest reusable text presentation primitive. */
 export interface TextProps {
-  /** Text content rendered by the component. */
+  /**
+   * Text content rendered by the component.
+   * @example "Example label"
+   */
   readonly content: string;
   /** Optional semantic color treatment. */
   readonly tone?: TextTone;
@@ -34,10 +37,6 @@ const toneColors: Readonly<Record<TextTone, string | undefined>> = {
  *
  * @layer atom
  * @status stable
- * @example Default text
- * ```tsx
- * <Text content="Example label" />
- * ```
  */
 export function Text(props: TextProps): ReactElement {
   const maxWidth = props.maxWidth === undefined ? "100%" : props.maxWidth;

@@ -6,9 +6,15 @@ import type { CardShape } from "../shared-types.js";
 export interface CardProps {
   /** Geometric outline of the card; defaults to a rounded rectangle. */
   readonly shape?: CardShape;
-  /** Caller-owned content rendered inside the card. */
+  /**
+   * Caller-owned content rendered inside the card.
+   * @example "Body"
+   */
   readonly children: ReactNode;
-  /** Optional accessible name for the card. */
+  /**
+   * Optional accessible name for the card.
+   * @example "Task status"
+   */
   readonly ariaLabel?: string;
   /** Optional accent used for the card boundary. */
   readonly accentColor?: string;
@@ -41,10 +47,6 @@ const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%,
  *
  * @layer atom
  * @status stable
- * @example Basic card
- * ```tsx
- * <Card ariaLabel="Task status">Body</Card>
- * ```
  */
 export function Card(props: CardProps): ReactElement {
   const usesAccentBoundary = props.accentColor !== undefined;

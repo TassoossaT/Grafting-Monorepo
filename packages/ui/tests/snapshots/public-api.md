@@ -26,7 +26,10 @@ import type { ReactElement } from "react";
 export type TextTone = "default" | "muted" | "accent" | "danger";
 /** Public inputs for the smallest reusable text presentation primitive. */
 export interface TextProps {
-    /** Text content rendered by the component. */
+    /**
+     * Text content rendered by the component.
+     * @example "Example label"
+     */
     readonly content: string;
     /** Optional semantic color treatment. */
     readonly tone?: TextTone;
@@ -46,10 +49,6 @@ export interface TextProps {
  *
  * @layer atom
  * @status stable
- * @example Default text
- * ```tsx
- * <Text content="Example label" />
- * ```
  */
 export declare function Text(props: TextProps): ReactElement;
 
@@ -57,9 +56,15 @@ import type { ReactElement } from "react";
 import type { UiStatus } from "../shared-types.js";
 /** Public inputs for a compact semantic status indicator. */
 export interface StatusBadgeProps {
-    /** Semantic state to present. */
+    /**
+     * Semantic state to present.
+     * @example "success"
+     */
     readonly status: UiStatus;
-    /** Human-readable status label. */
+    /**
+     * Human-readable status label.
+     * @example "Ready"
+     */
     readonly label: string;
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
@@ -69,17 +74,16 @@ export interface StatusBadgeProps {
  *
  * @layer atom
  * @status stable
- * @example Ready status
- * ```tsx
- * <StatusBadge status="success" label="Ready" />
- * ```
  */
 export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
 
 import type { ReactElement } from "react";
 /** Public inputs for a compact, clickable action. */
 export interface ButtonProps {
-    /** Human-readable button label. */
+    /**
+     * Human-readable button label.
+     * @example "Run"
+     */
     readonly label: string;
     /** Invoked when the button is activated. */
     readonly onClick?: () => void;
@@ -93,10 +97,6 @@ export interface ButtonProps {
  *
  * @layer atom
  * @status stable
- * @example Default button
- * ```tsx
- * <Button label="Run" />
- * ```
  */
 export declare function Button(props: ButtonProps): ReactElement;
 
@@ -106,9 +106,15 @@ import type { CardShape } from "../shared-types.js";
 export interface CardProps {
     /** Geometric outline of the card; defaults to a rounded rectangle. */
     readonly shape?: CardShape;
-    /** Caller-owned content rendered inside the card. */
+    /**
+     * Caller-owned content rendered inside the card.
+     * @example "Body"
+     */
     readonly children: ReactNode;
-    /** Optional accessible name for the card. */
+    /**
+     * Optional accessible name for the card.
+     * @example "Task status"
+     */
     readonly ariaLabel?: string;
     /** Optional accent used for the card boundary. */
     readonly accentColor?: string;
@@ -138,10 +144,6 @@ export interface CardProps {
  *
  * @layer atom
  * @status stable
- * @example Basic card
- * ```tsx
- * <Card ariaLabel="Task status">Body</Card>
- * ```
  */
 export declare function Card(props: CardProps): ReactElement;
 
@@ -149,9 +151,15 @@ import type { ReactElement, ReactNode } from "react";
 import type { CardShape, UiMountHandle, UiStatus } from "../shared-types.js";
 /** Public inputs for a reusable entity summary shown in canvases, tables, or inspectors. */
 export interface EntitySummaryProps {
-    /** Primary human-readable entity name. */
+    /**
+     * Primary human-readable entity name.
+     * @example "architecture-studio"
+     */
     readonly title: string;
-    /** Optional secondary description. */
+    /**
+     * Optional secondary description.
+     * @example "project"
+     */
     readonly description?: string;
     /** Optional semantic status. */
     readonly status?: UiStatus;
@@ -201,10 +209,6 @@ export interface EntitySummaryProps {
  *
  * @layer molecule
  * @status stable
- * @example Entity card
- * ```tsx
- * <EntitySummary title="architecture-studio" description="project" />
- * ```
  */
 export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
 /** Mounts an EntitySummary into an existing DOM host without exposing ReactDOM. */
@@ -253,13 +257,31 @@ export interface DataTablePagination {
 }
 /** Public inputs for the reusable Grafting data table. */
 export interface DataTableProps<Row extends object> {
-    /** Immutable caller-owned rows. */
+    /**
+     * Immutable caller-owned rows.
+     * @example
+     * ```tsx
+     * [{ id: "a", name: "architecture-studio" }, { id: "b", name: "ui" }]
+     * ```
+     */
     readonly rows: readonly Row[];
-    /** Immutable vendor-neutral column definitions. */
+    /**
+     * Immutable vendor-neutral column definitions.
+     * @example
+     * ```tsx
+     * [{ id: "name", header: "Name", value: (row) => row.name }]
+     * ```
+     */
     readonly columns: readonly DataTableColumn<Row>[];
-    /** Returns the stable key for a row. */
+    /**
+     * Returns the stable key for a row.
+     * @example (row) => row.id
+     */
     readonly rowKey: (row: Row) => DataTableRowKey;
-    /** Accessible table name. */
+    /**
+     * Accessible table name.
+     * @example "Repository nodes"
+     */
     readonly ariaLabel: string;
     /** Optional controlled selection. */
     readonly selection?: DataTableSelection;
@@ -279,15 +301,6 @@ export interface DataTableProps<Row extends object> {
  *
  * @layer organism
  * @status stable
- * @example Repository nodes table
- * ```tsx
- * <DataTable
- *   ariaLabel="Repository nodes"
- *   rows={[{ id: "a", name: "architecture-studio" }, { id: "b", name: "ui" }]}
- *   rowKey={(row) => row.id}
- *   columns={[{ id: "name", header: "Name", value: (row) => row.name }]}
- * />
- * ```
  */
 export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
 
@@ -326,9 +339,18 @@ export interface GridPanel {
 }
 /** Public inputs for the reusable Grafting dashboard grid layout. */
 export interface GridLayoutProps {
-    /** Immutable caller-owned panels and their current placements. */
+    /**
+     * Immutable caller-owned panels and their current placements.
+     * @example
+     * ```tsx
+     * [{ placement: { id: "p1", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]
+     * ```
+     */
     readonly panels: readonly GridPanel[];
-    /** Accessible name for the grid region. */
+    /**
+     * Accessible name for the grid region.
+     * @example "Studio dashboard"
+     */
     readonly ariaLabel: string;
     /** Number of columns the grid is divided into. */
     readonly columns?: number;
@@ -356,13 +378,6 @@ export interface GridLayoutProps {
  *
  * @layer atom
  * @status stable
- * @example Dashboard grid
- * ```tsx
- * <GridLayout
- *   ariaLabel="Studio dashboard"
- *   panels={[{ placement: { id: "p1", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]}
- * />
- * ```
  */
 export declare function GridLayout(props: GridLayoutProps): ReactElement;
 ```

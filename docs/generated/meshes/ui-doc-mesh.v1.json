@@ -13,44 +13,65 @@
         {
           "name": "content",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Example label\""
         },
         {
           "name": "tone",
           "type": "TextTone",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "default",
+              "muted",
+              "accent",
+              "danger"
+            ]
+          }
         },
         {
           "name": "strong",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "truncate",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "tooltip",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "maxWidth",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "default-text",
-          "title": "Default text",
-          "snippet": "<Text content=\"Example label\" />"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     },
@@ -64,24 +85,35 @@
         {
           "name": "status",
           "type": "UiStatus",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "select",
+            "options": [
+              "neutral",
+              "info",
+              "success",
+              "warning",
+              "error"
+            ]
+          },
+          "example": "\"success\""
         },
         {
           "name": "label",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Ready\""
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "ready-status",
-          "title": "Ready status",
-          "snippet": "<StatusBadge status=\"success\" label=\"Ready\" />"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     },
@@ -95,29 +127,39 @@
         {
           "name": "label",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Run\""
         },
         {
           "name": "onClick",
           "type": "() => void",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "action"
+          }
         },
         {
           "name": "tone",
           "type": "\"default\" | \"accent\"",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "default",
+              "accent"
+            ]
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "default-button",
-          "title": "Default button",
-          "snippet": "<Button label=\"Run\" />"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     },
@@ -131,79 +173,122 @@
         {
           "name": "shape",
           "type": "CardShape",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "rectangle",
+              "pill",
+              "circle",
+              "hexagon"
+            ]
+          }
         },
         {
           "name": "children",
           "type": "ReactNode",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "example": "\"Body\""
         },
         {
           "name": "ariaLabel",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Task status\""
         },
         {
           "name": "accentColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "backgroundColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "fillContainer",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "interactive",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "selected",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "selectedColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "borderWidth",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "borderRadius",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "padding",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "glowColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "basic-card",
-          "title": "Basic card",
-          "snippet": "<Card ariaLabel=\"Task status\">Body</Card>"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     },
@@ -217,124 +302,201 @@
         {
           "name": "title",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"architecture-studio\""
         },
         {
           "name": "description",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"project\""
         },
         {
           "name": "status",
           "type": "UiStatus",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "neutral",
+              "info",
+              "success",
+              "warning",
+              "error"
+            ]
+          }
         },
         {
           "name": "statusLabel",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "leading",
           "type": "ReactNode",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          }
         },
         {
           "name": "actions",
           "type": "ReactNode",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          }
         },
         {
           "name": "ariaLabel",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "accentColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "backgroundColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "fillContainer",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "interactive",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "selected",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "selectedColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "borderWidth",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "borderRadius",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "bodyPadding",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "contentGap",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "tags",
           "type": "readonly string[]",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          }
         },
         {
           "name": "glowColor",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "shape",
           "type": "CardShape",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "rectangle",
+              "pill",
+              "circle",
+              "hexagon"
+            ]
+          }
         },
         {
           "name": "actionLabel",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "onAction",
           "type": "() => void",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "entity-card",
-          "title": "Entity card",
-          "snippet": "<EntitySummary title=\"architecture-studio\" description=\"project\" />"
+          "required": false,
+          "control": {
+            "kind": "action"
+          }
         }
       ]
     },
@@ -348,59 +510,90 @@
         {
           "name": "rows",
           "type": "readonly Row[]",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "example": "[{ id: \"a\", name: \"architecture-studio\" }, { id: \"b\", name: \"ui\" }]"
         },
         {
           "name": "columns",
           "type": "readonly DataTableColumn<Row>[]",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "example": "[{ id: \"name\", header: \"Name\", value: (row) => row.name }]"
         },
         {
           "name": "rowKey",
           "type": "(row: Row) => DataTableRowKey",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "example": "(row) => row.id"
         },
         {
           "name": "ariaLabel",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Repository nodes\""
         },
         {
           "name": "selection",
           "type": "DataTableSelection",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          }
         },
         {
           "name": "pagination",
           "type": "DataTablePagination | false",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          }
         },
         {
           "name": "density",
           "type": "\"compact\" | \"regular\"",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "compact",
+              "regular"
+            ]
+          }
         },
         {
           "name": "emptyMessage",
           "type": "string",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         },
         {
           "name": "loading",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "repository-nodes-table",
-          "title": "Repository nodes table",
-          "snippet": "<DataTable\n  ariaLabel=\"Repository nodes\"\n  rows={[{ id: \"a\", name: \"architecture-studio\" }, { id: \"b\", name: \"ui\" }]}\n  rowKey={(row) => row.id}\n  columns={[{ id: \"name\", header: \"Name\", value: (row) => row.name }]}\n/>"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     },
@@ -414,54 +607,76 @@
         {
           "name": "panels",
           "type": "readonly GridPanel[]",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "example": "[{ placement: { id: \"p1\", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]"
         },
         {
           "name": "ariaLabel",
           "type": "string",
-          "required": true
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "example": "\"Studio dashboard\""
         },
         {
           "name": "columns",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "rowHeight",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "gap",
           "type": "number",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "number"
+          }
         },
         {
           "name": "draggable",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "resizable",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          }
         },
         {
           "name": "onPlacementsChange",
           "type": "(placements: readonly GridPanelPlacement[]) => void",
-          "required": false
+          "required": false,
+          "control": {
+            "kind": "action"
+          }
         },
         {
           "name": "className",
           "type": "string",
-          "required": false
-        }
-      ],
-      "examples": [
-        {
-          "id": "dashboard-grid",
-          "title": "Dashboard grid",
-          "snippet": "<GridLayout\n  ariaLabel=\"Studio dashboard\"\n  panels={[{ placement: { id: \"p1\", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]}\n/>"
+          "required": false,
+          "control": {
+            "kind": "text"
+          }
         }
       ]
     }

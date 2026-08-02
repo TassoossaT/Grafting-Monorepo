@@ -10,9 +10,15 @@ import type { CardShape, UiMountHandle, UiStatus } from "../shared-types.js";
 
 /** Public inputs for a reusable entity summary shown in canvases, tables, or inspectors. */
 export interface EntitySummaryProps {
-  /** Primary human-readable entity name. */
+  /**
+   * Primary human-readable entity name.
+   * @example "architecture-studio"
+   */
   readonly title: string;
-  /** Optional secondary description. */
+  /**
+   * Optional secondary description.
+   * @example "project"
+   */
   readonly description?: string;
   /** Optional semantic status. */
   readonly status?: UiStatus;
@@ -66,10 +72,6 @@ const MAX_VISIBLE_TAGS = 3;
  *
  * @layer molecule
  * @status stable
- * @example Entity card
- * ```tsx
- * <EntitySummary title="architecture-studio" description="project" />
- * ```
  */
 export function EntitySummary(props: EntitySummaryProps): ReactElement {
   const hasStatus = props.status !== undefined && props.statusLabel !== undefined;

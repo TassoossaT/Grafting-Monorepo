@@ -5,9 +5,15 @@ import type { UiStatus } from "../shared-types.js";
 
 /** Public inputs for a compact semantic status indicator. */
 export interface StatusBadgeProps {
-  /** Semantic state to present. */
+  /**
+   * Semantic state to present.
+   * @example "success"
+   */
   readonly status: UiStatus;
-  /** Human-readable status label. */
+  /**
+   * Human-readable status label.
+   * @example "Ready"
+   */
   readonly label: string;
   /** Optional caller-owned class name for layout composition. */
   readonly className?: string;
@@ -26,10 +32,6 @@ const statusColors: Readonly<Record<UiStatus, string>> = {
  *
  * @layer atom
  * @status stable
- * @example Ready status
- * ```tsx
- * <StatusBadge status="success" label="Ready" />
- * ```
  */
 export function StatusBadge(props: StatusBadgeProps): ReactElement {
   return (

@@ -14,6 +14,7 @@ const ts = tsModule?.default ?? tsModule;
 
 const COMPACT_WHITESPACE = /\s+/g;
 const FENCED_CODE_BLOCK = /```(?:tsx|jsx)?\r?\n([\s\S]*?)```/;
+const VOID_RETURNING_FUNCTION = /=>\s*void\s*$/;
 
 function normalizeType(typeText) {
   return typeText.replace(COMPACT_WHITESPACE, " ").trim();
@@ -33,11 +34,11 @@ function parsePropertyName(nameNode) {
   return nameNode.getText();
 }
 
-// The doc comment above each exported component function is this pipeline's
-// one hand-authored input (summary, @layer, @status, @example snippets). It
-// is parsed here as plain leading trivia -- not via TypeScript's JSDoc tag
-// AST -- so that JSX inside a fenced ```tsx block never risks being mangled
-// by a comment parser that was not designed to carry JSX verbatim.
+// Every doc comment in this pipeline (component-level and now per-prop) is
+// parsed here as plain leading trivia -- not via TypeScript's JSDoc tag AST --
+// so that JSX/arrow-function expressions inside a fenced ```tsx block never
+// risk being mangled by a comment parser that was not designed to carry them
+// verbatim.
 function getLeadingDocComment(sourceRaw, node) {
   const ranges = ts.getLeadingCommentRanges(sourceRaw, node.getFullStart()) ?? [];
   const jsDocRange = ranges
@@ -73,7 +74,7 @@ function parseDocBlocks(strippedText) {
   return blocks;
 }
 
-function parseDocComment(rawComment, componentName) {
+function parseComponentDoc(rawComment, componentName) {
   const blocks = parseDocBlocks(stripCommentDelimiters(rawComment));
 
   const description = blocks
@@ -88,44 +89,112 @@ function parseDocComment(rawComment, componentName) {
   const statusBlock = blocks.find((block) => block.tag === "status");
   const status = statusBlock === undefined ? "stable" : statusBlock.lines[0].trim();
 
-  const exampleBlocks = blocks.filter((block) => block.tag === "example");
-  const examples = exampleBlocks.map((block) => {
-    const title = block.lines[0].trim();
-    const body = block.lines.slice(1).join("\n");
-    const fenced = FENCED_CODE_BLOCK.exec(body);
-    if (fenced === null) {
-      throw new Error(`@example "${title}" on ${componentName} must contain a fenced \`\`\`tsx code block`);
-    }
-    return {
-      id: toKebabCase(title),
-      title,
-      snippet: fenced[1].trim(),
-    };
-  });
-
   return {
     summary: description.length > 0 ? description : `${componentName} exported by @grafting/ui.`,
     layer,
     status,
-    examples:
-      examples.length > 0
-        ? examples
-        : [{ id: `${toKebabCase(componentName)}-default`, title: `${componentName} default`, snippet: `<${componentName} />` }],
   };
 }
 
-function parsePropsInterface(sourceFile, interfaceDeclaration) {
+// A prop's @example is its Storybook default/seed value, written as a real
+// source expression (a string, number, array, arrow function, or even JSX)
+// rather than a JSON-restricted literal -- it is spliced verbatim into the
+// generated story's `args` object. Short values read inline
+// (`@example "Run"`); anything spanning multiple lines needs a fenced
+// ```tsx block, the same convention this pipeline already used for
+// component-level examples before this change moved them onto each prop.
+function parsePropExample(blocks, propName) {
+  const exampleBlock = blocks.find((block) => block.tag === "example");
+  if (exampleBlock === undefined) return undefined;
+
+  const [firstLine = "", ...rest] = exampleBlock.lines;
+  if (rest.every((line) => line.trim().length === 0)) {
+    return firstLine.trim();
+  }
+
+  const body = [firstLine, ...rest].join("\n");
+  const fenced = FENCED_CODE_BLOCK.exec(body);
+  if (fenced === null) {
+    throw new Error(`@example on prop "${propName}" must be inline or contain a fenced \`\`\`tsx code block`);
+  }
+  return fenced[1].trim();
+}
+
+// Classifies a prop into a Storybook control so argTypes/Controls can be
+// generated straight from the type the package already declares, with no
+// docgen step and no separate manual description of each control. A
+// function type is only ever auto-wrapped as a logging "action" when it
+// returns void -- anything else (e.g. DataTableProps.rowKey, whose return
+// value the table actually depends on) must supply its own @example instead,
+// since an action wrapper would silently return undefined. Arrays and plain
+// object types (DataTableProps.rows/columns, GridLayoutProps.panels, etc.)
+// get Storybook's real "object" control -- a JSON tree editor that lets a
+// caller add/remove/rename entries live -- rather than being left
+// uncontrolled; only ReactNode is excluded from that (it is routinely a real
+// JSX element, which a JSON editor cannot usefully represent), and a
+// non-void function stays uncontrolled for the reason above.
+function classifyControl(checker, member, typeText) {
+  if (typeText === "boolean") return { kind: "boolean" };
+  if (typeText === "number") return { kind: "number" };
+  if (typeText === "string") return { kind: "text" };
+  if (typeText.includes("=>")) {
+    return VOID_RETURNING_FUNCTION.test(typeText) ? { kind: "action" } : { kind: "disabled" };
+  }
+  if (typeText === "ReactNode") return { kind: "disabled" };
+
+  if (member.type !== undefined) {
+    const resolved = checker.getTypeFromTypeNode(member.type);
+    const constituents = resolved.isUnion() ? resolved.types : [resolved];
+    if (constituents.length > 0 && constituents.every((constituent) => constituent.isStringLiteral())) {
+      return { kind: "select", options: constituents.map((constituent) => constituent.value) };
+    }
+  }
+
+  return { kind: "object" };
+}
+
+function parsePropsInterface(checker, sourceFile, interfaceDeclaration) {
   const props = [];
+
   for (const member of interfaceDeclaration.members) {
     if (!ts.isPropertySignature(member) || member.type === undefined || member.name === undefined) {
       continue;
     }
+
+    const name = parsePropertyName(member.name);
+    const type = normalizeType(member.type.getText(sourceFile));
+    const required = member.questionToken === undefined;
+
+    const rawComment = getLeadingDocComment(sourceFile.text, member);
+    const blocks = rawComment === undefined ? [] : parseDocBlocks(stripCommentDelimiters(rawComment));
+    const example = parsePropExample(blocks, name);
+
+    if (required && example === undefined) {
+      throw new Error(
+        `required prop "${name}" on ${interfaceDeclaration.name.text} must have an @example value`,
+      );
+    }
+
+    // Storybook's "object" control initializes its own editable state to {}
+    // when no seed value is given in args -- for an optional prop that is
+    // meant to stay entirely absent unless the caller opts in (e.g.
+    // DataTableProps.selection, whose consuming code assumes it is either
+    // undefined or fully well-formed), that synthesized {} is a real prop
+    // value the component was never designed to receive. Only grant the
+    // "object" control when there is a real @example to seed it with;
+    // otherwise leave it uncontrolled, same as any other unrepresentable type.
+    const rawControl = classifyControl(checker, member, type);
+    const control = rawControl.kind === "object" && example === undefined ? { kind: "disabled" } : rawControl;
+
     props.push({
-      name: parsePropertyName(member.name),
-      type: normalizeType(member.type.getText(sourceFile)),
-      required: member.questionToken === undefined,
+      name,
+      type,
+      required,
+      control,
+      ...(example === undefined ? {} : { example }),
     });
   }
+
   return props;
 }
 
@@ -143,21 +212,18 @@ function resolveReExportedDeclarations(checker, specifier) {
 }
 
 function loadProgram() {
+  const diagnosticsHost = {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => packageRoot,
+    getNewLine: () => "\n",
+  };
   const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (config.error) {
-    throw new Error(ts.formatDiagnosticsWithColorAndContext([config.error], {
-      getCanonicalFileName: (fileName) => fileName,
-      getCurrentDirectory: () => packageRoot,
-      getNewLine: () => "\n",
-    }));
+    throw new Error(ts.formatDiagnosticsWithColorAndContext([config.error], diagnosticsHost));
   }
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, packageRoot, {}, tsconfigPath);
   if (parsed.errors.length > 0) {
-    throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors, {
-      getCanonicalFileName: (fileName) => fileName,
-      getCurrentDirectory: () => packageRoot,
-      getNewLine: () => "\n",
-    }));
+    throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors, diagnosticsHost));
   }
   return ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
 }
@@ -179,7 +245,10 @@ function collectComponents(checker, indexSourceFile) {
       for (const declaration of resolveReExportedDeclarations(checker, specifier)) {
         const declarationSourceFile = declaration.getSourceFile();
         if (ts.isInterfaceDeclaration(declaration) && exportedName.endsWith("Props")) {
-          propsInterfacesByName.set(exportedName, parsePropsInterface(declarationSourceFile, declaration));
+          propsInterfacesByName.set(
+            exportedName,
+            parsePropsInterface(checker, declarationSourceFile, declaration),
+          );
         } else if (ts.isFunctionDeclaration(declaration) && declaration.parameters.length > 0) {
           componentCandidates.push({ componentName: exportedName, declaration, declarationSourceFile });
         }
@@ -201,18 +270,16 @@ function collectComponents(checker, indexSourceFile) {
     const rawComment = getLeadingDocComment(declarationSourceFile.text, declaration);
     const doc =
       rawComment === undefined
-        ? parseDocComment("/***/", componentName)
-        : parseDocComment(rawComment, componentName);
-    const layer = doc.layer;
+        ? parseComponentDoc("/***/", componentName)
+        : parseComponentDoc(rawComment, componentName);
 
     components.push({
-      id: `${layer}.${toKebabCase(componentName)}`,
+      id: `${doc.layer}.${toKebabCase(componentName)}`,
       name: componentName,
-      layer,
+      layer: doc.layer,
       summary: doc.summary,
       status: doc.status,
       props,
-      examples: doc.examples,
     });
   }
 
@@ -243,8 +310,10 @@ function validateMesh(mesh) {
     if (!Array.isArray(component?.props)) {
       throw new Error(`Component ${component.id} must declare props as an array`);
     }
-    if (!Array.isArray(component?.examples)) {
-      throw new Error(`Component ${component.id} must declare examples as an array`);
+    for (const prop of component.props) {
+      if (typeof prop?.control?.kind !== "string") {
+        throw new Error(`Component ${component.id} prop "${prop?.name}" must declare a control kind`);
+      }
     }
   }
 }

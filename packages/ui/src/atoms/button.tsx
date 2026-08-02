@@ -3,7 +3,10 @@ import type { ReactElement } from "react";
 
 /** Public inputs for a compact, clickable action. */
 export interface ButtonProps {
-  /** Human-readable button label. */
+  /**
+   * Human-readable button label.
+   * @example "Run"
+   */
   readonly label: string;
   /** Invoked when the button is activated. */
   readonly onClick?: () => void;
@@ -18,10 +21,6 @@ export interface ButtonProps {
  *
  * @layer atom
  * @status stable
- * @example Default button
- * ```tsx
- * <Button label="Run" />
- * ```
  */
 export function Button(props: ButtonProps): ReactElement {
   return (

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-STORYBOOK-CONTROLS-FROM-PROPS",
+  "title": "Generate Storybook argTypes/Controls from each prop's reflected type, and move example values onto individual Props fields instead of a whole component-level JSX snippet",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T14:30:00-03:00",
+  "objective": "Owner-directed, two combined asks in one message: (1) 'Controls do Storybook a partir dos tipos das props' -- generate real argTypes automatically from each prop's already-reflected type (string-literal unions -> select dropdown, boolean -> toggle, number -> number field, void-returning functions like onClick -> Storybook actions so a click is visible in the Actions panel, fixing the reported 'This story has no controls' error and 'o botao nao pode ser clicado'), with stories rendering via args instead of static JSX. (2) Stop building each component's default example as a whole hand-written JSX snippet on the component's own TSDoc (the current `@example <title> \\`\\`\\`tsx ... \\`\\`\\`` tag on e.g. Text/Button); instead, each PROP carries its own `@example` value directly on its own field doc comment in the Props interface (e.g. ButtonProps.label gets `@example \"Run\"`), and export-doc-mesh.mjs assembles the story's default args from those per-prop values. Owner explicitly leaned toward the simpler end state ('talvez seja ideal ter uma so e todas as opcoes ficam em Controls'): one generated story per component (not one per hand-authored example), args-seeded from each prop's own @example, with every other value explorable live through Storybook's Controls panel -- confirmed via investigating the installed storybook@10.5.5 that Controls and the fn()-based actions pattern (from the `storybook/test` subpath, no separate @storybook/addon-actions/@storybook/test package needed in this version) are core, zero-addon-registration features, matching the owner's own already-reported error message (Storybook's own core UI, not a missing addon).",
+  "affected_paths": [
+    ".ai/state/tasks/UI-STORYBOOK-CONTROLS-FROM-PROPS.json",
+    "packages/ui/src/atoms/text.tsx",
+    "packages/ui/src/atoms/status-badge.tsx",
+    "packages/ui/src/atoms/button.tsx",
+    "packages/ui/src/atoms/card.tsx",
+    "packages/ui/src/atoms/grid-layout.tsx",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/src/organisms/data-table.tsx",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "packages/ui/tests/snapshots/public-api.md",
+    "packages/ui/README.md",
+    "docs/generated/meshes/ui-doc-mesh.v1.json",
+    "docs/generated/api/ts/ui.api.md",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "apps/architecture-studio/stories/button.stories.tsx",
+    "apps/architecture-studio/stories/card.stories.tsx",
+    "apps/architecture-studio/stories/data-table.stories.tsx",
+    "apps/architecture-studio/stories/entity-summary.stories.tsx",
+    "apps/architecture-studio/stories/grid-layout.stories.tsx",
+    "apps/architecture-studio/stories/status-badge.stories.tsx",
+    "apps/architecture-studio/stories/text.stories.tsx"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: every required prop across all 7 components has an @example tag on its own field doc comment (inline `@example \"value\"` for simple literals; fenced ```tsx block for DataTable's rows/columns and GridLayout's panels). export-doc-mesh.mjs throws a clear error if a required prop has none -- verified by construction, export ran clean.",
+    "DONE: export-doc-mesh.mjs's classifyControl() classifies each prop by its reflected type. First pass (before owner feedback): boolean/number/string mapped directly; string-literal unions (including named aliases TextTone/UiStatus/CardShape, resolved via checker.getTypeFromTypeNode(...).isUnion()/isStringLiteral()) became select+options; `=> void` functions became actions; everything else (including arrays/objects like DataTable.rows/columns) was left as a bare 'disabled' control with no way to edit. Owner reported back after checking the browser: could not add/rename DataTable columns, and Actions/Interactions showed nothing on click. Investigated against Storybook's own docs (WebSearch + WebFetch on storybook.js.org): fn() logging to the Actions panel needs zero extra config and was already correct in the generated code (confirmed by fetching the live dev server's actual Vite-transformed module and seeing storybook/test's fn resolve through Storybook's own __STORYBOOK_MODULE_TEST__ virtual module at runtime); the Interactions panel is expected to stay empty since none of these stories define a play() function -- not a bug. The real, fixable gap was the DataTable/GridLayout complaint: arrays and plain objects were being left fully uncontrolled instead of using Storybook's real 'object' JSON-tree-editor control. Fixed by adding an 'object' fallback (instead of 'disabled') for anything that is not boolean/number/string/a string-literal union/a `=> void` function/literally ReactNode/a non-void function -- ReactNode stays excluded (a JSON editor cannot usefully represent live JSX) and a non-void function (DataTableProps.rowKey, whose return value the Table depends on) stays excluded for the reason above.",
+    "DONE: docs/generated/meshes/ui-doc-mesh.v1.json's per-prop entries carry a `control` descriptor (now including the 'object' kind for DataTable.rows/columns/selection/pagination, GridLayout.panels, EntitySummary.tags) and an optional `example`; verified the final classification printout directly against every one of the 65 reflected props across all 7 components -- every select/action/object/disabled assignment matches the intended rule with no misclassification (in particular DataTable.pagination, a real `DataTablePagination | false` mixed union, correctly stayed out of 'select' rather than being misidentified as a string-literal union).",
+    "DONE: generate-stories.mjs emits one CSF3 `Default` story per component using `args`/`argTypes`; void-returning function props default to `fn()` from `storybook/test`; the new 'object' control kind renders as `{ control: \"object\" }` in argTypes.",
+    "DONE: all 7 regenerated story files reviewed directly for correctness (select options, action wiring, object controls, DataTable's generic Row-type inference from the args object, GridLayout's JSX-valued example spliced correctly).",
+    "DONE: packages/ui tsc --noEmit clean; node --test tests/*.test.mjs 9/9 pass; api-check baseline drift was exactly the expected doc-comment migration (examples moved from each component's function-level TSDoc onto each prop's own field), updated via UPDATE_SNAPSHOTS=yes and re-verified clean.",
+    "DONE: docs/generated/api/ts/ui.api.md regenerated (503 lines, unchanged size -- this generator only ever renders TypeDoc's comment.summary, never @example) and docs-quality-check run again: no size outlier, no formatting artifacts.",
+    "DONE: architecture-studio's own tsc --noEmit passes against the regenerated stories, both before and after the object-control fix.",
+    "DONE: killed and restarted the Storybook dev server from scratch (not just relying on Vite HMR) to rule out any stale-bundle explanation for the owner's 'onClick does nothing' report; confirmed via /index.json that all 7 stories serve correctly under the fresh process and the object-control change is reflected in the live-served module.",
+    "DONE: packages/ui/README.md's docs-mesh-export section rewritten to describe the current per-prop @example + generated-control convention (no more whole-component JSX snippet), including the new object-control behavior and its two exclusions (ReactNode, non-void functions).",
+    "NOT DONE (accepted limitation, same as prior tasks this session): actually seeing the Controls panel populated, editing a DataTable column live, and watching a click show up in the Actions panel all need the owner's own browser check after the restart -- no browser-automation tool is available in this session."
+  ],
+  "artifacts": [
+    "packages/ui/src/{atoms/text.tsx,atoms/status-badge.tsx,atoms/button.tsx,atoms/card.tsx,atoms/grid-layout.tsx,molecules/entity-summary.tsx,organisms/data-table.tsx} (per-prop @example tags; component-level @example removed)",
+    "packages/ui/scripts/export-doc-mesh.mjs (per-prop example parsing, checker-based control classification incl. the object-control fix, required-prop @example enforcement)",
+    "packages/ui/tests/snapshots/public-api.md (updated baseline, reviewed in full)",
+    "packages/ui/README.md (docs-mesh-export section rewritten)",
+    "docs/generated/meshes/ui-doc-mesh.v1.json + docs/generated/api/ts/ui.api.md (regenerated)",
+    "apps/architecture-studio/scripts/generate-stories.mjs (args/argTypes-based CSF3 generation, incl. the object control kind)",
+    "apps/architecture-studio/stories/*.stories.tsx (regenerated, all 7 reviewed)"
+  ],
+  "risks": [
+    "Auto-wrapping every function-typed prop as a Storybook action would silently break props whose return value the component actually depends on (DataTableProps.rowKey returns the row's real key; action()/fn() wrappers return undefined) -- guarded by only treating `=> void`-returning functions as safe actions; verified this classification landed correctly on the real mesh output.",
+    "storybook@10.5.5 is a very recent major version outside typical training familiarity; verified directly against the installed node_modules (storybook/test and storybook/actions subpaths, no separate @storybook/addon-actions or @storybook/test package), against the live dev server's actual transformed module output, and against Storybook's own current documentation (fetched live via WebSearch/WebFetch) rather than assumed from memory of older Storybook APIs.",
+    "Controls/Actions panel interactivity was verified only up to the live dev server correctly serving and transforming the story modules (including confirming storybook/test's fn resolves through Storybook's own runtime module system) -- the visual Controls-panel and Actions-panel behavior in a real browser was not confirmed by this agent, consistent with this session's standing lack of a browser-automation tool. The owner's original 'nothing happens on click' report may also have been observing a stale bundle from mid-implementation testing; the dev server was fully restarted (not just HMR-reloaded) as a precaution."
+  ],
+  "next_responsible_party": null
+}

@@ -49,13 +49,31 @@ export interface DataTablePagination {
 
 /** Public inputs for the reusable Grafting data table. */
 export interface DataTableProps<Row extends object> {
-  /** Immutable caller-owned rows. */
+  /**
+   * Immutable caller-owned rows.
+   * @example
+   * ```tsx
+   * [{ id: "a", name: "architecture-studio" }, { id: "b", name: "ui" }]
+   * ```
+   */
   readonly rows: readonly Row[];
-  /** Immutable vendor-neutral column definitions. */
+  /**
+   * Immutable vendor-neutral column definitions.
+   * @example
+   * ```tsx
+   * [{ id: "name", header: "Name", value: (row) => row.name }]
+   * ```
+   */
   readonly columns: readonly DataTableColumn<Row>[];
-  /** Returns the stable key for a row. */
+  /**
+   * Returns the stable key for a row.
+   * @example (row) => row.id
+   */
   readonly rowKey: (row: Row) => DataTableRowKey;
-  /** Accessible table name. */
+  /**
+   * Accessible table name.
+   * @example "Repository nodes"
+   */
   readonly ariaLabel: string;
   /** Optional controlled selection. */
   readonly selection?: DataTableSelection;
@@ -103,15 +121,6 @@ const normalizeKeys = (keys: readonly React.Key[]): readonly DataTableRowKey[] =
  *
  * @layer organism
  * @status stable
- * @example Repository nodes table
- * ```tsx
- * <DataTable
- *   ariaLabel="Repository nodes"
- *   rows={[{ id: "a", name: "architecture-studio" }, { id: "b", name: "ui" }]}
- *   rowKey={(row) => row.id}
- *   columns={[{ id: "name", header: "Name", value: (row) => row.name }]}
- * />
- * ```
  */
 export function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement {
   const columns: TableColumnsType<Row> = props.columns.map(toColumn);

@@ -104,18 +104,16 @@ Targets:
 - `ui:test` — server-rendered behavioral component contracts;
 - `ui:docs-mesh-export` — exports a Storybook-independent JSON mesh for
   documentation/preview consumers (`docs/generated/meshes/ui-doc-mesh.v1.json`)
-  by extracting exported components and their `*Props` contracts from
-  `packages/ui/src/index.ts`, then reading `@layer`, `@status`, and one or
-  more `@example <title>` tags directly from that same exported component's
-  TSDoc comment;
+  by extracting each exported component's `*Props` interface and reflecting
+  every field's type, then reading `@layer`/`@status` from the component's
+  own TSDoc and an `@example` value from each individual prop's own doc
+  comment;
 - `ui:api-check` — declaration generation, TSDoc enforcement, AntD leak scan,
   and comparison with the tracked public API baseline.
 
-The documentation mesh requires no separate file to maintain. Add a new
-exported component in `src/index.ts` following the existing pattern
-(`export function Component(props: ComponentProps): ReactElement`), document
-it with the usual TSDoc description plus `@layer`, `@status`, and at least one
-`@example <title>` tag whose body is a fenced ` ```tsx ` block, for example:
+The documentation mesh requires no separate file to maintain, and there is no
+whole hand-written JSX snippet to keep working either. Document a component
+with the usual TSDoc description plus `@layer`/`@status`:
 
 ```ts
 /**
@@ -123,19 +121,45 @@ it with the usual TSDoc description plus `@layer`, `@status`, and at least one
  *
  * @layer atom
  * @status stable
- * @example Default button
- * ```tsx
- * <Button label="Run" />
- * ```
  */
 export function Button(props: ButtonProps): ReactElement { ... }
 ```
 
-and it appears in the generated mesh automatically, with no other file to
-keep in sync. Multiple `@example` tags produce multiple examples/stories.
-`@layer` defaults to `atom` and `@status` to `stable` when omitted; a
-component with no `@example` tag gets one generated default snippet
-(`<ComponentName />`).
+and give each **prop** its own example value directly on that field, inline
+for a short literal or a fenced ` ```tsx ` block for anything longer (an
+array, an arrow function, even JSX):
+
+```ts
+export interface ButtonProps {
+  /**
+   * Human-readable button label.
+   * @example "Run"
+   */
+  readonly label: string;
+  /** Invoked when the button is activated. */
+  readonly onClick?: () => void;
+  /** Optional semantic emphasis. */
+  readonly tone?: "default" | "accent";
+}
+```
+
+Every **required** prop must carry an `@example` (the export fails loudly
+otherwise); optional props may skip it. `@layer` defaults to `atom` and
+`@status` to `stable` when omitted.
+
+Each prop's reflected type also drives a real Storybook control, generated
+straight from the mesh with no docgen step: a string-literal union (inline,
+or through a named alias like `TextTone`/`UiStatus`/`CardShape`) becomes a
+`select` with those options; `boolean`/`number`/`string` become the matching
+control; a callback typed `=> void` (e.g. `onClick`) becomes a logged
+Storybook action; an array or plain object (`DataTableProps.rows`/`columns`,
+`GridLayoutProps.panels`) becomes an editable `object` control. Only
+`ReactNode` (a real JSX value a JSON editor cannot usefully represent) and a
+callback whose return value the component actually depends on (e.g.
+`DataTableProps.rowKey`) stay uncontrolled — both still need their own
+`@example` if the prop is required. Each component gets exactly one
+generated "Default" story seeded from these examples; every other value is
+then explorable live through Storybook's own Controls panel.
 
 To intentionally update the API baseline:
 

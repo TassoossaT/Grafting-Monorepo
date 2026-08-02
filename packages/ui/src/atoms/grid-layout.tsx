@@ -39,9 +39,18 @@ export interface GridPanel {
 
 /** Public inputs for the reusable Grafting dashboard grid layout. */
 export interface GridLayoutProps {
-  /** Immutable caller-owned panels and their current placements. */
+  /**
+   * Immutable caller-owned panels and their current placements.
+   * @example
+   * ```tsx
+   * [{ placement: { id: "p1", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]
+   * ```
+   */
   readonly panels: readonly GridPanel[];
-  /** Accessible name for the grid region. */
+  /**
+   * Accessible name for the grid region.
+   * @example "Studio dashboard"
+   */
   readonly ariaLabel: string;
   /** Number of columns the grid is divided into. */
   readonly columns?: number;
@@ -101,13 +110,6 @@ const toLayout = (layout: Layout): readonly GridPanelPlacement[] => layout.map(t
  *
  * @layer atom
  * @status stable
- * @example Dashboard grid
- * ```tsx
- * <GridLayout
- *   ariaLabel="Studio dashboard"
- *   panels={[{ placement: { id: "p1", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]}
- * />
- * ```
  */
 export function GridLayout(props: GridLayoutProps): ReactElement {
   const gap = props.gap ?? 12;
