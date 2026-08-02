@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "ARCH-STUDIO-NEXTJS-MIGRATION",
   "title": "Migrate apps/architecture-studio from a plain TypeScript/Vite SPA to Next.js (App Router), preserving the read-only Graph IR explorer surface's behavior exactly",
-  "status": "blocked",
+  "status": "completed",
   "owner": "claude",
-  "revision": 3,
-  "updated_at": "2026-08-01T10:30:00-03:00",
+  "revision": 4,
+  "updated_at": "2026-08-01T13:00:00-03:00",
   "objective": "Owner-directed: 'Vamos refatorar o architecture studio para usar next e colocar os elementos para testar tudo + ia + o que esta planejado.' Per the approved plan (C:\\Users\\PICHAU\\.claude\\plans\\mellow-drifting-nova.md, Phase B) and ADR-0016 (Accepted, DEC-054), this task performs the framework migration itself: apps/architecture-studio becomes a Next.js App Router application, reusing the exact Rust->Wasm->Dedicated-Worker->Next.js-client-route pattern already proven by spikes/wasm-worker-nextjs (wasm-pack output copied as a static asset under public/, loaded via a runtime-variable import(/* webpackIgnore: true */ ...) inside the Worker). The existing Graph IR explorer surface's behavior must not change: same read-only canvas, same entity list/inspector/copy actions, same Rust-computed grouped-grid layout via the same layout_graph_json Wasm export. Pure logic/data modules (canvas-composition.ts, canvas-views.ts, presentation.ts, layout-client.ts) move unchanged; only main.ts (becomes a 'use client' React component), style.css (becomes globals.css), layout.worker.ts (Wasm-loading half rewritten to the static-asset pattern), and the app's own build/test tooling (package.json, project.json, tsconfig.json) change. Explicitly out of scope for this task: the VTT generation-test surface and the agent-orchestration surface (separate, later tasks per the plan's Phase C/D).",
   "affected_paths": [
     ".ai/state/tasks/ARCH-STUDIO-NEXTJS-MIGRATION.json",
@@ -30,16 +30,14 @@
     "pnpm-lock.yaml",
     "docs/generated/api/ts/architecture-studio.api.md"
   ],
-  "blockers": [
-    "No browser-automation tool is available to this agent in this environment (confirmed via ToolSearch), so the one remaining validation item -- real-browser confirmation that the migrated explorer surface behaves identically to the pre-migration Vite app (node list renders, canvas renders/pans/zooms, node/edge selection updates the inspector, copy actions work, center/reset buttons work) -- cannot be performed by the agent. Everything else in this task's validations list has been performed and passed. The dev server is running at http://127.0.0.1:4511/ (started via `pnpm nx run architecture-studio:dev`, i.e. `node scripts/copy-wasm-assets.mjs && next dev --hostname 127.0.0.1 --port 4511`) for the owner to check directly."
-  ],
+  "blockers": [],
   "validations": [
     "DONE: node --test test/*.test.mjs -- all 8 pre-existing canvas-composition/presentation tests pass unchanged.",
     "DONE: tsc -p tsconfig.json --noEmit passes clean (both before and after Next.js's own build-time tsconfig auto-patch: jsx -> react-jsx, allowJs added, .next/dev/types include added -- these are Next's own mandatory/suggested changes, kept as-is).",
     "DONE: next build (Turbopack) succeeds; root route prerenders as static content.",
     "DONE: next dev started at http://127.0.0.1:4511/; curl-verified HTTP 200 with the expected SSR shell markers present (topbar, entity-list, #graph, inspector-content, 'Loading Graph IR v1…'); curl-verified /wasm-pkg/grafting_isekai_wasm.js and /wasm-pkg/grafting_isekai_wasm_bg.wasm are both served with HTTP 200 (16248 and 196014 bytes respectively), confirming the static-asset Wasm-serving pattern from spikes/wasm-worker-nextjs works end to end for the real app.",
     "DONE: docs-generate re-run for architecture-studio; docs/generated/api/ts/architecture-studio.api.md is byte-identical to its pre-migration content (this app has no public package-API surface), so no docs-quality-check review was needed.",
-    "BLOCKED (see blockers): real-browser interactive confirmation (canvas rendering, click-to-select, Worker+Wasm layout computation actually completing in a browser's JS runtime) -- not observable via curl/Node; requires the repository owner to open http://127.0.0.1:4511/ in a browser."
+    "DONE: real-browser interactive confirmation performed by the repository owner directly (canvas rendering, click-to-select, Worker+Wasm layout computation) -- confirmed working."
   ],
   "artifacts": [
     "apps/architecture-studio/src/app/{layout.tsx,page.tsx,explorer-client.tsx,globals.css}",
@@ -59,5 +57,5 @@
     "Deploy runtime (Node vs Edge) is not validated by this task, consistent with the spike's own flagged open risk -- this task only targets local dev/build parity, not a production deployment target.",
     "No dependency was added without evaluation: next/react/react-dom versions match what @grafting/ui and @grafting/x6-canvas already use as devDependencies (react/react-dom 19.2.8), avoiding a second React version in the workspace."
   ],
-  "next_responsible_party": "repository-owner"
+  "next_responsible_party": "claude"
 }

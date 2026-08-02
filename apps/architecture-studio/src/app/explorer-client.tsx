@@ -244,7 +244,7 @@ export default function ExplorerClient() {
   }, []);
 
   return (
-    <>
+    <div className="explorer-shell">
       <header className="topbar">
         <div className="identity">
           <strong>Grafting Architecture Studio</strong>
@@ -287,6 +287,6 @@ export default function ExplorerClient() {
       <footer ref={statusRef} id="status" data-testid="status" role="status" aria-live="polite">
         Loading Graph IR v1…
       </footer>
-    </>
+    </div>
   );
 }

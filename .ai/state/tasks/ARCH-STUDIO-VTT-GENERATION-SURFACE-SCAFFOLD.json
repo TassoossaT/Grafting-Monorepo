@@ -2,10 +2,10 @@
   "schema_version": 1,
   "task_id": "ARCH-STUDIO-VTT-GENERATION-SURFACE-SCAFFOLD",
   "title": "Scaffold the VTT procedural-generation test/visualization surface in apps/architecture-studio: a real (minimal) Rust/Wasm domain crate, rendered via Three.js inside a GridLayout panel",
-  "status": "in_progress",
+  "status": "completed",
   "owner": "claude",
-  "revision": 3,
-  "updated_at": "2026-08-01T12:20:00-03:00",
+  "revision": 4,
+  "updated_at": "2026-08-01T13:05:00-03:00",
   "objective": "Continues the owner-approved plan (C:\\Users\\PICHAU\\.claude\\plans\\mellow-drifting-nova.md, Phase C step 2-3) after VTT-WASM-COMPILE-VERIFICATION-SPIKE confirmed all four candidate crates compile to wasm32-unknown-unknown. Per ADR-0016 (Accepted, DEC-054) surface 2 and its Follow-up work item 3, this task promotes a small, real (not toy) subset of that spike into an actual Rust domain crate wired into apps/architecture-studio, and adds a new route rendering its real output via Three.js inside @grafting/ui's GridLayout -- the first real GridLayout consumer, per packages/ui/DECISIONS.md's addendum. Scope is deliberately minimal: one real noise-backed heightmap generation function, not the full Townscaper-style WFC pipeline (tileset authoring, terrain/water passes remain explicitly out of scope per the plan and ADR-0016's own Follow-up work sequencing, items 3's 'real domain crate' promotion is scoped here to a small first slice, not the complete pipeline).",
   "affected_paths": [
     ".ai/state/tasks/ARCH-STUDIO-VTT-GENERATION-SURFACE-SCAFFOLD.json",
@@ -42,14 +42,24 @@
   ],
   "blockers": [],
   "validations": [
-    "PENDING: new crate scaffolded via tools/scripts/generate-rust-crate.mjs, then hand-extended with wasm-bindgen/cdylib wiring (generator has none) mirroring libs/isekai/wasm-bridge's Cargo.toml shape; cargo check/test pass natively.",
-    "PENDING: cargo build --target wasm32-unknown-unknown and wasm-pack build --target web succeed for the new crate.",
-    "PENDING: packages/vtt-generation-wasm npm wrapper mirrors packages/isekai-wasm's package.json shape.",
-    "PENDING: apps/architecture-studio's copy-wasm-assets.mjs extended to also copy this new package's pkg/ output as a static asset; the new route's worker loads it via the same webpackIgnore-guarded runtime-URL pattern already proven for the Graph IR layout worker and spikes/wasm-worker-nextjs.",
-    "PENDING: new /vtt-generation route renders real Wasm-computed heightmap output via Three.js inside one @grafting/ui GridLayout panel; tsc --noEmit and next build both pass.",
-    "PENDING: docs-generate re-run for both the new Rust crate and architecture-studio, per root AGENTS.md's completion rule."
+    "DONE: new crate scaffolded via tools/scripts/generate-rust-crate.mjs, then hand-extended with wasm-bindgen/cdylib wiring mirroring libs/isekai/wasm-bridge's Cargo.toml shape; cargo check/test pass natively (3/3 tests).",
+    "DONE: cargo build --target wasm32-unknown-unknown and wasm-pack build --target web both succeed for the new crate.",
+    "DONE: packages/vtt-generation-wasm npm wrapper mirrors packages/isekai-wasm's package.json/AGENTS.md/README.md shape.",
+    "DONE: new packages/three-canvas package created (owner correction mid-task) owning `three` behind a neutral createHeightfieldCanvas surface; api-check passes, no THREE.* type leaks; 2/2 unit tests pass on the pure options-defaulting logic.",
+    "DONE: apps/architecture-studio's copy-wasm-assets.mjs extended to also copy the new package's pkg/ output as a static asset; the new route's worker loads it via the same webpackIgnore-guarded runtime-URL pattern already proven for the Graph IR layout worker and spikes/wasm-worker-nextjs.",
+    "DONE: new /vtt-generation route renders real Wasm-computed heightmap output via @grafting/three-canvas inside one @grafting/ui GridLayout panel (three is no longer a direct architecture-studio dependency); tsc --noEmit and next build both pass; all 8 pre-existing app unit tests still pass.",
+    "DONE: docs-generate re-run for the new Rust crate, three-canvas, and architecture-studio; docs-quality-check skill run against all three regenerated files, no issues found.",
+    "DONE: real-browser interactive confirmation performed by the repository owner directly at /vtt-generation (seed/scale controls, rotating 3D terrain mesh from real Rust-computed noise) -- confirmed working."
   ],
-  "artifacts": [],
+  "artifacts": [
+    "libs/vtt/generation-wasm/{Cargo.toml,src/lib.rs,README.md,AGENTS.md,project.json}",
+    "packages/vtt-generation-wasm/{package.json,AGENTS.md,README.md,pkg/.gitignore}",
+    "packages/three-canvas/{package.json,project.json,tsconfig.json,AGENTS.md,README.md,src/index.ts,src/canvas/resolve-options.ts,src/canvas/create-heightfield-canvas.ts,tests/resolve-options.test.mjs,tests/snapshots/public-api.md}",
+    "apps/architecture-studio/src/app/vtt-generation/{page.tsx,generation-client.tsx,generation.worker.ts}",
+    "apps/architecture-studio/{package.json,project.json,scripts/copy-wasm-assets.mjs}",
+    "docs/generated/api/rust/grafting-vtt-generation-wasm.md",
+    "docs/generated/api/ts/{architecture-studio.api.md,three-canvas.api.md}"
+  ],
   "risks": [
     "Owner correction mid-task: importing `three` directly into apps/architecture-studio broke this repo's own established DEC-049/ADR-0011 and DEC-052/ADR-0014 pattern (third-party runtime libraries stay behind a Grafting-owned package boundary -- @antv/x6 behind packages/x6-canvas, antd behind packages/ui). Fixed by adding a new packages/three-canvas package exposing a neutral createHeightfieldCanvas(container, options) mechanism; no THREE.* type appears in its public surface. apps/architecture-studio now depends on @grafting/three-canvas instead of three directly.",
     "This crate's own directory needs no [workspace] opt-out (unlike the throwaway spikes/ crates) because libs/ crates are meant to join the real root Cargo.toml workspace -- confirmed consistent with every existing libs/ crate.",

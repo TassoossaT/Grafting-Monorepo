@@ -466,23 +466,23 @@ Semantic statuses supported by Grafting UI components.
 
 ### `function ui.Button(props: ButtonProps): ReactElement`
 
-Renders a compact clickable action without exposing the current component-library API.
+Compact action button for lightweight command triggers.
 
 ### `function ui.Card(props: CardProps): ReactElement`
 
-Renders a generic bounded card surface without exposing the current component-library API.
+Dependency-free bounded surface with replaceable accent and selection styles.
 
 ### `function ui.DataTable(props: DataTableProps<Row>): ReactElement`
 
-Renders a vendor-neutral data table whose cells may contain bespoke React components.
+Immutable rows table with controlled selection and custom renderers.
 
 ### `function ui.EntitySummary(props: EntitySummaryProps): ReactElement`
 
-Renders a reusable entity identity card suitable for tables, canvases, and inspectors.
+Composable identity card built from Card, Text, and StatusBadge.
 
 ### `function ui.GridLayout(props: GridLayoutProps): ReactElement`
 
-Renders a reusable dashboard grid layout with draggable, resizable panels.
+Draggable/resizable dashboard layout using Grafting-owned panel contracts.
 
 Consumers whose bundler does not already provide it must import
 `react-grid-layout/css/styles.css` once at the application level; this
@@ -496,8 +496,8 @@ Mounts an EntitySummary into an existing DOM host without exposing ReactDOM.
 
 ### `function ui.StatusBadge(props: StatusBadgeProps): ReactElement`
 
-Renders a compact semantic status without exposing the current component-library API.
+Semantic status marker with Grafting-owned status names.
 
 ### `function ui.Text(props: TextProps): ReactElement`
 
-Renders Grafting text without exposing the current component-library API.
+Bounded text with semantic tone and optional truncation.

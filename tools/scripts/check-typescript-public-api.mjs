@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
+const LOCAL_MODULE_SPECIFIER = /^\.\.?\//;
+
 const normalizeText = (value) => `${value.replaceAll("\r\n", "\n").trimEnd()}\n`;
 
 const normalizedPathKey = (value) => {
@@ -60,22 +62,77 @@ const isExportedStatement = (typescript, statement) =>
   typescript.isExportAssignment(statement) ||
   hasModifier(typescript, statement, typescript.SyntaxKind.ExportKeyword);
 
-export function collectUndocumentedPublicApi(typescript, sourceFile) {
+// A named re-export (`export { Text, type TextProps } from "./atoms/text.js"`)
+// carries no documentation of its own by design -- the entry point only
+// re-exports; the real TSDoc lives on the original declaration, in whichever
+// file actually declares it. Resolving through the alias is what lets that
+// file be the single source of truth instead of requiring a second, matching
+// comment on the re-export line itself.
+const resolveReExportedDeclarations = (typescript, checker, specifier) => {
+  const localTarget = checker.getExportSpecifierLocalTargetSymbol(specifier);
+  if (localTarget === undefined) return [];
+  const resolved =
+    (localTarget.flags & typescript.SymbolFlags.Alias) !== 0
+      ? checker.getAliasedSymbol(localTarget)
+      : localTarget;
+  return resolved.getDeclarations() ?? [];
+};
+
+const checkDeclarationDocumentation = (typescript, node, nodeSourceFile, bareName, missingLabel, missing) => {
+  if (!hasDocumentation(typescript, node)) {
+    missing.push(missingLabel);
+  }
+  for (const member of publicMembers(typescript, node)) {
+    if (!hasDocumentation(typescript, member)) {
+      missing.push(`member ${bareName}.${declarationLabel(member, nodeSourceFile)}`);
+    }
+  }
+};
+
+export function collectUndocumentedPublicApi(typescript, checker, sourceFile) {
   const missing = [];
 
   for (const statement of sourceFile.statements) {
     if (!isExportedStatement(typescript, statement)) continue;
 
-    const exportedLabel = declarationLabel(statement, sourceFile);
-    if (!hasDocumentation(typescript, statement)) {
-      missing.push(`export ${exportedLabel}`);
+    const isNamedReExport =
+      typescript.isExportDeclaration(statement) &&
+      statement.moduleSpecifier !== undefined &&
+      statement.exportClause !== undefined &&
+      typescript.isNamedExports(statement.exportClause);
+
+    if (isNamedReExport) {
+      for (const specifier of statement.exportClause.elements) {
+        const exportedName = specifier.name.getText(sourceFile);
+        const declarations = resolveReExportedDeclarations(typescript, checker, specifier);
+        if (declarations.length === 0) {
+          missing.push(`export ${exportedName} (could not resolve re-exported declaration)`);
+          continue;
+        }
+        for (const declaration of declarations) {
+          const declarationSourceFile = declaration.getSourceFile();
+          checkDeclarationDocumentation(
+            typescript,
+            declaration,
+            declarationSourceFile,
+            exportedName,
+            `export ${exportedName}`,
+            missing,
+          );
+        }
+      }
+      continue;
     }
 
-    for (const member of publicMembers(typescript, statement)) {
-      if (!hasDocumentation(typescript, member)) {
-        missing.push(`member ${exportedLabel}.${declarationLabel(member, sourceFile)}`);
-      }
-    }
+    const exportedLabel = declarationLabel(statement, sourceFile);
+    checkDeclarationDocumentation(
+      typescript,
+      statement,
+      sourceFile,
+      exportedLabel,
+      `export ${exportedLabel}`,
+      missing,
+    );
   }
 
   return missing.sort();
@@ -118,6 +175,72 @@ export function collectModuleSpecifiers(typescript, declarationText) {
   visit(sourceFile);
   return [...specifiers].sort();
 }
+
+const resolveModuleSpecifierSourcePath = (specifierText, containingDir) => {
+  const withoutExtension = specifierText.replace(/\.jsx?$/, "");
+  const candidate = resolve(containingDir, withoutExtension);
+  for (const extension of [".tsx", ".ts"]) {
+    if (existsSync(`${candidate}${extension}`)) return `${candidate}${extension}`;
+  }
+  return undefined;
+};
+
+const resolveOutputDeclarationPath = (typescript, parsedCommandLine, sourcePath) => {
+  const outputFileNames = typescript.getOutputFileNames(
+    parsedCommandLine,
+    sourcePath,
+    !typescript.sys.useCaseSensitiveFileNames,
+  );
+  return outputFileNames.find((fileName) => fileName.endsWith(".d.ts"));
+};
+
+// Plain `tsc` only emits a bare passthrough (`export { X } from "./y.js";`)
+// for a local re-export -- the real, expanded shape lives in that target
+// file's own declaration output. Inlining it here keeps the tracked baseline
+// one complete, reviewable document even though the source now colocates
+// each component's contract with its own implementation instead of
+// declaring everything directly in the entry point.
+const expandLocalReExports = (typescript, parsedCommandLine, entryPointPath, declarationText, outputs) => {
+  const sourceFile = typescript.createSourceFile(
+    "index.d.ts",
+    declarationText,
+    typescript.ScriptTarget.Latest,
+    true,
+    typescript.ScriptKind.TS,
+  );
+  const entryDir = dirname(entryPointPath);
+  const segments = [];
+
+  for (const statement of sourceFile.statements) {
+    const moduleSpecifierText =
+      typescript.isExportDeclaration(statement) &&
+      statement.moduleSpecifier !== undefined &&
+      typescript.isStringLiteral(statement.moduleSpecifier)
+        ? statement.moduleSpecifier.text
+        : undefined;
+
+    if (moduleSpecifierText === undefined || !LOCAL_MODULE_SPECIFIER.test(moduleSpecifierText)) {
+      segments.push(statement.getText(sourceFile).trim());
+      continue;
+    }
+
+    const targetSourcePath = resolveModuleSpecifierSourcePath(moduleSpecifierText, entryDir);
+    if (targetSourcePath === undefined) {
+      throw new Error(`cannot resolve re-exported module for baseline rendering: ${moduleSpecifierText}`);
+    }
+    const targetDeclarationPath = resolveOutputDeclarationPath(typescript, parsedCommandLine, targetSourcePath);
+    const targetDeclarationText =
+      targetDeclarationPath === undefined
+        ? undefined
+        : outputs.get(normalizedPathKey(targetDeclarationPath));
+    if (targetDeclarationText === undefined) {
+      throw new Error(`missing emitted declaration for re-exported module: ${moduleSpecifierText}`);
+    }
+    segments.push(targetDeclarationText.trim());
+  }
+
+  return normalizeText(segments.join("\n\n"));
+};
 
 export function assertNoForbiddenModules(moduleSpecifiers, forbiddenModules) {
   const leaks = moduleSpecifiers.filter((specifier) =>
@@ -215,7 +338,8 @@ const emitPublicDeclaration = (typescript, projectRoot, packageManifest, contrac
       `public API entry point is not part of the TypeScript program: ${contract.entryPoint}`,
     );
   }
-  const undocumented = collectUndocumentedPublicApi(typescript, sourceEntry);
+  const checker = program.getTypeChecker();
+  const undocumented = collectUndocumentedPublicApi(typescript, checker, sourceEntry);
   if (undocumented.length > 0) {
     throw new Error(`public API documentation is missing:\n- ${undocumented.join("\n- ")}`);
   }
@@ -247,7 +371,7 @@ const emitPublicDeclaration = (typescript, projectRoot, packageManifest, contrac
     );
   }
 
-  return declaration;
+  return expandLocalReExports(typescript, parsed, sourceEntryPath, declaration, outputs);
 };
 
 const renderBaseline = ({ packageName, typescriptVersion, contract, declaration }) => {

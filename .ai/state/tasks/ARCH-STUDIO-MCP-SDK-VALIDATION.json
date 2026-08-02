@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-MCP-SDK-VALIDATION",
+  "title": "Validate raw @modelcontextprotocol/sdk end to end inside apps/architecture-studio (agent-orchestration surface, Phase D of the approved plan) before any framework (Mastra/VoltAgent) is picked",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-01T13:40:00-03:00",
+  "objective": "Continues the owner-approved plan (C:\\Users\\PICHAU\\.claude\\plans\\mellow-drifting-nova.md, Phase D) under ADR-0016 (Accepted, DEC-054) surface 3. Per ADR-0016's own license-risk policy, the first implementation step for the agent-orchestration surface is validating raw @modelcontextprotocol/sdk (MIT/Apache-2.0-family, no framework lock-in) against one reference MCP server, before committing to Mastra or VoltAgent -- this task performs exactly that validation, nothing more. Concretely: a minimal, real MCP server (one genuinely useful tool -- listing Graph IR entities already exposed read-only by the existing explorer surface, not a toy add-two-numbers example) hosted via a Next.js Route Handler (Node.js runtime explicitly, not Edge, since MCP's real transports assume a Node process) using the SDK's StreamableHTTP transport, plus a minimal client page proving one real tool-call round-trip. Explicitly out of scope: picking Mastra/VoltAgent, any write/execute authority over canonical sources (ADR-0016's proposal/validation/plan/approval lifecycle still gates that), and any real multi-agent orchestration feature.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-MCP-SDK-VALIDATION.json",
+    "apps/architecture-studio/package.json",
+    "apps/architecture-studio/src/app/api/mcp/route.ts",
+    "apps/architecture-studio/src/app/api/mcp/server.ts",
+    "apps/architecture-studio/scripts/verify-mcp.mjs",
+    "apps/architecture-studio/src/app/agents/page.tsx",
+    "apps/architecture-studio/src/app/agents/agents-client.tsx",
+    "pnpm-lock.yaml",
+    "docs/generated/api/ts/architecture-studio.api.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: @modelcontextprotocol/sdk 1.30.0 added (MIT license, confirmed via npm view).",
+    "DONE: minimal MCP server (server.ts) exposing list_architecture_entities over docs/generated/grafting.graph.json, mounted at src/app/api/mcp/route.ts (Node.js runtime, WebStandardStreamableHTTPServerTransport, stateless mode).",
+    "DONE: /agents client page connects via the SDK's real Client + StreamableHTTPClientTransport and calls the tool.",
+    "DONE: tsc --noEmit and next build both pass; all 8 pre-existing unit tests still pass.",
+    "DONE: real round-trip verified twice via scripts/verify-mcp.mjs against the live dev server -- returned real Graph IR data (88 nodes/86 edges, first 3 nodes shown correctly).",
+    "DONE: docs-generate re-run for architecture-studio; docs-quality-check skill run, clean (238 lines, +17 vs. previous, no size/formatting issues)."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/src/app/api/mcp/{route.ts,server.ts}",
+    "apps/architecture-studio/src/app/agents/{page.tsx,agents-client.tsx}",
+    "apps/architecture-studio/scripts/verify-mcp.mjs",
+    "apps/architecture-studio/package.json (added @modelcontextprotocol/sdk, zod)",
+    "docs/generated/api/ts/architecture-studio.api.md"
+  ],
+  "risks": [
+    "This surface is the first place in this repository where a Studio-owned process executes MCP tool calls -- a materially larger trust boundary than anything the Studio has had before, per ADR-0016's own Consequences section. Scoped here to a single read-only query tool with zero write/execute authority over canonical sources.",
+    "Framework choice (Mastra vs VoltAgent) is explicitly deferred past this task, per ADR-0016's license-risk policy -- this task must not accidentally back into a framework dependency."
+  ],
+  "next_responsible_party": "claude"
+}

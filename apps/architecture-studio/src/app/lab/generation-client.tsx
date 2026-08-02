@@ -135,7 +135,7 @@ export default function GenerationClient() {
   ];
 
   return (
-    <div style={{ height: "100vh", padding: 12, boxSizing: "border-box" }}>
+    <div style={{ padding: 12, boxSizing: "border-box" }}>
       <GridLayout
         panels={panels}
         ariaLabel="VTT procedural-generation test surface"

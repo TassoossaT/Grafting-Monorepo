@@ -9,9 +9,19 @@ Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`
 ## Declaration entry point
 
 ```ts
-import type { ReactElement, ReactNode } from "react";
 /** Semantic statuses supported by Grafting UI components. */
 export type UiStatus = "neutral" | "info" | "success" | "warning" | "error";
+/** Geometric outline of a card surface. */
+export type CardShape = "rectangle" | "pill" | "circle" | "hexagon";
+/** Vendor-neutral lifecycle returned by a UI component mounted into an existing DOM host. */
+export interface UiMountHandle<Props> {
+    /** Re-renders the mounted component with complete next inputs. */
+    update(props: Props): void;
+    /** Unmounts the component and releases the owned UI root. */
+    dispose(): void;
+}
+
+import type { ReactElement } from "react";
 /** Semantic text tones independent of the current visual implementation. */
 export type TextTone = "default" | "muted" | "accent" | "danger";
 /** Public inputs for the smallest reusable text presentation primitive. */
@@ -31,6 +41,20 @@ export interface TextProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/**
+ * Bounded text with semantic tone and optional truncation.
+ *
+ * @layer atom
+ * @status stable
+ * @example Default text
+ * ```tsx
+ * <Text content="Example label" />
+ * ```
+ */
+export declare function Text(props: TextProps): ReactElement;
+
+import type { ReactElement } from "react";
+import type { UiStatus } from "../shared-types.js";
 /** Public inputs for a compact semantic status indicator. */
 export interface StatusBadgeProps {
     /** Semantic state to present. */
@@ -40,8 +64,19 @@ export interface StatusBadgeProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
-/** Geometric outline of a card surface. */
-export type CardShape = "rectangle" | "pill" | "circle" | "hexagon";
+/**
+ * Semantic status marker with Grafting-owned status names.
+ *
+ * @layer atom
+ * @status stable
+ * @example Ready status
+ * ```tsx
+ * <StatusBadge status="success" label="Ready" />
+ * ```
+ */
+export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
+
+import type { ReactElement } from "react";
 /** Public inputs for a compact, clickable action. */
 export interface ButtonProps {
     /** Human-readable button label. */
@@ -53,6 +88,20 @@ export interface ButtonProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/**
+ * Compact action button for lightweight command triggers.
+ *
+ * @layer atom
+ * @status stable
+ * @example Default button
+ * ```tsx
+ * <Button label="Run" />
+ * ```
+ */
+export declare function Button(props: ButtonProps): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
+import type { CardShape } from "../shared-types.js";
 /** Public inputs for the smallest reusable bounded surface: a generic card. */
 export interface CardProps {
     /** Geometric outline of the card; defaults to a rounded rectangle. */
@@ -84,6 +133,20 @@ export interface CardProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/**
+ * Dependency-free bounded surface with replaceable accent and selection styles.
+ *
+ * @layer atom
+ * @status stable
+ * @example Basic card
+ * ```tsx
+ * <Card ariaLabel="Task status">Body</Card>
+ * ```
+ */
+export declare function Card(props: CardProps): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
+import type { CardShape, UiMountHandle, UiStatus } from "../shared-types.js";
 /** Public inputs for a reusable entity summary shown in canvases, tables, or inspectors. */
 export interface EntitySummaryProps {
     /** Primary human-readable entity name. */
@@ -133,13 +196,21 @@ export interface EntitySummaryProps {
     /** Invoked when the action button is activated. */
     readonly onAction?: () => void;
 }
-/** Vendor-neutral lifecycle returned by a UI component mounted into an existing DOM host. */
-export interface UiMountHandle<Props> {
-    /** Re-renders the mounted component with complete next inputs. */
-    update(props: Props): void;
-    /** Unmounts the component and releases the owned UI root. */
-    dispose(): void;
-}
+/**
+ * Composable identity card built from Card, Text, and StatusBadge.
+ *
+ * @layer molecule
+ * @status stable
+ * @example Entity card
+ * ```tsx
+ * <EntitySummary title="architecture-studio" description="project" />
+ * ```
+ */
+export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
+/** Mounts an EntitySummary into an existing DOM host without exposing ReactDOM. */
+export declare function mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>;
+
+import type { ReactElement, ReactNode } from "react";
 /** Stable key used to identify a table row independently of its position. */
 export type DataTableRowKey = string | number;
 /** Immutable context supplied to a custom table-cell renderer. */
@@ -203,6 +274,24 @@ export interface DataTableProps<Row extends object> {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
+/**
+ * Immutable rows table with controlled selection and custom renderers.
+ *
+ * @layer organism
+ * @status stable
+ * @example Repository nodes table
+ * ```tsx
+ * <DataTable
+ *   ariaLabel="Repository nodes"
+ *   rows={[{ id: "a", name: "architecture-studio" }, { id: "b", name: "ui" }]}
+ *   rowKey={(row) => row.id}
+ *   columns={[{ id: "name", header: "Name", value: (row) => row.name }]}
+ * />
+ * ```
+ */
+export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
 /** Stable caller-owned identity for one panel in a Grafting grid layout. */
 export type GridPanelId = string;
 /** Vendor-neutral position and size of one panel, in grid units, not pixels. */
@@ -256,28 +345,24 @@ export interface GridLayoutProps {
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
 }
-/** Renders Grafting text without exposing the current component-library API. */
-export declare function Text(props: TextProps): ReactElement;
-/** Renders a compact semantic status without exposing the current component-library API. */
-export declare function StatusBadge(props: StatusBadgeProps): ReactElement;
-/** Renders a compact clickable action without exposing the current component-library API. */
-export declare function Button(props: ButtonProps): ReactElement;
-/** Renders a generic bounded card surface without exposing the current component-library API. */
-export declare function Card(props: CardProps): ReactElement;
-/** Renders a reusable entity identity card suitable for tables, canvases, and inspectors. */
-export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
-/** Mounts an EntitySummary into an existing DOM host without exposing ReactDOM. */
-export declare function mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>;
-/** Renders a vendor-neutral data table whose cells may contain bespoke React components. */
-export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
 /**
- * Renders a reusable dashboard grid layout with draggable, resizable panels.
+ * Draggable/resizable dashboard layout using Grafting-owned panel contracts.
  *
  * Consumers whose bundler does not already provide it must import
  * `react-grid-layout/css/styles.css` once at the application level; this
  * package does not import it as a side effect (it declares `sideEffects:
  * false`), so the choice of when and whether to load that stylesheet stays
  * with the consuming application.
+ *
+ * @layer atom
+ * @status stable
+ * @example Dashboard grid
+ * ```tsx
+ * <GridLayout
+ *   ariaLabel="Studio dashboard"
+ *   panels={[{ placement: { id: "p1", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]}
+ * />
+ * ```
  */
 export declare function GridLayout(props: GridLayoutProps): ReactElement;
 ```

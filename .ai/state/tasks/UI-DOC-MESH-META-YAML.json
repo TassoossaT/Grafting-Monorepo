@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-DOC-MESH-META-YAML",
+  "title": "Switch packages/ui's hand-authored ui-doc-mesh.meta.v1 file from JSON to YAML, so component example snippets no longer need to be written as escaped-quote strings",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-02T10:00:00-03:00",
+  "objective": "Owner-directed: 'eu quero melhorar a forma de escrever uma documentacao' (I want to improve the way of writing documentation) -- the real pain point is packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.json requiring JSX example snippets to be written as JSON strings with escaped quotes (e.g. \"<Button label=\\\"Run\\\" />\"), which is unpleasant to author and has no syntax highlighting. Owner chose YAML over a real-.tsx-example-file alternative (smaller, lower-risk change). YAML's block scalar syntax (|) lets the snippet be written as near-literal JSX with no escaping. Only the hand-authored input format changes -- packages/ui/scripts/export-doc-mesh.mjs's generated output (docs/generated/meshes/ui-doc-mesh.v1.json) stays JSON, since that is consumed programmatically (by architecture-studio's generate-stories.mjs and the gallery import), not hand-read.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-DOC-MESH-META-YAML.json",
+    "packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.yaml",
+    "packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.json",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "packages/ui/package.json",
+    "packages/ui/project.json",
+    "packages/ui/README.md",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: js-yaml 4.1.0 added (MIT, well-established release -- deliberately not the just-published 5.2.3, which triggered this repo's minimumReleaseAge supply-chain gate and got auto-excepted by pnpm without owner review; that exception was reverted and the version pinned down instead).",
+    "DONE: ui-doc-mesh.meta.v1.json converted to an equivalent ui-doc-mesh.meta.v1.yaml (same data, YAML block-scalar snippets, no escaping); old .json meta file deleted.",
+    "DONE: export-doc-mesh.mjs updated to parse the .yaml meta file via js-yaml's load(); each example's snippet is trimmed (YAML block scalars keep one trailing newline) before being written to the generated JSON.",
+    "DONE: project.json's docs-mesh-export target inputs updated to the .yaml path; README.md's reference updated.",
+    "DONE: full pipeline re-verified end to end: export-doc-mesh.mjs runs clean and produces correct multi-line-JSX snippets, apps/architecture-studio's generate-stories.mjs regenerates all 7 stories correctly (verified the multi-line DataTable snippet renders as valid JSX), Storybook dev server restarted and confirmed serving all stories via its own index.json, packages/ui's own tsc/tests(9)/api-check all still pass."
+  ],
+  "artifacts": [
+    "packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.yaml (new, replaces the .json file)",
+    "packages/ui/scripts/export-doc-mesh.mjs (parses YAML now)",
+    "packages/ui/{package.json,project.json,README.md}",
+    "apps/architecture-studio/scripts/generate-stories.mjs (comment fix)",
+    "pnpm-workspace.yaml (reverted an auto-added, unreviewed release-age exception)"
+  ],
+  "risks": [
+    "Pure format change to a hand-authored input file plus the one script that reads it -- the generated JSON output schema and every downstream consumer are unaffected."
+  ],
+  "next_responsible_party": "claude"
+}

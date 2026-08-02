@@ -1,5 +1,22 @@
 # architecture-studio
 
+### `variable architecture-studio.route.runtime: "nodejs"`
+
+### `function architecture-studio.route.DELETE(request: Request): Promise<Response>`
+
+### `reference architecture-studio.route.GET`
+
+### `reference architecture-studio.route.POST`
+
+### `function architecture-studio.server.createMcpServer(): McpServer`
+
+Minimal, real MCP server validating raw `@modelcontextprotocol/sdk` end to
+end, per ADR-0016's license-risk policy (validate the raw SDK before
+picking Mastra/VoltAgent). One tool, `list_architecture_entities`, queries
+the same already-public, read-only Graph IR v1 artifact the explorer
+surface renders -- no write/execute authority over any canonical source
+is granted here.
+
 ### `interface architecture-studio.generation.worker.HeightmapWorkerRequest`
 
 ### `property architecture-studio.generation.worker.HeightmapWorkerRequest.height: number`

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-OUT-OF-UI",
+  "title": "Move Storybook-specific files (generate-stories.mjs, *.stories.tsx) out of packages/ui into apps/architecture-studio, so packages/ui never references Storybook at all",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-02T09:20:00-03:00",
+  "objective": "Owner-directed architectural correction: 'eu quero que o pacote nem sabia que o storybook exista, ele precisa se autodocumentar de forma generica e agnostica' (I want the package to not even know Storybook exists; it needs to self-document generically and agnostically). packages/ui/scripts/generate-stories.mjs and packages/ui/stories/*.stories.tsx both import @storybook/react-vite types -- real Storybook awareness living inside a package meant to be tool-agnostic (DEC-049/ADR-0011). packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.json and packages/ui/scripts/export-doc-mesh.mjs stay in packages/ui unchanged -- they are already generic (plain JSON, JSX-as-string snippets, no Storybook import) and are the correct place for the package's own self-description. Only the Storybook-consuming half moves to apps/architecture-studio (where Storybook itself is configured), reading that same generic JSON from the outside.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-OUT-OF-UI.json",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "apps/architecture-studio/stories/button.stories.tsx",
+    "apps/architecture-studio/stories/card.stories.tsx",
+    "apps/architecture-studio/stories/text.stories.tsx",
+    "apps/architecture-studio/stories/status-badge.stories.tsx",
+    "apps/architecture-studio/stories/data-table.stories.tsx",
+    "apps/architecture-studio/stories/grid-layout.stories.tsx",
+    "apps/architecture-studio/stories/entity-summary.stories.tsx",
+    "apps/architecture-studio/.storybook/main.ts",
+    "apps/architecture-studio/project.json",
+    "packages/ui/scripts/generate-stories.mjs",
+    "packages/ui/stories/button.stories.tsx",
+    "packages/ui/stories/card.stories.tsx",
+    "packages/ui/stories/text.stories.tsx",
+    "packages/ui/stories/status-badge.stories.tsx",
+    "packages/ui/stories/data-table.stories.tsx",
+    "packages/ui/stories/grid-layout.stories.tsx",
+    "packages/ui/stories/entity-summary.stories.tsx",
+    "packages/ui/project.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: packages/ui/scripts/generate-stories.mjs and packages/ui/stories/ deleted; packages/ui/project.json's stories-generate/stories-check targets removed.",
+    "DONE: apps/architecture-studio/scripts/generate-stories.mjs created (same logic, paths recalculated for its new location), generating apps/architecture-studio/stories/*.stories.tsx (7 files).",
+    "DONE: apps/architecture-studio/.storybook/main.ts's stories glob updated to '../stories/**/*.stories.tsx'.",
+    "DONE: apps/architecture-studio/project.json gains stories-generate/stories-check targets (depending on ui:docs-mesh-export); storybook/build-storybook targets now depend on the local stories-generate instead of ui:stories-generate.",
+    "DONE: grep confirms zero remaining '@storybook'/'storybook' references anywhere under packages/ui/ except one pre-existing README line ('Storybook-independent JSON mesh') that predates this session and correctly documents the already-intended design.",
+    "DONE: storybook build succeeds from the new location; packages/ui's own tsc/tests(9)/api-check and architecture-studio's tsc/tests(8) all pass unchanged."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/{scripts/generate-stories.mjs,stories/*.stories.tsx,.storybook/main.ts,project.json}",
+    "packages/ui/project.json (stories-generate/stories-check targets removed)"
+  ],
+  "risks": [
+    "Purely a file-relocation + path-recalculation change -- no logic changes to the generator or the generated story content."
+  ],
+  "next_responsible_party": "claude"
+}

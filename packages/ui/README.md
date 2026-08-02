@@ -105,17 +105,37 @@ Targets:
 - `ui:docs-mesh-export` — exports a Storybook-independent JSON mesh for
   documentation/preview consumers (`docs/generated/meshes/ui-doc-mesh.v1.json`)
   by extracting exported components and their `*Props` contracts from
-  `packages/ui/src/index.ts`, then merging optional editorial metadata from
-  `packages/ui/documentation/mesh/ui-doc-mesh.meta.v1.json` (summary,
-  status, layer, examples);
+  `packages/ui/src/index.ts`, then reading `@layer`, `@status`, and one or
+  more `@example <title>` tags directly from that same exported component's
+  TSDoc comment;
 - `ui:api-check` — declaration generation, TSDoc enforcement, AntD leak scan,
   and comparison with the tracked public API baseline.
 
-The documentation mesh no longer requires maintaining a full manual component
-list. Add a new exported component in `src/index.ts` following the existing
-pattern (`export function Component(props: ComponentProps): ReactElement`) and
-it appears in the generated mesh automatically. Only optional editorial fields
-need metadata updates.
+The documentation mesh requires no separate file to maintain. Add a new
+exported component in `src/index.ts` following the existing pattern
+(`export function Component(props: ComponentProps): ReactElement`), document
+it with the usual TSDoc description plus `@layer`, `@status`, and at least one
+`@example <title>` tag whose body is a fenced ` ```tsx ` block, for example:
+
+```ts
+/**
+ * One-line description shown as this component's summary everywhere.
+ *
+ * @layer atom
+ * @status stable
+ * @example Default button
+ * ```tsx
+ * <Button label="Run" />
+ * ```
+ */
+export function Button(props: ButtonProps): ReactElement { ... }
+```
+
+and it appears in the generated mesh automatically, with no other file to
+keep in sync. Multiple `@example` tags produce multiple examples/stories.
+`@layer` defaults to `atom` and `@status` to `stable` when omitted; a
+component with no `@example` tag gets one generated default snippet
+(`<ComponentName />`).
 
 To intentionally update the API baseline:
 

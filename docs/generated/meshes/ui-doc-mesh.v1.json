@@ -48,7 +48,7 @@
       ],
       "examples": [
         {
-          "id": "text-default",
+          "id": "default-text",
           "title": "Default text",
           "snippet": "<Text content=\"Example label\" />"
         }
@@ -79,7 +79,7 @@
       ],
       "examples": [
         {
-          "id": "status-ready",
+          "id": "ready-status",
           "title": "Ready status",
           "snippet": "<StatusBadge status=\"success\" label=\"Ready\" />"
         }
@@ -115,7 +115,7 @@
       ],
       "examples": [
         {
-          "id": "button-default",
+          "id": "default-button",
           "title": "Default button",
           "snippet": "<Button label=\"Run\" />"
         }
@@ -201,7 +201,7 @@
       ],
       "examples": [
         {
-          "id": "card-basic",
+          "id": "basic-card",
           "title": "Basic card",
           "snippet": "<Card ariaLabel=\"Task status\">Body</Card>"
         }
@@ -332,7 +332,7 @@
       ],
       "examples": [
         {
-          "id": "entity-summary-default",
+          "id": "entity-card",
           "title": "Entity card",
           "snippet": "<EntitySummary title=\"architecture-studio\" description=\"project\" />"
         }
@@ -398,9 +398,9 @@
       ],
       "examples": [
         {
-          "id": "table-repo-nodes",
+          "id": "repository-nodes-table",
           "title": "Repository nodes table",
-          "snippet": "<DataTable ariaLabel=\"Repository nodes\" rows={rows} rowKey={(row) => row.id} columns={columns} />"
+          "snippet": "<DataTable\n  ariaLabel=\"Repository nodes\"\n  rows={[{ id: \"a\", name: \"architecture-studio\" }, { id: \"b\", name: \"ui\" }]}\n  rowKey={(row) => row.id}\n  columns={[{ id: \"name\", header: \"Name\", value: (row) => row.name }]}\n/>"
         }
       ]
     },
@@ -408,7 +408,7 @@
       "id": "atom.grid-layout",
       "name": "GridLayout",
       "layer": "atom",
-      "summary": "Draggable/resizable dashboard layout using Grafting-owned panel contracts.",
+      "summary": "Draggable/resizable dashboard layout using Grafting-owned panel contracts.\n\nConsumers whose bundler does not already provide it must import\n`react-grid-layout/css/styles.css` once at the application level; this\npackage does not import it as a side effect (it declares `sideEffects:\nfalse`), so the choice of when and whether to load that stylesheet stays\nwith the consuming application.",
       "status": "stable",
       "props": [
         {
@@ -459,9 +459,9 @@
       ],
       "examples": [
         {
-          "id": "grid-dashboard",
+          "id": "dashboard-grid",
           "title": "Dashboard grid",
-          "snippet": "<GridLayout ariaLabel=\"Studio dashboard\" panels={panels} />"
+          "snippet": "<GridLayout\n  ariaLabel=\"Studio dashboard\"\n  panels={[{ placement: { id: \"p1\", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]}\n/>"
         }
       ]
     }

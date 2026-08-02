@@ -24,6 +24,9 @@ TestResults/
 #spikes for tests
 spikes/
 
+# Storybook build output (apps/architecture-studio)
+storybook-static/
+
 # FlatBuffers generated output (master source S10.3: not the source of
 # truth, regenerated via `pnpm exec nx run engine-domain-core:generate`).
 # The *fixture* generated code under domain-core/tests/generated_v1/ is

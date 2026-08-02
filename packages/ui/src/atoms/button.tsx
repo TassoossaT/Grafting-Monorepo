@@ -1,17 +1,37 @@
-import { Button } from "antd";
+import { Button as AntButton } from "antd";
 import type { ReactElement } from "react";
 
-import type { ButtonProps } from "../index.js";
+/** Public inputs for a compact, clickable action. */
+export interface ButtonProps {
+  /** Human-readable button label. */
+  readonly label: string;
+  /** Invoked when the button is activated. */
+  readonly onClick?: () => void;
+  /** Optional semantic emphasis. */
+  readonly tone?: "default" | "accent";
+  /** Optional caller-owned class name for layout composition. */
+  readonly className?: string;
+}
 
-export function ButtonView(props: ButtonProps): ReactElement {
+/**
+ * Compact action button for lightweight command triggers.
+ *
+ * @layer atom
+ * @status stable
+ * @example Default button
+ * ```tsx
+ * <Button label="Run" />
+ * ```
+ */
+export function Button(props: ButtonProps): ReactElement {
   return (
-    <Button
+    <AntButton
       className={props.className}
       onClick={props.onClick}
       size="small"
       type={props.tone === "accent" ? "primary" : "default"}
     >
       {props.label}
-    </Button>
+    </AntButton>
   );
 }

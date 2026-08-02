@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-INTEGRATION",
+  "title": "Restore Storybook (embedded via iframe at /storybook) as the Architecture Studio's component documentation surface; remove the react-live/mesh-gallery experiment",
+  "status": "blocked",
+  "owner": "claude",
+  "revision": 5,
+  "updated_at": "2026-08-01T17:10:00-03:00",
+  "objective": "Final reversal after a long back-and-forth this session: Storybook was added, then rejected for needing a second process, replaced first by a static generated gallery, then by a react-live-based live-editable gallery (packages/live-preview) reading docs/generated/meshes/ui-doc-mesh.v1.json. The owner judged the custom gallery 'nao serve de absolutamente nada' (serves no purpose) once its real automatic/manual dependency chain was explained, and explicitly asked to restore Storybook, embedded via iframe at /storybook exactly as it was before removal ('use a porcaria do storybook entao, dentro do app como estava antes'). This task: (1) removes packages/live-preview and apps/architecture-studio/src/app/lab/components/ entirely, (2) restores Storybook (storybook + @storybook/react-vite devDependencies, .storybook/main.ts + preview.ts, packages/ui/scripts/generate-stories.mjs regenerating packages/ui/stories/*.stories.tsx from the same ui-doc-mesh.v1.json), (3) restores the /storybook route (page.tsx + storybook-client.tsx, iframe embedding the separate Storybook dev server at localhost:6006), (4) restores the storybook/build-storybook Nx targets and studio-nav.tsx's link back to /storybook. The DataTable/GridLayout metadata self-containment fix and the ui-doc-mesh pipeline itself remain unchanged and correct -- only the Storybook-vs-custom-gallery question reverses.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-INTEGRATION.json",
+    "packages/live-preview/package.json",
+    "packages/live-preview/project.json",
+    "packages/live-preview/tsconfig.json",
+    "packages/live-preview/AGENTS.md",
+    "packages/live-preview/README.md",
+    "packages/live-preview/src/index.ts",
+    "packages/live-preview/src/live-component-preview.tsx",
+    "packages/live-preview/tests/live-component-preview.test.mjs",
+    "apps/architecture-studio/src/app/lab/components/page.tsx",
+    "apps/architecture-studio/src/app/lab/components/components-gallery-client.tsx",
+    "apps/architecture-studio/package.json",
+    "apps/architecture-studio/project.json",
+    "apps/architecture-studio/.storybook/main.ts",
+    "apps/architecture-studio/.storybook/preview.ts",
+    "apps/architecture-studio/src/app/storybook/page.tsx",
+    "apps/architecture-studio/src/app/storybook/storybook-client.tsx",
+    "apps/architecture-studio/src/app/studio-nav.tsx",
+    "packages/ui/scripts/generate-stories.mjs",
+    "packages/ui/stories/button.stories.tsx",
+    "packages/ui/stories/card.stories.tsx",
+    "packages/ui/stories/text.stories.tsx",
+    "packages/ui/stories/status-badge.stories.tsx",
+    "packages/ui/stories/data-table.stories.tsx",
+    "packages/ui/stories/grid-layout.stories.tsx",
+    "packages/ui/stories/entity-summary.stories.tsx",
+    "packages/ui/project.json",
+    ".gitignore",
+    "pnpm-lock.yaml",
+    "docs/generated/api/ts/architecture-studio.api.md"
+  ],
+  "blockers": ["No browser-automation tool available to the agent; both dev servers are up (next :4511, storybook :6006) for the owner to check directly."],
+  "validations": [
+    "DONE: packages/live-preview and apps/architecture-studio/src/app/lab/components/ deleted entirely.",
+    "DONE: Storybook restored (storybook + @storybook/react-vite devDependencies, .storybook/main.ts + preview.ts, /storybook route with iframe, packages/ui/stories/*.stories.tsx regenerated via generate-stories.mjs from ui-doc-mesh.v1.json -- 7 files).",
+    "DONE: studio-nav.tsx links to /storybook again (internal Next.js route rendering the iframe).",
+    "DONE: tsc --noEmit, next build, and storybook build all pass; all 8 pre-existing architecture-studio unit tests pass; packages/ui's own tsc/tests(9)/api-check all pass.",
+    "DONE: docs-generate re-run for architecture-studio -- diff matches the expected MCP-route-only content, no leftover gallery artifacts.",
+    "DONE: both dev servers started together (next dev on :4511, storybook dev on :6006); curl-verified all four routes return HTTP 200, the /storybook page's iframe src correctly points at http://localhost:6006, and that server responds directly too.",
+    "PENDING: owner's own visual/interactive confirmation in a real browser (no browser-automation tool available to the agent)."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/{package.json,project.json,.storybook/main.ts,.storybook/preview.ts,src/app/storybook/page.tsx,src/app/storybook/storybook-client.tsx,src/app/studio-nav.tsx}",
+    "packages/ui/{project.json,scripts/generate-stories.mjs,stories/*.stories.tsx}",
+    ".gitignore",
+    "pnpm-lock.yaml",
+    "docs/generated/api/ts/architecture-studio.api.md"
+  ],
+  "risks": [
+    "This is the third reversal on the same decision this session -- keeping the final state simple and matching exactly what was proven working before removal (not re-designing further) is the priority now."
+  ],
+  "next_responsible_party": "claude"
+}

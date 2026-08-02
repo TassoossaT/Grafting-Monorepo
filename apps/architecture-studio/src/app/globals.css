@@ -6,9 +6,53 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { display: grid; grid-template-rows: 64px minmax(0, 1fr) 38px; overflow: hidden; }
+body { display: flex; flex-direction: column; overflow: hidden; }
 button { font: inherit; }
 button:focus-visible { outline: 3px solid #7aa7ff; outline-offset: 2px; }
+a:focus-visible { outline: 3px solid #7aa7ff; outline-offset: 2px; }
+
+/* Persistent nav shared by all three Architecture Studio surfaces (ADR-0016). */
+.studio-nav {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 18px;
+  height: 48px;
+  background: #0d1730;
+  color: white;
+  border-bottom: 1px solid #2d3d61;
+}
+.studio-nav-brand { font-size: 13px; }
+.studio-nav-links { display: flex; gap: 4px; }
+.studio-nav-links a {
+  color: #b9c8e5;
+  text-decoration: none;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.studio-nav-links a:hover { background: #1c2b4d; color: white; }
+.studio-nav-links a[aria-current="page"] { background: #263c66; color: white; }
+
+/* Flexible region below the nav; each page's own root sizes itself within this. */
+.studio-shell-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* Explorer surface's own full-height layout, scoped here (not the bare `body`) so it no longer leaks into the other two routes. */
+.explorer-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr) 38px;
+  overflow: hidden;
+}
 
 .topbar {
   display: flex;
@@ -88,7 +132,7 @@ footer[data-status="invalid"], footer[data-status="unsupported"] { color: #982b3
 footer[data-status="warning"] { color: #815b13; background: #fff8e8; }
 
 @media (max-width: 980px) {
-  body { overflow: auto; grid-template-rows: auto auto; }
+  .explorer-shell { overflow: auto; grid-template-rows: auto auto; }
   .topbar { align-items: flex-start; flex-direction: column; padding: 12px; }
   .toolbar { flex-wrap: wrap; }
   .workspace { grid-template-columns: 1fr; grid-template-rows: 320px 60vh auto; }

@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-import type { UiMountHandle } from "../index.js";
+import type { UiMountHandle } from "../shared-types.js";
 
 /** Minimal private root boundary used to test lifecycle independently of the DOM. */
 export interface ReactViewRoot {

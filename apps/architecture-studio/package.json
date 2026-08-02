@@ -7,20 +7,26 @@
     "build": "node scripts/copy-wasm-assets.mjs && next build",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs",
-    "dev": "node scripts/copy-wasm-assets.mjs && next dev --hostname 127.0.0.1 --port 4511"
+    "dev": "node scripts/copy-wasm-assets.mjs && next dev --hostname 127.0.0.1 --port 4511",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@grafting/three-canvas": "workspace:*",
     "@grafting/ui": "workspace:*",
     "@grafting/x6-canvas": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "next": "^16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-grid-layout": "2.2.3"
+    "react-grid-layout": "2.2.3",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@storybook/react-vite": "^10.5.5",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "storybook": "^10.5.5",
     "typescript": "^5.9.3"
   }
 }

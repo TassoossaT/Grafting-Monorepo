@@ -39,6 +39,42 @@
       "cache": true,
       "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },
+    "stories-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node scripts/generate-stories.mjs" },
+      "dependsOn": ["ui:docs-mesh-export"],
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
+        "{projectRoot}/scripts/generate-stories.mjs"
+      ],
+      "outputs": ["{projectRoot}/stories"]
+    },
+    "stories-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node scripts/generate-stories.mjs --check" },
+      "dependsOn": ["ui:docs-mesh-export"],
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
+        "{projectRoot}/scripts/generate-stories.mjs",
+        "{projectRoot}/stories/**/*"
+      ]
+    },
+    "storybook": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/architecture-studio storybook" },
+      "dependsOn": ["stories-generate"],
+      "cache": false
+    },
+    "build-storybook": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/architecture-studio build-storybook" },
+      "dependsOn": ["stories-generate"],
+      "cache": true,
+      "inputs": ["{projectRoot}/.storybook/**/*", "{projectRoot}/stories/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/storybook-static"]
+    },
     "docs-generate": {
       "executor": "nx:run-commands",
       "options": { "command": "node tools/scripts/generate-api-docs.mjs architecture-studio" },

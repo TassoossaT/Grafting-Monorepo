@@ -89,7 +89,6 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/src/index.ts",
-        "{projectRoot}/documentation/mesh/ui-doc-mesh.meta.v1.json",
         "{projectRoot}/scripts/export-doc-mesh.mjs",
         "{projectRoot}/project.json"
       ],
