@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN",
+  "title": "Point Storybook's @grafting/ui alias at real TypeScript source instead of the built dist, so its docgen can read real prop types and TSDoc comments",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T18:45:00-03:00",
+  "objective": "Owner asked why component/prop descriptions never show in Storybook's Docs/Controls panels. Root-caused: the description text does survive TypeScript's JS emit (JSDoc comments are preserved by default), but each Props interface and its per-field JSDoc are erased entirely at compile time -- they only exist in the .d.ts declaration and the original .tsx source, never in the plain compiled .js that .storybook/main.ts's viteFinal currently aliases @grafting/ui to (packages/ui/dist/index.js). Storybook's bundled docgen (react-docgen-typescript, via @storybook/react-vite) needs a real .tsx source file with types+comments together to build prop tables/descriptions; it never sees the .d.ts at all when resolving through the compiled JS. Owner chose (after being offered a mesh-driven alternative that keeps testing the built package) to instead point the alias at packages/ui/src/index.ts directly, letting Vite transpile TypeScript on the fly and letting Storybook's own docgen work natively. This changes what Storybook exercises (source, not the built/published package) -- verify this doesn't silently break anything (the .js-extension-importing-.ts/.tsx-source convention used throughout packages/ui/src needs to actually resolve under Vite, which is a different bundler/resolution algorithm than tsc's Bundler moduleResolution mode that currently makes it work for the package's own build).",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN.json",
+    "apps/architecture-studio/.storybook/main.ts"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: root-caused precisely why descriptions never showed -- read packages/ui/dist/atoms/button.js directly and confirmed the component-level TSDoc comment DOES survive TS's JS emit (comments preserved by default), but read dist/atoms/button.d.ts and confirmed the Props interface + its per-field JSDoc only exist there and in the original .tsx source, never in the plain compiled .js the old alias pointed Storybook at. Storybook's bundled docgen needs a real .tsx file (types + comments together) to build prop descriptions; a split .js+.d.ts pair was never going to work through that mechanism no matter what.",
+    "DONE: changed .storybook/main.ts's viteFinal alias from packages/ui/dist/index.js to packages/ui/src/index.ts.",
+    "DONE: restarted the combined dev command; Storybook started cleanly with 'Vite Re-optimizing dependencies because vite config has changed' and no resolution errors.",
+    "DONE: verified the specific technical risk flagged before starting -- fetched the transformed index.ts module directly and confirmed every one of its literal '.js' re-export specifiers (./atoms/text.js, ./atoms/status-badge.js, ./atoms/button.js, ./atoms/card.js, ./molecules/entity-summary.js, ./organisms/data-table.js, ./atoms/grid-layout.js) correctly resolved to the real .tsx source files under Vite -- the TypeScript Bundler-moduleResolution '.js-import-resolves-to-.ts/.tsx-source' convention used throughout packages/ui/src is NOT tsc-specific, Vite (via esbuild) handles it too.",
+    "DONE: fetched the transformed button.tsx module directly and found Vite's docgen plugin had injected real, accurate prop descriptions verbatim from the TSDoc comments (e.g. className: \"Optional caller-owned class name for layout composition.\") -- definitive proof the fix works, not just an assumption that docgen would pick it up.",
+    "DONE: re-ran architecture-studio's own tsc --noEmit (clean) and the full app HTTP chain (root, /storybook, /storybook-app proxy, a real POST to /api/mcp) -- all 200, confirming the Storybook config change didn't regress anything else in the app.",
+    "NOT DONE (accepted limitation): seeing the Docs/Controls panels actually render these descriptions in a real browser needs the owner's own check -- no browser-automation tool available this session, though the docgen data being present in the served module is strong, concrete evidence it will."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/.storybook/main.ts (viteFinal alias now points at packages/ui/src/index.ts instead of dist/index.js)"
+  ],
+  "risks": [
+    "Storybook now exercises packages/ui's source directly rather than its built package -- it no longer requires `pnpm --filter @grafting/ui build` to run first, which is a real behavior change from the deliberate 'always test the built artifact' rationale the original alias comment documented. The owner explicitly chose this tradeoff (offered the mesh-driven alternative that would have kept testing the built package) in exchange for real, live-updating prop descriptions with zero extra generator work.",
+    "Vite's own module resolution for the '.js'-resolves-to-'.tsx' convention was verified empirically for this specific package's current file set, not proven as a guarantee for every possible future path shape in packages/ui/src -- worth re-checking if that package's internal structure changes significantly."
+  ],
+  "next_responsible_party": null
+}

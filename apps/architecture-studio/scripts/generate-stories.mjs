@@ -54,42 +54,57 @@ function loadMesh() {
   return parsed.components;
 }
 
-// Renders one argTypes entry for a prop, or undefined when Storybook needs
-// no explicit control declaration for it (an "action"-kind prop is instead
-// seeded with a real spy function in `args`, below).
+// Renders one argTypes entry for a prop. This pipeline already fully
+// specifies argTypes for every prop (control kind, options), so Storybook's
+// implicit docgen-to-argTypes merge is not something to rely on for
+// descriptions either -- the prop's own doc-comment description (captured
+// by export-doc-mesh.mjs, independent of whichever source packages/ui's own
+// Storybook alias happens to resolve to) is emitted explicitly here instead.
 function renderArgType(prop) {
+  const parts = [];
   switch (prop.control.kind) {
     case "boolean":
-      return `{ control: "boolean" }`;
+      parts.push(`control: "boolean"`);
+      break;
     case "number":
-      return `{ control: "number" }`;
+      parts.push(`control: "number"`);
+      break;
     case "text":
-      return `{ control: "text" }`;
+      parts.push(`control: "text"`);
+      break;
     case "select":
-      return `{ control: "select", options: ${JSON.stringify(prop.control.options)} }`;
+      parts.push(`control: "select"`, `options: ${JSON.stringify(prop.control.options)}`);
+      break;
     case "object":
-      return `{ control: "object" }`;
+      parts.push(`control: "object"`);
+      break;
     case "disabled":
-      return `{ control: false }`;
     case "action":
-      return undefined;
+      parts.push(`control: false`);
+      break;
     default:
       throw new Error(`unknown control kind: ${prop.control.kind}`);
   }
+  if (prop.description !== undefined) {
+    parts.push(`description: ${JSON.stringify(prop.description)}`);
+  }
+  if (prop.defaultValue !== undefined) {
+    // table.defaultValue.summary is display text, not a live value -- the
+    // raw @default expression (real source, possibly multi-line for an
+    // object literal) is collapsed to one line for a compact table cell.
+    const summary = prop.defaultValue.replace(/\s+/g, " ").trim();
+    parts.push(`table: { defaultValue: { summary: ${JSON.stringify(summary)} } }`);
+  }
+  return `{ ${parts.join(", ")} }`;
 }
 
 function renderStoryFile(component) {
-  const { id, name, layer, props } = component;
+  const { id, name, layer, summary, props } = component;
   const slug = id.split(".").pop();
   const title = `${titleForLayer(layer)}/${name}`;
   const needsActionFn = props.some((prop) => prop.control.kind === "action");
 
-  const argTypeLines = props
-    .map((prop) => {
-      const rendered = renderArgType(prop);
-      return rendered === undefined ? undefined : `    ${prop.name}: ${rendered},`;
-    })
-    .filter((line) => line !== undefined);
+  const argTypeLines = props.map((prop) => `    ${prop.name}: ${renderArgType(prop)},`);
 
   const argLines = props
     .map((prop) => {
@@ -108,6 +123,13 @@ function renderStoryFile(component) {
   const metaBody = [
     `  title: ${JSON.stringify(title)},`,
     `  component: ${name},`,
+    `  parameters: {`,
+    `    docs: {`,
+    `      description: {`,
+    `        component: ${JSON.stringify(summary)},`,
+    `      },`,
+    `    },`,
+    `  },`,
     ...(argTypeLines.length > 0 ? [`  argTypes: {`, ...argTypeLines, `  },`] : []),
   ].join("\n");
 

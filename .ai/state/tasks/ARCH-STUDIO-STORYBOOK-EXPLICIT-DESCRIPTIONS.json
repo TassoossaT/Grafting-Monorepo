@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-EXPLICIT-DESCRIPTIONS",
+  "title": "Capture component and per-prop descriptions in the doc mesh and emit them explicitly in generated stories, instead of relying on Storybook's docgen-argType merge behavior",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T19:50:00-03:00",
+  "objective": "Owner reports that even after pointing Storybook at real TypeScript source (ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN, confirmed via direct inspection that Vite's docgen plugin injects real descriptions into the transformed module), no description/comment text shows up anywhere in Storybook's UI. Root cause: generate-stories.mjs already emits a fully explicit `argTypes` object per component (control kind, options, etc.) with no `description` key -- Storybook's docgen-to-argTypes merge behavior for props that are ALREADY explicitly declared is not something to rely on/guess at further; this pipeline's whole design philosophy is deterministic generation, not implicit tool behavior. Fix: extend export-doc-mesh.mjs to capture each prop's own doc-comment description text (already parsed for other purposes, just not retained) plus reuse the component's own `summary` field, and have generate-stories.mjs emit both explicitly (`description` in each argType, `parameters.docs.description.component` in the Meta object) -- guaranteed regardless of any docgen/argTypes merge ambiguity.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-EXPLICIT-DESCRIPTIONS.json",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "docs/generated/meshes/ui-doc-mesh.v1.json",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "apps/architecture-studio/stories/button.stories.tsx",
+    "apps/architecture-studio/stories/card.stories.tsx",
+    "apps/architecture-studio/stories/data-table.stories.tsx",
+    "apps/architecture-studio/stories/entity-summary.stories.tsx",
+    "apps/architecture-studio/stories/grid-layout.stories.tsx",
+    "apps/architecture-studio/stories/status-badge.stories.tsx",
+    "apps/architecture-studio/stories/text.stories.tsx"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: export-doc-mesh.mjs's parsePropsInterface now also captures each prop's own doc-comment description (parsePropDescription, reusing the same block-parsing already in place for @example) into an optional `description` field per prop in the mesh.",
+    "DONE: generate-stories.mjs's renderArgType now always emits an argTypes entry per prop (previously action-kind props got none at all) including an explicit `description` when present; the Meta object now also sets `parameters.docs.description.component` from the component's own `summary` field.",
+    "DONE: regenerated the mesh and all 7 stories; inspected button.stories.tsx directly -- every prop's argType carries its real description text verbatim, and the component-level summary is set explicitly on parameters.docs.description.component.",
+    "DONE: packages/ui tsc --noEmit and its 9 tests still pass (only the generator script changed, not package source); architecture-studio's own tsc --noEmit clean against the new story shape.",
+    "DONE: confirmed via the live dev server (already running, no restart needed -- Vite HMR picked up the regenerated story content) that the served button.stories.tsx module carries the explicit description strings verbatim, and the full app/proxy chain (/storybook, /storybook-app, index.json with all 7 entries) still returns correctly.",
+    "NOTE: this makes descriptions independent of Storybook's docgen-to-argTypes merge behavior entirely (which was the suspected reason ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN's fix alone wasn't enough) -- descriptions now come from this pipeline's own deterministic generation, the same design philosophy already used for control kinds and examples, rather than relying on an implicit merge this session could not fully verify one way or the other from the outside."
+  ],
+  "artifacts": [
+    "packages/ui/scripts/export-doc-mesh.mjs (captures each prop's description text)",
+    "docs/generated/meshes/ui-doc-mesh.v1.json (regenerated, now includes description per prop)",
+    "apps/architecture-studio/scripts/generate-stories.mjs (emits description in every argType + parameters.docs.description.component)",
+    "apps/architecture-studio/stories/*.stories.tsx (regenerated, all now carry explicit descriptions)"
+  ],
+  "risks": [
+    "Still depends on the owner's own browser check to see these descriptions actually rendered in the Controls table and Docs page -- no browser-automation tool available this session; the evidence gathered (explicit description strings present in the served module) is strong but not a substitute for seeing the UI itself."
+  ],
+  "next_responsible_party": null
+}

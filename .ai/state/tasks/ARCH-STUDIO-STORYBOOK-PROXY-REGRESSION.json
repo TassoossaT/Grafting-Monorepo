@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-PROXY-REGRESSION",
+  "title": "Diagnose why Storybook stopped appearing through architecture-studio's /storybook iframe after the same-origin proxy change",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T17:30:00-03:00",
+  "objective": "Owner reports Storybook no longer appears through the /storybook route inside architecture-studio, even though it was confirmed working (via curl/HTTP-level checks) immediately after the ARCH-STUDIO-STORYBOOK-SAMEORIGIN-PROXY task. Likely candidates: one or both dev server processes died or were restarted since (this session repeatedly killed/restarted both the Next.js and Storybook dev servers across several tasks), a stale browser tab/bundle, or a real regression in the proxy config itself. Diagnose with real evidence (process status, HTTP checks, server logs) before changing anything.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-PROXY-REGRESSION.json",
+    "apps/architecture-studio/package.json",
+    "apps/architecture-studio/project.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: confirmed both dev server processes (Next.js :4511, Storybook :6006) were running and all HTTP-level checks (direct, proxied, headers, page HTML/iframe src) passed cleanly -- ruled out a dead process or a stale .next/config issue before looking further.",
+    "DONE: found the real cause in Storybook's own dev-server log (not previously checked at this specific moment): Vite's `server.allowedHosts` protection rejected the preview because architecture-studio's Next.js proxy forwards the original `Host: 127.0.0.1:4511` header through to Storybook's Vite server, which only recognized 'localhost' by default, not '127.0.0.1' -- Storybook's own error message named both real fixes (`--host 127.0.0.1` or a viteFinal allowedHosts change). Used the simpler, already-precedented one: architecture-studio's own `next dev` already runs with `--hostname 127.0.0.1` explicitly, so matching that same convention for storybook (`storybook dev -p 6006 -h 127.0.0.1`) is consistent, not a new pattern.",
+    "DONE: restarted Storybook with the fix; confirmed the startup banner's 'On your network' address changed from the LAN IP to 127.0.0.1 (proof the flag took effect); re-ran the full proxy chain (direct :6006, /storybook-app proxy, /storybook page, iframe.html through the proxy) -- all 200; grepped the fresh log after these real requests for the exact error text ('another hostname', 'allowedHosts') -- zero occurrences, versus multiple occurrences in the pre-fix log capture.",
+    "NOTE: /vite-app.js returns 404 both via direct :6006 access and via the proxy, identically -- not a proxy-specific regression (same behavior either way), most likely a virtual module path only resolved in a real SPA runtime context rather than a bare curl GET; not investigated further since behavior is consistent and no error accompanies it.",
+    "NOT DONE (accepted limitation): the owner's own browser needs to reload/reopen the /storybook tab now that both servers are running fresh with the fix -- this agent cannot confirm the visual result."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/package.json (storybook script: added -h 127.0.0.1)"
+  ],
+  "risks": [
+    "This was the third distinct root cause found across the Storybook-same-origin-proxy work (cross-origin postMessage, root-absolute Vite paths, and now Vite's allowedHosts host-header check) -- consistent with the earlier external evidence that this integration path has an unusually large number of small, independent edge cases. No further ones are known at this time, but the owner should not be surprised if another one surfaces."
+  ],
+  "next_responsible_party": null
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-STILL-BLANK",
+  "title": "Storybook still shows nothing through architecture-studio's /storybook iframe after the allowedHosts fix",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T17:55:00-03:00",
+  "objective": "Owner reports 'Ainda nao aparece nada' (still nothing appears) after the allowedHosts fix (-h 127.0.0.1) and a full server restart in ARCH-STUDIO-STORYBOOK-PROXY-REGRESSION. Need fresh, concrete evidence (process status, logs, HTTP checks) rather than assuming the previous fix was sufficient -- there may be another distinct root cause, consistent with the pattern already seen in this integration (three separate real bugs found so far: cross-origin postMessage, root-absolute Vite paths, allowedHosts).",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-STILL-BLANK.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: found via the Next.js dev server's own request log that the browser was repeatedly requesting only the parent /storybook page, never the iframe's /storybook-app target at all -- ruled out further Storybook/proxy-config issues and pointed at stale client-side state instead, after this session's many rapid dev-server restarts during the proxy work.",
+    "DONE: killed and fully restarted both dev servers (not just the app) to get a clean baseline; owner subsequently killed both themselves per their own request to run their own instance.",
+    "SUPERSEDED: the owner's later reports (ECONNREFUSED when running only architecture-studio:dev, and the explicit requirement that starting/stopping one process must start/stop the other) revealed the actual expectation this whole investigation was missing -- not a bug in the proxy itself, but that the owner expects a single command to own both processes' lifecycle together. Continued as ARCH-STUDIO-DEV-STORYBOOK-TOGETHER."
+  ],
+  "artifacts": [],
+  "risks": [],
+  "next_responsible_party": null
+}

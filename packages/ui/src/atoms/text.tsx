@@ -11,15 +11,27 @@ export interface TextProps {
    * @example "Example label"
    */
   readonly content: string;
-  /** Optional semantic color treatment. */
+  /**
+   * Optional semantic color treatment.
+   * @default "default"
+   */
   readonly tone?: TextTone;
-  /** Whether the text uses the emphasized weight. */
+  /**
+   * Whether the text uses the emphasized weight.
+   * @default false
+   */
   readonly strong?: boolean;
-  /** Whether overflowing single-line content is truncated with an accessible tooltip. */
+  /**
+   * Whether overflowing single-line content is truncated with an accessible tooltip.
+   * @default false
+   */
   readonly truncate?: boolean;
   /** Optional tooltip text used when truncation is enabled. */
   readonly tooltip?: string;
-  /** Optional maximum width in CSS pixels. */
+  /**
+   * Optional maximum width in CSS pixels.
+   * @default "100%"
+   */
   readonly maxWidth?: number;
   /** Optional caller-owned class name for layout composition. */
   readonly className?: string;

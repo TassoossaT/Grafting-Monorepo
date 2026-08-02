@@ -9,10 +9,17 @@ import { StatusBadge } from "@grafting/ui";
 const meta: Meta<typeof StatusBadge> = {
   title: "Atoms/StatusBadge",
   component: StatusBadge,
+  parameters: {
+    docs: {
+      description: {
+        component: "Semantic status marker with Grafting-owned status names.",
+      },
+    },
+  },
   argTypes: {
-    status: { control: "select", options: ["neutral","info","success","warning","error"] },
-    label: { control: "text" },
-    className: { control: "text" },
+    status: { control: "select", options: ["neutral","info","success","warning","error"], description: "Semantic state to present." },
+    label: { control: "text", description: "Human-readable status label." },
+    className: { control: "text", description: "Optional caller-owned class name for layout composition." },
   },
 };
 export default meta;

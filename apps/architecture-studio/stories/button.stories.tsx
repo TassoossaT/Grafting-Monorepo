@@ -10,10 +10,18 @@ import { Button } from "@grafting/ui";
 const meta: Meta<typeof Button> = {
   title: "Atoms/Button",
   component: Button,
+  parameters: {
+    docs: {
+      description: {
+        component: "Compact action button for lightweight command triggers.",
+      },
+    },
+  },
   argTypes: {
-    label: { control: "text" },
-    tone: { control: "select", options: ["default","accent"] },
-    className: { control: "text" },
+    label: { control: "text", description: "Human-readable button label." },
+    onClick: { control: false, description: "Invoked when the button is activated." },
+    tone: { control: "select", options: ["default","accent"], description: "Optional semantic emphasis.", table: { defaultValue: { summary: "\"default\"" } } },
+    className: { control: "text", description: "Optional caller-owned class name for layout composition." },
   },
 };
 export default meta;

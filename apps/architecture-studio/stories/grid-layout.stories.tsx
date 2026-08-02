@@ -10,15 +10,23 @@ import { GridLayout } from "@grafting/ui";
 const meta: Meta<typeof GridLayout> = {
   title: "Atoms/GridLayout",
   component: GridLayout,
+  parameters: {
+    docs: {
+      description: {
+        component: "Draggable/resizable dashboard layout using Grafting-owned panel contracts.\n\nConsumers whose bundler does not already provide it must import\n`react-grid-layout/css/styles.css` once at the application level; this\npackage does not import it as a side effect (it declares `sideEffects:\nfalse`), so the choice of when and whether to load that stylesheet stays\nwith the consuming application.",
+      },
+    },
+  },
   argTypes: {
-    panels: { control: "object" },
-    ariaLabel: { control: "text" },
-    columns: { control: "number" },
-    rowHeight: { control: "number" },
-    gap: { control: "number" },
-    draggable: { control: "boolean" },
-    resizable: { control: "boolean" },
-    className: { control: "text" },
+    panels: { control: "object", description: "Immutable caller-owned panels and their current placements." },
+    ariaLabel: { control: "text", description: "Accessible name for the grid region." },
+    columns: { control: "number", description: "Number of columns the grid is divided into.", table: { defaultValue: { summary: "12" } } },
+    rowHeight: { control: "number", description: "Height of one grid row in CSS pixels.", table: { defaultValue: { summary: "32" } } },
+    gap: { control: "number", description: "Gap between panels in CSS pixels, applied both horizontally and vertically.", table: { defaultValue: { summary: "12" } } },
+    draggable: { control: "boolean", description: "Whether panels can be dragged to a new position." },
+    resizable: { control: "boolean", description: "Whether panels can be resized." },
+    onPlacementsChange: { control: false, description: "Receives the complete next placement for every panel after a drag, resize, or compaction." },
+    className: { control: "text", description: "Optional caller-owned class name for layout composition." },
   },
 };
 export default meta;

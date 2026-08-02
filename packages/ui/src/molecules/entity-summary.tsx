@@ -36,27 +36,54 @@ export interface EntitySummaryProps {
   readonly accentColor?: string;
   /** Optional background color for the complete card surface. */
   readonly backgroundColor?: string;
-  /** Whether the card occupies the complete width and height of its container. */
+  /**
+   * Whether the card occupies the complete width and height of its container.
+   * @default false
+   */
   readonly fillContainer?: boolean;
-  /** Whether the card should communicate pointer interaction. */
+  /**
+   * Whether the card should communicate pointer interaction.
+   * @default false
+   */
   readonly interactive?: boolean;
-  /** Whether the card displays its selected treatment. */
+  /**
+   * Whether the card displays its selected treatment.
+   * @default false
+   */
   readonly selected?: boolean;
   /** Optional boundary color used when the component is selected. */
   readonly selectedColor?: string;
-  /** Optional boundary width in CSS pixels. */
+  /**
+   * Optional boundary width in CSS pixels.
+   * @default 1
+   */
   readonly borderWidth?: number;
-  /** Optional rounded-corner radius in CSS pixels. */
+  /**
+   * Optional rounded-corner radius in CSS pixels.
+   * @default 8
+   */
   readonly borderRadius?: number;
-  /** Optional body padding in CSS pixels. */
+  /**
+   * Optional body padding in CSS pixels.
+   * @default 12
+   */
   readonly bodyPadding?: number;
-  /** Optional gap between the component's content regions. */
+  /**
+   * Optional gap between the component's content regions.
+   * @default 10
+   */
   readonly contentGap?: number;
-  /** Optional short caller-owned labels rendered as compact badges below the identity. */
+  /**
+   * Optional short caller-owned labels rendered as compact badges below the identity.
+   * @default []
+   */
   readonly tags?: readonly string[];
   /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
   readonly glowColor?: string;
-  /** Geometric outline of the card; defaults to a rounded rectangle. */
+  /**
+   * Geometric outline of the card; defaults to a rounded rectangle.
+   * @default "rectangle"
+   */
   readonly shape?: CardShape;
   /** Optional label for a compact action button rendered in the card. */
   readonly actionLabel?: string;

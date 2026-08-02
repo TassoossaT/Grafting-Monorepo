@@ -17,6 +17,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Text content rendered by the component.",
           "example": "\"Example label\""
         },
         {
@@ -31,7 +32,9 @@
               "accent",
               "danger"
             ]
-          }
+          },
+          "description": "Optional semantic color treatment.",
+          "defaultValue": "\"default\""
         },
         {
           "name": "strong",
@@ -39,7 +42,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the text uses the emphasized weight.",
+          "defaultValue": "false"
         },
         {
           "name": "truncate",
@@ -47,7 +52,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether overflowing single-line content is truncated with an accessible tooltip.",
+          "defaultValue": "false"
         },
         {
           "name": "tooltip",
@@ -55,7 +62,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional tooltip text used when truncation is enabled."
         },
         {
           "name": "maxWidth",
@@ -63,7 +71,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional maximum width in CSS pixels.",
+          "defaultValue": "\"100%\""
         },
         {
           "name": "className",
@@ -71,7 +81,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     },
@@ -96,6 +107,7 @@
               "error"
             ]
           },
+          "description": "Semantic state to present.",
           "example": "\"success\""
         },
         {
@@ -105,6 +117,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Human-readable status label.",
           "example": "\"Ready\""
         },
         {
@@ -113,7 +126,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     },
@@ -131,6 +145,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Human-readable button label.",
           "example": "\"Run\""
         },
         {
@@ -139,7 +154,8 @@
           "required": false,
           "control": {
             "kind": "action"
-          }
+          },
+          "description": "Invoked when the button is activated."
         },
         {
           "name": "tone",
@@ -151,7 +167,9 @@
               "default",
               "accent"
             ]
-          }
+          },
+          "description": "Optional semantic emphasis.",
+          "defaultValue": "\"default\""
         },
         {
           "name": "className",
@@ -159,7 +177,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     },
@@ -182,7 +201,9 @@
               "circle",
               "hexagon"
             ]
-          }
+          },
+          "description": "Geometric outline of the card; defaults to a rounded rectangle.",
+          "defaultValue": "\"rectangle\""
         },
         {
           "name": "children",
@@ -191,6 +212,7 @@
           "control": {
             "kind": "disabled"
           },
+          "description": "Caller-owned content rendered inside the card.",
           "example": "\"Body\""
         },
         {
@@ -200,6 +222,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Optional accessible name for the card.",
           "example": "\"Task status\""
         },
         {
@@ -208,7 +231,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional accent used for the card boundary."
         },
         {
           "name": "backgroundColor",
@@ -216,7 +240,9 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional background color for the card surface.",
+          "defaultValue": "\"#ffffff\""
         },
         {
           "name": "fillContainer",
@@ -224,7 +250,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card occupies the complete width and height of its container.",
+          "defaultValue": "false"
         },
         {
           "name": "interactive",
@@ -232,7 +260,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card should communicate pointer interaction.",
+          "defaultValue": "false"
         },
         {
           "name": "selected",
@@ -240,7 +270,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card displays its selected treatment.",
+          "defaultValue": "false"
         },
         {
           "name": "selectedColor",
@@ -248,7 +280,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional boundary color used when the card is selected."
         },
         {
           "name": "borderWidth",
@@ -256,7 +289,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional boundary width in CSS pixels.",
+          "defaultValue": "1"
         },
         {
           "name": "borderRadius",
@@ -264,7 +299,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional rounded-corner radius in CSS pixels.",
+          "defaultValue": "8"
         },
         {
           "name": "padding",
@@ -272,7 +309,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional padding in CSS pixels.",
+          "defaultValue": "12"
         },
         {
           "name": "glowColor",
@@ -280,7 +319,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional glow color rendered as an outer shadow, e.g. to signal live status."
         },
         {
           "name": "className",
@@ -288,7 +328,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     },
@@ -306,6 +347,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Primary human-readable entity name.",
           "example": "\"architecture-studio\""
         },
         {
@@ -315,6 +357,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Optional secondary description.",
           "example": "\"project\""
         },
         {
@@ -330,7 +373,8 @@
               "warning",
               "error"
             ]
-          }
+          },
+          "description": "Optional semantic status."
         },
         {
           "name": "statusLabel",
@@ -338,7 +382,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Human-readable label paired with status."
         },
         {
           "name": "leading",
@@ -346,7 +391,8 @@
           "required": false,
           "control": {
             "kind": "disabled"
-          }
+          },
+          "description": "Optional visual placed before the textual identity."
         },
         {
           "name": "actions",
@@ -354,7 +400,8 @@
           "required": false,
           "control": {
             "kind": "disabled"
-          }
+          },
+          "description": "Optional actions placed after the textual identity."
         },
         {
           "name": "ariaLabel",
@@ -362,7 +409,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional accessible name for the summary container."
         },
         {
           "name": "className",
@@ -370,7 +418,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         },
         {
           "name": "accentColor",
@@ -378,7 +427,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional accent used for the complete card boundary."
         },
         {
           "name": "backgroundColor",
@@ -386,7 +436,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional background color for the complete card surface."
         },
         {
           "name": "fillContainer",
@@ -394,7 +445,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card occupies the complete width and height of its container.",
+          "defaultValue": "false"
         },
         {
           "name": "interactive",
@@ -402,7 +455,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card should communicate pointer interaction.",
+          "defaultValue": "false"
         },
         {
           "name": "selected",
@@ -410,7 +465,9 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether the card displays its selected treatment.",
+          "defaultValue": "false"
         },
         {
           "name": "selectedColor",
@@ -418,7 +475,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional boundary color used when the component is selected."
         },
         {
           "name": "borderWidth",
@@ -426,7 +484,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional boundary width in CSS pixels.",
+          "defaultValue": "1"
         },
         {
           "name": "borderRadius",
@@ -434,7 +494,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional rounded-corner radius in CSS pixels.",
+          "defaultValue": "8"
         },
         {
           "name": "bodyPadding",
@@ -442,7 +504,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional body padding in CSS pixels.",
+          "defaultValue": "12"
         },
         {
           "name": "contentGap",
@@ -450,7 +514,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Optional gap between the component's content regions.",
+          "defaultValue": "10"
         },
         {
           "name": "tags",
@@ -458,7 +524,9 @@
           "required": false,
           "control": {
             "kind": "disabled"
-          }
+          },
+          "description": "Optional short caller-owned labels rendered as compact badges below the identity.",
+          "defaultValue": "[]"
         },
         {
           "name": "glowColor",
@@ -466,7 +534,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional glow color rendered as an outer shadow, e.g. to signal live status."
         },
         {
           "name": "shape",
@@ -480,7 +549,9 @@
               "circle",
               "hexagon"
             ]
-          }
+          },
+          "description": "Geometric outline of the card; defaults to a rounded rectangle.",
+          "defaultValue": "\"rectangle\""
         },
         {
           "name": "actionLabel",
@@ -488,7 +559,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional label for a compact action button rendered in the card."
         },
         {
           "name": "onAction",
@@ -496,7 +568,8 @@
           "required": false,
           "control": {
             "kind": "action"
-          }
+          },
+          "description": "Invoked when the action button is activated."
         }
       ]
     },
@@ -514,6 +587,7 @@
           "control": {
             "kind": "object"
           },
+          "description": "Immutable caller-owned rows.",
           "example": "[{ id: \"a\", name: \"architecture-studio\" }, { id: \"b\", name: \"ui\" }]"
         },
         {
@@ -523,6 +597,7 @@
           "control": {
             "kind": "object"
           },
+          "description": "Immutable vendor-neutral column definitions.",
           "example": "[{ id: \"name\", header: \"Name\", value: (row) => row.name }]"
         },
         {
@@ -532,6 +607,7 @@
           "control": {
             "kind": "disabled"
           },
+          "description": "Returns the stable key for a row.",
           "example": "(row) => row.id"
         },
         {
@@ -541,6 +617,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Accessible table name.",
           "example": "\"Repository nodes\""
         },
         {
@@ -549,7 +626,8 @@
           "required": false,
           "control": {
             "kind": "disabled"
-          }
+          },
+          "description": "Optional controlled selection."
         },
         {
           "name": "pagination",
@@ -557,7 +635,9 @@
           "required": false,
           "control": {
             "kind": "disabled"
-          }
+          },
+          "description": "Optional pagination, or false to render all rows.",
+          "defaultValue": "{ pageSize: 20, hideWhenSinglePage: true }"
         },
         {
           "name": "density",
@@ -569,7 +649,9 @@
               "compact",
               "regular"
             ]
-          }
+          },
+          "description": "Optional table density.",
+          "defaultValue": "\"compact\""
         },
         {
           "name": "emptyMessage",
@@ -577,7 +659,9 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional text shown when there are no rows.",
+          "defaultValue": "\"No data\""
         },
         {
           "name": "loading",
@@ -585,7 +669,8 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether a loading treatment is displayed."
         },
         {
           "name": "className",
@@ -593,7 +678,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     },
@@ -611,6 +697,7 @@
           "control": {
             "kind": "object"
           },
+          "description": "Immutable caller-owned panels and their current placements.",
           "example": "[{ placement: { id: \"p1\", x: 0, y: 0, width: 12, height: 4 }, content: <div>Panel</div> }]"
         },
         {
@@ -620,6 +707,7 @@
           "control": {
             "kind": "text"
           },
+          "description": "Accessible name for the grid region.",
           "example": "\"Studio dashboard\""
         },
         {
@@ -628,7 +716,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Number of columns the grid is divided into.",
+          "defaultValue": "12"
         },
         {
           "name": "rowHeight",
@@ -636,7 +726,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Height of one grid row in CSS pixels.",
+          "defaultValue": "32"
         },
         {
           "name": "gap",
@@ -644,7 +736,9 @@
           "required": false,
           "control": {
             "kind": "number"
-          }
+          },
+          "description": "Gap between panels in CSS pixels, applied both horizontally and vertically.",
+          "defaultValue": "12"
         },
         {
           "name": "draggable",
@@ -652,7 +746,8 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether panels can be dragged to a new position."
         },
         {
           "name": "resizable",
@@ -660,7 +755,8 @@
           "required": false,
           "control": {
             "kind": "boolean"
-          }
+          },
+          "description": "Whether panels can be resized."
         },
         {
           "name": "onPlacementsChange",
@@ -668,7 +764,8 @@
           "required": false,
           "control": {
             "kind": "action"
-          }
+          },
+          "description": "Receives the complete next placement for every panel after a drag, resize, or compaction."
         },
         {
           "name": "className",
@@ -676,7 +773,8 @@
           "required": false,
           "control": {
             "kind": "text"
-          }
+          },
+          "description": "Optional caller-owned class name for layout composition."
         }
       ]
     }

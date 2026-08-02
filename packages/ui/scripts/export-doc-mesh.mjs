@@ -96,18 +96,34 @@ function parseComponentDoc(rawComment, componentName) {
   };
 }
 
-// A prop's @example is its Storybook default/seed value, written as a real
-// source expression (a string, number, array, arrow function, or even JSX)
-// rather than a JSON-restricted literal -- it is spliced verbatim into the
-// generated story's `args` object. Short values read inline
-// (`@example "Run"`); anything spanning multiple lines needs a fenced
-// ```tsx block, the same convention this pipeline already used for
-// component-level examples before this change moved them onto each prop.
-function parsePropExample(blocks, propName) {
-  const exampleBlock = blocks.find((block) => block.tag === "example");
-  if (exampleBlock === undefined) return undefined;
+// The plain description text on a prop's own doc comment (everything before
+// its first @tag) becomes that prop's Storybook argType `description` --
+// generated explicitly rather than left to Storybook's own docgen-to-argTypes
+// merge, since every prop already gets a fully explicit argTypes entry
+// (control kind, options) from this pipeline; relying on an implicit merge
+// with whatever docgen also produces is not something worth guessing at.
+function parsePropDescription(blocks) {
+  const description = blocks
+    .filter((block) => block.tag === null)
+    .flatMap((block) => block.lines)
+    .join("\n")
+    .trim();
+  return description.length > 0 ? description : undefined;
+}
 
-  const [firstLine = "", ...rest] = exampleBlock.lines;
+// Both @example (a prop's Storybook seed value) and @default (the value the
+// component itself substitutes when the prop is omitted -- not always the
+// same thing: e.g. Card.borderRadius has no @example seed since it isn't
+// required, but does have a real @default of 8) share one grammar: a real
+// source expression (string, number, array, arrow function, even JSX)
+// rather than a JSON-restricted literal, spliced verbatim wherever it lands.
+// Short values read inline (`@default 12`); anything spanning multiple
+// lines needs a fenced ```tsx block.
+function parseTaggedExpression(blocks, tagName, propName) {
+  const tagBlock = blocks.find((block) => block.tag === tagName);
+  if (tagBlock === undefined) return undefined;
+
+  const [firstLine = "", ...rest] = tagBlock.lines;
   if (rest.every((line) => line.trim().length === 0)) {
     return firstLine.trim();
   }
@@ -115,7 +131,9 @@ function parsePropExample(blocks, propName) {
   const body = [firstLine, ...rest].join("\n");
   const fenced = FENCED_CODE_BLOCK.exec(body);
   if (fenced === null) {
-    throw new Error(`@example on prop "${propName}" must be inline or contain a fenced \`\`\`tsx code block`);
+    throw new Error(
+      `@${tagName} on prop "${propName}" must be inline or contain a fenced \`\`\`tsx code block`,
+    );
   }
   return fenced[1].trim();
 }
@@ -167,7 +185,9 @@ function parsePropsInterface(checker, sourceFile, interfaceDeclaration) {
 
     const rawComment = getLeadingDocComment(sourceFile.text, member);
     const blocks = rawComment === undefined ? [] : parseDocBlocks(stripCommentDelimiters(rawComment));
-    const example = parsePropExample(blocks, name);
+    const example = parseTaggedExpression(blocks, "example", name);
+    const defaultValue = parseTaggedExpression(blocks, "default", name);
+    const description = parsePropDescription(blocks);
 
     if (required && example === undefined) {
       throw new Error(
@@ -191,7 +211,9 @@ function parsePropsInterface(checker, sourceFile, interfaceDeclaration) {
       type,
       required,
       control,
+      ...(description === undefined ? {} : { description }),
       ...(example === undefined ? {} : { example }),
+      ...(defaultValue === undefined ? {} : { defaultValue }),
     });
   }
 

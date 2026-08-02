@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-AUTODOCS",
+  "title": "Enable Storybook autodocs so a Docs page (with the full argTypes table, including descriptions) exists per component",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T20:35:00-03:00",
+  "objective": "Owner pasted the actual Storybook UI: the Controls addon panel table only ever shows 'Name | Control' columns, and there is no 'Docs' entry anywhere in the sidebar for any component. Root cause: the compact Controls ADDON PANEL (next to Actions/Interactions) is intentionally minimal in Storybook -- the full ArgTypes table (Name, Description, Default, Control) is a Docs-page feature (the 'Controls' doc block used by autodocs/MDX), not something the panel itself ever renders. No story in this app has the 'autodocs' tag, so no Docs page is generated at all, which is why descriptions (already correctly present in argTypes, confirmed via direct server-side inspection in the prior task) were never going to be visible anywhere the owner was looking. Fix: enable autodocs globally via .storybook/preview.ts so every component gets a real Docs page.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-AUTODOCS.json",
+    "apps/architecture-studio/.storybook/preview.ts",
+    "apps/architecture-studio/.storybook/main.ts"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: owner pasted the actual UI (sidebar with only story entries, no Docs entries; Controls panel table showing only Name|Control columns) -- confirmed via /index.json that no story had a docs-type entry, matching the pasted UI exactly.",
+    "DONE (attempt 1, insufficient alone): added `tags: [\"autodocs\"]` to .storybook/preview.ts's default export. Restarted both servers fully (config change, not just HMR-able); /index.json still showed zero 'docs'-type entries -- this alone did not trigger doc-page generation in this Storybook version/setup.",
+    "DONE (attempt 2, confirmed working): added `docs: { autodocs: true }` to .storybook/main.ts's StorybookConfig (the older, unambiguous 'always generate a Docs page' option, rather than relying on tag-matching). Restarted both servers; /index.json now shows a real '<component>--docs' entry (type: 'docs') alongside the existing story entry for all 7 components.",
+    "DONE: verified the actual Docs iframe (viewMode=docs) returns 200 through the full same-origin proxy chain (architecture-studio -> /storybook-app -> Storybook), not just the story canvas.",
+    "DONE: architecture-studio's own tsc --noEmit still clean; full app chain (/storybook page, /storybook-app proxy) still 200."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/.storybook/preview.ts (tags: [\"autodocs\"] added -- kept even though it alone wasn't sufficient, since it's the documented per-story mechanism and does no harm alongside the main.ts option)",
+    "apps/architecture-studio/.storybook/main.ts (docs: { autodocs: true } added -- this is the setting that actually produced the docs entries)"
+  ],
+  "risks": [
+    "This was the real root cause behind two consecutive prior 'descriptions don't show' reports (ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN and ARCH-STUDIO-STORYBOOK-EXPLICIT-DESCRIPTIONS both correctly fixed the underlying data, but neither could have worked without a Docs page existing anywhere to render it) -- worth remembering that Storybook's compact Controls addon panel is deliberately minimal (Name/Control only) and was never going to show descriptions regardless of how correct the argTypes data was."
+  ],
+  "next_responsible_party": null
+}

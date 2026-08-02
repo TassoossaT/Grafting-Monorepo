@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-STORYBOOK-DEFAULT-VALUES",
+  "title": "Capture each optional prop's real internal default value via a @default TSDoc tag, and surface it in Storybook's Controls table Default column",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T22:40:00-03:00",
+  "objective": "Owner noticed the Controls panel's now-visible 'Default' column (from ARCH-STUDIO-STORYBOOK-REEXAMINE's controls.expanded fix) is empty for every prop, and asked to fix it. Root cause: @example is a seed value for the generated story, not necessarily the component's own real internal default (e.g. Card.shape falls back to 'rectangle' via `props.shape ?? \"rectangle\"` inside the component, GridLayout.columns falls back to 12) -- this data exists in each component's implementation but was never captured anywhere. Add a new @default TSDoc tag (same parsing convention as @example: inline for simple literals, fenced ```tsx block for anything longer) to every optional prop that has a real internal fallback; export-doc-mesh.mjs captures it into the mesh, generate-stories.mjs emits it as each argType's `table: { defaultValue: { summary: ... } }`.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-STORYBOOK-DEFAULT-VALUES.json",
+    "packages/ui/src/atoms/text.tsx",
+    "packages/ui/src/atoms/button.tsx",
+    "packages/ui/src/atoms/card.tsx",
+    "packages/ui/src/atoms/grid-layout.tsx",
+    "packages/ui/src/molecules/entity-summary.tsx",
+    "packages/ui/src/organisms/data-table.tsx",
+    "packages/ui/scripts/export-doc-mesh.mjs",
+    "docs/generated/meshes/ui-doc-mesh.v1.json",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "apps/architecture-studio/stories/button.stories.tsx",
+    "apps/architecture-studio/stories/card.stories.tsx",
+    "apps/architecture-studio/stories/data-table.stories.tsx",
+    "apps/architecture-studio/stories/entity-summary.stories.tsx",
+    "apps/architecture-studio/stories/grid-layout.stories.tsx",
+    "apps/architecture-studio/stories/status-badge.stories.tsx",
+    "apps/architecture-studio/stories/text.stories.tsx"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: read all 7 components' actual implementation code directly (not guessed) to find each optional prop's real internal fallback: Text (tone->\"default\", strong/truncate->false, maxWidth->\"100%\" special CSS value), Button (tone->\"default\"), Card (shape->\"rectangle\", backgroundColor->\"#ffffff\", fillContainer/interactive/selected->false, borderWidth->1, borderRadius->8, padding->12), GridLayout (columns->12, rowHeight->32, gap->12), EntitySummary (same Card-forwarded defaults plus contentGap->10, tags->[]), DataTable (pagination->{pageSize:20, hideWhenSinglePage:true}, density->\"compact\", emptyMessage->\"No data\"). Deliberately skipped props with no real fallback logic (undefined just means absent) rather than inventing one.",
+    "DONE: generalized export-doc-mesh.mjs's example-parsing helper into parseTaggedExpression(blocks, tagName, propName), reused for both @example and the new @default tag (same inline-or-fenced grammar).",
+    "DONE: generate-stories.mjs's renderArgType now emits `table: { defaultValue: { summary: ... } }` when a prop has a captured default, collapsing multi-line fenced defaults (DataTable.pagination's object literal) to one line for the table cell.",
+    "DONE: regenerated the mesh and printed every captured defaultValue directly -- all 27 expected entries present with exactly the right text, including the collapsed multi-line pagination default.",
+    "DONE: packages/ui tsc --noEmit clean, all 9 tests still pass; regenerated all 7 stories, reviewed card.stories.tsx and data-table.stories.tsx directly -- correct table.defaultValue.summary on every relevant argType; architecture-studio's own tsc --noEmit clean.",
+    "DONE: confirmed via the live dev server (HMR, no restart needed) that the regenerated story content serves correctly with defaultValue populated; full app chain (/storybook, /storybook-app) still 200."
+  ],
+  "artifacts": [
+    "packages/ui/src/{atoms/text.tsx,atoms/button.tsx,atoms/card.tsx,atoms/grid-layout.tsx,molecules/entity-summary.tsx,organisms/data-table.tsx} (@default tags added to props with a real internal fallback)",
+    "packages/ui/scripts/export-doc-mesh.mjs (parsePropExample generalized to parseTaggedExpression, reused for @default)",
+    "docs/generated/meshes/ui-doc-mesh.v1.json (regenerated, defaultValue field added per prop where applicable)",
+    "apps/architecture-studio/scripts/generate-stories.mjs (emits table.defaultValue.summary per argType)",
+    "apps/architecture-studio/stories/*.stories.tsx (regenerated, all reviewed)"
+  ],
+  "risks": [],
+  "next_responsible_party": null
+}

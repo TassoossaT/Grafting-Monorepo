@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-DEV-STORYBOOK-TOGETHER",
+  "title": "Make architecture-studio's dev command start both Next.js and Storybook together again",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T18:20:00-03:00",
+  "objective": "Owner reports that running the app's dev command used to bring up both Next.js and Storybook together, and now only starts Next.js, leaving /storybook broken (ECONNREFUSED to :6006) unless Storybook is started as a fully separate manual command. Owner wants this to work with a single command again -- investigate the current dev/storybook targets in package.json and project.json, and wire them to start together (e.g. via a concurrently-style runner), without regressing the existing dev target's own behavior (wasm asset copy step, --hostname 127.0.0.1 --port 4511).",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-DEV-STORYBOOK-TOGETHER.json",
+    "apps/architecture-studio/package.json",
+    "pnpm-lock.yaml"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: added `concurrently` as a devDependency and rewrote the `dev` script to run the wasm-copy step once, then start `next dev` and `storybook dev -p 6006 -h 127.0.0.1` together via `concurrently -k -n next,storybook -c blue,magenta`. `pnpm install` resolved cleanly (no supply-chain minimum-release-age exception needed, unlike the earlier js-yaml case this session).",
+    "DONE: ran `npm run dev` fresh -- both processes started together with clearly prefixed, color-coded output ([next]/[storybook]) in one log; verified via HTTP that the app root, /storybook page, and the /storybook-app proxy all return 200 while both are up.",
+    "DONE: directly tested the owner's stated requirement ('se eu derrubar um eu derrubo o outro') -- killed only the Storybook child process by PID; confirmed via the log that concurrently's `-k` (kill-others) flag detected the exit and sent SIGTERM to the Next.js process too, and both ports were free afterward. This is the concrete behavior requested, not just assumed from the flag's documentation.",
+    "DONE: restarted the combined command once more after the kill-test to leave a clean, working instance running, re-verified both ports up and /storybook-app returning 200."
+  ],
+  "artifacts": [
+    "apps/architecture-studio/package.json (dev script now starts Next.js + Storybook together via concurrently; concurrently added as a devDependency)",
+    "pnpm-lock.yaml (concurrently and its transitive deps added)"
+  ],
+  "risks": [
+    "concurrently's -k flag kills the other process when ANY one exits, including a normal/expected exit -- fine for this dev-only use case (both are meant to run for the whole session), but worth knowing if either command is ever changed to something that can legitimately exit early on its own."
+  ],
+  "next_responsible_party": null
+}

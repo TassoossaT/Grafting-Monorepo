@@ -52,11 +52,20 @@ export interface GridLayoutProps {
    * @example "Studio dashboard"
    */
   readonly ariaLabel: string;
-  /** Number of columns the grid is divided into. */
+  /**
+   * Number of columns the grid is divided into.
+   * @default 12
+   */
   readonly columns?: number;
-  /** Height of one grid row in CSS pixels. */
+  /**
+   * Height of one grid row in CSS pixels.
+   * @default 32
+   */
   readonly rowHeight?: number;
-  /** Gap between panels in CSS pixels, applied both horizontally and vertically. */
+  /**
+   * Gap between panels in CSS pixels, applied both horizontally and vertically.
+   * @default 12
+   */
   readonly gap?: number;
   /** Whether panels can be dragged to a new position. */
   readonly draggable?: boolean;

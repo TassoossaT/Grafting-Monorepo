@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-PAGE-NOT-LOADING",
+  "title": "Diagnose why architecture-studio's page stopped loading after the Storybook source-alias change",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T19:15:00-03:00",
+  "objective": "Owner reports the page no longer loads at all (not scoped to /storybook specifically) after ARCH-STUDIO-STORYBOOK-SOURCE-DOCGEN's alias change and dev server restart. Diagnose with real evidence (process status, dev server logs, HTTP checks) before changing anything -- could be a dead process, a crash triggered by the new source-based Storybook resolution, or something unrelated.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-PAGE-NOT-LOADING.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: confirmed both processes were running and the app root/direct Storybook both returned 200 -- ruled out a dead process immediately.",
+    "DONE: found the real error in the combined dev log: 'Error loading story index: TypeError: Failed to fetch' inside Storybook's preview runtime, right after 'Vite Re-optimizing dependencies because vite config has changed' -- a stale Vite/Storybook dependency-optimizer cache left over from switching the @grafting/ui alias from dist/index.js to src/index.ts in the prior task (a significant enough config change that the existing node_modules/.cache/storybook and .cache/sb-vite-plugin-externals content no longer matched).",
+    "DONE: killed both processes, deleted node_modules/.cache (storybook + sb-vite-plugin-externals) and .next entirely, and did a fully fresh restart.",
+    "DONE: re-verified the exact thing that failed before -- fetched /storybook-app/index.json through the full proxy chain and confirmed all 7 story entries now load with zero errors in the fresh log (previously this same fetch is what threw inside the preview runtime)."
+  ],
+  "artifacts": [],
+  "risks": [
+    "A significant Vite config change (like the alias switch in the prior task) can leave a stale optimizer cache that only surfaces as a real breakage on the following restart, not the one where the config changed -- worth remembering to clear node_modules/.cache proactively after any future viteFinal/main.ts change in this app, rather than waiting for a report."
+  ],
+  "next_responsible_party": null
+}

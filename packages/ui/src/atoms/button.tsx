@@ -10,7 +10,10 @@ export interface ButtonProps {
   readonly label: string;
   /** Invoked when the button is activated. */
   readonly onClick?: () => void;
-  /** Optional semantic emphasis. */
+  /**
+   * Optional semantic emphasis.
+   * @default "default"
+   */
   readonly tone?: "default" | "accent";
   /** Optional caller-owned class name for layout composition. */
   readonly className?: string;

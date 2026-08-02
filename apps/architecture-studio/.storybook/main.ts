@@ -13,16 +13,29 @@ const config: StorybookConfig = {
     options: {},
   },
   addons: [],
+  // Autodocs was tried and reverted: it triggers a confirmed, currently
+  // unresolved upstream Storybook bug (storybookjs/storybook#33440,
+  // "docsParameter.renderer is not a function") that throws whenever a
+  // Docs page is prepared, including in the background even while just
+  // viewing a story's Canvas. Descriptions are rendered directly inside
+  // each story's Canvas instead (see generate-stories.mjs's
+  // renderDescriptionBlock), which depends on nothing Storybook-internal
+  // and cannot be broken by this bug.
   async viteFinal(viteConfig) {
-    // Explicit alias to packages/ui's built dist/, rather than relying on
-    // Node's self-reference resolution, which is a real but less
-    // universally predictable resolution path across bundlers. packages/ui
-    // must be built (`pnpm --filter @grafting/ui build`) before Storybook
-    // can resolve this.
+    // Explicit alias to packages/ui's own TypeScript source, not its built
+    // dist/. Vite transpiles it on the fly, which is what lets Storybook's
+    // own docgen (react-docgen-typescript) read real prop types and TSDoc
+    // comments directly -- the compiled dist/index.js still carries each
+    // component's own leading comment (TS preserves JSDoc in JS emit by
+    // default), but every Props interface and its per-field comments are
+    // erased entirely at compile time, so docgen had nothing to read
+    // through that path. This does mean Storybook now exercises source
+    // rather than the built package; it no longer requires
+    // `pnpm --filter @grafting/ui build` to run first.
     viteConfig.resolve ??= {};
     viteConfig.resolve.alias = {
       ...viteConfig.resolve.alias,
-      "@grafting/ui": fileURLToPath(new URL("../../../packages/ui/dist/index.js", import.meta.url)),
+      "@grafting/ui": fileURLToPath(new URL("../../../packages/ui/src/index.ts", import.meta.url)),
     };
     return viteConfig;
   },

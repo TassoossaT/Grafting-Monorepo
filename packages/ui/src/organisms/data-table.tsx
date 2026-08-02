@@ -77,11 +77,23 @@ export interface DataTableProps<Row extends object> {
   readonly ariaLabel: string;
   /** Optional controlled selection. */
   readonly selection?: DataTableSelection;
-  /** Optional pagination, or false to render all rows. */
+  /**
+   * Optional pagination, or false to render all rows.
+   * @default
+   * ```tsx
+   * { pageSize: 20, hideWhenSinglePage: true }
+   * ```
+   */
   readonly pagination?: DataTablePagination | false;
-  /** Optional table density. */
+  /**
+   * Optional table density.
+   * @default "compact"
+   */
   readonly density?: "compact" | "regular";
-  /** Optional text shown when there are no rows. */
+  /**
+   * Optional text shown when there are no rows.
+   * @default "No data"
+   */
   readonly emptyMessage?: string;
   /** Whether a loading treatment is displayed. */
   readonly loading?: boolean;

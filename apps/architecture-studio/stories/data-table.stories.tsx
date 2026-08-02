@@ -9,17 +9,24 @@ import { DataTable } from "@grafting/ui";
 const meta: Meta<typeof DataTable> = {
   title: "Organisms/DataTable",
   component: DataTable,
+  parameters: {
+    docs: {
+      description: {
+        component: "Immutable rows table with controlled selection and custom renderers.",
+      },
+    },
+  },
   argTypes: {
-    rows: { control: "object" },
-    columns: { control: "object" },
-    rowKey: { control: false },
-    ariaLabel: { control: "text" },
-    selection: { control: false },
-    pagination: { control: false },
-    density: { control: "select", options: ["compact","regular"] },
-    emptyMessage: { control: "text" },
-    loading: { control: "boolean" },
-    className: { control: "text" },
+    rows: { control: "object", description: "Immutable caller-owned rows." },
+    columns: { control: "object", description: "Immutable vendor-neutral column definitions." },
+    rowKey: { control: false, description: "Returns the stable key for a row." },
+    ariaLabel: { control: "text", description: "Accessible table name." },
+    selection: { control: false, description: "Optional controlled selection." },
+    pagination: { control: false, description: "Optional pagination, or false to render all rows.", table: { defaultValue: { summary: "{ pageSize: 20, hideWhenSinglePage: true }" } } },
+    density: { control: "select", options: ["compact","regular"], description: "Optional table density.", table: { defaultValue: { summary: "\"compact\"" } } },
+    emptyMessage: { control: "text", description: "Optional text shown when there are no rows.", table: { defaultValue: { summary: "\"No data\"" } } },
+    loading: { control: "boolean", description: "Whether a loading treatment is displayed." },
+    className: { control: "text", description: "Optional caller-owned class name for layout composition." },
   },
 };
 export default meta;

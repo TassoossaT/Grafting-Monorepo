@@ -7,8 +7,8 @@
     "build": "node scripts/copy-wasm-assets.mjs && next build",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs",
-    "dev": "node scripts/copy-wasm-assets.mjs && next dev --hostname 127.0.0.1 --port 4511",
-    "storybook": "storybook dev -p 6006",
+    "dev": "node scripts/copy-wasm-assets.mjs && concurrently -k -n next,storybook -c blue,magenta \"next dev --hostname 127.0.0.1 --port 4511\" \"storybook dev -p 6006 -h 127.0.0.1\"",
+    "storybook": "storybook dev -p 6006 -h 127.0.0.1",
     "build-storybook": "storybook build"
   },
   "dependencies": {
@@ -26,6 +26,7 @@
     "@storybook/react-vite": "^10.5.5",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "concurrently": "^9.1.2",
     "storybook": "^10.5.5",
     "typescript": "^5.9.3"
   }

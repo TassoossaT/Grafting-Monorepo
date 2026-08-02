@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-REVERT-VERIFY",
+  "title": "Restart dev servers cleanly and verify the Storybook state after reverting autodocs and the inline-description Canvas hack",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T21:35:00-03:00",
+  "objective": "After reverting ARCH-STUDIO-STORYBOOK-INLINE-DESCRIPTIONS (owner rejected the Canvas description block) and ARCH-STUDIO-STORYBOOK-AUTODOCS's docs.autodocs config, restart both dev servers with cleared caches and verify: no docs entries in the sidebar anymore, no docsParameter.renderer errors in the log, Controls/Actions still work, full app chain still 200.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-REVERT-VERIFY.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: killed both processes, cleared node_modules/.cache and .next, restarted fully via the combined dev command.",
+    "DONE: /index.json shows only 7 plain 'story' entries -- no 'docs' entries anymore, confirming autodocs is fully reverted and the sidebar no longer shows a Docs tab that would just throw the upstream bug.",
+    "DONE: full app chain re-verified -- /storybook page, /storybook-app proxy, and a real POST to /api/mcp all 200.",
+    "DONE: grepped the fresh log for 'docsParameter' -- zero occurrences, confirming the background error is gone now that autodocs is off."
+  ],
+  "artifacts": [],
+  "risks": [],
+  "next_responsible_party": null
+}

@@ -9,14 +9,21 @@ import { Text } from "@grafting/ui";
 const meta: Meta<typeof Text> = {
   title: "Atoms/Text",
   component: Text,
+  parameters: {
+    docs: {
+      description: {
+        component: "Bounded text with semantic tone and optional truncation.",
+      },
+    },
+  },
   argTypes: {
-    content: { control: "text" },
-    tone: { control: "select", options: ["default","muted","accent","danger"] },
-    strong: { control: "boolean" },
-    truncate: { control: "boolean" },
-    tooltip: { control: "text" },
-    maxWidth: { control: "number" },
-    className: { control: "text" },
+    content: { control: "text", description: "Text content rendered by the component." },
+    tone: { control: "select", options: ["default","muted","accent","danger"], description: "Optional semantic color treatment.", table: { defaultValue: { summary: "\"default\"" } } },
+    strong: { control: "boolean", description: "Whether the text uses the emphasized weight.", table: { defaultValue: { summary: "false" } } },
+    truncate: { control: "boolean", description: "Whether overflowing single-line content is truncated with an accessible tooltip.", table: { defaultValue: { summary: "false" } } },
+    tooltip: { control: "text", description: "Optional tooltip text used when truncation is enabled." },
+    maxWidth: { control: "number", description: "Optional maximum width in CSS pixels.", table: { defaultValue: { summary: "\"100%\"" } } },
+    className: { control: "text", description: "Optional caller-owned class name for layout composition." },
   },
 };
 export default meta;

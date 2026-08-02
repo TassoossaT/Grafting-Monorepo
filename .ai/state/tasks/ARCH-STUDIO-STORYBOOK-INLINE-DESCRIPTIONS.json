@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-STORYBOOK-INLINE-DESCRIPTIONS",
+  "title": "Render component/prop descriptions inline in the Canvas, bypassing Storybook's buggy Docs page and the Controls panel's by-design lack of a description column",
+  "status": "cancelled",
+  "owner": "claude",
+  "revision": 3,
+  "updated_at": "2026-08-02T21:20:00-03:00",
+  "objective": "Confirmed via storybookjs/storybook issue #33440 that the autodocs Docs page throws 'TypeError: docsParameter.renderer is not a function' -- a real, currently-unresolved upstream Storybook bug (reported on 10.1.11, still reproducing on our 10.5.5), not a misconfiguration on our end; separately, the Controls addon panel is deliberately minimal (Name/Control only, no Description column, confirmed earlier). Owner chose to render descriptions directly inside each story's Canvas instead of depending on either broken/limited Storybook surface: generate-stories.mjs's Default story gets an explicit `render` function that shows a small description block (component summary + each prop's own description) above the real, interactive component.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-STORYBOOK-INLINE-DESCRIPTIONS.json",
+    "apps/architecture-studio/scripts/generate-stories.mjs",
+    "apps/architecture-studio/.storybook/main.ts",
+    "apps/architecture-studio/.storybook/preview.ts",
+    "apps/architecture-studio/stories/button.stories.tsx",
+    "apps/architecture-studio/stories/card.stories.tsx",
+    "apps/architecture-studio/stories/data-table.stories.tsx",
+    "apps/architecture-studio/stories/entity-summary.stories.tsx",
+    "apps/architecture-studio/stories/grid-layout.stories.tsx",
+    "apps/architecture-studio/stories/status-badge.stories.tsx",
+    "apps/architecture-studio/stories/text.stories.tsx"
+  ],
+  "blockers": [],
+  "validations": [
+    "IMPLEMENTED THEN REVERTED: built renderDescriptionBlock() in generate-stories.mjs and wired the Default story's `render` to show it above the real component; regenerated all 7 stories, confirmed via tsc --noEmit (clean, including the generic DataTable) and via the live dev server (HMR picked up the change, JSX transform applied correctly). Owner reviewed and rejected it directly: 'Não gostei dessa solução, é uma gambiarra ruim' (didn't like this solution, it's a bad hack).",
+    "DONE: reverted generate-stories.mjs back to the plain args-only Default story (no custom render, no description block) exactly as it was before this task; regenerated all 7 stories and re-confirmed tsc --noEmit clean.",
+    "Autodocs (docs.autodocs in main.ts, tags in preview.ts) was already going to be reverted/commented regardless, since it triggers the confirmed upstream bug (#33440) even in the background -- that revert stands independent of the inline-block rejection."
+  ],
+  "artifacts": [],
+  "risks": [
+    "Descriptions remain invisible anywhere in the Storybook UI for now: Controls panel shows them by design never (Name/Control only), Docs page is blocked by an unresolved upstream Storybook bug, and the owner rejected the inline-Canvas workaround. The underlying data (argTypes.description, parameters.docs.description.component) is still generated correctly and ready to surface the moment either a real fix or an approach the owner likes is found."
+  ],
+  "next_responsible_party": null
+}
