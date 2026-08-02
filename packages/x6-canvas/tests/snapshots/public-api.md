@@ -14,6 +14,7 @@ export type CanvasPortPosition = "top" | "right" | "bottom" | "left" | {
     readonly x: number;
     readonly y: number;
 };
+
 /** Optional product-supplied appearance of a visible connection port. */
 export interface CanvasPortPresentation {
     /** Radius in CSS pixels. */
@@ -27,6 +28,7 @@ export interface CanvasPortPresentation {
     /** Opacity from zero to one. */
     readonly opacity?: number;
 }
+
 /** Consumer-owned connection point exposed by a node view. */
 export interface CanvasPortDefinition {
     /** Stable identifier referenced by edge terminals. */
@@ -38,6 +40,7 @@ export interface CanvasPortDefinition {
     /** Optional visible treatment; omitted ports remain technically available. */
     readonly presentation?: CanvasPortPresentation;
 }
+
 /** Immutable presentation data for one canvas node. */
 export interface CanvasNode {
     /** Stable caller-owned identity preserved by the adapter. */
@@ -59,6 +62,7 @@ export interface CanvasNode {
     /** Optional per-node port replacement for the selected view defaults. */
     readonly ports?: readonly CanvasPortDefinition[];
 }
+
 /** Context delivered to a consumer-supplied node mount. */
 export interface CanvasNodeRenderContext {
     /** Complete immutable consumer-owned node. */
@@ -66,6 +70,7 @@ export interface CanvasNodeRenderContext {
     /** Whether the canvas currently selects this node. */
     readonly selected: boolean;
 }
+
 /** Lifecycle owned by a mounted consumer-supplied node view. */
 export interface CanvasNodeRenderHandle {
     /** Updates the mounted view after node data or selection changes. */
@@ -73,6 +78,7 @@ export interface CanvasNodeRenderHandle {
     /** Releases every resource created by the mount. */
     dispose(): void;
 }
+
 /** Consumer-supplied node renderer registered for one canvas instance. */
 export interface CanvasNodeViewDefinition {
     /** Stable identifier referenced by `CanvasNode.view`. */
@@ -86,6 +92,7 @@ export interface CanvasNodeViewDefinition {
     /** Mounts any DOM-based implementation without exposing its UI runtime. */
     mount(host: HTMLElement, context: CanvasNodeRenderContext): CanvasNodeRenderHandle;
 }
+
 /** Consumer-owned endpoint of a rendered edge. */
 export interface CanvasEdgeTerminal {
     /** Stable identity of the endpoint node. */
@@ -93,6 +100,7 @@ export interface CanvasEdgeTerminal {
     /** Optional port identity defined by the endpoint node view. */
     readonly portId?: string;
 }
+
 /** Immutable presentation data for one directed canvas edge. */
 export interface CanvasEdge {
     /** Stable caller-owned identity preserved by the adapter. */
@@ -106,6 +114,7 @@ export interface CanvasEdge {
     /** Opaque consumer-owned data delivered unchanged to the edge presenter. */
     readonly data?: unknown;
 }
+
 /** Connector geometry selected by a consumer without exposing X6 names. */
 export type CanvasEdgeConnector = {
     readonly kind: "straight";
@@ -116,6 +125,7 @@ export type CanvasEdgeConnector = {
     readonly kind: "rounded";
     readonly radius?: number;
 };
+
 /** Optional marker rendered at one end of an edge. */
 export interface CanvasEdgeMarkerPresentation {
     /** Marker geometry, or `none` to suppress it explicitly. */
@@ -129,6 +139,7 @@ export interface CanvasEdgeMarkerPresentation {
     /** Marker stroke color. */
     readonly stroke?: string;
 }
+
 /** Product-supplied appearance of the rendered edge path. */
 export interface CanvasEdgeLinePresentation {
     /** Stroke color. */
@@ -148,6 +159,7 @@ export interface CanvasEdgeLinePresentation {
     /** Optional target marker. */
     readonly targetMarker?: CanvasEdgeMarkerPresentation;
 }
+
 /** Product-supplied label rendered along an edge. */
 export interface CanvasEdgeLabelPresentation {
     /** Human-readable text. */
@@ -169,6 +181,7 @@ export interface CanvasEdgeLabelPresentation {
     /** Optional product CSS class used for effects and typography. */
     readonly className?: string;
 }
+
 /** Complete consumer-owned visual projection for an edge. */
 export interface CanvasEdgePresentation {
     /** Optional path geometry; omitted values use the adapter's neutral default. */
@@ -182,6 +195,7 @@ export interface CanvasEdgePresentation {
     /** Optional layer used only for presentation ordering. */
     readonly zIndex?: number;
 }
+
 /** Context delivered to a consumer-supplied edge presenter. */
 export interface CanvasEdgeRenderContext {
     /** Complete immutable consumer-owned edge. */
@@ -189,6 +203,7 @@ export interface CanvasEdgeRenderContext {
     /** Whether the canvas currently selects this edge. */
     readonly selected: boolean;
 }
+
 /** Consumer-supplied edge renderer registered for one canvas instance. */
 export interface CanvasEdgeViewDefinition {
     /** Stable identifier referenced by `CanvasEdge.view`. */
@@ -196,6 +211,7 @@ export interface CanvasEdgeViewDefinition {
     /** Projects product data and selection into a vendor-neutral edge presentation. */
     present(context: CanvasEdgeRenderContext): CanvasEdgePresentation;
 }
+
 /** Stable reference to one caller-owned entity rendered on the canvas. */
 export interface CanvasEntityReference {
     /** Kind of rendered entity referenced by the caller-owned identifier. */
@@ -203,6 +219,7 @@ export interface CanvasEntityReference {
     /** Stable caller-owned identifier preserved by the adapter. */
     readonly id: string;
 }
+
 /** Optional grid rendered by the canvas surface. */
 export interface CanvasGridPresentation {
     /** Grid geometry. */
@@ -214,6 +231,7 @@ export interface CanvasGridPresentation {
     /** Grid mark or line thickness. */
     readonly thickness?: number;
 }
+
 /** Consumer-owned canvas background and grid treatment. */
 export interface CanvasSurfacePresentation {
     /** Optional background color; omission leaves the surface transparent. */
@@ -221,8 +239,10 @@ export interface CanvasSurfacePresentation {
     /** Optional grid, or `false` to suppress it explicitly. */
     readonly grid?: CanvasGridPresentation | false;
 }
+
 /** Modifier used by the optional canvas zoom interaction. */
 export type CanvasInteractionModifier = "control" | "meta" | "alt" | "shift";
+
 /** Consumer-owned wheel zoom behavior. */
 export interface CanvasZoomOptions {
     /** Required modifier keys; an empty list permits an unmodified wheel. */
@@ -234,6 +254,7 @@ export interface CanvasZoomOptions {
     /** Maximum permitted scale. */
     readonly maxScale?: number;
 }
+
 /** Consumer-owned interaction policy for a read-only canvas. */
 export interface CanvasInteractionOptions {
     /** Whether ordinary primary-button dragging pans the surface. */
@@ -247,6 +268,7 @@ export interface CanvasInteractionOptions {
     /** Whether activation also selects the activated entity. */
     readonly selectOnActivate?: boolean;
 }
+
 /** Consumer-owned fit-to-content behavior. */
 export interface CanvasViewportOptions {
     /** Whether content is fit and centered when the canvas is created. */
@@ -256,6 +278,7 @@ export interface CanvasViewportOptions {
     /** Maximum scale used by fit and `center` operations. */
     readonly maxScale?: number;
 }
+
 /** Composition and optional read-only callbacks for a canvas instance. */
 export interface ReadOnlyCanvasOptions {
     /** Node view implementations available to this canvas instance. */
@@ -271,6 +294,7 @@ export interface ReadOnlyCanvasOptions {
     /** Receives an immutable entity reference when a rendered entity is activated. */
     readonly onActivate?: (entity: CanvasEntityReference) => void;
 }
+
 /** Read-only controls returned to a canvas consumer. */
 export interface ReadOnlyCanvas {
     /** Number of nodes supplied when the canvas was created. */
@@ -284,6 +308,7 @@ export interface ReadOnlyCanvas {
     /** Releases the canvas resources owned by this adapter instance. */
     dispose(): void;
 }
+
 /**
  * Creates a non-editable graph canvas from caller-owned presentation data.
  *

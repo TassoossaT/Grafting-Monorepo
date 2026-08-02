@@ -31,15 +31,27 @@ export interface TextProps {
      * @example "Example label"
      */
     readonly content: string;
-    /** Optional semantic color treatment. */
+    /**
+     * Optional semantic color treatment.
+     * @default "default"
+     */
     readonly tone?: TextTone;
-    /** Whether the text uses the emphasized weight. */
+    /**
+     * Whether the text uses the emphasized weight.
+     * @default false
+     */
     readonly strong?: boolean;
-    /** Whether overflowing single-line content is truncated with an accessible tooltip. */
+    /**
+     * Whether overflowing single-line content is truncated with an accessible tooltip.
+     * @default false
+     */
     readonly truncate?: boolean;
     /** Optional tooltip text used when truncation is enabled. */
     readonly tooltip?: string;
-    /** Optional maximum width in CSS pixels. */
+    /**
+     * Optional maximum width in CSS pixels.
+     * @default "100%"
+     */
     readonly maxWidth?: number;
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
@@ -87,7 +99,10 @@ export interface ButtonProps {
     readonly label: string;
     /** Invoked when the button is activated. */
     readonly onClick?: () => void;
-    /** Optional semantic emphasis. */
+    /**
+     * Optional semantic emphasis.
+     * @default "default"
+     */
     readonly tone?: "default" | "accent";
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
@@ -104,7 +119,10 @@ import type { ReactElement, ReactNode } from "react";
 import type { CardShape } from "../shared-types.js";
 /** Public inputs for the smallest reusable bounded surface: a generic card. */
 export interface CardProps {
-    /** Geometric outline of the card; defaults to a rounded rectangle. */
+    /**
+     * Geometric outline of the card; defaults to a rounded rectangle.
+     * @default "rectangle"
+     */
     readonly shape?: CardShape;
     /**
      * Caller-owned content rendered inside the card.
@@ -118,21 +136,42 @@ export interface CardProps {
     readonly ariaLabel?: string;
     /** Optional accent used for the card boundary. */
     readonly accentColor?: string;
-    /** Optional background color for the card surface. */
+    /**
+     * Optional background color for the card surface.
+     * @default "#ffffff"
+     */
     readonly backgroundColor?: string;
-    /** Whether the card occupies the complete width and height of its container. */
+    /**
+     * Whether the card occupies the complete width and height of its container.
+     * @default false
+     */
     readonly fillContainer?: boolean;
-    /** Whether the card should communicate pointer interaction. */
+    /**
+     * Whether the card should communicate pointer interaction.
+     * @default false
+     */
     readonly interactive?: boolean;
-    /** Whether the card displays its selected treatment. */
+    /**
+     * Whether the card displays its selected treatment.
+     * @default false
+     */
     readonly selected?: boolean;
     /** Optional boundary color used when the card is selected. */
     readonly selectedColor?: string;
-    /** Optional boundary width in CSS pixels. */
+    /**
+     * Optional boundary width in CSS pixels.
+     * @default 1
+     */
     readonly borderWidth?: number;
-    /** Optional rounded-corner radius in CSS pixels. */
+    /**
+     * Optional rounded-corner radius in CSS pixels.
+     * @default 8
+     */
     readonly borderRadius?: number;
-    /** Optional padding in CSS pixels. */
+    /**
+     * Optional padding in CSS pixels.
+     * @default 12
+     */
     readonly padding?: number;
     /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
     readonly glowColor?: string;
@@ -177,27 +216,54 @@ export interface EntitySummaryProps {
     readonly accentColor?: string;
     /** Optional background color for the complete card surface. */
     readonly backgroundColor?: string;
-    /** Whether the card occupies the complete width and height of its container. */
+    /**
+     * Whether the card occupies the complete width and height of its container.
+     * @default false
+     */
     readonly fillContainer?: boolean;
-    /** Whether the card should communicate pointer interaction. */
+    /**
+     * Whether the card should communicate pointer interaction.
+     * @default false
+     */
     readonly interactive?: boolean;
-    /** Whether the card displays its selected treatment. */
+    /**
+     * Whether the card displays its selected treatment.
+     * @default false
+     */
     readonly selected?: boolean;
     /** Optional boundary color used when the component is selected. */
     readonly selectedColor?: string;
-    /** Optional boundary width in CSS pixels. */
+    /**
+     * Optional boundary width in CSS pixels.
+     * @default 1
+     */
     readonly borderWidth?: number;
-    /** Optional rounded-corner radius in CSS pixels. */
+    /**
+     * Optional rounded-corner radius in CSS pixels.
+     * @default 8
+     */
     readonly borderRadius?: number;
-    /** Optional body padding in CSS pixels. */
+    /**
+     * Optional body padding in CSS pixels.
+     * @default 12
+     */
     readonly bodyPadding?: number;
-    /** Optional gap between the component's content regions. */
+    /**
+     * Optional gap between the component's content regions.
+     * @default 10
+     */
     readonly contentGap?: number;
-    /** Optional short caller-owned labels rendered as compact badges below the identity. */
+    /**
+     * Optional short caller-owned labels rendered as compact badges below the identity.
+     * @default []
+     */
     readonly tags?: readonly string[];
     /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
     readonly glowColor?: string;
-    /** Geometric outline of the card; defaults to a rounded rectangle. */
+    /**
+     * Geometric outline of the card; defaults to a rounded rectangle.
+     * @default "rectangle"
+     */
     readonly shape?: CardShape;
     /** Optional label for a compact action button rendered in the card. */
     readonly actionLabel?: string;
@@ -285,11 +351,23 @@ export interface DataTableProps<Row extends object> {
     readonly ariaLabel: string;
     /** Optional controlled selection. */
     readonly selection?: DataTableSelection;
-    /** Optional pagination, or false to render all rows. */
+    /**
+     * Optional pagination, or false to render all rows.
+     * @default
+     * ```tsx
+     * { pageSize: 20, hideWhenSinglePage: true }
+     * ```
+     */
     readonly pagination?: DataTablePagination | false;
-    /** Optional table density. */
+    /**
+     * Optional table density.
+     * @default "compact"
+     */
     readonly density?: "compact" | "regular";
-    /** Optional text shown when there are no rows. */
+    /**
+     * Optional text shown when there are no rows.
+     * @default "No data"
+     */
     readonly emptyMessage?: string;
     /** Whether a loading treatment is displayed. */
     readonly loading?: boolean;
@@ -352,11 +430,20 @@ export interface GridLayoutProps {
      * @example "Studio dashboard"
      */
     readonly ariaLabel: string;
-    /** Number of columns the grid is divided into. */
+    /**
+     * Number of columns the grid is divided into.
+     * @default 12
+     */
     readonly columns?: number;
-    /** Height of one grid row in CSS pixels. */
+    /**
+     * Height of one grid row in CSS pixels.
+     * @default 32
+     */
     readonly rowHeight?: number;
-    /** Gap between panels in CSS pixels, applied both horizontally and vertically. */
+    /**
+     * Gap between panels in CSS pixels, applied both horizontally and vertically.
+     * @default 12
+     */
     readonly gap?: number;
     /** Whether panels can be dragged to a new position. */
     readonly draggable?: boolean;

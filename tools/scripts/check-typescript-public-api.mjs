@@ -200,7 +200,7 @@ const resolveOutputDeclarationPath = (typescript, parsedCommandLine, sourcePath)
 // one complete, reviewable document even though the source now colocates
 // each component's contract with its own implementation instead of
 // declaring everything directly in the entry point.
-const expandLocalReExports = (typescript, parsedCommandLine, entryPointPath, declarationText, outputs) => {
+export const expandLocalReExports = (typescript, parsedCommandLine, entryPointPath, declarationText, outputs) => {
   const sourceFile = typescript.createSourceFile(
     "index.d.ts",
     declarationText,
@@ -220,7 +220,13 @@ const expandLocalReExports = (typescript, parsedCommandLine, entryPointPath, dec
         : undefined;
 
     if (moduleSpecifierText === undefined || !LOCAL_MODULE_SPECIFIER.test(moduleSpecifierText)) {
-      segments.push(statement.getText(sourceFile).trim());
+      // getText() excludes leading trivia (the statement's own JSDoc comment
+      // lives there, not in the node's own span) -- getFullText() is the one
+      // that keeps it. Using getText() here silently dropped every directly
+      // declared statement's doc comment from the baseline for any project
+      // that isn't 100% re-exports (i.e. every TS project except the one
+      // this function was originally written and tested against).
+      segments.push(statement.getFullText(sourceFile).trim());
       continue;
     }
 

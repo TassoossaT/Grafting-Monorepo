@@ -9,6 +9,7 @@ import {
   assertNoForbiddenModules,
   collectModuleSpecifiers,
   collectUndocumentedPublicApi,
+  expandLocalReExports,
   loadTypeScriptForProject,
   resolveWithinProject,
 } from "./check-typescript-public-api.mjs";
@@ -58,6 +59,30 @@ test("empty documentation blocks do not satisfy the public obligation", () => {
     "export EmptyDocs",
     "member EmptyDocs.value",
   ]);
+});
+
+test("baseline rendering keeps each directly-declared statement's own leading JSDoc comment", () => {
+  // Regression test: expandLocalReExports's direct-declaration branch used
+  // to call statement.getText(sourceFile), which excludes leading trivia --
+  // the statement's own doc comment lives there, not in the node's own span.
+  // That silently dropped every doc comment from the baseline for any
+  // project with statements declared directly in the entry point (i.e. not
+  // 100% re-exports), and went unnoticed because it was never exercised by
+  // a test until now.
+  const declarationText =
+    "/** Public inputs for Foo. */\n" +
+    "export interface FooProps {\n" +
+    "  /** A field. */\n" +
+    "  readonly a: string;\n" +
+    "}\n\n" +
+    "/** Runs Foo. */\n" +
+    "export declare function run(): void;\n";
+
+  const expanded = expandLocalReExports(typescript, {}, "/virtual/index.ts", declarationText, new Map());
+
+  assert.match(expanded, /\/\*\* Public inputs for Foo\. \*\//);
+  assert.match(expanded, /\/\*\* A field\. \*\//);
+  assert.match(expanded, /\/\*\* Runs Foo\. \*\//);
 });
 
 test("named re-exports resolve documentation from the original declaration, not the re-export line", () => {

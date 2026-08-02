@@ -28,6 +28,7 @@ export interface HeightfieldCanvasOptions {
     /** Whether the terrain slowly auto-rotates. Defaults to `true`. */
     readonly autoRotate?: boolean;
 }
+
 /** Lifecycle handle returned by {@link createHeightfieldCanvas}. */
 export interface HeightfieldCanvas {
     /** Replaces the rendered terrain with new height values, keeping the same grid size and camera. */
@@ -35,6 +36,7 @@ export interface HeightfieldCanvas {
     /** Stops rendering and releases all GPU/DOM resources. */
     dispose(): void;
 }
+
 /**
  * Mounts a real-time-rendered heightfield terrain preview into `container`,
  * the same neutral-mechanism/Grafting-owned-surface pattern
