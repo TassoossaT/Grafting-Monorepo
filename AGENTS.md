@@ -112,6 +112,12 @@ Minimize tokens read and produced; do not fetch more than a task needs.
   session, not once per action; if a constraint needs to persist across
   sessions, add a short line to the relevant file or agent memory instead of
   re-deriving it each time.
+- **Verbatim relocation:** to move or archive content unchanged (e.g. an
+  entire file, or a section into its own file), prefer a filesystem/Git
+  operation (`git mv`, `cp`, or a shell copy) over `Read` then `Write` — the
+  latter pays the full content's token cost twice (once in, once out) for
+  zero actual editing. Reserve `Read`+`Write`/`Edit` for when the content
+  itself changes.
 
 ## What counts as a direct/simple edit
 
