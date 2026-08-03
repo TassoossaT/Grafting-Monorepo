@@ -35,6 +35,15 @@ architectural rule.
 
 An owner ID is one of the IDs in `.ai/registry/agents.yaml`. Provider roles are selected per task; no provider is permanently the planner, implementer, or reviewer.
 
+Moving a task record to `in_progress/` (step 5) automatically triggers a
+`PostToolUse` reminder (`tools/scripts/context-resolver-hook.mjs`) that prints
+the small slice of `AGENTS.md` files, `GRAFTING_MASTER_SOURCE.md` router rows,
+and ADRs relevant to that task's own `affected_paths`, so the required-sources
+read in step 1 can target that slice instead of the whole repository by
+default. This is a starting point, not a substitute for judgment — read
+further whenever the task actually needs it. The same resolution can be run
+by hand at any time: `node tools/scripts/context-resolver.mjs --task <ID>`.
+
 ## Fast-Track for Simple Tasks
 
 Workflow mechanics for the reduced-ceremony path; `AGENTS.md`'s own

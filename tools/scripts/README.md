@@ -278,3 +278,27 @@ whoever has a real one to add -- not something these tests do.
   in `.claude/settings.json`) giving the same signal inline right after an
   edit leaves an authored Markdown document "large" or "colossal".
   Advisory only, same non-blocking shape as `research-registry-reminder.mjs`.
+- `context-resolver.mjs` (+ `.test.mjs`) -- materializes the "context pack"
+  concept named in `docs/architecture/ai-control-plane.md` §16.9 (DEC-050)
+  but never implemented before this. Given a task ID (reads that task's own
+  `affected_paths`/`title`/`objective`, per DEC-031) or an explicit
+  `--paths a.ts,b.rs`, resolves and prints (never inlines) the small slice
+  of `AGENTS.md` files, `GRAFTING_MASTER_SOURCE.md` §0.4 router rows, and
+  `docs/adr/README.md` ADRs actually relevant to it, backed by Nx's own
+  project graph (`docs/generated/project-graph.json` for project roots,
+  `pnpm nx show projects --affected --files=... --json` for real
+  dependency-graph-aware downstream impact, per DEC-021 -- no new
+  dependency). Manual usage: `node tools/scripts/context-resolver.mjs
+  --task <TASK_ID>`. Known limitation: a task whose `affected_paths`
+  includes root-level/global files (`nx.json`, root `AGENTS.md`, a whole
+  `tools/scripts/` directory) will legitimately make Nx mark most of the
+  workspace as affected -- a correct answer given Nx's own model, just not
+  a sharp signal for that specific task.
+- `context-resolver-hook.mjs` (+ `.test.mjs`) -- `PostToolUse` reminder
+  (wired in `.claude/settings.json`) that runs `context-resolver.mjs`
+  automatically whenever a `Write`/`Edit` leaves a `.ai/state/tasks/`
+  record at `status: "in_progress"`, so the digest above appears right
+  after a task is claimed without a manual command. Advisory only, same
+  non-blocking shape as the other reminders; re-fires on later edits to an
+  already-`in_progress` record too (checks current state, not a diff, same
+  tradeoff `doc-size-reminder.mjs` already accepts).
