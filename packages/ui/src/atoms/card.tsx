@@ -1,4 +1,5 @@
-import type { ReactElement, ReactNode } from "react";
+import { Card as AntCard } from "antd";
+import type { ReactElement, ReactNode, CSSProperties } from "react";
 
 import type { CardShape } from "../shared-types.js";
 
@@ -64,8 +65,6 @@ export interface CardProps {
   readonly className?: string;
 }
 
-const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)";
-
 /**
  * Dependency-free bounded surface with replaceable accent and selection styles.
  *
@@ -73,43 +72,46 @@ const HEXAGON_CLIP_PATH = "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%,
  * @status stable
  */
 export function Card(props: CardProps): ReactElement {
+  const shape = props.shape ?? "rectangle";
   const usesAccentBoundary = props.accentColor !== undefined;
   const boundaryColor =
     props.selected === true && props.selectedColor !== undefined
       ? props.selectedColor
       : props.accentColor;
-  const shape = props.shape ?? "rectangle";
+
   const borderRadius =
     shape === "circle" ? "50%" : shape === "pill" ? 999 : (props.borderRadius ?? 8);
-  const clipPath = shape === "hexagon" ? HEXAGON_CLIP_PATH : undefined;
+
+  const cardStyle: CSSProperties = {
+    background: props.backgroundColor ?? "#ffffff",
+    border: `${props.borderWidth ?? 1}px solid ${
+      usesAccentBoundary ? boundaryColor : "rgba(0, 0, 0, 0.08)"
+    }`,
+    borderRadius,
+    boxShadow: props.glowColor === undefined ? undefined : `0 0 16px 4px ${props.glowColor}`,
+    boxSizing: "border-box",
+    cursor: props.interactive ? "pointer" : undefined,
+    height: props.fillContainer ? "100%" : undefined,
+    minWidth: 0,
+    overflow: "hidden",
+    width: "100%",
+  };
+
+  const bodyStyle: CSSProperties = {
+    padding: props.padding ?? 12,
+  };
 
   return (
-    <div
+    <AntCard
       aria-label={props.ariaLabel}
       className={props.className}
       data-selected={props.selected === undefined ? undefined : String(props.selected)}
       data-shape={shape}
-      style={{
-        background: props.backgroundColor ?? "#ffffff",
-        border: `${props.borderWidth ?? 1}px solid ${
-          usesAccentBoundary ? boundaryColor : "rgba(0, 0, 0, 0.08)"
-        }`,
-        borderRadius,
-        boxShadow:
-          props.glowColor === undefined
-            ? undefined
-            : `0 0 16px 4px ${props.glowColor}`,
-        boxSizing: "border-box",
-        clipPath,
-        cursor: props.interactive ? "pointer" : undefined,
-        height: props.fillContainer ? "100%" : undefined,
-        minWidth: 0,
-        overflow: "hidden",
-        padding: props.padding ?? 12,
-        width: "100%",
-      }}
+      variant="borderless"
+      style={cardStyle}
+      styles={{ body: bodyStyle }}
     >
       {props.children}
-    </div>
+    </AntCard>
   );
 }

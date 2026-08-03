@@ -6,6 +6,7 @@ export { Button, type ButtonProps } from "./atoms/button.js";
 export { Card, type CardProps } from "./atoms/card.js";
 
 export { EntitySummary, type EntitySummaryProps, mountEntitySummary } from "./molecules/entity-summary.js";
+export { PreviewCard, type PreviewCardProps } from "./molecules/preview-card.js";
 
 export {
   DataTable,

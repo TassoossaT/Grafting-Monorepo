@@ -67,6 +67,32 @@ existing consumers (the X6 canvas React-node bridge that mounts
 `EntitySummary` (or a future molecule), keeping `Card` reusable for whatever
 unrelated content a caller places inside it.
 
+**Reversed 2026-08-02.** The owner directed rebuilding `Card` on Ant
+Design's real `Card` internally, on general principle: leverage what antd
+(or another library) already provides rather than hand-build everything,
+not because a specific missing capability was identified this time.
+`CardProps` and every observable prop's behavior stay exactly as before —
+`EntitySummary` and `PreviewCard`, both built on `Card`, needed zero
+changes. Verified directly against the installed `antd@6.5.2` package
+(`.../antd/es/card/Card.d.ts`) before implementing: its `styles={{ root,
+body, ... }}` "semantic DOM" API plus `variant="borderless"` reproduce
+every value `Card` already computed by hand (background, border, radius,
+glow shadow via `boxShadow`, clip path, cursor, height, `overflow:
+hidden`), just relocated from one inline `style` object on a bare `<div>`
+into `styles.root`/`styles.body` on `<AntCard>`.
+
+One real, accepted, unavoidable cost: antd's `Card` necessarily renders its
+own `ant-card` class (plus a css-in-js hash class) on the root element —
+there is no prop that suppresses antd's own base class while still using
+the real component. This is a genuine reversal of this section's own
+earlier "contributing nothing beyond a `<div>`" finding, not a
+continuation of it: `packages/ui/tests/ui.test.mjs`'s DOM-purity
+assertions (`doesNotMatch(rootTag, /ant-/)`) had to be replaced with the
+opposite assertion (`match(rootTag, /class="ant-card/)`) on all three
+affected tests, since that specific "no vendor leak on the root" guarantee
+no longer holds by construction. The *props* contract is what stayed
+frozen, not the DOM shape.
+
 ## Grid layout decision
 
 `react-grid-layout` `2.2.3` is the initial private engine behind `GridLayout`,
@@ -116,6 +142,45 @@ app-level React root today (`src/main.ts` is plain DOM; React currently
 only exists privately inside `@grafting/x6-canvas`'s per-node mounts), so
 wiring `GridLayout` in is a first-time integration decision for that app,
 not routine reuse of an established pattern.
+
+## Preview card decision
+
+`PreviewCard` (`molecules/preview-card.tsx`, 2026-08-02) is the "future
+molecule" the Card atom decision above already anticipated: a gallery-style
+tile with a cover image, title/description, status, tags, and actions.
+Demonstrated need: Architecture Studio's `/lab` route needs a tile for each
+active trial (e.g. the heightmap generation demo), richer than a plain
+`Card` but shaped completely differently from `EntitySummary`'s compact
+horizontal identity row (used in X6 node views and tables, where a big
+cover image has no room and would risk breaking existing consumers).
+
+The owner asked directly whether to build this on Ant Design's `Card`
+(`cover`/`actions`/`Meta`/`Avatar`) or introduce Mantine's `Card` instead.
+Neither was adopted. `EntitySummary` already proves title, description,
+status, tags, actions, and a "live status" glow are fully achievable with
+this package's own dependency-free `Card`/`Text`/`StatusBadge`/`Button`
+atoms — no vendor `Card` involved. The only genuinely new surface
+`PreviewCard` needed was a cover image, and Ant Design's own `cover` prop
+is nothing more than a styled wrapper `<div>` around whatever image is
+passed to it — the same "contributing nothing beyond a `<div>`" finding
+that already ruled out Ant Design's `Card` for `EntitySummary` applies
+here too. A plain `<img>`, clipped to `Card`'s own rounded corners for
+free via its existing `overflow: hidden` (achieved by rendering `Card`
+with `padding={0}` and giving the body its own inner padding instead),
+does the same job with no new dependency. Mantine was not evaluated
+further than this for the same reason `DECISIONS.md`'s own closing line
+already states: this package keeps one UI framework (`antd`) private to
+it, and adding a second was never demonstrated as necessary for anything
+`PreviewCard` needs.
+
+`EntitySummary` is intentionally unchanged by this decision.
+
+Deferred, not part of this decision: a reusable hover/glow *behavior* hook
+(e.g. under a future `hooks/` category) so "glow on some condition" stays
+swappable instead of hardcoded into any one component. `Card`'s existing
+`glowColor` prop (and `PreviewCard`'s passthrough of it) already accepts
+any caller-decided color; deciding *when* to show one is left to the
+caller until a second real consumer of that behavior exists.
 
 ## shadcn/ui conclusion
 

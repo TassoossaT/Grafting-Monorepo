@@ -384,6 +384,76 @@ Horizontal position in grid columns, zero-indexed from the left.
 
 Vertical position in grid rows, zero-indexed from the top.
 
+### `interface ui.PreviewCardProps`
+
+Public inputs for a gallery-style tile: cover image, title/description, status, tags, and actions.
+
+### `property ui.PreviewCardProps.accentColor?: string`
+
+Optional accent used for the card boundary.
+
+### `property ui.PreviewCardProps.actions?: ReactNode`
+
+Optional actions rendered at the bottom of the card.
+
+### `property ui.PreviewCardProps.ariaLabel?: string`
+
+Optional accessible name for the card container.
+
+### `property ui.PreviewCardProps.backgroundColor?: string`
+
+Optional background color for the card surface.
+
+### `property ui.PreviewCardProps.className?: string`
+
+Optional caller-owned class name for layout composition.
+
+### `property ui.PreviewCardProps.cover?: { alt: string; src: string }`
+
+Optional cover image shown above the title, clipped to the card's own
+corners. `alt` is bundled with `src` so accessible text can never be
+forgotten when a cover is present.
+
+### `property ui.PreviewCardProps.description?: string`
+
+Optional secondary description.
+
+### `property ui.PreviewCardProps.fillContainer?: boolean`
+
+Whether the card occupies the complete width and height of its container.
+
+### `property ui.PreviewCardProps.glowColor?: string`
+
+Optional glow color rendered as an outer shadow, e.g. to signal live status.
+
+### `property ui.PreviewCardProps.interactive?: boolean`
+
+Whether the card should communicate pointer interaction.
+
+### `property ui.PreviewCardProps.selected?: boolean`
+
+Whether the card displays its selected treatment.
+
+### `property ui.PreviewCardProps.selectedColor?: string`
+
+Optional boundary color used when the card is selected.
+
+### `property ui.PreviewCardProps.status?: UiStatus`
+
+Optional semantic status.
+
+### `property ui.PreviewCardProps.statusLabel?: string`
+
+Human-readable label paired with status.
+
+### `property ui.PreviewCardProps.tags?: readonly string[]`
+
+Optional short caller-owned labels rendered as compact badges.
+
+### `property ui.PreviewCardProps.title: string`
+
+Primary human-readable title.
+
 ### `interface ui.StatusBadgeProps`
 
 Public inputs for a compact semantic status indicator.
@@ -493,6 +563,11 @@ with the consuming application.
 ### `function ui.mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>`
 
 Mounts an EntitySummary into an existing DOM host without exposing ReactDOM.
+
+### `function ui.PreviewCard(props: PreviewCardProps): ReactElement`
+
+Gallery-style tile built from Card, Text, and StatusBadge: a cover image,
+title/description, status, tags, and caller-owned actions.
 
 ### `function ui.StatusBadge(props: StatusBadgeProps): ReactElement`
 

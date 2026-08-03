@@ -4,7 +4,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Card, DataTable, EntitySummary, GridLayout, StatusBadge, Text } from "../dist/index.js";
+import { Card, DataTable, EntitySummary, GridLayout, PreviewCard, StatusBadge, Text } from "../dist/index.js";
 import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
@@ -15,19 +15,20 @@ test("exports only the deliberate Grafting component surface", async () => {
     "DataTable",
     "EntitySummary",
     "GridLayout",
+    "PreviewCard",
     "StatusBadge",
     "Text",
     "mountEntitySummary",
   ]);
 });
 
-test("renders a dependency-free bounded surface", () => {
+test("renders a bounded surface built on Ant Design's Card (DEC: card-antd-rebuild, 2026-08-02)", () => {
   const markup = renderToStaticMarkup(
     createElement(Card, { ariaLabel: "Panel", children: createElement("span", null, "Content") }),
   );
 
   assert.match(markup, /^<div/);
-  assert.doesNotMatch(markup, /ant-/);
+  assert.match(markup, /class="ant-card/);
   assert.match(markup, /aria-label="Panel"/);
   assert.match(markup, /Content/);
 });
@@ -82,7 +83,7 @@ test("lets the Card atom own a complete selected canvas-node boundary", () => {
   const rootTag = markup.match(/^<[^>]+>/)?.[0] ?? "";
 
   assert.match(rootTag, /^<div/);
-  assert.doesNotMatch(rootTag, /ant-/);
+  assert.match(rootTag, /class="ant-card/);
   assert.match(rootTag, /data-selected="true"/);
   assert.match(rootTag, /border:3px solid #2563eb/);
   assert.match(rootTag, /height:100%/);
@@ -101,6 +102,50 @@ test("shows a capped row of caller-owned tags below the entity identity", () => 
   assert.match(markup, /scope:shared/);
   assert.match(markup, /type:lib/);
   assert.doesNotMatch(markup, /platform:web/);
+});
+
+test("renders a gallery tile without a cover image when none is given", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PreviewCard, {
+      ariaLabel: "noise-rs",
+      description: "Perlin-noise procedural terrain heightmap.",
+      title: "noise-rs",
+    }),
+  );
+
+  assert.match(markup, /aria-label="noise-rs"/);
+  assert.match(markup, /noise-rs/);
+  assert.match(markup, /Perlin-noise procedural terrain heightmap\./);
+  assert.doesNotMatch(markup, /<img/);
+});
+
+test("clips a PreviewCard's cover image to the card's own corners", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PreviewCard, {
+      cover: { alt: "Rendered heightmap preview", src: "/preview.png" },
+      title: "Heightmap generation",
+    }),
+  );
+
+  assert.match(markup, /<img[^>]*src="\/preview\.png"/);
+  assert.match(markup, /<img[^>]*alt="Rendered heightmap preview"/);
+  assert.match(markup, /overflow:hidden/);
+});
+
+test("shows status and tags together below a PreviewCard's identity", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PreviewCard, {
+      status: "warning",
+      statusLabel: "In development",
+      tags: ["noise-rs"],
+      title: "Heightmap generation",
+    }),
+  );
+  const rootTag = markup.match(/^<[^>]+>/)?.[0] ?? "";
+
+  assert.match(markup, /In development/);
+  assert.match(markup, />noise-rs</);
+  assert.match(rootTag, /class="ant-card/);
 });
 
 test("updates and disposes a DOM mount through a ReactDOM-free public lifecycle", () => {

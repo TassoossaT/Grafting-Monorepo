@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "UI-PREVIEW-CARD",
+  "title": "Add a PreviewCard molecule to @grafting/ui for gallery-style tiles (cover image, tags, title/description)",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-02T05:30:00-03:00",
+  "objective": "Owner wants a richer card for grid/gallery tiles (starting with Architecture Studio's /lab trial cards), pasting two Ant Design Card examples (cover+actions+Meta, and an antd-style themed variant) as inspiration, and asked for help choosing Ant Design vs Mantine for it. Research found packages/ui/src/molecules/entity-summary.tsx already implements almost everything in those examples (title, description, StatusBadge status, tags, glowColor for 'live status', actions, selected/interactive) using only this package's own dependency-free Card/Text/StatusBadge/Button atoms, no Ant Design Card. packages/ui/DECISIONS.md's existing 'Card atom decision' already anticipated a future molecule needing a cover image, and separately found Ant Design's Card 'contributing nothing beyond a <div>' for EntitySummary's needs -- the same reasoning applies to a cover image (Ant Design's cover prop is just a styled div; a plain <img> does the same job). Confirmed with the owner via AskUserQuestion: new molecule (PreviewCard) composing only the existing atoms plus a cover-image region, no Ant Design Card, no Mantine; EntitySummary stays untouched (different shape, already used in X6 node views/tables); a separate hover/glow behavior hook (packages/ui/src/hooks/) is explicitly deferred to a later task. Full design in the approved plan at C:\\Users\\PICHAU\\.claude\\plans\\mellow-drifting-nova.md.",
+  "affected_paths": [
+    ".ai/state/tasks/UI-PREVIEW-CARD.json",
+    "packages/ui/src/molecules/preview-card.tsx",
+    "packages/ui/src/index.ts",
+    "packages/ui/tests/ui.test.mjs",
+    "packages/ui/tests/snapshots/public-api.md",
+    "packages/ui/DECISIONS.md",
+    "docs/generated/meshes/ui-doc-mesh.v1.json",
+    "docs/generated/api/ts/ui.api.md",
+    "apps/architecture-studio/stories/preview-card.stories.tsx",
+    "docs/generated/grafting.graph.json",
+    "docs/generated/repo-map.md",
+    "docs/generated/project-graph.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: wrote packages/ui/src/molecules/preview-card.tsx composing only the existing Card/Text/StatusBadge atoms (Card rendered with padding=0 so a cover <img> clips to its own rounded corners for free via Card's existing overflow:hidden) -- no antd Card, no Mantine, per the owner's confirmed decision. Exported from src/index.ts matching EntitySummary's export pattern.",
+    "DONE: added 3 new behavioral tests to packages/ui/tests/ui.test.mjs (no cover renders no <img>; cover image clips via overflow:hidden with correct src/alt; status+tags render together) plus updated the export-surface assertion; found and fixed one real test bug during the run -- an over-broad 'no ant- anywhere' assertion copied from a different EntitySummary test failed because PreviewCard's children (Text/StatusBadge) legitimately use antd internally, same as EntitySummary's own children do; fixed to check only the root tag, matching the established pattern exactly. Full suite: 12/12 pass.",
+    "DONE: tsc --noEmit clean. Public API baseline deliberately updated (UPDATE_SNAPSHOTS=yes pnpm --filter @grafting/ui api-check per AGENTS.md's one sanctioned exception), diff reviewed directly (git diff) -- addition-only, exactly PreviewCardProps + PreviewCard's declaration, no unexpected drift elsewhere. api-check then passes clean with 'no forbidden module leaked' (antd/react-dom/react-grid-layout types confirmed not to escape the public surface).",
+    "DONE: regenerated docs/generated/meshes/ui-doc-mesh.v1.json (export-doc-mesh.mjs) and inspected the new molecule.preview-card entry directly -- correct control-kind inference (text/select/object/boolean), all @example/@default values captured. Regenerated apps/architecture-studio's Storybook stories (node scripts/generate-stories.mjs) and read the generated preview-card.stories.tsx directly -- Molecules/PreviewCard title, full argTypes, and a populated Default story matching every @example. architecture-studio's own tsc --noEmit stayed clean with the new story file in the tree.",
+    "DONE: regenerated docs/generated/api/ts/ui.api.md and docs/generated/grafting.graph.json; full pnpm run docs:check passes clean end to end. Reviewed ui.api.md directly (578 lines, up from 503 pre-task, consistent growth for the new component, not a size outlier vs siblings) -- PreviewCardProps and PreviewCard both documented correctly.",
+    "DONE: added a 'Preview card decision' section to packages/ui/DECISIONS.md recording the demonstrated need, why Ant Design's Card and Mantine were both evaluated and not used (same 'contributes nothing beyond a div' reasoning already established for the Card atom itself, now applied fresh to a cover image), that EntitySummary is deliberately unchanged, and that the hover/glow behavior hook is explicitly deferred."
+  ],
+  "artifacts": [
+    "packages/ui/src/molecules/preview-card.tsx (new)",
+    "packages/ui/src/index.ts (PreviewCard/PreviewCardProps export added)",
+    "packages/ui/tests/ui.test.mjs (3 new tests, export-surface list updated)",
+    "packages/ui/tests/snapshots/public-api.md (baseline deliberately updated, diff reviewed)",
+    "packages/ui/DECISIONS.md (new 'Preview card decision' section)",
+    "docs/generated/meshes/ui-doc-mesh.v1.json, docs/generated/api/ts/ui.api.md, docs/generated/grafting.graph.json (regenerated)",
+    "apps/architecture-studio/stories/preview-card.stories.tsx (regenerated)",
+    ".ai/state/tasks/UI-PREVIEW-CARD.json (this record)"
+  ],
+  "risks": [
+    "Discovered but out of scope to fix here: `pnpm exec nx run architecture-studio:stories-generate` fails (MODULE_NOT_FOUND) because the Nx run-commands executor invokes `node scripts/generate-stories.mjs` with cwd at the workspace root instead of the project root -- a pre-existing target-wiring bug this task did not introduce and did not touch. Worked around by running the script directly from apps/architecture-studio for verification; the underlying Nx target needs its own fix (likely an explicit `options.cwd`) in a separate task.",
+    "PreviewCard is built but not yet wired into any real consumer (e.g. apps/architecture-studio/src/app/lab/lab-client.tsx's hand-rolled trial cards) -- deferred per the approved plan as a natural next step, not bundled into this task.",
+    "The hover/glow behavior hook (packages/ui/src/hooks/) remains explicitly deferred, per the owner's own direction, until a concrete second consumer exists.",
+    "This task only proves the current working tree is internally consistent and passes every local check -- none of this session's uncommitted changes have been committed or pushed yet."
+  ],
+  "next_responsible_party": null
+}

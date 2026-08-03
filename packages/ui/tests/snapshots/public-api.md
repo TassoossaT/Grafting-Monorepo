@@ -281,6 +281,91 @@ export declare function EntitySummary(props: EntitySummaryProps): ReactElement;
 export declare function mountEntitySummary(host: HTMLElement, props: EntitySummaryProps): UiMountHandle<EntitySummaryProps>;
 
 import type { ReactElement, ReactNode } from "react";
+import type { UiStatus } from "../shared-types.js";
+/** Public inputs for a gallery-style tile: cover image, title/description, status, tags, and actions. */
+export interface PreviewCardProps {
+    /**
+     * Primary human-readable title.
+     * @example "Heightmap generation"
+     */
+    readonly title: string;
+    /**
+     * Optional secondary description.
+     * @example "Perlin-noise procedural terrain heightmap, computed in Rust via Wasm."
+     */
+    readonly description?: string;
+    /**
+     * Optional cover image shown above the title, clipped to the card's own
+     * corners. `alt` is bundled with `src` so accessible text can never be
+     * forgotten when a cover is present.
+     * @example
+     * ```tsx
+     * { src: "/preview.png", alt: "Rendered heightmap preview" }
+     * ```
+     */
+    readonly cover?: {
+        readonly src: string;
+        readonly alt: string;
+    };
+    /**
+     * Optional semantic status.
+     * @example "success"
+     */
+    readonly status?: UiStatus;
+    /**
+     * Human-readable label paired with status.
+     * @example "Adopted"
+     */
+    readonly statusLabel?: string;
+    /**
+     * Optional short caller-owned labels rendered as compact badges.
+     * @default []
+     * @example ["MIT", "top pick"]
+     */
+    readonly tags?: readonly string[];
+    /** Optional actions rendered at the bottom of the card. */
+    readonly actions?: ReactNode;
+    /** Optional accessible name for the card container. */
+    readonly ariaLabel?: string;
+    /** Optional caller-owned class name for layout composition. */
+    readonly className?: string;
+    /** Optional glow color rendered as an outer shadow, e.g. to signal live status. */
+    readonly glowColor?: string;
+    /**
+     * Whether the card should communicate pointer interaction.
+     * @default false
+     */
+    readonly interactive?: boolean;
+    /**
+     * Whether the card displays its selected treatment.
+     * @default false
+     */
+    readonly selected?: boolean;
+    /** Optional boundary color used when the card is selected. */
+    readonly selectedColor?: string;
+    /** Optional accent used for the card boundary. */
+    readonly accentColor?: string;
+    /**
+     * Optional background color for the card surface.
+     * @default "#ffffff"
+     */
+    readonly backgroundColor?: string;
+    /**
+     * Whether the card occupies the complete width and height of its container.
+     * @default false
+     */
+    readonly fillContainer?: boolean;
+}
+/**
+ * Gallery-style tile built from Card, Text, and StatusBadge: a cover image,
+ * title/description, status, tags, and caller-owned actions.
+ *
+ * @layer molecule
+ * @status stable
+ */
+export declare function PreviewCard(props: PreviewCardProps): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
 /** Stable key used to identify a table row independently of its position. */
 export type DataTableRowKey = string | number;
 /** Immutable context supplied to a custom table-cell renderer. */
