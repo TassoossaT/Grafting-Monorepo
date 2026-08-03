@@ -4,18 +4,17 @@ Read and follow, in order:
 
 1. `AGENTS.md`;
 2. `GRAFTING_MASTER_SOURCE.md`;
-3. `CURRENT_PLANNING_STATE.md`;
-4. `.ai/coordination/PROTOCOL.md` and current task/handoff state;
-5. applicable ADRs and contracts.
+3. `.ai/coordination/PROTOCOL.md`;
+4. applicable ADRs and contracts.
 
 This file is only an adapter for Claude and does not repeat the architecture.
-Claude must claim or receive a task through the canonical coordination
-protocol before editing. Chat context is not a substitute for repository
-state.
+Task coordination goes through `tools/ia-graft` (worktree + branch per task,
+PR to finish) — see `AGENTS.md`'s "Task-based work" section. Chat context is
+not a substitute for repository state.
 
-For a genuinely small change, check `AGENTS.md`'s Fast-Track criteria first —
-a qualifying Simple Task skips the required-reading chain and the full task
-record.
+For a genuinely small, direct edit, check `AGENTS.md`'s "What counts as a
+direct/simple edit" first — it skips the required-reading chain and the
+worktree/PR ceremony.
 
 While the project is still in the planning phase:
 

@@ -23,15 +23,20 @@ spikes before the definitive scaffold.
 See:
 
 - [`GRAFTING_MASTER_SOURCE.md`](GRAFTING_MASTER_SOURCE.md) — canonical
-  architecture, decisions, backlog, and plan;
-- [`CURRENT_PLANNING_STATE.md`](CURRENT_PLANNING_STATE.md) — current status
-  and next steps;
+  architecture, decisions, backlog, and plan (itself a router — see its
+  §0.4 table for where each section's full body actually lives);
 - [`AGENTS.md`](AGENTS.md) — operational contract for agents;
 - [`docs/adr/`](docs/adr/) — architectural decision records;
+- [`docs/decisions/GATES.md`](docs/decisions/GATES.md) — live Decision Gate
+  status;
 - [`.ai/README.md`](.ai/README.md) — current scope of the AI Control Plane;
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — record of external
   open-source code copied or adapted into this repository, with attribution
   and license.
+
+Historical build log (what was done, when, and why, epic by epic) is
+archived at [`docs/history/PLANNING_LOG.md`](docs/history/PLANNING_LOG.md) —
+optional reading, not part of the required chain above.
 
 ## Documentation authority
 
