@@ -31,12 +31,15 @@ ADR-per-task.
 
 - `guard-check` — ask "would `<tool>` on `<path>`/`<command>` be allowed"
   before attempting it; returns `{ok, allowed, reason}`.
-- `task new --id <TASK-ID> --title <title> [--base main]` — creates an
-  isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
-  (`task/<TASK-ID>`) off `origin/<base>`.
+- `task new --id <TASK-ID> [--base main]` — creates an isolated Git worktree
+  (`.worktrees/<TASK-ID>`) and branch (`task/<TASK-ID>`) off `origin/<base>`.
+- `task commit --id <TASK-ID> --message <msg> [--files <path>...]` — stages
+  (all changed files, or a given subset) and commits inside that worktree.
 - `task done --id <TASK-ID> --title <title> --body <body> [--base main]` —
-  pushes the branch and opens a pull request via `gh pr create`. Leaves the
-  worktree in place for any follow-up review commits.
+  pushes the branch and opens a pull request via `gh pr create`. If `gh` is
+  missing or unauthenticated, it still pushes and returns
+  `{opened: false, prUrl: <manual compare URL>}` instead of failing. Leaves
+  the worktree in place for any follow-up review commits.
 - `task cleanup --id <TASK-ID>` — after the PR has merged, removes the
   worktree directory and prunes Git metadata. The remote branch is left
   intact deliberately.
@@ -44,18 +47,22 @@ ADR-per-task.
 ## Starting work
 
 1. Decide whether the change is a direct/simple edit (see `AGENTS.md`'s "What
-   counts as a direct/simple edit") or a full task.
-2. Direct/simple edit: edit the main checkout, commit directly.
-3. Otherwise: `ia-graft task new --id <TASK-ID> --title <title>`, then work
-   only inside the printed worktree path. Pick `<TASK-ID>` so it doesn't
-   collide with another agent's in-flight worktree (check
-   `git worktree list` / open branches named `task/*` first).
-4. Commit inside the worktree as you make progress — there is no
-   "declare then batch-commit at the end" step; commit early and often.
-5. When the task is complete, `ia-graft task done --id <TASK-ID> --title
-   <title> --body <body>` opens the pull request. A human reviews and merges
-   it; once merged, `ia-graft task cleanup --id <TASK-ID>` removes the
-   worktree.
+   counts as a direct/simple edit") or a full task — either way, it goes
+   through a task branch and a PR; only the ceremony differs (a direct/simple
+   edit skips required-reading and gets a terser title/body).
+2. `ia-graft task new --id <TASK-ID>`, then work only inside the printed
+   worktree path. Pick `<TASK-ID>` so it doesn't collide with another agent's
+   in-flight worktree (check `git worktree list` / open branches named
+   `task/*` first).
+3. `ia-graft task commit --id <TASK-ID> --message <msg>` as you make
+   progress — there is no "declare then batch-commit at the end" step;
+   commit early and often, and never with raw `git commit` in the main
+   checkout.
+4. When the task is complete, `ia-graft task done --id <TASK-ID> --title
+   <title> --body <body>` pushes the branch and opens the pull request (via
+   `gh`, when available — otherwise it still pushes and returns a manual
+   compare URL instead of failing). A human reviews and merges it; once
+   merged, `ia-graft task cleanup --id <TASK-ID>` removes the worktree.
 
 Isolation between agents comes entirely from separate worktrees/branches. If
 two agents need to touch the same area, that surfaces as a normal Git merge
