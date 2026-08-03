@@ -47,20 +47,6 @@
         "{workspaceRoot}/rust-toolchain.toml"
       ]
     },
-    "build": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "wasm-pack build --target web --out-dir ../../../packages/vtt-generation-wasm/pkg libs/vtt/generation-wasm"
-      },
-      "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "{workspaceRoot}/Cargo.toml",
-        "{workspaceRoot}/Cargo.lock",
-        "{workspaceRoot}/rust-toolchain.toml"
-      ],
-      "outputs": ["{workspaceRoot}/packages/vtt-generation-wasm/pkg"]
-    },
     "docs-generate": {
       "executor": "nx:run-commands",
       "options": {

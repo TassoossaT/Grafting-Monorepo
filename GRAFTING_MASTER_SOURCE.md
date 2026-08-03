@@ -5,7 +5,7 @@
 > Version: `1.12.1`
 > Original base date: July 23, 2026
 > Consolidation date: July 26, 2026
-> Last updated: 2026-08-01 - expanded Architecture Studio to add a VTT generation-test surface and an agent-orchestration surface (DEC-054).
+> Last updated: 2026-08-02 - Wasm codegen for any Rust crate now lands directly in the consuming app's own build output at build/install time, never in a `packages/` technical package (DEC-055).
 > State: `CANONICAL-UNIFIED`
 > Next milestone: close the Decision Gates in Section 5 and execute the unified Phase 0 before the definitive scaffold.
 >
@@ -198,7 +198,7 @@ Planned components:
 | ----------------------------- | ----------------------------------------- |
 | `grafting-isekai-wasm`     | Rust crate that exposes the core to Wasm   |
 | `grafting-isekai-capi`     | Rust crate that exposes the native C ABI     |
-| `@grafting/isekai-wasm`    | npm package with Wasm, loader, and types      |
+| `@grafting/isekai-wasm`    | the same Rust crate's directory, also a normal npm package (co-located `package.json`, `postinstall` runs `wasm-pack`); not a separate `packages/` technical package (`ADR-0017`, DEC-055) |
 | `@grafting/isekai-web`     | idiomatic TypeScript/Worker client    |
 | `Grafting.Isekai.Interop`  | safe C# wrapper for the native library   |
 | `Grafting.Isekai.Protocol` | C# types generated from binary contracts |
@@ -208,7 +208,6 @@ In Nx, project names must remain unique, for example:
 ```text
 isekai-wasm-bridge
 isekai-capi-bridge
-isekai-wasm-package
 isekai-web-client
 isekai-dotnet-interop
 isekai-dotnet-protocol
@@ -401,6 +400,7 @@ and ADR-0013.
 | DEC-052 | Reusable capability packages expose neutral mechanisms, Grafting-owned composition contracts, extension points, and only replaceable defaults; consuming applications own concrete visual identity, semantic roles, effects, and interaction policy. A package may privately adapt third-party code, but it must not hardcode one product's presentation or force consumers to bypass its boundary (`docs/adr/ADR-0014-composable-capability-packages.md`). |
 | DEC-053 | AI agents never create, amend, rewrite, merge, or implicitly produce Git commits on any branch. They may inspect/stage Git state, create isolated `ai/<agent>/<task-id>` branches, and assist with pull requests containing human-authored commits; only explicit isolated branches may be pushed, and agents never push to `main`/`master`, force remote refs, or merge pull requests (`docs/adr/ADR-0015-agent-git-write-policy.md`). |
 | DEC-054 | `apps/architecture-studio`'s scope expands to three named surfaces: (1) the existing Graph IR explorer, unchanged and still read-only; (2) a new VTT procedural-generation test/visualization surface executing Rust/Wasm generation code, rendered via Three.js inside `@grafting/ui`'s `GridLayout`; (3) a new agent-orchestration surface, a Node backend executing MCP-based agent workflows, bound by a license-risk policy (no Mastra `ee/` code reachable from a shipped build) and still routing any canonical-source edit through `ADR-0012`'s existing proposal/validation/plan/approval lifecycle. `ADR-0012`'s read-only-only exclusion is superseded for surfaces 2 and 3 only (`docs/adr/ADR-0016-architecture-studio-scope-expansion.md`). |
+| DEC-055 | Generated Wasm bindings (`wasm-pack` output or equivalent) for any Rust crate never live inside `packages/`, even gitignored; the Rust crate stays a plain Cargo project under `libs/`, and its generated output is produced at build/install time directly into a directory owned by the consuming app, via an Nx target that app declares itself. `packages/isekai-wasm` and `packages/vtt-generation-wasm` are eliminated; `packages/isekai-web-client` receives its compiled Wasm module's location as a runtime parameter instead of importing a generated package (`docs/adr/ADR-0017-wasm-bindings-colocated-with-crate.md`). |
 
 ### 3.2 `PROVISIONAL` Decisions
 
@@ -816,7 +816,6 @@ reviewed when closing `GATE-004` and `GATE-009`.
 │       ├── narrative/
 │       └── session/
 ├── packages/
-│   ├── isekai-wasm/
 │   ├── isekai-web-client/
 │   ├── polymath/
 │   └── x6-canvas/
@@ -1010,17 +1009,18 @@ contracts:codegen
     └──> isekai-dotnet-protocol:build
 
 domain-core:build
-    ├──> isekai-wasm-bridge:build
+    ├──> isekai-wasm-bridge:check
     └──> isekai-capi-bridge:build
 
-isekai-wasm-bridge:build
-    └──> isekai-wasm-package:package
+isekai-wasm-bridge:check
+    └──> (not an Nx target -- `libs/isekai/wasm-bridge`'s own co-located
+         `package.json` `postinstall` script runs `wasm-pack` into that
+         same directory on a plain `pnpm install`; consuming apps just
+         depend on `@grafting/isekai-wasm` as `workspace:*`,
+         DEC-055/ADR-0017)
 
 isekai-capi-bridge:build
     └──> isekai-dotnet-interop:build
-
-isekai-wasm-package:package
-    └──> web-vtt:build
 
 isekai-dotnet-interop:build
     └──> desktop-game:build
@@ -1345,27 +1345,28 @@ Use:
 
 Do not make the experimental Global Virtual Store a requirement.
 
-### 9.2 Wasm package
+### 9.2 Wasm codegen (DEC-055)
 
-`packages/isekai-wasm` will be the technical package containing:
+Generated Wasm bindings (`.wasm`, loader, TypeScript definitions,
+ABI/protocol metadata, strictly necessary glue) never live inside a
+separate `packages/` technical package, not even gitignored. Instead, the
+Rust crate itself (`libs/isekai/wasm-bridge` and equivalents) is *also* a
+normal pnpm workspace package: a `package.json` co-located right next to
+its `Cargo.toml`, with a `postinstall` script that runs `wasm-pack build
+--target web --out-dir pkg`, writing generated output into that same
+directory (gitignored). Consuming apps depend on it exactly like any other
+workspace package -- `"@grafting/isekai-wasm": "workspace:*"` in
+`dependencies`, then a normal `import` -- no custom build script, no Nx
+target/`project.json` entry for this at all. A plain `pnpm install`
+already performs the conversion, the same as any npm package with native
+bindings. There is no standalone `packages/isekai-wasm`-style intermediate
+package; `@grafting/isekai-wasm` and `@grafting/vtt-generation-wasm` are
+themselves the crates' own package.json identities. See
+`docs/adr/ADR-0017-wasm-bindings-colocated-with-crate.md` for the full
+rationale, the two earlier designs it supersedes (an app-owned Nx target,
+then an app-owned `package.json` script), and the trade-offs.
 
-- `.wasm`;
-- loader;
-- TypeScript definitions;
-- ABI/protocol metadata;
-- strictly necessary glue.
-
-The web client must depend on:
-
-```json
-{
-  "dependencies": {
-    "@grafting/isekai-wasm": "workspace:*"
-  }
-}
-```
-
-The package must not contain domain logic rewritten in TypeScript.
+The Rust crate must not contain domain logic rewritten in TypeScript.
 
 ### 9.3 Web wrapper
 
@@ -1378,6 +1379,12 @@ The package must not contain domain logic rewritten in TypeScript.
 - device loss handling;
 - structured result decoding;
 - transferables management.
+
+Per DEC-055, this package depends on `@grafting/isekai-wasm` as a normal
+`workspace:*` dependency and imports it statically, same as before this
+decision -- what changed is only where `@grafting/isekai-wasm`'s own
+`package.json` lives (co-located in `libs/isekai/wasm-bridge`, not a
+separate `packages/isekai-wasm`).
 
 The wrapper must not expose memory offsets to React components.
 

@@ -20,13 +20,20 @@ proven by `docs/benchmarks/vtt-wasm-compile-spike-2026-08-01.md`.
 
 - `check` -- `cargo check -p grafting-vtt-generation-wasm`
 - `test` -- `cargo test -p grafting-vtt-generation-wasm`
-- `build` -- `wasm-pack build --target web --out-dir ../../../packages/vtt-generation-wasm/pkg libs/vtt/generation-wasm`
 
-Run via Nx: `pnpm exec nx run generation-wasm:check` / `:test` / `:build`.
+Run via Nx: `pnpm exec nx run generation-wasm:check` / `:test`.
+
+## Wasm bindings (DEC-055/ADR-0017)
+
+This crate is also a normal pnpm workspace package (`package.json`
+co-located right here, name `@grafting/vtt-generation-wasm`) -- not a
+separate `packages/` technical package. Its `postinstall` script runs
+`wasm-pack build --target web --out-dir pkg`, so a plain `pnpm install`
+already regenerates `pkg/` (gitignored). There is no separate
+`vtt-generation-wasm-package` project.
 
 ## Consumer
 
-`apps/architecture-studio`'s `/vtt-generation` route (via
-`packages/vtt-generation-wasm`, the generated npm wrapper around this
-crate's `wasm-pack` output) — the same static-asset-plus-Dedicated-Worker
-pattern already used for the Graph IR explorer's layout worker.
+`apps/architecture-studio`'s `/vtt-generation` route depends on
+`@grafting/vtt-generation-wasm` as a normal `workspace:*` dependency and
+imports it directly in its Dedicated Worker.

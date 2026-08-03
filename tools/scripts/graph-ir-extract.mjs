@@ -59,9 +59,11 @@ export async function extractGraphIr({ check = false } = {}) {
   const projectNames = Object.keys(nx.nodes).sort();
 
   // Resolve each project's manifest: prefer project.json, fall back to
-  // package.json for the one real case with no project.json
-  // (@grafting/isekai-wasm -- confirmed empirically; every other current
-  // project has project.json). The repo-root project's own Nx root is
+  // package.json for any project without one (none currently exist --
+  // @grafting/isekai-wasm was the one real case, until DEC-055/ADR-0017
+  // co-located it with libs/isekai/wasm-bridge's own project.json -- kept
+  // as a fallback since a future package-only project is plausible). The
+  // repo-root project's own Nx root is
   // "." (the "grafting" project, G-TOOLING-NX-ROOT-TARGETS) -- joining
   // that with a leading "./" produces a "." path segment, which
   // validate-graph-ir.mjs's validateEvidencePath rejects as unnormalized;

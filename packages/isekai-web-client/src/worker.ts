@@ -23,12 +23,11 @@
 import * as wasmModuleImport from "@grafting/isekai-wasm";
 import type { WorkerRequest, WorkerResponse } from "./protocol.js";
 
-// A normal static import: unlike spike 1's runtime-fetched static asset
-// (which needed a `webpackIgnore`-guarded dynamic import to dodge
-// build-time resolution), `@grafting/isekai-wasm` is a real, resolvable
-// workspace package -- both Vite/Vitest (this package's own tests) and
-// Next.js's bundler (the eventual real consumer) resolve it normally at
-// build time.
+// A normal static import: `@grafting/isekai-wasm` is a real, resolvable
+// workspace package co-located with its Rust source in
+// libs/isekai/wasm-bridge (DEC-055/ADR-0017) -- both Vite/Vitest (this
+// package's own tests) and Next.js's bundler (the real consumer) resolve
+// it normally at build time.
 type WasmModule = typeof wasmModuleImport;
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;

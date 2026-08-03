@@ -24,12 +24,18 @@ importers:
 
   apps/architecture-studio:
     dependencies:
+      '@grafting/isekai-wasm':
+        specifier: workspace:*
+        version: link:../../libs/isekai/wasm-bridge
       '@grafting/three-canvas':
         specifier: workspace:*
         version: link:../../packages/three-canvas
       '@grafting/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@grafting/vtt-generation-wasm':
+        specifier: workspace:*
+        version: link:../../libs/vtt/generation-wasm
       '@grafting/x6-canvas':
         specifier: workspace:*
         version: link:../../packages/x6-canvas
@@ -71,13 +77,19 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  packages/isekai-wasm: {}
+  libs/isekai/wasm-bridge: {}
+
+  libs/isekai/wasm-bridge/pkg: {}
+
+  libs/vtt/generation-wasm: {}
+
+  libs/vtt/generation-wasm/pkg: {}
 
   packages/isekai-web-client:
     dependencies:
       '@grafting/isekai-wasm':
         specifier: workspace:*
-        version: link:../isekai-wasm
+        version: link:../../libs/isekai/wasm-bridge
       flatbuffers:
         specifier: ^25.9.23
         version: 25.9.23
@@ -132,8 +144,6 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
-
-  packages/vtt-generation-wasm: {}
 
   packages/x6-canvas:
     dependencies:

@@ -83,7 +83,18 @@ Deliberately not done, and why:
 
 - `check` -- `cargo check -p grafting-isekai-wasm`
 - `test` -- `cargo test -p grafting-isekai-wasm && wasm-pack test --node`
-- `build` -- `wasm-pack build --target web --out-dir ../../../packages/isekai-wasm/pkg`
-  (produces `packages/isekai-wasm/pkg`, gitignored, regenerated on demand)
 
 Run via Nx: `pnpm nx run isekai-wasm-bridge:test`.
+
+## Wasm bindings (DEC-055/ADR-0017)
+
+This crate is also a normal pnpm workspace package (`package.json`
+co-located right here, name `@grafting/isekai-wasm`) -- not a separate
+`packages/` technical package. Its `postinstall` script runs `wasm-pack
+build --target web --out-dir pkg`, so a plain `pnpm install` at the
+workspace root already regenerates `pkg/` (gitignored) whenever this
+crate's source changes and a consumer re-links it. Consumers depend on it
+exactly like any other workspace package: `"@grafting/isekai-wasm":
+"workspace:*"` in `dependencies`, then `import init, { ... } from
+"@grafting/isekai-wasm"` -- no runtime URL fetch, no copy script, no Nx
+target for this. There is no separate `isekai-wasm-package` project.

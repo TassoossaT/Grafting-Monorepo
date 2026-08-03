@@ -21,13 +21,13 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
-      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "three-canvas:build", "ui:build", "x6-canvas:build"],
+      "dependsOn": ["three-canvas:build", "ui:build", "x6-canvas:build"],
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
-      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "three-canvas:build", "ui:build", "x6-canvas:build"],
+      "dependsOn": ["three-canvas:build", "ui:build", "x6-canvas:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/.next"]

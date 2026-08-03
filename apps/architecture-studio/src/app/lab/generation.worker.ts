@@ -1,10 +1,12 @@
 /// <reference lib="webworker" />
 
 // Dedicated Worker (DEC-015: Wasm/compute runs off the main thread). Loads
-// the wasm-pack "web" target output for grafting-vtt-generation-wasm as a
-// static asset (populated by scripts/copy-wasm-assets.mjs) and calls its one
-// real exported function, mirroring layout.worker.ts's already-proven
-// pattern for the Graph IR explorer's Rust layout worker.
+// @grafting/vtt-generation-wasm as a normal workspace dependency (DEC-055/
+// ADR-0017 -- the crate's own package.json postinstall regenerates its
+// `pkg/` on `pnpm install`; no separate technical package, no static-asset
+// copy step) and calls its one real exported function.
+
+import init, { generate_heightmap } from "@grafting/vtt-generation-wasm";
 
 export interface HeightmapWorkerRequest {
   readonly type: "generate";
@@ -20,30 +22,15 @@ export type HeightmapWorkerResponse =
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-// Shape of wasm-pack's "web" target glue
-// (packages/vtt-generation-wasm/pkg/grafting_vtt_generation_wasm.d.ts),
-// asserted by hand: the module is a static asset fetched at runtime from
-// public/vtt-generation-wasm-pkg/, not a file the TS project resolves at
-// build time.
-interface VttGenerationWasmModule {
-  default: () => Promise<unknown>;
-  generate_heightmap: (width: number, height: number, seed: number, scale: number) => Float32Array;
-}
-
-const wasmReady = (async (): Promise<VttGenerationWasmModule> => {
-  const wasmPkgUrl = "/vtt-generation-wasm-pkg/grafting_vtt_generation_wasm.js";
-  const wasm = (await import(/* webpackIgnore: true */ wasmPkgUrl)) as VttGenerationWasmModule;
-  await wasm.default();
-  return wasm;
-})();
+const wasmReady = init();
 
 ctx.onmessage = async (event: MessageEvent<HeightmapWorkerRequest>) => {
   if (event.data.type !== "generate") return;
 
   try {
-    const wasm = await wasmReady;
+    await wasmReady;
     const { width, height, seed, scale } = event.data;
-    const values = wasm.generate_heightmap(width, height, seed, scale);
+    const values = generate_heightmap(width, height, seed, scale);
     const response: HeightmapWorkerResponse = { type: "result", width, height, values };
     ctx.postMessage(response, [values.buffer]);
   } catch (error) {

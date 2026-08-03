@@ -46,8 +46,11 @@
       "**/*.egg-info": true,
       "**/src/generated": true,
       "**/Generated": true,
-      "**/packages/isekai-wasm/pkg": true,
-      "**/tools/.flatc-csharp": true
+      "**/tools/.flatc-csharp": true,
+      "**/*.rpyc": true,
+      "**/*.rpa": true,
+      "**/*.rpymc": true,
+      "**/cache/": true
     },
     "search.exclude": {
       "**/target": true,
@@ -59,7 +62,6 @@
       "**/.nx": true,
       "**/src/generated": true,
       "**/Generated": true,
-      "**/packages/isekai-wasm/pkg": true,
       "**/pnpm-lock.yaml": true,
       "**/Cargo.lock": true,
       "**/uv.lock": true,

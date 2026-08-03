@@ -1,6 +1,6 @@
 // Idiomatic Worker/Promise wrapper over `@grafting/isekai-wasm` (master
-// source S9.3). Never exposes memory offsets/handles to callers -- those
-// stay internal to `worker.ts`.
+// source S9.2/S9.3). Never exposes memory offsets/handles to callers --
+// those stay internal to `worker.ts`.
 
 import type { WorkerRequest, WorkerResponse } from "./protocol.js";
 

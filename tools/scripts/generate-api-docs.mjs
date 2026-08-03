@@ -28,9 +28,11 @@
 //     public API surface.
 // A project is skipped (not an error) if it has no project.json, isn't
 // tagged lang:typescript, or resolves to zero entry points --
-// packages/isekai-wasm (compiled wasm-bindgen output only, its own
-// package.json says "No domain logic here", and it has no project.json
-// at all) falls out naturally rather than needing an explicit exclusion.
+// libs/isekai/wasm-bridge and libs/vtt/generation-wasm (Rust crates that
+// are also normal npm packages purely to host their own generated Wasm
+// bindings, co-located package.json says "No domain logic here",
+// DEC-055/ADR-0017) fall out naturally via their lang:rust tag rather
+// than needing an explicit exclusion.
 //
 // An optional positional argument scopes generation to one project.json
 // `name` instead of every discovered target (G-DOCS-PER-PROJECT-REGEN-RULE):

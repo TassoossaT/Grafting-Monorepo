@@ -1,7 +1,12 @@
 # `@grafting/isekai-web-client`
 
 Idiomatic Worker/Promise wrapper over `@grafting/isekai-wasm` (master
-source S9.3). Never exposes memory offsets/handles to callers.
+source S9.2/S9.3). Never exposes memory offsets/handles to callers.
+
+`@grafting/isekai-wasm` is co-located with its Rust source in
+`libs/isekai/wasm-bridge` and generated via that package's own `postinstall`
+script (DEC-055/ADR-0017) -- a normal `workspace:*` dependency, not a
+separate `packages/` technical package.
 
 ## Current status
 

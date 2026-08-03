@@ -153,10 +153,11 @@ premature.
   output (no entry of its own) unless it carries a real file-level doc
   comment. A project is silently skipped, not an error, if it has no
   `project.json`, isn't tagged `lang:typescript`, or resolves to zero
-  entry points -- `packages/isekai-wasm` (compiled `wasm-bindgen` output
-  only, no hand-written `src/`, no `project.json` at all: its own
-  `package.json` says "No domain logic here") falls out this way rather
-  than needing an explicit exclusion. `disableGit`/`disableSources` keep
+  entry points -- `libs/isekai/wasm-bridge` and `libs/vtt/generation-wasm`
+  (Rust crates that are also normal npm packages purely to host their own
+  generated Wasm bindings, DEC-055/ADR-0017; their own `package.json` says
+  "No domain logic here") fall out this way via their `lang:rust` tag
+  rather than needing an explicit exclusion. `disableGit`/`disableSources` keep
   the underlying reflection data machine-independent (no absolute paths,
   no git-remote dependency), and entry/tsconfig/basePath are posix-ified
   before being handed to TypeDoc, since its glob matching rejects Windows

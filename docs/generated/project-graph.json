@@ -191,7 +191,7 @@
           ],
           "metadata": {
             "targetGroups": {},
-            "description": "Idiomatic Worker/Promise wrapper over @grafting/isekai-wasm (master source S9.3). Never exposes memory offsets/handles to callers.",
+            "description": "Idiomatic Worker/Promise wrapper over @grafting/isekai-wasm, co-located with its Rust source in libs/isekai/wasm-bridge (master source S9.2/S9.3, DEC-055/ADR-0017). Never exposes memory offsets/handles to callers.",
             "js": {
               "packageName": "@grafting/isekai-web-client",
               "packageVersion": "0.0.0",
@@ -235,7 +235,7 @@
               "cache": true,
               "executor": "nx:run-commands",
               "dependsOn": [
-                "isekai-wasm-bridge:build",
+                "three-canvas:build",
                 "ui:build",
                 "x6-canvas:build"
               ],
@@ -245,7 +245,7 @@
                 "{workspaceRoot}/pnpm-lock.yaml"
               ],
               "outputs": [
-                "{workspaceRoot}/dist/architecture-studio"
+                "{projectRoot}/.next"
               ],
               "options": {
                 "command": "pnpm --filter @grafting/architecture-studio build"
@@ -257,6 +257,7 @@
               "cache": true,
               "executor": "nx:run-commands",
               "dependsOn": [
+                "three-canvas:build",
                 "ui:build",
                 "x6-canvas:build"
               ],
@@ -275,13 +276,81 @@
             "dev": {
               "executor": "nx:run-commands",
               "dependsOn": [
-                "isekai-wasm-bridge:build",
+                "three-canvas:build",
                 "ui:build",
                 "x6-canvas:build"
               ],
               "cache": false,
               "options": {
                 "command": "pnpm --filter @grafting/architecture-studio dev"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "stories-generate": {
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "ui:docs-mesh-export"
+              ],
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
+                "{projectRoot}/scripts/generate-stories.mjs"
+              ],
+              "outputs": [
+                "{projectRoot}/stories"
+              ],
+              "options": {
+                "command": "node scripts/generate-stories.mjs"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "stories-check": {
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "ui:docs-mesh-export"
+              ],
+              "cache": true,
+              "inputs": [
+                "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
+                "{projectRoot}/scripts/generate-stories.mjs",
+                "{projectRoot}/stories/**/*"
+              ],
+              "options": {
+                "command": "node scripts/generate-stories.mjs --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "storybook": {
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "stories-generate"
+              ],
+              "cache": false,
+              "options": {
+                "command": "pnpm --filter @grafting/architecture-studio storybook"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build-storybook": {
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "stories-generate"
+              ],
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/.storybook/**/*",
+                "{projectRoot}/stories/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/storybook-static"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/architecture-studio build-storybook"
               },
               "configurations": {},
               "parallelism": true
@@ -322,7 +391,9 @@
             "type:app"
           ],
           "implicitDependencies": [
+            "generation-wasm",
             "isekai-wasm-bridge",
+            "three-canvas",
             "ui",
             "x6-canvas"
           ],
@@ -343,6 +414,119 @@
               ]
             }
           }
+        }
+      },
+      "generation-wasm": {
+        "name": "generation-wasm",
+        "type": "lib",
+        "data": {
+          "root": "libs/vtt/generation-wasm",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-vtt-generation-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-vtt-generation-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "postinstall": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "wasm-pack build --target web --out-dir pkg",
+                "runCommand": "pnpm run postinstall"
+              },
+              "options": {
+                "script": "postinstall"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-vtt-generation-wasm.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "generation-wasm",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:vtt",
+            "lang:rust",
+            "platform:web",
+            "type:lib"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "postinstall"
+              ]
+            },
+            "description": "grafting-vtt-generation-wasm compiled to Wasm via wasm-pack, co-located with its Rust source (DEC-055/ADR-0017). No domain logic here -- see src/ for the Rust source. `pkg/` is generated by this package's own postinstall script and gitignored; consumers depend on this like any other workspace package (workspace:*), no separate technical package involved.",
+            "js": {
+              "packageName": "@grafting/vtt-generation-wasm",
+              "packageVersion": "0.0.0",
+              "packageMain": "./pkg/grafting_vtt_generation_wasm.js",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "generation-wasm",
+              "kind": "lib",
+              "tags": [
+                "scope:vtt",
+                "lang:rust",
+                "platform:web",
+                "type:lib"
+              ]
+            }
+          },
+          "implicitDependencies": []
         }
       },
       "engine-compute-api": {
@@ -766,24 +950,6 @@
               "configurations": {},
               "parallelism": true
             },
-            "build": {
-              "cache": true,
-              "executor": "nx:run-commands",
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/Cargo.toml",
-                "{workspaceRoot}/Cargo.lock",
-                "{workspaceRoot}/rust-toolchain.toml"
-              ],
-              "outputs": [
-                "{workspaceRoot}/packages/isekai-wasm/pkg"
-              ],
-              "options": {
-                "command": "wasm-pack build --target web --out-dir ../../../packages/isekai-wasm/pkg libs/isekai/wasm-bridge"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
             "test": {
               "cache": true,
               "executor": "nx:run-commands",
@@ -795,6 +961,18 @@
               ],
               "options": {
                 "command": "cargo test -p grafting-isekai-wasm && wasm-pack test --node libs/isekai/wasm-bridge"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "postinstall": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "wasm-pack build --target web --out-dir pkg",
+                "runCommand": "pnpm run postinstall"
+              },
+              "options": {
+                "script": "postinstall"
               },
               "configurations": {},
               "parallelism": true
@@ -831,6 +1009,7 @@
           "name": "isekai-wasm-bridge",
           "projectType": "library",
           "tags": [
+            "npm:private",
             "scope:engine",
             "lang:rust",
             "platform:web",
@@ -841,6 +1020,18 @@
             "graph-core"
           ],
           "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "postinstall"
+              ]
+            },
+            "description": "grafting-isekai-wasm compiled to Wasm via wasm-pack, co-located with its Rust source (master source S9.2, DEC-055/ADR-0017). No domain logic here -- see src/ for the Rust source. `pkg/` is generated by this package's own postinstall script and gitignored; consumers depend on this like any other workspace package (workspace:*), no separate technical package involved.",
+            "js": {
+              "packageName": "@grafting/isekai-wasm",
+              "packageVersion": "0.0.0",
+              "packageMain": "./pkg/grafting_isekai_wasm.js",
+              "isInPackageManagerWorkspaces": true
+            },
             "graphIr": {
               "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
               "id": "isekai-wasm-bridge",
@@ -854,26 +1045,139 @@
           }
         }
       },
-      "@grafting/isekai-wasm": {
-        "name": "@grafting/isekai-wasm",
+      "three-canvas": {
+        "name": "three-canvas",
         "type": "lib",
         "data": {
-          "root": "packages/isekai-wasm",
-          "name": "@grafting/isekai-wasm",
+          "root": "packages/three-canvas",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/three-canvas check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/three-canvas build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/tests/**/*.test.mjs",
+                "{projectRoot}/package.json",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/three-canvas test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "api-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/project.json",
+                "{projectRoot}/tsconfig.json",
+                "{projectRoot}/tests/snapshots/public-api.md",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/three-canvas api-check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs three-canvas"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/three-canvas.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs three-canvas --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "three-canvas",
+          "projectType": "library",
           "tags": [
-            "npm:private"
+            "npm:private",
+            "scope:shared",
+            "lang:typescript",
+            "platform:web",
+            "type:ui-adapter"
           ],
           "metadata": {
             "targetGroups": {},
-            "description": "Technical package: compiled grafting-isekai-wasm .wasm + loader + TS types (master source S9.2). No domain logic here -- see libs/isekai/wasm-bridge for the Rust source. Regenerate with: wasm-pack build --target web --out-dir ../../packages/isekai-wasm/pkg (run from libs/isekai/wasm-bridge).",
             "js": {
-              "packageName": "@grafting/isekai-wasm",
+              "packageName": "@grafting/three-canvas",
               "packageVersion": "0.0.0",
-              "packageMain": "./pkg/grafting_isekai_wasm.js",
+              "packageExports": "./dist/index.js",
               "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "three-canvas",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:typescript",
+                "platform:web"
+              ]
+            },
+            "publicApi": {
+              "entryPoint": "src/index.ts",
+              "baseline": "tests/snapshots/public-api.md",
+              "forbiddenModules": [
+                "three"
+              ]
             }
           },
-          "targets": {},
           "implicitDependencies": []
         }
       },
@@ -1196,10 +1500,11 @@
                 "{workspaceRoot}/pnpm-lock.yaml"
               ],
               "outputs": [
-                "{projectRoot}/dist"
+                "{projectRoot}/dist",
+                "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
               ],
               "options": {
-                "command": "pnpm --filter @grafting/ui build"
+                "command": "pnpm --filter @grafting/ui build && node packages/ui/scripts/export-doc-mesh.mjs"
               },
               "configurations": {},
               "parallelism": true
@@ -1263,6 +1568,23 @@
               ],
               "options": {
                 "command": "node tools/scripts/generate-api-docs.mjs ui --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-mesh-export": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/index.ts",
+                "{projectRoot}/scripts/export-doc-mesh.mjs",
+                "{projectRoot}/project.json"
+              ],
+              "outputs": [
+                "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
+              ],
+              "options": {
+                "command": "node packages/ui/scripts/export-doc-mesh.mjs"
               },
               "configurations": {},
               "parallelism": true
@@ -1574,11 +1896,16 @@
         },
         {
           "source": "isekai-web-client",
-          "target": "@grafting/isekai-wasm",
+          "target": "isekai-wasm-bridge",
           "type": "static"
         }
       ],
       "architecture-studio": [
+        {
+          "source": "architecture-studio",
+          "target": "generation-wasm",
+          "type": "implicit"
+        },
         {
           "source": "architecture-studio",
           "target": "isekai-wasm-bridge",
@@ -1586,6 +1913,11 @@
         },
         {
           "source": "architecture-studio",
+          "target": "three-canvas",
+          "type": "implicit"
+        },
+        {
+          "source": "architecture-studio",
           "target": "ui",
           "type": "implicit"
         },
@@ -1596,7 +1928,7 @@
         },
         {
           "source": "architecture-studio",
-          "target": "@grafting/isekai-wasm",
+          "target": "three-canvas",
           "type": "static"
         },
         {
@@ -1610,6 +1942,7 @@
           "type": "static"
         }
       ],
+      "generation-wasm": [],
       "engine-compute-api": [],
       "engine-compute-cpu": [
         {
@@ -1638,7 +1971,7 @@
           "type": "implicit"
         }
       ],
-      "@grafting/isekai-wasm": [],
+      "three-canvas": [],
       "x6-canvas": [],
       "graph-core": [],
       "ui": [],

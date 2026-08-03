@@ -77,6 +77,7 @@ the ADR or Graph IR contract.
 | [ADR-0014](ADR-0014-composable-capability-packages.md) | - (structural amendment) | Neutral composable capability packages and product-owned presentation | **Accepted (DEC-052)** |
 | [ADR-0015](ADR-0015-agent-git-write-policy.md) | - (AI operational safety) | Prohibit agent-authored commits and default-branch pushes | **Accepted (DEC-053)** |
 | [ADR-0016](ADR-0016-architecture-studio-scope-expansion.md) | - (amends ADR-0012, I-001) | Architecture Studio scope expansion: VTT generation-test surface and agent-orchestration surface | **Accepted (DEC-054)** |
+| [ADR-0017](ADR-0017-wasm-bindings-colocated-with-crate.md) | - (amends GRAFTING_MASTER_SOURCE.md 9.2) | Generated Wasm bindings are co-located with their Rust crate, not a separate `packages/` technical package | **Accepted (DEC-055)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for

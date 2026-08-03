@@ -6,6 +6,11 @@ This package MUST NOT expose memory offsets, raw `WasmEngine`
 handles/pointers, or any `@grafting/isekai-wasm` internal type to its own
 callers (S9.3) -- `IsekaiEngine`'s public methods are the only surface.
 
+`@grafting/isekai-wasm` is co-located with its Rust source in
+`libs/isekai/wasm-bridge` (DEC-055/ADR-0017), not a separate `packages/`
+technical package -- depend on it as a normal `workspace:*` package.json
+dependency, same as any other workspace package.
+
 MUST NOT assume a Wasm panic is distinguishable from an ordinary
 `Result::Err`-turned-JS-throw without re-reading `src/worker.ts`'s module
 docs first -- the current design deliberately treats any exception from a

@@ -4,16 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/copy-wasm-assets.mjs && next build",
+    "build": "next build",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "node --test test/*.test.mjs",
-    "dev": "node scripts/copy-wasm-assets.mjs && concurrently -k -n next,storybook -c blue,magenta \"next dev --hostname 127.0.0.1 --port 4511\" \"storybook dev -p 6006 -h 127.0.0.1\"",
+    "dev": "concurrently -k -n next,storybook -c blue,magenta \"next dev --hostname 127.0.0.1 --port 4511\" \"storybook dev -p 6006 -h 127.0.0.1\"",
     "storybook": "storybook dev -p 6006 -h 127.0.0.1",
     "build-storybook": "storybook build"
   },
   "dependencies": {
+    "@grafting/isekai-wasm": "workspace:*",
     "@grafting/three-canvas": "workspace:*",
     "@grafting/ui": "workspace:*",
+    "@grafting/vtt-generation-wasm": "workspace:*",
     "@grafting/x6-canvas": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "next": "^16.2.12",
