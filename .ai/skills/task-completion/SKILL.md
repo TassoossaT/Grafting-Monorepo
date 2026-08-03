@@ -1,12 +1,12 @@
 ---
 name: task-completion
-description: Use when a task is finished or a work session is wrapping up in the Grafting Monorepo. Produces the structured completion report defined in AGENTS.md and refreshes CURRENT_PLANNING_STATE.md so the next session starts from a clean, non-redundant entry point.
+description: Use when a task is finished or a work session is wrapping up in the Grafting Monorepo. Produces the structured completion report defined in AGENTS.md and, for a full task, opens its pull request via ia-graft so the next session starts from a clean entry point.
 ---
 
 # Task Completion
 
-This skill formalizes two things that already existed as plain instructions
-in `AGENTS.md` and `CURRENT_PLANNING_STATE.md`, but never existed as an
+This skill formalizes what already exists as plain instructions in
+`AGENTS.md` and `.ai/coordination/PROTOCOL.md`, but never existed as an
 invocable artifact: closing out a task or a session in a way that leaves the
 repository easy to pick back up.
 
@@ -47,29 +47,26 @@ repository easy to pick back up.
    usually "manual consistency review", not automated checks — say that
    plainly instead of implying CI ran.
 
-2. **Refresh `CURRENT_PLANNING_STATE.md`.**
-   This file's only job is to be the next session's entry point. On every
-   completion pass:
-   - Fold new facts into the existing sections instead of appending new ones
-     — this file should never grow by accretion.
-   - Remove anything that duplicates what a linked ADR or the master source
-     already says in full; point to it instead of repeating it.
-   - Collapse lists of individually-resolved items (e.g. gates closed one at
-     a time across a session) into one consolidated table or list, not one
-     bullet per historical decision moment.
-   - Update "Recommended next action" to the *actual* next concrete step,
-     not a restatement of what was just finished.
+2. **Open the pull request, if this was a full task.**
+   A direct/simple edit (see `AGENTS.md`) just needs its commit; nothing else
+   to open. Otherwise, inside the task's worktree:
+   `ia-graft task done --id <TASK-ID> --title <title> --body <body>` — the
+   body should be the completion report from step 1, not a repeat of the
+   task's original description. This pushes the branch and opens the PR via
+   `gh`; the worktree stays until a human merges it and runs
+   `ia-graft task cleanup --id <TASK-ID>`.
 
-3. **Flag uncommitted state.**
-   If the working tree has uncommitted changes when the session is ending,
-   say so plainly and ask whether to commit — do not commit automatically
-   (see `AGENTS.md` git/safety rules) and do not let a session end silently
-   leaving work unsaved without the owner knowing.
+3. **Confirm everything is committed.**
+   The working tree inside the task's worktree should be clean before
+   `task done` runs — commit as you go, not in one batch at the end (see
+   `.ai/coordination/PROTOCOL.md` → "Starting work"). If anything is still
+   uncommitted when the session is ending, say so plainly rather than
+   leaving it implicit.
 
 ## Non-goals
 
 - This skill does not decide architecture. If closing out the task surfaces
-  an open question, that becomes a `docs/adr/` entry or a `CURRENT_PLANNING_STATE.md`
-  pending item — never a silent decision folded into the completion report.
+  an open question, that becomes a `docs/adr/` entry — never a silent
+  decision folded into the completion report.
 - This skill does not replace the per-task "Antes de editar" declaration in
   `AGENTS.md` — that happens at the start of a task, this happens at the end.
