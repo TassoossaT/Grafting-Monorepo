@@ -16,8 +16,11 @@ The precedence order remains:
 2. accepted ADRs;
 3. root and nearest scope-local `AGENTS.md`;
 4. implemented code, manifests, schemas, and Graph IR evidence;
-5. `CURRENT_PLANNING_STATE.md`;
-6. provider adapters and private chat context.
+5. provider adapters and private chat context.
+
+Historical build-log/journal content (what was done, when, and why) lives in
+`docs/history/PLANNING_LOG.md` — an archive, not part of this precedence
+order.
 
 ## ia-graft: the task-lifecycle CLI
 

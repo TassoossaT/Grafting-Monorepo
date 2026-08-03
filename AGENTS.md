@@ -16,7 +16,8 @@ full pass.
 
 ## Initial state
 
-While `CURRENT_PLANNING_STATE.md` states that the monorepo does not yet exist:
+While `docs/decisions/GATES.md` still has open Decision Gates and the
+monorepo's native toolchains are not yet fully scaffolded:
 
 - do not treat planned directories as real files;
 - do not assume Git, CI, Nx, Cargo, pnpm, uv, or .NET are already configured;

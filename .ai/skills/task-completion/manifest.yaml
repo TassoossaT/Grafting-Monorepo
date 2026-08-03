@@ -1,9 +1,9 @@
 id: task-completion
 name: Task completion report
 summary: >
-  Produces the AGENTS.md completion report and refreshes
-  CURRENT_PLANNING_STATE.md so the next session starts from a clean,
-  non-redundant entry point.
+  Produces the AGENTS.md completion report and, for a full task, opens its
+  pull request via ia-graft so the next session starts from a clean entry
+  point.
 triggers:
   - a tracked task is marked done
   - the owner signals the work session is ending
@@ -12,7 +12,7 @@ risk: low
 cost: low
 depends_on:
   - AGENTS.md ("Completion format" section)
-  - CURRENT_PLANNING_STATE.md
+  - tools/ia-graft (task done/cleanup)
 status: active
-version: 1.0.0
+version: 2.0.0
 owner: repository owner

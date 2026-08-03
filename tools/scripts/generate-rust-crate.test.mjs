@@ -4,7 +4,7 @@
 // temp directory would sit outside the repo entirely, and Nx's default
 // project-graph construction only crawls the actual repo tree (excludes
 // .gitignore'd paths too) -- confirmed empirically before writing this
-// file (see CURRENT_PLANNING_STATE.md's G-tooling section) that neither
+// file (see docs/history/PLANNING_LOG.md's G-tooling section) that neither
 // an OS tmpdir nor `spikes/` (gitignored) would ever be Nx-discoverable,
 // which is exactly G-006's own "valid crate *and graph*" criterion.
 // The scratch directory is always deleted afterward and never `git

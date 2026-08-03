@@ -4,18 +4,17 @@ Read and follow, in order:
 
 1. `AGENTS.md`;
 2. `GRAFTING_MASTER_SOURCE.md`;
-3. `CURRENT_PLANNING_STATE.md`;
-4. `.ai/coordination/PROTOCOL.md` and current task/handoff state;
-5. applicable ADRs and contracts.
+3. `.ai/coordination/PROTOCOL.md`;
+4. applicable ADRs and contracts.
 
 This file is only an adapter for Gemini and does not repeat the architecture.
-Gemini must claim or receive a task through the canonical coordination
-protocol before editing. Chat context is not a substitute for repository
-state.
+Task coordination goes through `tools/ia-graft` (worktree + branch per task,
+PR to finish) — see `AGENTS.md`'s "Task-based work" section. Chat context is
+not a substitute for repository state.
 
 ## Planning state
 
-While the project is still in the planning phase (per `CURRENT_PLANNING_STATE.md`):
+While the project is still in the planning phase:
 
 -   Work on drafting decisions, ADRs, technology comparisons, and spikes to reduce uncertainty.
 -   Do not treat the directory structure planned in `GRAFTING_MASTER_SOURCE.md` as if it were already implemented.

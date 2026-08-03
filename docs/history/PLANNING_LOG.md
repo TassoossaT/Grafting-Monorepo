@@ -1,78 +1,11 @@
-# Current planning state
+# Planning log (historical)
 
-> **Type:** mutable operational status
-> **Authority:** does not alter the architecture; in case of conflict,
-> `GRAFTING_MASTER_SOURCE.md` wins.
-> **Updated on:** July 29, 2026
-
-## Situation
-
-- Git repository created on July 26, 2026; first documentation commit made.
-- The provider-neutral AI Control Plane is operational at its minimal Phase 1
-  level: canonical coordination protocol, registered Claude/Codex/Gemini
-  identities, single-owner task records, immutable structured handoffs,
-  schemas, capabilities/workflows, and deterministic validation/audit. It has
-  no gateway, MCP, hook, model call, or self-evolution (DEC-048/ADR-0010).
-- English is now the default documentation language for the entire
-  repository (DEC-047): every pre-existing Portuguese document was
-  translated to English in this pass. This supersedes the earlier rule that
-  only required new files to be written in English going forward.
-- **Epic B (workspace foundation) is now real, as of 2026-07-27** — see
-  "Workspace foundation (Epic B)" below for exactly what exists and what's
-  deliberately still missing. This supersedes the earlier "no workspaces,
-  lockfiles ... exist yet" statement.
-- The active architectural source is `GRAFTING_MASTER_SOURCE.md`; `docs/adr/`
-  is the decision history that feeds it.
-
-## Current phase
-
-```text
-planning
-→ adversarial review           (not yet formally executed)
-→ closing the Decision Gates     ← done
-→ Knowledge/Automation Plane ADR   ← done (I-001, DEC-050)
-→ Graph IR v1 contract             ← done (I-002; extractor remains I-004)
-→ generic Rust graph core          ← done (GRAPH-001, DEC-051)
-→ full English translation pass   ← done
-→ disposable spikes                ← done (8 accepted)
-→ scaffold                          ← in progress (Epic B core done; see below)
-```
-
-## Decision Gates — consolidated status
-
-Full criteria and rationale for each gate: `docs/decisions/GATES.md` (this
-table is only a status-at-a-glance summary, not a second copy of that detail).
-
-| Gate | Status | Decision | Record |
-| --- | --- | --- | --- |
-| GATE-001 | **closed** | Web host = Next.js; the VTT is a client-only route, not the whole app | DEC-041 · ADR-0001 |
-| GATE-002 | open, **indefinite standby** | Generic C ABI/.NET feasibility is proven; no engine/game work resumes without the owner's explicit instruction | ADR-0002 |
-| GATE-003 | **closed** | V1 desktop client = Windows x64; Linux/macOS core-build only | DEC-043 · ADR-0003 |
-| GATE-004 | open, **formally deferred** | The authoritative server host choice awaits Phase 6 / Epic H | ADR-0005 |
-| GATE-005 | **closed** | Replay determinism on the same platform/build; GPU never writes directly to the state hash | DEC-044 · ADR-0004 |
-| GATE-007 | **closed** | Single monorepo; "selling" a product means packaging that app's artifact, not splitting the repository | DEC-045 · ADR-0007 |
-| GATE-006, 008, 009 | open, unprioritized | WebGPU-less fallback; license/proprietary policy; multiplayer persistence | — |
-
-No agent may close GATE-002, GATE-004, or any gate from GATE-006 to
-GATE-009 without an explicit decision from the owner.
-
-## Complementary structural decisions (not numbered gates)
-
-| Decision | Content | Record |
-| --- | --- | --- |
-| Polymath | One package per runtime (`polymath`/`@grafting/polymath`/`Grafting.Polymath`) is the only place allowed to inspect OS/runtime/RID | DEC-042 · ADR-0006 |
-| `libs/` boundary + domain map | A capability used by more than one product is born in `libs/domains`/`packages/`, never duplicated inside an app. Initial map: `narrative` and `session` are generic; the VTT's X6 map is product-specific (only `packages/x6-canvas` is shared with the Architecture Studio); Discord and transcription are external integrations, not domains | DEC-046 · ADR-0008 · master source §4.4 |
-| Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · `docs/decisions/DECISION-LOG.md` §3.1 |
-| Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
-| Capability autonomy and external isolation | Reusable capabilities use the smallest useful boundary (module tree, package, or host app); third-party APIs stay internal, package count remains evidence-driven, and authoritative behavior is implemented once | DEC-049 · ADR-0011 · master source §2.6 |
-| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; graph computation, visual adaptation, and application presentation are separate responsibilities. The original TypeScript graph-package allocation is amended by DEC-051 | DEC-050 · ADR-0012 · `docs/architecture/ai-control-plane.md` §§16.7-16.8 |
-| Rust graph authority and API contracts | Rust owns reusable graph structures/calculations; callers own presentation enrichment; every consumed package has a generated API baseline plus behavioral contract tests | DEC-051 · ADR-0013 · master source §2.7 · `docs/architecture/ai-control-plane.md` §16.8 |
-
-Pending, but not blocking Phase 0: standard directory for external
-integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
-move from idea to implementation.
-
-Full ADR index, with status and links: `docs/adr/README.md`.
+> Archived verbatim from `CURRENT_PLANNING_STATE.md` as part of
+> `DOCS-CONTEXT-SPLIT`, unedited. This is a retrospective build journal, not
+> a live status source — it is not part of the required-reading chain. For
+> current status, use `docs/decisions/GATES.md` (Decision Gates) and
+> `docs/decisions/DECISION-LOG.md` (decision history); actual architectural
+> decisions live in `GRAFTING_MASTER_SOURCE.md` or an ADR, never here.
 
 ## Foundational spikes planned (Phase 0)
 
@@ -1122,6 +1055,12 @@ repository-wide Git hook is deliberately absent so authorized human commits
 remain unaffected. Other providers remain bound by the canonical rule and may
 add thin enforcement adapters only through owner-approved tasks.
 
+> Historical note: this Git write policy was later revised by
+> `DOCS-CONTEXT-SPLIT`'s predecessor task — agents now commit directly on
+> their own `ia-graft`-created task branch. See `AGENTS.md` and
+> `.ai/coordination/PROTOCOL.md` for the current rule; this entry is kept
+> as-archived, unedited.
+
 ## Recommended next action
 
 All foundational spikes are accepted. GATE-002 stays in indefinite standby.
@@ -1142,8 +1081,10 @@ not block the Web path. ADR-0009's Decision section remains pending owner
 confirmation; `engine_submit(bytes)` and E-003 remain separately scoped future
 work.
 
-## Update rule
+## Update rule (as archived)
 
-This file records only: real status, current phase, next steps, blockers,
+This file recorded only: real status, current phase, next steps, blockers,
 and decisions awaiting the owner. Actual architectural decisions live in the
-master source or an ADR — this file points to them, it does not repeat them.
+master source or an ADR — this file pointed to them, it did not repeat them.
+This rule no longer applies since the file is now a frozen archive; it is
+kept here for historical accuracy only.
