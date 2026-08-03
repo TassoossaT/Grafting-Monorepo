@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from automation.coordination import CoordinationValidationError, validate_repository
+from automation.coordination import CoordinationValidationError, find_task_paths, validate_repository
 
 
 class ControlPlaneAuditError(ValueError):
@@ -26,9 +26,9 @@ def audit_repository(root: Path, *, check_graph: bool = True) -> dict[str, Any]:
 
     root = root.resolve()
     task_ids = validate_repository(root)
+    task_paths = find_task_paths(root)
     task_records = [
-        json.loads((root / ".ai" / "state" / "tasks" / f"{task_id}.json").read_text(encoding="utf-8"))
-        for task_id in task_ids
+        json.loads(task_paths[task_id].read_text(encoding="utf-8")) for task_id in task_ids
     ]
     statuses = Counter(task["status"] for task in task_records)
 

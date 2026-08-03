@@ -44,7 +44,6 @@
     "docs/generated/project-graph.json",
     "docs/generated/api/ts/isekai-web-client.api.md",
     "docs/generated/grafting.graph.json",
-    "docs/generated/project-graph.json",
     "docs/generated/repo-map.md"
   ],
   "blockers": [],

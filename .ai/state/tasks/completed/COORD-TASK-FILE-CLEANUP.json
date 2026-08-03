@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "COORD-TASK-FILE-CLEANUP",
+  "title": "Remove the stale in_progress/ duplicate left behind when COORD-DOCS-FASTTRACK-DEDUP was moved to completed/",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 2,
+  "updated_at": "2026-08-02T07:26:00-03:00",
+  "objective": "Mechanical follow-up: while completing COORD-DOCS-FASTTRACK-DEDUP, its status was flipped to completed in place at .ai/state/tasks/in_progress/COORD-DOCS-FASTTRACK-DEDUP.json before being copied to .ai/state/tasks/completed/, which meant no task counted as in_progress anymore and Bash (needed to delete the stale copy) was denied. This tiny task exists solely to hold an active claim long enough to delete that one stray duplicate file. Also incidentally confirms a real gap: the new Fast-Track protocol (AGENTS.md/PROTOCOL.md) has no corresponding runtime support in tools/scripts/agent-task-guard.mjs -- the guard has no Fast-Track bypass coded, so it cannot actually be exercised for a Bash-gated action like this one yet; noted as a risk, not fixed here.",
+  "affected_paths": [
+    ".ai/state/tasks/in_progress/COORD-TASK-FILE-CLEANUP.json",
+    ".ai/state/tasks/completed/COORD-TASK-FILE-CLEANUP.json",
+    ".ai/state/tasks/in_progress/COORD-DOCS-FASTTRACK-DEDUP.json"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: deleted the stale .ai/state/tasks/in_progress/COORD-DOCS-FASTTRACK-DEDUP.json duplicate; the canonical, complete record for that task now lives only at .ai/state/tasks/completed/COORD-DOCS-FASTTRACK-DEDUP.json."
+  ],
+  "artifacts": [
+    ".ai/state/tasks/in_progress/COORD-DOCS-FASTTRACK-DEDUP.json (deleted)"
+  ],
+  "risks": [
+    "This record itself was not relocated into .ai/state/tasks/completed/ after finishing, because doing so (edit status to completed in place, then Bash-delete the stale copy) reproduces the exact same active-task-disappears-before-delete race that created the need for this task in the first place -- fixing it would require yet another bootstrap task, an infinite regress not worth chasing for a housekeeping file. Left in .ai/state/tasks/in_progress/ with status: completed, the same kind of not-yet-relocated inconsistency already present in ~108 other legacy flat task files -- consistent with, not worse than, the pre-existing migration gap the owner explicitly deferred.",
+    "Confirms a real gap for whoever finishes the .ai/state/tasks/<status>/ migration: completing a task now requires either accepting this same race (status flips in place before the physical move can happen) or the guard/protocol needs an explicit 'move to completed/ atomically with the status write' allowance -- worth folding into that future task."
+  ],
+  "next_responsible_party": null
+}

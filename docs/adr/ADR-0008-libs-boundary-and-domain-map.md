@@ -13,7 +13,8 @@
   campaign) and external integrations (Discord, transcription).
 - Related `LOCKED` decisions: DEC-001 (Rust is the single source of logic),
   section 4.3 (future domains are born as feature slices in `libs/domains`),
-  section 16.8 (X6 is the Graph IR viewer/editor in the Architecture Studio)
+  `docs/architecture/ai-control-plane.md` §16.8 (X6 is the Graph IR
+  viewer/editor in the Architecture Studio)
 - Authority: in case of conflict, `GRAFTING_MASTER_SOURCE.md` prevails over
   this ADR.
 
@@ -30,8 +31,8 @@ risk.
 At the same time, the owner cited new capabilities the master source never
 modeled: narrative/story creation, session/campaign organization, an
 interactive map (considering reusing X6, today reserved for the Architecture
-Studio — section 16.8), integration with Discord and with transcription
-tools.
+Studio — `docs/architecture/ai-control-plane.md` §16.8), integration with
+Discord and with transcription tools.
 
 ## Proposed boundary rule
 
@@ -57,7 +58,7 @@ only when a real feature of the first product (VTT) requires it.
 | --- | --- | --- | --- |
 | Narrative / story creation | Generic domain | `libs/domains/narrative` (Rust crate) | Scene, NPC, and plot structure is not VTT-specific — a future collaborative-writing product would reuse it unchanged. |
 | Session / campaign organization | Generic domain | `libs/domains/session` (Rust crate) | Campaigns, sessions, participants, and scheduling are general RPG concepts, not specific to the map or the VTT. |
-| Interactive map (X6) | **VTT-specific**, with a generic piece underneath | `apps/web-vtt` consumes a new `packages/x6-canvas` package (generic X6 wrapper) | X6 today only serves the Architecture Studio (Graph IR, section 16.8). Reusing the library is legitimate, but the "battle map" logic (grid, fog of war, tokens) belongs to the VTT — only the *canvas library* should be shared, not the map domain itself, until a second product needs a map. |
+| Interactive map (X6) | **VTT-specific**, with a generic piece underneath | `apps/web-vtt` consumes a new `packages/x6-canvas` package (generic X6 wrapper) | X6 today only serves the Architecture Studio (Graph IR, `docs/architecture/ai-control-plane.md` §16.8). Reusing the library is legitimate, but the "battle map" logic (grid, fog of war, tokens) belongs to the VTT — only the *canvas library* should be shared, not the map domain itself, until a second product needs a map. |
 | Discord bot | External integration | new service directory (e.g., `apps/integrations/discord-bot` or `tools/integrations/discord-bot`, to be defined in Phase 1) | Not a game domain — it is a client that talks to `session`/`narrative` through the same contracts a product would use, never accessing internals directly (the same boundary principle already applied to hosts, section 15.4). |
 | Session transcription | External integration, likely Python | `python/` (uv workspace already planned, DEC-005) or a dedicated service | Transcription tools tend to depend on ML/audio libraries — the master source already reserves `python/` for automation and experiments; a transcription pipeline fits there or as a dedicated service, feeding the `narrative` domain via contract, not by direct access. |
 
@@ -117,7 +118,8 @@ only when a real feature of the first product (VTT) requires it.
 - [x] Add `libs/domains/narrative`, `libs/domains/session`, and
       `packages/x6-canvas` to the section 6.1 tree (as future entries, not
       empty folders created now — section 4.3).
-- [x] Record the boundary rule as a new `LOCKED` decision in section 3.1.
+- [x] Record the boundary rule as a new `LOCKED` decision in
+      `docs/decisions/DECISION-LOG.md` §3.1.
 - [ ] Decide the standard directory for external integrations
       (`apps/integrations/` vs. `tools/`) once the Discord bot or
       transcription move off paper.

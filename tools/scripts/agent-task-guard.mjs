@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, isAbsolute, posix, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const TASK_RECORD = /^\.ai\/state\/tasks\/([A-Z][A-Z0-9-]{2,63})\.json$/;
+const TASK_RECORD = /^\.ai\/state\/tasks\/[a-z_]+\/([A-Z][A-Z0-9-]{2,63})\.json$/;
 const HANDOFF_RECORD = /^\.ai\/state\/handoffs\/.+\.json$/;
 
 const allowed = () => ({ allowed: true, reason: "" });
@@ -57,25 +57,39 @@ export function affectedPathMatches(affectedPath, repositoryRelativePath) {
 
 const loadTasks = async (root) => {
   const taskDirectory = resolve(root, ".ai/state/tasks");
-  const names = (await readdir(taskDirectory)).filter((name) => name.endsWith(".json")).sort();
-  return Promise.all(
-    names.map(async (name) => {
-      const path = resolve(taskDirectory, name);
-      try {
-        return JSON.parse(await readFile(path, "utf8"));
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(`cannot evaluate task ownership because ${name} is invalid: ${reason}`);
+  const allTasks = [];
+  try {
+    const statusDirs = await readdir(taskDirectory);
+    for (const status of statusDirs) {
+      const statusDir = resolve(taskDirectory, status);
+      if ((await stat(statusDir)).isDirectory()) {
+        const names = (await readdir(statusDir)).filter((name) => name.endsWith(".json")).sort();
+        const tasks = await Promise.all(
+          names.map(async (name) => {
+            const path = resolve(statusDir, name);
+            try {
+              return JSON.parse(await readFile(path, "utf8"));
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              throw new Error(`cannot evaluate task ownership because ${name} is invalid: ${reason}`);
+            }
+          }),
+        );
+        allTasks.push(...tasks);
       }
-    }),
-  );
+    }
+  } catch (error) {
+    // Ignore if the tasks directory or subdirectories don't exist yet
+    if (error.code !== 'ENOENT') throw error;
+  }
+  return allTasks;
 };
 
 const activeTaskFor = (tasks, agent) => {
   const owned = tasks.filter((task) => task.status === "in_progress" && task.owner === agent);
   if (owned.length === 0) {
     return denied(
-      `no in_progress task is owned by ${agent}; create a planned record under .ai/state/tasks, re-read it, and claim it before using mutating tools`,
+      `no in_progress task is owned by ${agent}; create a planned record under .ai/state/tasks/<status>, re-read it, and claim it before using mutating tools`,
     );
   }
   if (owned.length > 1) {

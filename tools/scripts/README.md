@@ -266,3 +266,15 @@ whoever has a real one to add -- not something these tests do.
 - `generate-contracts.ps1`, `get-flatc-csharp.ps1` -- FlatBuffers codegen
   for `libs/engine/domain-core/contracts/*.fbs` (C-005/C-006). See
   `libs/engine/domain-core/contracts/README.md`.
+- `doc-size.mjs` -- shared thresholds/classification ("ok"/"large"/
+  "colossal" by line count) and the generated/snapshot exclusion, used by
+  both of the following so they never drift on what counts as large.
+- `check-doc-organization.mjs` -- manual, on-demand report of every
+  authored Markdown document past those thresholds (`node
+  tools/scripts/check-doc-organization.mjs`), so an oversized document gets
+  noticed and split into a router plus linked sub-documents instead of
+  growing forever. Report only, never edits anything.
+- `doc-size-reminder.mjs` (+ `.test.mjs`) -- `PostToolUse` reminder (wired
+  in `.claude/settings.json`) giving the same signal inline right after an
+  edit leaves an authored Markdown document "large" or "colossal".
+  Advisory only, same non-blocking shape as `research-registry-reminder.mjs`.

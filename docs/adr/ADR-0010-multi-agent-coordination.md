@@ -7,7 +7,11 @@
 - Runtime enforcement amendment: **Accepted by the repository owner on
   2026-07-29** after an assigned Claude task was not claimed in canonical
   state; implemented by task `COORDINATION-CLAUDE-RUNTIME-GUARD`.
-- Related: DEC-025, DEC-028, master source §16, §25.7, §25.8, and §29.11.
+- Related: DEC-025, DEC-028, `docs/architecture/ai-control-plane.md` §16 and
+  §29.11 (formerly master source §16, §25.7, §25.8, and §29.11 — §25.7/§25.8
+  were removed as duplicative when the master source was split, see
+  `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`'s note in §29.11
+  for the ADR-0016 vs. Context Broker MCP distinction).
 
 ## Context
 

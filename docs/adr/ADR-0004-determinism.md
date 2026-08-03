@@ -13,7 +13,7 @@
 
 ## Context
 
-The master source (section 5, GATE-005) distinguishes four notions of determinism that
+The master source (`docs/decisions/GATES.md`, GATE-005) distinguishes four notions of determinism that
 cannot be treated as one:
 
 1. **Semantic determinism** — the same input produces the same result with equivalent game
@@ -127,7 +127,7 @@ hash — see Decision.
 
 ## Next steps
 
-- [x] Update `GRAFTING_MASTER_SOURCE.md` section 3 (record as `LOCKED`) citing this ADR —
+- [x] Update `docs/decisions/DECISION-LOG.md` (record as `LOCKED`) citing this ADR —
       done in this revision (see new DEC).
 - [ ] Revisit this decision when `GATE-004` and `GATE-009` are closed, in case they change
       the premises around host migration or persistence.

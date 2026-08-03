@@ -11,13 +11,14 @@
 ## Context
 
 `GATE-003` defines the CI matrix and the formats published in V1. Together with GATE-001
-and GATE-002, it blocks the final scaffold of the applications (section 3.3). The Rust core
+and GATE-002, it blocks the final scaffold of the applications
+(`docs/decisions/DECISION-LOG.md` §3.3). The Rust core
 itself is portable; the real limitation lies in the hosts (Web, Desktop) and the GPU backend
 (DEC-008, `wgpu`/WebGPU with guaranteed CPU fallback per DEC-009).
 
 ## Options considered
 
-The master source already records a **suggested pragmatic default** (section 5, GATE-003):
+The master source already records a **suggested pragmatic default** (`docs/decisions/GATES.md`, GATE-003):
 
 - Web: modern browsers with WebAssembly.
 - Web GPU: WebGPU when available.
@@ -78,7 +79,7 @@ a published client).
 
 ## Next steps after closing
 
-- [x] Update `GRAFTING_MASTER_SOURCE.md` section 3 (record as `LOCKED`) citing this ADR —
+- [x] Update `docs/decisions/DECISION-LOG.md` (record as `LOCKED`) citing this ADR —
       done in this revision (see new DEC).
 - [ ] Define the native CI matrix (section 18.3) with the corresponding Windows runner.
 - [ ] Close `GATE-006` (fallback policy without WebGPU) separately — remains open.

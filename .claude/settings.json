@@ -29,6 +29,12 @@
             "command": "node \"${CLAUDE_PROJECT_DIR}/tools/scripts/third-party-attribution-reminder.mjs\"",
             "timeout": 10,
             "statusMessage": "Checking whether adapted third-party code needs an attribution notice"
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/tools/scripts/doc-size-reminder.mjs\" --root \"${CLAUDE_PROJECT_DIR}\"",
+            "timeout": 10,
+            "statusMessage": "Checking whether the edited document has grown too large"
           }
         ]
       }

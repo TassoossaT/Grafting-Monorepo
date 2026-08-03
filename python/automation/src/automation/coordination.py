@@ -202,6 +202,15 @@ def _validate_workflow_registry(root: Path) -> None:
 
 
 def _validate_task(path: Path, value: dict[str, Any], agent_ids: set[str]) -> str:
+    # Pop and validate optional fields first, so they are not treated as "extra".
+    scope = value.pop("scope", None)
+    if scope is not None and not isinstance(scope, str):
+        raise CoordinationValidationError(f"{path}: scope must be a string")
+
+    related_tasks = value.pop("related_tasks", None)
+    if related_tasks is not None:
+        _require_string_list(path, related_tasks, "related_tasks", unique=True)
+
     _require_exact_fields(path, value, TASK_FIELDS)
     if value["schema_version"] != 1:
         raise CoordinationValidationError(f"{path}: schema_version must be 1")
@@ -253,6 +262,55 @@ def _validate_handoff(
         _require_string_list(path, value[field], field)
 
 
+def organize_tasks(root: Path) -> list[tuple[Path, Path]]:
+    """Moves every task record under .ai/state/tasks/ into the status
+    subdirectory matching its own ``status`` field (creating that
+    subdirectory on demand), regardless of whether it currently sits flat
+    at the top level or already inside some subdirectory. Returns every
+    ``(old_path, new_path)`` pair actually moved; a file already in the
+    right place is left untouched and not included."""
+
+    root = root.resolve()
+    task_dir = root / ".ai" / "state" / "tasks"
+    moved: list[tuple[Path, Path]] = []
+    for path in sorted(task_dir.rglob("*.json")):
+        value = _read_object(path)
+        status = value.get("status")
+        if status not in TASK_STATUSES:
+            raise CoordinationValidationError(
+                f"{path}: cannot organize, invalid or missing status {status!r}"
+            )
+        target_path = task_dir / status / path.name
+        if path == target_path:
+            continue
+        if target_path.exists():
+            raise CoordinationValidationError(
+                f"{path}: cannot move to {target_path}, a file already exists there"
+            )
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        path.rename(target_path)
+        moved.append((path, target_path))
+    return moved
+
+
+def find_task_paths(root: Path) -> dict[str, Path]:
+    """Maps every task_id found under a status subdirectory to its file path.
+
+    This is the one shared place that knows how to locate a task record by
+    ID across the status-subdirectory layout, so other tools (e.g.
+    ``control_plane.py``) don't each grow their own flat-path assumption."""
+
+    root = root.resolve()
+    task_dir = root / ".ai" / "state" / "tasks"
+    paths: dict[str, Path] = {}
+    for status in TASK_STATUSES:
+        status_dir = task_dir / status
+        if status_dir.is_dir():
+            for path in sorted(status_dir.glob("*.json")):
+                paths[path.stem] = path
+    return paths
+
+
 def validate_repository(root: Path) -> list[str]:
     """Validate all canonical coordination artifacts and return task IDs."""
 
@@ -263,13 +321,23 @@ def validate_repository(root: Path) -> list[str]:
     _validate_capability_registry(root)
     _validate_workflow_registry(root)
 
+    # Deliberately not built from find_task_paths(): that function returns a
+    # dict keyed by task_id, which would silently collapse two records that
+    # share an ID across different status subdirectories -- exactly the
+    # case the uniqueness check just below exists to catch.
     task_dir = root / ".ai" / "state" / "tasks"
-    task_paths = sorted(task_dir.glob("*.json"))
+    task_paths = []
+    for status in TASK_STATUSES:
+        status_dir = task_dir / status
+        if status_dir.is_dir():
+            task_paths.extend(status_dir.glob("*.json"))
+    task_paths.sort()
+
     if not task_paths:
-        raise CoordinationValidationError(f"{task_dir}: at least one task record is required")
+        raise CoordinationValidationError(f"{task_dir}: no task records were found in status subdirectories")
     task_ids = {_validate_task(path, _read_object(path), agent_ids) for path in task_paths}
     if len(task_ids) != len(task_paths):
-        raise CoordinationValidationError(f"{task_dir}: task IDs must be unique")
+        raise CoordinationValidationError(f"{task_dir}: task IDs must be unique across all subdirectories")
 
     handoff_dir = root / ".ai" / "state" / "handoffs"
     for path in sorted(handoff_dir.glob("*.json")):
@@ -280,7 +348,24 @@ def validate_repository(root: Path) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--organize",
+        action="store_true",
+        help=(
+            "Before validating, move every task record into the "
+            ".ai/state/tasks/<status>/ subdirectory matching its own status "
+            "field, wherever it currently sits."
+        ),
+    )
     args = parser.parse_args(argv)
+    if args.organize:
+        try:
+            moved = organize_tasks(args.root)
+        except CoordinationValidationError as error:
+            parser.exit(1, f"task organization failed: {error}\n")
+        for old_path, new_path in moved:
+            print(f"organized: {old_path} -> {new_path}")
+        print(f"organized {len(moved)} task record(s)")
     try:
         task_ids = validate_repository(args.root)
     except CoordinationValidationError as error:

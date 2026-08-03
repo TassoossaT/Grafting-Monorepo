@@ -80,5 +80,4 @@ the ADR or Graph IR contract.
 | [ADR-0017](ADR-0017-wasm-bindings-colocated-with-crate.md) | - (amends GRAFTING_MASTER_SOURCE.md 9.2) | Generated Wasm bindings are co-located with their Rust crate, not a separate `packages/` technical package | **Accepted (DEC-055)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
-priority gates; `GRAFTING_MASTER_SOURCE.md` section 5 is the source of truth for
-each gate.
+priority gates; `docs/decisions/GATES.md` is the source of truth for each gate.

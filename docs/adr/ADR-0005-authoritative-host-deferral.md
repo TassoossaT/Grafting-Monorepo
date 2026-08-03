@@ -25,11 +25,11 @@ and collects results. This means no decision from Phase 0 to 5 (Knowledge Plane,
 workspace, `domain-core`, Isekai bindings, GPU compute, client-side Web/Desktop hosts)
 depends on the language of the server host. The gate's main criterion is host operation,
 observability, and scale — not the solver's language, which remains Rust regardless
-(section 5, GATE-004).
+(`docs/decisions/GATES.md`, GATE-004).
 
 ## Options already recorded for when the gate is decided
 
-The master source already lists the acceptable options (section 5), preserved here only
+The master source already lists the acceptable options (`docs/decisions/GATES.md`), preserved here only
 as a reference — none is chosen by this ADR:
 
 1. TypeScript/Node host loading Wasm or a native addon.

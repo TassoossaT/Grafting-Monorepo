@@ -1,14 +1,16 @@
 # `.ai/` — AI Control Plane (minimal bootstrap)
 
 This directory is the canonical source of the AI Control Plane, per
-`GRAFTING_MASTER_SOURCE.md` §16 and §29 (DEC-025). It does not replace
+`docs/architecture/ai-control-plane.md` (extracted from
+`GRAFTING_MASTER_SOURCE.md` §16 and §29, DEC-025). It does not replace
 `AGENTS.md` as the project's operational contract — `AGENTS.md` still wins
 for agent behavior rules.
 
 ## Current state
 
 This is a **minimal operational control plane**, not the full structure
-described in §29.1. Only directories with real content exist. Phase 1
+described in `docs/architecture/ai-control-plane.md` §29.1. Only directories
+with real content exist. Phase 1
 multi-agent communication is now active through versioned files:
 
 ```text
@@ -39,9 +41,10 @@ JSON so validation needs no model call and no external service.
 
 ## Skills
 
-Skills follow the canonical Agent Skills format from §29.3
-(`SKILL.md` + `manifest.yaml`, plus `references/`/`scripts/`/etc. only when
-there is real content for them). The lifecycle in §29.3
+Skills follow the canonical Agent Skills format from
+`docs/architecture/ai-control-plane.md` §29.3 (`SKILL.md` + `manifest.yaml`,
+plus `references/`/`scripts/`/etc. only when there is real content for them).
+The lifecycle in that same §29.3
 (`discovered → quarantined → inspected → adapted → evaluated → approved →
 active → monitored → deprecated → archived`) applies to skills adopted from
 outside the project; a skill authored in-repo by the owner, like

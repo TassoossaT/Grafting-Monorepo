@@ -5,7 +5,11 @@
       "path": "."
     },
     {
-      "name": "🦀 Rust",
+      "name": "🏛️ Apps (Monorepo Projects)",
+      "path": "apps"
+    },
+    {
+      "name": "🦀 Rust - libs",
       "path": "libs"
     },
     {
@@ -19,7 +23,11 @@
     {
       "name": "🐍 Python",
       "path": "python"
-    }
+    },
+    {
+      "name": "📖 Docs",
+      "path": "docs"
+    },
   ],
   "settings": {
     // Noise shared across every folder above -- build outputs,
@@ -111,7 +119,8 @@
     "[python]": {
       "editor.defaultFormatter": "ms-python.python"
     },
-    "powershell.cwd": "🎯 Central (root, docs, ADRs, config)"
+    "powershell.cwd": "🎯 Central (root, docs, ADRs, config)",
+    "r.lsp.promptToInstall": false
   },
   "extensions": {
     "recommendations": [

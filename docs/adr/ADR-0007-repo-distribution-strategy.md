@@ -79,7 +79,7 @@ consumed by separate per-product repositories?
 
 ## Next steps
 
-- [x] Update `GRAFTING_MASTER_SOURCE.md` section 3 (record as `LOCKED`)
+- [x] Update `docs/decisions/DECISION-LOG.md` (record as `LOCKED`)
       citing this ADR — done in this revision (see new DEC).
 - [ ] Define, once the first sale is real, the concrete mechanism for
       extracting that product's artifact/history.

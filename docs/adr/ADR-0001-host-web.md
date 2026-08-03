@@ -13,7 +13,7 @@
 The Web VTT is described in the master source as TypeScript + Three.js, consuming the Rust
 core via Wasm inside a Dedicated Worker (DEC-015). The Web host does not yet have a defined
 framework. No scaffold of `apps/web-vtt` can be created while this gate remains open
-(GRAFTING_MASTER_SOURCE.md, section 3.3).
+(`docs/decisions/DECISION-LOG.md` §3.3).
 
 ## Questions the gate needs to answer
 
@@ -91,7 +91,7 @@ server routes in the same project.
 
 ## Next steps after closing
 
-- [ ] Update `GRAFTING_MASTER_SOURCE.md` section 3 (record as `LOCKED`) citing this ADR. —
+- [ ] Update `docs/decisions/DECISION-LOG.md` (record as `LOCKED`) citing this ADR. —
       done in this revision (see DEC-041).
 - [ ] Enable backlog item A-001 and review A-006 (Wasm/Worker spike) to validate the Worker
       bootstrap within a Next.js client-only route.

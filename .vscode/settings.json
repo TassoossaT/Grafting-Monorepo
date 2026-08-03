@@ -11,6 +11,7 @@
     "packages": true,
     "dotnet": true,
     "python": true,
-    ".claude": true
+    "docs": true,
+    "apps": true,
   }
 }

@@ -82,138 +82,59 @@ The agent MUST NOT:
 
 ---
 
-## 1. Product vision
+### 0.4 Router: where to find each section
 
-The repository will house two main products:
+This master source stays the single entry point, but most section bodies now
+live in dedicated files so an agent fetches only what a task needs instead of
+reading the whole document. Sections marked "moved" below are no longer
+present in the body of this file at all -- use this table, not the heading
+numbers elsewhere in this document, to find them. Stable citation keys
+(`DEC-XXX`, `GATE-XXX`) are location-independent and are unaffected by any of
+these moves; cite the ID, never the section number, when referencing a
+decision or gate from outside this document.
 
-1. **Web Virtual Tabletop**
+| § | Topic | Location |
+| - | ----- | -------- |
+| 0 | How to use this document | inline below |
+| 1 | Product vision | moved -> `docs/architecture/overview.md` |
+| 2 | Architectural principles | inline below |
+| 3 | Summary decision log | moved -> `docs/decisions/DECISION-LOG.md` |
+| 4 | Logical architecture | inline below (pending relocation -> `docs/architecture/boundaries.md`, follow-up task) |
+| 5 | Decision Gates to close | moved -> `docs/decisions/GATES.md` |
+| 6 | Proposed physical topology | inline below (pending relocation -> `docs/architecture/toolchains.md`, follow-up task) |
+| 7 | Nx orchestration | inline below (pending relocation -> `docs/architecture/toolchains.md`, follow-up task) |
+| 8 | Python management with uv and Nx | inline below (pending relocation -> `docs/architecture/toolchains.md`, follow-up task) |
+| 9 | Node, pnpm, and the Wasm package | inline below (pending relocation -> `docs/architecture/toolchains.md`, follow-up task) |
+| 10 | Data contracts | inline below (pending relocation -> `docs/architecture/contracts.md`, follow-up task) |
+| 11 | FFI and memory | inline below (pending relocation -> `docs/architecture/memory-model.md`, follow-up task) |
+| 12 | ABI: version and lifecycle | inline below (pending relocation -> `docs/architecture/abi.md`, follow-up task) |
+| 13 | GPU and the single solver | inline below (pending relocation -> `docs/architecture/gpu-model.md`, follow-up task) |
+| 14 | Threads and asynchrony | inline below (pending relocation, follow-up task) |
+| 15 | Multiplayer | inline below (pending relocation -> `docs/architecture/multiplayer.md`, follow-up task) |
+| 16 | Knowledge, documentation, and context for AI | moved -> `docs/architecture/ai-control-plane.md` |
+| 17 | Generators and scaffolding | inline below (pending relocation -> `docs/architecture/generators.md`, follow-up task) |
+| 18 | CI/CD | inline below (pending relocation -> `docs/architecture/testing.md`, follow-up task) |
+| 19 | Testing | inline below (pending relocation -> `docs/architecture/testing.md`, follow-up task) |
+| 20 | Observability | inline below (pending relocation, follow-up task) |
+| 21 | Security and robustness | inline below (pending relocation, follow-up task) |
+| 22 | Implementation phases | inline below (pending relocation, follow-up task) |
+| 23 | Initial backlog | inline below (pending relocation -> `docs/architecture/backlog.md`, follow-up task) |
+| 24 | Definition of Done | moved -> `docs/DEFINITION_OF_DONE.md` |
+| 25 | Working protocol for Claude and GPT/Codex agents | inline below, collapsed to a pointer (see 25.0) |
+| 26 | Strategy for making the most of agent credit | inline below |
+| 27 | Creation checklist | inline below |
+| 28 | Future matters deliberately out of V1 | moved -> `docs/architecture/out-of-v1.md` |
+| 29 | AI Control Plane in detail | moved -> `docs/architecture/ai-control-plane.md` |
+| 30 | Primary technical references | moved -> `docs/architecture/references.md` |
+| 31 | Final executive summary | inline below |
+| 32 | Maintenance of this master source | inline below |
 
-   - TypeScript;
-   - Three.js;
-   - web interface;
-   - engine consumption via WebAssembly;
-   - simulation and heavy computation off the main thread.
-2. **Native Desktop Game**
-
-   - C#/.NET;
-   - graphics engine still to be decided;
-   - engine consumption via native library;
-   - initial priority support for Windows, with a design compatible with Linux and macOS.
-
-Both products will consume the same proprietary Rust core.
-
-### 1.1 Central objective
-
-Build a logical, mathematical, and optimization engine that:
-
-- is the single source of truth;
-- is reusable on Web and Desktop;
-- allows future implementation of a proprietary optimization solver;
-- runs algorithms on CPU and, when advantageous, on GPU;
-- maintains explicit control of memory and lifecycle;
-- does not replicate proprietary logic in the hosts;
-- can in the future operate locally or on an authoritative server.
-
-### 1.2 What "single core" means
-
-"Single core" means:
-
-- a single mathematical model;
-- a single implementation of the business rules;
-- a single solver algorithm;
-- a single collection of WGSL kernels;
-- a single protocol for commands, events, and snapshots;
-- thin bindings, without reimplementing behavior;
-- interchangeable execution backends behind internal contracts.
-
-"Single core" does not mean:
-
-- a single process;
-- a single binary for all systems;
-- a single logical GPU device instance;
-- a single Rust reference crossing any runtime;
-- a single physical representation of memory across CPU, Wasm, Worker, GPU, and network.
-
-### 1.3 Architectural success criteria
-
-The project will be considered well structured when:
-
-- a rule changed in Rust produces the same behavior in both products;
-- Web and Desktop do not have copies of the solver;
-- an incompatible contract change fails early in the build;
-- an incompatible ABI fails at startup, not during gameplay;
-- affected tasks are executed in the correct order by Nx;
-- each compiler continues to be operated by its native toolchain;
-- the cache never masks external effects or artifacts from another platform;
-- the absence of WebGPU triggers a controlled CPU fallback;
-- the renderer does not need to know the solver's internal implementation;
-- the solver does not need to know about Three.js, the C# engine, or transport protocols.
-
-### 1.4 Identity and taxonomy
-
-The project is called **Grafting Monorepo**, inspired by the idea of grafting or connecting parts that originally belong to different places into a coherent system.
-
-Conventions:
-
-| Context                         | Name                  |
-| -------------------------------- | --------------------- |
-| Human project name           | `Grafting Monorepo` |
-| Recommended repository slug | `grafting`          |
-| Rust crate prefix           | `grafting-*`        |
-| npm package scope            | `@grafting/*`       |
-| C# root namespace                | `Grafting.*`        |
-| Bridge between runtimes/languages  | `Isekai`            |
-
-**Isekai** is the bounded context that transports data, commands, results, and lifecycles between execution "worlds":
-
-- native Rust ↔ C#/.NET;
-- Rust/Wasm ↔ TypeScript;
-- Wasm linear memory ↔ TypedArrays;
-- native memory ↔ C# spans/views.
-
-The name does not replace technical terminology. Public APIs remain explicit:
-
-```text
-engine_submit
-engine_job_poll
-engine_buffer_release
-```
-
-and do not use metaphorical names such as `send_to_another_world`.
-
-Boundaries:
-
-- Isekai contains no business rules;
-- Isekai does not implement the solver;
-- Isekai has no rendering;
-- Isekai is not the multiplayer system;
-- Isekai depends on the engine; the engine does not depend on Isekai;
-- networking remains in the `replication` and `transport` contexts.
-
-This discipline allows using a memorable identity without harming the technical readability of the code.
-
-Planned components:
-
-| Artifact                     | Responsibility                         |
-| ----------------------------- | ----------------------------------------- |
-| `grafting-isekai-wasm`     | Rust crate that exposes the core to Wasm   |
-| `grafting-isekai-capi`     | Rust crate that exposes the native C ABI     |
-| `@grafting/isekai-wasm`    | the same Rust crate's directory, also a normal npm package (co-located `package.json`, `postinstall` runs `wasm-pack`); not a separate `packages/` technical package (`ADR-0017`, DEC-055) |
-| `@grafting/isekai-web`     | idiomatic TypeScript/Worker client    |
-| `Grafting.Isekai.Interop`  | safe C# wrapper for the native library   |
-| `Grafting.Isekai.Protocol` | C# types generated from binary contracts |
-
-In Nx, project names must remain unique, for example:
-
-```text
-isekai-wasm-bridge
-isekai-capi-bridge
-isekai-web-client
-isekai-dotnet-interop
-isekai-dotnet-protocol
-```
-
----
+Sections 4, 6-14, 15, 17-19, and 23 are cited from real Rust/C#/TypeScript
+source-code comments via an `S<n>.<n>` shorthand; relocating their prose is
+explicitly deferred to a separate follow-up task so that move gets its own
+careful pass and verification, rather than being bundled into this router's
+first stand-up. Their section *numbers* remain the stable citation key either
+way, so no source file needs to change when that follow-up happens.
 
 ## 2. Architectural principles
 
@@ -337,106 +258,6 @@ affected consumers, and the applicable version/decision together. Native tools
 extract Rust, TypeScript, C#, and Python APIs; versioned schemas/IDLs remain
 authoritative only at actual ABI, protocol, or process boundaries. See DEC-051
 and ADR-0013.
-
----
-
-## 3. Summary decision log
-
-### 3.1 `LOCKED` Decisions
-
-| ID      | Decision                                                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| DEC-001 | Rust is the single source of proprietary logic, mathematics, and the solver.                                                           |
-| DEC-002 | Nx acts as the meta-orchestrator; native toolchains remain sovereign.                                                         |
-| DEC-003 | pnpm manages the Node/TypeScript workspace.                                                                                       |
-| DEC-004 | Cargo manages Rust crates, features, targets, and dependencies.                                                                   |
-| DEC-005 | uv manages Python, environments, and the lockfile.                                                                                        |
-| DEC-006 | dotnet/MSBuild manages C# projects.                                                                                             |
-| DEC-007 | Rust owns the GPU compute resources; the hosts own the rendering resources.                                                   |
-| DEC-008 | The GPU backend will be based on `wgpu`; portable kernels will be written in WGSL.                                              |
-| DEC-009 | The GPU backend has a functional CPU fallback.                                                                                     |
-| DEC-010 | FFI calls will be batched; per-entity iterative operations are prohibited in the hot path.                                     |
-| DEC-011 | The desktop ABI will be a versioned C ABI with opaque handles and fixed-width types.                                             |
-| DEC-012 | ABI, network protocol, and product version are separate versioning axes.                                                     |
-| DEC-013 | FlatBuffers will be used for structured data; hot numeric arrays will use explicit raw layouts.                     |
-| DEC-014 | "Zero-copy" will not be described as an end-to-end property.                                                                   |
-| DEC-015 | Web will run Wasm/simulation/compute in a Dedicated Worker.                                                                   |
-| DEC-016 | Initial multiplayer will be authoritative replication with a journal and snapshots, not full Event Sourcing.                       |
-| DEC-017 | Native builds will occur on runners of the target system.                                                                      |
-| DEC-018 | Generated code will not be mandatorily committed; generation will be a deterministic task.                                |
-| DEC-019 | `.venv` will never be shared between Windows, WSL, Linux, macOS, or different checkouts.                                    |
-| DEC-020 | pnpm's experimental Global Virtual Store is not an architectural requirement.                                                      |
-| DEC-021 | Nx graph export is derived structural context, not RAG.                                                              |
-| DEC-022 | `AGENTS.md` will be the agent-agnostic contract; vendor-specific files will be short adapters.              |
-| DEC-023 | The project is called Grafting; Isekai is exclusively the interoperability boundary between runtimes and languages.             |
-| DEC-024 | The root and local `AGENTS.md` is the canonical operational contract per scope.                                                       |
-| DEC-025 | `.ai/` is the canonical source of the AI Control Plane: skills, agents, prompts, policies, workflows, evals, catalog, and routing. |
-| DEC-026 | `CLAUDE.md`, `.claude/`, `.codex/`, and `.agents/` are vendor adapters and not parallel architectural sources.       |
-| DEC-027 | Knowledge & Automation Plane and a minimal Graph IR are P0.                                                                         |
-| DEC-028 | Every Nx project is born with `project.json`, `README.md`, `AGENTS.md`, Graph IR metadata, and `src/`.                        |
-| DEC-029 | Capabilities, skills, tools, and context are loaded on demand.                                                         |
-| DEC-030 | Agent Skills is the base interoperable skill format.                                                                         |
-| DEC-031 | There is a single durable source of executable task state: one validated record per task under `.ai/state/tasks/`. Architectural backlog definitions remain in this master source; provider chat and generated Graph IR are not task authority (ADR-0010). |
-| DEC-032 | Each task has a single executing owner at a time; parallel executors use distinct worktrees.                      |
-| DEC-033 | The implementer cannot be the sole reviewer of their own change.                                                             |
-| DEC-034 | Continuous learning is evidence-driven, evaluated, and approval-gated.                                                             |
-| DEC-035 | Post-tool maintenance is deterministic and does not call a model.                                                           |
-| DEC-036 | Semantic caching remains disabled by default and is prohibited for code, security, incidents, and side effects.              |
-| DEC-037 | Canonical prompts live in `.ai/prompts/`; external records are published projections.                                     |
-| DEC-038 | External AI integrations enter via spike, quarantine, license, security, and evaluation.                                   |
-| DEC-039 | No AI integration can create another workspace root, lockfile, or toolchain without an ADR.                                    |
-| DEC-040 | The Grafting Graph IR also represents capabilities, skills, agents, prompts, tools, policies, evals, tasks, and runs.    |
-| DEC-041 | The Web host is Next.js (React + SSR/edge); the VTT is a client-only route within it, not a standalone app (GATE-001, `docs/adr/ADR-0001-host-web.md`). |
-| DEC-042 | Platform/environment differences (OS, Web runtime, RID) may only be inspected inside the Polymath package per runtime (`polymath` Rust, `@grafting/polymath` TS, `Grafting.Polymath` C# in the future); no other module performs this inspection directly (`docs/adr/ADR-0006-polymath-platform-abstraction.md`). |
-| DEC-043 | The V1 desktop client is Windows x64 only; Linux/macOS remain core compilation targets, validated progressively, with no published client in V1 (GATE-003, `docs/adr/ADR-0003-platforms-v1.md`). Future expansion is absorbed by Polymath (DEC-042), not by rewriting the core. |
-| DEC-044 | The V1 authoritative path requires replay determinism on the same platform/build (command ordering, RNG, DomainEvents, snapshots, state hash); "same platform" fixes build ID, target, protocol/schema versions, features, numeric configuration, and RNG algorithm. Numeric/GPU subsystems use mathematical tolerance; GPU results are validated, canonicalized, and deterministically tie-broken on the CPU before touching the state hash. Non-authoritative rendering/effects require only semantic determinism. Bit-for-bit cross-platform matching is not a V1 requirement; the authoritative host stays fixed to one target per session (GATE-005, `docs/adr/ADR-0004-determinism.md`; to be reviewed when closing GATE-004/GATE-009). |
-| DEC-045 | Monorepo distribution is monolithic: a single workspace, multiple products as distinct `apps/`, with no satellite repositories per product. "Selling" a product means packaging that app's build artifact (`dist/<app>`), not splitting repositories (GATE-007, `docs/adr/ADR-0007-repo-distribution-strategy.md`). |
-| DEC-046 | A capability is born in `libs/domains` or `packages/` — never duplicated inside an `app` — whenever more than one product needs it or it is reasonable to foresee that it will; an `app` only composes domains, presents UI, and integrates the host. Initial map: `narrative` and `session` are generic domains (`libs/domains`); the VTT's interactive map is product-specific, sharing only the `packages/x6-canvas` wrapper with the Architecture Studio; Discord and transcription are external integrations that consume contracts, never internal domains (`docs/adr/ADR-0008-libs-boundary-and-domain-map.md`). |
-| DEC-047 | English is the default documentation language for the entire repository, effective 2026-07-26. All pre-existing Portuguese documents (`GRAFTING_MASTER_SOURCE.md`, `CURRENT_PLANNING_STATE.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `README.md`, `docs/adr/*.md`) were translated to English in full as part of this decision. This supersedes the earlier informal rule that only required new files to be written in English going forward. New files, package names, comments, and READMEs continue to be written in English. |
-| DEC-048 | Phase 1 communication between Claude, Codex, Gemini, and future providers uses provider-neutral, versioned files under `.ai/state/`: one active owner per task, immutable structured handoffs, deterministic validation without model calls, and short vendor adapters that point to the canonical protocol instead of duplicating it (`docs/adr/ADR-0010-multi-agent-coordination.md`). |
-| DEC-049 | Reusable capabilities use the smallest useful consumer-agnostic boundary (internal tree, package, or host app); third-party runtime/library APIs remain inside that boundary and are exposed through Grafting-owned surfaces without vendor-type leakage; separate packages require real reuse/build/ownership/fork evidence; authoritative behavior has one implementation or canonical source, with explicit allowances for independent tests, generated bindings, frozen fixtures, thin boundary translations, and derived evidence (`docs/adr/ADR-0011-package-autonomy-and-external-isolation.md`). |
-| DEC-050 | The Knowledge and Automation Plane separates canonical authored sources, operational authored state, derived evidence, and presentation state; derived facts remain read-only and traceable, while proposed edits target authored sources through validation and plan/diff approval. Graph computation, visual adaptation, and application presentation remain separate; the original TypeScript graph-package allocation is amended by DEC-051 (`docs/adr/ADR-0012-knowledge-automation-plane.md`). |
-| DEC-051 | Reusable graph structures, semantic validation, algorithms, ordering, queries, diffs, layout mathematics, and other significant calculations are authoritative in the Rust `grafting-graph-core` crate; callers own presentation enrichment, while `@grafting/x6-canvas` privately owns X6. Every consumed package has a generated public-API baseline, an `api-check` target, and behavioral contract tests, with native source declarations remaining authoritative (`docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md`). |
-| DEC-052 | Reusable capability packages expose neutral mechanisms, Grafting-owned composition contracts, extension points, and only replaceable defaults; consuming applications own concrete visual identity, semantic roles, effects, and interaction policy. A package may privately adapt third-party code, but it must not hardcode one product's presentation or force consumers to bypass its boundary (`docs/adr/ADR-0014-composable-capability-packages.md`). |
-| DEC-053 | AI agents never create, amend, rewrite, merge, or implicitly produce Git commits on any branch. They may inspect/stage Git state, create isolated `ai/<agent>/<task-id>` branches, and assist with pull requests containing human-authored commits; only explicit isolated branches may be pushed, and agents never push to `main`/`master`, force remote refs, or merge pull requests (`docs/adr/ADR-0015-agent-git-write-policy.md`). |
-| DEC-054 | `apps/architecture-studio`'s scope expands to three named surfaces: (1) the existing Graph IR explorer, unchanged and still read-only; (2) a new VTT procedural-generation test/visualization surface executing Rust/Wasm generation code, rendered via Three.js inside `@grafting/ui`'s `GridLayout`; (3) a new agent-orchestration surface, a Node backend executing MCP-based agent workflows, bound by a license-risk policy (no Mastra `ee/` code reachable from a shipped build) and still routing any canonical-source edit through `ADR-0012`'s existing proposal/validation/plan/approval lifecycle. `ADR-0012`'s read-only-only exclusion is superseded for surfaces 2 and 3 only (`docs/adr/ADR-0016-architecture-studio-scope-expansion.md`). |
-| DEC-055 | Generated Wasm bindings (`wasm-pack` output or equivalent) for any Rust crate never live inside `packages/`, even gitignored; the Rust crate stays a plain Cargo project under `libs/`, and its generated output is produced at build/install time directly into a directory owned by the consuming app, via an Nx target that app declares itself. `packages/isekai-wasm` and `packages/vtt-generation-wasm` are eliminated; `packages/isekai-web-client` receives its compiled Wasm module's location as a runtime parameter instead of importing a generated package (`docs/adr/ADR-0017-wasm-bindings-colocated-with-crate.md`). |
-
-### 3.2 `PROVISIONAL` Decisions
-
-| ID       | Decision to validate                                                                            |
-| -------- | --------------------------------------------------------------------------------------------- |
-| PROV-001 | Re-evaluate the official `@nx/dotnet` plugin when GATE-002 resumes or manual .NET metadata becomes costly. A-010 validated that the plugin is available and compatible, but the current small, generic C# surface deliberately retains explicit `nx:run-commands` targets as its documented fallback (`docs/benchmarks/toolchain-nx-validation-2026-07-28.md`). |
-| PROV-002 | Use `wasm-pack` as the initial packager for the Wasm binding.                                   |
-| PROV-003 | Use FlatBuffers for Commands, DomainEvents, ReplicationDeltas, and Snapshots.                  |
-| PROV-004 | Maintain a single `uv.lock` for the workspace's compatible Python packages.                 |
-| PROV-005 | Use a single product version while artifacts remain internal.                      |
-| PROV-006 | Keep the Web `wgpu::Device` inside the same Worker that holds the Wasm instance.          |
-| PROV-007 | Use Bifrost as the central gateway, initially as a pinned container or external service.    |
-| PROV-008 | Use BAML as the typed prompt compiler.                                                                  |
-| PROV-009 | Use Langfuse for tracing, datasets, and published prompt versions.                        |
-| PROV-010 | Use Promptfoo for quick evals and regressions.                                             |
-| PROV-011 | Use LangMem for extracting and consolidating learning candidates.                         |
-| PROV-012 | Use GEPA/DSPy for offline optimization of variants.                                        |
-| PROV-013 | Use LLMLingua only for selective compression of non-normative content.                 |
-| PROV-014 | Use Serena and ast-grep as complements to repository intelligence.                    |
-
-### 3.3 `OPEN` Decisions
-
-| Gate     | Human decision needed                        | Impact                                              |
-| -------- | ------------------------------------------------------------------ | ----------------------------------------------------- |
-| GATE-002 | C# engine: Unity, Godot C#, MonoGame, Stride, or a custom engine    | native integration, packaging, and thread ownership — **formally deferred until there is a concrete C# game project; see `docs/adr/ADR-0002-engine-desktop.md`. Does not block the generic development of `isekai-capi`, only the desktop app scaffold and the engine-specific wrapper.** |
-| GATE-004 | Authoritative server host language                         | future tree and deployment — **formally deferred to the start of Phase 6/Epic H; see `docs/adr/ADR-0005-authoritative-host-deferral.md`.** |
-| GATE-006 | Support policy when WebGPU is unavailable           | UX, fallback, and minimum requirements                   |
-| GATE-008 | Proprietary code license and policy                      | publication and distribution of symbols           |
-| GATE-009 | Multiplayer persistence                                       | journal, snapshots, and operation                      |
-
-`GATE-001` has been closed — see DEC-041 and `docs/adr/ADR-0001-host-web.md`.
-`GATE-003` has been closed — see DEC-043 and `docs/adr/ADR-0003-platforms-v1.md`.
-`GATE-005` has been closed — see DEC-044 and `docs/adr/ADR-0004-determinism.md`.
-`GATE-007` has been closed — see DEC-045 and `docs/adr/ADR-0007-repo-distribution-strategy.md`.
-
-No gate prevents creating isolated proofs of concept. Of the gates that were blocking the definitive scaffold of the applications, only `GATE-002` remains open (GATE-001 and GATE-003 closed).
 
 ---
 
@@ -612,7 +433,7 @@ Initial domain map (see `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
 | --- | --- | --- |
 | Narrative / story creation | generic domain | `libs/domains/narrative` |
 | Session / campaign organization | generic domain | `libs/domains/session` |
-| VTT interactive map (X6) | product-specific + generic wrapper | `apps/web-vtt` consumes `packages/x6-canvas`, shared with `apps/architecture-studio` (section 16.8) |
+| VTT interactive map (X6) | product-specific + generic wrapper | `apps/web-vtt` consumes `packages/x6-canvas`, shared with `apps/architecture-studio` (`docs/architecture/ai-control-plane.md` §16.8) |
 | Discord bot | external integration | its own service consuming `session`/`narrative` contracts, never internals |
 | Session transcription | external integration (likely Python) | `python/` or a dedicated service, feeding `narrative` via contract |
 
@@ -637,114 +458,6 @@ interfaces and isolate third-party runtime APIs inside the smallest useful
 owning module/project boundary. It does not require one package per dependency.
 Shared behavior is reused from its authoritative implementation rather than
 copied into a second module, package, or application.
-
----
-
-## 5. Decision Gates to close
-
-This section must be answered by the owner before the final scaffold. The agent can prepare comparisons and spikes, but cannot choose silently.
-
-### GATE-001 — Web Host — CLOSED
-
-Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-041 and detailed in
-`docs/adr/ADR-0001-host-web.md`.
-
-Questions that drove the decision:
-
-- Is the VTT a client SPA or does it need SSR?
-- Will there be indexable public pages?
-- Does the application need server routes from the same framework?
-- Will the deploy be static, Node, or edge?
-
-Decision: **Next.js (React + SSR/edge)**. The VTT is just one of the product's planned
-pages; the other pages benefit from SSR/server routes in the same framework.
-
-The default originally considered in this section (React + Vite + Three.js as an isolated
-SPA, with separate backend services) was discarded because it assumed a single-page
-product, which is not the case. The Worker/Wasm bootstrap (DEC-015) must occur within a
-client-only Next.js route, without participating in SSR.
-
-### GATE-002 — Desktop Engine
-
-Status: **open and in indefinite standby until the owner explicitly resumes C# game
-development** (see `docs/adr/ADR-0002-engine-desktop.md`). The generic C ABI and .NET
-interop feasibility work is complete; there is currently no specific game or engine to
-evaluate, and no further engine-specific work is planned while the gate is in standby.
-
-The choice, when resumed, needs to evaluate:
-
-- the possibility of distributing a Rust DLL;
-- the threading model;
-- P/Invoke support;
-- packaging control per RID;
-- native plugin policy;
-- window/input access;
-- license restrictions;
-- the ability to run tests without an editor.
-
-The core must not assume Unity, Godot, or another engine until the gate closes.
-
-The deferral does not block generic work: `isekai-capi` (C ABI, opaque handles,
-DEC-011) is designed to be engine-agnostic by construction, and can be developed
-and validated with a generic .NET harness (console app or tests with direct P/Invoke),
-without choosing an engine. What remains blocked is the desktop app scaffold itself and the
-engine-specific threading/window/input wrapper (section 12.6).
-
-### GATE-003 — V1 Platforms — CLOSED
-
-Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-043 and detailed in
-`docs/adr/ADR-0003-platforms-v1.md`.
-
-Decision (pragmatic default originally suggested, adopted unchanged):
-
-- Web: modern browsers with WebAssembly;
-- Web GPU: WebGPU when available;
-- Desktop V1: Windows x64;
-- Linux/macOS: core compilable and progressively validated, with no published client in
-  the first milestone.
-
-Rationale: the Polymath package (DEC-042) already isolates platform differences, so
-restricting the desktop client to Windows in V1 is a publication sequencing decision,
-not an architectural limitation — Linux/macOS come later as new implementations
-inside Polymath, without rewriting the core or hosts.
-
-### GATE-004 — Authoritative server
-
-Acceptable options:
-
-- a TypeScript/Node host loading Wasm or a native addon;
-- a C# host loading a native library;
-- a Rust host calling the core directly.
-
-Main criterion:
-
-- host operation, observability, and scale;
-- not the solver's language, which will remain Rust.
-
-### GATE-005 — Determinism — CLOSED
-
-Status: **CLOSED on 2026-07-26.** Decision recorded in DEC-044 and detailed in
-`docs/adr/ADR-0004-determinism.md`.
-
-Differentiated levels (reference):
-
-1. semantic determinism;
-2. same-platform replay determinism;
-3. cross-platform bit-for-bit determinism;
-4. mathematical validity within tolerance.
-
-Floating-point GPU must not be used for decisions that require bit-for-bit equality between machines. A solver may use GPU for search and CPU to validate the final solution.
-
-Decision: V1 adopts **level 2 (replay on the same platform/build)** for the
-authoritative path (command ordering, RNG, DomainEvents, snapshots, state hash). "Same
-platform" fixes build ID, target, protocol/schema versions, features, numeric
-configuration, and RNG algorithm. Numeric and GPU subsystems use **level 4 (mathematical
-tolerance)**; GPU results never enter the state hash raw — they are validated,
-canonicalized, and deterministically tie-broken on the CPU before touching the
-authoritative path. Non-authoritative rendering and effects require only **level 1
-(semantic)**. **Level 3 (cross-platform bit-for-bit) is not a V1 requirement**; the
-authoritative host stays fixed to a single target during a session. This decision will be
-reviewed when closing `GATE-004` and `GATE-009`.
 
 ---
 
@@ -2049,200 +1762,6 @@ Full Event Sourcing will only be adopted if events become the primary source and
 
 ---
 
-## 16. Knowledge, documentation, and context for AI
-
-### 16.1 Sources of truth
-
-Authority is divided without circular generation:
-
-- this document: global architecture;
-- ADRs: specific changes;
-- `AGENTS.md`: operational contract per scope;
-- `.ai/`: AI Control Plane;
-- code/manifests/schemas: implemented facts;
-- Graph IR and generated docs: projections with evidence.
-
-```text
-docs/
-├── architecture/
-│   ├── overview.md
-│   ├── boundaries.md
-│   ├── memory-model.md
-│   ├── gpu-model.md
-│   ├── abi.md
-│   └── multiplayer.md
-├── adr/
-│   ├── 0001-*.md
-│   └── ...
-├── runbooks/
-├── benchmarks/
-└── generated/
-    ├── project-graph.json
-    ├── project-graph.html
-    ├── artifact-manifest.json
-    └── repo-map.md
-```
-
-### 16.2 `AGENTS.md`
-
-`AGENTS.md` is the agnostic and canonical operational contract per scope:
-
-- purpose and public surface;
-- official commands;
-- invariants and ownership;
-- allowed and forbidden dependencies;
-- acceptance criteria;
-- boundaries;
-- generated files;
-- mandatory tests;
-- ADRs;
-- change checklist;
-- documentation map.
-
-Local `AGENTS.md` files restrict the subtree. `.ai/` can index them and validate consistency, but does not silently override them.
-
-### 16.3 `CLAUDE.md` and adapters
-
-`CLAUDE.md` must be short:
-
-- direct to read `AGENTS.md`;
-- direct to read this document;
-- point to applicable context packs and skills;
-- list validation commands;
-- explain how to report open decisions;
-- contain only Claude-specific behavior.
-
-`.claude/`, `.codex/`, and `.agents/` adapt the same canonical source. Do not duplicate the entire blueprint in these files, as this creates drift and increases context.
-
-### 16.4 Cursor and other vendors
-
-Specific rules can exist in:
-
-- `.cursor/rules/*.mdc`;
-- equivalent files from other tools.
-
-They must adapt, not contradict, `AGENTS.md`.
-
-### 16.5 Nx graph
-
-The graph will be generated on demand or in CI:
-
-```bash
-pnpm nx graph --file=docs/generated/project-graph.json
-```
-
-This file is:
-
-- structural context;
-- input for tools;
-- derived snapshot.
-
-It is not RAG by itself.
-
-RAG only exists when there is:
-
-- a corpus;
-- chunking;
-- embeddings or an index;
-- a retrieval mechanism;
-- an update policy;
-- relevance evaluation.
-
-### 16.6 Automated documentation
-
-Automation must generate:
-
-- the project graph;
-- an artifact matrix;
-- a contract inventory;
-- a list of ABI exports;
-- toolchain versions;
-- benchmark summary;
-- target compatibility.
-
-Automation must not silently generate:
-
-- architectural decisions;
-- ADR rationale;
-- support promises;
-- product requirements.
-
----
-
-### 16.7 Grafting Graph IR
-
-The Graph IR represents projects, targets, modules, symbols, contracts, ABI, artifacts, runtimes, threads, documents, ADRs, workflows, skills, agents, prompts, tools, MCPs, policies, evals, tasks, runs, and handoffs.
-
-Derived relations record extractor, version, file, symbol, hash, confidence, and evidence. The Graph IR is the canonical model for interchange and querying; the authority for a fact remains in the originating code, manifest, schema, or ADR.
-
-Per DEC-050, repository information is explicitly classified as canonical
-authored source, operational authored state, derived evidence, or presentation
-state. Derived evidence is read-only and traceable to its source. A future edit
-from the Architecture Studio creates a proposed source patch or structured
-command, validates it, presents a plan/diff for approval, applies it through the
-native owning toolchain, and then regenerates evidence. The viewer never writes
-Graph IR or generated evidence directly.
-
-Levels:
-
-| Level | Content                                    |
-| ------ | -------------------------------------------- |
-| L0     | apps, packages, crates, and projects            |
-| L1     | modules and imports                           |
-| L2     | classes, traits, interfaces, and public APIs |
-| L3     | call graph, dataflow, and runtime tracing       |
-
-Approximate call graphs are not normative truth.
-
-Graph IR v1 is defined by `docs/graph-ir/graph-ir-v1.schema.json` and its
-adjacent semantic validator. Version `1.0.0` requires stable namespaced node
-IDs, canonical relation IDs, one authority class per node, extractor identity
-and version, a graph-wide source revision, confidence, and at least one hashed
-evidence locator per node and edge. Arrays are deterministically ordered; IDs
-are unique; edge endpoints must exist; evidence paths are normalized and
-repository-relative. Viewer, X6, DOM, layout, color, and viewport concepts are
-excluded from the contract.
-
-I-002 accepts the contract and fixtures, not a live extractor. I-004 owns the
-atomic replacement of the spike candidate with the reproducible
-`docs/generated/grafting.graph.json` output.
-
-### 16.8 AntV X6 and Architecture Studio
-
-X6 is a controlled viewer/editor. Normative, derived, authored, and visual information remains separate. Derived graphs are read-only. Authored workflows go through schema, policy, plan/diff, and the Nx/CI executor.
-
-V1 views:
-
-1. Project Map;
-2. Task Pipeline;
-3. Interop/Isekai;
-4. Contract Map;
-5. Documentation Map;
-6. AI Capability Map.
-
-Per DEC-046, DEC-049, DEC-050, and DEC-051, reusable graph structures and
-calculations live in `libs/graph/core`. The Rust crate exposes Grafting-owned
-IDs, commands, results, errors, and immutable snapshots without leaking vendor
-graph or mathematics types. Significant operations cross runtime boundaries in
-batches rather than as individual arithmetic calls.
-
-`packages/x6-canvas` owns the Grafting visual input contract and is the
-exclusive owner of the external X6 API. Its public surface must not expose the
-mutable vendor graph or other X6-owned types. Applications enrich immutable
-results with labels, colors, icons, components, selection, and viewport state;
-data that affects a shared calculation is an explicit Rust input.
-
-The spike-era `packages/graph-x6` is transitional. It is migrated atomically
-after Graph IR v1 is defined: generic graph semantics move to Rust, the
-Architecture Studio owns its initial Graph IR presentation projection, and the
-superseded package/path is removed so no second authoritative mapping remains.
-A VTT may reuse the Rust graph core and X6 adapter without sharing Architecture
-Studio or Graph IR semantics.
-
-### 16.9 Context packs
-
-Each task receives a small, reproducible, versioned, and validated context pack containing task, criteria, capabilities, policies, context, allowed/forbidden tools, output schema, artifacts, handoffs, graph scope, and token budget. The context pack is an index, not a substitute for reading the code.
-
 ## 17. Generators and scaffolding
 
 ### 17.1 Local plugin
@@ -2859,98 +2378,22 @@ Deliverables subject to spike:
 | J-011 | Context Broker MCP                | I-005,J-003       | minimal tools tested in MCP Inspector            |
 | J-012 | AI Graph IR extension             | I-002,J-003,J-005 | skills/prompts/runs appear with evidence         |
 
-## 24. Definition of Done
-
-A task is only complete when:
-
-- the requested scope has been implemented;
-- relevant tests pass;
-- lint/format/typecheck pass;
-- Nx inputs and outputs are correct;
-- no cacheable task gained a side effect;
-- affected documentation has been updated;
-- an ADR was created when there was a decision;
-- a contract/ABI was versioned when necessary;
-- generated code is reproducible;
-- there is no duplicated authoritative logic across hosts, apps, or packages;
-- consumed packages have current generated public-API baselines and behavioral
-  contract tests for their documented guarantees;
-- third-party runtime APIs and types do not leak outside their designated
-  owning module/project boundary;
-- error and cleanup were considered;
-- the agent reported the files and commands executed;
-- the change was small enough for review;
-- `AGENTS.md`, `.ai/`, adapters, and Graph IR did not drift;
-- skill, prompt, or agent changes have an applicable eval;
-- tokens, cache, and cost were recorded when there was a model call;
-- no permission or tool was silently expanded.
-
-For performance:
-
-- benchmark attached;
-- comparable baseline;
-- hardware and versions recorded;
-- the result is not based on an irrelevant microbenchmark.
-
----
-
 ## 25. Working protocol for Claude and GPT/Codex agents
 
-### 25.1 Before writing
+### 25.0 This section is a pointer, not a restatement
 
-Every agent must:
+Prior revisions of this section restated `AGENTS.md`'s "Before editing" /
+"Completion format" / "Stop conditions" and
+`.ai/coordination/PROTOCOL.md`'s "Handoffs" / "Git write policy" almost
+verbatim -- duplication that let one copy drift from the other. One drifted
+copy (25.2, since removed) said agents "may make small checkpoint commits
+when authorized," directly contradicting the absolute Git-commit prohibition
+that governs everywhere else (DEC-053,
+`docs/adr/ADR-0015-agent-git-write-policy.md`). Read `AGENTS.md` and
+`.ai/coordination/PROTOCOL.md` directly for the actual protocol; this section
+only keeps the two example prompts below, which are distinct enough to stay.
 
-1. read `AGENTS.md`;
-2. read this document;
-3. read related ADRs;
-4. inspect the actual tree;
-5. consult the Nx graph;
-6. identify the exact task ID;
-7. list blocking `OPEN` decisions;
-8. propose a small plan;
-9. wait for a decision only when truly blocking.
-
-### 25.2 During implementation
-
-Every agent must:
-
-- work on one backlog ID at a time, unless authorized otherwise;
-- use native toolchains;
-- preserve existing changes;
-- not refactor unrelated areas;
-- add a test alongside the implementation;
-- record assumptions;
-- make small checkpoint commits when authorized;
-- update the plan upon discovering a risk.
-
-### 25.3 Completion format
-
-Upon completing a task, respond with:
-
-```text
-Task:
-Result:
-Files changed:
-Validations run:
-Decisions made:
-Risks or pending items:
-Next unblocked task:
-```
-
-### 25.4 Stop conditions
-
-The agent must stop and request a decision when:
-
-- an unchosen engine/framework changes the structure;
-- the action would change the ABI major version;
-- the action would break the persisted protocol;
-- it would be necessary to share GPU resources between runtimes;
-- a second lockfile/workspace would be necessary;
-- external credentials or publication are needed;
-- a test shows that a `LOCKED` architecture is unviable;
-- the scope grows materially beyond the selected ID.
-
-### 25.5 Recommended bootstrap prompt
+### 25.1 Recommended bootstrap prompt
 
 ```text
 Read GRAFTING_MASTER_SOURCE.md in full.
@@ -2967,8 +2410,8 @@ into choices.
    - multiplayer.
 3. Propose the ADRs needed to close GATE-001 through GATE-005.
 4. Propose four minimal spikes:
-   - Rust → Wasm in a Worker;
-   - Rust DLL → C#;
+   - Rust -> Wasm in a Worker;
+   - Rust DLL -> C#;
    - the same WGSL on native and Web wgpu;
    - a batching/copy benchmark.
 5. For each spike, define the minimal tree, commands, test, and objective
@@ -2979,7 +2422,7 @@ into choices.
 When you find a conflict, cite the section and present the smallest possible change.
 ```
 
-### 25.6 Prompt after gates close
+### 25.2 Prompt after gates close
 
 ```text
 Read GRAFTING_MASTER_SOURCE.md, root and local AGENTS.md, the context pack, and all accepted ADRs.
@@ -2998,27 +2441,8 @@ During implementation:
 - do not make silent architectural changes;
 - preserve others' changes.
 
-At the end, use the completion format defined in Section 25.3.
+At the end, use the completion format defined in AGENTS.md.
 ```
-
----
-
-### 25.7 Providers, agents, and review
-
-Claude and Codex share skills, contracts, context packs, and tasks. Vendor-specific definitions remain adapters. Do not permanently fix that one provider always plans or implements. Use `primary_agent`, `review_agent`, `verification_agent`, and `synthesis_agent` according to local evals.
-
-The agent that implemented cannot be the sole reviewer. For parallel work, use one worktree per executor and a single owner per task.
-
-Agents never create or merge Git commits. They may inspect Git, prepare an
-uncommitted working tree or patch, create an isolated
-`ai/<agent>/<task-id>` branch, and assist with a pull request whose commits
-were created by a human. Agents never push to `main` or `master`; creating a
-branch, owning a task, or being asked to prepare a PR does not grant commit or
-merge authority. See DEC-053 and ADR-0015.
-
-### 25.8 Structured handoff format
-
-Every handoff must record task ID, sender, recipient, objective, context, criteria, constraints, uncertainties, artifacts, current owner, return schema, and next responsible party.
 
 ## 26. Strategy for making the most of agent credit
 
@@ -3310,249 +2734,6 @@ Automate only conventions already proven:
       require a separate task and explicit owner approval);
 - [ ] tested rollback.
 
-## 28. Future matters deliberately out of V1
-
-Do not implement without demand and an ADR:
-
-- texture/buffer sharing between `wgpu` and the renderer;
-- SharedArrayBuffer;
-- full Event Sourcing;
-- microservices per domain;
-- hermetic Bazel;
-- Kubernetes;
-- independent publication of every crate/package;
-- a universal Nx plugin for all languages;
-- transpiling regular Rust directly to WGSL;
-- a single renderer in Rust;
-- distributed solver execution;
-- hot reload of the native library;
-- automatic migration of arbitrarily old savegames.
-
----
-
-## 29. AI Control Plane in detail
-
-### 29.1 Structure
-
-```text
-.ai/
-├── README.md
-├── registry/
-│   ├── capabilities.yaml
-│   ├── agents.yaml
-│   ├── tools.yaml
-│   ├── models.yaml
-│   ├── prompts.yaml
-│   ├── policies.yaml
-│   └── workflows.yaml
-├── policies/
-├── skills/
-├── agents/
-├── prompts/
-├── workflows/
-├── context/
-├── contracts/
-├── adapters/
-├── evals/
-├── catalog/
-├── state/
-├── reports/
-└── scripts/
-```
-
-`.ai/` is the canonical source of the control plane, but it does not replace `AGENTS.md` as the project's operational contract.
-
-### 29.2 Progressive disclosure
-
-Initially load only ID, name, summary, triggers, risk, cost, and dependencies. Skill body, references, scripts, schemas, and tools are loaded only after selection.
-
-### 29.3 Agent Skills
-
-Canonical format:
-
-```text
-skill-name/
-├── SKILL.md
-├── manifest.yaml
-├── references/
-├── scripts/
-├── templates/
-├── examples/
-├── evals/
-├── tests/
-└── assets/
-```
-
-Lifecycle:
-
-```text
-discovered
-→ quarantined
-→ inspected
-→ adapted
-→ evaluated
-→ approved
-→ active
-→ monitored
-→ deprecated
-→ archived
-```
-
-External skills never enter directly as active.
-
-### 29.4 Initial control plane agents
-
-- capability-curator;
-- skill-engineer;
-- context-engineer;
-- agent-evaluator;
-- repository-intelligence-agent;
-- graph-ir-architect.
-
-Each agent defines responsibilities, permissions, limits, tools, context, output schema, and evals.
-
-### 29.5 AI System Maintainer
-
-Modes:
-
-- `observe`: after tools, without a model and without a canonical change;
-- `audit`: end of turn, validation, and report;
-- `evolve`: evidence-driven, with eval, review, approval, and rollback.
-
-Hooks:
-
-```text
-PostToolUse → observe
-Stop        → audit
-SessionEnd  → finalize
-```
-
-Python execution:
-
-```bash
-uv run --locked --no-sync python <script>
-```
-
-The skill itself, hooks, permissions, sandbox, and MCPs only change in a separate task with human approval.
-
-### 29.6 Prompt IR
-
-Canonical prompts live in `.ai/prompts/`. The compiler validates schema, resolves fragments, deduplicates, preserves priority, generates adapters and snapshots, computes hash, and records provenance.
-
-BAML is an optional spike; it does not replace the Git source.
-
-### 29.7 Gateway and cache
-
-Bifrost is a priority spike, initially run as a pinned container or external service and configured in `tools/ai-gateway/`.
-
-Distinct caches:
-
-- prompt compilation;
-- the provider's native prompt caching;
-- exact response cache;
-- semantic cache.
-
-Semantic cache is disabled by default and prohibited for implementation, debugging, review, security, incidents, architecture, side effects, and mutable state.
-
-### 29.8 Token economy
-
-Use progressive disclosure, tool search, namespaces, context packs, deduplication, structured summaries, cache, and selective compression.
-
-LLMLingua must not compress policies, permissions, AGENTS, CLAUDE, contracts, schemas, code, ABI, acceptance criteria, critical messages, or configurations.
-
-### 29.9 Observability and evals
-
-Langfuse is a spike for tracing and datasets; `.ai/prompts/` remains the canonical source.
-
-Promptfoo is the default for quick evals. Record correctness, scope, regression, rework, cost, latency, tokens, cache hit, tools, files, and side effects.
-
-### 29.10 Continuous learning
-
-Pipeline:
-
-```text
-execution
-→ observation
-→ evidence
-→ grouping
-→ learning candidate
-→ proposal
-→ eval
-→ variant
-→ comparison
-→ review
-→ approval
-→ promotion
-→ monitoring
-```
-
-Minimum evidence: explicit request, the same fix twice, a critical incident, a reproducible eval, an equivalent workflow three times, or objective drift.
-
-LangMem, Hermes, GEPA, and DSPy are references/spikes; they do not promote changes directly.
-
-### 29.11 Communication between agents
-
-> **Note (2026-08-01, `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`,
-> Proposed):** `ADR-0016` proposes a Studio *product feature* (agent
-> orchestration surfaced through the Architecture Studio UI) that uses MCP.
-> This is independent of the Context Broker MCP described below, which
-> coordinates Claude/Codex/Gemini working on this repository itself. Both
-> may eventually share the same `@modelcontextprotocol/sdk` dependency, but
-> must not share one implementation unless a later task explicitly merges
-> them (DEC-049: no duplicated authoritative behavior).
-
-Phase 1: files in `.ai/state/`.
-
-Phase 2: Context Broker MCP with minimal tools:
-
-```text
-capabilities.search
-capabilities.describe
-context.build_pack
-tasks.get
-tasks.update
-handoffs.create
-handoffs.respond
-artifacts.publish
-events.append
-```
-
-Phase 3: Claude and Codex call each other via MCP/wrappers with limits, tracing, schemas, and approval for effects.
-
-## 30. Primary technical references
-
-### Nx
-
-- [https://nx.dev/docs/getting-started/intro](https://nx.dev/docs/getting-started/intro)
-- [https://nx.dev/docs/features/cache-task-results](https://nx.dev/docs/features/cache-task-results)
-- [https://nx.dev/docs/reference/project-configuration](https://nx.dev/docs/reference/project-configuration)
-- [https://nx.dev/docs/technologies/dotnet/introduction](https://nx.dev/docs/technologies/dotnet/introduction)
-
-### uv
-
-- [https://docs.astral.sh/uv/concepts/projects/](https://docs.astral.sh/uv/concepts/projects/)
-- [https://docs.astral.sh/uv/concepts/projects/workspaces/](https://docs.astral.sh/uv/concepts/projects/workspaces/)
-- [https://docs.astral.sh/uv/concepts/projects/sync/](https://docs.astral.sh/uv/concepts/projects/sync/)
-
-### wgpu/WebGPU
-
-- [https://github.com/gfx-rs/wgpu](https://github.com/gfx-rs/wgpu)
-- [https://docs.rs/wgpu/latest/wgpu/struct.Adapter.html](https://docs.rs/wgpu/latest/wgpu/struct.Adapter.html)
-- [https://docs.rs/wgpu/latest/wgpu/struct.CommandBuffer.html](https://docs.rs/wgpu/latest/wgpu/struct.CommandBuffer.html)
-- [https://www.w3.org/TR/webgpu/](https://www.w3.org/TR/webgpu/)
-
-### FlatBuffers
-
-- [https://flatbuffers.dev/](https://flatbuffers.dev/)
-- [https://flatbuffers.dev/evolution/](https://flatbuffers.dev/evolution/)
-- [https://flatbuffers.dev/flatc/](https://flatbuffers.dev/flatc/)
-
-### Rust FFI
-
-- [https://doc.rust-lang.org/nomicon/ffi.html](https://doc.rust-lang.org/nomicon/ffi.html)
-
----
-
 ## 31. Final executive summary
 
 The intended architecture is viable:
@@ -3626,3 +2807,4 @@ with:
 SUPERSEDED BY: GRAFTING_MASTER_SOURCE.md
 DO NOT USE AS CURRENT ARCHITECTURAL AUTHORITY
 ```
+

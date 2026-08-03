@@ -104,6 +104,32 @@ or session can touch the repository.
   revision changed unexpectedly;
 - run the repository's AI-state validation before reporting completion.
 
+## Fast-Track for Simple Tasks
+
+A reduced-ceremony path for genuinely small changes. Mechanics (conflict
+check, validation, logging) live in `.ai/coordination/PROTOCOL.md`'s
+Fast-Track section — this is the one place that defines what qualifies.
+
+A task is **Simple** only if it meets every criterion:
+
+- **Limited scope:** touches at most two files.
+- **No contract changes:** no public API, data contract (`.fbs`, JSON
+  schema), or critical config (`project.json`, `nx.json`, `package.json`,
+  `Cargo.toml`, etc.).
+- **Non-structural:** no new dependency, no architectural change.
+- **No conflicts:** none of the target files appear in another agent's
+  `in_progress` task `affected_paths` (verified before starting, per
+  PROTOCOL.md's conflict-check step).
+
+Examples: fixing a typo, adding a comment, refactoring one function's
+internals without changing its signature.
+
+Simple Tasks are exempt from the `Required reading` step above
+(`GRAFTING_MASTER_SOURCE.md`/`CURRENT_PLANNING_STATE.md`) — by definition
+they don't touch anything those documents govern. If a task turns out not
+to qualify once you start, stop and follow the full protocol (`Task-based
+work`, `Before editing`, `Completion criteria`) instead.
+
 ## Before editing
 
 Declare:

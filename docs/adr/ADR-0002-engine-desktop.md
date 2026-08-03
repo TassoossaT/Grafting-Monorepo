@@ -33,7 +33,8 @@ to commit to a specific engine ahead of time. Deciding now would mean choosing w
 real project to validate against.
 
 This is exactly the situation the master source already anticipated: "the core must not
-assume Unity, Godot, or another engine until the gate closes" (section 5). The correct
+assume Unity, Godot, or another engine until the gate closes" (`docs/decisions/GATES.md`).
+The correct
 response is not to invent a choice, nor to lock all C#-related work — it is to separate what
 is generic by construction from what is engine-specific.
 

@@ -1,10 +1,11 @@
 # Multi-agent coordination protocol
 
 This protocol is the canonical Phase 1 communication mechanism for Claude,
-Codex, Gemini, and future providers. It implements `GRAFTING_MASTER_SOURCE.md`
-§25.7, §25.8, and §29.11 without an MCP, gateway, or model call. A
-project-scoped Claude Code hook now enforces part of this existing protocol at
-runtime; it is a vendor adapter, not a second source of policy.
+Codex, Gemini, and future providers. It implements the multi-agent
+communication phase described in `docs/architecture/ai-control-plane.md`
+§29.11, without an MCP, gateway, or model call. A project-scoped Claude Code
+hook now enforces part of this existing protocol at runtime; it is a vendor
+adapter, not a second source of policy.
 
 ## Authority
 
@@ -24,17 +25,39 @@ architectural rule.
 ## Starting work
 
 1. Read the required sources and inspect the actual tree and Git status.
-2. Find the task record in `.ai/state/tasks/` or create one from the schema.
-3. Re-read the record immediately before claiming it.
-4. Claim only a `planned` or `blocked` task. Set one owner, increment
-   `revision`, record `updated_at`, affected paths, validations, and blockers.
-5. If another agent owns an `in_progress` task, do not edit that scope. Create
-   a handoff if it needs information.
-6. Declare the task using the root `AGENTS.md` format before editing.
+2. Before creating a new task, search existing tasks in all status subdirectories under `.ai/state/tasks/` to avoid duplication. If a similar task exists (especially in `completed/`), consider referencing it in the new task using the `related_tasks` field to carry over context.
+3. Find the task record in the appropriate subdirectory (e.g., `.ai/state/tasks/planned/`) or create one from the schema in the correct initial status directory.
+4. Re-read the record immediately before claiming it.
+5. Claim only a `planned` or `blocked` task. Set one owner, increment `revision`, record `updated_at`, affected paths, validations, and blockers. After claiming, move the task record to the `.ai/state/tasks/in_progress/` directory.
+6. If another agent owns an `in_progress` task, do not edit that scope. Create a handoff if it needs information.
+7. Declare the task using the root `AGENTS.md` format before editing.
+8. When writing task descriptions, objectives, and completion results, be clear and detailed. Treat these records as a durable knowledge base that future agents will use to understand design rationale and historical context.
 
-An owner ID is one of the IDs in `.ai/registry/agents.yaml`. Provider roles are
-selected per task; no provider is permanently the planner, implementer, or
-reviewer.
+An owner ID is one of the IDs in `.ai/registry/agents.yaml`. Provider roles are selected per task; no provider is permanently the planner, implementer, or reviewer.
+
+## Fast-Track for Simple Tasks
+
+Workflow mechanics for the reduced-ceremony path; `AGENTS.md`'s own
+Fast-Track section is the one place that defines what counts as a
+"Simple Task" — do not restate that definition here.
+
+1. Confirm the task meets every Simple-Task criterion in `AGENTS.md`.
+2. Conflict check: read every task record with `status: "in_progress"`
+   (under `.ai/state/tasks/in_progress/`, or found by inspecting each
+   record's own `status` field for any task not yet moved into that
+   subdirectory), collect their `affected_paths`, and confirm no overlap
+   with the intended file(s). Any overlap with another agent's task means:
+   stop, use the full protocol instead (a handoff may be needed).
+3. Make the change.
+4. Validate: format and lint the changed file(s) only.
+5. Log one line to `.ai/state/FAST_TRACK_LOG.md` (create it if absent):
+
+   ```text
+   - YYYY-MM-DDTHH:mm:ssZ | <agent-id> | <file-path-1>[, <file-path-2>] | <brief-description-of-change>
+   ```
+
+Misuse — Fast-Tracking a task that doesn't actually qualify — creates the
+exact repository-state conflicts the full protocol exists to prevent.
 
 ## Runtime enforcement adapters
 
@@ -47,7 +70,7 @@ Before Claude owns exactly one `in_progress` task, the guard permits only:
 - native read tools;
 - simple, allowlisted read-only shell inspection such as `git status`,
   `git diff`, and `rg` without command composition;
-- creation or repair of a record under `.ai/state/tasks/` so the task can be
+- creation or repair of a record under the appropriate `.ai/state/tasks/` subdirectory so the task can be
   created, re-read, and claimed without a bootstrap deadlock.
 
 After the claim, exact `Write` and `Edit` targets must be covered by that
@@ -208,12 +231,25 @@ Existing handoff files are never rewritten.
 From the repository root:
 
 ```powershell
-uv run --package automation python -m automation.coordination --root .
+uv run --package automation python -m automation.coordination --root . --organize
 ```
 
-If `uv` is not available through the current shell, use the repository's
-bootstrap instructions first. Never weaken a schema or skip a conflicting
-owner merely to make validation pass.
+`--organize` moves every task record into the `.ai/state/tasks/<status>/`
+subdirectory matching its own `status` field first (wherever it currently
+sits, flat or already nested), then runs the same validation `--organize`-free
+invocations already did. It is additive and idempotent — a record already in
+the right place is left untouched — so this one command is both the
+maintenance step and the check; there is no separate manual "go move files"
+step. If `uv` is not available through the current shell, use the
+repository's bootstrap instructions first. Never weaken a schema or skip a
+conflicting owner merely to make validation pass.
+
+Separately, `node tools/scripts/check-doc-organization.mjs` reports every
+authored Markdown document that has grown "large" or "colossal"
+(`tools/scripts/doc-size.mjs`'s thresholds) — run it occasionally to decide
+whether a document needs splitting into a router plus linked sub-documents.
+It only reports; a `PostToolUse` hook (`tools/scripts/doc-size-reminder.mjs`)
+gives the same reminder inline right after an edit crosses a threshold.
 
 ## Rollback
 

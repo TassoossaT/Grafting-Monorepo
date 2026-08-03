@@ -40,6 +40,9 @@ planning
 
 ## Decision Gates — consolidated status
 
+Full criteria and rationale for each gate: `docs/decisions/GATES.md` (this
+table is only a status-at-a-glance summary, not a second copy of that detail).
+
 | Gate | Status | Decision | Record |
 | --- | --- | --- | --- |
 | GATE-001 | **closed** | Web host = Next.js; the VTT is a client-only route, not the whole app | DEC-041 · ADR-0001 |
@@ -59,11 +62,11 @@ GATE-009 without an explicit decision from the owner.
 | --- | --- | --- |
 | Polymath | One package per runtime (`polymath`/`@grafting/polymath`/`Grafting.Polymath`) is the only place allowed to inspect OS/runtime/RID | DEC-042 · ADR-0006 |
 | `libs/` boundary + domain map | A capability used by more than one product is born in `libs/domains`/`packages/`, never duplicated inside an app. Initial map: `narrative` and `session` are generic; the VTT's X6 map is product-specific (only `packages/x6-canvas` is shared with the Architecture Studio); Discord and transcription are external integrations, not domains | DEC-046 · ADR-0008 · master source §4.4 |
-| Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · master source §3.1 |
+| Documentation language | English is the default documentation language repository-wide; all pre-existing Portuguese docs were translated | DEC-047 · `docs/decisions/DECISION-LOG.md` §3.1 |
 | Multi-agent coordination | Claude, Codex, and Gemini share single-owner task state and structured handoffs under `.ai/`; vendor adapters remain short | DEC-048 · ADR-0010 |
 | Capability autonomy and external isolation | Reusable capabilities use the smallest useful boundary (module tree, package, or host app); third-party APIs stay internal, package count remains evidence-driven, and authoritative behavior is implemented once | DEC-049 · ADR-0011 · master source §2.6 |
-| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; graph computation, visual adaptation, and application presentation are separate responsibilities. The original TypeScript graph-package allocation is amended by DEC-051 | DEC-050 · ADR-0012 · master source §§16.7-16.8 |
-| Rust graph authority and API contracts | Rust owns reusable graph structures/calculations; callers own presentation enrichment; every consumed package has a generated API baseline plus behavioral contract tests | DEC-051 · ADR-0013 · master source §§2.7, 16.8 |
+| Knowledge/Automation Plane | Four authority classes and a proposal-based documentary lifecycle; graph computation, visual adaptation, and application presentation are separate responsibilities. The original TypeScript graph-package allocation is amended by DEC-051 | DEC-050 · ADR-0012 · `docs/architecture/ai-control-plane.md` §§16.7-16.8 |
+| Rust graph authority and API contracts | Rust owns reusable graph structures/calculations; callers own presentation enrichment; every consumed package has a generated API baseline plus behavioral contract tests | DEC-051 · ADR-0013 · master source §2.7 · `docs/architecture/ai-control-plane.md` §16.8 |
 
 Pending, but not blocking Phase 0: standard directory for external
 integrations (`apps/integrations/` vs. `tools/`) once Discord/transcription
