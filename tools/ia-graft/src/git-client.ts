@@ -90,18 +90,37 @@ export class GitWorktreeSession {
 
     /**
      * Opens a pull request for this session's branch against baseBranch, via the `gh` CLI.
+     * Falls back to a manual compare-URL instead of throwing when `gh` is missing or not
+     * authenticated, so a caller without `gh` set up still gets a usable next step rather
+     * than a stack trace.
      * @param title The PR title.
      * @param body The PR body/description.
      * @param baseBranch The branch to open the PR against.
-     * @returns The URL of the created pull request.
+     * @returns The PR URL (or manual compare URL) and whether it was actually opened.
      */
-    async createPullRequest(title: string, body: string, baseBranch: string): Promise<string> {
-        const { stdout } = await execFileAsync(
-            'gh',
-            ['pr', 'create', '--title', title, '--body', body, '--base', baseBranch, '--head', this.branchName],
-            { cwd: this.worktreePath },
-        );
-        return stdout.trim();
+    async createPullRequest(title: string, body: string, baseBranch: string): Promise<{ url: string; opened: boolean }> {
+        try {
+            const { stdout } = await execFileAsync(
+                'gh',
+                ['pr', 'create', '--title', title, '--body', body, '--base', baseBranch, '--head', this.branchName],
+                { cwd: this.worktreePath },
+            );
+            return { url: stdout.trim(), opened: true };
+        } catch {
+            return { url: await this.compareUrl(baseBranch), opened: false };
+        }
+    }
+
+    /**
+     * Builds the manual "open a pull request" URL for this session's branch,
+     * from the repo's own `origin` remote -- used when `gh` cannot open one automatically.
+     */
+    private async compareUrl(baseBranch: string): Promise<string> {
+        const remote = await executeGit(['remote', 'get-url', 'origin'], this.worktreePath);
+        const httpsBase = remote
+            .replace(/^git@([^:]+):/, 'https://$1/')
+            .replace(/\.git$/, '');
+        return `${httpsBase}/compare/${baseBranch}...${this.branchName}?expand=1`;
     }
 
     /**
