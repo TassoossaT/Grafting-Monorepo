@@ -1,12 +1,32 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
 import { taskCleanup, taskCommit, taskDone, taskNew } from "./task-commands.ts";
 
+/**
+ * Resolves the MAIN repository root, never a task worktree's own root, even
+ * when this exact script is invoked from inside a task worktree (every
+ * worktree has its own full copy of this file, and running it from there is
+ * the natural thing an agent already `cd`ed into its task worktree would do).
+ * `--git-common-dir` is the one thing every worktree and the main checkout
+ * share -- unlike `--show-toplevel`, which a worktree reports as itself.
+ * Falls back to script-relative resolution (pre-worktree-aware behavior) if
+ * git is unavailable for any reason.
+ */
 function repoRoot(): string {
-  // tools/ia-graft/src/bin.ts -> repo root is three levels up.
-  return resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+  const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
+  try {
+    const commonDir = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: scriptDir,
+      encoding: "utf8",
+    }).trim();
+    return resolve(scriptDir, commonDir, "..");
+  } catch {
+    // tools/ia-graft/src/bin.ts -> repo root is three levels up.
+    return resolve(scriptDir, "../../..");
+  }
 }
 
 async function readStdin(): Promise<unknown> {
