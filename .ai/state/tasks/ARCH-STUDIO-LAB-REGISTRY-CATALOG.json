@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "task_id": "ARCH-STUDIO-LAB-REGISTRY-CATALOG",
+  "title": "Split apps/architecture-studio into /lab (the real testing laboratory: live trials + in-development/in-review queue) and /registry (the full research-decisions reference catalog)",
+  "status": "completed",
+  "owner": "claude",
+  "revision": 5,
+  "updated_at": "2026-08-02T04:30:00-03:00",
+  "objective": "Owner-directed, revised once mid-implementation: the owner wants to start actually trying chosen tools/libraries and wanted apps/architecture-studio's /lab route to be the interface for that -- organizing what's approved, rejected, under review, and in development, not just visually testing one demo. First implementation put a full filterable catalog of docs/research/RESEARCH-DECISIONS-REGISTRY.md's ~119 candidates directly at /lab; the owner corrected this after seeing it built: 'lab' means an actual testing laboratory (things you go run), not a viewer for adoption status across the repo's entire evaluation history -- that history belongs on its own page. Final shape: /registry is the full reference catalog (unchanged from the first pass, just relocated, all statuses, filterable); /lab shows only two things -- 'Active trials' (live, runnable demos, today just the heightmap generator) and an 'In development / in review' queue (registry rows with those two statuses, currently empty since none exist yet, an honest empty state not hidden). Also mid-implementation, the owner corrected the heightmap demo's route name (moved from lab/vtt-heightmap/ to lab/heightmap/) since apps/architecture-studio and its packages must stay product-agnostic -- 'VTT' as a concept only belongs inside the actual VTT product, never in the Studio's own route/component naming (only a literal dependency name like @grafting/vtt-generation-wasm may say it). Registry status vocabulary extended with 'In development'/'In review' (and 'Decided', already used by 5 rows but never formally defined -- a pre-existing drift, also fixed). Parser is a dependency-free direct-Markdown-read inside apps/architecture-studio (deliberately not a docs/generated/ pipeline, per this session's own DEC-055/ADR-0017 preference for fewer intermediate generated artifacts when one consumer suffices). VTT project-structure planning remains explicitly deferred by the owner to a separate later conversation. Full history in the approved plan at C:\\Users\\PICHAU\\.claude\\plans\\mellow-drifting-nova.md.",
+  "affected_paths": [
+    ".ai/state/tasks/ARCH-STUDIO-LAB-REGISTRY-CATALOG.json",
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md",
+    "tools/scripts/research-registry-reminder.mjs",
+    "tools/scripts/research-registry-reminder.test.mjs",
+    "apps/architecture-studio/src/research-registry.ts",
+    "apps/architecture-studio/src/research-registry-ui.ts",
+    "apps/architecture-studio/test/research-registry.test.mjs",
+    "apps/architecture-studio/src/app/lab/page.tsx",
+    "apps/architecture-studio/src/app/lab/lab-client.tsx",
+    "apps/architecture-studio/src/app/registry/page.tsx",
+    "apps/architecture-studio/src/app/registry/registry-client.tsx",
+    "apps/architecture-studio/src/app/studio-nav.tsx",
+    "apps/architecture-studio/src/app/lab/heightmap/page.tsx",
+    "apps/architecture-studio/src/app/lab/heightmap/generation-client.tsx",
+    "apps/architecture-studio/src/app/lab/heightmap/generation.worker.ts",
+    "docs/generated/api/ts/architecture-studio.api.md"
+  ],
+  "blockers": [],
+  "validations": [
+    "DONE: extended docs/research/RESEARCH-DECISIONS-REGISTRY.md's Status legend with 'In development'/'In review' and formally documented 'Decided' (already used by 5 rows -- React Flow, Three.js, ghx_proc_gen, fast-surface-nets-rs, noise-rs -- but never defined); updated research-registry-reminder.mjs's reminder string to name the full current vocabulary instead of the stale 'adopted, discarded, or standby/deferred' subset; both changes verified via the existing research-registry-reminder.test.mjs suite (7/7 still pass).",
+    "DONE: wrote apps/architecture-studio/src/research-registry.ts, a dependency-free Markdown parser for the registry, with 8 unit tests (node --test) covering a normal row, bold-stripped candidate/status cells, all three real qualifier-separator styles this file actually uses (comma, em-dash, parenthetical), every status in the vocabulary (including the two new ones), an unrecognized-status throw, table-less sections being skipped not erroring, and a soft-line-wrapped 'Full reasoning:' line. Smoke-tested directly against the real, current registry file (not just fixtures): all 8 sections and 119 rows parse cleanly with zero unrecognized-status errors, confirming the STATUS_DEFINITIONS list already covers everything actually in use today.",
+    "DONE: found and fixed a real bug during the real-file smoke test, not just fixture tests -- the initial 'Full reasoning:' parser only read one line, truncating the one section whose reasoning line soft-wraps in the source Markdown ('Component preview tooling'); fixed by joining wrapped lines, then found and fixed a second real bug the fix introduced -- the backtick-path regex then over-eagerly matched a glob-shaped string inside that same section's prose ('`docs/research/*.md`') as if it were the real doc path; fixed by requiring a backtick match to end in .md and contain no `*` before trusting it as a path, added a regression test for exactly this case.",
+    "DONE (owner correction #1, mid-implementation): first design put the full filterable 119-candidate catalog directly at /lab. Owner corrected: lab means a place to actually run tests, not a viewer of the repo's entire tool-adoption history. Moved that catalog (page.tsx + client component, renamed registry-catalog.tsx -> registry-client.tsx per this app's established *-client.tsx naming convention) to a new /registry route, added it to StudioNav, and rebuilt /lab from scratch as two sections: 'Active trials' (cards for each live demo, sourced from a shared DEMO_LINKS map) and an 'In development / in review' queue (registry rows with those two statuses specifically, honest empty state since nothing is marked that way yet). Extracted the shared DEMO_LINKS/SEMANTIC_STATUS/statusLabelFor/findRowByCandidate/inProgressRows helpers into apps/architecture-studio/src/research-registry-ui.ts so both routes stay consistent without duplicating logic.",
+    "DONE (owner correction #2, mid-implementation): the heightmap demo's route was initially named lab/vtt-heightmap/. Owner corrected: apps/architecture-studio and its packages must stay product-agnostic in their own naming -- 'VTT' as a concept belongs only inside the actual VTT product, never in the Studio's own routes/components/aria-labels (a literal dependency name like @grafting/vtt-generation-wasm is the one legitimate exception, since that's a real import specifier, not invented naming). Renamed the route to lab/heightmap/, the page component to HeightmapPage, and generalized the GridLayout's ariaLabel from 'VTT procedural-generation test surface' to 'Procedural heightmap generation test surface'.",
+    "DONE: full verification against the final tree -- apps/architecture-studio's complete node --test suite (16/16, including all 8 parser tests), tsc --noEmit clean, next build (Turbopack) succeeds producing /, /lab, /lab/heightmap, /registry, /agents, /api/mcp, /storybook as expected routes. Inspected the actual prerendered static HTML output directly (not just 'build succeeded') for both new routes: /lab.html contains 'Active trials', the noise-rs trial card, 'Open trial', and the honest 'Nothing marked in development or in review right now' empty state; /registry.html contains all 119 candidates and the working status-filter chip markup.",
+    "DONE: regenerated docs/generated/api/ts/architecture-studio.api.md and docs/generated/grafting.graph.json (both stale after the src/ changes); full `pnpm run docs:check` passes clean end to end, including the unrelated getFullText/getFullText regression test carried over from the prior CI-FIX-INVESTIGATION task. Ran the docs-quality-check skill against the regenerated architecture-studio.api.md directly (298 lines, up from 274 pre-task, in line with sibling doc sizes 37-503): no size outlier, no empty/silent-failure signs, undocumented-property ratio matches this file's own pre-existing pattern for plain data-shape interfaces, no formatting artifacts."
+  ],
+  "artifacts": [
+    "docs/research/RESEARCH-DECISIONS-REGISTRY.md (Status legend extended: Decided documented, In development/In review added; a note pointing at the parser)",
+    "tools/scripts/research-registry-reminder.mjs (reminder string names the full current vocabulary)",
+    "apps/architecture-studio/src/research-registry.ts (new: the Markdown parser)",
+    "apps/architecture-studio/src/research-registry-ui.ts (new: shared presentation helpers -- DEMO_LINKS, SEMANTIC_STATUS, statusLabelFor, findRowByCandidate, inProgressRows)",
+    "apps/architecture-studio/test/research-registry.test.mjs (new: 8 parser unit tests)",
+    "apps/architecture-studio/src/app/lab/{page.tsx,lab-client.tsx} (rebuilt: active trials + in-development/in-review queue, no registry browsing)",
+    "apps/architecture-studio/src/app/lab/heightmap/{page.tsx,generation-client.tsx,generation.worker.ts} (moved from lab/ directly, then renamed from vtt-heightmap/ to heightmap/; product-agnostic naming throughout)",
+    "apps/architecture-studio/src/app/registry/{page.tsx,registry-client.tsx} (new: the full reference catalog, moved out of /lab)",
+    "apps/architecture-studio/src/app/studio-nav.tsx (added the Registry link)",
+    "docs/generated/api/ts/architecture-studio.api.md, docs/generated/grafting.graph.json (regenerated)",
+    ".ai/state/tasks/ARCH-STUDIO-LAB-REGISTRY-CATALOG.json (this record)"
+  ],
+  "risks": [
+    "The 'In development'/'In review' statuses are net-new and currently unused by any real registry row -- /lab's queue section is genuinely empty today (an honest empty state, not a bug), and stays empty until the owner or a future agent actually marks a candidate that way while working on it.",
+    "DEMO_LINKS (apps/architecture-studio/src/research-registry-ui.ts) is a small hard-coded map, not inferred from the registry -- adding a new live trial under /lab requires remembering to add its candidate-name -> route entry there too; nothing enforces this link automatically.",
+    "This task only proves the current working tree is internally consistent and passes every local check -- none of this session's uncommitted changes have been committed or pushed yet."
+  ],
+  "next_responsible_party": null
+}

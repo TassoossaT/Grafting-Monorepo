@@ -18,10 +18,27 @@ update that candidate's row here too. A `PostToolUse` hook
 research document other than this one — it only reminds, it never blocks or
 edits anything itself (see `.ai/coordination/PROTOCOL.md`).
 
+Architecture Studio's `/lab` route renders this file directly (parsed by
+`apps/architecture-studio/src/research-registry.ts`, no separate generated
+copy) as a browsable, filterable catalog. If a status used below is ever
+renamed or a genuinely new one is introduced, update the "Status legend"
+below and that parser's `STATUS_DEFINITIONS` in the same change — the
+parser throws on an unrecognized status rather than silently mis-rendering
+it.
+
 ## Status legend
 
 - **Adopted** — a real dependency exists in the repository today because of
   this candidate.
+- **Decided** — the owner has made a final architectural call on this
+  candidate, even if the literal dependency isn't wired into a manifest yet
+  (distinct from **Adopted**). Already used by several rows below (React
+  Flow, Three.js, `ghx_proc_gen`, `fast-surface-nets-rs`, `noise-rs`) before
+  this entry formally documented it.
+- **In development** — actively being spiked or built right now, typically
+  with a live, interactive trial under Architecture Studio's `/lab` route.
+- **In review** — a spike or trial is complete and its results are ready
+  for the owner to approve, reject, or send back for more work.
 - **Standby (deferred)** — a real candidate, gated behind a stated condition;
   not yet spiked or adopted.
 - **Discarded** — evaluated and ruled out (license conflict, wrong shape for

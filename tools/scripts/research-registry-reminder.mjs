@@ -27,8 +27,8 @@ export function reminderFor(root, hookInput) {
 
   return (
     `This edit touched a research document (${target}). If a candidate's status changed ` +
-    `(adopted, discarded, or standby/deferred), also update ${REGISTRY_PATH} so tool-adoption ` +
-    "decisions stay consolidated in one place."
+    "(adopted, decided, in development, in review, standby/deferred, discarded, or reference " +
+    `only), also update ${REGISTRY_PATH} so tool-adoption decisions stay consolidated in one place.`
   );
 }
 

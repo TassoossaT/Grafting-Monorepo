@@ -236,3 +236,63 @@ Single authored configuration for the Rust-owned layout projection.
 ### `function architecture-studio.presentation.toEntityReference(entity: GraphIrEntity): CanvasEntityReference`
 
 ### `function architecture-studio.presentation.toLayoutRequest(graph: GraphIrDocument): GraphLayoutRequest`
+
+### `interface architecture-studio.research-registry.RegistryRow`
+
+### `property architecture-studio.research-registry.RegistryRow.candidate: string`
+
+### `property architecture-studio.research-registry.RegistryRow.license: string`
+
+### `property architecture-studio.research-registry.RegistryRow.note: string`
+
+### `property architecture-studio.research-registry.RegistryRow.statusId: StatusId`
+
+### `property architecture-studio.research-registry.RegistryRow.statusLabel: string`
+
+### `property architecture-studio.research-registry.RegistryRow.statusQualifier: string | null`
+
+Free-text qualifier after the matched status, e.g. "top pick" -- null when the cell was an exact status match.
+
+### `interface architecture-studio.research-registry.RegistrySection`
+
+### `property architecture-studio.research-registry.RegistrySection.rows: readonly RegistryRow[]`
+
+### `property architecture-studio.research-registry.RegistrySection.sourceDoc: string | null`
+
+Repository-relative path to the research document this section summarizes, when the registry names one.
+
+### `property architecture-studio.research-registry.RegistrySection.title: string`
+
+### `type architecture-studio.research-registry.StatusId = "adopted" | "decided" | "in-development" | "in-review" | "standby" | "discarded" | "reference-only"`
+
+Canonical status vocabulary, matching the registry's own "Status legend" section.
+
+### `variable architecture-studio.research-registry.STATUS_DEFINITIONS: readonly StatusDefinition[]`
+
+### `function architecture-studio.research-registry.parseResearchRegistry(markdown: string): readonly RegistrySection[]`
+
+Parses the registry's Markdown into topic sections, skipping any `##` section with no table (e.g. the legend itself).
+
+### `interface architecture-studio.research-registry-ui.LocatedRow`
+
+### `property architecture-studio.research-registry-ui.LocatedRow.row: RegistryRow`
+
+### `property architecture-studio.research-registry-ui.LocatedRow.sectionTitle: string`
+
+### `variable architecture-studio.research-registry-ui.DEMO_LINKS: Readonly<Record<string, string>>`
+
+Candidate name -> a live, interactive trial of it under /lab.
+Deliberately a small hard-coded map, not something inferred from the
+registry itself -- only one candidate has a real trial today.
+
+### `variable architecture-studio.research-registry-ui.SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>>`
+
+### `function architecture-studio.research-registry-ui.findRowByCandidate(sections: readonly RegistrySection[], candidate: string): LocatedRow | undefined`
+
+Finds a candidate's row (and which topic section it lives in) across every section.
+
+### `function architecture-studio.research-registry-ui.inProgressRows(sections: readonly RegistrySection[]): readonly LocatedRow[]`
+
+Every row across every section whose status is "in-development" or "in-review".
+
+### `function architecture-studio.research-registry-ui.statusLabelFor(row: RegistryRow): string`

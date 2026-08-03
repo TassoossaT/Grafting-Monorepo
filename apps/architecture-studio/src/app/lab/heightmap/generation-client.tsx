@@ -138,7 +138,7 @@ export default function GenerationClient() {
     <div style={{ padding: 12, boxSizing: "border-box" }}>
       <GridLayout
         panels={panels}
-        ariaLabel="VTT procedural-generation test surface"
+        ariaLabel="Procedural heightmap generation test surface"
         rowHeight={32}
         draggable
         resizable
