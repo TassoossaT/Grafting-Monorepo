@@ -1,10 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, isAbsolute, posix, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-
-const TASK_RECORD = /^\.ai\/state\/tasks\/[a-z_]+\/([A-Z][A-Z0-9-]{2,63})\.json$/;
-const HANDOFF_RECORD = /^\.ai\/state\/handoffs\/.+\.json$/;
 
 const allowed = () => ({ allowed: true, reason: "" });
 const denied = (reason) => ({ allowed: false, reason });
@@ -28,130 +23,16 @@ const HARNESS_MEMORY_PATH = /(?:^|[\\/])\.claude[\\/]projects[\\/][^\\/]+[\\/]me
 const HARNESS_PLANS_PATH = /(?:^|[\\/])\.claude[\\/]plans(?:[\\/]|$)/i;
 
 /**
- * The coordination protocol this guard enforces governs repository state
- * only (master source precedence says as much: task/handoff records are
- * "repository state, not architectural authority"). The Claude Code
- * harness's own cross-session memory directory and plan-mode plan-file
- * directory are deliberately outside any repository -- memory persists
- * across projects, and a plan file exists before a task claim would even
- * make sense. Matched by path segment, not a hardcoded absolute prefix, so
+ * The Claude Code harness's own cross-session memory directory and
+ * plan-mode plan-file directory are deliberately outside any repository --
+ * memory persists across projects, and a plan file exists before any task
+ * even starts. Matched by path segment, not a hardcoded absolute prefix, so
  * this does not depend on one specific user home directory.
  */
 export function isHarnessManagedPath(candidate) {
   if (typeof candidate !== "string" || candidate.length === 0) return false;
   return HARNESS_MEMORY_PATH.test(candidate) || HARNESS_PLANS_PATH.test(candidate);
 }
-
-export function affectedPathMatches(affectedPath, repositoryRelativePath) {
-  if (typeof affectedPath !== "string" || affectedPath.length === 0) return false;
-  const portable = affectedPath.replaceAll("\\", "/");
-  if (portable === "." || portable.startsWith("/") || portable.startsWith("../")) return false;
-  const isDirectory = portable.endsWith("/");
-  const normalized = posix.normalize(portable).replace(/^\.\//, "").replace(/\/$/, "");
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../")) return false;
-  return (
-    repositoryRelativePath === normalized ||
-    (isDirectory && repositoryRelativePath.startsWith(`${normalized}/`))
-  );
-}
-
-const loadTasks = async (root) => {
-  const taskDirectory = resolve(root, ".ai/state/tasks");
-  const allTasks = [];
-  try {
-    const statusDirs = await readdir(taskDirectory);
-    for (const status of statusDirs) {
-      const statusDir = resolve(taskDirectory, status);
-      if ((await stat(statusDir)).isDirectory()) {
-        const names = (await readdir(statusDir)).filter((name) => name.endsWith(".json")).sort();
-        const tasks = await Promise.all(
-          names.map(async (name) => {
-            const path = resolve(statusDir, name);
-            try {
-              return JSON.parse(await readFile(path, "utf8"));
-            } catch (error) {
-              const reason = error instanceof Error ? error.message : String(error);
-              throw new Error(`cannot evaluate task ownership because ${name} is invalid: ${reason}`);
-            }
-          }),
-        );
-        allTasks.push(...tasks);
-      }
-    }
-  } catch (error) {
-    // Ignore if the tasks directory or subdirectories don't exist yet
-    if (error.code !== 'ENOENT') throw error;
-  }
-  return allTasks;
-};
-
-const activeTaskFor = (tasks, agent) => {
-  const owned = tasks.filter((task) => task.status === "in_progress" && task.owner === agent);
-  if (owned.length === 0) {
-    return denied(
-      `no in_progress task is owned by ${agent}; create a planned record under .ai/state/tasks/<status>, re-read it, and claim it before using mutating tools`,
-    );
-  }
-  if (owned.length > 1) {
-    return denied(
-      `${agent} owns more than one in_progress task (${owned.map((task) => task.task_id).join(", ")}); resolve ownership before continuing`,
-    );
-  }
-  return { allowed: true, reason: "", task: owned[0] };
-};
-
-/**
- * Best-effort reconstruction of the JSON a Write or Edit call would produce,
- * used only to decide whether a write to an already-closed task record is a
- * same-status/same-owner correction. Returns null on anything it cannot
- * confidently resolve, which the caller treats as "not a proven correction".
- */
-const resolveNextTaskContent = (absolute, tool, toolInput) => {
-  try {
-    if (tool === "Write") {
-      if (typeof toolInput.content !== "string") return null;
-      return JSON.parse(toolInput.content);
-    }
-    if (tool === "Edit") {
-      const { old_string: oldString, new_string: newString, replace_all: replaceAll } = toolInput;
-      if (typeof oldString !== "string" || typeof newString !== "string") return null;
-      const current = readFileSync(absolute, "utf8");
-      if (!current.includes(oldString)) return null;
-      const next = replaceAll ? current.split(oldString).join(newString) : current.replace(oldString, newString);
-      return JSON.parse(next);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const evaluateTaskRecordWrite = (root, path, agent, tool, toolInput) => {
-  const match = TASK_RECORD.exec(path);
-  if (!match) return denied(`invalid task record path: ${path}`);
-  const absolute = resolve(root, path);
-  if (!existsSync(absolute)) return allowed();
-
-  let task;
-  try {
-    task = JSON.parse(readFileSync(absolute, "utf8"));
-  } catch {
-    return allowed();
-  }
-  if (task.owner && task.owner !== agent) {
-    return denied(`task ${task.task_id ?? match[1]} belongs to ${task.owner}, not ${agent}`);
-  }
-  if (["completed", "cancelled"].includes(task.status)) {
-    const next = resolveNextTaskContent(absolute, tool, toolInput);
-    if (next && next.status === task.status && next.owner === task.owner) {
-      return allowed();
-    }
-    return denied(
-      `task ${task.task_id ?? match[1]} is ${task.status} and cannot be reused for new work; only a same-status, same-owner correction (e.g. filling in validations left blank by a split edit) is allowed`,
-    );
-  }
-  return allowed();
-};
 
 const targetPathFrom = (hookInput) => {
   if (!hookInput || typeof hookInput !== "object") return null;
@@ -165,7 +46,7 @@ export function isReadOnlyInspectionCommand(command) {
   const value = command.trim();
   if (/(?:[;&|><`]|\$\(|\r|\n)/.test(value)) return false;
   if (/^rg\b/i.test(value) && /(?:^|\s)--pre(?:\s|=|$)/i.test(value)) return false;
-  return /^(?:pwd\b|ls\b|cat\b|rg\b|grep\b|Get-Content\b|Get-ChildItem\b|Select-String\b|git\s+(?:status|diff|log|show|rev-parse|ls-files)\b)/i.test(
+  return /^(?:pwd\b|ls\b|cat\b|rg\b|grep\b|Get-Content\b|Get-ChildItem\b|Select-String\b|git\s+(?:status|diff|log|show|rev-parse|ls-files|worktree)\b)/i.test(
     value,
   );
 }
@@ -176,26 +57,33 @@ const gitSubcommandPattern = (subcommands) =>
     "i",
   );
 
-/** Enforces owner-approved Git history rules before ordinary task ownership. */
+/**
+ * Coordination is now handled entirely by tools/ia-graft (worktree per
+ * task, PR via `gh` to finish). This guard no longer knows about tasks,
+ * ownership, or file scope -- it only enforces the Git history rules the
+ * repository owner has approved for any agent, everywhere: agents commit
+ * but never merge/rewrite history, and never push straight to main or
+ * force a remote ref. Agents DO commit directly within their own task
+ * worktree/branch (that is the whole point of `ia-graft task new/done`) --
+ * only history-rewriting/merge operations remain denied.
+ */
 export function evaluateAgentGitCommand(command) {
   if (typeof command !== "string" || command.trim().length === 0) return allowed();
 
-  const commitProducing = gitSubcommandPattern([
-    "commit",
+  const historyRewriting = gitSubcommandPattern([
     "commit-tree",
     "merge",
     "rebase",
     "cherry-pick",
     "revert",
     "am",
-    "stash",
     "notes",
     "fast-import",
     "filter-branch",
   ]);
-  if (commitProducing.test(command)) {
+  if (historyRewriting.test(command)) {
     return denied(
-      "AI agents must not create or rewrite Git commits; prepare an uncommitted change for the repository owner",
+      "AI agents must not merge or rewrite Git history; commit forward on your own task branch instead",
     );
   }
 
@@ -218,13 +106,6 @@ export function evaluateAgentGitCommand(command) {
     if (/(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?=$|\s)/i.test(segment)) {
       return denied("AI agents must never push to main or master");
     }
-    if (
-      !/(?:^|\s)(?:[^\s:]+:)?(?:refs\/heads\/)?ai\/[a-z0-9._/-]+(?=$|\s)/i.test(segment)
-    ) {
-      return denied(
-        "AI agents may push only an explicit isolated ai/<agent>/<task> branch containing human-authored commits",
-      );
-    }
   }
 
   return allowed();
@@ -244,49 +125,11 @@ export async function evaluateHook({ root, agent, hookInput }) {
       if (isHarnessManagedPath(candidate)) return allowed();
       return denied(`tool target is outside the repository: ${candidate ?? "missing"}`);
     }
-
-    if (TASK_RECORD.test(target)) {
-      return evaluateTaskRecordWrite(root, target, agent, tool, hookInput.tool_input ?? {});
-    }
-
-    const tasks = await loadTasks(root);
-    const active = activeTaskFor(tasks, agent);
-    if (!active.allowed) return active;
-
-    if (HANDOFF_RECORD.test(target)) {
-      if (tool !== "Write") return denied("handoff records are immutable and cannot be edited");
-      if (existsSync(resolve(root, target))) return denied("handoff records are immutable and cannot be overwritten");
-      if (!basename(target).includes(`--${agent}-to-`)) {
-        return denied(`new handoff filename must identify ${agent} as the sender`);
-      }
-      return allowed();
-    }
-
-    const conflicting = tasks.find(
-      (task) =>
-        task.status === "in_progress" &&
-        task.owner !== agent &&
-        (task.affected_paths ?? []).some((path) => affectedPathMatches(path, target)),
-    );
-    if (conflicting) {
-      return denied(`path ${target} is owned by active task ${conflicting.task_id} (${conflicting.owner})`);
-    }
-
-    if (!(active.task.affected_paths ?? []).some((path) => affectedPathMatches(path, target))) {
-      return denied(
-        `path ${target} is outside active task ${active.task.task_id}; update the task scope through the coordination protocol before editing`,
-      );
-    }
     return allowed();
   }
 
   if (tool === "Bash") {
-    const command = hookInput.tool_input?.command;
-    const gitDecision = evaluateAgentGitCommand(command);
-    if (!gitDecision.allowed) return gitDecision;
-    const active = activeTaskFor(await loadTasks(root), agent);
-    if (active.allowed) return allowed();
-    return isReadOnlyInspectionCommand(command) ? allowed() : active;
+    return evaluateAgentGitCommand(hookInput.tool_input?.command);
   }
 
   return denied(`unsupported mutating tool: ${tool ?? "missing"}`);

@@ -1,12 +1,8 @@
 # Shared agent state
 
-This directory is the canonical Phase 1 coordination surface. It contains one
-mutable record per task and immutable handoff records. Read
-`.ai/coordination/PROTOCOL.md` before changing anything here.
-
-- `tasks/`: one active owner per task; re-read before every update.
-- `handoffs/`: immutable messages containing all context needed by another
-  provider; never assume access to the sender's chat.
+Task coordination is handled entirely by `tools/ia-graft` (see
+`.ai/coordination/PROTOCOL.md`): a task is a Git worktree + branch, not a
+file here. This directory is deliberately empty of task/handoff records.
 
 No secret, credential, private prompt, transcript, or generated build output
 belongs here.

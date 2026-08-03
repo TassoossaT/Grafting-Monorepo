@@ -13,6 +13,10 @@ Claude must claim or receive a task through the canonical coordination
 protocol before editing. Chat context is not a substitute for repository
 state.
 
+For a genuinely small change, check `AGENTS.md`'s Fast-Track criteria first —
+a qualifying Simple Task skips the required-reading chain and the full task
+record.
+
 While the project is still in the planning phase:
 
 - work on decisions, ADRs, comparisons, and spikes;

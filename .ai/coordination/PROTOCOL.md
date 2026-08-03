@@ -1,14 +1,15 @@
 # Multi-agent coordination protocol
 
 This protocol is the canonical Phase 1 communication mechanism for Claude,
-Codex, Gemini, and future providers. It implements the multi-agent
-communication phase described in `docs/architecture/ai-control-plane.md`
-§29.11, without an MCP, gateway, or model call. A project-scoped Claude Code
-hook now enforces part of this existing protocol at runtime; it is a vendor
-adapter, not a second source of policy.
+Codex, Gemini, and future providers. Coordination is a Git worktree + branch
+per task, managed by `tools/ia-graft`, not a JSON record. A project-scoped
+Claude Code hook enforces the Git-safety half of this protocol at runtime; it
+is a vendor adapter, not a second source of policy.
 
 ## Authority
 
+This is the single source for the required-reading precedence order; root
+`AGENTS.md`'s "Required reading" section points here instead of restating it.
 The precedence order remains:
 
 1. `GRAFTING_MASTER_SOURCE.md`;
@@ -16,254 +17,132 @@ The precedence order remains:
 3. root and nearest scope-local `AGENTS.md`;
 4. implemented code, manifests, schemas, and Graph IR evidence;
 5. `CURRENT_PLANNING_STATE.md`;
-6. task and handoff records;
-7. provider adapters and private chat context.
+6. provider adapters and private chat context.
 
-Task state coordinates work; it never closes an `OPEN` decision or changes an
-architectural rule.
+## ia-graft: the task-lifecycle CLI
+
+`tools/ia-graft` (strict JSON in/out, `node --experimental-strip-types
+tools/ia-graft/src/bin.ts <command> --input '<json>'`) is the only
+coordination mechanism. There is no task JSON, no handoff record, and no
+ADR-per-task.
+
+- `guard-check` — ask "would `<tool>` on `<path>`/`<command>` be allowed"
+  before attempting it; returns `{ok, allowed, reason}`.
+- `task new --id <TASK-ID> --title <title> [--base main]` — creates an
+  isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
+  (`task/<TASK-ID>`) off `origin/<base>`.
+- `task done --id <TASK-ID> --title <title> --body <body> [--base main]` —
+  pushes the branch and opens a pull request via `gh pr create`. Leaves the
+  worktree in place for any follow-up review commits.
+- `task cleanup --id <TASK-ID>` — after the PR has merged, removes the
+  worktree directory and prunes Git metadata. The remote branch is left
+  intact deliberately.
 
 ## Starting work
 
-1. Read the required sources and inspect the actual tree and Git status.
-2. Before creating a new task, search existing tasks in all status subdirectories under `.ai/state/tasks/` to avoid duplication. If a similar task exists (especially in `completed/`), consider referencing it in the new task using the `related_tasks` field to carry over context.
-3. Find the task record in the appropriate subdirectory (e.g., `.ai/state/tasks/planned/`) or create one from the schema in the correct initial status directory.
-4. Re-read the record immediately before claiming it.
-5. Claim only a `planned` or `blocked` task. Set one owner, increment `revision`, record `updated_at`, affected paths, validations, and blockers. After claiming, move the task record to the `.ai/state/tasks/in_progress/` directory.
-6. If another agent owns an `in_progress` task, do not edit that scope. Create a handoff if it needs information.
-7. Declare the task using the root `AGENTS.md` format before editing.
-8. When writing task descriptions, objectives, and completion results, be clear and detailed. Treat these records as a durable knowledge base that future agents will use to understand design rationale and historical context.
+1. Decide whether the change is a direct/simple edit (see `AGENTS.md`'s "What
+   counts as a direct/simple edit") or a full task.
+2. Direct/simple edit: edit the main checkout, commit directly.
+3. Otherwise: `ia-graft task new --id <TASK-ID> --title <title>`, then work
+   only inside the printed worktree path. Pick `<TASK-ID>` so it doesn't
+   collide with another agent's in-flight worktree (check
+   `git worktree list` / open branches named `task/*` first).
+4. Commit inside the worktree as you make progress — there is no
+   "declare then batch-commit at the end" step; commit early and often.
+5. When the task is complete, `ia-graft task done --id <TASK-ID> --title
+   <title> --body <body>` opens the pull request. A human reviews and merges
+   it; once merged, `ia-graft task cleanup --id <TASK-ID>` removes the
+   worktree.
 
-An owner ID is one of the IDs in `.ai/registry/agents.yaml`. Provider roles are selected per task; no provider is permanently the planner, implementer, or reviewer.
+Isolation between agents comes entirely from separate worktrees/branches. If
+two agents need to touch the same area, that surfaces as a normal Git merge
+conflict on the PR, not as a pre-emptive file-ownership check.
 
-Moving a task record to `in_progress/` (step 5) automatically triggers a
-`PostToolUse` reminder (`tools/scripts/context-resolver-hook.mjs`) that prints
-the small slice of `AGENTS.md` files, `GRAFTING_MASTER_SOURCE.md` router rows,
-and ADRs relevant to that task's own `affected_paths`, so the required-sources
-read in step 1 can target that slice instead of the whole repository by
-default. This is a starting point, not a substitute for judgment — read
-further whenever the task actually needs it. The same resolution can be run
-by hand at any time: `node tools/scripts/context-resolver.mjs --task <ID>`.
-
-## Fast-Track for Simple Tasks
-
-Workflow mechanics for the reduced-ceremony path; `AGENTS.md`'s own
-Fast-Track section is the one place that defines what counts as a
-"Simple Task" — do not restate that definition here.
-
-1. Confirm the task meets every Simple-Task criterion in `AGENTS.md`.
-2. Conflict check: read every task record with `status: "in_progress"`
-   (under `.ai/state/tasks/in_progress/`, or found by inspecting each
-   record's own `status` field for any task not yet moved into that
-   subdirectory), collect their `affected_paths`, and confirm no overlap
-   with the intended file(s). Any overlap with another agent's task means:
-   stop, use the full protocol instead (a handoff may be needed).
-3. Make the change.
-4. Validate: format and lint the changed file(s) only.
-5. Log one line to `.ai/state/FAST_TRACK_LOG.md` (create it if absent):
-
-   ```text
-   - YYYY-MM-DDTHH:mm:ssZ | <agent-id> | <file-path-1>[, <file-path-2>] | <brief-description-of-change>
-   ```
-
-Misuse — Fast-Tracking a task that doesn't actually qualify — creates the
-exact repository-state conflicts the full protocol exists to prevent.
-
-## Runtime enforcement adapters
+## Runtime enforcement adapter
 
 `.claude/settings.json` registers a `PreToolUse` hook for `Write`, `Edit`, and
-`Bash`. It calls the provider-neutral `tools/scripts/agent-task-guard.mjs` with
-the canonical agent ID `claude`.
+`Bash`, calling the provider-neutral `tools/scripts/agent-task-guard.mjs` with
+the canonical agent ID `claude`. The guard enforces only Git-safety rules — it
+has no concept of tasks, ownership, or file scope:
 
-Before Claude owns exactly one `in_progress` task, the guard permits only:
-
-- native read tools;
-- simple, allowlisted read-only shell inspection such as `git status`,
-  `git diff`, and `rg` without command composition;
-- creation or repair of a record under the appropriate `.ai/state/tasks/` subdirectory so the task can be
-  created, re-read, and claimed without a bootstrap deadlock.
-
-After the claim, exact `Write` and `Edit` targets must be covered by that
-task's `affected_paths` and must not be covered by another provider's active
-task. Existing handoffs cannot be changed or overwritten, and a new handoff
-must name the active agent as sender. `Bash` requires a unique active claim,
-but arbitrary shell text cannot be mapped perfectly to every path it might
-mutate; diff review and completion validation remain mandatory.
-
-The guard does not create, claim, expand, complete, or transfer a task. It only
-reads canonical state and blocks a tool call with an actionable reason. Other
-providers remain governed by this protocol and may add their own thin runtime
-adapter only through a separate owner-approved task.
-
-A `completed` or `cancelled` task record accepts exactly one further kind of
-write: a same-status, same-owner correction, where the resulting `status` and
-`owner` are byte-identical to what is already on disk. This exists so an agent
-that closed a task before finishing its own bookkeeping (for example, setting
-`status: "completed"` in one edit and only then trying to fill in
-`validations`/`artifacts` in a second edit) can fix that record instead of
-leaving it permanently thin. It is not a reopening mechanism: any write that
-would change `status` or `owner` on an already-closed record is still denied,
-and genuinely new work always requires a new task record. Set the final
-`status`, `validations`, `artifacts`, `risks`, and `next_responsible_party`
-together in one write whenever possible; the correction path is a safety net,
-not the normal flow.
+- `Write`/`Edit` is allowed anywhere inside the repository (plus the
+  harness's own memory/plan directories under `.claude/`, which live outside
+  any repository).
+- `Bash` is allowed except for the Git write policy below, which the guard
+  checks regardless of current directory.
 
 Project hooks can be disabled by a user's higher-precedence local Claude
 settings. Verify the active `Project` hook through Claude Code's `/hooks`
-screen. Organization-level tamper resistance would require managed settings
-and is outside this repository's authority.
+screen.
 
 ## Git write policy
 
-AI agents never create, amend, rewrite, or implicitly produce Git commits.
-This prohibition applies on every branch, even when the agent owns an active
-task. In particular, agents do not run commit, merge, rebase, cherry-pick,
-revert, stash, commit-producing pull, or pull-request merge operations.
+Agents commit forward on their own task branch as they work — that is the
+whole point of the worktree-per-task model. Agents never rewrite or discard
+history and never merge.
 
 Agents may:
 
 - inspect Git state and history;
-- stage or unstage changes when useful for review without committing them;
-- create or switch to an isolated `ai/<agent>/<task-id>` branch;
+- commit on their own task branch (created by `ia-graft task new`);
 - fetch and use `git pull --ff-only` when otherwise authorized;
-- prepare or open a pull request whose commits were authored by a human;
-- push only an explicit `ai/<agent>/<task-id>` branch containing
-  human-authored commits.
+- push their own task branch;
+- prepare or open a pull request (`ia-graft task done` does this via `gh`).
 
 Agents never push to `main` or `master`, never force/bulk/mirror/tag/delete
-remote refs, and never merge a pull request. Creating an isolated branch or
-requesting a PR does not authorize a commit. The repository owner remains the
-only party who may decide that a commit or merge is created.
+remote refs, never run `merge`/`rebase`/`cherry-pick`/`revert`/history-editing
+commands, and never merge a pull request (`gh pr merge`). The repository
+owner remains the only party who may merge a task's pull request.
 
 The provider-neutral task guard enforces this policy for every provider that
-adopts its runtime adapter. Canonical instructions govern providers without an
-adapter. A repository-wide pre-commit hook is deliberately not installed,
-because it would also interfere with authorized human commits.
+adopts its runtime adapter. Canonical instructions govern providers without
+an adapter.
 
-## During work
+## Before opening the pull request
 
-- Work on one task ID at a time and preserve unrelated changes.
-- Re-read a shared file before editing it. Unexpected revision or ownership
-  changes are a conflict: stop and reconcile instead of overwriting.
-- Record material scope, dependency, ABI, protocol, security, and decision
-  discoveries in the task record.
-- Do not communicate through generated files, editor settings, ignored files,
-  or assumptions about another provider's chat history.
-- Do not commit any change. Hand off the uncommitted working tree or a patch to
-  the repository owner; ownership transfer never transfers commit authority.
+Whether the change was a direct/simple edit or a full task, before running
+`ia-graft task done` (or, for a direct edit, before considering it finished):
 
-## Handoffs
-
-Create one immutable JSON file per handoff in `.ai/state/handoffs/`, named:
-
-```text
-<UTC timestamp>--<task-id>--<sender>-to-<recipient>.json
-```
-
-The record must include task ID, sender, recipient, objective, context,
-criteria, constraints, uncertainties, artifacts, current owner, return schema,
-and next responsible party. The recipient acknowledges it by creating a new
-response handoff or by updating the task record after ownership is transferred.
-Existing handoff files are never rewritten.
-
-## Completing or blocking work
-
-1. Run the validations declared by the task and the AI-state validator.
-2. Set `status` to `completed` only with evidence, or `blocked` with a concrete
-   blocker. Increment `revision` and update the timestamp.
-3. Record changed artifacts, validations actually run, residual risks, and the
-   next responsible party.
-4. Apply the completion format in root `AGENTS.md`.
-5. Implementation and independent review should have different agents when a
-   review is required; a self-review must not be represented as independent.
-6. If any `affected_paths` fall under a documented project's `src/`
-   (TypeScript: `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that
-   project's API-reference evidence in `docs/generated/api/` before setting
-   `status: "completed"`, and include the regenerated file(s) in
-   `affected_paths`/`artifacts`. Scope the regeneration to only the
-   project(s) actually touched, not a full-repo `docs:check` run, so this
-   stays cheap as the repository grows. The primary, always-available way
-   to do this is calling the generator directly with that project's own
-   `project.json` `name` (TypeScript) or Cargo package name (Rust):
+1. Run the validations the change actually calls for (format, lint,
+   typecheck, tests, build — whatever applies).
+2. If the change touches a documented project's `src/` (TypeScript:
+   `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that project's
+   API-reference evidence in `docs/generated/api/` and run the
+   `docs-quality-check` skill against it. Scope the regeneration to the
+   project(s) actually touched:
    `node tools/scripts/generate-api-docs.mjs <name>` /
-   `node tools/scripts/generate-rust-api-docs.mjs <name>`. This needs no
-   per-project setup and works immediately for a project created in the
-   same task, since target discovery itself is dynamic (reads
-   `project.json`/`Cargo.toml`, not a hardcoded list; see
-   `tools/scripts/README.md`). Where a matching `nx run
-   <project>:docs-generate`/`docs-check` target already exists (every
-   project scaffolded by `generate-rust-crate.mjs`, and every project
-   documented before this rule was added), prefer that -- but its absence
-   on a brand-new project is not a blocker; the direct script call always
-   works. The full-repo `docs:api:ts:check`/`docs:api:rust:check` (already
-   inside `docs:check` and CI) remains the backstop for anything skipped.
-   After regenerating, run the `docs-quality-check` skill
-   (`.claude/skills/docs-quality-check/SKILL.md`) against the regenerated
-   file before setting `status: "completed"`. It only reads and reports --
-   it cannot edit the generated file or the generator itself
-   (`disallowed-tools: Write, Edit` in its own frontmatter) -- so a real
-   finding becomes a suggested generator fix for the owner to confirm, not
-   a silent change.
-7. If any `affected_paths` include a `docs/research/*.md` file other than
-   `docs/research/RESEARCH-DECISIONS-REGISTRY.md` itself, and the edit
-   changed a candidate's status (adopted, discarded, or standby/deferred),
-   update that candidate's row in the registry before setting
-   `status: "completed"`, and include the registry in
-   `affected_paths`/`artifacts`. The registry is a hand-maintained index, not
-   generated -- there is no script to run. Claude Code carries a `PostToolUse`
-   hook (`tools/scripts/research-registry-reminder.mjs`, wired in
-   `.claude/settings.json`) that reminds after such an edit; it only reminds
-   and never blocks or edits the registry itself, so providers without an
-   equivalent hook remain cooperatively governed by this rule the same way
-   the rest of this protocol works.
-8. If any file under `affected_paths` contains code copied or adapted from
-   an external open-source project (not an ordinary declared dependency --
-   source that was read and rewritten/ported into this repository), add the
-   header marker `Adapted from <Project Name> (<source URL>).` /
-   `Original license: <SPDX-License-Identifier>. See THIRD_PARTY_NOTICES.md.`
-   to the top of that file, and add a matching entry to
-   `THIRD_PARTY_NOTICES.md` (template inside that file) before setting
-   `status: "completed"`. Run
-   `node tools/scripts/check-third-party-notices.mjs` -- it deterministically
-   scans every Git-tracked file for the marker and fails if a marked file's
-   project has no matching notice entry; this is a real check, not only a
-   reminder. Claude Code also carries a content-aware `PostToolUse` hook
-   (`tools/scripts/third-party-attribution-reminder.mjs`) that reminds when a
-   `Write`/`Edit` introduces the marker phrase; it only reminds and never
-   blocks, the same non-enforcing design as the research-registry hook, so
-   providers without an equivalent hook remain governed by this rule and the
-   check script directly. Attribution is never removed regardless of the
-   source project's license permissions around commercial or closed-source
-   use.
+   `node tools/scripts/generate-rust-api-docs.mjs <name>`, or the matching
+   `nx run <project>:docs-generate` target where one already exists.
+3. If the change touches a `docs/research/*.md` file other than
+   `docs/research/RESEARCH-DECISIONS-REGISTRY.md` itself, and it changed a
+   candidate's status (adopted, discarded, standby/deferred), update that
+   candidate's row in the registry — it is hand-maintained, no script runs
+   it.
+4. If the change includes code copied or adapted from an external
+   open-source project, add the header marker `Adapted from <Project Name>
+   (<source URL>). Original license: <SPDX-License-Identifier>. See
+   THIRD_PARTY_NOTICES.md.` to the top of that file, add a matching entry to
+   `THIRD_PARTY_NOTICES.md`, and run
+   `node tools/scripts/check-third-party-notices.mjs`.
 
-## Validation
+Steps 2-4 have `PostToolUse` reminder hooks in `.claude/settings.json`
+(`research-registry-reminder.mjs`, `third-party-attribution-reminder.mjs`)
+that nudge inline right after a relevant edit; they only remind and never
+block or edit anything themselves.
 
-From the repository root:
+## Documentation size
 
-```powershell
-uv run --package automation python -m automation.coordination --root . --organize
-```
-
-`--organize` moves every task record into the `.ai/state/tasks/<status>/`
-subdirectory matching its own `status` field first (wherever it currently
-sits, flat or already nested), then runs the same validation `--organize`-free
-invocations already did. It is additive and idempotent — a record already in
-the right place is left untouched — so this one command is both the
-maintenance step and the check; there is no separate manual "go move files"
-step. If `uv` is not available through the current shell, use the
-repository's bootstrap instructions first. Never weaken a schema or skip a
-conflicting owner merely to make validation pass.
-
-Separately, `node tools/scripts/check-doc-organization.mjs` reports every
-authored Markdown document that has grown "large" or "colossal"
+`node tools/scripts/check-doc-organization.mjs` reports every authored
+Markdown document that has grown "large" or "colossal"
 (`tools/scripts/doc-size.mjs`'s thresholds) — run it occasionally to decide
 whether a document needs splitting into a router plus linked sub-documents.
-It only reports; a `PostToolUse` hook (`tools/scripts/doc-size-reminder.mjs`)
-gives the same reminder inline right after an edit crosses a threshold.
+A `PostToolUse` hook (`tools/scripts/doc-size-reminder.mjs`) gives the same
+reminder inline right after an edit crosses a threshold.
 
 ## Rollback
 
-Canonical coordination state remains file-based and has no external service
-side effects. Roll back the Claude enforcement adapter by removing its
-`PreToolUse` entry from `.claude/settings.json` and reverting the guard task's
-tracked files. Never delete another active agent's task or handoff record as
-part of rollback.
+Roll back the Claude enforcement adapter by removing its `PreToolUse` entry
+from `.claude/settings.json` and reverting the guard script's tracked
+changes. Rolling back a task means abandoning its worktree/branch (`ia-graft
+task cleanup`, or a manual `git worktree remove`) — never delete another
+agent's in-flight worktree or branch.

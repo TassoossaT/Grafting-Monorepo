@@ -2,15 +2,17 @@
 
 This file defines how agents must work in this repository.
 
+Tasks are created, isolated, and finished exclusively through `tools/ia-graft`
+(see `.ai/coordination/PROTOCOL.md`). There is no task JSON, no ADR-per-task,
+and no manual status tracking — see `Task-based work` below.
+
 ## Required reading
 
-Before proposing or executing structural work, read in this order:
-
-1. `GRAFTING_MASTER_SOURCE.md`;
-2. `CURRENT_PLANNING_STATE.md`;
-3. related ADRs;
-4. the nearest `AGENTS.md` to the scope, when one exists;
-5. applicable code, manifests, schemas, and Graph IR.
+Before structural work, read the sources in the precedence order defined once
+in `.ai/coordination/PROTOCOL.md`'s `Authority` section (do not restate that
+order here — it is the single source and the two must never drift apart). A
+genuinely small, direct edit (see `Task-based work` below) does not need this
+full pass.
 
 ## Initial state
 
@@ -53,10 +55,9 @@ The agent MUST NOT:
 - promise zero-copy between distinct domains;
 - call authoritative replication "Event Sourcing";
 - create a second workspace root or lockfile without an ADR;
-- create, amend, rewrite, or implicitly produce a Git commit; agents may
-  inspect/stage changes, create `ai/<agent>/<task>` branches, and assist with
-  pull requests containing human-authored commits, but only humans commit and
-  merge, and agents never push to `main` or `master` (DEC-053,
+- merge a pull request or push directly to `main`/`master`; agents commit and
+  push within their own task branch/worktree (created by `ia-graft task new`)
+  and may open a pull request, but only a human merges it (DEC-053,
   `docs/adr/ADR-0015-agent-git-write-policy.md`);
 - use Nx to replace native toolchains;
 - create the entire future tree empty;
@@ -73,62 +74,63 @@ The agent MUST NOT:
 
 ## Task-based work
 
-Once there is an implemented backlog:
+Claude, Codex, Gemini, and any future provider use the same repository state
+and the same coordination mechanism: `tools/ia-graft`. Vendor adapters
+(`CLAUDE.md`, `GEMINI.md`, and equivalent files) may only point to canonical
+instructions; they must not restate or override them.
 
-- work on one task at a time;
-- keep a single owner per task;
-- use a worktree for parallel execution;
-- separate implementation from independent review;
-- preserve unrelated changes.
+- **Direct/simple edits** (a typo, a comment, a small non-structural change
+  that doesn't touch a contract/config/policy file): edit the main checkout
+  directly, commit, no worktree ceremony required.
+- **Any other task**: run `ia-graft task new --id <TASK-ID> --title <title>`.
+  This creates an isolated Git worktree and branch for the task — work only
+  inside that worktree, commit directly and often as you make progress.
+  Isolation between agents comes from separate worktrees/branches, not from
+  a file-ownership ledger.
+- When the task is complete, run `ia-graft task done --id <TASK-ID> --title
+  <title> --body <body>` to push the branch and open a pull request via
+  `gh`. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>` to
+  remove the worktree.
+- Changing the protocol, registries, policies, hooks, permissions, skills, or
+  MCPs still requires explicit owner approval — open the PR and wait for
+  review, do not merge your own.
+- Provider chat history is never treated as shared state or evidence.
 
-## Multi-agent coordination
+## Agent Efficiency and Token Economy
 
-Claude, Codex, Gemini, and any future provider use the same repository state.
-Vendor adapters (`CLAUDE.md`, `GEMINI.md`, and equivalent files) may only
-point to canonical instructions; they must not restate or override them.
+Minimize tokens read and produced; do not fetch more than a task needs.
 
-Before starting implementation, every agent MUST read
-`.ai/coordination/PROTOCOL.md` and inspect `.ai/state/tasks/` and
-`.ai/state/handoffs/`. The protocol is mandatory whenever more than one agent
-or session can touch the repository.
+- **Discovery:** never list a full directory tree; use pattern/keyword search
+  (`glob`, `grep`) instead, and rely on tools that already respect
+  `.gitignore` to skip build artifacts and dependencies.
+- **File content:** avoid reading whole files — search for the relevant
+  lines, or read a bounded line range around the edit target.
+- **Commands:** prefer quiet/silent flags; redirect known-verbose commands to
+  a file and inspect that instead of the raw stream.
+- **Re-reads:** read a foundational document (ADRs, master source) once per
+  session, not once per action; if a constraint needs to persist across
+  sessions, add a short line to the relevant file or agent memory instead of
+  re-deriving it each time.
 
-- one task has exactly one active owner;
-- an agent must claim or receive a task before editing its scope;
-- an agent must not edit files owned by another active task;
-- discoveries that affect another task are sent through a structured handoff;
-- task and handoff records are repository state, not architectural authority;
-- changing the protocol, registries, policies, hooks, permissions, skills, or
-  MCPs requires a separate task and explicit owner approval;
-- provider chat history is never treated as shared state or evidence;
-- before writing a task record, re-read it and refuse the write if ownership or
-  revision changed unexpectedly;
-- run the repository's AI-state validation before reporting completion.
+## What counts as a direct/simple edit
 
-## Fast-Track for Simple Tasks
+A change qualifies for the direct-edit path above only if it meets every
+criterion:
 
-A reduced-ceremony path for genuinely small changes. Mechanics (conflict
-check, validation, logging) live in `.ai/coordination/PROTOCOL.md`'s
-Fast-Track section — this is the one place that defines what qualifies.
-
-A task is **Simple** only if it meets every criterion:
-
-- **Limited scope:** touches at most two files.
+- **Limited scope:** touches at most two files, or up to four when every
+  touched file is Markdown documentation. This raised cap never applies to
+  the protocol/registry/policy/hook/permission/skill/MCP files named in
+  Mandatory rules above — a change to any of those always goes through
+  `ia-graft task new` and a PR, regardless of file count.
 - **No contract changes:** no public API, data contract (`.fbs`, JSON
   schema), or critical config (`project.json`, `nx.json`, `package.json`,
   `Cargo.toml`, etc.).
 - **Non-structural:** no new dependency, no architectural change.
-- **No conflicts:** none of the target files appear in another agent's
-  `in_progress` task `affected_paths` (verified before starting, per
-  PROTOCOL.md's conflict-check step).
 
 Examples: fixing a typo, adding a comment, refactoring one function's
-internals without changing its signature.
-
-Simple Tasks are exempt from the `Required reading` step above
-(`GRAFTING_MASTER_SOURCE.md`/`CURRENT_PLANNING_STATE.md`) — by definition
-they don't touch anything those documents govern. If a task turns out not
-to qualify once you start, stop and follow the full protocol (`Task-based
-work`, `Before editing`, `Completion criteria`) instead.
+internals without changing its signature. If a change turns out not to
+qualify once you start, stop, discard uncommitted scope creep, and run
+`ia-graft task new` instead.
 
 ## Before editing
 
@@ -159,18 +161,9 @@ A task can only be declared complete with applicable evidence:
 - schema validation;
 - diff review;
 - acceptance criteria;
-- documentation — if `affected_paths` touch a documented project's `src/`
-  (TypeScript: `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that
-  project's scoped API-reference evidence and run the `docs-quality-check`
-  skill on it before declaring completion (`.ai/coordination/PROTOCOL.md`
-  rule 6, `tools/scripts/README.md`); if `affected_paths` touch a
-  `docs/research/*.md` file, update
-  `docs/research/RESEARCH-DECISIONS-REGISTRY.md` when a candidate's status
-  changed (`.ai/coordination/PROTOCOL.md` rule 7); if `affected_paths`
-  include code copied or adapted from an external open-source project, add
-  the header marker and a matching `THIRD_PARTY_NOTICES.md` entry, then run
-  `node tools/scripts/check-third-party-notices.mjs`
-  (`.ai/coordination/PROTOCOL.md` rule 8);
+- documentation — see `.ai/coordination/PROTOCOL.md`'s "Before opening the
+  pull request" section for the concrete steps (API-reference regeneration,
+  research registry updates, third-party attribution) and when each applies;
 - Graph IR;
 - risks and limitations.
 

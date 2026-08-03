@@ -39,3 +39,16 @@ dotnet/Grafting.Isekai.Protocol/Generated/
 # tools/scripts/get-flatc-csharp.ps1) -- downloaded on demand, not the
 # primary pinned flatc (tools/flatc-version.txt).
 tools/.flatc-csharp/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Downloaded binaries and versioned tool folders
+packages/cloudflared.exe
+22.23.2/
+
+# Common OS and editor files
+.DS_Store
+Thumbs.db
+*.user
+.idea/

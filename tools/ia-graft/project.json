@@ -1,0 +1,27 @@
+{
+  "name": "ia-graft",
+  "root": "tools/ia-graft",
+  "projectType": "application",
+  "tags": ["scope:tooling", "lang:typescript", "platform:node", "type:cli"],
+  "metadata": {
+    "graphIr": {
+      "id": "ia-graft",
+      "kind": "app",
+      "tags": ["scope:tooling", "lang:typescript", "platform:node", "type:cli"]
+    }
+  },
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ia-graft test" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "{workspaceRoot}/tools/scripts/agent-task-guard.mjs",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
+    }
+  }
+}

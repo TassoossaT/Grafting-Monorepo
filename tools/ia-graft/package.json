@@ -1,0 +1,19 @@
+{
+  "name": "@grafting/ia-graft",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-facing CLI: task-record lifecycle and guard-check automation, strict JSON I/O. See .ai/state/tasks/completed/COORDINATION-IA-GRAFT-CLI-V1.json for design rationale.",
+  "type": "module",
+  "bin": {
+    "ia-graft": "src/bin.ts"
+  },
+  "scripts": {
+    "ia-graft": "node --experimental-strip-types src/bin.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
