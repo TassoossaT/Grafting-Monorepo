@@ -4,10 +4,13 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/three-canvas";
 import { GridLayout, PreviewCard, type GridPanel } from "@grafting/ui";
 import "react-grid-layout/css/styles.css";
+import { readPreviewImage, writePreviewImage } from "../../../lab-preview-storage.ts";
 import type { HeightmapWorkerRequest, HeightmapWorkerResponse } from "./generation.worker.ts";
 
 const GRID_WIDTH = 64;
 const GRID_HEIGHT = 64;
+/** Must match the "noise-rs" key in `DEMO_LINKS` (research-registry-ui.ts) so the /lab gallery finds this trial's captured preview. */
+const CANDIDATE = "noise-rs";
 
 interface Heightmap {
   readonly width: number;
@@ -80,11 +83,17 @@ export default function GenerationClient() {
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreviewImage(readPreviewImage(CANDIDATE) ?? null);
+  }, []);
   const canvasHandleRef = useRef<HeightfieldCanvas | null>(null);
 
   const capturePreview = useCallback(() => {
     if (canvasHandleRef.current === null) return;
-    setPreviewImage(canvasHandleRef.current.captureImage());
+    const dataUrl = canvasHandleRef.current.captureImage();
+    setPreviewImage(dataUrl);
+    writePreviewImage(CANDIDATE, dataUrl);
   }, []);
 
   const generate = useCallback((nextSeed: number, nextScale: number) => {
