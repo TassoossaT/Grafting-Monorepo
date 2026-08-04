@@ -1,11 +1,12 @@
-//! Wasm bridge quantizing a continuous VTT heightmap (as produced by
-//! `grafting-vtt-generation-wasm`'s `generate_heightmap`) into a discrete
-//! stacked-layer elevation grid. This is pipeline step 3 only
-//! ("Quantization into the discrete grid", per
+//! Wasm bridge quantizing a continuous heightmap (as produced by
+//! `grafting-procgen-generation-wasm`'s `generate_heightmap`) into a
+//! discrete stacked-layer elevation grid, as a generic, shareable domain
+//! capability. This is pipeline step 3 only ("Quantization into the
+//! discrete grid", per
 //! `docs/research/vtt-map-and-terrain-construction-options.md`'s end-to-end
-//! pipeline section) -- not the terrain-WFC tileset pass, water-mask
-//! integration, or any other future step, which remain separate future
-//! crates.
+//! pipeline section, which designed this capability for the VTT product
+//! first) -- not the terrain-WFC tileset pass, water-mask integration, or
+//! any other future step, which remain separate future crates.
 
 use wasm_bindgen::prelude::*;
 

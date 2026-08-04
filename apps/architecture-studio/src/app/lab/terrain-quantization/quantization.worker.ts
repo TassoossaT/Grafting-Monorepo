@@ -6,8 +6,8 @@
 // posts back both the continuous and quantized arrays so the client can
 // compare them side by side.
 
-import initGeneration, { generate_heightmap } from "@grafting/vtt-generation-wasm";
-import initQuantization, { quantize_heightmap } from "@grafting/vtt-terrain-quantization";
+import initGeneration, { generate_heightmap } from "@grafting/procgen-generation-wasm";
+import initQuantization, { quantize_heightmap } from "@grafting/procgen-terrain-quantization";
 
 export interface QuantizationWorkerRequest {
   readonly type: "generate";

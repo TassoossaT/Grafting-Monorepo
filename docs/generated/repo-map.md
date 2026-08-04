@@ -10,7 +10,7 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | `engine-compute-api` | library | `libs/engine/compute-api` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-compute-cpu` | library | `libs/engine/compute-cpu` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-domain-core` | library | `libs/engine/domain-core` | `check`, `docs-check`, `docs-generate`, `generate`, `test` |
-| `generation-wasm` | library | `libs/vtt/generation-wasm` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `generation-wasm` | library | `libs/domains/procgen/generation-wasm` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `graph-core` | library | `libs/graph/core` | `api-check`, `check`, `docs-check`, `docs-generate`, `format`, `graph-ir-check`, `lint`, `test` |
 | `isekai-capi-bridge` | library | `libs/isekai/capi-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `test` |
 | `isekai-wasm-bridge` | library | `libs/isekai/wasm-bridge` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |

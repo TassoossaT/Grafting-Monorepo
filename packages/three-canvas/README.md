@@ -9,9 +9,9 @@ rendering libraries stay behind a neutral, Grafting-owned surface; no
 
 `createHeightfieldCanvas(container, options)` — mounts a real-time-rendered
 terrain preview (a displaced plane mesh) into a container element, given a
-row-major grid of height values. Built for `apps/architecture-studio`'s VTT
-generation-test surface (`/vtt-generation`), rendering real
-`grafting-vtt-generation-wasm` output.
+row-major grid of height values. Built for `apps/architecture-studio`'s
+generation-test surface (`/lab/heightmap`, `/lab/terrain-quantization`),
+rendering real `grafting-procgen-generation-wasm` output.
 
 ```ts
 import { createHeightfieldCanvas } from "@grafting/three-canvas";

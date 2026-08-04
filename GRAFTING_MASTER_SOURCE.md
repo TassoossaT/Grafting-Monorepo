@@ -434,6 +434,7 @@ Initial domain map (see `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
 | Narrative / story creation | generic domain | `libs/domains/narrative` |
 | Session / campaign organization | generic domain | `libs/domains/session` |
 | VTT interactive map (X6) | product-specific + generic wrapper | `apps/web-vtt` consumes `packages/x6-canvas`, shared with `apps/architecture-studio` (`docs/architecture/ai-control-plane.md` §16.8) |
+| Procedural terrain/heightmap generation (heightmap seed, discrete-grid quantization) | generic domain | `libs/domains/procgen` (`generation-wasm`, `terrain-quantization` Rust/Wasm crates) — designed against the VTT's map-generation pipeline (`docs/research/vtt-map-and-terrain-construction-options.md`) but reclassified from an initial VTT-scoped `libs/vtt/` location (owner direction, 2026-08-04): not exclusive to the VTT, any product needing procedural heightmap generation can depend on it |
 | Discord bot | external integration | its own service consuming `session`/`narrative` contracts, never internals |
 | Session transcription | external integration (likely Python) | `python/` or a dedicated service, feeding `narrative` via contract |
 

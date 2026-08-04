@@ -54,7 +54,7 @@ jobs:
         run: flatc --rust -o libs/engine/domain-core/src/generated libs/engine/domain-core/contracts/command.fbs libs/engine/domain-core/contracts/domain_event.fbs libs/engine/domain-core/contracts/snapshot.fbs
 
       - name: Install pinned wasm-pack (DEC-055/ADR-0017)
-        # libs/isekai/wasm-bridge and libs/vtt/generation-wasm each run
+        # libs/isekai/wasm-bridge and libs/domains/procgen/generation-wasm each run
         # `wasm-pack build` from their own package.json `postinstall` --
         # the "Install Node dependencies" step below triggers those, so
         # wasm-pack must already be on PATH before `pnpm install` runs, not

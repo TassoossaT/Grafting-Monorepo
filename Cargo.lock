@@ -352,17 +352,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "grafting-rust-api-docgen"
-version = "0.0.0"
-dependencies = [
- "public-api",
- "rustdoc-json",
- "rustdoc-types",
- "serde_json",
-]
-
-[[package]]
-name = "grafting-vtt-generation-wasm"
+name = "grafting-procgen-generation-wasm"
 version = "0.0.0"
 dependencies = [
  "getrandom 0.2.17",
@@ -371,10 +361,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "grafting-vtt-terrain-quantization"
+name = "grafting-procgen-terrain-quantization"
 version = "0.0.0"
 dependencies = [
  "wasm-bindgen",
+]
+
+[[package]]
+name = "grafting-rust-api-docgen"
+version = "0.0.0"
+dependencies = [
+ "public-api",
+ "rustdoc-json",
+ "rustdoc-types",
+ "serde_json",
 ]
 
 [[package]]
