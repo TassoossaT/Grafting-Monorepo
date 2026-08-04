@@ -1,0 +1,44 @@
+{
+  "name": "terrain-quantization",
+  "root": "libs/domains/procgen/terrain-quantization",
+  "projectType": "library",
+  "tags": ["scope:procgen", "lang:rust", "platform:web", "type:lib"],
+  "metadata": {
+    "graphIr": {
+      "id": "terrain-quantization",
+      "kind": "lib",
+      "tags": ["scope:procgen", "lang:rust", "platform:web", "type:lib"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo check -p grafting-procgen-terrain-quantization" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo test -p grafting-procgen-terrain-quantization" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-quantization" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-quantization --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-terrain-quantization.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs", "sharedGlobals"
+      ]
+    }
+  }
+}

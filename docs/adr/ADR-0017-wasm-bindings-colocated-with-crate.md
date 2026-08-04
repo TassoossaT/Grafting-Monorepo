@@ -223,6 +223,18 @@ resolve and package the Wasm module for the Worker.
   dependency-chain diagram elsewhere in the master source that mention
   `packages/isekai-wasm` are updated to match.
 
+> **Footnote (2026-08-04, owner direction in conversation):** this ADR's
+> concrete example crate, originally `libs/vtt/generation-wasm`
+> (`@grafting/vtt-generation-wasm`), was relocated to
+> `libs/domains/procgen/generation-wasm` (`@grafting/procgen-generation-wasm`)
+> as part of reclassifying procedural-generation crates as a generic domain
+> rather than a VTT-product-specific one -- see
+> `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`'s own footnote and
+> `GRAFTING_MASTER_SOURCE.md` §4.4. The co-located-`package.json` pattern
+> this ADR establishes is unaffected; only that one example crate's path and
+> name changed. The body below is left as the historical record of the
+> 2026-08-02 decision, not rewritten.
+
 ## Validation and evidence
 
 - Acceptance criterion: after migration, `packages/isekai-wasm` and
