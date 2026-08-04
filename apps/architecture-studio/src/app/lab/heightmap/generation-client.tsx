@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/three-canvas";
-import { GridLayout, type GridPanel } from "@grafting/ui";
+import { GridLayout, PreviewCard, type GridPanel } from "@grafting/ui";
 import "react-grid-layout/css/styles.css";
 import type { HeightmapWorkerRequest, HeightmapWorkerResponse } from "./generation.worker.ts";
 
@@ -39,31 +39,36 @@ function requestHeightmap(seed: number, scale: number): Promise<Heightmap> {
 }
 
 /** Renders real Rust-computed heightmap output via `@grafting/three-canvas` -- no `three` import here, per this repo's package-boundary convention (`@antv/x6` behind `@grafting/x6-canvas`, `antd` behind `@grafting/ui`). */
-function TerrainCanvas({ heightmap }: { heightmap: Heightmap | null }) {
+function TerrainCanvas({
+  heightmap,
+  handleRef,
+}: {
+  heightmap: Heightmap | null;
+  handleRef: MutableRefObject<HeightfieldCanvas | null>;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HeightfieldCanvas | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (container === null || heightmap === null) return;
 
-    if (canvasRef.current === null) {
-      canvasRef.current = createHeightfieldCanvas(container, {
+    if (handleRef.current === null) {
+      handleRef.current = createHeightfieldCanvas(container, {
         width: heightmap.width,
         height: heightmap.height,
         values: heightmap.values,
       });
     } else {
-      canvasRef.current.update(heightmap.values);
+      handleRef.current.update(heightmap.values);
     }
-  }, [heightmap]);
+  }, [heightmap, handleRef]);
 
   useEffect(() => {
     return () => {
-      canvasRef.current?.dispose();
-      canvasRef.current = null;
+      handleRef.current?.dispose();
+      handleRef.current = null;
     };
-  }, []);
+  }, [handleRef]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -74,6 +79,13 @@ export default function GenerationClient() {
   const [heightmap, setHeightmap] = useState<Heightmap | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const canvasHandleRef = useRef<HeightfieldCanvas | null>(null);
+
+  const capturePreview = useCallback(() => {
+    if (canvasHandleRef.current === null) return;
+    setPreviewImage(canvasHandleRef.current.captureImage());
+  }, []);
 
   const generate = useCallback((nextSeed: number, nextScale: number) => {
     setStatus("loading");
@@ -120,6 +132,9 @@ export default function GenerationClient() {
           <button type="button" onClick={() => generate(seed, scale)}>
             Regenerate
           </button>
+          <button type="button" disabled={status !== "ok"} onClick={capturePreview}>
+            Capture preview
+          </button>
           <span data-testid="generation-status" data-status={status}>
             {status === "loading" && "Calculating the heightmap in Rust…"}
             {status === "ok" && heightmap !== null && `Ready · ${heightmap.width}×${heightmap.height} cells`}
@@ -129,8 +144,27 @@ export default function GenerationClient() {
       ),
     },
     {
-      placement: { id: "terrain", x: 0, y: 3, width: 12, height: 9 },
-      content: <TerrainCanvas heightmap={heightmap} />,
+      placement: { id: "terrain", x: 0, y: 3, width: 8, height: 9 },
+      content: <TerrainCanvas heightmap={heightmap} handleRef={canvasHandleRef} />,
+    },
+    {
+      placement: { id: "preview", x: 8, y: 3, width: 4, height: 9 },
+      content: (
+        <div style={{ padding: 12 }}>
+          <PreviewCard
+            title={`Heightmap · seed ${seed}`}
+            description={`Perlin-noise procedural terrain, scale ${scale}.`}
+            cover={
+              previewImage === null
+                ? undefined
+                : { src: previewImage, alt: `Rendered heightmap preview for seed ${seed}` }
+            }
+            status={status === "error" ? "error" : "success"}
+            statusLabel={status === "error" ? "Error" : "Ready"}
+            tags={[`seed:${seed}`, `scale:${scale}`]}
+          />
+        </div>
+      ),
     },
   ];
 
