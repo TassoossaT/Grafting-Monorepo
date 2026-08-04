@@ -16,9 +16,14 @@ __pycache__/
 # Rust build outputs
 target/
 
-# C#/.NET build and test outputs
-bin/
-obj/
+# C#/.NET build and test outputs. Scoped to dotnet/ specifically -- a bare
+# `bin/`/`obj/` also matches Rust's own `src/bin/` convention for extra
+# Cargo binary targets (e.g. libs/graph/core/src/bin/,
+# libs/isekai/capi-bridge/src/bin/), which is real source code, not build
+# output, and must stay tracked. Found by CI failing to build a bin target
+# that had silently never been committed.
+dotnet/**/bin/
+dotnet/**/obj/
 artifacts/
 TestResults/
 
