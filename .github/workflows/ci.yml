@@ -28,6 +28,17 @@ jobs:
         # stable Rust toolchain and installation remains a CI setup effect.
         run: rustup toolchain install "$(cat tools/rust-public-api-toolchain.txt)" --profile minimal
 
+      - name: Install pinned wasm-pack (DEC-055/ADR-0017)
+        # libs/isekai/wasm-bridge and libs/vtt/generation-wasm each run
+        # `wasm-pack build` from their own package.json `postinstall` --
+        # the "Install Node dependencies" step below triggers those, so
+        # wasm-pack must already be on PATH before `pnpm install` runs, not
+        # after. Pinned to the same version tools/wasm-pack-version.txt
+        # already declares for the Windows toolchain validator
+        # (tools/scripts/validate-toolchains.ps1), so both platforms stay
+        # locked to one source of truth.
+        run: cargo install wasm-pack --version "$(cat tools/wasm-pack-version.txt)" --locked
+
       - uses: pnpm/action-setup@v6
         with:
           version: 11.17.0
