@@ -31,13 +31,16 @@ ADR-per-task.
 
 - `guard-check` — ask "would `<tool>` on `<path>`/`<command>` be allowed"
   before attempting it; returns `{ok, allowed, reason}`.
-- `task new --id <TASK-ID> [--base main]` — creates an isolated Git worktree
-  (`.worktrees/<TASK-ID>`) and branch (`task/<TASK-ID>`) off `origin/<base>`,
-  and links every `node_modules` in the tree (root and each nested package,
-  pnpm-workspace style) from the main checkout into it — a plain
-  `git worktree add` never brings gitignored dependency trees, which breaks
-  `tsc`/most tests otherwise. Only reports success once linked (or once
-  confirmed the main checkout itself has no `node_modules` to give).
+- `task new --id <TASK-ID> [--base main]` — first sweeps `.worktrees/` for
+  already-merged tasks and cleans them up silently (see `task sweep` below;
+  a sweep failure never blocks creating the task actually being asked for),
+  then creates an isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
+  (`task/<TASK-ID>`) off `origin/<base>`, and links every `node_modules` in
+  the tree (root and each nested package, pnpm-workspace style) from the
+  main checkout into it — a plain `git worktree add` never brings gitignored
+  dependency trees, which breaks `tsc`/most tests otherwise. Only reports
+  success once linked (or once confirmed the main checkout itself has no
+  `node_modules` to give).
 - `task commit --id <TASK-ID> --message <msg> [--files <path>...]` — stages
   (all changed files, or a given subset) and commits inside that worktree.
 - `task test --id <TASK-ID> --command <cmd>` — runs a test/check command
@@ -52,6 +55,15 @@ ADR-per-task.
 - `task cleanup --id <TASK-ID>` — after the PR has merged, removes the
   worktree directory (retrying briefly on a transient Windows file-lock) and
   prunes Git metadata. The remote branch is left intact deliberately.
+- `task sweep` — checks every worktree under `.worktrees/` against `gh` and
+  cleans up (worktree + local branch) whichever ones already have a merged
+  PR. `task new` already calls this itself before creating anything, so
+  nobody needs to invoke it directly — it's exposed as its own subcommand
+  only for manual/debugging use. Anything `gh` can't confirm as merged is
+  left alone and reported as skipped — it never guesses from local branch
+  topology alone (a brand-new, not-yet-committed-to branch is trivially "an
+  ancestor" of anything the base branch merges later too, so that check
+  can't tell "merged" apart from "never touched").
 
 ## Starting work
 
