@@ -3,6 +3,12 @@ packages:
   - "libs/**"
   - "packages/*"
   - "tools/*"
+# Both workspace Wasm packages invoke wasm-pack during postinstall. Their
+# shared Cargo/wasm-pack caches are not safe to mutate concurrently on Windows.
+childConcurrency: 1
+# Nx targets may call pnpm-owned package scripts, but they must not turn a
+# normal `nx ...` invocation into an implicit dependency installation.
+verifyDepsBeforeRun: warn
 allowBuilds:
   # Vite works through esbuild's platform package without its install script.
   # Keep dependency scripts denied unless separately reviewed and approved.

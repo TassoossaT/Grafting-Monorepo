@@ -51,7 +51,7 @@ function stripCommentDelimiters(rawComment) {
   return rawComment
     .replace(/^\/\*\*/, "")
     .replace(/\*\/$/, "")
-    .split("\n")
+    .split(/\r?\n/)
     .map((line) => line.replace(/^\s*\*\s?/, ""))
     .join("\n");
 }
@@ -60,7 +60,7 @@ function parseDocBlocks(strippedText) {
   const blocks = [];
   let current = { tag: null, lines: [] };
 
-  for (const line of strippedText.split("\n")) {
+  for (const line of strippedText.split(/\r?\n/)) {
     const tagMatch = /^@(\w+)(?:[ \t]+(.*))?$/.exec(line);
     if (tagMatch === null) {
       current.lines.push(line);
