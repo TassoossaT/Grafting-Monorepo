@@ -45,7 +45,7 @@ export function createHeightfieldCanvasAdapter(
   camera.position.set(0, 16, 20);
   camera.lookAt(0, 0, 0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.replaceChildren(renderer.domElement);
@@ -96,6 +96,10 @@ export function createHeightfieldCanvasAdapter(
         resolved.meshColor,
       );
       scene.add(terrain);
+    },
+    captureImage() {
+      renderer.render(scene, camera);
+      return renderer.domElement.toDataURL("image/png");
     },
     dispose() {
       disposed = true;

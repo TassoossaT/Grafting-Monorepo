@@ -24,6 +24,8 @@ export interface HeightfieldCanvasOptions {
 export interface HeightfieldCanvas {
   /** Replaces the rendered terrain with new height values, keeping the same grid size and camera. */
   update(values: Float32Array): void;
+  /** Captures the current frame as a PNG data URL, for use as a `PreviewCard` cover image. */
+  captureImage(): string;
   /** Stops rendering and releases all GPU/DOM resources. */
   dispose(): void;
 }
