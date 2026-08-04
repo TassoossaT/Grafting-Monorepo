@@ -98,6 +98,8 @@ export function Card(props: CardProps): ReactElement {
   };
 
   const bodyStyle: CSSProperties = {
+    boxSizing: "border-box",
+    height: props.fillContainer ? "100%" : undefined,
     padding: props.padding ?? 12,
   };
 

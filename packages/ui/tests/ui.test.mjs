@@ -132,6 +132,26 @@ test("clips a PreviewCard's cover image to the card's own corners", () => {
   assert.match(markup, /overflow:hidden/);
 });
 
+test("keeps a filled PreviewCard's identity visible while its cover adapts to the grid panel", () => {
+  const markup = renderToStaticMarkup(
+    createElement(PreviewCard, {
+      actions: "Open trial",
+      cover: { alt: "Rendered heightmap preview", src: "/preview.png" },
+      description: "Perlin-noise procedural terrain heightmap.",
+      fillContainer: true,
+      title: "Heightmap generation",
+    }),
+  );
+  const imageTag = markup.match(/<img[^>]+>/)?.[0] ?? "";
+
+  assert.match(markup, /height:100%/);
+  assert.match(markup, /flex-direction:column/);
+  assert.match(imageTag, /flex:1 1 0/);
+  assert.match(imageTag, /min-height:0/);
+  assert.match(markup, /Heightmap generation/);
+  assert.match(markup, /Open trial/);
+});
+
 test("shows status and tags together below a PreviewCard's identity", () => {
   const markup = renderToStaticMarkup(
     createElement(PreviewCard, {
