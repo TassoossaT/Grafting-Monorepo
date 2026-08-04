@@ -71,7 +71,7 @@ test("taskNew creates a deterministic worktree that taskCleanup removes", async 
   const entries = await readdir(join(root, ".worktrees"));
   assert.deepEqual(entries, ["DEMO-TASK"]);
 
-  const cleaned = await taskCleanup(root, { taskId: "DEMO-TASK" });
+  const cleaned = await taskCleanup(root, { taskId: "DEMO-TASK", force: true });
   assert.equal(cleaned.ok, true);
   await assert.rejects(readdir(join(root, ".worktrees", "DEMO-TASK")));
 });
@@ -214,8 +214,37 @@ test("taskDone pushes and falls back to a manual compare URL when gh cannot open
   assert.equal(typeof result.prUrl, "string");
   // `gh` may or may not be installed/authenticated in the environment running this test;
   // either outcome must be well-formed rather than throwing.
-  if (!result.opened) {
+  if (result.prState === "manual") {
     assert.match(result.prUrl as string, /compare\/main\.\.\.task\/DEMO-TASK/);
     assert.equal(typeof result.note, "string");
   }
+});
+
+test("taskNew resumes an existing task and taskStatus derives its state", async () => {
+  const root = await makeRepoWithBareRemote();
+  const first = await taskNew(root, { taskId: "RESUME-TASK", base: "main" });
+  assert.equal(first.ok, true);
+  if (!first.ok) return;
+  assert.equal(first.resumed, false);
+  const second = await taskNew(root, { taskId: "RESUME-TASK", base: "main" });
+  assert.equal(second.ok, true);
+  if (!second.ok) return;
+  assert.equal(second.resumed, true);
+  const status = await (await import("./task-commands.ts")).taskStatus(root, { taskId: "RESUME-TASK" });
+  assert.equal(status.ok, true);
+  if (status.ok) assert.equal(status.exists, true);
+});
+
+test("taskCleanup refuses an unmerged task unless force is explicit", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "KEEP-TASK", base: "main" });
+  await assert.rejects(taskCleanup(root, { taskId: "KEEP-TASK" }), /refusing cleanup/);
+  const cleaned = await taskCleanup(root, { taskId: "KEEP-TASK", force: true });
+  assert.equal(cleaned.ok, true);
+});
+test("taskTest refuses dependency mutations against shared node_modules", async () => {
+  const root = await makeRoot();
+  const result = await taskTest(root, { taskId: "DEMO-TASK", command: "pnpm install" });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /shared/);
 });

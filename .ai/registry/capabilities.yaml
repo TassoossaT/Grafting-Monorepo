@@ -3,7 +3,7 @@
   "capabilities": [
     {
       "id": "coordination.validate",
-      "summary": "Validate agent registries, task ownership, contracts, and handoff records without a model call.",
+      "summary": "Validate AI registries and Git-safety policy without a model call.",
       "command": "uv run --package automation python -m automation.coordination --root .",
       "risk": "low",
       "side_effects": false,

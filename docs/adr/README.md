@@ -69,13 +69,13 @@ the ADR or Graph IR contract.
 | [ADR-0007](ADR-0007-repo-distribution-strategy.md) | GATE-007 | Multi-product repository/distribution strategy | **Accepted — closed (single monorepo)** |
 | [ADR-0008](ADR-0008-libs-boundary-and-domain-map.md) | — (structural, post GATE-007) | `libs/` boundary rule and domain map (narrative, session, X6, Discord, transcription) | **Accepted (DEC-046)** |
 | [ADR-0009](ADR-0009-committed-flatbuffers-fixture.md) | — (structural, §10.3 exception) | Commit C-006's frozen FlatBuffers evolution fixture's generated code | Proposed — pending owner decision |
-| [ADR-0010](ADR-0010-multi-agent-coordination.md) | — (AI Control Plane Phase 1) | Provider-neutral task ownership, structured handoffs, and Claude runtime guard | **Accepted; runtime enforcement amended 2026-07-29** |
+| [ADR-0010](ADR-0010-multi-agent-coordination.md) | — (AI Control Plane Phase 1) | Provider-neutral Git/worktree/PR task coordination | **Accepted; worktree lifecycle replaced in place 2026-08-03** |
 | [ADR-0011](ADR-0011-package-autonomy-and-external-isolation.md) | — (structural) | Package autonomy, external dependency isolation, and authoritative reuse | **Accepted (DEC-049)** |
 | [ADR-0012](ADR-0012-knowledge-automation-plane.md) | I-001 | Knowledge/Automation Plane authority, lifecycle, and graph ports | **Accepted (DEC-050)** |
 | [ADR-0013](ADR-0013-rust-graph-core-and-api-contracts.md) | — (structural amendment) | Rust graph authority and generated public API contracts per consumed package | **Accepted (DEC-051)** |
 
 | [ADR-0014](ADR-0014-composable-capability-packages.md) | - (structural amendment) | Neutral composable capability packages and product-owned presentation | **Accepted (DEC-052)** |
-| [ADR-0015](ADR-0015-agent-git-write-policy.md) | - (AI operational safety) | Prohibit agent-authored commits and default-branch pushes | **Accepted (DEC-053)** |
+| [ADR-0015](ADR-0015-agent-git-write-policy.md) | - (AI operational safety) | Allow isolated task-branch commits; prohibit default-branch writes and agent merges | **Accepted (DEC-053)** |
 | [ADR-0016](ADR-0016-architecture-studio-scope-expansion.md) | - (amends ADR-0012, I-001) | Architecture Studio scope expansion: VTT generation-test surface and agent-orchestration surface | **Accepted (DEC-054)** |
 | [ADR-0017](ADR-0017-wasm-bindings-colocated-with-crate.md) | - (amends GRAFTING_MASTER_SOURCE.md 9.2) | Generated Wasm bindings are co-located with their Rust crate, not a separate `packages/` technical package | **Accepted (DEC-055)** |
 

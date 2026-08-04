@@ -138,14 +138,10 @@ function summarizeTestOutput(output: string): string {
 async function executeGit(args: string[], cwd: string): Promise<string> {
     try {
         const { stdout, stderr } = await execFileAsync('git', args, { cwd });
-        if (stderr) {
-            // Log stderr for debugging, but don't throw unless the command fails
-            console.warn(`Git warning: ${stderr}`);
-        }
         return stdout.trim();
     } catch (error) {
-        console.error(`Error executing git ${args.join(' ')}\n${error}`);
-        throw error;
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`git ${args[0]} failed: ${detail}`);
     }
 }
 
@@ -217,18 +213,18 @@ export class GitWorktreeSession {
      * @param baseBranch The branch to open the PR against.
      * @returns The PR URL (or manual compare URL) and whether it was actually opened.
      */
-    async createPullRequest(title: string, body: string, baseBranch: string): Promise<{ url: string; opened: boolean }> {
+    async createPullRequest(title: string, body: string, baseBranch: string): Promise<{ url: string; state: 'created' | 'existing' | 'manual' }> {
         try {
             const { stdout } = await execFileAsync(
                 'gh',
                 ['pr', 'create', '--title', title, '--body', body, '--base', baseBranch, '--head', this.branchName],
                 { cwd: this.worktreePath, env: envWithGhFallbackPath() },
             );
-            return { url: stdout.trim(), opened: true };
+            return { url: stdout.trim(), state: 'created' };
         } catch {
             const existing = await this.existingPullRequestUrl();
-            if (existing) return { url: existing, opened: true };
-            return { url: await this.compareUrl(baseBranch), opened: false };
+            if (existing) return { url: existing, state: 'existing' };
+            return { url: await this.compareUrl(baseBranch), state: 'manual' };
         }
     }
 
@@ -302,7 +298,6 @@ export class GitWorktreeSession {
         await executeGit(['worktree', 'prune'], this.repoPath);
 
         // Deleting the remote branch is a separate, conscious decision -- not done here.
-        console.log(`Cleaned up worktree for branch ${this.branchName} at ${this.worktreePath}`);
     }
 
     /**
@@ -333,8 +328,6 @@ export class GitWorktreeSession {
         if (!linked && reason !== 'main checkout has no node_modules; run pnpm install there first') {
             throw new Error(`worktree created but failed to link node_modules: ${reason}`);
         }
-
-        console.log(`Created worktree for branch ${branchName} at ${worktreePath}`);
         return new GitWorktreeSession(repoPath, worktreePath, branchName, linked);
     }
 
@@ -378,6 +371,38 @@ export class GitClient {
     async createSession(taskId: string, baseBranch: string = 'main'): Promise<GitWorktreeSession> {
         return GitWorktreeSession.create(this.repoPath, baseBranch, taskId);
     }
+    async createOrResumeSession(taskId: string, baseBranch: string = 'main'): Promise<{ session: GitWorktreeSession; resumed: boolean }> {
+        const worktree = worktreePathForTask(this.repoPath, taskId);
+        try {
+            await fs.access(worktree);
+            const branch = await executeGit(['branch', '--show-current'], worktree);
+            if (branch !== branchNameForTask(taskId)) throw new Error(`task path belongs to unexpected branch ${branch}`);
+            return { session: GitWorktreeSession.open(this.repoPath, taskId), resumed: true };
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('unexpected branch')) throw error;
+            return { session: await this.createSession(taskId, baseBranch), resumed: false };
+        }
+    }
+
+    async taskStatus(taskId: string): Promise<{ taskId: string; exists: boolean; branch: string; dirty?: boolean; head?: string }> {
+        const worktree = worktreePathForTask(this.repoPath, taskId);
+        try { await fs.access(worktree); } catch { return { taskId, exists: false, branch: branchNameForTask(taskId) }; }
+        const branch = await executeGit(['branch', '--show-current'], worktree);
+        if (branch !== branchNameForTask(taskId)) throw new Error(`task path belongs to unexpected branch ${branch}`);
+        const dirty = (await executeGit(['status', '--porcelain'], worktree)).length > 0;
+        const head = await executeGit(['rev-parse', '--short', 'HEAD'], worktree);
+        return { taskId, exists: true, branch, dirty, head };
+    }
+
+    async cleanupTask(taskId: string, force: boolean): Promise<void> {
+        const status = await this.taskStatus(taskId);
+        if (!status.exists) return;
+        if (status.dirty && !force) throw new Error('refusing cleanup: task worktree has uncommitted changes (use --force only to abandon them)');
+        const merge = await this.branchMergeStatus(status.branch);
+        if (!merge.merged && !force) throw new Error(`refusing cleanup: ${merge.reason}`);
+        await GitWorktreeSession.open(this.repoPath, taskId).cleanup();
+        await executeGit(['branch', '-D', status.branch], this.repoPath).catch(() => undefined);
+    }
 
     /**
      * Reopens the session for an already-existing task worktree created by a
@@ -419,11 +444,7 @@ export class GitClient {
                 skipped.push({ id, reason: status.reason });
                 continue;
             }
-            const session = GitWorktreeSession.open(this.repoPath, id);
-            await session.cleanup();
-            await executeGit(['branch', '-D', branch], this.repoPath).catch(() => {
-                // Already gone, or never existed as a local ref -- not fatal to the sweep.
-            });
+            await this.cleanupTask(id, false);
             cleaned.push(id);
         }
         return { cleaned, skipped };

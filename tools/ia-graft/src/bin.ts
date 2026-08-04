@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCleanup, taskCommit, taskDone, taskNew, taskSweep, taskTest } from "./task-commands.ts";
+import { taskCleanup, taskCommit, taskDone, taskNew, taskStatus, taskSweep, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -46,6 +46,36 @@ function readInputFlag(argv: string[]): unknown | undefined {
   return JSON.parse(raw);
 }
 
+function readValue(argv: string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+  if (index === -1) return undefined;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+  return value;
+}
+
+function readValues(argv: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== name) continue;
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+    values.push(value);
+  }
+  return values;
+}
+
+function flagInput(subcommand: string | undefined, argv: string[]): unknown | undefined {
+  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
+  const taskId = readValue(argv, "--id");
+  if (subcommand === "new") return { taskId, base: readValue(argv, "--base") };
+  if (subcommand === "commit") return { taskId, message: readValue(argv, "--message"), files: readValues(argv, "--file") };
+  if (subcommand === "test") return { taskId, command: readValue(argv, "--command") };
+  if (subcommand === "done") return { taskId, title: readValue(argv, "--title"), body: readValue(argv, "--body"), base: readValue(argv, "--base") };
+  if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
+  if (subcommand === "status") return { taskId };
+  return undefined;
+}
 function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(result.ok ? 0 : 1);
@@ -62,18 +92,19 @@ async function main(argv: string[]): Promise<void> {
     }
 
     if (group === "task") {
-      const input = readInputFlag(argv) ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
       if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
       if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
       if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
       if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
       if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
+      if (subcommand === "status") printAndExit(await taskStatus(root, input as Parameters<typeof taskStatus>[1]));
       if (subcommand === "sweep") printAndExit(await taskSweep(root));
     }
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup|sweep>  (JSON input on stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup|status|sweep> (flags, --input JSON, or JSON stdin)`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

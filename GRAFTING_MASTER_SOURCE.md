@@ -2122,16 +2122,7 @@ Test:
 
 ### 25.0 This section is a pointer, not a restatement
 
-Prior revisions of this section restated `AGENTS.md`'s "Before editing" /
-"Completion format" / "Stop conditions" and
-`.ai/coordination/PROTOCOL.md`'s "Handoffs" / "Git write policy" almost
-verbatim -- duplication that let one copy drift from the other. One drifted
-copy (25.2, since removed) said agents "may make small checkpoint commits
-when authorized," directly contradicting the absolute Git-commit prohibition
-that governs everywhere else (DEC-053,
-`docs/adr/ADR-0015-agent-git-write-policy.md`). Read `AGENTS.md` and
-`.ai/coordination/PROTOCOL.md` directly for the actual protocol; this section
-only keeps the two example prompts below, which are distinct enough to stay.
+The task lifecycle is defined only by `AGENTS.md`, `.ai/coordination/PROTOCOL.md`, ADR-0010 and ADR-0015. It uses isolated worktrees, forward-only task-branch commits and human PR merge. This section keeps no second copy of those rules.
 
 ### 25.1 Recommended bootstrap prompt
 
@@ -2451,11 +2442,11 @@ Automate only conventions already proven:
       validation (I-002, 2026-07-29);
 - [x] `grafting.graph.json` (I-004, 2026-07-29; real Nx-sourced extractor --
       `project`/`target` nodes, `contains`/`depends_on` edges only;
-      task/agent/handoff/skill/prompt coverage remains a later
+      agent/skill/prompt coverage remains a later
       I-006/J-012 extension, not this file);
 - [ ] README/AGENTS/metadata template;
 - [x] minimal `.ai/` (task-completion skill plus Phase 1 coordination protocol,
-      contracts, registries, tasks/handoffs, capabilities, and workflows;
+      contracts, registries, Git-derived task coordination, capabilities, and workflows;
       unused canonical directories remain absent);
 - [ ] AI System Maintainer tested via uv;
 - [ ] hooks with no model call;
@@ -2468,7 +2459,7 @@ Automate only conventions already proven:
 - [ ] Promptfoo;
 - [x] semantic cache disabled (no cache implementation exists; DEC-036 remains
       the enforced policy);
-- [x] a single durable source of tasks (`.ai/state/tasks/`, one file/owner per
+- [x] a single durable source of tasks (Git worktree + branch + PR per
       task; replaces the earlier unimplemented `Backlog.md` default);
 - [x] approval for control changes (ADR-0010 and the coordination protocol
       require a separate task and explicit owner approval);

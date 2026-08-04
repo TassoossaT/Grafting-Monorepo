@@ -2,7 +2,7 @@
   "name": "@grafting/ia-graft",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-facing CLI: task-record lifecycle and guard-check automation, strict JSON I/O. See .ai/state/tasks/completed/COORDINATION-IA-GRAFT-CLI-V1.json for design rationale.",
+  "description": "AI-facing CLI for worktree/branch/PR task lifecycle and Git-safety checks with strict JSON output.",
   "type": "module",
   "bin": {
     "ia-graft": "src/bin.ts"

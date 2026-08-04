@@ -24,8 +24,7 @@ order.
 
 ## ia-graft: the task-lifecycle CLI
 
-`tools/ia-graft` (strict JSON in/out, `node --experimental-strip-types
-tools/ia-graft/src/bin.ts <command> --input '<json>'`) is the only
+`tools/ia-graft` is the only
 coordination mechanism. There is no task JSON, no handoff record, and no
 ADR-per-task.
 
@@ -34,14 +33,15 @@ ADR-per-task.
 - `task new --id <TASK-ID> [--base main]` — first sweeps `.worktrees/` for
   already-merged tasks and cleans them up silently (see `task sweep` below;
   a sweep failure never blocks creating the task actually being asked for),
-  then creates an isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
+  then creates or resumes an isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
   (`task/<TASK-ID>`) off `origin/<base>`, and links every `node_modules` in
   the tree (root and each nested package, pnpm-workspace style) from the
   main checkout into it — a plain `git worktree add` never brings gitignored
   dependency trees, which breaks `tsc`/most tests otherwise. Only reports
   success once linked (or once confirmed the main checkout itself has no
   `node_modules` to give).
-- `task commit --id <TASK-ID> --message <msg> [--files <path>...]` — stages
+  Shared dependency junctions are read-only operationally: never run `pnpm/npm/yarn/bun install/add/remove/update` inside a task worktree; install only in the main checkout. `task test` rejects these commands.
+- `task commit --id <TASK-ID> --message <msg> [--file <path>]...` — stages
   (all changed files, or a given subset) and commits inside that worktree.
 - `task test --id <TASK-ID> --command <cmd>` — runs a test/check command
   inside the worktree and returns a compact pass/fail summary (node:test's
@@ -50,11 +50,12 @@ ADR-per-task.
 - `task done --id <TASK-ID> --title <title> --body <body> [--base main]` —
   pushes the branch and opens a pull request via `gh pr create`. If `gh` is
   missing or unauthenticated, it still pushes and returns
-  `{opened: false, prUrl: <manual compare URL>}` instead of failing. Leaves
+  `{prState: "manual", prUrl: <manual compare URL>}` instead of failing. Leaves
   the worktree in place for any follow-up review commits.
-- `task cleanup --id <TASK-ID>` — after the PR has merged, removes the
+- `task status --id <TASK-ID>` — derives existence, branch, dirty state and HEAD from Git; no status file is written.
+- `task cleanup --id <TASK-ID> [--force]` — after the PR has merged, removes the
   worktree directory (retrying briefly on a transient Windows file-lock) and
-  prunes Git metadata. The remote branch is left intact deliberately.
+  prunes Git metadata. Without `--force`, dirty or unmerged tasks are refused. Force means explicit abandonment. The remote branch is left intact deliberately.
 - `task sweep` — checks every worktree under `.worktrees/` against `gh` and
   cleans up (worktree + local branch) whichever ones already have a merged
   PR. `task new` already calls this itself before creating anything, so
@@ -82,10 +83,10 @@ ADR-per-task.
 4. Before opening the PR, run the change's own tests via
    `ia-graft task test --id <TASK-ID> --command <cmd>` — it returns a
    compact pass/fail summary, not the raw transcript.
-5. When the task is complete, `ia-graft task done --id <TASK-ID> --title
+5. When the task is ready for review, `ia-graft task done --id <TASK-ID> --title
    <title> --body <body>` pushes the branch and opens the pull request (via
    `gh`, when available — otherwise it still pushes and returns a manual
-   compare URL). A human reviews and merges it; once merged,
+   compare URL). During review, run `task new --id <TASK-ID>` to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
    `ia-graft task cleanup --id <TASK-ID>` removes the
    worktree.
 

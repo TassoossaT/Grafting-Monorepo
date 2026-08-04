@@ -4,9 +4,9 @@
     {
       "id": "task-lifecycle-v1",
       "status": "active",
-      "summary": "Provider-neutral claim, implement, validate, handoff, and completion lifecycle.",
+      "summary": "Provider-neutral create/resume, implement, validate, review, and merge lifecycle.",
       "policy": ".ai/coordination/PROTOCOL.md",
-      "steps": ["inspect", "claim", "declare", "implement", "validate", "handoff-or-complete"]
+      "steps": ["inspect", "create-or-resume", "declare", "implement", "validate", "review", "merge"]
     },
     {
       "id": "control-plane-audit-v1",
