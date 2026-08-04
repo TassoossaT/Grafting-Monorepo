@@ -125,7 +125,7 @@ test("resolveAgentsFiles skips a project whose AGENTS.md does not exist on disk"
   assert.deepEqual(resolveAgentsFiles(["isekai-dotnet-protocol"], rootsMap, "/repo", () => false), ["AGENTS.md"]);
 });
 
-test("runNxAffected parses the last JSON-array line, tolerating pnpm/nx preamble", () => {
+test("runNxAffected parses the last JSON-array line, tolerating Nx preamble", () => {
   const fakeExec = () => "Lockfile is up to date\nsome noise\n[\"ui\",\"architecture-studio\"]\n";
   assert.deepEqual(runNxAffected(["packages/ui/src/index.ts"], { root: "/repo", exec: fakeExec }), [
     "ui",

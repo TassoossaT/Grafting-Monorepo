@@ -33,4 +33,4 @@ Deliberately not modeled yet, and why:
   the substantive tests live in `engine-compute-cpu`, the first real
   implementation)
 
-Run via Nx: `pnpm nx run engine-compute-api:check`.
+Run via Nx: `nx run engine-compute-api:check`.

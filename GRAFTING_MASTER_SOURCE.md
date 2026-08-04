@@ -997,7 +997,7 @@ In CI:
 ```bash
 uv lock --check
 uv sync --locked
-pnpm nx affected -t lint test build
+nx affected -t lint test build
 ```
 
 The behavior of `--locked`, `--frozen`, and `--no-sync` is documented at:

@@ -107,11 +107,11 @@ export function resolveAgentsFiles(projectNames, rootsMap, root, exists = exists
 export function runNxAffected(paths, { root, exec = execFileSync } = {}) {
   if (paths.length === 0) return [];
   const stdout = exec(
-    "pnpm",
-    ["nx", "show", "projects", "--affected", `--files=${paths.join(",")}`, "--json"],
+    "nx",
+    ["show", "projects", "--affected", `--files=${paths.join(",")}`, "--json"],
     { cwd: root, encoding: "utf8", shell: true },
   );
-  // `pnpm`/`nx` may print lockfile/postinstall preamble before the JSON payload;
+  // Nx may print diagnostic preamble before the JSON payload;
   // the payload is always the last successfully-parseable JSON line.
   const lines = stdout.split("\n").filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {

@@ -22,7 +22,7 @@
     "docs:api:ts:check": "node tools/scripts/generate-api-docs.mjs --check",
     "docs:api:rust:generate": "node tools/scripts/generate-rust-api-docs.mjs",
     "docs:api:rust:check": "node tools/scripts/generate-rust-api-docs.mjs --check",
-    "docs:check": "pnpm run graph:map:check && pnpm run graph:manifest:check && pnpm run graph:extract:check && pnpm run docs:api:ts:check && pnpm run docs:api:rust:check && pnpm exec nx run graph-core:api-check && pnpm exec nx run x6-canvas:api-check",
+    "docs:check": "pnpm run graph:map:check && pnpm run graph:manifest:check && pnpm run graph:extract:check && pnpm run docs:api:ts:check && pnpm run docs:api:rust:check && nx run graph-core:api-check && nx run x6-canvas:api-check",
     "licenses:third-party-check": "node tools/scripts/check-third-party-notices.mjs",
     "ai:check": "uv run --package automation python -m automation.coordination --root .",
     "ai:audit": "uv run --package automation python -m automation.control_plane --root .",

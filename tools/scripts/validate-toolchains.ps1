@@ -99,7 +99,7 @@ if ($flatc) {
 } else { throw "flatc $flatcExpected is pinned but not installed" }
 
 $nxExpected = $packageJson.devDependencies.nx
-$nxVersionOutput = (& pnpm.cmd exec nx --version) -join "`n"
+$nxVersionOutput = (& nx --version) -join "`n"
 if ($nxVersionOutput -notmatch 'Local:\s*v?([0-9][0-9.]*)') {
     throw "could not parse local nx version from: $nxVersionOutput"
 }
@@ -123,7 +123,7 @@ if ($nxVersionOutput -match 'Global:\s*v?([0-9][0-9.]*)') {
 if (-not $SkipWorkspaceChecks) {
     Invoke-Checked 'Cargo workspace check' { cargo check --workspace }
     Invoke-Checked 'uv lock check' { & $uv lock --check }
-    Invoke-Checked 'Nx projects' { pnpm.cmd exec nx show projects }
+    Invoke-Checked 'Nx projects' { nx show projects }
 }
 
 Write-Host 'PASS: installed versions match the explicit pins checked by this script.'

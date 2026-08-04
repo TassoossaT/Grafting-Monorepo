@@ -84,7 +84,7 @@ Deliberately not done, and why:
 - `check` -- `cargo check -p grafting-isekai-wasm`
 - `test` -- `cargo test -p grafting-isekai-wasm && wasm-pack test --node`
 
-Run via Nx: `pnpm nx run isekai-wasm-bridge:test`.
+Run via Nx: `nx run isekai-wasm-bridge:test`.
 
 ## Wasm bindings (DEC-055/ADR-0017)
 

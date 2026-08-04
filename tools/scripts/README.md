@@ -242,7 +242,7 @@ not be created ahead of time") -- `generate-rust-crate.test.mjs` and
 `generate-domain.test.mjs` scaffold into a uniquely-named, in-repo,
 non-`.gitignore`d scratch directory (`libs/.generator-*-test-<id>/`),
 assert real `cargo check` success and real Nx discoverability
-(`pnpm exec nx show projects --json`), then delete it. Using either
+(`nx show projects --json`), then delete it. Using either
 generator to create a real, permanent crate/domain is a decision for
 whoever has a real one to add -- not something these tests do.
 
@@ -286,7 +286,7 @@ whoever has a real one to add -- not something these tests do.
   of `AGENTS.md` files, `GRAFTING_MASTER_SOURCE.md` §0.4 router rows, and
   `docs/adr/README.md` ADRs actually relevant to it, backed by Nx's own
   project graph (`docs/generated/project-graph.json` for project roots,
-  `pnpm nx show projects --affected --files=... --json` for real
+  `nx show projects --affected --files=... --json` for real
   dependency-graph-aware downstream impact, per DEC-021 -- no new
   dependency). Manual usage: `node tools/scripts/context-resolver.mjs
   --task <TASK_ID>`. Known limitation: a task whose `affected_paths`

@@ -39,7 +39,7 @@ That old schema's generated Rust code
 (`libs/engine/domain-core/tests/generated_v1/command_v1_generated.rs`)
 is not "always reproducible" in the sense §10.3's default rule assumes:
 nobody regenerates a frozen historical fixture as part of normal
-iteration (running `pnpm exec nx run engine-domain-core:generate` only
+iteration (running `nx run engine-domain-core:generate` only
 ever touches the *current* schemas, never `fixtures/command_v1.fbs`) --
 if this generated file were gitignored like the live schemas' output,
 a fresh clone would be missing it with no command that reproduces it,

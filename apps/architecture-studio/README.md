@@ -38,7 +38,7 @@ calculation still belongs in `grafting-graph-core`.
 Run locally:
 
 ```powershell
-pnpm nx run architecture-studio:dev
+nx run architecture-studio:dev
 ```
 
 Then open `http://127.0.0.1:4511/` in a supported browser.

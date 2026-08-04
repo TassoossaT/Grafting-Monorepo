@@ -21,7 +21,7 @@ proven by `docs/benchmarks/vtt-wasm-compile-spike-2026-08-01.md`.
 - `check` -- `cargo check -p grafting-vtt-generation-wasm`
 - `test` -- `cargo test -p grafting-vtt-generation-wasm`
 
-Run via Nx: `pnpm exec nx run generation-wasm:check` / `:test`.
+Run via Nx: `nx run generation-wasm:check` / `:test`.
 
 ## Wasm bindings (DEC-055/ADR-0017)
 

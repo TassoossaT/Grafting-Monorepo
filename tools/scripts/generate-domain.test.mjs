@@ -75,14 +75,10 @@ test("scaffoldDomainFiles produces a complete slice: crate + tests + contract + 
   await writeFile(resolve(targetDir, "Cargo.toml"), `${cargoTomlOriginal}\n[workspace]\n`);
   execFileSync("cargo", ["check"], { cwd: targetDir, stdio: "pipe" });
 
-  // CI=true required -- see generate-rust-crate.test.mjs's identical
-  // assertion for why (pnpm exec's own dependency-status check aborts
-  // without a TTY otherwise).
-  const nxProjectsRaw = execFileSync("pnpm", ["exec", "nx", "show", "projects", "--json"], {
+  const nxProjectsRaw = execFileSync("nx", ["show", "projects", "--json"], {
     cwd: root,
     encoding: "utf8",
     shell: true,
-    env: { ...process.env, CI: "true" },
   });
   const nxProjects = JSON.parse(nxProjectsRaw.trim().split("\n").pop());
   assert.ok(nxProjects.includes(nxProjectName), `expected Nx to discover ${nxProjectName}, got: ${nxProjectsRaw}`);
