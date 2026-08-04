@@ -88,13 +88,14 @@ instructions; they must not restate or override them.
   required-reading chain, but still go through
   `ia-graft task new`/`commit`/`done` below — just with a terser title/body,
   not a full task declaration.
-- **Any task**: run `ia-graft task new --id <TASK-ID>`. This creates an
+- **Any task**: run `ia-graft task new --id <TASK-ID>`. This creates or resumes an
   isolated Git worktree and branch, and links every `node_modules` in the
   tree from the main checkout into it — work only inside that worktree.
   Isolation between agents comes from separate worktrees/branches, not from
   a file-ownership ledger. It also sweeps any already-merged worktree out of
   `.worktrees/` first, silently — nothing to invoke or remember, it's just
   what `task new` does.
+  Treat linked `node_modules` as read-only; dependency installation or mutation runs only in the main checkout, never inside a task worktree.
 - Commit as you go with `ia-graft task commit --id <TASK-ID> --message
   <msg>` (stages and commits inside the worktree) — not raw `git add`/`git
   commit`, and never in the main checkout.
@@ -102,11 +103,11 @@ instructions; they must not restate or override them.
   <cmd>` — it returns a compact pass/fail summary instead of the raw
   transcript, so validating a change doesn't cost more tokens than the
   change itself.
-- When the task is complete, run `ia-graft task done --id <TASK-ID> --title
+- When the task is ready for review, run `ia-graft task done --id <TASK-ID> --title
   <title> --body <body>` to push the branch and open a pull request via
   `gh`. If `gh` can't open one (missing/unauthenticated), it still pushes
   and returns a manual compare URL instead of failing — open that URL
-  yourself. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
+  yourself. For requested changes, run `task new` with the same ID to resume, commit/test, and run `task done` again; it returns the existing PR. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
   to remove the worktree.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
   MCPs still requires explicit owner approval — open the PR and wait for
@@ -126,7 +127,7 @@ Minimize tokens read and produced; do not fetch more than a task needs.
   a file and inspect that instead of the raw stream.
 - **Re-reads:** read a foundational document (ADRs, master source) once per
   session, not once per action; if a constraint needs to persist across
-  sessions, add a short line to the relevant file or agent memory instead of
+  sessions, add a short line to the relevant file or a compact canonical repository source instead of
   re-deriving it each time.
 - **Verbatim relocation:** to move or archive content unchanged (e.g. an
   entire file, or a section into its own file), prefer a filesystem/Git

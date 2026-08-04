@@ -33,10 +33,9 @@ at a time when real work produces content for them.
 
 ## Coordination
 
-`.ai/coordination/PROTOCOL.md` is the provider-neutral workflow. Task records
-under `.ai/state/tasks/` establish ownership; handoff records under
-`.ai/state/handoffs/` transfer discoveries and responsibility without relying
-on private chat history. Contracts and registries are JSON-compatible YAML or
+`.ai/coordination/PROTOCOL.md` is the provider-neutral workflow. Task state is derived from worktrees, branches, commits and pull requests through `tools/ia-graft`; no duplicate task or handoff state is maintained.
+
+Contracts and registries are JSON-compatible YAML or
 JSON so validation needs no model call and no external service.
 
 ## Skills

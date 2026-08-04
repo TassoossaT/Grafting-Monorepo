@@ -30,15 +30,16 @@ export interface TaskNewInput {
  * unreachable) never blocks creating the task that was actually asked for.
  */
 export async function taskNew(repoRoot: string, input: TaskNewInput) {
-  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
   await client.sweepMergedWorktrees().catch(() => undefined);
-  const session = await client.createSession(input.taskId, input.base ?? "main");
+  const { session, resumed } = await client.createOrResumeSession(input.taskId, input.base ?? "main");
   return {
     ok: true as const,
     worktreePath: session.worktreePath,
     branch: session.branchName,
     nodeModulesLinked: session.nodeModulesLinked,
+    resumed,
   };
 }
 
@@ -50,7 +51,7 @@ export interface TaskCommitInput {
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
 export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
-  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.message) return fail("message is required");
   const client = new GitClient(repoRoot);
   const session = client.openSession(input.taskId);
@@ -70,8 +71,11 @@ export interface TaskTestInput {
  * result, not the transcript.
  */
 export async function taskTest(repoRoot: string, input: TaskTestInput) {
-  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.command) return fail("command is required");
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:install|add|remove|update|upgrade|ci)\b/i.test(input.command)) {
+    return fail("dependency-mutating commands are forbidden in task worktrees because node_modules is shared; run installs in the main checkout");
+  }
   const client = new GitClient(repoRoot);
   const session = client.openSession(input.taskId);
   const { passed, summary } = await session.runTests(input.command);
@@ -91,28 +95,31 @@ export interface TaskDoneInput {
  * result names a manual compare URL instead of failing the whole call.
  */
 export async function taskDone(repoRoot: string, input: TaskDoneInput) {
-  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.title || !input.body) return fail("title and body are required");
   const client = new GitClient(repoRoot);
   const session = client.openSession(input.taskId);
   await session.push();
-  const { url, opened } = await session.createPullRequest(input.title, input.body, input.base ?? "main");
-  return opened
-    ? { ok: true as const, prUrl: url, opened }
-    : { ok: true as const, prUrl: url, opened, note: "gh could not open the PR automatically; branch is pushed, open the PR manually at prUrl" };
+  const pr = await session.createPullRequest(input.title, input.body, input.base ?? "main");
+  return { ok: true as const, prUrl: pr.url, prState: pr.state, note: pr.state === "manual" ? "branch pushed; open the PR manually at prUrl" : undefined };
 }
 
 export interface TaskCleanupInput {
   taskId: string;
+  force?: boolean;
 }
 
 /** Removes a task's worktree after its pull request has merged. The remote branch is left intact. */
 export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
-  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
-  const session = client.openSession(input.taskId);
-  await session.cleanup();
+  await client.cleanupTask(input.taskId, input.force ?? false);
   return { ok: true as const };
+}
+
+export async function taskStatus(repoRoot: string, input: { taskId: string }) {
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
+  return { ok: true as const, ...(await new GitClient(repoRoot).taskStatus(input.taskId)) };
 }
 
 /**

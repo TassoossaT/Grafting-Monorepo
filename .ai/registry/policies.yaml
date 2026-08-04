@@ -5,13 +5,13 @@
       "id": "multi-agent-coordination-v1",
       "status": "active",
       "source": ".ai/coordination/PROTOCOL.md",
-      "summary": "Single-owner tasks and immutable structured handoffs across providers."
+      "summary": "Worktree-isolated tasks coordinated through Git branches and pull requests."
     },
     {
-      "id": "agent-git-write-prohibition-v1",
+      "id": "agent-git-write-policy-v2",
       "status": "active",
       "source": "docs/adr/ADR-0015-agent-git-write-policy.md",
-      "summary": "AI agents never create or merge commits and never push the default branch; Git inspection, isolated branches, and PR assistance remain available."
+      "summary": "Agents may commit forward only in ia-graft task worktrees; default-branch writes, history rewrites, force pushes, and agent PR merges are prohibited."
     }
   ]
 }
