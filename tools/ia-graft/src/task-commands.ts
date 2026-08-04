@@ -19,12 +19,22 @@ export interface TaskNewInput {
   base?: string;
 }
 
-/** Creates an isolated worktree + branch for a task. No status, no JSON record. */
+/**
+ * Creates an isolated worktree + branch for a task. No status, no JSON record.
+ * Only returns once the worktree has a linked `node_modules` (or the main
+ * checkout genuinely has none to give it) -- a worktree without one silently
+ * breaks tsc/most tests, so this is not best-effort.
+ */
 export async function taskNew(repoRoot: string, input: TaskNewInput) {
   if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
   const client = new GitClient(repoRoot);
   const session = await client.createSession(input.taskId, input.base ?? "main");
-  return { ok: true as const, worktreePath: session.worktreePath, branch: session.branchName };
+  return {
+    ok: true as const,
+    worktreePath: session.worktreePath,
+    branch: session.branchName,
+    nodeModulesLinked: session.nodeModulesLinked,
+  };
 }
 
 export interface TaskCommitInput {
@@ -42,6 +52,25 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   await session.commit(input.message);
   return { ok: true as const };
+}
+
+export interface TaskTestInput {
+  taskId: string;
+  command: string;
+}
+
+/**
+ * Runs a test/check command inside the task's worktree and returns a
+ * compact pass/fail summary instead of raw output -- spend tokens on the
+ * result, not the transcript.
+ */
+export async function taskTest(repoRoot: string, input: TaskTestInput) {
+  if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
+  if (!input.command) return fail("command is required");
+  const client = new GitClient(repoRoot);
+  const session = client.openSession(input.taskId);
+  const { passed, summary } = await session.runTests(input.command);
+  return { ok: true as const, passed, summary };
 }
 
 export interface TaskDoneInput {

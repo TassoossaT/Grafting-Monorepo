@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { isValidTaskId, taskCleanup, taskCommit, taskDone, taskNew } from "./task-commands.ts";
+import { isValidTaskId, taskCleanup, taskCommit, taskDone, taskNew, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -74,6 +74,57 @@ test("taskNew creates a deterministic worktree that taskCleanup removes", async 
   const cleaned = await taskCleanup(root, { taskId: "DEMO-TASK" });
   assert.equal(cleaned.ok, true);
   await assert.rejects(readdir(join(root, ".worktrees", "DEMO-TASK")));
+});
+
+test("taskNew reports nodeModulesLinked: false when the main checkout has no node_modules, without failing", async () => {
+  const root = await makeRepoWithBareRemote();
+  const created = await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.nodeModulesLinked, false);
+});
+
+test("taskNew links every node_modules in the tree (root and nested packages), pnpm-workspace style", async () => {
+  const root = await makeRepoWithBareRemote();
+  await mkdir(join(root, "node_modules", "some-pkg"), { recursive: true });
+  await writeFile(join(root, "node_modules", "some-pkg", "index.js"), "module.exports = 1;\n", "utf8");
+  // A package-local node_modules pnpm would never hoist to the root -- the
+  // scenario a root-only link cannot cover.
+  await mkdir(join(root, "tools", "fake-pkg", "node_modules", "@types"), { recursive: true });
+
+  const created = await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.nodeModulesLinked, true);
+
+  const worktree = join(root, ".worktrees", "DEMO-TASK");
+  const rootLink = await readlink(join(worktree, "node_modules"));
+  assert.equal(rootLink, join(root, "node_modules"));
+  const nestedLink = await readlink(join(worktree, "tools", "fake-pkg", "node_modules"));
+  assert.equal(nestedLink, join(root, "tools", "fake-pkg", "node_modules"));
+});
+
+test("taskTest returns a compact summary rather than raw output, for both a passing and a failing command", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "DEMO-TASK");
+  await writeFile(
+    join(worktree, "fake-pass.mjs"),
+    "console.log('# tests 1');\nconsole.log('# pass 1');\nconsole.log('# fail 0');\n",
+    "utf8",
+  );
+  await writeFile(join(worktree, "fake-fail.mjs"), "process.exit(1);\n", "utf8");
+
+  const passing = await taskTest(root, { taskId: "DEMO-TASK", command: "node fake-pass.mjs" });
+  assert.equal(passing.ok, true);
+  if (!passing.ok) return;
+  assert.equal(passing.passed, true);
+  assert.match(passing.summary, /# pass 1/);
+
+  const failing = await taskTest(root, { taskId: "DEMO-TASK", command: "node fake-fail.mjs" });
+  assert.equal(failing.ok, true);
+  if (!failing.ok) return;
+  assert.equal(failing.passed, false);
 });
 
 test("taskCommit stages and commits inside the task's own worktree", async () => {

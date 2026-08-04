@@ -80,18 +80,32 @@ and the same coordination mechanism: `tools/ia-graft`. Vendor adapters
 (`CLAUDE.md`, `GEMINI.md`, and equivalent files) may only point to canonical
 instructions; they must not restate or override them.
 
+- **Never commit on `master`/`main` directly, no exception for small edits.**
+  Every commit, however small, happens on a task branch and goes through a
+  pull request.
 - **Direct/simple edits** (a typo, a comment, a small non-structural change
-  that doesn't touch a contract/config/policy file): edit the main checkout
-  directly, commit, no worktree ceremony required.
-- **Any other task**: run `ia-graft task new --id <TASK-ID> --title <title>`.
-  This creates an isolated Git worktree and branch for the task — work only
-  inside that worktree, commit directly and often as you make progress.
+  that doesn't touch a contract/config/policy file): still skip the
+  required-reading chain, but still go through
+  `ia-graft task new`/`commit`/`done` below — just with a terser title/body,
+  not a full task declaration.
+- **Any task**: run `ia-graft task new --id <TASK-ID>`. This creates an
+  isolated Git worktree and branch, and links every `node_modules` in the
+  tree from the main checkout into it — work only inside that worktree.
   Isolation between agents comes from separate worktrees/branches, not from
   a file-ownership ledger.
+- Commit as you go with `ia-graft task commit --id <TASK-ID> --message
+  <msg>` (stages and commits inside the worktree) — not raw `git add`/`git
+  commit`, and never in the main checkout.
+- Before opening the PR, run `ia-graft task test --id <TASK-ID> --command
+  <cmd>` — it returns a compact pass/fail summary instead of the raw
+  transcript, so validating a change doesn't cost more tokens than the
+  change itself.
 - When the task is complete, run `ia-graft task done --id <TASK-ID> --title
   <title> --body <body>` to push the branch and open a pull request via
-  `gh`. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>` to
-  remove the worktree.
+  `gh`. If `gh` can't open one (missing/unauthenticated), it still pushes
+  and returns a manual compare URL instead of failing — open that URL
+  yourself. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
+  to remove the worktree.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
   MCPs still requires explicit owner approval — open the PR and wait for
   review, do not merge your own.
@@ -121,14 +135,16 @@ Minimize tokens read and produced; do not fetch more than a task needs.
 
 ## What counts as a direct/simple edit
 
-A change qualifies for the direct-edit path above only if it meets every
+Both paths above go through `ia-graft task new`/`commit`/`done` and a PR —
+this only decides whether the *required-reading* chain and a full
+title/body can be skipped. A change qualifies only if it meets every
 criterion:
 
 - **Limited scope:** touches at most two files, or up to four when every
   touched file is Markdown documentation. This raised cap never applies to
   the protocol/registry/policy/hook/permission/skill/MCP files named in
-  Mandatory rules above — a change to any of those always goes through
-  `ia-graft task new` and a PR, regardless of file count.
+  Mandatory rules above — a change to any of those always gets the full
+  required-reading pass, regardless of file count.
 - **No contract changes:** no public API, data contract (`.fbs`, JSON
   schema), or critical config (`project.json`, `nx.json`, `package.json`,
   `Cargo.toml`, etc.).
@@ -136,8 +152,8 @@ criterion:
 
 Examples: fixing a typo, adding a comment, refactoring one function's
 internals without changing its signature. If a change turns out not to
-qualify once you start, stop, discard uncommitted scope creep, and run
-`ia-graft task new` instead.
+qualify once you start, stop and do the full required-reading pass before
+continuing — you're already on a task branch either way.
 
 ## Before editing
 

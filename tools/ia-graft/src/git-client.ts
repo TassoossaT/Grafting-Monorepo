@@ -15,6 +15,105 @@ export function branchNameForTask(taskId: string): string {
 const execFileAsync = promisify(execFile);
 
 /**
+ * Finds every `node_modules` directory under `dir`, at any depth, without
+ * descending into one once found -- pnpm nests its content-addressable
+ * store (`node_modules/.pnpm/...`) inside each `node_modules` it creates, so
+ * recursing further would only re-discover the same install's own internals,
+ * not another package's independent dependency tree. Skips `.git` and
+ * `.worktrees` (never contains source packages, and `.worktrees` holds other
+ * tasks' own checkouts, not this repo's own package tree).
+ */
+async function findNodeModulesDirs(dir: string, relBase = ''): Promise<string[]> {
+    let entries;
+    try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+        return [];
+    }
+    const results: string[] = [];
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === '.git' || entry.name === '.worktrees') continue;
+        const rel = relBase ? path.join(relBase, entry.name) : entry.name;
+        if (entry.name === 'node_modules') {
+            results.push(rel);
+            continue;
+        }
+        results.push(...(await findNodeModulesDirs(path.join(dir, entry.name), rel)));
+    }
+    return results;
+}
+
+/**
+ * Links every `node_modules` directory in the main checkout into a fresh
+ * task worktree, at the same relative path. `git worktree add` only brings
+ * tracked files -- `node_modules` is gitignored, so every new worktree
+ * starts with none, breaking anything that needs a real dependency tree
+ * (tsc, most tests). A single root-level link is not enough in a pnpm
+ * workspace: pnpm gives each package its own local `node_modules` (symlinks
+ * into the shared root `.pnpm` store), so `tools/ia-graft/node_modules`,
+ * `apps/*\/node_modules`, etc. each need their own link too -- Node's
+ * parent-directory module-resolution walk cannot substitute for a
+ * package-local dependency that pnpm never hoists to the workspace root.
+ * Returns `{ linked: false }` (not an error) when the main checkout itself
+ * has no root `node_modules` yet -- nothing to link, and that is the main
+ * checkout's own problem to fix (`pnpm install`), not this worktree's.
+ */
+async function linkSharedNodeModules(repoPath: string, worktreePath: string): Promise<{ linked: boolean; reason?: string }> {
+    const rootNodeModules = path.join(repoPath, 'node_modules');
+    try {
+        await fs.access(rootNodeModules);
+    } catch {
+        return { linked: false, reason: 'main checkout has no node_modules; run pnpm install there first' };
+    }
+    const relativeDirs = await findNodeModulesDirs(repoPath);
+    for (const rel of relativeDirs) {
+        const target = path.join(worktreePath, rel);
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        await fs.symlink(path.join(repoPath, rel), target, process.platform === 'win32' ? 'junction' : 'dir');
+    }
+    return { linked: true };
+}
+
+/**
+ * Retries a recursive removal a few times with backoff before giving up.
+ * Windows can hold a directory handle open briefly after a process that ran
+ * inside it (tsc, a test runner) exits, surfacing as a transient EBUSY/EPERM
+ * on the very next `fs.rm` rather than a real, permanent failure.
+ */
+async function removeWithRetry(target: string, attempts = 5, delayMs = 300): Promise<void> {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            await fs.rm(target, { recursive: true, force: true });
+            return;
+        } catch (error) {
+            const code = (error as { code?: string }).code;
+            if (attempt === attempts || (code !== 'EBUSY' && code !== 'EPERM')) throw error;
+            await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
+        }
+    }
+}
+
+const TAP_SUMMARY_LINE = /^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)\b/;
+const TAP_FAILURE_LINE = /^not ok\b/;
+
+/**
+ * Reduces test-runner output to what actually matters: for node:test's TAP
+ * output, the failing test lines plus the summary counters; for anything
+ * else (no recognizable TAP summary present), the last 40 lines, on the
+ * assumption the interesting part -- especially a failure -- is at the end.
+ */
+function summarizeTestOutput(output: string): string {
+    const lines = output.split(/\r?\n/).filter((line) => line.length > 0);
+    const summary = lines.filter((line) => TAP_SUMMARY_LINE.test(line));
+    if (summary.length > 0) {
+        const failures = lines.filter((line) => TAP_FAILURE_LINE.test(line));
+        return [...failures, ...summary].join('\n');
+    }
+    return lines.slice(-40).join('\n');
+}
+
+/**
  * Executes a Git command safely without shell interpretation to prevent injection.
  * @param args The command arguments.
  * @param cwd The working directory.
@@ -43,11 +142,13 @@ export class GitWorktreeSession {
     public readonly repoPath: string;
     public readonly worktreePath: string;
     public readonly branchName: string;
+    public readonly nodeModulesLinked: boolean;
 
-    private constructor(repoPath: string, worktreePath: string, branchName: string) {
+    private constructor(repoPath: string, worktreePath: string, branchName: string, nodeModulesLinked: boolean) {
         this.repoPath = repoPath;
         this.worktreePath = worktreePath;
         this.branchName = branchName;
+        this.nodeModulesLinked = nodeModulesLinked;
     }
 
     /**
@@ -124,11 +225,37 @@ export class GitWorktreeSession {
     }
 
     /**
+     * Runs a test/check command inside the worktree and returns a compact
+     * summary instead of raw output -- spending tokens only on pass/fail
+     * evidence, not the full verbose stream. Recognizes node:test's TAP
+     * summary lines and `not ok` failures; falls back to the last 40 lines
+     * of output for any other runner.
+     * @param command The full shell command to run (e.g. a `node --test ...`
+     * or `pnpm test` invocation).
+     */
+    async runTests(command: string): Promise<{ passed: boolean; summary: string }> {
+        const isWin = process.platform === 'win32';
+        const invocation = isWin
+            ? execFileAsync('cmd.exe', ['/d', '/s', '/c', command], { cwd: this.worktreePath })
+            : execFileAsync('/bin/sh', ['-c', command], { cwd: this.worktreePath });
+        try {
+            const { stdout, stderr } = await invocation;
+            return { passed: true, summary: summarizeTestOutput(`${stdout}\n${stderr}`) };
+        } catch (error) {
+            const execError = error as { stdout?: string; stderr?: string; message: string };
+            const output = `${execError.stdout ?? ''}\n${execError.stderr ?? execError.message}`;
+            return { passed: false, summary: summarizeTestOutput(output) };
+        }
+    }
+
+    /**
      * Cleans up the worktree by removing the directory and pruning the git metadata.
      */
     async cleanup(): Promise<void> {
-        // First, remove the worktree directory itself
-        await fs.rm(this.worktreePath, { recursive: true, force: true });
+        // First, remove the worktree directory itself. A process that recently ran inside it
+        // (tsc, a test runner) can leave Windows holding a directory handle open for a moment
+        // after exit, surfacing as a transient EBUSY here -- retry with backoff before giving up.
+        await removeWithRetry(this.worktreePath);
 
         // Then, tell git to prune the worktree metadata using the original repoPath
         await executeGit(['worktree', 'prune'], this.repoPath);
@@ -159,8 +286,15 @@ export class GitWorktreeSession {
         // Create the worktree and the new branch in a single command linked to the remote base
         await executeGit(['worktree', 'add', '-b', branchName, worktreePath, `origin/${baseBranch}`], repoPath);
 
+        // Required, not best-effort: the caller only sees this session as created once the
+        // worktree actually has a usable dependency tree (or the main checkout has none to give it).
+        const { linked, reason } = await linkSharedNodeModules(repoPath, worktreePath);
+        if (!linked && reason !== 'main checkout has no node_modules; run pnpm install there first') {
+            throw new Error(`worktree created but failed to link node_modules: ${reason}`);
+        }
+
         console.log(`Created worktree for branch ${branchName} at ${worktreePath}`);
-        return new GitWorktreeSession(repoPath, worktreePath, branchName);
+        return new GitWorktreeSession(repoPath, worktreePath, branchName, linked);
     }
 
     /**
@@ -171,7 +305,7 @@ export class GitWorktreeSession {
      * @param taskId The task identifier the worktree and branch are derived from.
      */
     static open(repoPath: string, taskId: string): GitWorktreeSession {
-        return new GitWorktreeSession(repoPath, worktreePathForTask(repoPath, taskId), branchNameForTask(taskId));
+        return new GitWorktreeSession(repoPath, worktreePathForTask(repoPath, taskId), branchNameForTask(taskId), true);
     }
 }
 

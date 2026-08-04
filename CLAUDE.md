@@ -13,8 +13,9 @@ PR to finish) — see `AGENTS.md`'s "Task-based work" section. Chat context is
 not a substitute for repository state.
 
 For a genuinely small, direct edit, check `AGENTS.md`'s "What counts as a
-direct/simple edit" first — it skips the required-reading chain and the
-worktree/PR ceremony.
+direct/simple edit" first — it skips the required-reading chain, but still
+goes through a task branch and a PR like everything else; no commit ever
+lands on `master`/`main` directly.
 
 While the project is still in the planning phase:
 
