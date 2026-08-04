@@ -444,8 +444,33 @@ export class GitClient {
                 skipped.push({ id, reason: status.reason });
                 continue;
             }
-            await this.cleanupTask(id, false);
-            cleaned.push(id);
+            try {
+                const gitMarker = path.join(worktreesDir, id, '.git');
+                try {
+                    await fs.access(gitMarker);
+                    await this.cleanupTask(id, false);
+                } catch (error) {
+                    const markerMissing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+                    if (!markerMissing) throw error;
+
+                    // A previous Windows cleanup may have removed the
+                    // worktree's contents before failing to remove its root
+                    // directory because the caller's cwd was still inside it.
+                    // Git then searches upward and falsely reports the main
+                    // checkout's branch. The merged PR is already confirmed,
+                    // so remove this reserved orphan path without asking Git
+                    // to interpret it as a live worktree.
+                    await removeWithRetry(path.join(worktreesDir, id));
+                    await executeGit(['worktree', 'prune'], this.repoPath);
+                    await executeGit(['branch', '-D', branch], this.repoPath).catch(() => undefined);
+                }
+                cleaned.push(id);
+            } catch (error) {
+                skipped.push({
+                    id,
+                    reason: error instanceof Error ? `cleanup failed: ${error.message}` : `cleanup failed: ${String(error)}`,
+                });
+            }
         }
         return { cleaned, skipped };
     }

@@ -85,6 +85,12 @@ async function main(argv: string[]): Promise<void> {
   const [group, subcommand] = argv;
   const root = repoRoot();
 
+  // Commands are intentionally runnable from inside a task worktree. Move the
+  // process itself to the main checkout before a sweep can remove that
+  // worktree; Windows refuses to remove a process's current working directory
+  // and otherwise leaves a partially deleted, unregistered directory behind.
+  process.chdir(root);
+
   try {
     if (group === "guard-check") {
       const input = (readInputFlag(argv) ?? (await readStdin())) as Parameters<typeof runGuardCheck>[1];
