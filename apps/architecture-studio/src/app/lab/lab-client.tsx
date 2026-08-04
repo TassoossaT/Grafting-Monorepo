@@ -1,9 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, StatusBadge, Text } from "@grafting/ui";
+import { Card, GridLayout, PreviewCard, StatusBadge, Text, type GridPanel } from "@grafting/ui";
+import "react-grid-layout/css/styles.css";
+import { readPreviewImage } from "../../lab-preview-storage.ts";
 import type { RegistrySection } from "../../research-registry.ts";
 import { DEMO_LINKS, SEMANTIC_STATUS, findRowByCandidate, inProgressRows, statusLabelFor } from "../../research-registry-ui.ts";
+
+const TRIAL_TILE_WIDTH = 4;
+const TRIAL_TILE_HEIGHT = 9;
+const TRIAL_COLUMNS = 12;
 
 /** The actual testing laboratory: live trials you can go run, plus what's actively in development or review. Full history lives in /registry. */
 export default function LabClient({ sections }: { sections: readonly RegistrySection[] }) {
@@ -13,6 +20,48 @@ export default function LabClient({ sections }: { sections: readonly RegistrySec
     located: findRowByCandidate(sections, candidate),
   }));
   const queue = inProgressRows(sections);
+
+  // localStorage is client-only and trial pages write to it after this page has
+  // already rendered, so previews load post-mount rather than as initial state.
+  const [previewImages, setPreviewImages] = useState<Readonly<Record<string, string>>>({});
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const trial of trials) {
+      const image = readPreviewImage(trial.candidate);
+      if (image !== undefined) next[trial.candidate] = image;
+    }
+    setPreviewImages(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `trials` is rebuilt every render from a stable DEMO_LINKS map; keying off it would loop.
+  }, []);
+
+  const trialPanels: readonly GridPanel[] = trials.map((trial, index) => ({
+    placement: {
+      id: trial.candidate,
+      x: (index % (TRIAL_COLUMNS / TRIAL_TILE_WIDTH)) * TRIAL_TILE_WIDTH,
+      y: Math.floor(index / (TRIAL_COLUMNS / TRIAL_TILE_WIDTH)) * TRIAL_TILE_HEIGHT,
+      width: TRIAL_TILE_WIDTH,
+      height: TRIAL_TILE_HEIGHT,
+    },
+    content: (
+      <Link href={trial.href} style={{ display: "block", height: "100%", textDecoration: "none", color: "inherit" }}>
+        <PreviewCard
+          ariaLabel={trial.candidate}
+          title={trial.candidate}
+          description={trial.located?.row.note}
+          cover={
+            previewImages[trial.candidate] === undefined
+              ? undefined
+              : { src: previewImages[trial.candidate], alt: `Captured preview for ${trial.candidate}` }
+          }
+          status={trial.located !== undefined ? SEMANTIC_STATUS[trial.located.row.statusId] : undefined}
+          statusLabel={trial.located !== undefined ? statusLabelFor(trial.located.row) : undefined}
+          interactive
+          fillContainer
+          actions={<Text content="Open trial →" tone="accent" />}
+        />
+      </Link>
+    ),
+  }));
 
   return (
     <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 20 }}>
@@ -26,26 +75,8 @@ export default function LabClient({ sections }: { sections: readonly RegistrySec
 
       <section>
         <Text content="Active trials" strong />
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
-          {trials.map((trial) => (
-            <div key={trial.href} style={{ width: 320 }}>
-              <Card ariaLabel={trial.candidate} interactive>
-                <Link href={trial.href} style={{ display: "block", textDecoration: "none", color: "inherit" }}>
-                  <Text content={trial.candidate} strong />
-                  {trial.located !== undefined && (
-                    <>
-                      <StatusBadge
-                        status={SEMANTIC_STATUS[trial.located.row.statusId]}
-                        label={statusLabelFor(trial.located.row)}
-                      />
-                      <Text content={trial.located.row.note} tone="muted" />
-                    </>
-                  )}
-                  <Text content="Open trial →" tone="accent" />
-                </Link>
-              </Card>
-            </div>
-          ))}
+        <div style={{ marginTop: 8 }}>
+          <GridLayout panels={trialPanels} ariaLabel="Active lab trials" rowHeight={32} draggable resizable />
         </div>
       </section>
 
