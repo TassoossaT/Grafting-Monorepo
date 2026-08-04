@@ -8,7 +8,14 @@ allowBuilds:
   # Keep dependency scripts denied unless separately reviewed and approved.
   esbuild: false
   nx: true
-  sharp: set this to true or false
+  # Transitive via next (apps/architecture-studio) for its Image Optimization
+  # feature. sharp's install script only compiles/downloads a prebuilt
+  # libvips binary for image processing -- no network access beyond that
+  # fetch, maintained by libvips' own author (lovell), and this exact
+  # unresolved placeholder ("set this to true or false") was leaving
+  # `pnpm install --frozen-lockfile` failing in CI with
+  # ERR_PNPM_IGNORED_BUILDS instead of actually deciding anything.
+  sharp: true
 overrides:
   # SECURITY-001: nx's own dependency tree still resolves these two
   # transitively; nx 23.1.0 is the latest stable release (23.2.0 only
