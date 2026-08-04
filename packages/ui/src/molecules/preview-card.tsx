@@ -104,6 +104,7 @@ export function PreviewCard(props: PreviewCardProps): ReactElement {
       selected={props.selected}
       selectedColor={props.selectedColor}
     >
+      <Text content={props.title} strong />
       {props.cover === undefined ? null : (
         <img
           alt={props.cover.alt}
@@ -112,7 +113,6 @@ export function PreviewCard(props: PreviewCardProps): ReactElement {
         />
       )}
       <div style={{ padding: BODY_PADDING }}>
-        <Text content={props.title} strong />
         {props.description === undefined ? null : <Text content={props.description} tone="muted" />}
         {!hasStatus && tags.length === 0 ? null : (
           <Flex gap={4} style={{ flexWrap: "wrap", marginTop: 6, minWidth: 0 }}>
