@@ -15,6 +15,21 @@ export function branchNameForTask(taskId: string): string {
 const execFileAsync = promisify(execFile);
 
 /**
+ * A long-lived process's inherited PATH predates any install that happened
+ * after it started -- e.g. `gh` installed via winget mid-session. Appending
+ * its well-known default install directory as a fallback means a fresh
+ * install works immediately, without needing to restart the process that's
+ * calling this CLI, while still preferring whatever PATH already resolves.
+ */
+function envWithGhFallbackPath(): NodeJS.ProcessEnv {
+    if (process.platform !== 'win32') return process.env;
+    const fallbackDir = 'C:\\Program Files\\GitHub CLI';
+    const currentPath = process.env.PATH ?? process.env.Path ?? '';
+    if (currentPath.includes(fallbackDir)) return process.env;
+    return { ...process.env, PATH: `${currentPath};${fallbackDir}` };
+}
+
+/**
  * Finds every `node_modules` directory under `dir`, at any depth, without
  * descending into one once found -- pnpm nests its content-addressable
  * store (`node_modules/.pnpm/...`) inside each `node_modules` it creates, so
@@ -204,7 +219,7 @@ export class GitWorktreeSession {
             const { stdout } = await execFileAsync(
                 'gh',
                 ['pr', 'create', '--title', title, '--body', body, '--base', baseBranch, '--head', this.branchName],
-                { cwd: this.worktreePath },
+                { cwd: this.worktreePath, env: envWithGhFallbackPath() },
             );
             return { url: stdout.trim(), opened: true };
         } catch {
