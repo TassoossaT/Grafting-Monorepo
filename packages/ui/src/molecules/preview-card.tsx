@@ -104,25 +104,41 @@ export function PreviewCard(props: PreviewCardProps): ReactElement {
       selected={props.selected}
       selectedColor={props.selectedColor}
     >
-      <Text content={props.title} strong />
-      {props.cover === undefined ? null : (
-        <img
-          alt={props.cover.alt}
-          src={props.cover.src}
-          style={{ aspectRatio: "16 / 9", display: "block", objectFit: "cover", width: "100%" }}
-        />
-      )}
-      <div style={{ padding: BODY_PADDING }}>
-        {props.description === undefined ? null : <Text content={props.description} tone="muted" />}
-        {!hasStatus && tags.length === 0 ? null : (
-          <Flex gap={4} style={{ flexWrap: "wrap", marginTop: 6, minWidth: 0 }}>
-            {hasStatus ? <StatusBadge label={props.statusLabel} status={props.status} /> : null}
-            {tags.map((tag) => (
-              <StatusBadge key={tag} label={tag} status="neutral" />
-            ))}
-          </Flex>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: props.fillContainer ? "100%" : undefined,
+          minHeight: 0,
+        }}
+      >
+        {props.cover === undefined ? null : (
+          <img
+            alt={props.cover.alt}
+            src={props.cover.src}
+            style={{
+              aspectRatio: props.fillContainer ? undefined : "16 / 9",
+              display: "block",
+              flex: props.fillContainer ? "1 1 0" : undefined,
+              minHeight: 0,
+              objectFit: "cover",
+              width: "100%",
+            }}
+          />
         )}
-        {props.actions === undefined ? null : <div style={{ marginTop: 8 }}>{props.actions}</div>}
+        <div style={{ flex: "0 0 auto", padding: BODY_PADDING }}>
+          <Text content={props.title} strong />
+          {props.description === undefined ? null : <Text content={props.description} tone="muted" />}
+          {!hasStatus && tags.length === 0 ? null : (
+            <Flex gap={4} style={{ flexWrap: "wrap", marginTop: 6, minWidth: 0 }}>
+              {hasStatus ? <StatusBadge label={props.statusLabel} status={props.status} /> : null}
+              {tags.map((tag) => (
+                <StatusBadge key={tag} label={tag} status="neutral" />
+              ))}
+            </Flex>
+          )}
+          {props.actions === undefined ? null : <div style={{ marginTop: 8 }}>{props.actions}</div>}
+        </div>
       </div>
     </Card>
   );
