@@ -3,7 +3,7 @@
   "root": "apps/architecture-studio",
   "projectType": "application",
   "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
-  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "three-canvas", "ui", "x6-canvas"],
+  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "terrain-quantization", "three-canvas", "ui", "x6-canvas"],
   "metadata": {
     "graphIr": {
       "id": "architecture-studio",

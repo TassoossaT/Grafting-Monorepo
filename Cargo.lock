@@ -371,6 +371,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-vtt-terrain-quantization"
+version = "0.0.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "hashbag"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
