@@ -21,7 +21,7 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
-      "dependsOn": ["three-canvas:build", "ui:build", "x6-canvas:build"],
+      "dependsOn": ["three-canvas:watch", "ui:watch", "x6-canvas:watch"],
       "cache": false
     },
     "build": {

@@ -13,6 +13,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && node --test tests/*.test.mjs",
     "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."

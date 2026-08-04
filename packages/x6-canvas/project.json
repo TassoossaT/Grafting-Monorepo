@@ -29,6 +29,12 @@
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/dist"]
     },
+    "watch": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/x6-canvas watch" },
+      "continuous": true,
+      "cache": false
+    },
     "test": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/x6-canvas test" },

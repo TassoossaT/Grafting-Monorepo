@@ -34,6 +34,12 @@
         "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
       ]
     },
+    "watch": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ui watch" },
+      "continuous": true,
+      "cache": false
+    },
     "test": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/ui test" },
