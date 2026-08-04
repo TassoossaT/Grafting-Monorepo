@@ -24,10 +24,15 @@ export interface TaskNewInput {
  * Only returns once the worktree has a linked `node_modules` (or the main
  * checkout genuinely has none to give it) -- a worktree without one silently
  * breaks tsc/most tests, so this is not best-effort.
+ *
+ * Sweeps merged-PR worktrees first, silently and best-effort -- nobody
+ * calling this needs to know that happens, and a sweep failure (e.g. `gh`
+ * unreachable) never blocks creating the task that was actually asked for.
  */
 export async function taskNew(repoRoot: string, input: TaskNewInput) {
   if (!isValidTaskId(input.taskId)) return fail(`invalid task id: ${input.taskId}`);
   const client = new GitClient(repoRoot);
+  await client.sweepMergedWorktrees().catch(() => undefined);
   const session = await client.createSession(input.taskId, input.base ?? "main");
   return {
     ok: true as const,

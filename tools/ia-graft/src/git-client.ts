@@ -206,9 +206,12 @@ export class GitWorktreeSession {
 
     /**
      * Opens a pull request for this session's branch against baseBranch, via the `gh` CLI.
-     * Falls back to a manual compare-URL instead of throwing when `gh` is missing or not
-     * authenticated, so a caller without `gh` set up still gets a usable next step rather
-     * than a stack trace.
+     * Calling `task done` again on a branch that already has an open PR (e.g. pushing
+     * follow-up commits) is expected, not an error -- `gh pr create` itself fails with
+     * "already exists" in that case, so this looks up and returns the existing PR's own
+     * URL instead of falling back to a misleading "couldn't open one" compare URL.
+     * Falls back to a manual compare-URL only when `gh` is genuinely missing/unauthenticated,
+     * so a caller without `gh` set up still gets a usable next step rather than a stack trace.
      * @param title The PR title.
      * @param body The PR body/description.
      * @param baseBranch The branch to open the PR against.
@@ -223,7 +226,30 @@ export class GitWorktreeSession {
             );
             return { url: stdout.trim(), opened: true };
         } catch {
+            const existing = await this.existingPullRequestUrl();
+            if (existing) return { url: existing, opened: true };
             return { url: await this.compareUrl(baseBranch), opened: false };
+        }
+    }
+
+    /**
+     * Looks up this session's branch's own already-open PR, if one exists --
+     * used when `gh pr create` fails because there already is one (a normal
+     * outcome of pushing follow-up commits to an in-review task), not because
+     * `gh` is unavailable. Returns `null` for any other reason (no such PR,
+     * `gh` unreachable), which the caller treats the same as "couldn't open one."
+     */
+    private async existingPullRequestUrl(): Promise<string | null> {
+        try {
+            const { stdout } = await execFileAsync(
+                'gh',
+                ['pr', 'view', this.branchName, '--json', 'url'],
+                { cwd: this.worktreePath, env: envWithGhFallbackPath() },
+            );
+            const { url } = JSON.parse(stdout) as { url?: string };
+            return url ?? null;
+        } catch {
+            return null;
         }
     }
 

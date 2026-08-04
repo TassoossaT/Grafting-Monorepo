@@ -88,15 +88,13 @@ instructions; they must not restate or override them.
   required-reading chain, but still go through
   `ia-graft task new`/`commit`/`done` below — just with a terser title/body,
   not a full task declaration.
-- **Before starting anything**, run `ia-graft task sweep` — it cleans up any
-  worktree whose PR already merged since your last session, so worktrees
-  don't keep accumulating. It only acts on what `gh` confirms as merged;
-  anything it can't confirm is left alone.
 - **Any task**: run `ia-graft task new --id <TASK-ID>`. This creates an
   isolated Git worktree and branch, and links every `node_modules` in the
   tree from the main checkout into it — work only inside that worktree.
   Isolation between agents comes from separate worktrees/branches, not from
-  a file-ownership ledger.
+  a file-ownership ledger. It also sweeps any already-merged worktree out of
+  `.worktrees/` first, silently — nothing to invoke or remember, it's just
+  what `task new` does.
 - Commit as you go with `ia-graft task commit --id <TASK-ID> --message
   <msg>` (stages and commits inside the worktree) — not raw `git add`/`git
   commit`, and never in the main checkout.

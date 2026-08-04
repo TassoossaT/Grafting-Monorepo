@@ -76,6 +76,20 @@ test("taskNew creates a deterministic worktree that taskCleanup removes", async 
   await assert.rejects(readdir(join(root, ".worktrees", "DEMO-TASK")));
 });
 
+test("taskNew sweeps first, silently, without disturbing an unrelated worktree it can't confirm as merged", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "EARLIER-TASK", base: "main" });
+
+  const created = await taskNew(root, { taskId: "NEWER-TASK", base: "main" });
+  assert.equal(created.ok, true);
+
+  // gh has no real GitHub repo to check against here, so the sweep taskNew
+  // ran internally could not confirm anything as merged -- both worktrees
+  // must still be there.
+  const entries = (await readdir(join(root, ".worktrees"))).sort();
+  assert.deepEqual(entries, ["EARLIER-TASK", "NEWER-TASK"]);
+});
+
 test("taskNew reports nodeModulesLinked: false when the main checkout has no node_modules, without failing", async () => {
   const root = await makeRepoWithBareRemote();
   const created = await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
