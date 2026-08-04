@@ -1,12 +1,33 @@
 #!/usr/bin/env node
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCleanup, taskCommit, taskDone, taskNew } from "./task-commands.ts";
+import { taskCleanup, taskCommit, taskDone, taskNew, taskTest } from "./task-commands.ts";
 
+/**
+ * Resolves the MAIN repository root, never a task worktree's own root, even
+ * when this exact script is invoked from inside a task worktree (every
+ * worktree has its own full copy of this file, and running it from there is
+ * the natural thing an agent already `cd`ed into its task worktree would
+ * do). `--git-common-dir` is the one thing every worktree and the main
+ * checkout share -- unlike `--show-toplevel`, which a worktree reports as
+ * itself. Falls back to script-relative resolution if git is unavailable.
+ * (Duplicated from the not-yet-merged IA-GRAFT-COMMIT-AND-PR-FALLBACK
+ * branch; expect a trivial merge conflict, same content, whichever of the
+ * two branches merges second.)
+ */
 function repoRoot(): string {
-  // tools/ia-graft/src/bin.ts -> repo root is three levels up.
-  return resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+  const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
+  try {
+    const commonDir = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: scriptDir,
+      encoding: "utf8",
+    }).trim();
+    return resolve(scriptDir, commonDir, "..");
+  } catch {
+    return resolve(scriptDir, "../../..");
+  }
 }
 
 async function readStdin(): Promise<unknown> {
@@ -47,13 +68,14 @@ async function main(argv: string[]): Promise<void> {
       const input = readInputFlag(argv) ?? (await readStdin());
       if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
       if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
+      if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
       if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
       if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
     }
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|commit|done|cleanup>  (JSON input on stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup>  (JSON input on stdin)`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
