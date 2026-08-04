@@ -1,7 +1,7 @@
 "use client";
 
 // Storybook is a real, separate process (its own Vite dev server, started
-// via `pnpm nx run architecture-studio:storybook`) -- Next.js cannot host
+// via `nx run architecture-studio:storybook`) -- Next.js cannot host
 // its bundler/dev-server logic directly. This embeds it via iframe so
 // browsing stays inside one Next.js-served tab/nav, rather than opening a
 // separate browser tab/window.

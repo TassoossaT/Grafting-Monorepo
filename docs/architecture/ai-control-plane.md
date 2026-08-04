@@ -86,7 +86,7 @@ They must adapt, not contradict, `AGENTS.md`.
 The graph will be generated on demand or in CI:
 
 ```bash
-pnpm nx graph --file=docs/generated/project-graph.json
+nx graph --file=docs/generated/project-graph.json
 ```
 
 This file is:

@@ -95,16 +95,11 @@ test("scaffoldCrateFiles produces a real crate: correct content, cargo check pas
   // The actual "and graph" half of G-006's real acceptance criterion
   // ("valid crate and graph") -- proven, not assumed. Confirmed
   // empirically before writing this test that Nx's default project
-  // discovery finds a scratch project.json placed here. CI=true is
-  // required here (confirmed empirically): without an inherited TTY,
-  // `pnpm exec`'s own dependency-status check aborts asking to purge
-  // node_modules interactively -- pnpm's own error message names this
-  // exact env var as the fix.
-  const nxProjectsRaw = execFileSync("pnpm", ["exec", "nx", "show", "projects", "--json"], {
+  // discovery finds a scratch project.json placed here.
+  const nxProjectsRaw = execFileSync("nx", ["show", "projects", "--json"], {
     cwd: root,
     encoding: "utf8",
     shell: true,
-    env: { ...process.env, CI: "true" },
   });
   const nxProjects = JSON.parse(nxProjectsRaw.trim().split("\n").pop());
   assert.ok(nxProjects.includes(nxProjectName), `expected Nx to discover ${nxProjectName}, got: ${nxProjectsRaw}`);

@@ -32,4 +32,4 @@ Deliberately not done, and why:
 - `check` -- `cargo check -p grafting-compute-cpu`
 - `test` -- `cargo test -p grafting-compute-cpu`
 
-Run via Nx: `pnpm nx run engine-compute-cpu:test`.
+Run via Nx: `nx run engine-compute-cpu:test`.

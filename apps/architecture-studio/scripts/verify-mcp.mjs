@@ -2,7 +2,7 @@
 // to the app's own running /api/mcp Route Handler using the MCP SDK's real
 // Client + StreamableHTTPClientTransport (not a mock), and calls the one
 // real tool it exposes. Requires the dev server to already be running
-// (`pnpm nx run architecture-studio:dev`).
+// (`nx run architecture-studio:dev`).
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 

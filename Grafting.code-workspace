@@ -33,7 +33,7 @@
     // Noise shared across every folder above -- build outputs,
     // toolchain caches, and generated code (master source S10.3:
     // generated code is not the source of truth, regenerate on demand
-    // via `pnpm exec nx run engine-domain-core:generate`). Hiding
+    // via `nx run engine-domain-core:generate`). Hiding
     // libs/packages/dotnet/python *from the root folder specifically*
     // (so they don't show up twice) is a separate, folder-scoped rule
     // in .vscode/settings.json -- workspace-level files.exclude here

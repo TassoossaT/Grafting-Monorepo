@@ -732,12 +732,11 @@ would wire into CI.
   real `cargo check` inside it (after appending a local, test-only empty
   `[workspace]` table -- confirmed empirically that Cargo otherwise
   refuses to check a crate nested inside the real workspace tree that
-  isn't a declared member), run `pnpm exec nx show projects --json` and
+  isn't a declared member), run `nx show projects --json` and
   assert the scratch project is actually discovered, then delete it --
-  confirmed absent afterward via `git status --short`. `pnpm exec`
-  itself needed `CI=true` in the test's own environment (confirmed
-  empirically: without an inherited TTY it aborts asking to
-  interactively purge `node_modules`, per pnpm's own error message).
+  confirmed absent afterward via `git status --short`. The test invokes
+  the global `nx` command directly instead of routing Nx through a package
+  manager.
 - `tools/scripts/README.md` (new) documents every script in the
   directory, including Codex's Graph IR/coordination ones, for
   discoverability as the script list grows.

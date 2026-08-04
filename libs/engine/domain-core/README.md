@@ -64,5 +64,5 @@ Real content still open, and why:
   `tests/flatbuffers_round_trip.rs` (C-005), `tests/flatbuffers_evolution.rs`
   (C-006)
 
-Run via Nx: `pnpm nx run engine-domain-core:check` /
-`pnpm nx run engine-domain-core:test`.
+Run via Nx: `nx run engine-domain-core:check` /
+`nx run engine-domain-core:test`.

@@ -44,7 +44,7 @@ rejected, not truncated or panicking (see
 ## Regenerating
 
 ```bash
-pnpm exec nx run engine-domain-core:generate
+nx run engine-domain-core:generate
 ```
 
 Writes Rust into `../src/generated/` (gitignored, wired via

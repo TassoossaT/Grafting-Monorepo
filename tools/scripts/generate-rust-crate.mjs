@@ -80,7 +80,7 @@ no real logic yet. Fill in this README once real content lands.
 - \`check\` -- \`cargo check -p ${packageName}\`
 - \`test\` -- \`cargo test -p ${packageName}\`
 
-Run via Nx: \`pnpm exec nx run ${name}:check\` / \`pnpm exec nx run ${name}:test\`.
+Run via Nx: \`nx run ${name}:check\` / \`nx run ${name}:test\`.
 `;
 
   const agents = `# AGENTS.md -- \`${packageName}\`

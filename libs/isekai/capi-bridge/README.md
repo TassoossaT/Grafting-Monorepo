@@ -83,4 +83,4 @@ Deliberately not done, and why:
   `target/release/grafting_isekai_capi.dll`, consumed by
   `dotnet/Grafting.Isekai.Interop`)
 
-Run via Nx: `pnpm nx run isekai-capi-bridge:test`.
+Run via Nx: `nx run isekai-capi-bridge:test`.
