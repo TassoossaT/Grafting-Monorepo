@@ -850,8 +850,8 @@ definition -- build ID, target, protocol/schema versions, features,
 numeric configuration, and RNG algorithm are all supposed to be fixed
 per build. A real determinism manifest covering all six axes doesn't
 exist anywhere in this repo yet. This is a known, recorded gap (see
-`CURRENT_PLANNING_STATE.md`), not something this snapshot format
-claims to solve.
+`docs/history/PLANNING_LOG.md`'s Epic C entry), not something this
+snapshot format claims to solve.
 
 Round-trip is proven with `#[derive(Clone, PartialEq)]`, not a
 serialization crate: master source S10.1 explicitly names Snapshot for
