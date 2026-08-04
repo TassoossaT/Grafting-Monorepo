@@ -115,12 +115,15 @@ only when a real feature of the first product (VTT) requires it.
 > **Footnote (2026-08-04, owner direction in conversation, not a re-vote on
 > this ADR's original domain map):** a new capability not covered by the
 > 2026-07-26 table above -- procedural terrain/heightmap generation
-> (`generation-wasm`, `terrain-quantization`) -- was initially placed under a
+> (`generation-wasm`, `discretize`) -- was initially placed under a
 > product-scoped `libs/vtt/` directory, then reclassified as a **generic
 > domain** under `libs/domains/procgen`, matching this ADR's own boundary
 > rule ("a capability is born in `libs/domains`... whenever more than one
-> product needs it, or it is reasonable to foresee that it will"). See the
-> updated domain-map table in `GRAFTING_MASTER_SOURCE.md` §4.4 for the
+> product needs it, or it is reasonable to foresee that it will"). The
+> second crate was also renamed from `terrain-quantization` to `discretize`
+> (owner direction, 2026-08-04), since it has no concept of terrain -- it
+> bins any continuous `[-1.0, 1.0]` float array into N discrete levels. See
+> the updated domain-map table in `GRAFTING_MASTER_SOURCE.md` §4.4 for the
 > current entry; this ADR's original table above is left as the historical
 > record of the 2026-07-26 decision, not rewritten.
 

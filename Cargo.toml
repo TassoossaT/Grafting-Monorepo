@@ -8,6 +8,6 @@ members = [
     "libs/isekai/capi-bridge",
     "libs/isekai/wasm-bridge",
     "libs/domains/procgen/generation-wasm",
-    "libs/domains/procgen/terrain-quantization",
+    "libs/domains/procgen/discretize",
     "tools/rust-api-docgen",
 ]

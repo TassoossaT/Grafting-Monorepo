@@ -1,13 +1,13 @@
 /// <reference lib="webworker" />
 
 // Dedicated Worker (DEC-015: Wasm/compute runs off the main thread). Runs
-// the generation-wasm heightmap seed and the terrain-quantization crate in
+// the generation-wasm heightmap seed and the generic discretize crate in
 // sequence, both as normal workspace dependencies (DEC-055/ADR-0017), and
 // posts back both the continuous and quantized arrays so the client can
 // compare them side by side.
 
 import initGeneration, { generate_heightmap } from "@grafting/procgen-generation-wasm";
-import initQuantization, { quantize_heightmap } from "@grafting/procgen-terrain-quantization";
+import initQuantization, { discretize } from "@grafting/procgen-discretize";
 
 export interface QuantizationWorkerRequest {
   readonly type: "generate";
@@ -40,7 +40,7 @@ ctx.onmessage = async (event: MessageEvent<QuantizationWorkerRequest>) => {
     await wasmReady;
     const { width, height, seed, scale, levels } = event.data;
     const continuous = generate_heightmap(width, height, seed, scale);
-    const quantized = quantize_heightmap(continuous, levels);
+    const quantized = discretize(continuous, levels);
     const response: QuantizationWorkerResponse = { type: "result", width, height, levels, continuous, quantized };
     ctx.postMessage(response, [continuous.buffer, quantized.buffer]);
   } catch (error) {
