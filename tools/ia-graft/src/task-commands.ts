@@ -109,3 +109,15 @@ export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
   await session.cleanup();
   return { ok: true as const };
 }
+
+/**
+ * Sweeps every worktree under `.worktrees/`, cleans up (worktree + local
+ * branch) the ones whose PR is already merged, and leaves everything else
+ * untouched. Worktrees stop accumulating without anyone having to remember
+ * to run `task cleanup` by hand after every merge.
+ */
+export async function taskSweep(repoRoot: string) {
+  const client = new GitClient(repoRoot);
+  const { cleaned, skipped } = await client.sweepMergedWorktrees();
+  return { ok: true as const, cleaned, skipped };
+}

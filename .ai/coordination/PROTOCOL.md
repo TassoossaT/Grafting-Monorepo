@@ -52,9 +52,20 @@ ADR-per-task.
 - `task cleanup --id <TASK-ID>` — after the PR has merged, removes the
   worktree directory (retrying briefly on a transient Windows file-lock) and
   prunes Git metadata. The remote branch is left intact deliberately.
+- `task sweep` — checks every worktree under `.worktrees/` against `gh` and
+  cleans up (worktree + local branch) whichever ones already have a merged
+  PR, so worktrees stop accumulating without anyone running `task cleanup`
+  by hand after every merge. Anything `gh` can't confirm as merged is left
+  alone and reported as skipped — it never guesses from local branch
+  topology alone (a brand-new, not-yet-committed-to branch is trivially "an
+  ancestor" of anything the base branch merges later too, so that check
+  can't tell "merged" apart from "never touched"). Run it at the start of a
+  session, or whenever the worktree list is getting cluttered.
 
 ## Starting work
 
+0. `ia-graft task sweep` first, to clean up any worktree whose PR merged
+   since your last session.
 1. Decide whether the change is a direct/simple edit (see `AGENTS.md`'s "What
    counts as a direct/simple edit") or a full task — either way, it goes
    through a task branch and a PR; only the ceremony differs (a direct/simple

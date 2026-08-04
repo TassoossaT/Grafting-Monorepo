@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCleanup, taskCommit, taskDone, taskNew, taskTest } from "./task-commands.ts";
+import { taskCleanup, taskCommit, taskDone, taskNew, taskSweep, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -13,9 +13,6 @@ import { taskCleanup, taskCommit, taskDone, taskNew, taskTest } from "./task-com
  * do). `--git-common-dir` is the one thing every worktree and the main
  * checkout share -- unlike `--show-toplevel`, which a worktree reports as
  * itself. Falls back to script-relative resolution if git is unavailable.
- * (Duplicated from the not-yet-merged IA-GRAFT-COMMIT-AND-PR-FALLBACK
- * branch; expect a trivial merge conflict, same content, whichever of the
- * two branches merges second.)
  */
 function repoRoot(): string {
   const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
@@ -71,11 +68,12 @@ async function main(argv: string[]): Promise<void> {
       if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
       if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
       if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
+      if (subcommand === "sweep") printAndExit(await taskSweep(root));
     }
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup>  (JSON input on stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup|sweep>  (JSON input on stdin)`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, readlink, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { isValidTaskId, taskCleanup, taskCommit, taskDone, taskNew, taskTest } from "./task-commands.ts";
+import { isValidTaskId, taskCleanup, taskCommit, taskDone, taskNew, taskSweep, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -140,6 +140,51 @@ test("taskCommit stages and commits inside the task's own worktree", async () =>
   assert.match(log, /add note/);
   const status = execFileSync("git", ["status", "--short"], { cwd: worktree }).toString();
   assert.equal(status.trim(), "");
+});
+
+test("taskSweep reports empty results when there is no .worktrees directory yet", async () => {
+  const root = await makeRoot();
+  const result = await taskSweep(root);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.cleaned, []);
+  assert.deepEqual(result.skipped, []);
+});
+
+test("taskSweep never deletes anything when it cannot reach gh to confirm a real merge -- not even a branch that is a trivial ancestor of the base", async () => {
+  // A fake bare remote has no real GitHub repo behind it, so `gh pr list`
+  // always fails here -- this exercises the "can't confirm, so don't touch
+  // it" safety path deliberately, not a stand-in for a real merge check.
+  // It also proves the specific false-positive a local ancestry check alone
+  // would have produced: fast-forwarding the fake remote's own base branch
+  // to the "merged" task's tip makes the *other*, untouched task branch a
+  // trivial ancestor of that same base too (it still points at their shared
+  // root commit) -- ancestry alone cannot tell "merged" apart from "never
+  // touched," which is exactly why there is no such fallback anymore.
+  const root = await makeRoot();
+  execFileSync("git", ["init", "-b", "master"], { cwd: root });
+  execFileSync("git", ["commit", "--allow-empty", "-m", "root"], { cwd: root });
+  const cloneRemote = await mkdtemp(join(tmpdir(), "ia-graft-remote-"));
+  roots.push(cloneRemote);
+  execFileSync("git", ["clone", "--bare", root, join(cloneRemote, "origin.git")], { cwd: root });
+  execFileSync("git", ["remote", "add", "origin", join(cloneRemote, "origin.git")], { cwd: root });
+  execFileSync("git", ["fetch", "origin"], { cwd: root });
+
+  await taskNew(root, { taskId: "NOT-MERGED", base: "master" });
+  await taskNew(root, { taskId: "ALREADY-MERGED", base: "master" });
+  const mergedWorktree = join(root, ".worktrees", "ALREADY-MERGED");
+  await writeFile(join(mergedWorktree, "note.txt"), "hello\n", "utf8");
+  await taskCommit(root, { taskId: "ALREADY-MERGED", message: "add note" });
+  execFileSync("git", ["push", "origin", "task/ALREADY-MERGED:master"], { cwd: mergedWorktree });
+
+  const result = await taskSweep(root);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.cleaned, []);
+  assert.equal(result.skipped.length, 2);
+
+  await readdir(join(root, ".worktrees", "ALREADY-MERGED"));
+  await readdir(join(root, ".worktrees", "NOT-MERGED"));
 });
 
 test("taskDone pushes and falls back to a manual compare URL when gh cannot open a PR", async () => {
