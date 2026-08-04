@@ -28,6 +28,31 @@ jobs:
         # stable Rust toolchain and installation remains a CI setup effect.
         run: rustup toolchain install "$(cat tools/rust-public-api-toolchain.txt)" --profile minimal
 
+      - name: Install pinned flatc (C-005, master source S10.3)
+        # Rust/TS use this primary pin (tools/flatc-version.txt); C#
+        # uses a second, older, separately-pinned flatc instead (see
+        # tools/scripts/get-flatc-csharp.ps1) -- irrelevant here, this
+        # job doesn't build the C# side. Asset name verified against the
+        # real google/flatbuffers GitHub release, not assumed. Must run
+        # before "Install Node dependencies": libs/isekai/wasm-bridge's own
+        # `postinstall` (triggered by that step) compiles grafting-domain-core,
+        # which needs this generated code to exist already -- it doesn't
+        # go through Nx's own `dependsOn` codegen chain, since a plain
+        # `pnpm install` isn't an `nx run` invocation.
+        run: |
+          FLATC_VERSION=$(cat tools/flatc-version.txt)
+          curl -fsSL -o /tmp/flatc.zip "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.g++-13.zip"
+          unzip -o /tmp/flatc.zip -d /tmp/flatc
+          chmod +x /tmp/flatc/flatc
+          sudo mv /tmp/flatc/flatc /usr/local/bin/flatc
+          flatc --version
+
+      - name: Generate FlatBuffers Rust code (C-005/C-006)
+        # Only the Rust output is needed here; TS/C# generation isn't
+        # exercised by this job (no Windows/.NET or Node-typecheck CI job
+        # exists yet -- B-010, a separate, already-tracked gap).
+        run: flatc --rust -o libs/engine/domain-core/src/generated libs/engine/domain-core/contracts/command.fbs libs/engine/domain-core/contracts/domain_event.fbs libs/engine/domain-core/contracts/snapshot.fbs
+
       - name: Install pinned wasm-pack (DEC-055/ADR-0017)
         # libs/isekai/wasm-bridge and libs/vtt/generation-wasm each run
         # `wasm-pack build` from their own package.json `postinstall` --
@@ -50,29 +75,6 @@ jobs:
 
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install pinned flatc (C-005, master source S10.3)
-        # Rust/TS use this primary pin (tools/flatc-version.txt); C#
-        # uses a second, older, separately-pinned flatc instead (see
-        # tools/scripts/get-flatc-csharp.ps1) -- irrelevant here, this
-        # job doesn't build the C# side. Asset name verified against the
-        # real google/flatbuffers GitHub release, not assumed.
-        run: |
-          FLATC_VERSION=$(cat tools/flatc-version.txt)
-          curl -fsSL -o /tmp/flatc.zip "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.g++-13.zip"
-          unzip -o /tmp/flatc.zip -d /tmp/flatc
-          chmod +x /tmp/flatc/flatc
-          sudo mv /tmp/flatc/flatc /usr/local/bin/flatc
-          flatc --version
-
-      - name: Generate FlatBuffers Rust code (C-005/C-006)
-        # A bare `cargo test --workspace` below bypasses Nx's own
-        # `dependsOn` codegen chain entirely (that only fires through an
-        # `nx run` invocation) -- generate explicitly first. Only the
-        # Rust output is needed here; TS/C# generation isn't exercised
-        # by this job (no Windows/.NET or Node-typecheck CI job exists
-        # yet -- B-010, a separate, already-tracked gap).
-        run: flatc --rust -o libs/engine/domain-core/src/generated libs/engine/domain-core/contracts/command.fbs libs/engine/domain-core/contracts/domain_event.fbs libs/engine/domain-core/contracts/snapshot.fbs
 
       - name: Cargo check + test
         run: |
