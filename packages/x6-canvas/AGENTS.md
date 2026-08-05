@@ -1,29 +1,18 @@
-# AGENTS.md - `@grafting/x6-canvas`
+# AGENTS.md - retired `@grafting/x6-canvas`
 
 Scope-local addendum to the root `AGENTS.md`.
 
-This package is a generic, presentation-neutral X6 adapter. It MUST NOT contain
-Graph IR, VTT, workflow, or product semantics. It MUST NOT own graph
-structures, algorithms, ordering, queries, diffs, or layout mathematics; those
-belong to `grafting-graph-core` (DEC-051).
+This package is retained as dormant reference code under DEC-056. It has no
+active consumer and MUST NOT be added to an application, root validation
+pipeline, generated API catalog, or new dependency graph without a new explicit
+owner decision that reactivates it.
 
-This is the designated owner of `@antv/x6` and `@antv/x6-react-shape` for
-Grafting canvas consumers. X6 and React-shape types remain private. The package
-MUST NOT depend on `@grafting/ui`, Ant Design, or a product component. An
-application composes this adapter with its chosen UI capability through the
-Grafting-owned DOM mount lifecycle (DEC-052).
+Maintenance while retired is limited to security or repository-compatibility
+work needed to keep the retained source inspectable. Do not add features,
+presentation policy, graph computation, or a second active canvas boundary
+here. The active browser canvas implementation is private to `@grafting/ui`;
+its public API uses Grafting-owned names and keeps renderer types private.
 
-Node views, ports, edge curves, markers, labels, effects, surface styling, and
-interaction choices are supplied per canvas instance. Package defaults are
-neutral and replaceable. Canvas lifecycle code MUST NOT branch on concrete
-views or product roles. `nodes/registry.ts` registers only the technical host;
-that host may size its mount point but MUST NOT add a visible boundary, color,
-shape, text, selection style, or behavior policy.
-
-Every exported declaration and public member requires TSDoc. Public API
-changes require `x6-canvas:api-check`, a reviewed update to
-`tests/snapshots/public-api.md`, and behavioral contract tests. The check MUST
-fail if `@antv/x6`, `@antv/x6-react-shape`, `react`, `react-dom`, `antd`, or a
-subpath leaks through the public declaration entry point.
-
-Use one `tests/` root. Do not recreate a parallel `test/` directory.
+The retained source remains bound by DEC-049, DEC-051, and DEC-052: no vendor
+types may cross its old public boundary, graph calculations remain in
+`grafting-graph-core`, and product presentation remains application-owned.

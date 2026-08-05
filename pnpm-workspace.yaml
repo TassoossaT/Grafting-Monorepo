@@ -14,6 +14,9 @@ allowBuilds:
   # Keep dependency scripts denied unless separately reviewed and approved.
   esbuild: false
   nx: true
+  # Rete's optional postinstall only prints an informational message; the
+  # runtime is build-independent, so dependency-script execution stays denied.
+  rete: false
   # Transitive via next (apps/architecture-studio) for its Image Optimization
   # feature. sharp's install script only compiles/downloads a prebuilt
   # libvips binary for image processing -- no network access beyond that

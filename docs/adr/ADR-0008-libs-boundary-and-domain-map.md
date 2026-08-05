@@ -18,6 +18,10 @@
 - Authority: in case of conflict, `GRAFTING_MASTER_SOURCE.md` prevails over
   this ADR.
 
+> **Amendment (2026-08-04):** DEC-056 and ADR-0018 supersede every X6- and
+> canvas-sharing clause in this ADR. The domain-boundary rule remains active;
+> Rete.js is now the private active graph engine inside `@grafting/ui`, Three.js
+> is its private 3D/heightfield renderer, and `@grafting/x6-canvas` is retired.
 ## Context
 
 Section 4.3 of the master source already foresaw domains like physics,

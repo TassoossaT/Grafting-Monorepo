@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "../index.js";
+import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "./contracts.js";
 import { resolveHeightfieldOptions } from "./resolve-options.js";
 
 function buildTerrainMesh(
@@ -13,9 +13,14 @@ function buildTerrainMesh(
   const geometry = new THREE.PlaneGeometry(planeSize, planeSize, width - 1, height - 1);
   geometry.rotateX(-Math.PI / 2);
 
-  const position = geometry.attributes.position;
+  const position = geometry.getAttribute("position");
+  if (!(position instanceof THREE.BufferAttribute)) {
+    throw new Error("Heightfield geometry did not expose a writable position buffer");
+  }
   for (let i = 0; i < values.length; i += 1) {
-    position.setY(i, values[i] * heightScale);
+    const value = values[i];
+    if (value === undefined) break;
+    position.setY(i, value * heightScale);
   }
   geometry.computeVertexNormals();
 

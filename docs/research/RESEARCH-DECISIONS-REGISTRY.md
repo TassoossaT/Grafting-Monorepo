@@ -47,9 +47,8 @@ it.
 - **Reference only** — useful as a design or UX pattern to learn from; never
   itself a dependency candidate.
 
-As of this writing, nothing below is **Adopted** — every research document in
-this repository is still in the planning-phase candidate-catalog stage. That
-is expected, not a gap.
+Adopted entries identify dependencies now present in repository manifests;
+DEC-056 moved Rete.js into that state on 2026-08-04.
 
 ## Architecture Studio: document, canvas, search, tracing
 
@@ -145,13 +144,13 @@ Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
 
 | Candidate | License | Status | Note |
 | --- | --- | --- | --- |
-| **React Flow (xyflow)** | MIT | **Decided, top pick** | Symmetric `nodeTypes`/`edgeTypes` (both first-class React components) — X6 cannot do this for edges, confirmed via its own official docs (`x6-react-shape` is node-only by design) |
-| AntV X6 | MIT | Decided — Architecture-Studio-only, dropped from the VTT | Real remaining advantages (shared SVG document, raw SVG port attrs already built, first-party layout, higher perf ceiling) don't outweigh the node/edge symmetry requirement; still valid for Architecture Studio's existing `packages/x6-canvas` |
+| React Flow (xyflow) | MIT | Discarded | Earlier top pick superseded by the owner's Rete.js adoption in DEC-056; never installed |
+| AntV X6 | MIT | Discarded | Retired from active use by DEC-056; `@grafting/x6-canvas` remains dormant reference code with no consumer |
 | JointJS | MPL-2.0 core + paid JointJS+ | Discarded | X6 is a superset of this model with a bigger community and no paid tier |
 | maxGraph (draw.io engine) | Apache-2.0 | Discarded | Deepest low-level control and only one with built-in layout, but verbose old-school API and much smaller community than X6 |
 | Cytoscape.js | MIT | Discarded | Network-science/analysis oriented (Canvas + fixed style model), weak fit for rich custom nodes |
 | GoJS | Commercial | Discarded | Not free |
-| **Rete.js** | MIT | Standby, conditional | Wrong category for a static graph (it's an editor *framework* with real execution semantics, not a diagramming library) — the right tool only if a genuinely editable/executing pipeline is built: most concretely, a visual editor for the procedural-generation crates below. Has a real, verified 3D mode (`rete-area-3d-plugin`, built on Three.js) |
+| **Rete.js** | MIT | **Adopted** | Sole active graph-canvas engine, private inside `@grafting/ui`; consumers use only Grafting-owned canvas elements and contracts (DEC-056) |
 
 ## VTT map, terrain, and rendering
 

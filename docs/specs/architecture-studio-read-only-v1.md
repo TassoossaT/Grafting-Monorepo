@@ -70,8 +70,8 @@ must not be written into the Graph IR document.
    pointers, and symbols when present.
 10. Show clear loading, empty, invalid, unsupported, and freshness states.
 11. Preserve the non-editable canvas guarantee.
-12. Atomically remove the transitional `@grafting/graph-x6` path after the
-    application-owned Graph IR presentation projection is validated.
+12. Keep the application-owned Graph IR presentation projection as the only
+    active mapping, with no transitional renderer-specific adapter.
 
 ### 3.2 Explicitly outside I-006 v1
 
@@ -200,11 +200,11 @@ The Canvas:
 - distinguishes node and edge kinds using text/icon/shape in addition to
   color;
 - exposes selected and keyboard-focused state through Grafting-owned
-  presentation contracts, not X6 objects.
+  presentation contracts, not renderer-owned objects.
 
 The implemented presentation maps Graph IR kinds to opaque application view
 data and stable application view IDs. `src/canvas-composition.ts` supplies the
-current `@grafting/ui` Ant Design Card mount, ports, smooth curves, arrow
+current `@grafting/ui` component mount, ports, smooth curves, arrow
 markers, compact relation labels, effects, canvas surface, and interaction
 policy to the neutral canvas adapter. Neither vendor API crosses the
 application contract. New visual shapes are application-owned view definitions
@@ -299,7 +299,7 @@ the Rust structural validator or Graph IR schema rules.
 - **FR-012:** A node or edge can be activated from the canvas without enabling
   graph editing.
 - **FR-013:** Canvas activation emits only a Grafting stable ID and entity kind
-  or another minimal Grafting-owned value; it must not expose an X6 cell/event.
+  or another minimal Grafting-owned value; it must not expose a renderer event.
 - **FR-014:** List selection, canvas selection, inspector content, and URL/local
   presentation state must converge on one selected stable ID.
 - **FR-015:** The Inspector must render every provenance evidence entry and all
@@ -325,7 +325,7 @@ the Rust structural validator or Graph IR schema rules.
 - **FR-022:** The rendered canvas may explicitly allow local node
   repositioning, but must keep connection, edge, vertex, label, tool, and
   graph-data editing interactions disabled.
-- **FR-023:** No public app or package API may return the mutable X6 graph,
+- **FR-023:** No public app or package API may return a mutable renderer graph,
   cells, events, options, errors, or configuration objects.
 - **FR-024:** Test/build execution belongs to the Automation Plane and is not a
   hidden side effect of browsing, filtering, or selecting entities.
@@ -379,16 +379,16 @@ docs/generated/grafting.graph.json
   -> batched grafting-graph-core layout/query boundary
   -> immutable layout snapshot + application presentation enrichment
   -> immutable Grafting canvas model
-  -> @grafting/x6-canvas
-  -> @antv/x6 (private)
+  -> @grafting/ui vendor-neutral canvas
+  -> private renderer integration
 ```
 
 Concrete presentation composes alongside that data flow:
 
 ```text
 Architecture Studio canvas composition
-  -> @grafting/ui DOM mount lifecycle (Ant Design private)
-  -> @grafting/x6-canvas neutral node/edge contracts (X6 private)
+  -> @grafting/ui component mount lifecycle
+  -> @grafting/ui vendor-neutral canvas contracts
 ```
 
 I-006 must not create separate packages for loader, filters, hooks, inspector,
@@ -399,13 +399,13 @@ crate.
 The transitional direction below disappeared atomically during the cutover:
 
 ```text
-Architecture Studio -> @grafting/graph-x6 -> @grafting/x6-canvas
+Architecture Studio -> transitional graph adapter -> canvas adapter
 ```
 
 The application is now the sole owner of its Graph IR presentation mapping.
-No second mapping remains after migration; `@grafting/graph-x6` was removed.
+No second mapping or renderer-specific adapter remains after migration.
 
-## 10. Required `x6-canvas` contract evolution
+## 10. Required UI canvas contract
 
 The current public canvas handle exposes counts, `center()`, and `dispose()`.
 That is insufficient for an Inspector driven from the visual canvas.
@@ -422,7 +422,7 @@ implementation task, but its behavior must satisfy all of these constraints:
    synchronized;
 5. disposal removes listeners and prevents later callbacks;
 6. the generated TypeScript public API baseline is intentionally updated;
-7. negative tests prove that `@antv/x6` types still do not leak;
+7. negative tests prove that renderer modules and their types do not leak;
 8. behavioral contract tests prove activation, external selection, and
    disposal semantics.
 
@@ -561,11 +561,10 @@ Provisional guardrails:
   and canvas failure are observable and recoverable as specified.
 - **AC-011:** All core navigation and inspection tasks can be completed with a
   keyboard and without relying on color.
-- **AC-012:** `@grafting/graph-x6` is removed in the same validated cutover that
-  moves the presentation projection into the app; no duplicate Graph IR
-  mapping remains.
-- **AC-013:** `x6-canvas:api-check` passes against an intentionally reviewed
-  baseline, forbidden `@antv/x6` public-type tests pass, and activation/
+- **AC-012:** no transitional renderer-specific graph adapter or duplicate
+  Graph IR presentation mapping exists; the application owns the sole mapping.
+- **AC-013:** `ui:api-check` passes against an intentionally reviewed
+  baseline, forbidden renderer-module public-type tests pass, and activation/
   disposal behavioral contracts pass.
 - **AC-014:** Graph IR schema/Rust structural validation, app typecheck/tests,
   package checks/tests, and the production build all pass without relying on
@@ -584,7 +583,7 @@ Provisional guardrails:
 | Graph IR loader | valid v1, unsupported version, malformed document, missing evidence, dangling edge |
 | Rust graph query | combined filters, neighborhood depth/direction, no matches, cycles where allowed, deterministic snapshot ordering |
 | Presentation projection | every v1 node/edge kind has generic presentation; stable IDs/fields preserved |
-| `x6-canvas` | activation, external selection, opt-in node movement with structural editing disabled, no vendor-type leakage, listener cleanup/disposal |
+| UI canvas | activation, external selection, opt-in node movement with structural editing disabled, no vendor-type leakage, listener cleanup/disposal |
 | Explorer/Inspector | keyboard selection, copy-full-value, multiple evidence items, endpoint navigation |
 | URL state | lossless stable IDs, invalid/removed ID recovery, different-revision recovery |
 | Application | loading/error/empty/stale/unknown/ready states, real document, production build |
@@ -610,7 +609,7 @@ package or one durable task per line.
 
 - import Graph IR v1 real output;
 - create the application-owned presentation projection;
-- remove the `graph-x6` dependency/package and spike JSON use in one change;
+- keep transitional graph adapters and spike JSON out of the active dependency graph;
 - preserve stable IDs and read-only behavior.
 
 ### Checkpoint C: explorer and provenance

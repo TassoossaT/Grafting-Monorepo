@@ -76,8 +76,6 @@
       "inputs": [
         "{workspaceRoot}/packages/ui/src/**/*",
         "{workspaceRoot}/packages/ui/tsconfig.json",
-        "{workspaceRoot}/packages/x6-canvas/src/**/*",
-        "{workspaceRoot}/packages/x6-canvas/tsconfig.json",
         "{workspaceRoot}/packages/isekai-web-client/src/**/*",
         "{workspaceRoot}/packages/isekai-web-client/tsconfig.json",
         "{workspaceRoot}/apps/architecture-studio/src/**/*",

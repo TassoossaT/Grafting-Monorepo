@@ -101,9 +101,9 @@ inside the already-accepted rule.**
 | --- | --- | --- |
 | Player's immersive view **and** GM's analytical/overview view | **Three.js**, single renderer for both | **Decided** — Three.js itself is not new (already a `Closed` rule in `GRAFTING_MASTER_SOURCE.md`: "Rust is the sole owner of GPU resources for mathematical computation. Three.js and the C# engine own the rendering resources"; this session initially mistook it for new information, then corrected that). What's newly decided is that Three.js handles *both* views — deck.gl is not adopted as a second rendering library |
 | deck.gl (+ `@deck.gl-community/editable-layers`) | Reference/parameter only | **Reference only** — not a dependency. Its layer catalog is the specification of *what to replicate*, studied and reimplemented with Three.js's own primitives |
-| Architecture Studio's code graph, future character-relationship webs | **React Flow (xyflow)** | **Decided** in conversation (see the node/edge library section below) |
-| `packages/x6-canvas` (X6) | Architecture Studio only | **Decided** — dropped from the VTT; `docs/adr/ADR-0008-libs-boundary-and-domain-map.md` proposed reusing it for the VTT's "interactive map" before Three.js was confirmed as the sole real renderer. **That ADR needs a follow-up amendment; this document flags it but does not rewrite the ADR itself, per the owner's explicit-approval requirement for changing accepted decisions.** |
-| Procedural-generation authoring UI (optional) | **Rete.js** (with its Three.js-based `rete-area-3d-plugin` if a 3D graph view is wanted) | **Standby** — only needed if a visual node-graph editor for building generation pipelines is actually pursued |
+| Architecture Studio's code graph and future node-graph surfaces | **Rete.js**, private inside `@grafting/ui` | **Adopted (DEC-056)** — the owner selected it as the sole active graph-canvas engine; consumers use vendor-neutral UI contracts |
+| `packages/x6-canvas` (X6) | Dormant reference only | **Retired (DEC-056)** — no active consumer, root validation, or generated API documentation; reactivation needs a new owner decision |
+| Procedural-generation and heightfield visualization | **Three.js**, private inside `@grafting/ui` | **Adopted boundary (DEC-056)** — it remains the non-graph 3D renderer and is not exposed through consumer contracts |
 
 ### What deck.gl demonstrates, and its Three.js-native equivalent
 
@@ -200,7 +200,12 @@ investigation) is to verify this kind of claim with a real compile-and-run
 check, not assume it. **Recorded as a concrete future spike, not done in
 this pass.**
 
-### Node/edge library decision (Architecture Studio + future character webs)
+### Historical node/edge comparison (superseded by DEC-056)
+
+The comparison below records the evidence available before the owner's
+2026-08-04 decision. Its React Flow recommendation and conditional Rete status
+are superseded: Rete.js is adopted as the sole active graph-canvas engine,
+private inside `@grafting/ui`, and X6 is retired.
 
 Reached through direct comparison against this repository's actual
 `packages/x6-canvas` code, not in the abstract:
@@ -963,13 +968,11 @@ cleanly on the first attempt. This unblocks the next step: promoting a real
 subset of this into an actual domain crate wired into
 `apps/architecture-studio`'s VTT generation-test surface.
 
-## Open items (not resolved by this document)
+## Follow-up status
 
-1. **`ADR-0008` follow-up amendment** — its "VTT's interactive map reuses
-   `packages/x6-canvas`" proposal needs to be superseded to reflect Three.js
-   as the VTT's sole real renderer (both player and GM views), with X6
-   remaining Architecture-Studio-only. Flagged here, not rewritten, pending
-   the owner's explicit sign-off on the ADR text itself.
+1. **`ADR-0008` canvas amendment — resolved 2026-08-04.** ADR-0018/DEC-056
+   supersedes its X6-sharing clause. The VTT keeps Three.js as its private real
+   renderer through `@grafting/ui`; X6 is retired.
 2. **Import format/mechanism (Tier 2)** — Universal VTT (UVTT) identified as
    a strong candidate (see "Import (Tier 2)" above), but not adopted; how it
    reconciles with this project's own free-3D/discrete-elevation terrain
@@ -982,11 +985,10 @@ subset of this into an actual domain crate wired into
    stated visual preference over Ladle/React Cosmos/Bit/Playroom/others
    researched earlier in this session, but never formally confirmed as a
    final pick; recorded here as the leading candidate, not yet decided.
-5. **Whether Rete.js is actually built** — its role here is conditional on
-   the owner actually wanting a visual node-graph editor for procedural
-   generation; if a simpler UI (forms, sliders, presets) covers the need,
-   Rete adds a real, currently-unsolved-elsewhere capability but also real
-   scope.
+5. **Whether Rete.js is actually built — resolved 2026-08-04.** The owner
+   adopted Rete.js as the sole active graph-canvas engine through DEC-056. Its
+   current read-only Graph IR use preserves room for later editable procedural
+   and orchestration workflows without exposing the engine to consumers.
 6. **Wasm-compile verification spike** — **done, 2026-08-01.** All four
    crates compile to `wasm32-unknown-unknown` and were verified via a real
    call into each one's own API, instantiated through `wasm-pack`'s "web"

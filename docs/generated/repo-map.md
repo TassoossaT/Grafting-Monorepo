@@ -7,6 +7,7 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
+| `discretize` | library | `libs/domains/procgen/discretize` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `engine-compute-api` | library | `libs/engine/compute-api` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-compute-cpu` | library | `libs/engine/compute-cpu` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-domain-core` | library | `libs/engine/domain-core` | `check`, `docs-check`, `docs-generate`, `generate`, `test` |
@@ -27,10 +28,10 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
 | `architecture-studio` | application | `apps/architecture-studio` | `build`, `build-storybook`, `check`, `dev`, `docs-check`, `docs-generate`, `stories-check`, `stories-generate`, `storybook`, `test` |
+| `ia-graft` | application | `tools/ia-graft` | `ia-graft`, `test`, `typecheck` |
 | `isekai-web-client` | library | `packages/isekai-web-client` | `check`, `docs-check`, `docs-generate`, `test` |
-| `three-canvas` | library | `packages/three-canvas` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `test` |
-| `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `docs-mesh-export`, `test` |
-| `x6-canvas` | library | `packages/x6-canvas` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `test` |
+| `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `docs-mesh-export`, `test`, `watch` |
+| `x6-canvas` | library | `packages/x6-canvas` | `build`, `check`, `test` |
 
 ## Other
 
@@ -38,4 +39,4 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | --- | --- | --- | --- |
 | `grafting` | library | `.` | `ai-audit`, `ai-check`, `docs-api-rust-check`, `docs-api-rust-generate`, `docs-api-ts-check`, `docs-api-ts-generate`, `docs-check`, `graph-check`, `graph-extract`, `graph-extract-check`, `graph-generate`, `graph-manifest`, `graph-manifest-check`, `graph-map`, `graph-map-check`, `graph-v1-check`, `graph-v1-test`, `toolchains-check` |
 
-_15 project(s) total._
+_16 project(s) total._

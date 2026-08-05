@@ -156,16 +156,18 @@ IDs, canonical relation IDs, one authority class per node, extractor identity
 and version, a graph-wide source revision, confidence, and at least one hashed
 evidence locator per node and edge. Arrays are deterministically ordered; IDs
 are unique; edge endpoints must exist; evidence paths are normalized and
-repository-relative. Viewer, X6, DOM, layout, color, and viewport concepts are
-excluded from the contract.
+repository-relative. Viewer, DOM, renderer, layout, color, and viewport concepts
+are excluded from the contract.
 
 I-002 accepts the contract and fixtures, not a live extractor. I-004 owns the
 atomic replacement of the spike candidate with the reproducible
 `docs/generated/grafting.graph.json` output.
 
-## 16.8 AntV X6 and Architecture Studio
+## 16.8 Canvas and Architecture Studio
 
-X6 is a controlled viewer/editor. Normative, derived, authored, and visual information remains separate. Derived graphs are read-only. Authored workflows go through schema, policy, plan/diff, and the Nx/CI executor.
+The canvas is a controlled presentation surface. Normative, derived, authored,
+and visual information remain separate. Derived graphs are read-only. Authored
+workflows go through schema, policy, plan/diff, and the Nx/CI executor.
 
 V1 views:
 
@@ -176,27 +178,26 @@ V1 views:
 5. Documentation Map;
 6. AI Capability Map.
 
-Per DEC-046, DEC-049, DEC-050, and DEC-051, reusable graph structures and
-calculations live in `libs/graph/core`. The Rust crate exposes Grafting-owned
-IDs, commands, results, errors, and immutable snapshots without leaking vendor
-graph or mathematics types. Significant operations cross runtime boundaries in
-batches rather than as individual arithmetic calls.
+Per DEC-046, DEC-049, DEC-050, DEC-051, and DEC-056, reusable graph structures
+and calculations live in `libs/graph/core`. The Rust crate exposes
+Grafting-owned IDs, commands, results, errors, and immutable snapshots without
+leaking vendor graph or mathematics types. Significant operations cross runtime
+boundaries in batches rather than as individual arithmetic calls.
 
-`packages/x6-canvas` owns the Grafting visual input contract and is the
-exclusive owner of the external X6 API. Its public surface must not expose the
-mutable vendor graph or other X6-owned types. Applications enrich immutable
-results with labels, colors, icons, components, selection, and viewport state;
-data that affects a shared calculation is an explicit Rust input.
+`@grafting/ui` owns the vendor-neutral browser canvas contracts. Rete.js is the
+sole active graph-canvas engine and Three.js remains the 3D/heightfield renderer;
+both integrations are private implementation details. Applications enrich
+immutable results with labels, colors, icons, components, selection, and
+viewport state. Data that affects a shared calculation is an explicit Rust
+input.
 
-The spike-era `packages/graph-x6` is transitional. It is migrated atomically
-after Graph IR v1 is defined: generic graph semantics move to Rust, the
-Architecture Studio owns its initial Graph IR presentation projection, and the
-superseded package/path is removed so no second authoritative mapping remains.
-A VTT may reuse the Rust graph core and X6 adapter without sharing Architecture
-Studio or Graph IR semantics.
+Architecture Studio owns its Graph IR presentation projection and concrete
+visual/interaction policy. `@grafting/x6-canvas` is retired and retained only as
+dormant reference code; no consumer or active repository validation depends on
+it. A VTT may reuse the Rust graph core and the generic `@grafting/ui` canvas
+mechanisms without sharing Architecture Studio or Graph IR semantics.
 
 ## 16.9 Context packs
-
 Each task receives a small, reproducible, versioned, and validated context pack containing task, criteria, capabilities, policies, context, allowed/forbidden tools, output schema, artifacts, handoffs, graph scope, and token budget. The context pack is an index, not a substitute for reading the code.
 
 ---

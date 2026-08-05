@@ -7,6 +7,10 @@
 - Amends: DEC-050 and ADR-0012's originally proposed TypeScript graph package.
 - Related: DEC-001, DEC-002, DEC-013, DEC-046, DEC-049, I-002, and I-003.
 
+> **Amendment (2026-08-04):** DEC-056 and ADR-0018 supersede this ADR's
+> X6-specific ownership section. Rust graph authority and public-API contract
+> requirements remain active; the vendor-neutral canvas API and its private
+> Rete.js implementation now live in `@grafting/ui`.
 ## Context
 
 ADR-0012 correctly separated repository knowledge, graph computation, visual

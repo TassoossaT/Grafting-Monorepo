@@ -1,4 +1,10 @@
-# `@grafting/x6-canvas`
+# Retired: `@grafting/x6-canvas`
+
+> **Retired by DEC-056 on 2026-08-04.** This package is retained as dormant
+> reference code only. It has no active consumer or root validation/doc target;
+> the active vendor-neutral canvas surface is exported by `@grafting/ui`.
+
+## Historical package documentation
 
 Generic AntV X6 adapter shared by canvas-oriented products (DEC-046, DEC-052).
 It owns X6 and React-shape integration privately while exposing only immutable

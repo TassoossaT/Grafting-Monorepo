@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/three-canvas";
+import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/ui";
 import { GridLayout, PreviewCard, type GridPanel } from "@grafting/ui";
 import "react-grid-layout/css/styles.css";
 import { readPreviewImage, writePreviewImage } from "../../../lab-preview-storage.ts";

@@ -433,7 +433,7 @@ Initial domain map (see `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
 | --- | --- | --- |
 | Narrative / story creation | generic domain | `libs/domains/narrative` |
 | Session / campaign organization | generic domain | `libs/domains/session` |
-| VTT interactive map (X6) | product-specific + generic wrapper | `apps/web-vtt` consumes `packages/x6-canvas`, shared with `apps/architecture-studio` (`docs/architecture/ai-control-plane.md` §16.8) |
+| VTT interactive map | product-specific presentation | The Web host composes `@grafting/ui`; Three.js remains private inside that package and the VTT does not reuse the graph canvas (DEC-056, ADR-0018) |
 | Procedural heightmap generation + generic value discretization | generic domain | `libs/domains/procgen` (`generation-wasm`, `discretize` Rust/Wasm crates) — designed against the VTT's map-generation pipeline (`docs/research/vtt-map-and-terrain-construction-options.md`) but reclassified from an initial VTT-scoped `libs/vtt/` location (owner direction, 2026-08-04): not exclusive to the VTT, any product needing procedural heightmap generation or continuous-to-discrete value binning can depend on it. `discretize` was itself renamed from `terrain-quantization` (owner direction, 2026-08-04) since it has no concept of terrain -- it bins any `[-1.0, 1.0]` float array into N levels |
 | Discord bot | external integration | its own service consuming `session`/`narrative` contracts, never internals |
 | Session transcription | external integration (likely Python) | `python/` or a dedicated service, feeding `narrative` via contract |
@@ -443,16 +443,11 @@ born because there is already a declared intention for more than one
 product to need them; the VTT map remains within the app until a second
 product requires a map.
 
-> **Footnote (2026-08-01, `docs/adr/ADR-0016-architecture-studio-scope-expansion.md`,
-> Proposed):** the "VTT interactive map (X6)" row's `apps/web-vtt` label
-> reads as inconsistent with `DEC-041` ("the VTT is a client-only route
-> within [the Next.js Web host], not a standalone app") — flagged here, not
-> resolved. Separately, ADR-0016 proposes that `apps/architecture-studio`
-> also host a **generation-testing and visualization surface** for the VTT's
-> procedural-generation pipeline (Rust/Wasm crates rendered via Three.js) —
-> a distinct relationship from the one this table row already describes
-> (sharing `packages/x6-canvas`): the new surface shares the VTT's Rust
-> domain crate and the Isekai/Wasm pathway instead, not `x6-canvas`.
+> **Amendment (2026-08-04, DEC-056/ADR-0018):** the VTT is a route in the
+> Web host, not a standalone app. Its interactive map and Architecture Studio's
+> heightfield surface use the private Three.js renderer inside `@grafting/ui`.
+> Active graph canvases use private Rete.js integration through the same
+> vendor-neutral package. `@grafting/x6-canvas` is retired and dormant.
 
 DEC-049 strengthens this boundary: reusable capabilities expose Grafting-owned
 interfaces and isolate third-party runtime APIs inside the smallest useful
@@ -532,7 +527,8 @@ copied into a second module, package, or application.
 ├── packages/
 │   ├── isekai-web-client/
 │   ├── polymath/
-│   └── x6-canvas/
+│   ├── ui/
+│   └── x6-canvas/ (retired reference)
 ├── dotnet/
 │   ├── Grafting.Isekai.Interop/
 │   ├── Grafting.Isekai.Protocol/
@@ -2308,7 +2304,8 @@ Automate only conventions already proven:
 - [x] `.venv` outside the cache (uv-managed, gitignored, per-checkout as
       DEC-019 requires).
 - [ ] deterministic publishable outputs — `dist/architecture-studio` is now
-      exercised by the Graph IR/X6 spike, but no product release artifact or
+      exercised by the historical Graph IR/X6 spike and the active UI canvas,
+      but no product release artifact or
       artifact manifest exists yet.
 - [x] Polymath rule (DEC-042) documented in `AGENTS.md` (2026-07-27). Not
       yet lint/ast-grep-verified — deferred until CI has something to
@@ -2428,7 +2425,7 @@ Automate only conventions already proven:
 - [x] `docs:check`/CI drift detection (I-007 + G-008, 2026-07-29: one
       entry point, `pnpm docs:check`, chaining the real
       `graph:map:check`/`graph:manifest:check`/`graph:extract:check`/
-      `graph-core:api-check`/`x6-canvas:api-check` checks rather than a
+      `graph-core:api-check`/`ui:api-check` checks rather than a
       second implementation; wired into `.github/workflows/ci.yml` as one
       step, replacing the two previously separate/bundled `api-check`
       invocations with no coverage change).

@@ -1,9 +1,9 @@
 # `@grafting/ui`
 
-Shared React UI components for Grafting products. The package starts with Ant
-Design as a private implementation and exposes only Grafting-owned component
-contracts. Its internal organization follows Atomic Design without creating
-empty speculative layers.
+Shared React UI components and browser canvas elements for Grafting products.
+The package exposes only Grafting-owned contracts while its component and
+renderer libraries remain private implementation details. Its internal
+organization follows Atomic Design without creating empty speculative layers.
 
 Current components:
 
@@ -16,12 +16,16 @@ Current components:
   Grafting-owned `GridPanel`/`GridPanelPlacement` inputs, privately backed by
   `react-grid-layout`;
 - molecule `EntitySummary`: composes `Card`, `Text`, and `StatusBadge` into one
-  reusable identity card for tables, X6 React canvas nodes, and inspectors;
+  reusable identity card for tables, graph canvas nodes, and inspectors;
   optional fill, accent, interaction, and selection props let it become a
   complete canvas node; its border, selected color, radius, padding, and
   content gap are replaceable;
 - organism `DataTable`: immutable rows, stable keys, controlled selection,
-  pagination, and bespoke React cell renderers through Grafting column types.
+  pagination, and bespoke React cell renderers through Grafting column types;
+- canvas element `createCanvas`: immutable nodes and connections, caller-owned
+  mounts/presentation, selection, viewport, and replaceable interaction policy;
+- canvas element `createHeightfieldCanvas`: lifecycle for numeric heightfields,
+  updates, image capture, and disposal.
 
 Consumers import only from the package root:
 
@@ -173,5 +177,5 @@ Review the baseline together with affected consumers and behavioral tests. A
 normal `api-check` never changes it.
 
 See [DECISIONS.md](DECISIONS.md) for the evaluated AntD, TanStack, shadcn/ui,
-grid-layout, Card atom, licensing, Atomic Design, and X6/React-node
+grid-layout, Card atom, licensing, Atomic Design, and canvas composition
 conclusions.

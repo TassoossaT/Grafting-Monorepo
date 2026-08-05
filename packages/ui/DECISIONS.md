@@ -4,6 +4,12 @@ This file preserves the conclusions that led to the initial `@grafting/ui`
 boundary. Architectural authority remains in the master source and accepted
 ADRs; this is package-local implementation guidance.
 
+> **Current canvas decision (DEC-056, 2026-08-04):** `@grafting/ui` owns the
+> active vendor-neutral canvas API. Rete.js is the private graph engine and
+> Three.js is the private 3D/heightfield renderer. `@grafting/x6-canvas` is
+> retired. Historical X6 allocation notes below explain earlier decisions but
+> are no longer current package guidance.
+
 ## Current choice
 
 - Start with Ant Design because it already provides the controls needed by the
@@ -194,24 +200,24 @@ Adding shadcn/ui wholesale would create unused code and a second visual system.
 The package instead adopts individual ideas or components only when they fit an
 identified requirement.
 
-## Entity components, tables, and graph nodes
+## Entity components, tables, and canvas nodes
 
-The same entity should be projected through reusable React presentation rather
-than copied or represented by a complete X6 runtime node inside a table cell:
+The same entity should be projected through reusable presentation rather than
+copied or represented by a complete renderer runtime object inside a table
+cell:
 
 ```text
 caller-owned entity view data
 ├── EntitySummary inside DataTable
 ├── EntitySummary inside an inspector
-└── EntitySummary inside an X6 React shape
+└── EntitySummary inside a generic canvas node
 ```
 
-The X6 integration is implemented by `@grafting/x6-canvas`, which stays the
-only X6-owning boundary and privately owns `@antv/x6-react-shape`.
-`@grafting/ui` owns reusable React presentation and privately owns Ant Design.
-Neither reusable package chooses the other: an application composes a UI DOM
-mount into a consumer-supplied canvas node view. Stable caller-owned IDs
-synchronize canvas, table, and inspector without leaking either vendor API.
+`@grafting/ui` owns both reusable React presentation and the vendor-neutral
+canvas boundary. Renderer integrations remain private module details. An
+application composes a UI DOM mount into a caller-supplied canvas node view;
+stable caller-owned IDs synchronize canvas, table, and inspector without
+leaking a vendor API.
 
 When a product chooses a Card node, `EntitySummary` owns the full visible node
 boundary, background, dimensions, accent, and selected treatment. The generic
@@ -223,7 +229,6 @@ Full data tables should not be embedded in compact graph nodes. A node receives
 a bounded summary; detailed tables belong in an inspector or adjacent panel.
 
 ## Logic boundary
-
 UI-local display state such as a selected row, visible column, or current page
 may remain in the React layer. Authoritative graph validation, semantic filters,
 ordering, neighborhood queries, subgraphs, and layout calculations remain in
@@ -232,17 +237,26 @@ only presents those results.
 
 ## Dependency and license record
 
-The initial dependency evaluation used registry metadata on 2026-07-29:
+Current canvas dependencies were verified from registry metadata on 2026-08-04:
+
+- `rete` `2.0.6`, `rete-area-plugin` `2.3.2`, `rete-react-plugin` `2.1.2`,
+  and `rete-render-utils` `2.0.3`: MIT, private graph-canvas implementation;
+- their optional informational `rete` postinstall is denied by workspace
+  `allowBuilds`; no runtime build step is required;
+- `styled-components` `6.1.19`: MIT, private renderer peer/runtime dependency;
+- `three` and `@types/three` `0.182.0`: MIT, private 3D/heightfield
+  implementation.
+
+The initial UI dependency evaluation on 2026-07-29 also recorded:
 
 - `antd` `6.5.2`: MIT; React and React DOM `>=18.0.0` peers;
-- `@antv/x6-react-shape` `3.0.1`: MIT; owned by `@grafting/x6-canvas`,
-  compatible with X6 3.x and React/React DOM `>=18.0.0`;
+- `@antv/x6-react-shape` `3.0.1`: MIT; now isolated in the retired
+  `@grafting/x6-canvas` reference package;
 - `@tanstack/react-table` `8.21.3`: MIT, evaluated but not installed;
 - `react-grid-layout` `2.2.3`: MIT; React and React DOM `>=16.3.0` peers;
   Gridstack.js `MIT` was evaluated and not installed (see the Grid layout
   decision above);
 - React/React DOM: explicit peer runtime for this React-specific package.
-
 Upgrades still require the normal dependency, compatibility, security, and
 public-API review. This record is not permission to add another UI framework
 without a demonstrated component need.
