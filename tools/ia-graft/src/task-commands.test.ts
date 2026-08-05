@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskTest } from "./task-commands.ts";
+import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -100,24 +100,26 @@ test("taskNew reports nodeModulesLinked: false when the main checkout has no nod
   assert.equal(created.nodeModulesLinked, false);
 });
 
-test("taskNew links every node_modules in the tree (root and nested packages), pnpm-workspace style", async () => {
+test("taskNew creates workspace-aware dependency overlays for root and nested packages", async () => {
   const root = await makeRepoWithBareRemote();
   await mkdir(join(root, "node_modules", "some-pkg"), { recursive: true });
   await writeFile(join(root, "node_modules", "some-pkg", "index.js"), "module.exports = 1;\n", "utf8");
-  // A package-local node_modules pnpm would never hoist to the root -- the
-  // scenario a root-only link cannot cover.
-  await mkdir(join(root, "tools", "fake-pkg", "node_modules", "@types"), { recursive: true });
+  await mkdir(join(root, "tools", "fake-pkg", "node_modules", "@types", "example"), { recursive: true });
 
   const created = await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
   assert.equal(created.ok, true);
   if (!created.ok) return;
   assert.equal(created.nodeModulesLinked, true);
+  assert.equal(created.dependencyMode, "workspace-aware");
 
   const worktree = join(root, ".worktrees", "DEMO-TASK");
-  const rootLink = await readlink(join(worktree, "node_modules"));
-  assert.equal(rootLink, join(root, "node_modules"));
-  const nestedLink = await readlink(join(worktree, "tools", "fake-pkg", "node_modules"));
-  assert.equal(nestedLink, join(root, "tools", "fake-pkg", "node_modules"));
+  const marker = JSON.parse(await readFile(join(worktree, "node_modules", ".ia-graft-overlay.json"), "utf8"));
+  assert.equal(marker.version, 1);
+  assert.equal(await readlink(join(worktree, "node_modules", "some-pkg")), join(root, "node_modules", "some-pkg"));
+  assert.equal(
+    await readlink(join(worktree, "tools", "fake-pkg", "node_modules", "@types", "example")),
+    join(root, "tools", "fake-pkg", "node_modules", "@types", "example"),
+  );
 });
 
 test("taskTest returns a compact summary rather than raw output, for both a passing and a failing command", async () => {
@@ -244,11 +246,11 @@ test("taskCleanup refuses an unmerged task unless force is explicit", async () =
   const cleaned = await taskCleanup(root, { taskId: "KEEP-TASK", force: true });
   assert.equal(cleaned.ok, true);
 });
-test("taskTest refuses dependency mutations against shared node_modules", async () => {
+test("taskTest refuses dependency mutations inside a task worktree", async () => {
   const root = await makeRoot();
   const result = await taskTest(root, { taskId: "DEMO-TASK", command: "pnpm install" });
   assert.equal(result.ok, false);
-  if (!result.ok) assert.match(result.error, /shared/);
+  if (!result.ok) assert.match(result.error, /main checkout/);
 });
 
 test("taskNew reattaches an existing local task branch after its worktree was removed", async () => {
@@ -286,7 +288,7 @@ test("taskDoctor detects and taskNew repairs an orphan task directory", async ()
   await assert.rejects(readFile(join(worktree, "leftover.txt"), "utf8"));
 });
 
-test("force cleanup removes shared node_modules links without touching their targets", async () => {
+test("force cleanup removes managed dependency overlays without touching their targets", async () => {
   const root = await makeRepoWithBareRemote();
   await mkdir(join(root, "node_modules", "keep-me"), { recursive: true });
   await writeFile(join(root, "node_modules", "keep-me", "sentinel.txt"), "safe\n", "utf8");
@@ -398,4 +400,134 @@ test("task done refuses a base that differs from the task's recorded parent", as
     taskDone(root, { taskId: "BASE-CHILD", title: "child", body: "child body" }),
     /parent task branch task\/BASE-PARENT is not published/,
   );
+});
+test("dependency overlays resolve workspace packages from the task worktree", async () => {
+  const root = await makeRepoWithBareRemote();
+  await mkdir(join(root, "node_modules"), { recursive: true });
+  await mkdir(join(root, "packages", "local"), { recursive: true });
+  await writeFile(join(root, "packages", "local", "index.js"), "module.exports = 'main';\n", "utf8");
+  execFileSync("git", ["add", "packages/local/index.js"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "add local workspace package"], { cwd: root });
+  await mkdir(join(root, "apps", "demo", "node_modules", "@scope"), { recursive: true });
+  await symlink(join(root, "packages", "local"), join(root, "apps", "demo", "node_modules", "@scope", "local"), "junction");
+
+  const created = await taskNew(root, { taskId: "WORKSPACE-LINKS", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.workspaceLinks, 1);
+  const worktree = join(root, ".worktrees", "WORKSPACE-LINKS");
+  const dependencyPath = join(worktree, "apps", "demo", "node_modules", "@scope", "local");
+  assert.equal(await realpath(dependencyPath), await realpath(join(worktree, "packages", "local")));
+
+  await writeFile(join(worktree, "packages", "local", "index.js"), "module.exports = 'task';\n", "utf8");
+  assert.match(await readFile(join(dependencyPath, "index.js"), "utf8"), /task/);
+  assert.match(await readFile(join(root, "packages", "local", "index.js"), "utf8"), /main/);
+
+  const refreshed = await taskDependencies(root, { taskId: "WORKSPACE-LINKS" });
+  assert.equal(refreshed.ok, true);
+  if (refreshed.ok) assert.equal(refreshed.mode, "workspace-aware");
+
+  await rm(join(worktree, "node_modules", ".ia-graft-overlay.json"));
+  await assert.rejects(taskDependencies(root, { taskId: "WORKSPACE-LINKS" }), /unmanaged dependency directory/);
+});
+
+test("taskTest batches commands and caps generated output", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "BATCH-TEST", base: "main" });
+  const worktree = join(root, ".worktrees", "BATCH-TEST");
+  await writeFile(join(worktree, "noisy.mjs"), "console.log('x'.repeat(20000));\n", "utf8");
+  await writeFile(join(worktree, "quiet.mjs"), "console.log('ok');\n", "utf8");
+
+  const batch = await taskTest(root, {
+    taskId: "BATCH-TEST",
+    commands: ["node noisy.mjs", "node quiet.mjs"],
+    keepGoing: true,
+  });
+  assert.equal(batch.ok, true);
+  if (!batch.ok) return;
+  const results = batch.results;
+  assert.ok(results);
+  if (!results) return;
+  assert.equal(batch.passed, true);
+  assert.equal(results.length, 2);
+  assert.ok(results[0]!.summary.length <= 6000);
+  assert.match(results[0]!.summary, /line truncated/);
+
+  const tooLarge = await taskTest(root, {
+    taskId: "BATCH-TEST",
+    commands: Array.from({ length: 13 }, () => "node quiet.mjs"),
+  });
+  assert.equal(tooLarge.ok, false);
+  if (!tooLarge.ok) assert.match(tooLarge.error, /at most 12/);
+});
+
+test("taskSync integrates the recorded base with a forward-only merge commit", async () => {
+  const root = await makeRepoWithBareRemote();
+  await writeFile(join(root, "base.txt"), "base one\n", "utf8");
+  execFileSync("git", ["add", "base.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "base one"], { cwd: root });
+  execFileSync("git", ["push", "origin", "main"], { cwd: root });
+  await taskNew(root, { taskId: "SYNC-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "SYNC-TASK");
+  await writeFile(join(worktree, "task.txt"), "task change\n", "utf8");
+  await taskCommit(root, { taskId: "SYNC-TASK", message: "task change" });
+
+  await writeFile(join(root, "base.txt"), "base two\n", "utf8");
+  execFileSync("git", ["add", "base.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "base two"], { cwd: root });
+  execFileSync("git", ["push", "origin", "main"], { cwd: root });
+
+  await writeFile(join(worktree, "dirty.txt"), "not committed\n", "utf8");
+  await assert.rejects(taskSync(root, { taskId: "SYNC-TASK", fetch: true }), /uncommitted changes/);
+  await rm(join(worktree, "dirty.txt"));
+
+  const synced = await taskSync(root, { taskId: "SYNC-TASK", fetch: true });
+  assert.equal(synced.ok, true);
+  if (!synced.ok) return;
+  assert.equal(synced.completed, true);
+  assert.equal(synced.updated, true);
+  assert.equal(synced.mergeCommit, true);
+  assert.match(await readFile(join(worktree, "base.txt"), "utf8"), /base two/);
+  assert.equal(execFileSync("git", ["show", "-s", "--format=%P", "HEAD"], { cwd: worktree }).toString().trim().split(/\s+/).length, 2);
+});
+
+test("taskSync reports conflicts, protects taskCommit, and aborts only the unfinished merge", async () => {
+  const root = await makeRepoWithBareRemote();
+  await writeFile(join(root, "shared.txt"), "initial\n", "utf8");
+  execFileSync("git", ["add", "shared.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "shared base"], { cwd: root });
+  execFileSync("git", ["push", "origin", "main"], { cwd: root });
+  await taskNew(root, { taskId: "CONFLICT-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "CONFLICT-TASK");
+  await writeFile(join(worktree, "shared.txt"), "task version\n", "utf8");
+  await taskCommit(root, { taskId: "CONFLICT-TASK", message: "task version" });
+
+  await writeFile(join(root, "shared.txt"), "base version\n", "utf8");
+  execFileSync("git", ["add", "shared.txt"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "base version"], { cwd: root });
+  execFileSync("git", ["push", "origin", "main"], { cwd: root });
+
+  const sync = await taskSync(root, { taskId: "CONFLICT-TASK", fetch: true });
+  assert.equal(sync.ok, true);
+  if (!sync.ok) return;
+  assert.equal(sync.completed, false);
+  assert.equal(sync.mergeInProgress, true);
+  assert.deepEqual(sync.conflicts, ["shared.txt"]);
+
+  const diagnosis = await taskDoctor(root, { taskId: "CONFLICT-TASK" });
+  assert.equal(diagnosis.ok, true);
+  if (diagnosis.ok) {
+    assert.equal(diagnosis.mergeInProgress, true);
+    assert.equal(diagnosis.syncSource, "origin/main");
+    assert.match(diagnosis.recommendedAction, /task sync --abort/);
+  }
+  const unsafeCommit = await taskCommit(root, { taskId: "CONFLICT-TASK", message: "must not commit markers" });
+  assert.equal(unsafeCommit.ok, false);
+  if (!unsafeCommit.ok) assert.match(unsafeCommit.error, /conflict markers/);
+
+  const aborted = await taskSync(root, { taskId: "CONFLICT-TASK", abort: true });
+  assert.equal(aborted.ok, true);
+  if (aborted.ok) assert.equal(aborted.aborted, true);
+  assert.equal((await readFile(join(worktree, "shared.txt"), "utf8")).trim(), "task version");
+  assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: worktree }).toString().trim(), "");
 });

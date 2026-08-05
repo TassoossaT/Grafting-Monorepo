@@ -115,8 +115,9 @@ test("allows Bash with no claim at all, as long as it is not a forbidden git ope
   assert.equal(decision.allowed, true);
 });
 
-test("allows agents to commit forward on their own branch", () => {
+test("allows agents to commit forward and invoke controlled task sync", () => {
   assert.equal(evaluateAgentGitCommand('git commit -m "progress"').allowed, true);
+  assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK").allowed, true);
 });
 
 test("rejects history-rewriting and merge operations", () => {

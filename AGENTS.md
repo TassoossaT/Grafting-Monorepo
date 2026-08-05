@@ -89,13 +89,15 @@ instructions; they must not restate or override them.
   `ia-graft task new`/`commit`/`done` below — just with a terser title/body,
   not a full task declaration.
 - **Any task**: run `ia-graft task new --id <TASK-ID>`. This creates or resumes an
-  isolated Git worktree and branch, and links every `node_modules` in the
-  tree from the main checkout into it — work only inside that worktree.
-  Isolation between agents comes from separate worktrees/branches, not from
-  a file-ownership ledger. It also sweeps any already-merged worktree out of
-  `.worktrees/` first, silently — nothing to invoke or remember, it's just
-  what `task new` does.
-  Treat linked `node_modules` as read-only; dependency installation or mutation runs only in the main checkout, never inside a task worktree.
+  isolated Git worktree and branch, and prepares workspace-aware `node_modules`
+  overlays: external packages reuse the main checkout's installed store while
+  workspace-package links point into the task worktree. Work only inside that
+  worktree. Isolation between agents comes from separate worktrees/branches,
+  not from a file-ownership ledger. It also sweeps any already-merged worktree
+  out of `.worktrees/` first, silently — nothing to invoke or remember, it's
+  just what `task new` does. Run `task deps --id <TASK-ID>` to rebuild the
+  overlays after the main installation changes. Dependency installation or
+  mutation still runs only in the main checkout, never inside a task worktree.
 - **Review feedback is the same task**: use `ia-graft task resume --pr <number>`
   or `task new` with the exact same ID; never create a second task for requested
   changes on an open PR. For genuinely dependent new work, use
@@ -103,6 +105,11 @@ instructions; they must not restate or override them.
   `--parent` and starts from the detected default branch.
 - Use `task status`/`task doctor` before manual recovery. `task new` safely
   reattaches an existing branch and repairs an orphan reserved task directory.
+  When the recorded base advances, use `task sync --id <TASK-ID> [--fetch]`;
+  it refuses a dirty worktree and performs only forward integration from that
+  base. If it reports conflicts, resolve them and use `task commit`, or use
+  `task sync --id <TASK-ID> --abort` to undo only that unfinished CLI sync.
+  Raw `git merge`/`rebase` commands remain forbidden.
   Use `task checkout --id <TASK-ID>` and `task checkout --restore [--force]`
   for temporary testing in the clean main checkout; never commit there and
   only use restore force to explicitly discard task-generated changes. Use
@@ -112,9 +119,10 @@ instructions; they must not restate or override them.
   <msg>` (stages and commits inside the worktree) — not raw `git add`/`git
   commit`, and never in the main checkout.
 - Before opening the PR, run `ia-graft task test --id <TASK-ID> --command
-  <cmd>` — it returns a compact pass/fail summary instead of the raw
-  transcript, so validating a change doesn't cost more tokens than the
-  change itself.
+  <cmd>`. Repeat `--command` for a batch of at most 12 and add `--keep-going` only when
+  later checks remain useful after a failure. Summaries cap individual lines
+  and total characters instead of returning raw transcripts, so generated or
+  minified output cannot consume the task context.
 - When the task is ready for review, run `ia-graft task done --id <TASK-ID> --title
   <title> --body <body>` to push the branch and open a pull request via
   `gh`. If `gh` can't open one (missing/unauthenticated), it still pushes
