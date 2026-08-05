@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readlink, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { isValidTaskId, taskCleanup, taskCommit, taskDone, taskNew, taskSweep, taskTest } from "./task-commands.ts";
+import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -52,7 +52,9 @@ test("taskCommit rejects an invalid task id or a missing message before touching
 const makeRepoWithBareRemote = async (): Promise<string> => {
   const root = await makeRoot();
   execFileSync("git", ["init", "-b", "main"], { cwd: root });
-  execFileSync("git", ["commit", "--allow-empty", "-m", "root"], { cwd: root });
+  await writeFile(join(root, ".gitignore"), ".worktrees/\n", "utf8");
+  execFileSync("git", ["add", ".gitignore"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "root"], { cwd: root });
 
   const cloneRemote = await mkdtemp(join(tmpdir(), "ia-graft-remote-"));
   roots.push(cloneRemote);
@@ -201,22 +203,22 @@ test("taskSweep never deletes anything when it cannot reach gh to confirm a real
   await readdir(join(root, ".worktrees", "NOT-MERGED"));
 });
 
-test("taskDone pushes and falls back to a manual compare URL when gh cannot open a PR", async () => {
+test("taskDone distinguishes unavailable gh from a real PR creation failure", async () => {
   const root = await makeRepoWithBareRemote();
   await taskNew(root, { taskId: "DEMO-TASK", base: "main" });
   const worktree = join(root, ".worktrees", "DEMO-TASK");
   await writeFile(join(worktree, "note.txt"), "hello\n", "utf8");
   await taskCommit(root, { taskId: "DEMO-TASK", message: "add note" });
 
-  const result = await taskDone(root, { taskId: "DEMO-TASK", title: "t", body: "b", base: "main" });
-  assert.equal(result.ok, true);
-  if (!result.ok) return;
-  assert.equal(typeof result.prUrl, "string");
-  // `gh` may or may not be installed/authenticated in the environment running this test;
-  // either outcome must be well-formed rather than throwing.
-  if (result.prState === "manual") {
-    assert.match(result.prUrl as string, /compare\/main\.\.\.task\/DEMO-TASK/);
-    assert.equal(typeof result.note, "string");
+  try {
+    const result = await taskDone(root, { taskId: "DEMO-TASK", title: "t", body: "b", base: "main" });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.prState, "manual");
+      assert.match(result.note ?? "", /unavailable or unauthenticated/);
+    }
+  } catch (error) {
+    assert.match(String(error), /gh pr create failed for base main/);
   }
 });
 
@@ -247,4 +249,153 @@ test("taskTest refuses dependency mutations against shared node_modules", async 
   const result = await taskTest(root, { taskId: "DEMO-TASK", command: "pnpm install" });
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /shared/);
+});
+
+test("taskNew reattaches an existing local task branch after its worktree was removed", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "REATTACH-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "REATTACH-TASK");
+  execFileSync("git", ["worktree", "remove", "--force", worktree], { cwd: root });
+
+  const resumed = await taskNew(root, { taskId: "REATTACH-TASK", base: "main" });
+  assert.equal(resumed.ok, true);
+  if (!resumed.ok) return;
+  assert.equal(resumed.resumed, true);
+  assert.equal(resumed.repaired, false);
+  assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd: worktree }).toString().trim(), "task/REATTACH-TASK");
+});
+
+test("taskDoctor detects and taskNew repairs an orphan task directory", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "ORPHAN-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "ORPHAN-TASK");
+  execFileSync("git", ["worktree", "remove", "--force", worktree], { cwd: root });
+  await mkdir(worktree, { recursive: true });
+  await writeFile(join(worktree, "leftover.txt"), "orphan\n", "utf8");
+
+  const diagnosis = await taskDoctor(root, { taskId: "ORPHAN-TASK" });
+  assert.equal(diagnosis.ok, true);
+  if (!diagnosis.ok) return;
+  assert.equal(diagnosis.orphanDirectory, true);
+  assert.equal(diagnosis.healthy, false);
+
+  const repaired = await taskNew(root, { taskId: "ORPHAN-TASK", base: "main" });
+  assert.equal(repaired.ok, true);
+  if (!repaired.ok) return;
+  assert.equal(repaired.repaired, true);
+  await assert.rejects(readFile(join(worktree, "leftover.txt"), "utf8"));
+});
+
+test("force cleanup removes shared node_modules links without touching their targets", async () => {
+  const root = await makeRepoWithBareRemote();
+  await mkdir(join(root, "node_modules", "keep-me"), { recursive: true });
+  await writeFile(join(root, "node_modules", "keep-me", "sentinel.txt"), "safe\n", "utf8");
+  await taskNew(root, { taskId: "SAFE-CLEANUP", base: "main" });
+
+  const cleaned = await taskCleanup(root, { taskId: "SAFE-CLEANUP", force: true });
+  assert.equal(cleaned.ok, true);
+  assert.equal(await readFile(join(root, "node_modules", "keep-me", "sentinel.txt"), "utf8"), "safe\n");
+});
+
+test("taskNew and taskGraph derive master when it is the real default branch", async () => {
+  const root = await makeRoot();
+  execFileSync("git", ["init", "-b", "master"], { cwd: root });
+  execFileSync("git", ["commit", "--allow-empty", "-m", "root"], { cwd: root });
+  const cloneRemote = await mkdtemp(join(tmpdir(), "ia-graft-remote-"));
+  roots.push(cloneRemote);
+  execFileSync("git", ["clone", "--bare", root, join(cloneRemote, "origin.git")], { cwd: root });
+  execFileSync("git", ["remote", "add", "origin", join(cloneRemote, "origin.git")], { cwd: root });
+  execFileSync("git", ["fetch", "origin"], { cwd: root });
+
+  const created = await taskNew(root, { taskId: "DEFAULT-BASE" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.base, "master");
+  const graph = await taskGraph(root);
+  assert.equal(graph.defaultBranch.branch, "master");
+});
+
+test("dependent tasks start from their parent and expose the stack in taskGraph", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "STACK-PARENT", base: "main" });
+  const parentWorktree = join(root, ".worktrees", "STACK-PARENT");
+  await writeFile(join(parentWorktree, "parent.txt"), "parent\n", "utf8");
+  await taskCommit(root, { taskId: "STACK-PARENT", message: "parent layer" });
+
+  const child = await taskNew(root, { taskId: "STACK-CHILD", parent: "STACK-PARENT" });
+  assert.equal(child.ok, true);
+  if (!child.ok) return;
+  assert.equal(child.base, "task/STACK-PARENT");
+  assert.equal(child.parent, "STACK-PARENT");
+  assert.equal((await readFile(join(root, ".worktrees", "STACK-CHILD", "parent.txt"), "utf8")).trim(), "parent");
+
+  const graph = await taskGraph(root);
+  const row = graph.tasks.find((task) => task.taskId === "STACK-CHILD");
+  assert.equal(row?.parent, "STACK-PARENT");
+  assert.equal(row?.base, "task/STACK-PARENT");
+});
+
+test("task checkout moves a clean task to main for testing and restore recreates its worktree", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "CHECKOUT-TASK", base: "main" });
+
+  const checkedOut = await taskCheckout(root, { taskId: "CHECKOUT-TASK" });
+  assert.equal(checkedOut.ok, true);
+  assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd: root }).toString().trim(), "task/CHECKOUT-TASK");
+  const during = await taskDoctor(root, { taskId: "CHECKOUT-TASK" });
+  assert.equal(during.ok, true);
+  if (!during.ok) return;
+  assert.equal(during.checkoutMode, "main");
+
+  await writeFile(join(root, "generated-during-test.txt"), "generated\n", "utf8");
+  await assert.rejects(taskCheckout(root, { restore: true }), /uncommitted task changes/);
+  const restored = await taskCheckout(root, { restore: true, force: true });
+  assert.equal(restored.ok, true);
+  assert.equal("discardedChanges" in restored && restored.discardedChanges, true);
+  assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd: root }).toString().trim(), "main");
+  assert.equal(execFileSync("git", ["branch", "--show-current"], { cwd: join(root, ".worktrees", "CHECKOUT-TASK") }).toString().trim(), "task/CHECKOUT-TASK");
+  await assert.rejects(readFile(join(root, "generated-during-test.txt"), "utf8"));
+});
+
+test("taskNew recreates a local worktree from an existing remote-only task branch", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "REMOTE-RESUME", base: "main" });
+  const worktree = join(root, ".worktrees", "REMOTE-RESUME");
+  await writeFile(join(worktree, "remote.txt"), "remote\n", "utf8");
+  await taskCommit(root, { taskId: "REMOTE-RESUME", message: "remote state" });
+  execFileSync("git", ["push", "origin", "task/REMOTE-RESUME"], { cwd: worktree });
+  await taskCleanup(root, { taskId: "REMOTE-RESUME", force: true });
+
+  const resumed = await taskNew(root, { taskId: "REMOTE-RESUME" });
+  assert.equal(resumed.ok, true);
+  if (!resumed.ok) return;
+  assert.equal(resumed.resumed, true);
+  assert.equal((await readFile(join(worktree, "remote.txt"), "utf8")).trim(), "remote");
+});
+
+test("force cleanup handles paths longer than the legacy Windows MAX_PATH", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "LONG-PATH-CLEANUP", base: "main" });
+  const worktree = join(root, ".worktrees", "LONG-PATH-CLEANUP");
+  const deep = join(worktree, ...Array.from({ length: 14 }, (_, index) => `segment-${index.toString().padStart(2, "0")}-abcdefghij`));
+  await mkdir(deep, { recursive: true });
+  await writeFile(join(deep, "sentinel.txt"), "long\n", "utf8");
+
+  const cleaned = await taskCleanup(root, { taskId: "LONG-PATH-CLEANUP", force: true });
+  assert.equal(cleaned.ok, true);
+  await assert.rejects(readdir(worktree));
+});
+
+test("task done refuses a base that differs from the task's recorded parent", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "BASE-PARENT", base: "main" });
+  await taskNew(root, { taskId: "BASE-CHILD", parent: "BASE-PARENT" });
+  await assert.rejects(
+    taskDone(root, { taskId: "BASE-CHILD", title: "child", body: "child body", base: "main" }),
+    /task base mismatch/,
+  );
+  await assert.rejects(
+    taskDone(root, { taskId: "BASE-CHILD", title: "child", body: "child body" }),
+    /parent task branch task\/BASE-PARENT is not published/,
+  );
 });
