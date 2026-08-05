@@ -1,6 +1,6 @@
 # ADR-0010: provider-neutral task coordination
 
-- Status: **Accepted; replaced in place on 2026-08-03 with explicit owner approval.**
+- Status: **Accepted; replaced in place on 2026-08-03 and safety/stack lifecycle amended on 2026-08-04 with explicit owner approval.**
 - Decision owner: repository-owner
 - Records: DEC-031, DEC-048
 - Related: ADR-0015
@@ -22,6 +22,19 @@ the existing PR after review follow-up commits. No task JSON, ownership ledger,
 or immutable handoff record is authoritative. Provider chat remains private and
 non-authoritative.
 
+Lifecycle recovery is also canonical CLI behavior: an existing local/remote
+task branch is reattached when its directory is missing; a reserved orphan
+directory is diagnosed and safely repaired; `task doctor` exposes inconsistent
+Git/filesystem/PR state; and cleanup detaches confirmed shared dependency links
+before removing a worktree. Agents use `task checkout`/`--restore` for temporary
+main-checkout runtime testing rather than manually moving branches or directories.
+
+Review feedback resumes the same task/PR. A distinct task is either independent
+from the detected default branch or explicitly dependent through `--parent`,
+which creates a normal stacked branch and PR base without rebasing. Parent/base
+intent is stored in local Git branch config and validated against the PR; it is
+derived operational metadata, not a second committed task registry.
+
 Concurrent tasks use distinct worktrees. Overlap is resolved visibly by Git/PR
 review rather than duplicated file-ownership state. Vendor adapters point to
 `AGENTS.md` and the protocol and may enforce the Git safety subset.
@@ -37,6 +50,9 @@ a second coordination database.
 ## Invariants
 
 - one deterministic worktree and branch per task ID;
+- one open PR maps back to the same deterministic task for review follow-up;
+- dependent tasks name an explicit parent; independent tasks use the repository's detected default branch;
+- filesystem cleanup is limited to a validated `.worktrees/<TASK-ID>` target and never traverses shared dependency links;
 - no agent pushes or commits on `main`/`master`;
 - no history rewriting or agent-side PR merge;
 - cleanup refuses dirty or unmerged work unless abandonment is explicit;

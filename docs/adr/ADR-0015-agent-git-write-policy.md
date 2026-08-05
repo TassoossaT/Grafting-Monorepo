@@ -1,6 +1,6 @@
 # ADR-0015: agent Git write policy
 
-- Status: **Accepted; superseded in place on 2026-08-03 with explicit owner approval.**
+- Status: **Accepted; superseded in place on 2026-08-03 and safe checkout/stack lifecycle amended on 2026-08-04 with explicit owner approval.**
 - Decision owner: repository-owner
 - Record: DEC-053
 - Amends: ADR-0010
@@ -22,6 +22,21 @@ Agents must never:
 
 A human remains the only party that merges a PR. Agent commits are proposals
 made durable for review; merge is the human approval boundary.
+
+`ia-graft task checkout` may temporarily place a clean task branch in a clean
+main checkout solely for local runtime testing. The CLI records the previous
+branch and recreates the linked task worktree on `--restore`; task commit and
+other Git mutations remain forbidden there. A dirty restore is refused unless
+`--force` explicitly discards only that task checkout's uncommitted files.
+Explicit `task cleanup --force` is
+the supported abandonment path and must apply the same validated, link-safe
+filesystem removal as post-merge cleanup.
+
+Dependent `--parent` tasks are forward-only branches whose PR base is their
+parent branch. This does not authorize cascading rebase, force-with-lease or
+agent-side stack merge. GitHub's Stacked PR preview may only be adopted through
+a later explicit policy decision because its synchronization workflow rewrites
+branch history.
 
 ## Rationale
 

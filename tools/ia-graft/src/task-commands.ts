@@ -17,6 +17,7 @@ export function isValidTaskId(taskId: string): boolean {
 export interface TaskNewInput {
   taskId: string;
   base?: string;
+  parent?: string;
 }
 
 /**
@@ -33,13 +34,20 @@ export async function taskNew(repoRoot: string, input: TaskNewInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
   await client.sweepMergedWorktrees().catch(() => undefined);
-  const { session, resumed } = await client.createOrResumeSession(input.taskId, input.base ?? "main");
+  if (input.parent && !isValidTaskId(input.parent)) return fail(`invalid parent task id: ${input.parent}`);
+  const { session, resumed, repaired, base, parent } = await client.createOrResumeSession(input.taskId, {
+    base: input.base,
+    parentTaskId: input.parent,
+  });
   return {
     ok: true as const,
     worktreePath: session.worktreePath,
     branch: session.branchName,
     nodeModulesLinked: session.nodeModulesLinked,
     resumed,
+    repaired,
+    base,
+    parent,
   };
 }
 
@@ -54,7 +62,7 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.message) return fail("message is required");
   const client = new GitClient(repoRoot);
-  const session = client.openSession(input.taskId);
+  const session = await client.openSession(input.taskId);
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   await session.commit(input.message);
   return { ok: true as const };
@@ -77,7 +85,7 @@ export async function taskTest(repoRoot: string, input: TaskTestInput) {
     return fail("dependency-mutating commands are forbidden in task worktrees because node_modules is shared; run installs in the main checkout");
   }
   const client = new GitClient(repoRoot);
-  const session = client.openSession(input.taskId);
+  const session = await client.openSession(input.taskId);
   const { passed, summary } = await session.runTests(input.command);
   return { ok: true as const, passed, summary };
 }
@@ -98,10 +106,11 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.title || !input.body) return fail("title and body are required");
   const client = new GitClient(repoRoot);
-  const session = client.openSession(input.taskId);
+  const session = await client.openSession(input.taskId);
+  const base = await client.resolveTaskBase(input.taskId, input.base);
   await session.push();
-  const pr = await session.createPullRequest(input.title, input.body, input.base ?? "main");
-  return { ok: true as const, prUrl: pr.url, prState: pr.state, note: pr.state === "manual" ? "branch pushed; open the PR manually at prUrl" : undefined };
+  const pr = await session.createPullRequest(input.title, input.body, base);
+  return { ok: true as const, prUrl: pr.url, prState: pr.state, base, note: pr.state === "manual" ? `branch pushed; open the PR manually at prUrl (${pr.reason})` : undefined };
 }
 
 export interface TaskCleanupInput {
@@ -113,13 +122,48 @@ export interface TaskCleanupInput {
 export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
-  await client.cleanupTask(input.taskId, input.force ?? false);
-  return { ok: true as const };
+  const result = await client.cleanupTask(input.taskId, input.force ?? false);
+  return { ok: true as const, ...result };
 }
 
 export async function taskStatus(repoRoot: string, input: { taskId: string }) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   return { ok: true as const, ...(await new GitClient(repoRoot).taskStatus(input.taskId)) };
+}
+
+export async function taskDoctor(repoRoot: string, input: { taskId: string }) {
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
+  const diagnosis = await new GitClient(repoRoot).taskStatus(input.taskId);
+  const healthy = diagnosis.checkoutMode === "worktree" && diagnosis.issues.length === 0;
+  const recommendedAction = healthy ? "none"
+    : diagnosis.orphanDirectory ? "task new --id <ID>"
+    : diagnosis.checkoutMode === "main" ? "task checkout --restore"
+    : "task new --id <ID>";
+  return { ok: true as const, healthy, ...diagnosis, recommendedAction };
+}
+
+export async function taskResume(repoRoot: string, input: { taskId?: string; pr?: number }) {
+  if (input?.pr !== undefined) {
+    if (!Number.isInteger(input.pr) || input.pr <= 0) return fail(`invalid PR number: ${input.pr}`);
+    const result = await new GitClient(repoRoot).resumeFromPullRequest(input.pr);
+    return { ok: true as const, taskId: result.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath, pr: result.pr, repaired: result.repaired };
+  }
+  if (!input?.taskId || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
+  const result = await new GitClient(repoRoot).createOrResumeSession(input.taskId);
+  return { ok: true as const, taskId: input.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath, resumed: result.resumed, repaired: result.repaired, base: result.base };
+}
+
+export async function taskCheckout(repoRoot: string, input: { taskId?: string; restore?: boolean; force?: boolean }) {
+  const client = new GitClient(repoRoot);
+  if (input?.restore) return { ok: true as const, ...(await client.restoreCheckout(input.force ?? false)) };
+  if (!input?.taskId || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
+  return { ok: true as const, taskId: input.taskId, ...(await client.checkoutTask(input.taskId)) };
+}
+
+export async function taskGraph(repoRoot: string) {
+  const client = new GitClient(repoRoot);
+  const defaultBranch = await client.resolveDefaultBranch();
+  return { ok: true as const, defaultBranch, tasks: await client.taskGraph() };
 }
 
 /**
