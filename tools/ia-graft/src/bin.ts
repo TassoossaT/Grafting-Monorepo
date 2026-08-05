@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCleanup, taskCommit, taskDone, taskNew, taskStatus, taskSweep, taskTest } from "./task-commands.ts";
+import { taskCheckout, taskCleanup, taskCommit, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -68,12 +68,18 @@ function readValues(argv: string[], name: string): string[] {
 function flagInput(subcommand: string | undefined, argv: string[]): unknown | undefined {
   if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const taskId = readValue(argv, "--id");
-  if (subcommand === "new") return { taskId, base: readValue(argv, "--base") };
+  if (subcommand === "new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
+  if (subcommand === "resume") {
+    const pr = readValue(argv, "--pr");
+    return { taskId, pr: pr === undefined ? undefined : Number(pr) };
+  }
   if (subcommand === "commit") return { taskId, message: readValue(argv, "--message"), files: readValues(argv, "--file") };
   if (subcommand === "test") return { taskId, command: readValue(argv, "--command") };
   if (subcommand === "done") return { taskId, title: readValue(argv, "--title"), body: readValue(argv, "--body"), base: readValue(argv, "--base") };
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
   if (subcommand === "status") return { taskId };
+  if (subcommand === "doctor") return { taskId };
+  if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
   return undefined;
 }
 function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
@@ -100,17 +106,21 @@ async function main(argv: string[]): Promise<void> {
     if (group === "task") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
       if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
+      if (subcommand === "resume") printAndExit(await taskResume(root, input as Parameters<typeof taskResume>[1]));
       if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
       if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
       if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
       if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
       if (subcommand === "status") printAndExit(await taskStatus(root, input as Parameters<typeof taskStatus>[1]));
+      if (subcommand === "doctor") printAndExit(await taskDoctor(root, input as Parameters<typeof taskDoctor>[1]));
+      if (subcommand === "checkout") printAndExit(await taskCheckout(root, input as Parameters<typeof taskCheckout>[1]));
+      if (subcommand === "graph") printAndExit(await taskGraph(root));
       if (subcommand === "sweep") printAndExit(await taskSweep(root));
     }
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|commit|test|done|cleanup|status|sweep> (flags, --input JSON, or JSON stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft task <new|resume|commit|test|done|cleanup|status|doctor|checkout|graph|sweep> (flags, --input JSON, or JSON stdin)`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

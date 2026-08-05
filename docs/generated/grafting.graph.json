@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "graphId": "grafting.workspace",
-  "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+  "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
   "generator": {
     "id": "extractor:nx-graph-ir",
     "version": "1.0.0",
-    "inputHash": "9bb00712e60d449f3836104495d9124ffc6d24cebf97f829f493e68b528cc989"
+    "inputHash": "94ea943b1088718da1ceb9079ffc60f447cc32944cf28ac568f2263900aeb3de"
   },
   "nodes": [
     {
@@ -26,14 +26,44 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/name",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:discretize",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "discretize",
+      "tags": [
+        "lang:rust",
+        "npm:private",
+        "platform:web",
+        "scope:procgen",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/name",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
           }
         ]
       }
@@ -55,7 +85,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -84,7 +114,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -113,7 +143,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -135,7 +165,7 @@
         "lang:rust",
         "npm:private",
         "platform:web",
-        "scope:vtt",
+        "scope:procgen",
         "type:lib"
       ],
       "provenance": {
@@ -143,14 +173,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/name",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -171,7 +201,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -200,7 +230,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -230,7 +260,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -259,7 +289,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -288,7 +318,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -317,7 +347,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -347,7 +377,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -377,7 +407,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -407,7 +437,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -438,7 +468,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -461,14 +491,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -484,14 +514,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build-storybook",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -507,14 +537,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -530,14 +560,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/dev",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -553,14 +583,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -576,14 +606,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -599,14 +629,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -622,14 +652,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-generate",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -645,14 +675,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/storybook",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -668,14 +698,129 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/test",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/check",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/docs-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/docs-generate",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-generate",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/postinstall",
+      "kind": "target",
+      "authorityClass": "derived_evidence",
+      "label": "postinstall",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/discretize/data/targets/postinstall",
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/test",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
           }
         ]
       }
@@ -691,7 +836,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -714,7 +859,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -737,7 +882,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -760,7 +905,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -783,7 +928,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -806,7 +951,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -829,7 +974,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -852,7 +997,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -875,7 +1020,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -898,7 +1043,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -921,7 +1066,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -944,7 +1089,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -967,7 +1112,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -990,14 +1135,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -1013,14 +1158,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -1036,14 +1181,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -1059,14 +1204,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -1082,14 +1227,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -1105,7 +1250,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1128,7 +1273,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1151,7 +1296,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1174,7 +1319,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1197,7 +1342,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1220,7 +1365,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1243,7 +1388,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1266,7 +1411,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1289,7 +1434,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1312,7 +1457,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1335,7 +1480,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1358,7 +1503,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1381,7 +1526,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1404,7 +1549,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1427,7 +1572,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1450,7 +1595,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1473,7 +1618,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1496,7 +1641,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1519,7 +1664,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1542,7 +1687,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1565,7 +1710,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1588,7 +1733,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1611,7 +1756,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1634,7 +1779,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1657,7 +1802,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1680,7 +1825,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1703,14 +1848,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -1726,7 +1871,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1749,14 +1894,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -1772,7 +1917,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1795,7 +1940,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1818,7 +1963,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1841,7 +1986,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1864,7 +2009,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1887,7 +2032,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1910,7 +2055,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1933,7 +2078,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1956,7 +2101,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -1979,7 +2124,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2002,7 +2147,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2025,14 +2170,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -2048,7 +2193,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2071,7 +2216,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2094,7 +2239,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2117,7 +2262,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2140,7 +2285,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2163,7 +2308,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2186,7 +2331,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2209,7 +2354,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2232,7 +2377,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2255,7 +2400,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2278,7 +2423,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2301,7 +2446,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2324,7 +2469,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2347,7 +2492,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2370,7 +2515,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2393,7 +2538,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2418,14 +2563,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2441,14 +2586,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build-storybook",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2464,14 +2609,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2487,14 +2632,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/dev",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2510,14 +2655,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2533,14 +2678,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2556,14 +2701,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-check",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2579,14 +2724,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-generate",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2602,14 +2747,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/storybook",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2625,14 +2770,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/test",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Adiscretize",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:discretize",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/architecture-studio/project.json",
+            "pointer": "/implicitDependencies",
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2648,14 +2816,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2671,14 +2839,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
           }
         ]
       }
@@ -2694,14 +2862,129 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "32497c37ff54bba7f6baf6bed784e70302d0321cb114559317c296c3fdbc322b"
+            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Fcheck",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/check",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Fdocs-check",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/docs-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Fdocs-generate",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/docs-generate",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Fpostinstall",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/postinstall",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/discretize/data/targets/postinstall",
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Ftest",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/test",
+            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
           }
         ]
       }
@@ -2717,7 +3000,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2740,7 +3023,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2763,7 +3046,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2786,7 +3069,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2809,7 +3092,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2832,7 +3115,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2855,7 +3138,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2878,7 +3161,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2901,7 +3184,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2924,7 +3207,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2947,7 +3230,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2970,7 +3253,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -2993,7 +3276,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3016,7 +3299,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3039,14 +3322,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -3062,14 +3345,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -3085,14 +3368,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -3108,14 +3391,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -3131,14 +3414,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
-            "path": "libs/vtt/generation-wasm/project.json",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "6cf0ddeb5d2d54b48e1ffd35aea846f7469f7a588b66a50f12fe079e9c9e9b84"
+            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
           }
         ]
       }
@@ -3154,7 +3437,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3177,7 +3460,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3200,7 +3483,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3223,7 +3506,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3246,7 +3529,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3269,7 +3552,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3292,7 +3575,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3315,7 +3598,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3338,7 +3621,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3361,7 +3644,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3384,7 +3667,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3407,7 +3690,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3430,7 +3713,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3453,7 +3736,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3476,7 +3759,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3499,7 +3782,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3522,7 +3805,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3545,7 +3828,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3568,7 +3851,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3591,7 +3874,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3614,7 +3897,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3637,7 +3920,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3660,7 +3943,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3683,7 +3966,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3706,7 +3989,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3729,7 +4012,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3752,14 +4035,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -3775,7 +4058,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3798,14 +4081,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -3821,7 +4104,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3844,7 +4127,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3867,7 +4150,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3890,7 +4173,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3913,7 +4196,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3936,7 +4219,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3959,7 +4242,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -3982,7 +4265,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4005,7 +4288,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4028,7 +4311,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4051,7 +4334,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4074,7 +4357,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4097,7 +4380,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4120,7 +4403,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4143,14 +4426,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "b54a85d086af7f98a160ae608463b3ead6ec42ef86f315a023ee29a1873bbdf1"
+            "sha256": "0b7ab213a8b077798dff29bb0d7b5806710b22fa9b1153d77782e5411c6bf610"
           }
         ]
       }
@@ -4166,7 +4449,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4189,7 +4472,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4212,7 +4495,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4235,7 +4518,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4258,7 +4541,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4281,7 +4564,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4304,7 +4587,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4327,7 +4610,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4350,7 +4633,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4373,7 +4656,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4396,7 +4679,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4419,7 +4702,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4442,7 +4725,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4465,7 +4748,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4488,7 +4771,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4511,7 +4794,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4534,7 +4817,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4557,7 +4840,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {
@@ -4580,7 +4863,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:70f00555087b7e98572cbeda0a7677ffd0ce588e901a092294f78738a40a600d",
+        "sourceRevision": "workspace:sha256:58ec143c75cc0006bec6cb859cda719a417ba08509b293cd2f1fa14be0b614dc",
         "confidence": 1,
         "evidence": [
           {

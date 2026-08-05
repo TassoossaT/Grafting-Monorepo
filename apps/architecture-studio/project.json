@@ -3,7 +3,7 @@
   "root": "apps/architecture-studio",
   "projectType": "application",
   "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
-  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "ui"],
+  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "discretize", "ui"],
   "metadata": {
     "graphIr": {
       "id": "architecture-studio",

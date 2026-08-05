@@ -1,9 +1,11 @@
-//! Wasm bridge exposing a small, real VTT procedural-generation slice
-//! (a `noise`-backed heightmap sampler) to the Architecture Studio's VTT
-//! generation-test surface. This is pipeline step 1 only (the continuous
-//! heightmap seed, per `docs/research/vtt-map-and-terrain-construction-options.md`'s
-//! end-to-end pipeline section) -- not the terrain-quantization, water,
-//! WFC, or interior passes, which remain future work.
+//! Wasm bridge exposing a small, real procedural-generation slice (a
+//! `noise`-backed heightmap sampler) as a generic, shareable domain
+//! capability, currently exercised by Architecture Studio's generation-test
+//! surface. This is pipeline step 1 only (the continuous heightmap seed, per
+//! `docs/research/vtt-map-and-terrain-construction-options.md`'s end-to-end
+//! pipeline section, which designed this capability for the VTT product
+//! first) -- not the terrain-quantization, water, WFC, or interior passes,
+//! which remain future work.
 
 use noise::{NoiseFn, Perlin};
 use wasm_bindgen::prelude::*;

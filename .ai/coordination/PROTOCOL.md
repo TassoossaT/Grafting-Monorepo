@@ -30,32 +30,58 @@ ADR-per-task.
 
 - `guard-check` — ask "would `<tool>` on `<path>`/`<command>` be allowed"
   before attempting it; returns `{ok, allowed, reason}`.
-- `task new --id <TASK-ID> [--base main]` — first sweeps `.worktrees/` for
+- `task new --id <TASK-ID> [--base <branch> | --parent <PARENT-TASK-ID>]` — resolves
+  the repository's real default branch when no base is supplied, first sweeps `.worktrees/` for
   already-merged tasks and cleans them up silently (see `task sweep` below;
   a sweep failure never blocks creating the task actually being asked for),
   then creates or resumes an isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
-  (`task/<TASK-ID>`) off `origin/<base>`, and links every `node_modules` in
+  (`task/<TASK-ID>`). It reattaches an existing local/remote task branch when its
+  worktree is missing, safely repairs a reserved orphan directory left by an incomplete
+  Windows removal, and records the task's intended base in local Git branch config.
+  It refuses to resume an ID whose PR is already closed or merged; subsequent work
+  gets a new ID from the current default branch instead of extending stale/squashed history.
+  `--parent` creates a dependent branch from the parent's current local HEAD and records
+  the parent branch as the child's PR base; omit it for independent work. It links every `node_modules` in
   the tree (root and each nested package, pnpm-workspace style) from the
   main checkout into it — a plain `git worktree add` never brings gitignored
   dependency trees, which breaks `tsc`/most tests otherwise. Only reports
   success once linked (or once confirmed the main checkout itself has no
   `node_modules` to give).
   Shared dependency junctions are read-only operationally: never run `pnpm/npm/yarn/bun install/add/remove/update` inside a task worktree; install only in the main checkout. `task test` rejects these commands.
+- `task resume --id <TASK-ID>` / `task resume --pr <number>` — explicitly resumes
+  an existing task. PR-based resume derives the canonical task ID, head and base from
+  GitHub and refuses closed/merged PRs, so requested changes stay on the same PR.
 - `task commit --id <TASK-ID> --message <msg> [--file <path>]...` — stages
   (all changed files, or a given subset) and commits inside that worktree.
 - `task test --id <TASK-ID> --command <cmd>` — runs a test/check command
   inside the worktree and returns a compact pass/fail summary (node:test's
   TAP summary + failures, or the last 40 lines for any other runner)
   instead of the raw transcript — spend tokens on the result, not the log.
-- `task done --id <TASK-ID> --title <title> --body <body> [--base main]` —
+- `task done --id <TASK-ID> --title <title> --body <body> [--base <branch>]` —
   pushes the branch and opens a pull request via `gh pr create`. If `gh` is
   missing or unauthenticated, it still pushes and returns
   `{prState: "manual", prUrl: <manual compare URL>}` instead of failing. Leaves
-  the worktree in place for any follow-up review commits.
-- `task status --id <TASK-ID>` — derives existence, branch, dirty state and HEAD from Git; no status file is written.
+  the worktree in place for any follow-up review commits. Any other `gh pr create`
+  failure is explicit with its stderr; it is never mislabeled as a manual fallback.
+  The recorded base is validated, and the first push sets the task branch's own upstream.
+- `task status --id <TASK-ID>` / `task doctor --id <TASK-ID>` — derives local and
+  remote branch existence, registered worktree, on-disk directory, orphan/mismatch,
+  dirty state, HEAD, parent/base and PR from Git/GitHub. `doctor` adds health and a
+  recommended recovery action; no committed task/status file is written.
+- `task checkout --id <TASK-ID>` / `task checkout --restore [--force]` — temporarily moves a
+  clean task branch from its linked worktree into a clean main checkout for local
+  runtime testing, then restores the prior branch and recreates the linked worktree.
+  Commits remain forbidden from the main checkout. Restore refuses generated or
+  edited task files unless `--force` explicitly discards them before switching back.
+- `task graph` — reports the default branch and local `task/*` branches with their
+  recorded parent/base, HEAD and worktree location for Source Control/agent discovery.
 - `task cleanup --id <TASK-ID> [--force]` — after the PR has merged, removes the
   worktree directory (retrying briefly on a transient Windows file-lock) and
-  prunes Git metadata. Without `--force`, dirty or unmerged tasks are refused. Force means explicit abandonment. The remote branch is left intact deliberately.
+  prunes Git metadata. Cleanup validates the exact reserved target and removes only
+  confirmed shared `node_modules` links/junctions before recursive deletion, with a
+  long-path Windows fallback that cannot traverse those links. Without `--force`,
+  dirty or unmerged tasks are refused. Force means explicit abandonment and is the
+  supported way to discard an unmerged task. The remote branch is left intact deliberately.
 - `task sweep` — checks every worktree under `.worktrees/` against `gh` and
   cleans up (worktree + local branch) whichever ones already have a merged
   PR. `task new` already calls this itself before creating anything, so
@@ -73,26 +99,37 @@ ADR-per-task.
    through a task branch and a PR; only the ceremony differs (a direct/simple
    edit skips required-reading and gets a terser title/body). Never commit
    on `master`/`main` directly, with no exception.
-2. `ia-graft task new --id <TASK-ID>`, then work only inside the printed
+2. Classify the request before creating anything: requested changes on an open
+   PR use `task resume --pr <number>` (or the same task ID); independent work
+   uses `task new --id <TASK-ID>`; work that truly depends on an unmerged task
+   uses `task new --id <TASK-ID> --parent <PARENT-TASK-ID>`. Never create a new
+   task merely because review feedback arrived.
+3. Then work only inside the printed
    worktree path. Pick `<TASK-ID>` so it doesn't collide with another
    agent's in-flight worktree (check `git worktree list` / open branches
    named `task/*` first).
-3. `ia-graft task commit --id <TASK-ID> --message <msg>` as you make
+4. `ia-graft task commit --id <TASK-ID> --message <msg>` as you make
    progress — there is no "declare then batch-commit at the end" step;
    commit early and often, never with raw `git commit` in the main checkout.
-4. Before opening the PR, run the change's own tests via
+5. Before opening the PR, run the change's own tests via
    `ia-graft task test --id <TASK-ID> --command <cmd>` — it returns a
    compact pass/fail summary, not the raw transcript.
-5. When the task is ready for review, `ia-graft task done --id <TASK-ID> --title
+6. When the task is ready for review, `ia-graft task done --id <TASK-ID> --title
    <title> --body <body>` pushes the branch and opens the pull request (via
    `gh`, when available — otherwise it still pushes and returns a manual
-   compare URL). During review, run `task new --id <TASK-ID>` to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
+   compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
    `ia-graft task cleanup --id <TASK-ID>` removes the
    worktree.
 
 Isolation between agents comes entirely from separate worktrees/branches. If
 two agents need to touch the same area, that surfaces as a normal Git merge
 conflict on the PR, not as a pre-emptive file-ownership check.
+
+Dependent tasks use ordinary stacked branches/PR bases while retaining one
+worktree per agent. The official GitHub Stacked PR preview is not part of this
+contract: its cascading rebase and force-with-lease behavior conflicts with the
+forward-only policy below. Adopting it requires a separate owner-approved policy
+change; `--parent` itself never rebases or force-pushes.
 
 ## Runtime enforcement adapter
 
@@ -179,6 +216,7 @@ reminder inline right after an edit crosses a threshold.
 
 Roll back the Claude enforcement adapter by removing its `PreToolUse` entry
 from `.claude/settings.json` and reverting the guard script's tracked
-changes. Rolling back a task means abandoning its worktree/branch (`ia-graft
-task cleanup`, or a manual `git worktree remove`) — never delete another
+changes. Rolling back a task means abandoning its worktree/branch with
+`ia-graft task cleanup --id <TASK-ID> --force` — never use an ad-hoc filesystem
+or Git deletion path, and never delete another
 agent's in-flight worktree or branch.

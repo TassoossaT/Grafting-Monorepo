@@ -7,10 +7,11 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
+| `discretize` | library | `libs/domains/procgen/discretize` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `engine-compute-api` | library | `libs/engine/compute-api` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-compute-cpu` | library | `libs/engine/compute-cpu` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-domain-core` | library | `libs/engine/domain-core` | `check`, `docs-check`, `docs-generate`, `generate`, `test` |
-| `generation-wasm` | library | `libs/vtt/generation-wasm` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `generation-wasm` | library | `libs/domains/procgen/generation-wasm` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `graph-core` | library | `libs/graph/core` | `api-check`, `check`, `docs-check`, `docs-generate`, `format`, `graph-ir-check`, `lint`, `test` |
 | `isekai-capi-bridge` | library | `libs/isekai/capi-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `test` |
 | `isekai-wasm-bridge` | library | `libs/isekai/wasm-bridge` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
@@ -38,4 +39,4 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | --- | --- | --- | --- |
 | `grafting` | library | `.` | `ai-audit`, `ai-check`, `docs-api-rust-check`, `docs-api-rust-generate`, `docs-api-ts-check`, `docs-api-ts-generate`, `docs-check`, `graph-check`, `graph-extract`, `graph-extract-check`, `graph-generate`, `graph-manifest`, `graph-manifest-check`, `graph-map`, `graph-map-check`, `graph-v1-check`, `graph-v1-test`, `toolchains-check` |
 
-_15 project(s) total._
+_16 project(s) total._

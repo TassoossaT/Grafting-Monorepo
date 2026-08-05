@@ -153,7 +153,7 @@ premature.
   output (no entry of its own) unless it carries a real file-level doc
   comment. A project is silently skipped, not an error, if it has no
   `project.json`, isn't tagged `lang:typescript`, or resolves to zero
-  entry points -- `libs/isekai/wasm-bridge` and `libs/vtt/generation-wasm`
+  entry points -- `libs/isekai/wasm-bridge` and `libs/domains/procgen/generation-wasm`
   (Rust crates that are also normal npm packages purely to host their own
   generated Wasm bindings, DEC-055/ADR-0017; their own `package.json` says
   "No domain logic here") fall out this way via their `lang:rust` tag

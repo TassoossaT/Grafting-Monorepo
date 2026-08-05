@@ -28,7 +28,7 @@
 //     public API surface.
 // A project is skipped (not an error) if it has no project.json, isn't
 // tagged lang:typescript, or resolves to zero entry points --
-// libs/isekai/wasm-bridge and libs/vtt/generation-wasm (Rust crates that
+// libs/isekai/wasm-bridge and libs/domains/procgen/generation-wasm (Rust crates that
 // are also normal npm packages purely to host their own generated Wasm
 // bindings, co-located package.json says "No domain logic here",
 // DEC-055/ADR-0017) fall out naturally via their lang:rust tag rather

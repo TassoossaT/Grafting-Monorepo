@@ -1,9 +1,9 @@
 {
   "name": "generation-wasm",
-  "root": "libs/vtt/generation-wasm",
+  "root": "libs/domains/procgen/generation-wasm",
   "projectType": "library",
   "tags": [
-    "scope:vtt",
+    "scope:procgen",
     "lang:rust",
     "platform:web",
     "type:lib"
@@ -13,7 +13,7 @@
       "id": "generation-wasm",
       "kind": "lib",
       "tags": [
-        "scope:vtt",
+        "scope:procgen",
         "lang:rust",
         "platform:web",
         "type:lib"
@@ -24,7 +24,7 @@
     "check": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cargo check -p grafting-vtt-generation-wasm"
+        "command": "cargo check -p grafting-procgen-generation-wasm"
       },
       "cache": true,
       "inputs": [
@@ -37,7 +37,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cargo test -p grafting-vtt-generation-wasm"
+        "command": "cargo test -p grafting-procgen-generation-wasm"
       },
       "cache": true,
       "inputs": [
@@ -50,14 +50,14 @@
     "docs-generate": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm"
+        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-generation-wasm"
       },
       "cache": false
     },
     "docs-check": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-vtt-generation-wasm --check"
+        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-generation-wasm --check"
       },
       "cache": true,
       "inputs": [
@@ -65,7 +65,7 @@
         "{projectRoot}/Cargo.toml",
         "{workspaceRoot}/Cargo.toml",
         "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
-        "{workspaceRoot}/docs/generated/api/rust/grafting-vtt-generation-wasm.md",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-generation-wasm.md",
         "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
         "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
         "sharedGlobals"

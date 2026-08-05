@@ -96,6 +96,18 @@ instructions; they must not restate or override them.
   `.worktrees/` first, silently — nothing to invoke or remember, it's just
   what `task new` does.
   Treat linked `node_modules` as read-only; dependency installation or mutation runs only in the main checkout, never inside a task worktree.
+- **Review feedback is the same task**: use `ia-graft task resume --pr <number>`
+  or `task new` with the exact same ID; never create a second task for requested
+  changes on an open PR. For genuinely dependent new work, use
+  `task new --id <TASK-ID> --parent <PARENT-TASK-ID>`; independent work omits
+  `--parent` and starts from the detected default branch.
+- Use `task status`/`task doctor` before manual recovery. `task new` safely
+  reattaches an existing branch and repairs an orphan reserved task directory.
+  Use `task checkout --id <TASK-ID>` and `task checkout --restore [--force]`
+  for temporary testing in the clean main checkout; never commit there and
+  only use restore force to explicitly discard task-generated changes. Use
+  `task cleanup --id <TASK-ID> --force` for explicit abandonment instead of
+  manual worktree/filesystem deletion.
 - Commit as you go with `ia-graft task commit --id <TASK-ID> --message
   <msg>` (stages and commits inside the worktree) — not raw `git add`/`git
   commit`, and never in the main checkout.
@@ -107,7 +119,9 @@ instructions; they must not restate or override them.
   <title> --body <body>` to push the branch and open a pull request via
   `gh`. If `gh` can't open one (missing/unauthenticated), it still pushes
   and returns a manual compare URL instead of failing — open that URL
-  yourself. For requested changes, run `task new` with the same ID to resume, commit/test, and run `task done` again; it returns the existing PR. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
+  yourself. For requested changes, run `task resume --pr <number>` (or `task new`
+  with the same ID), commit/test, and run `task done` again; it returns the
+  existing PR. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
   to remove the worktree.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
   MCPs still requires explicit owner approval — open the PR and wait for

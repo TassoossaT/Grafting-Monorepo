@@ -434,6 +434,7 @@ Initial domain map (see `docs/adr/ADR-0008-libs-boundary-and-domain-map.md`):
 | Narrative / story creation | generic domain | `libs/domains/narrative` |
 | Session / campaign organization | generic domain | `libs/domains/session` |
 | VTT interactive map | product-specific presentation | The Web host composes `@grafting/ui`; Three.js remains private inside that package and the VTT does not reuse the graph canvas (DEC-056, ADR-0018) |
+| Procedural heightmap generation + generic value discretization | generic domain | `libs/domains/procgen` (`generation-wasm`, `discretize` Rust/Wasm crates) — designed against the VTT's map-generation pipeline (`docs/research/vtt-map-and-terrain-construction-options.md`) but reclassified from an initial VTT-scoped `libs/vtt/` location (owner direction, 2026-08-04): not exclusive to the VTT, any product needing procedural heightmap generation or continuous-to-discrete value binning can depend on it. `discretize` was itself renamed from `terrain-quantization` (owner direction, 2026-08-04) since it has no concept of terrain -- it bins any `[-1.0, 1.0]` float array into N levels |
 | Discord bot | external integration | its own service consuming `session`/`narrative` contracts, never internals |
 | Session transcription | external integration (likely Python) | `python/` or a dedicated service, feeding `narrative` via contract |
 
