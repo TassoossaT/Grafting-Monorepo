@@ -20,6 +20,478 @@ Invoked when the button is activated.
 
 Optional semantic emphasis.
 
+### `interface ui.CanvasEdge`
+
+Immutable presentation data for one directed canvas edge.
+
+### `property ui.CanvasEdge.data?: unknown`
+
+Opaque consumer-owned data delivered unchanged to the edge presenter.
+
+### `property ui.CanvasEdge.id: string`
+
+Stable caller-owned identity preserved by the adapter.
+
+### `property ui.CanvasEdge.source: CanvasEdgeTerminal`
+
+Source node and optional port.
+
+### `property ui.CanvasEdge.target: CanvasEdgeTerminal`
+
+Target node and optional port.
+
+### `property ui.CanvasEdge.view: string`
+
+Identifier of an edge view supplied in the canvas options.
+
+### `interface ui.CanvasEdgeLabelPresentation`
+
+Product-supplied label rendered along an edge.
+
+### `property ui.CanvasEdgeLabelPresentation.backgroundColor?: string`
+
+Label background color.
+
+### `property ui.CanvasEdgeLabelPresentation.borderColor?: string`
+
+Label boundary color.
+
+### `property ui.CanvasEdgeLabelPresentation.borderRadius?: number`
+
+Rounded-corner radius in CSS pixels.
+
+### `property ui.CanvasEdgeLabelPresentation.className?: string`
+
+Optional product CSS class used for effects and typography.
+
+### `property ui.CanvasEdgeLabelPresentation.color?: string`
+
+Text color.
+
+### `property ui.CanvasEdgeLabelPresentation.fontSize?: number`
+
+Font size in CSS pixels.
+
+### `property ui.CanvasEdgeLabelPresentation.fontWeight?: number`
+
+Numeric font weight.
+
+### `property ui.CanvasEdgeLabelPresentation.position?: number`
+
+Relative position from zero at the source to one at the target.
+
+### `property ui.CanvasEdgeLabelPresentation.text: string`
+
+Human-readable text.
+
+### `interface ui.CanvasEdgeLinePresentation`
+
+Product-supplied appearance of the rendered edge path.
+
+### `property ui.CanvasEdgeLinePresentation.attributes?: Readonly<Record<string, string | number>>`
+
+Optional SVG attributes that are not already represented above.
+
+### `property ui.CanvasEdgeLinePresentation.className?: string`
+
+Optional product CSS class used for effects and animation.
+
+### `property ui.CanvasEdgeLinePresentation.color?: string`
+
+Stroke color.
+
+### `property ui.CanvasEdgeLinePresentation.dash?: string`
+
+SVG dash pattern.
+
+### `property ui.CanvasEdgeLinePresentation.opacity?: number`
+
+Stroke opacity from zero to one.
+
+### `property ui.CanvasEdgeLinePresentation.sourceMarker?: CanvasEdgeMarkerPresentation`
+
+Optional source marker.
+
+### `property ui.CanvasEdgeLinePresentation.targetMarker?: CanvasEdgeMarkerPresentation`
+
+Optional target marker.
+
+### `property ui.CanvasEdgeLinePresentation.width?: number`
+
+Stroke width in CSS pixels.
+
+### `interface ui.CanvasEdgeMarkerPresentation`
+
+Optional marker rendered at one end of an edge.
+
+### `property ui.CanvasEdgeMarkerPresentation.fill?: string`
+
+Marker fill color.
+
+### `property ui.CanvasEdgeMarkerPresentation.height?: number`
+
+Marker height in CSS pixels.
+
+### `property ui.CanvasEdgeMarkerPresentation.kind: "block" | "none" | "classic"`
+
+Marker geometry, or `none` to suppress it explicitly.
+
+### `property ui.CanvasEdgeMarkerPresentation.stroke?: string`
+
+Marker stroke color.
+
+### `property ui.CanvasEdgeMarkerPresentation.width?: number`
+
+Marker width in CSS pixels.
+
+### `interface ui.CanvasEdgePresentation`
+
+Complete consumer-owned visual projection for an edge.
+
+### `property ui.CanvasEdgePresentation.connector?: CanvasEdgeConnector`
+
+Optional path geometry; omitted values use the adapter's neutral default.
+
+### `property ui.CanvasEdgePresentation.hitAreaWidth?: number`
+
+Optional transparent interaction width around the visible path.
+
+### `property ui.CanvasEdgePresentation.labels?: readonly CanvasEdgeLabelPresentation[]`
+
+Optional labels rendered along the path.
+
+### `property ui.CanvasEdgePresentation.line?: CanvasEdgeLinePresentation`
+
+Optional line treatment.
+
+### `property ui.CanvasEdgePresentation.zIndex?: number`
+
+Optional layer used only for presentation ordering.
+
+### `interface ui.CanvasEdgeRenderContext`
+
+Context delivered to a consumer-supplied edge presenter.
+
+### `property ui.CanvasEdgeRenderContext.edge: CanvasEdge`
+
+Complete immutable consumer-owned edge.
+
+### `property ui.CanvasEdgeRenderContext.selected: boolean`
+
+Whether the canvas currently selects this edge.
+
+### `interface ui.CanvasEdgeTerminal`
+
+Consumer-owned endpoint of a rendered edge.
+
+### `property ui.CanvasEdgeTerminal.nodeId: string`
+
+Stable identity of the endpoint node.
+
+### `property ui.CanvasEdgeTerminal.portId?: string`
+
+Optional port identity defined by the endpoint node view.
+
+### `interface ui.CanvasEdgeViewDefinition`
+
+Consumer-supplied edge renderer registered for one canvas instance.
+
+### `property ui.CanvasEdgeViewDefinition.id: string`
+
+Stable identifier referenced by `CanvasEdge.view`.
+
+### `method ui.CanvasEdgeViewDefinition.present(context: CanvasEdgeRenderContext): CanvasEdgePresentation`
+
+Projects product data and selection into a vendor-neutral edge presentation.
+
+### `interface ui.CanvasEntityReference`
+
+Stable reference to one caller-owned entity rendered on the canvas.
+
+### `property ui.CanvasEntityReference.id: string`
+
+Stable caller-owned identifier preserved by the adapter.
+
+### `property ui.CanvasEntityReference.kind: "node" | "edge"`
+
+Kind of rendered entity referenced by the caller-owned identifier.
+
+### `interface ui.CanvasGridPresentation`
+
+Optional grid rendered by the canvas surface.
+
+### `property ui.CanvasGridPresentation.color?: string`
+
+Grid color.
+
+### `property ui.CanvasGridPresentation.kind: "dot" | "mesh"`
+
+Grid geometry.
+
+### `property ui.CanvasGridPresentation.size: number`
+
+Distance between grid marks in CSS pixels.
+
+### `property ui.CanvasGridPresentation.thickness?: number`
+
+Grid mark or line thickness.
+
+### `interface ui.CanvasHandle`
+
+Read-only controls returned to a canvas consumer.
+
+### `property ui.CanvasHandle.edgeCount: number`
+
+Number of edges supplied when the canvas was created.
+
+### `property ui.CanvasHandle.nodeCount: number`
+
+Number of nodes supplied when the canvas was created.
+
+### `method ui.CanvasHandle.center(): void`
+
+Fits and centers the current rendered content in the viewport.
+
+### `method ui.CanvasHandle.dispose(): void`
+
+Releases the canvas resources owned by this adapter instance.
+
+### `method ui.CanvasHandle.setSelection(selection: CanvasEntityReference | null): void`
+
+Selects one rendered entity by its caller-owned identity, or clears the selection.
+
+### `interface ui.CanvasInteractionOptions`
+
+Consumer-owned interaction policy for a read-only canvas.
+
+### `property ui.CanvasInteractionOptions.clickThreshold?: number`
+
+Movement tolerance that separates activation from panning.
+
+### `property ui.CanvasInteractionOptions.movableNodes?: boolean`
+
+Whether users may reposition nodes locally without changing graph structure or caller data.
+
+### `property ui.CanvasInteractionOptions.panning?: boolean`
+
+Whether ordinary primary-button dragging pans the surface.
+
+### `property ui.CanvasInteractionOptions.selectOnActivate?: boolean`
+
+Whether activation also selects the activated entity.
+
+### `property ui.CanvasInteractionOptions.zoom?: false | CanvasZoomOptions`
+
+Optional wheel zoom behavior, or `false` to disable it.
+
+### `interface ui.CanvasNode`
+
+Immutable presentation data for one canvas node.
+
+### `property ui.CanvasNode.data?: unknown`
+
+Opaque consumer-owned data delivered unchanged to the selected node view.
+
+### `property ui.CanvasNode.height?: number`
+
+Optional rendered height in CSS pixels.
+
+### `property ui.CanvasNode.id: string`
+
+Stable caller-owned identity preserved by the adapter.
+
+### `property ui.CanvasNode.ports?: readonly CanvasPortDefinition[]`
+
+Optional per-node port replacement for the selected view defaults.
+
+### `property ui.CanvasNode.view: string`
+
+Identifier of a node view supplied in the canvas options.
+
+### `property ui.CanvasNode.width?: number`
+
+Optional rendered width in CSS pixels.
+
+### `property ui.CanvasNode.x: number`
+
+Horizontal presentation coordinate supplied by the caller.
+
+### `property ui.CanvasNode.y: number`
+
+Vertical presentation coordinate supplied by the caller.
+
+### `property ui.CanvasNode.zIndex?: number`
+
+Optional layer used only for presentation ordering.
+
+### `interface ui.CanvasNodeRenderContext`
+
+Context delivered to a consumer-supplied node mount.
+
+### `property ui.CanvasNodeRenderContext.node: CanvasNode`
+
+Complete immutable consumer-owned node.
+
+### `property ui.CanvasNodeRenderContext.selected: boolean`
+
+Whether the canvas currently selects this node.
+
+### `interface ui.CanvasNodeRenderHandle`
+
+Lifecycle owned by a mounted consumer-supplied node view.
+
+### `method ui.CanvasNodeRenderHandle.dispose(): void`
+
+Releases every resource created by the mount.
+
+### `method ui.CanvasNodeRenderHandle.update(context: CanvasNodeRenderContext): void`
+
+Updates the mounted view after node data or selection changes.
+
+### `interface ui.CanvasNodeViewDefinition`
+
+Consumer-supplied node renderer registered for one canvas instance.
+
+### `property ui.CanvasNodeViewDefinition.defaultHeight: number`
+
+Default rendered height when a node does not override it.
+
+### `property ui.CanvasNodeViewDefinition.defaultWidth: number`
+
+Default rendered width when a node does not override it.
+
+### `property ui.CanvasNodeViewDefinition.id: string`
+
+Stable identifier referenced by `CanvasNode.view`.
+
+### `property ui.CanvasNodeViewDefinition.ports?: readonly CanvasPortDefinition[]`
+
+Optional replaceable connection ports shared by this view.
+
+### `method ui.CanvasNodeViewDefinition.mount(host: HTMLElement, context: CanvasNodeRenderContext): CanvasNodeRenderHandle`
+
+Mounts any DOM-based implementation without exposing its UI runtime.
+
+### `interface ui.CanvasOptions`
+
+Composition and optional read-only callbacks for a canvas instance.
+
+### `property ui.CanvasOptions.edgeViews?: readonly CanvasEdgeViewDefinition[]`
+
+Edge presenters available to this canvas instance.
+
+### `property ui.CanvasOptions.interaction?: CanvasInteractionOptions`
+
+Optional replaceable interaction policy.
+
+### `property ui.CanvasOptions.nodeViews: readonly CanvasNodeViewDefinition[]`
+
+Node view implementations available to this canvas instance.
+
+### `property ui.CanvasOptions.onActivate?: (entity: CanvasEntityReference) => void`
+
+Receives an immutable entity reference when a rendered entity is activated.
+
+### `property ui.CanvasOptions.surface?: CanvasSurfacePresentation`
+
+Optional background and grid treatment.
+
+### `property ui.CanvasOptions.viewport?: CanvasViewportOptions`
+
+Optional replaceable fit-to-content behavior.
+
+### `interface ui.CanvasPortDefinition`
+
+Consumer-owned connection point exposed by a node view.
+
+### `property ui.CanvasPortDefinition.id: string`
+
+Stable identifier referenced by edge terminals.
+
+### `property ui.CanvasPortDefinition.magnet?: boolean`
+
+Whether the port may participate in future editable connections.
+
+### `property ui.CanvasPortDefinition.position: CanvasPortPosition`
+
+Boundary side or custom position of the port.
+
+### `property ui.CanvasPortDefinition.presentation?: CanvasPortPresentation`
+
+Optional visible treatment; omitted ports remain technically available.
+
+### `interface ui.CanvasPortPresentation`
+
+Optional product-supplied appearance of a visible connection port.
+
+### `property ui.CanvasPortPresentation.fill?: string`
+
+Fill color understood by the browser.
+
+### `property ui.CanvasPortPresentation.opacity?: number`
+
+Opacity from zero to one.
+
+### `property ui.CanvasPortPresentation.radius?: number`
+
+Radius in CSS pixels.
+
+### `property ui.CanvasPortPresentation.stroke?: string`
+
+Stroke color understood by the browser.
+
+### `property ui.CanvasPortPresentation.strokeWidth?: number`
+
+Stroke width in CSS pixels.
+
+### `interface ui.CanvasSurfacePresentation`
+
+Consumer-owned canvas background and grid treatment.
+
+### `property ui.CanvasSurfacePresentation.backgroundColor?: string`
+
+Optional background color; omission leaves the surface transparent.
+
+### `property ui.CanvasSurfacePresentation.grid?: false | CanvasGridPresentation`
+
+Optional grid, or `false` to suppress it explicitly.
+
+### `interface ui.CanvasViewportOptions`
+
+Consumer-owned fit-to-content behavior.
+
+### `property ui.CanvasViewportOptions.fitOnCreate?: boolean`
+
+Whether content is fit and centered when the canvas is created.
+
+### `property ui.CanvasViewportOptions.maxScale?: number`
+
+Maximum scale used by fit and `center` operations.
+
+### `property ui.CanvasViewportOptions.padding?: number`
+
+Padding used by fit and `center` operations.
+
+### `interface ui.CanvasZoomOptions`
+
+Consumer-owned wheel zoom behavior.
+
+### `property ui.CanvasZoomOptions.factor?: number`
+
+Multiplicative zoom factor.
+
+### `property ui.CanvasZoomOptions.maxScale?: number`
+
+Maximum permitted scale.
+
+### `property ui.CanvasZoomOptions.minScale?: number`
+
+Minimum permitted scale.
+
+### `property ui.CanvasZoomOptions.modifiers?: readonly CanvasInteractionModifier[]`
+
+Required modifier keys; an empty list permits an unmodified wheel.
+
 ### `interface ui.CardProps`
 
 Public inputs for the smallest reusable bounded surface: a generic card.
@@ -384,6 +856,58 @@ Horizontal position in grid columns, zero-indexed from the left.
 
 Vertical position in grid rows, zero-indexed from the top.
 
+### `interface ui.HeightfieldCanvas`
+
+Lifecycle handle returned by createHeightfieldCanvas.
+
+### `method ui.HeightfieldCanvas.captureImage(): string`
+
+Captures the current frame as a PNG data URL, for use as a `PreviewCard` cover image.
+
+### `method ui.HeightfieldCanvas.dispose(): void`
+
+Stops rendering and releases all GPU/DOM resources.
+
+### `method ui.HeightfieldCanvas.update(values: Float32Array): void`
+
+Replaces the rendered terrain with new height values, keeping the same grid size and camera.
+
+### `interface ui.HeightfieldCanvasOptions`
+
+Configuration for createHeightfieldCanvas. Colors are plain numeric hex values (e.g. `0x5b8a63`).
+
+### `property ui.HeightfieldCanvasOptions.autoRotate?: boolean`
+
+Whether the terrain slowly auto-rotates. Defaults to `true`.
+
+### `property ui.HeightfieldCanvasOptions.backgroundColor?: number`
+
+Scene background color. Defaults to `0xf7f9fc`.
+
+### `property ui.HeightfieldCanvasOptions.height: number`
+
+Grid height, in cells.
+
+### `property ui.HeightfieldCanvasOptions.heightScale?: number`
+
+Vertical displacement multiplier applied to each height value. Defaults to `6`.
+
+### `property ui.HeightfieldCanvasOptions.meshColor?: number`
+
+Terrain mesh color. Defaults to `0x5b8a63`.
+
+### `property ui.HeightfieldCanvasOptions.planeSize?: number`
+
+World-space size of the rendered plane. Defaults to `20`.
+
+### `property ui.HeightfieldCanvasOptions.values: Float32Array`
+
+Row-major height values, one per cell.
+
+### `property ui.HeightfieldCanvasOptions.width: number`
+
+Grid width, in cells.
+
 ### `interface ui.PreviewCardProps`
 
 Public inputs for a gallery-style tile: cover image, title/description, status, tags, and actions.
@@ -514,6 +1038,18 @@ Unmounts the component and releases the owned UI root.
 
 Re-renders the mounted component with complete next inputs.
 
+### `type ui.CanvasEdgeConnector = { kind: "straight" } | { direction?: "horizontal" | "vertical"; kind: "smooth" } | { kind: "rounded"; radius?: number }`
+
+Connector geometry selected by a consumer without exposing renderer-specific names.
+
+### `type ui.CanvasInteractionModifier = "control" | "meta" | "alt" | "shift"`
+
+Modifier used by the optional canvas zoom interaction.
+
+### `type ui.CanvasPortPosition = "top" | "right" | "bottom" | "left" | { x: number; y: number }`
+
+Immutable position for a connection port around a node boundary.
+
 ### `type ui.CardShape = "rectangle" | "pill" | "circle" | "hexagon"`
 
 Geometric outline of a card surface.
@@ -541,6 +1077,18 @@ Compact action button for lightweight command triggers.
 ### `function ui.Card(props: CardProps): ReactElement`
 
 Dependency-free bounded surface with replaceable accent and selection styles.
+
+### `function ui.createCanvas(container: HTMLElement, nodes: readonly CanvasNode[], edges: readonly CanvasEdge[], options: CanvasOptions): CanvasHandle`
+
+Creates a graph canvas from caller-owned presentation data.
+
+The UI boundary preserves identifiers and coordinates, mounts
+consumer-supplied views, and keeps its rendering engine private. Graph
+layout remains an explicit upstream computation.
+
+### `function ui.createHeightfieldCanvas(container: HTMLElement, options: HeightfieldCanvasOptions): HeightfieldCanvas`
+
+Mounts a real-time heightfield preview while keeping the renderer private.
 
 ### `function ui.DataTable(props: DataTableProps<Row>): ReactElement`
 

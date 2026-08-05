@@ -27,10 +27,10 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
 | `architecture-studio` | application | `apps/architecture-studio` | `build`, `build-storybook`, `check`, `dev`, `docs-check`, `docs-generate`, `stories-check`, `stories-generate`, `storybook`, `test` |
+| `ia-graft` | application | `tools/ia-graft` | `ia-graft`, `test`, `typecheck` |
 | `isekai-web-client` | library | `packages/isekai-web-client` | `check`, `docs-check`, `docs-generate`, `test` |
-| `three-canvas` | library | `packages/three-canvas` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `test` |
-| `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `docs-mesh-export`, `test` |
-| `x6-canvas` | library | `packages/x6-canvas` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `test` |
+| `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `docs-mesh-export`, `test`, `watch` |
+| `x6-canvas` | library | `packages/x6-canvas` | `build`, `check`, `test` |
 
 ## Other
 

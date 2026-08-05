@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import {
-  createReadOnlyCanvas,
+  createCanvas,
   type CanvasEntityReference,
-  type ReadOnlyCanvas,
-} from "@grafting/x6-canvas";
+  type CanvasHandle,
+} from "@grafting/ui";
 import graphData from "../../../../docs/generated/grafting.graph.json";
 import { ARCHITECTURE_CANVAS_COMPOSITION } from "../canvas-composition.ts";
 import { requestGraphLayout } from "../layout-client.ts";
@@ -71,7 +71,7 @@ export default function ExplorerClient() {
     }
 
     const selectionButtons = new Map<string, HTMLButtonElement>();
-    let view: ReadOnlyCanvas | undefined;
+    let view: CanvasHandle | undefined;
     let selected: CanvasEntityReference | null = null;
 
     const setStatus = (message: string, state = "ready") => {
@@ -155,7 +155,7 @@ export default function ExplorerClient() {
       } else {
         addField(details, "Authority", entity.authorityClass);
         if (entity.level !== undefined) addField(details, "Level", entity.level);
-        addField(details, "Tags", entity.tags.length === 0 ? "None" : entity.tags.join(" · "));
+        addField(details, "Tags", entity.tags.length === 0 ? "None" : entity.tags.join(" Ã‚Â· "));
       }
       addField(details, "Confidence", entity.provenance.confidence.toFixed(2));
       addField(
@@ -193,7 +193,7 @@ export default function ExplorerClient() {
       button.setAttribute("aria-pressed", "false");
       button.append(
         createText("span", isGraphIrEdge(entity) ? entity.kind : entity.label, "entity-label"),
-        createText("span", `${reference.kind} · ${entity.id}`, "entity-meta"),
+        createText("span", `${reference.kind} Ã‚Â· ${entity.id}`, "entity-meta"),
       );
       button.addEventListener("click", () => activateEntity(reference, true));
       item.append(button);
@@ -204,17 +204,17 @@ export default function ExplorerClient() {
     const start = async () => {
       assertGraphIrV1(graphData);
       const graph = graphData as GraphIrDocument;
-      setStatus("Calculating the grouped projection in Rust…", "loading");
+      setStatus("Calculating the grouped projection in RustÃ¢â‚¬Â¦", "loading");
       const layout = await requestGraphLayout(toLayoutRequest(graph));
       const presentation = toCanvasPresentation(graph, layout);
 
-      graphIdentity.textContent = `${graph.graphId} · ${graph.sourceRevision.slice(0, 16)}…`;
+      graphIdentity.textContent = `${graph.graphId} Ã‚Â· ${graph.sourceRevision.slice(0, 16)}Ã¢â‚¬Â¦`;
       graphIdentity.title = graph.sourceRevision;
-      graphCounts.textContent = `${graph.nodes.length} nodes · ${graph.edges.length} edges`;
+      graphCounts.textContent = `${graph.nodes.length} nodes Ã‚Â· ${graph.edges.length} edges`;
       graph.nodes.forEach(addEntityButton);
       graph.edges.forEach(addEntityButton);
 
-      view = createReadOnlyCanvas(graphContainer, presentation.nodes, presentation.edges, {
+      view = createCanvas(graphContainer, presentation.nodes, presentation.edges, {
         ...ARCHITECTURE_CANVAS_COMPOSITION,
         onActivate: (reference) => activateEntity(reference, false),
       });
@@ -228,7 +228,7 @@ export default function ExplorerClient() {
       clearSelection();
       document.body.dataset.readonly = "true";
       document.body.dataset.state = "ready";
-      setStatus(`Ready · ${view.nodeCount} nodes · ${view.edgeCount} edges · freshness unknown`);
+      setStatus(`Ready Ã‚Â· ${view.nodeCount} nodes Ã‚Â· ${view.edgeCount} edges Ã‚Â· freshness unknown`);
     };
 
     void start().catch((error: unknown) => {
@@ -248,11 +248,11 @@ export default function ExplorerClient() {
       <header className="topbar">
         <div className="identity">
           <strong>Grafting Architecture Studio</strong>
-          <span ref={graphIdentityRef}>Loading Graph IR v1…</span>
+          <span ref={graphIdentityRef}>Loading Graph IR v1Ã¢â‚¬Â¦</span>
         </div>
         <div className="toolbar">
           <span>Drag: pan | Click: inspect | Ctrl/Cmd + wheel: zoom</span>
-          <span ref={graphCountsRef}>Loading…</span>
+          <span ref={graphCountsRef}>LoadingÃ¢â‚¬Â¦</span>
           <span className="freshness" title="Runtime freshness evidence is not available yet">
             Unknown freshness
           </span>
@@ -280,12 +280,12 @@ export default function ExplorerClient() {
         <aside className="inspector" aria-label="Selected entity inspector">
           <div ref={inspectorRef} id="inspector-content">
             <p className="eyebrow">Inspector</p>
-            <h2>Loading…</h2>
+            <h2>LoadingÃ¢â‚¬Â¦</h2>
           </div>
         </aside>
       </div>
       <footer ref={statusRef} id="status" data-testid="status" role="status" aria-live="polite">
-        Loading Graph IR v1…
+        Loading Graph IR v1Ã¢â‚¬Â¦
       </footer>
     </div>
   );

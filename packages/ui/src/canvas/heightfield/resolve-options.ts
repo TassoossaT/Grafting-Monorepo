@@ -1,4 +1,4 @@
-import type { HeightfieldCanvasOptions } from "../index.js";
+import type { HeightfieldCanvasOptions } from "./contracts.js";
 
 /** Resolved defaults for a {@link HeightfieldCanvasOptions}, with every optional field filled in. */
 export interface ResolvedHeightfieldOptions {

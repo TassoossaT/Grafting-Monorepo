@@ -12,6 +12,10 @@
 - Decision owner: repository-owner
 - Source task: ADR-0016-ARCH-STUDIO-SCOPE-EXPANSION
 
+> **Amendment (2026-08-04):** DEC-056 and ADR-0018 replace the canvas package
+> names used by this ADR. Architecture Studio now consumes the vendor-neutral
+> canvas and heightfield elements from `@grafting/ui`; its scope and read-only
+> Graph IR guarantees are unchanged.
 ## Summary
 
 Add two new surfaces to `apps/architecture-studio` alongside its existing,

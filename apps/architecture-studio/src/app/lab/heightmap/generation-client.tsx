@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/three-canvas";
+import { createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/ui";
 import { GridLayout, PreviewCard, type GridPanel } from "@grafting/ui";
 import "react-grid-layout/css/styles.css";
 import { readPreviewImage, writePreviewImage } from "../../../lab-preview-storage.ts";
@@ -41,7 +41,7 @@ function requestHeightmap(seed: number, scale: number): Promise<Heightmap> {
   });
 }
 
-/** Renders real Rust-computed heightmap output via `@grafting/three-canvas` -- no `three` import here, per this repo's package-boundary convention (`@antv/x6` behind `@grafting/x6-canvas`, `antd` behind `@grafting/ui`). */
+/** Renders real Rust-computed heightmap output through the generic `@grafting/ui` element; the renderer remains private. */
 function TerrainCanvas({
   heightmap,
   handleRef,
@@ -145,8 +145,8 @@ export default function GenerationClient() {
             Capture preview
           </button>
           <span data-testid="generation-status" data-status={status}>
-            {status === "loading" && "Calculating the heightmap in Rust…"}
-            {status === "ok" && heightmap !== null && `Ready · ${heightmap.width}×${heightmap.height} cells`}
+            {status === "loading" && "Calculating the heightmap in Rustâ€¦"}
+            {status === "ok" && heightmap !== null && `Ready Â· ${heightmap.width}Ã—${heightmap.height} cells`}
             {status === "error" && `Error: ${error}`}
           </span>
         </div>
@@ -161,7 +161,7 @@ export default function GenerationClient() {
       content: (
         <div style={{ padding: 12 }}>
           <PreviewCard
-            title={`Heightmap · seed ${seed}`}
+            title={`Heightmap Â· seed ${seed}`}
             description={`Perlin-noise procedural terrain, scale ${scale}.`}
             cover={
               previewImage === null

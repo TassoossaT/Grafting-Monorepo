@@ -39,6 +39,15 @@ Any default visual treatment exposed by this package must remain replaceable;
 an application, not the generic canvas adapter, chooses which concrete UI
 component and appearance to compose (DEC-052).
 
+This package also owns the active browser canvas implementation. Rete.js and
+Three.js are private integrations inside `src/canvas`; consumers import only
+vendor-neutral elements and contracts from the `@grafting/ui` root. Vendor
+package names and vendor-owned types MUST NOT appear in public symbols, inputs,
+outputs, handles, or consumer imports. Rete.js is the sole active node-graph
+engine; Three.js is limited to 3D/heightfield rendering. Significant graph
+structure, validation, algorithms, queries, diffs, ordering, and layout remain
+Rust-owned, while applications own concrete presentation and interaction policy
+(DEC-051, DEC-052, DEC-056).
 DOM-mountable components expose only Grafting-owned update/dispose handles.
 ReactDOM roots and renderer types remain private to this package.
 

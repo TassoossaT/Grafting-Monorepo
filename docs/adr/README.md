@@ -53,7 +53,7 @@ browser application, converts them into Graph IR evidence. It must:
 - expose parse or freshness failures instead of silently omitting an ADR.
 
 The Architecture Studio consumes that Graph IR projection and links back to the
-Markdown source. X6 layout, viewport, color, and interaction state never enter
+Markdown source. Canvas renderer, layout, viewport, color, and interaction state never enter
 the ADR or Graph IR contract.
 
 ## Index
@@ -67,7 +67,7 @@ the ADR or Graph IR contract.
 | [ADR-0005](ADR-0005-authoritative-host-deferral.md) | GATE-004 | Formal deferral of the authoritative host | **Accepted — deferral memorandum (GATE-004 remains `OPEN`, not closed)** |
 | [ADR-0006](ADR-0006-polymath-platform-abstraction.md) | — (complements GATE-003/006) | Polymath package: platform and capability abstraction | **Accepted (DEC-042)** |
 | [ADR-0007](ADR-0007-repo-distribution-strategy.md) | GATE-007 | Multi-product repository/distribution strategy | **Accepted — closed (single monorepo)** |
-| [ADR-0008](ADR-0008-libs-boundary-and-domain-map.md) | — (structural, post GATE-007) | `libs/` boundary rule and domain map (narrative, session, X6, Discord, transcription) | **Accepted (DEC-046)** |
+| [ADR-0008](ADR-0008-libs-boundary-and-domain-map.md) | — (structural, post GATE-007) | `libs/` boundary rule and domain map; former X6 clause superseded by ADR-0018 | **Accepted (DEC-046, amended by DEC-056)** |
 | [ADR-0009](ADR-0009-committed-flatbuffers-fixture.md) | — (structural, §10.3 exception) | Commit C-006's frozen FlatBuffers evolution fixture's generated code | Proposed — pending owner decision |
 | [ADR-0010](ADR-0010-multi-agent-coordination.md) | — (AI Control Plane Phase 1) | Provider-neutral Git/worktree/PR task coordination | **Accepted; worktree lifecycle replaced in place 2026-08-03** |
 | [ADR-0011](ADR-0011-package-autonomy-and-external-isolation.md) | — (structural) | Package autonomy, external dependency isolation, and authoritative reuse | **Accepted (DEC-049)** |
@@ -78,6 +78,7 @@ the ADR or Graph IR contract.
 | [ADR-0015](ADR-0015-agent-git-write-policy.md) | - (AI operational safety) | Allow isolated task-branch commits; prohibit default-branch writes and agent merges | **Accepted (DEC-053)** |
 | [ADR-0016](ADR-0016-architecture-studio-scope-expansion.md) | - (amends ADR-0012, I-001) | Architecture Studio scope expansion: VTT generation-test surface and agent-orchestration surface | **Accepted (DEC-054)** |
 | [ADR-0017](ADR-0017-wasm-bindings-colocated-with-crate.md) | - (amends GRAFTING_MASTER_SOURCE.md 9.2) | Generated Wasm bindings are co-located with their Rust crate, not a separate `packages/` technical package | **Accepted (DEC-055)** |
+| [ADR-0018](ADR-0018-canvas-boundary-and-rete-adoption.md) | - (supersedes canvas clauses in ADR-0008/0013/0014/0016) | Vendor-neutral canvas in `@grafting/ui`, Rete.js adoption, X6 retirement | **Accepted (DEC-056)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `docs/decisions/GATES.md` is the source of truth for each gate.

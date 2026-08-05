@@ -12,6 +12,10 @@
 - Decision owner: repository-owner
 - Source task: X6-003-COMPOSABLE-CANVAS
 
+> **Amendment (2026-08-04):** DEC-056 and ADR-0018 preserve this ADR's neutral
+> composition and product-owned presentation rules while superseding its
+> X6-specific package allocation. The active canvas boundary is now the
+> `@grafting/ui` root API with private renderer integrations.
 ## Summary
 
 Reusable packages provide neutral capabilities that products can freely

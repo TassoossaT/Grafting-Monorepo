@@ -4,7 +4,7 @@ Package: `@grafting/ui`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`
+Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`, `rete`, `rete-area-plugin`, `rete-react-plugin`, `rete-render-utils`, `styled-components`, `three`
 
 ## Declaration entry point
 
@@ -552,4 +552,31 @@ export interface GridLayoutProps {
  * @status stable
  */
 export declare function GridLayout(props: GridLayoutProps): ReactElement;
+
+import type { CanvasEdge, CanvasHandle, CanvasNode, CanvasOptions } from "./graph/contracts.js";
+import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "./heightfield/contracts.js";
+export type { CanvasEdge, CanvasEdgeConnector, CanvasEdgeLabelPresentation, CanvasEdgeLinePresentation, CanvasEdgeMarkerPresentation, CanvasEdgePresentation, CanvasEdgeRenderContext, CanvasEdgeTerminal, CanvasEdgeViewDefinition, CanvasEntityReference, CanvasGridPresentation, CanvasHandle, CanvasInteractionModifier, CanvasInteractionOptions, CanvasNode, CanvasNodeRenderContext, CanvasNodeRenderHandle, CanvasNodeViewDefinition, CanvasOptions, CanvasPortDefinition, CanvasPortPosition, CanvasPortPresentation, CanvasSurfacePresentation, CanvasViewportOptions, CanvasZoomOptions, } from "./graph/contracts.js";
+export type { HeightfieldCanvas, HeightfieldCanvasOptions, } from "./heightfield/contracts.js";
+/**
+ * Creates a graph canvas from caller-owned presentation data.
+ *
+ * The UI boundary preserves identifiers and coordinates, mounts
+ * consumer-supplied views, and keeps its rendering engine private. Graph
+ * layout remains an explicit upstream computation.
+ *
+ * @param container - Browser element that owns the canvas surface.
+ * @param nodes - Immutable node presentation data.
+ * @param edges - Immutable connection presentation data.
+ * @param options - Consumer-supplied views and replaceable presentation policy.
+ * @returns A frozen Grafting-owned lifecycle handle.
+ */
+export declare function createCanvas(container: HTMLElement, nodes: readonly CanvasNode[], edges: readonly CanvasEdge[], options: CanvasOptions): CanvasHandle;
+/**
+ * Mounts a real-time heightfield preview while keeping the renderer private.
+ *
+ * @param container - Browser element that owns the rendered preview.
+ * @param options - Grid data and replaceable presentation options.
+ * @returns A Grafting-owned update, capture, and disposal handle.
+ */
+export declare function createHeightfieldCanvas(container: HTMLElement, options: HeightfieldCanvasOptions): HeightfieldCanvas;
 ```

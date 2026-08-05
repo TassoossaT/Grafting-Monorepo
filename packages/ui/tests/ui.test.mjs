@@ -18,6 +18,8 @@ test("exports only the deliberate Grafting component surface", async () => {
     "PreviewCard",
     "StatusBadge",
     "Text",
+    "createCanvas",
+    "createHeightfieldCanvas",
     "mountEntitySummary",
   ]);
 });

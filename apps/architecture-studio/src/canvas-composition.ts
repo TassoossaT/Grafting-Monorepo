@@ -5,8 +5,8 @@ import type {
   CanvasNodeRenderContext,
   CanvasNodeViewDefinition,
   CanvasPortDefinition,
-  ReadOnlyCanvasOptions,
-} from "@grafting/x6-canvas";
+  CanvasOptions,
+} from "@grafting/ui";
 import {
   ARCHITECTURE_CANVAS_VIEWS,
   ARCHITECTURE_NODE_SIZE,
@@ -138,7 +138,7 @@ export function presentArchitectureEdge(
 }
 
 /** Complete product-owned composition consumed by the generic canvas package. */
-export const ARCHITECTURE_CANVAS_COMPOSITION: ReadOnlyCanvasOptions = Object.freeze({
+export const ARCHITECTURE_CANVAS_COMPOSITION: CanvasOptions = Object.freeze({
   nodeViews: Object.freeze([ENTITY_SUMMARY_NODE_VIEW]),
   edgeViews: Object.freeze([
     Object.freeze({

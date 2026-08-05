@@ -3,7 +3,7 @@
   "root": "apps/architecture-studio",
   "projectType": "application",
   "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
-  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "three-canvas", "ui", "x6-canvas"],
+  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "ui"],
   "metadata": {
     "graphIr": {
       "id": "architecture-studio",
@@ -21,13 +21,13 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
-      "dependsOn": ["three-canvas:watch", "ui:watch", "x6-canvas:watch"],
+      "dependsOn": ["ui:watch"],
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
-      "dependsOn": ["three-canvas:build", "ui:build", "x6-canvas:build"],
+      "dependsOn": ["ui:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/.next"]
@@ -35,7 +35,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio test" },
-      "dependsOn": ["three-canvas:build", "ui:build", "x6-canvas:build"],
+      "dependsOn": ["ui:build"],
       "cache": true,
       "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveHeightfieldOptions } from "../dist/canvas/resolve-options.js";
+import { resolveHeightfieldOptions } from "../dist/canvas/heightfield/resolve-options.js";
 
 test("fills in every optional field with its documented default", () => {
   const values = new Float32Array([0.1, 0.2, 0.3, 0.4]);

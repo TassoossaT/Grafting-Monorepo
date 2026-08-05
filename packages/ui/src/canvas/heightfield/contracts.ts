@@ -1,6 +1,4 @@
-import { createHeightfieldCanvasAdapter } from "./canvas/create-heightfield-canvas.js";
-
-/** Configuration for {@link createHeightfieldCanvas}. Colors are plain numeric hex values (e.g. `0x5b8a63`); no `three` type is exposed. */
+/** Configuration for {@link createHeightfieldCanvas}. Colors are plain numeric hex values (e.g. `0x5b8a63`). */
 export interface HeightfieldCanvasOptions {
   /** Grid width, in cells. */
   readonly width: number;
@@ -30,20 +28,3 @@ export interface HeightfieldCanvas {
   dispose(): void;
 }
 
-/**
- * Mounts a real-time-rendered heightfield terrain preview into `container`,
- * the same neutral-mechanism/Grafting-owned-surface pattern
- * `@grafting/x6-canvas`'s `createReadOnlyCanvas` already establishes for
- * `@antv/x6`: `three` stays entirely private, no `THREE.*` type crosses
- * this function's signature.
- *
- * @param container - Browser element that will own the rendered canvas.
- * @param options - Grid size, height values, and replaceable presentation policy.
- * @returns A Grafting-owned handle with `update`/`dispose` operations.
- */
-export function createHeightfieldCanvas(
-  container: HTMLElement,
-  options: HeightfieldCanvasOptions,
-): HeightfieldCanvas {
-  return createHeightfieldCanvasAdapter(container, options);
-}

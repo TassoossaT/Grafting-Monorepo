@@ -6,7 +6,7 @@ import {
   presentArchitectureEdge,
 } from "../src/canvas-composition.ts";
 
-test("owns the concrete node, surface, ports, and interactions outside x6-canvas", () => {
+test("owns the concrete node, surface, ports, and interactions inside the application boundary", () => {
   const nodeView = ARCHITECTURE_CANVAS_COMPOSITION.nodeViews[0];
   const ports = nodeView.ports.map(({ id, position }) => ({ id, position }));
 

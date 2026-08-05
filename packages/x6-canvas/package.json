@@ -2,15 +2,14 @@
   "name": "@grafting/x6-canvas",
   "version": "0.0.0",
   "private": true,
+  "description": "Retired X6 adapter retained as dormant reference code (DEC-056).",
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm run build && node --test tests/*.test.mjs",
-    "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."
+    "test": "pnpm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@antv/x6": "3.1.7",

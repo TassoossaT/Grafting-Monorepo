@@ -1,0 +1,640 @@
+import { useId, useLayoutEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { createRoot } from "react-dom/client";
+import { ClassicPreset, GetSchemes, NodeEditor } from "rete";
+import { AreaExtensions, AreaPlugin, Zoom } from "rete-area-plugin";
+import { Presets, ReactPlugin, type ReactArea2D } from "rete-react-plugin";
+
+import type {
+  CanvasEdge,
+  CanvasEdgeConnector,
+  CanvasEdgeMarkerPresentation,
+  CanvasEdgePresentation,
+  CanvasEdgeViewDefinition,
+  CanvasEntityReference,
+  CanvasHandle,
+  CanvasInteractionModifier,
+  CanvasNode,
+  CanvasNodeRenderHandle,
+  CanvasNodeViewDefinition,
+  CanvasOptions,
+  CanvasPortDefinition,
+  CanvasPortPosition,
+} from "./contracts.js";
+import { resolveCanvasInteractionPolicy } from "./interaction-policy.js";
+
+class CanvasSocketModel extends ClassicPreset.Socket {
+  constructor(readonly definition: CanvasPortDefinition) {
+    super(definition.id);
+  }
+}
+
+class CanvasNodeModel extends ClassicPreset.Node {
+  readonly width: number;
+  readonly height: number;
+  selected = false;
+
+  constructor(
+    readonly source: CanvasNode,
+    readonly definition: CanvasNodeViewDefinition,
+    readonly activate: (reference: CanvasEntityReference) => void,
+    readonly clickThreshold: number,
+  ) {
+    super(source.id);
+    this.id = source.id;
+    this.width = source.width ?? definition.defaultWidth;
+    this.height = source.height ?? definition.defaultHeight;
+  }
+}
+
+class CanvasConnectionModel extends ClassicPreset.Connection<CanvasNodeModel, CanvasNodeModel> {
+  selected = false;
+
+  constructor(
+    source: CanvasNodeModel,
+    sourceOutput: string,
+    target: CanvasNodeModel,
+    targetInput: string,
+    readonly edge: CanvasEdge,
+    readonly definition: CanvasEdgeViewDefinition,
+    readonly activate: (reference: CanvasEntityReference) => void,
+    readonly clickThreshold: number,
+  ) {
+    super(source, sourceOutput, target, targetInput);
+    this.id = edge.id;
+  }
+}
+
+type Schemes = GetSchemes<CanvasNodeModel, CanvasConnectionModel>;
+type AreaExtra = ReactArea2D<Schemes>;
+
+const DEFAULT_SOURCE_PORT: CanvasPortDefinition = Object.freeze({
+  id: "__grafting_source__",
+  position: "right",
+});
+const DEFAULT_TARGET_PORT: CanvasPortDefinition = Object.freeze({
+  id: "__grafting_target__",
+  position: "left",
+});
+
+function createCatalog<Definition extends { readonly id: string }>(
+  kind: "node" | "edge",
+  definitions: readonly Definition[],
+): ReadonlyMap<string, Definition> {
+  const catalog = new Map<string, Definition>();
+  for (const definition of definitions) {
+    if (catalog.has(definition.id)) {
+      throw new Error(`Duplicate canvas ${kind} view: ${definition.id}`);
+    }
+    catalog.set(definition.id, definition);
+  }
+  return catalog;
+}
+
+function resolveView<Definition>(
+  kind: "node" | "edge",
+  catalog: ReadonlyMap<string, Definition>,
+  id: string,
+): Definition {
+  const definition = catalog.get(id);
+  if (definition === undefined) {
+    throw new Error(`Canvas ${kind} view is not registered: ${id}`);
+  }
+  return definition;
+}
+
+function resolvePort(
+  node: CanvasNode,
+  definition: CanvasNodeViewDefinition,
+  portId: string | undefined,
+  fallback: CanvasPortDefinition,
+): CanvasPortDefinition {
+  if (portId === undefined) return fallback;
+  const ports = node.ports ?? definition.ports ?? [];
+  const port = ports.find((candidate) => candidate.id === portId);
+  if (port === undefined) {
+    throw new Error(`Canvas node ${node.id} does not define port ${portId}`);
+  }
+  return port;
+}
+
+function assertUniqueIds(kind: "node" | "edge", values: readonly { readonly id: string }[]): void {
+  const ids = new Set<string>();
+  for (const value of values) {
+    if (ids.has(value.id)) throw new Error(`Duplicate canvas ${kind} id: ${value.id}`);
+    ids.add(value.id);
+  }
+}
+
+function socketPosition(position: CanvasPortPosition): CSSProperties {
+  const base: CSSProperties = {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    zIndex: 3,
+  };
+  if (typeof position === "object") {
+    return {
+      ...base,
+      left: `${position.x * 100}%`,
+      top: `${position.y * 100}%`,
+    };
+  }
+  switch (position) {
+    case "top":
+      return { ...base, left: "50%", top: 0 };
+    case "right":
+      return { ...base, right: 0, top: "50%" };
+    case "bottom":
+      return { ...base, bottom: 0, left: "50%" };
+    case "left":
+      return { ...base, left: 0, top: "50%" };
+  }
+}
+
+function CanvasSocketView({ data }: { readonly data: ClassicPreset.Socket }) {
+  const presentation = (data as CanvasSocketModel).definition.presentation;
+  const diameter = (presentation?.radius ?? 4) * 2;
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "block",
+        width: diameter,
+        height: diameter,
+        boxSizing: "border-box",
+        borderRadius: "50%",
+        background: presentation?.fill ?? "transparent",
+        border: `${presentation?.strokeWidth ?? 0}px solid ${presentation?.stroke ?? "transparent"}`,
+        opacity: presentation?.opacity ?? 1,
+        pointerEvents: "none",
+        transform: "translate(-50%, -50%)",
+      }}
+    />
+  );
+}
+
+function pointerDistance(
+  start: { readonly x: number; readonly y: number },
+  event: ReactPointerEvent,
+): number {
+  return Math.hypot(event.clientX - start.x, event.clientY - start.y);
+}
+
+function CanvasNodeView({
+  data,
+  emit,
+}: {
+  readonly data: CanvasNodeModel;
+  readonly emit: (signal: ReactArea2D<Schemes>) => void;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef<CanvasNodeRenderHandle | null>(null);
+  const pointerStartRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (host === null) return;
+    mountedRef.current = data.definition.mount(host, {
+      node: data.source,
+      selected: data.selected,
+    });
+    return () => {
+      mountedRef.current?.dispose();
+      mountedRef.current = null;
+    };
+  }, [data]);
+
+  useLayoutEffect(() => {
+    mountedRef.current?.update({ node: data.source, selected: data.selected });
+  }, [data, data.selected]);
+
+  const renderSocket = (
+    side: "input" | "output",
+    key: string,
+    port: ClassicPreset.Input<CanvasSocketModel> | ClassicPreset.Output<CanvasSocketModel>,
+  ) => (
+    <span key={`${side}:${key}`} style={socketPosition(port.socket.definition.position)}>
+      <Presets.classic.RefSocket
+        name="grafting-canvas-socket"
+        side={side}
+        socketKey={key}
+        nodeId={data.id}
+        emit={emit}
+        payload={port.socket}
+      />
+    </span>
+  );
+
+  return (
+    <div
+      data-canvas-node={data.source.id}
+      style={{
+        position: "relative",
+        width: data.width,
+        height: data.height,
+        boxSizing: "border-box",
+        userSelect: "none",
+        zIndex: data.source.zIndex ?? 1,
+      }}
+      onPointerDown={(event) => {
+        if (event.button === 0) {
+          pointerStartRef.current = { x: event.clientX, y: event.clientY };
+        }
+      }}
+      onPointerUp={(event) => {
+        const start = pointerStartRef.current;
+        pointerStartRef.current = null;
+        if (start !== null && event.button === 0 && pointerDistance(start, event) <= data.clickThreshold) {
+          data.activate({ kind: "node", id: data.source.id });
+        }
+      }}
+    >
+      <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
+      {Object.entries(data.outputs).map(([key, output]) =>
+        output instanceof ClassicPreset.Output ? renderSocket("output", key, output as ClassicPreset.Output<CanvasSocketModel>) : null,
+      )}
+      {Object.entries(data.inputs).map(([key, input]) =>
+        input instanceof ClassicPreset.Input ? renderSocket("input", key, input as ClassicPreset.Input<CanvasSocketModel>) : null,
+      )}
+    </div>
+  );
+}
+
+function edgePath(
+  start: { readonly x: number; readonly y: number },
+  end: { readonly x: number; readonly y: number },
+  connector: CanvasEdgeConnector | undefined,
+  fallback: string | null | undefined,
+): string {
+  if (connector?.kind === "straight") return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+  if (connector?.kind === "rounded") {
+    const midpointX = (start.x + end.x) / 2;
+    const midpointY = (start.y + end.y) / 2;
+    const radius = connector.radius ?? 8;
+    return `M ${start.x} ${start.y} Q ${midpointX + radius} ${midpointY - radius} ${end.x} ${end.y}`;
+  }
+  if (connector?.kind === "smooth") {
+    if (connector.direction === "vertical") {
+      const middleY = (start.y + end.y) / 2;
+      return `M ${start.x} ${start.y} C ${start.x} ${middleY}, ${end.x} ${middleY}, ${end.x} ${end.y}`;
+    }
+    const middleX = (start.x + end.x) / 2;
+    return `M ${start.x} ${start.y} C ${middleX} ${start.y}, ${middleX} ${end.y}, ${end.x} ${end.y}`;
+  }
+  return fallback ?? `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+}
+
+function markerShape(marker: CanvasEdgeMarkerPresentation): string {
+  return marker.kind === "classic" ? "M 0 0 L 10 5 L 0 10 L 3 5 z" : "M 0 0 L 10 5 L 0 10 z";
+}
+
+function CanvasConnectionView({ data }: { readonly data: CanvasConnectionModel }) {
+  const connection = Presets.classic.useConnection();
+  const uniqueId = useId().replaceAll(":", "");
+  const pointerStartRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  if (connection.start == null || connection.end == null) return null;
+
+  const presentation: CanvasEdgePresentation = data.definition.present({
+    edge: data.edge,
+    selected: data.selected,
+  });
+  const pathId = `grafting-edge-${uniqueId}`;
+  const sourceMarker = presentation.line?.sourceMarker;
+  const targetMarker = presentation.line?.targetMarker;
+  const sourceMarkerId = `${pathId}-source`;
+  const targetMarkerId = `${pathId}-target`;
+  const path = edgePath(connection.start, connection.end, presentation.connector, connection.path);
+  const line = presentation.line;
+
+  const renderMarker = (id: string, marker: CanvasEdgeMarkerPresentation | undefined) =>
+    marker === undefined || marker.kind === "none" ? null : (
+      <marker
+        id={id}
+        markerWidth={marker.width ?? 10}
+        markerHeight={marker.height ?? 10}
+        refX={9}
+        refY={5}
+        orient="auto-start-reverse"
+        viewBox="0 0 10 10"
+      >
+        <path d={markerShape(marker)} fill={marker.fill ?? line?.color ?? "currentColor"} stroke={marker.stroke ?? "none"} />
+      </marker>
+    );
+
+  return (
+    <svg
+      aria-hidden="true"
+      style={{
+        overflow: "visible",
+        position: "absolute",
+        pointerEvents: "none",
+        width: 9999,
+        height: 9999,
+        zIndex: presentation.zIndex ?? 0,
+      }}
+    >
+      <defs>
+        {renderMarker(sourceMarkerId, sourceMarker)}
+        {renderMarker(targetMarkerId, targetMarker)}
+      </defs>
+      <path
+        id={pathId}
+        d={path}
+        className={line?.className}
+        fill="none"
+        stroke={line?.color ?? "#64748b"}
+        strokeWidth={line?.width ?? 2}
+        strokeDasharray={line?.dash}
+        strokeOpacity={line?.opacity ?? 1}
+        markerStart={sourceMarker === undefined || sourceMarker.kind === "none" ? undefined : `url(#${sourceMarkerId})`}
+        markerEnd={targetMarker === undefined || targetMarker.kind === "none" ? undefined : `url(#${targetMarkerId})`}
+        {...line?.attributes}
+      />
+      <path
+        d={path}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={presentation.hitAreaWidth ?? 12}
+        pointerEvents="stroke"
+        onPointerDown={(event) => {
+          if (event.button === 0) pointerStartRef.current = { x: event.clientX, y: event.clientY };
+        }}
+        onPointerUp={(event) => {
+          const start = pointerStartRef.current;
+          pointerStartRef.current = null;
+          if (start !== null && event.button === 0 && pointerDistance(start, event) <= data.clickThreshold) {
+            data.activate({ kind: "edge", id: data.edge.id });
+          }
+        }}
+      />
+      {presentation.labels?.map((label, index) => {
+        const labelPath = (
+          <textPath href={`#${pathId}`} startOffset={`${(label.position ?? 0.5) * 100}%`} textAnchor="middle">
+            {label.text}
+          </textPath>
+        );
+        const backgroundWidth = (label.borderRadius ?? 4) * 2;
+        return (
+          <g key={`${label.text}:${index}`} className={label.className} pointerEvents="none">
+            {label.borderColor === undefined ? null : (
+              <text
+                fill={label.color ?? line?.color ?? "#334155"}
+                fontSize={label.fontSize ?? 10}
+                fontWeight={label.fontWeight ?? 600}
+                paintOrder="stroke"
+                stroke={label.borderColor}
+                strokeWidth={backgroundWidth + 2}
+                strokeLinejoin="round"
+              >
+                {labelPath}
+              </text>
+            )}
+            <text
+              fill={label.color ?? line?.color ?? "#334155"}
+              fontSize={label.fontSize ?? 10}
+              fontWeight={label.fontWeight ?? 600}
+              paintOrder="stroke"
+              stroke={label.backgroundColor ?? "white"}
+              strokeWidth={backgroundWidth}
+              strokeLinejoin="round"
+            >
+              {labelPath}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+class CanvasWheelZoom extends Zoom {
+  constructor(intensity: number, modifiers: readonly CanvasInteractionModifier[]) {
+    super(intensity);
+    const inheritedWheel = this.wheel;
+    this.wheel = (event: WheelEvent) => {
+      const active = modifiers.every((modifier) => {
+        switch (modifier) {
+          case "control":
+            return event.ctrlKey;
+          case "meta":
+            return event.metaKey;
+          case "alt":
+            return event.altKey;
+          case "shift":
+            return event.shiftKey;
+        }
+      });
+      if (active) inheritedWheel(event);
+    };
+  }
+}
+
+function applySurface(container: HTMLElement, options: CanvasOptions): string | null {
+  const previous = container.getAttribute("style");
+  const surface = options.surface;
+  container.style.position = "relative";
+  container.style.overflow = "hidden";
+  container.style.backgroundColor = surface?.backgroundColor ?? "transparent";
+  const grid = surface?.grid;
+  if (grid === undefined || grid === false) {
+    container.style.backgroundImage = "";
+    container.style.backgroundSize = "";
+  } else if (grid.kind === "dot") {
+    const thickness = grid.thickness ?? 1;
+    container.style.backgroundImage = `radial-gradient(circle, ${grid.color ?? "#cbd5e1"} ${thickness}px, transparent ${thickness}px)`;
+    container.style.backgroundSize = `${grid.size}px ${grid.size}px`;
+  } else {
+    const color = grid.color ?? "#cbd5e1";
+    const thickness = grid.thickness ?? 1;
+    container.style.backgroundImage = `linear-gradient(${color} ${thickness}px, transparent ${thickness}px), linear-gradient(90deg, ${color} ${thickness}px, transparent ${thickness}px)`;
+    container.style.backgroundSize = `${grid.size}px ${grid.size}px`;
+  }
+  return previous;
+}
+
+function fitScale(container: HTMLElement, options: CanvasOptions): number {
+  const padding = options.viewport?.padding ?? 0;
+  const smallestSide = Math.max(1, Math.min(container.clientWidth, container.clientHeight));
+  const padded = Math.max(0.1, 1 - (padding * 2) / smallestSide);
+  return Math.min(padded, options.viewport?.maxScale ?? 1);
+}
+
+/**
+ * Internal renderer boundary behind the public {@link createCanvas} facade.
+ */
+export function createCanvasAdapter(
+  container: HTMLElement,
+  nodes: readonly CanvasNode[],
+  edges: readonly CanvasEdge[],
+  options: CanvasOptions,
+): CanvasHandle {
+  assertUniqueIds("node", nodes);
+  assertUniqueIds("edge", edges);
+
+  const nodeViews = createCatalog("node", options.nodeViews);
+  const edgeViews = createCatalog("edge", options.edgeViews ?? []);
+  const interaction = resolveCanvasInteractionPolicy(options.interaction);
+  const clickThreshold = interaction.clickThreshold;
+  const nodeModels = new Map<string, CanvasNodeModel>();
+  const connectionModels = new Map<string, CanvasConnectionModel>();
+  let activate: (reference: CanvasEntityReference) => void = () => undefined;
+
+  for (const node of nodes) {
+    const definition = resolveView("node", nodeViews, node.view);
+    if (definition.defaultWidth <= 0 || definition.defaultHeight <= 0) {
+      throw new Error(`Canvas node view ${definition.id} must define positive dimensions`);
+    }
+    nodeModels.set(node.id, new CanvasNodeModel(node, definition, (reference) => activate(reference), clickThreshold));
+  }
+
+  for (const edge of edges) {
+    const source = nodeModels.get(edge.source.nodeId);
+    const target = nodeModels.get(edge.target.nodeId);
+    if (source === undefined || target === undefined) {
+      throw new Error(`Canvas edge ${edge.id} references a missing endpoint`);
+    }
+    const sourcePort = resolvePort(source.source, source.definition, edge.source.portId, DEFAULT_SOURCE_PORT);
+    const targetPort = resolvePort(target.source, target.definition, edge.target.portId, DEFAULT_TARGET_PORT);
+    const sourceKey = `output:${sourcePort.id}`;
+    const targetKey = `input:${targetPort.id}`;
+    if (!source.hasOutput(sourceKey)) {
+      source.addOutput(sourceKey, new ClassicPreset.Output(new CanvasSocketModel(sourcePort), "", true));
+    }
+    if (!target.hasInput(targetKey)) {
+      target.addInput(targetKey, new ClassicPreset.Input(new CanvasSocketModel(targetPort), "", true));
+    }
+    const definition = resolveView("edge", edgeViews, edge.view);
+    connectionModels.set(
+      edge.id,
+      new CanvasConnectionModel(
+        source,
+        sourceKey,
+        target,
+        targetKey,
+        edge,
+        definition,
+        (reference) => activate(reference),
+        clickThreshold,
+      ),
+    );
+  }
+
+  const previousStyle = applySurface(container, options);
+  container.replaceChildren();
+
+  const editor = new NodeEditor<Schemes>();
+  const area = new AreaPlugin<Schemes, AreaExtra>(container);
+  const render = new ReactPlugin<Schemes, AreaExtra>({ createRoot });
+  render.addPreset(
+    Presets.classic.setup({
+      customize: {
+        node: () => CanvasNodeView,
+        connection: () => CanvasConnectionView,
+        socket: () => CanvasSocketView,
+      },
+    }),
+  );
+  editor.use(area);
+  area.use(render);
+
+  const zoom = interaction.zoom;
+  if (zoom === false) {
+    area.area.setZoomHandler(null);
+  } else {
+    area.area.setZoomHandler(
+      new CanvasWheelZoom(Math.max(0.01, (zoom.factor ?? 1.1) - 1), zoom.modifiers ?? []),
+    );
+  }
+  if (!interaction.panning) area.area.setDragHandler(null);
+
+  let initializing = true;
+  let programmaticZoom = false;
+  let disposed = false;
+  let selected: CanvasEntityReference | null = null;
+
+  area.addPipe((context) => {
+    if (
+      context.type === "nodetranslate" &&
+      !initializing &&
+      !interaction.movableNodes
+    ) {
+      return;
+    }
+    if (context.type === "zoom" && !programmaticZoom && zoom !== false) {
+      if (context.data.source === "dblclick") return;
+      if (context.data.zoom < (zoom.minScale ?? 0.1) || context.data.zoom > (zoom.maxScale ?? 4)) {
+        return;
+      }
+    }
+    return context;
+  });
+
+  const center = async () => {
+    if (disposed || nodeModels.size === 0) return;
+    programmaticZoom = true;
+    try {
+      await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: fitScale(container, options) });
+    } finally {
+      programmaticZoom = false;
+    }
+  };
+
+  const ready = (async () => {
+    for (const node of nodeModels.values()) {
+      if (disposed) return;
+      await editor.addNode(node);
+      await area.translate(node.id, { x: node.source.x, y: node.source.y });
+      await area.resize(node.id, node.width, node.height);
+    }
+    for (const connection of connectionModels.values()) {
+      if (disposed) return;
+      await editor.addConnection(connection);
+    }
+    initializing = false;
+    if (options.viewport?.fitOnCreate ?? true) await center();
+  })();
+
+  const updateSelection = (reference: CanvasEntityReference, value: boolean): void => {
+    if (reference.kind === "node") {
+      const node = nodeModels.get(reference.id);
+      if (node === undefined) throw new Error(`Canvas node not found: ${reference.id}`);
+      node.selected = value;
+      void ready.then(() => area.update("node", node.id));
+    } else {
+      const connectionModel = connectionModels.get(reference.id);
+      if (connectionModel === undefined) throw new Error(`Canvas edge not found: ${reference.id}`);
+      connectionModel.selected = value;
+      void ready.then(() => area.update("connection", connectionModel.id));
+    }
+  };
+
+  const setSelection = (reference: CanvasEntityReference | null): void => {
+    if (disposed) return;
+    if (selected !== null) updateSelection(selected, false);
+    selected = reference === null ? null : Object.freeze({ ...reference });
+    if (selected !== null) updateSelection(selected, true);
+  };
+
+  activate = (reference) => {
+    if (interaction.selectOnActivate) setSelection(reference);
+    options.onActivate?.(Object.freeze({ ...reference }));
+  };
+
+  return Object.freeze({
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    center: () => {
+      void ready.then(center);
+    },
+    setSelection,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      area.destroy();
+      void editor.clear();
+      container.replaceChildren();
+      if (previousStyle === null) container.removeAttribute("style");
+      else container.setAttribute("style", previousStyle);
+    },
+  });
+}
