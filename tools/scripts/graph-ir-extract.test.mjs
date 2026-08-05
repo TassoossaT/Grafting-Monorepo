@@ -15,6 +15,7 @@ import {
   extractGraphIr,
   jsonPointerEscape,
   pathsFromGitPorcelain,
+  sourceRevisionForInputs,
 } from "./graph-ir-extract.mjs";
 
 test("jsonPointerEscape follows RFC 6901 (~ before /)", () => {
@@ -22,6 +23,15 @@ test("jsonPointerEscape follows RFC 6901 (~ before /)", () => {
   assert.equal(jsonPointerEscape("@grafting/isekai-wasm"), "@grafting~1isekai-wasm");
   assert.equal(jsonPointerEscape("a~b"), "a~0b");
   assert.equal(jsonPointerEscape("a~/b"), "a~0~1b");
+});
+
+test("source revision depends only on the input commit and dirty input hashes", () => {
+  const inputCommit = "a".repeat(40);
+  assert.equal(sourceRevisionForInputs(inputCommit, []), `git:${inputCommit}`);
+  const dirtyRevision = sourceRevisionForInputs(inputCommit, ["project.json deadbeef"]);
+  assert.equal(dirtyRevision, sourceRevisionForInputs(inputCommit, ["project.json deadbeef"]));
+  assert.notEqual(dirtyRevision, sourceRevisionForInputs("b".repeat(40), ["project.json deadbeef"]));
+  assert.match(dirtyRevision, /^workspace:sha256:/);
 });
 
 test("Git porcelain parsing preserves the first path when its index status is blank", () => {
@@ -41,31 +51,31 @@ test("extractGraphIr produces a document that passes both Graph IR v1 validation
   assert.ok(document.edges.length > 0);
 });
 
-test("architecture-studio depends directly on x6-canvas after the atomic graph-x6 cutover", async () => {
+test("architecture-studio depends on ui, not the retired x6 canvas", async () => {
   const document = await extractGraphIr({ check: false });
   const matches = document.edges.filter(
-    (edge) => edge.kind === "depends_on" && edge.source === "project:architecture-studio" && edge.target === "project:x6-canvas",
+    (edge) => edge.kind === "depends_on" && edge.source === "project:architecture-studio" && edge.target === "project:ui",
   );
   assert.equal(matches.length, 1, "must collapse to exactly one edge, not one per Nx dependency type");
   assert.equal(matches[0].relationClass, "declared");
   assert.equal(matches[0].provenance.confidence, 1);
   assert.equal(
-    document.nodes.some((node) => node.id === "project:graph-x6"),
+    document.edges.some((edge) => edge.kind === "depends_on" && edge.source === "project:architecture-studio" && edge.target === "project:x6-canvas"),
     false,
   );
 });
 
-test("isekai-web-client->@grafting/isekai-wasm (static-only, no implicitDependencies entry) is derived, not declared", async () => {
+test("isekai-web-client declares its dependency on the co-located Wasm bridge project", async () => {
   const document = await extractGraphIr({ check: false });
-  const edge = document.edges.find(
+  const matches = document.edges.filter(
     (candidate) =>
       candidate.kind === "depends_on" &&
       candidate.source === "project:isekai-web-client" &&
-      candidate.target === "project:@grafting/isekai-wasm",
+      candidate.target === "project:isekai-wasm-bridge",
   );
-  assert.ok(edge, "expected a real depends_on edge for this pair");
-  assert.equal(edge.relationClass, "derived");
-  assert.ok(edge.provenance.confidence < 1);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].relationClass, "declared");
+  assert.equal(matches[0].provenance.confidence, 1);
 });
 
 test("architecture-studio's explicitly declared `dev` target is canonical authored source", async () => {

@@ -40,6 +40,11 @@ function git(args) {
 export const pathsFromGitPorcelain = (status) =>
   [...new Set(status.split("\n").filter(Boolean).map((line) => line.slice(3).trim()))].sort();
 
+export const sourceRevisionForInputs = (inputCommitSha, dirtyInputLines) =>
+  dirtyInputLines.length === 0
+    ? `git:${inputCommitSha}`
+    : `workspace:sha256:${sha256(`${inputCommitSha}\n${dirtyInputLines.join("\n")}`)}`;
+
 /**
  * Builds the real Graph IR v1 document from the committed Nx project graph
  * and each project's manifest, self-checks it against both validation
@@ -91,24 +96,19 @@ export async function extractGraphIr({ check = false } = {}) {
   // --- sourceRevision -----------------------------------------------
   // Scoped strictly to this extractor's own real inputs (project-graph.json
   // + every manifest read), never a whole-repo `git status` scan. A
-  // repo-wide scan would be self-referential: this generator's own output
-  // file becomes part of the working tree the moment it's first written,
-  // so a later run's "whole tree" fingerprint would never match the one
-  // already embedded in the file on disk, and --check could never
-  // converge. Scoping to a known, fixed input-file list avoids that, and
-  // also keeps this fingerprint from shifting because of unrelated
-  // concurrent agent work elsewhere in the repo.
-  const headSha = git(["rev-parse", "HEAD"]);
+  // repo-wide scan and HEAD-based provenance are both self-referential: an
+  // unrelated commit (including the commit that stores this generated file)
+  // would make --check stale even when every real input is unchanged. Scope
+  // both dirtiness and the baseline commit to the fixed input-file list.
   const inputPaths = [...new Set([projectGraphRelative, ...[...manifestByProject.values()].map((m) => m.path)])].sort();
+  const headSha = git(["rev-parse", "HEAD"]);
+  const inputCommitSha = git(["log", "-1", "--format=%H", "--", ...inputPaths]) || headSha;
   const dirtyStatus = git(["status", "--porcelain=v1", "--", ...inputPaths]);
-  let sourceRevision;
-  if (dirtyStatus === "") {
-    sourceRevision = `git:${headSha}`;
-  } else {
-    const dirtyPaths = pathsFromGitPorcelain(dirtyStatus);
-    const lines = await Promise.all(dirtyPaths.map(async (path) => `${path} ${sha256(await readText(path))}`));
-    sourceRevision = `workspace:sha256:${sha256(`${headSha}\n${lines.join("\n")}`)}`;
-  }
+  const dirtyPaths = pathsFromGitPorcelain(dirtyStatus);
+  const dirtyInputLines = await Promise.all(
+    dirtyPaths.map(async (path) => `${path} ${sha256(await readText(path))}`),
+  );
+  const sourceRevision = sourceRevisionForInputs(inputCommitSha, dirtyInputLines);
 
   const provenance = (confidence, evidence) => ({ extractor: EXTRACTOR, sourceRevision, confidence, evidence });
 
