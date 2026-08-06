@@ -30,15 +30,8 @@ export const jsonPointerEscape = (key) => key.replace(/~/g, "~0").replace(/\//g,
 
 const EXTRACTOR = { id: "extractor:nx-graph-ir", version: "1.0.0" };
 
-function git(args) {
-  // Porcelain status uses its first two columns as meaningful state. Preserve
-  // a leading workspace-column space on the first line while removing only
-  // Git's trailing newline.
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trimEnd();
-}
-
-export const pathsFromGitPorcelain = (status) =>
-  [...new Set(status.split("\n").filter(Boolean).map((line) => line.slice(3).trim()))].sort();
+export const sourceRevisionForInputs = (inputHashLines) =>
+  `workspace:sha256:${sha256([...inputHashLines].sort().join("\n"))}`;
 
 /**
  * Builds the real Graph IR v1 document from the committed Nx project graph
@@ -89,26 +82,16 @@ export async function extractGraphIr({ check = false } = {}) {
   }
 
   // --- sourceRevision -----------------------------------------------
-  // Scoped strictly to this extractor's own real inputs (project-graph.json
-  // + every manifest read), never a whole-repo `git status` scan. A
-  // repo-wide scan would be self-referential: this generator's own output
-  // file becomes part of the working tree the moment it's first written,
-  // so a later run's "whole tree" fingerprint would never match the one
-  // already embedded in the file on disk, and --check could never
-  // converge. Scoping to a known, fixed input-file list avoids that, and
-  // also keeps this fingerprint from shifting because of unrelated
-  // concurrent agent work elsewhere in the repo.
-  const headSha = git(["rev-parse", "HEAD"]);
-  const inputPaths = [...new Set([projectGraphRelative, ...[...manifestByProject.values()].map((m) => m.path)])].sort();
-  const dirtyStatus = git(["status", "--porcelain=v1", "--", ...inputPaths]);
-  let sourceRevision;
-  if (dirtyStatus === "") {
-    sourceRevision = `git:${headSha}`;
-  } else {
-    const dirtyPaths = pathsFromGitPorcelain(dirtyStatus);
-    const lines = await Promise.all(dirtyPaths.map(async (path) => `${path} ${sha256(await readText(path))}`));
-    sourceRevision = `workspace:sha256:${sha256(`${headSha}\n${lines.join("\n")}`)}`;
-  }
+  // Provenance is derived only from the exact input paths and bytes. Git SHAs
+  // are unsuitable here: GitHub checks a synthetic merge ref with shallow
+  // history, so identical inputs can otherwise receive a different revision
+  // locally and in CI. Content provenance is deterministic across commits,
+  // branches, dirty worktrees and clone depths without becoming self-referential.
+  const inputHashLines = [
+    `${projectGraphRelative}\0${projectGraphSha}`,
+    ...[...manifestByProject.values()].map((manifest) => `${manifest.path}\0${manifest.sha256}`),
+  ];
+  const sourceRevision = sourceRevisionForInputs(inputHashLines);
 
   const provenance = (confidence, evidence) => ({ extractor: EXTRACTOR, sourceRevision, confidence, evidence });
 

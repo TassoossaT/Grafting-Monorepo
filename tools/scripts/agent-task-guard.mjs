@@ -58,14 +58,12 @@ const gitSubcommandPattern = (subcommands) =>
   );
 
 /**
- * Coordination is now handled entirely by tools/ia-graft (worktree per
- * task, PR via `gh` to finish). This guard no longer knows about tasks,
- * ownership, or file scope -- it only enforces the Git history rules the
- * repository owner has approved for any agent, everywhere: agents commit
- * but never merge/rewrite history, and never push straight to main or
- * force a remote ref. Agents DO commit directly within their own task
- * worktree/branch (that is the whole point of `ia-graft task new/done`) --
- * only history-rewriting/merge operations remain denied.
+ * Coordination is handled by tools/ia-graft (worktree per task, PR via `gh`).
+ * This guard does not reproduce task ownership or file scope; it enforces the
+ * outer Git boundary everywhere. Agents may commit on their task branch and
+ * may invoke `ia-graft task sync`, whose internal forward merge is constrained
+ * to the recorded base. Raw merge/history rewriting, default-branch pushes,
+ * force operations and agent-side PR merge remain denied.
  */
 export function evaluateAgentGitCommand(command) {
   if (typeof command !== "string" || command.trim().length === 0) return allowed();
@@ -83,7 +81,7 @@ export function evaluateAgentGitCommand(command) {
   ]);
   if (historyRewriting.test(command)) {
     return denied(
-      "AI agents must not merge or rewrite Git history; commit forward on your own task branch instead",
+      "raw Git merge/history rewriting is forbidden; use ia-graft task sync only for the task's recorded base",
     );
   }
 

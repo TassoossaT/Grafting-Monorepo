@@ -1,5 +1,5 @@
 import { exec, execFile } from 'child_process';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
@@ -15,6 +15,36 @@ export function branchNameForTask(taskId: string): string {
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
+const DEPENDENCY_OVERLAY_MARKER = '.ia-graft-overlay.json';
+const DEPENDENCY_CACHE_DIR = '.ia-graft-task-deps';
+
+export type DependencyMode = 'none' | 'legacy-shared' | 'workspace-aware' | 'unmanaged';
+
+export interface DependencyPreparation {
+    linked: boolean;
+    mode: DependencyMode;
+    overlays: number;
+    workspaceLinks: number;
+    externalLinks: number;
+    copiedFiles: number;
+    materialized?: boolean;
+    lockfileHash?: string;
+    workspaceConfigHash?: string;
+    virtualStore?: string;
+    reason?: string;
+}
+
+interface DependencyOverlayMarker {
+    version: 1 | 2 | 3;
+    source: string;
+    materialized?: boolean;
+    lockfileHash?: string;
+    workspaceConfigHash?: string;
+    virtualStore?: string;
+    workspaceLinks?: number;
+    externalLinks?: number;
+    copiedFiles?: number;
+}
 
 /**
  * A long-lived process's inherited PATH predates any install that happened
@@ -61,36 +91,163 @@ async function findNodeModulesDirs(dir: string, relBase = ''): Promise<string[]>
 }
 
 /**
- * Links every `node_modules` directory in the main checkout into a fresh
- * task worktree, at the same relative path. `git worktree add` only brings
- * tracked files -- `node_modules` is gitignored, so every new worktree
- * starts with none, breaking anything that needs a real dependency tree
- * (tsc, most tests). A single root-level link is not enough in a pnpm
- * workspace: pnpm gives each package its own local `node_modules` (symlinks
- * into the shared root `.pnpm` store), so `tools/ia-graft/node_modules`,
- * `apps/*\/node_modules`, etc. each need their own link too -- Node's
- * parent-directory module-resolution walk cannot substitute for a
- * package-local dependency that pnpm never hoists to the workspace root.
- * Returns `{ linked: false }` (not an error) when the main checkout itself
- * has no root `node_modules` yet -- nothing to link, and that is the main
- * checkout's own problem to fix (`pnpm install`), not this worktree's.
+ * Finds the installation roots that need task-owned overlays. A plain Git
+ * worktree has no ignored dependencies; reusing each main node_modules as one
+ * junction fixes external resolution but makes workspace links resolve back
+ * to main. The overlay below keeps external store targets while rebinding
+ * workspace packages to task-local sources. No main installation is a valid
+ * `linked: false` result; installation remains a main-checkout responsibility.
  */
-async function linkSharedNodeModules(repoPath: string, worktreePath: string): Promise<{ linked: boolean; reason?: string }> {
+function relativeInside(parent: string, child: string): string | undefined {
+    const relative = path.relative(path.resolve(parent), path.resolve(child));
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
+    return relative;
+}
+
+function workspaceRelativeTarget(repoPath: string, resolvedTarget: string): string | undefined {
+    const relative = relativeInside(repoPath, resolvedTarget);
+    if (!relative) return undefined;
+    const segments = relative.split(path.sep);
+    if (segments.includes('node_modules') || segments[0] === '.git' || segments[0] === '.worktrees') return undefined;
+    return relative;
+}
+
+async function removeLinkTree(target: string): Promise<void> {
+    const stat = await fs.lstat(target);
+    if (stat.isSymbolicLink()) {
+        await fs.unlink(target);
+        return;
+    }
+    if (!stat.isDirectory()) {
+        await fs.unlink(target);
+        return;
+    }
+    for (const entry of await fs.readdir(target, { withFileTypes: true })) {
+        await removeLinkTree(path.join(target, entry.name));
+    }
+    await fs.rmdir(target);
+}
+
+async function mirrorDependencyEntry(
+    repoPath: string,
+    worktreePath: string,
+    source: string,
+    target: string,
+    counts: Omit<DependencyPreparation, 'linked' | 'mode' | 'overlays' | 'reason'>,
+): Promise<void> {
+    const stat = await fs.lstat(source);
+    if (stat.isSymbolicLink()) {
+        const resolved = await fs.realpath(source);
+        const workspaceRelative = workspaceRelativeTarget(repoPath, resolved);
+        const linkTarget = workspaceRelative ? path.join(worktreePath, workspaceRelative) : resolved;
+        const targetStat = await fs.stat(resolved);
+        await fs.symlink(linkTarget, target, targetStat.isDirectory() ? 'junction' : 'file');
+        if (workspaceRelative) counts.workspaceLinks += 1;
+        else counts.externalLinks += 1;
+        return;
+    }
+    if (stat.isDirectory()) {
+        const name = path.basename(source);
+        if (name.startsWith('@') || name === '.bin') {
+            await fs.mkdir(target, { recursive: true });
+            for (const entry of await fs.readdir(source)) {
+                await mirrorDependencyEntry(repoPath, worktreePath, path.join(source, entry), path.join(target, entry), counts);
+            }
+            return;
+        }
+        await fs.symlink(source, target, 'junction');
+        counts.externalLinks += 1;
+        return;
+    }
+    await fs.copyFile(source, target);
+    counts.copiedFiles += 1;
+}
+
+async function readMaterializedPreparation(repoPath: string, worktreePath: string): Promise<DependencyPreparation | undefined> {
+    const markerPath = path.join(worktreePath, 'node_modules', DEPENDENCY_OVERLAY_MARKER);
+    if (!await pathExists(markerPath)) return undefined;
+    try {
+        const marker = JSON.parse(await fs.readFile(markerPath, 'utf8')) as DependencyOverlayMarker;
+        if (marker.version !== 3 || !marker.materialized || !samePath(marker.source, repoPath)
+            || !marker.lockfileHash || !marker.workspaceConfigHash || !marker.virtualStore) return undefined;
+        const lockfilePath = path.join(worktreePath, 'pnpm-lock.yaml');
+        const workspaceConfigPath = path.join(worktreePath, 'pnpm-workspace.yaml');
+        if (!await pathExists(lockfilePath) || !await pathExists(workspaceConfigPath)) return undefined;
+        const currentLockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+        const currentWorkspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
+        if (currentLockfileHash !== marker.lockfileHash || currentWorkspaceConfigHash !== marker.workspaceConfigHash) return undefined;
+        return {
+            linked: true,
+            mode: 'workspace-aware',
+            overlays: (await findNodeModulesDirs(worktreePath)).length,
+            workspaceLinks: marker.workspaceLinks ?? 0,
+            externalLinks: marker.externalLinks ?? 0,
+            copiedFiles: marker.copiedFiles ?? 0,
+            materialized: true,
+            lockfileHash: marker.lockfileHash,
+            workspaceConfigHash: marker.workspaceConfigHash,
+            virtualStore: marker.virtualStore,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+async function dependencyMode(worktreePath: string): Promise<DependencyMode> {
+    const rootNodeModules = path.join(worktreePath, 'node_modules');
+    if (!await pathExists(rootNodeModules)) return 'none';
+    if ((await fs.lstat(rootNodeModules)).isSymbolicLink()) return 'legacy-shared';
+    if (await pathExists(path.join(rootNodeModules, DEPENDENCY_OVERLAY_MARKER))) return 'workspace-aware';
+    return 'unmanaged';
+}
+
+/**
+ * Builds small task-owned node_modules overlays. External dependencies still
+ * point at the main checkout's installed store, while pnpm workspace links
+ * are rebound to the corresponding package inside this task worktree.
+ */
+async function prepareDependencyOverlays(
+    repoPath: string,
+    worktreePath: string,
+    preserveMaterialized = true,
+): Promise<DependencyPreparation> {
+    if (preserveMaterialized) {
+        const materialized = await readMaterializedPreparation(repoPath, worktreePath);
+        if (materialized) return materialized;
+    }
     const rootNodeModules = path.join(repoPath, 'node_modules');
     try {
         await fs.access(rootNodeModules);
     } catch {
-        return { linked: false, reason: 'main checkout has no node_modules; run pnpm install there first' };
+        return {
+            linked: false, mode: 'none', overlays: 0, workspaceLinks: 0, externalLinks: 0, copiedFiles: 0,
+            reason: 'main checkout has no node_modules; run pnpm install there first',
+        };
     }
     const relativeDirs = await findNodeModulesDirs(repoPath);
+    const counts = { workspaceLinks: 0, externalLinks: 0, copiedFiles: 0 };
     for (const rel of relativeDirs) {
+        const source = path.join(repoPath, rel);
         const target = path.join(worktreePath, rel);
+        if (await pathExists(target)) {
+            const stat = await fs.lstat(target);
+            const mode = stat.isSymbolicLink() ? 'legacy-shared'
+                : await pathExists(path.join(target, DEPENDENCY_OVERLAY_MARKER)) ? 'workspace-aware'
+                : 'unmanaged';
+            if (mode === 'unmanaged') throw new Error(`refusing to replace unmanaged dependency directory: ${target}`);
+            await removeLinkTree(target);
+        }
         await fs.mkdir(path.dirname(target), { recursive: true });
-        // Node treats the type as advisory on POSIX; junction avoids elevated
-        // symlink privileges on Windows without an application-owned OS branch.
-        await fs.symlink(path.join(repoPath, rel), target, 'junction');
+        await fs.mkdir(target, { recursive: true });
+        // Write the ownership proof first so a partially built overlay remains
+        // safely recoverable by task deps/cleanup after an interrupted run.
+        await fs.writeFile(path.join(target, DEPENDENCY_OVERLAY_MARKER), JSON.stringify({ version: 1, source }));
+        for (const entry of await fs.readdir(source)) {
+            if (rel === 'node_modules' && entry === DEPENDENCY_CACHE_DIR) continue;
+            await mirrorDependencyEntry(repoPath, worktreePath, path.join(source, entry), path.join(target, entry), counts);
+        }
     }
-    return { linked: true };
+    return { linked: true, mode: 'workspace-aware', overlays: relativeDirs.length, ...counts };
 }
 
 /**
@@ -132,8 +289,144 @@ async function pathExists(target: string): Promise<boolean> {
     }
 }
 
+function dependencyCachePath(repoPath: string, taskId: string): string {
+    return path.join(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR, taskId);
+}
+
+function assertSafeDependencyCachePath(repoPath: string, target: string): void {
+    const root = path.resolve(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR);
+    const resolved = path.resolve(target);
+    if (!samePath(path.dirname(resolved), root)) {
+        throw new Error(`refusing dependency-cache mutation outside one deterministic task path: ${resolved}`);
+    }
+}
+
+async function countDependencyEntry(
+    worktreePath: string,
+    target: string,
+    counts: { workspaceLinks: number; externalLinks: number; copiedFiles: number },
+): Promise<void> {
+    const name = path.basename(target);
+    if (name === DEPENDENCY_OVERLAY_MARKER || name === '.modules.yaml' || name.startsWith('.pnpm')) return;
+    const stat = await fs.lstat(target);
+    if (stat.isSymbolicLink()) {
+        const resolved = await fs.realpath(target);
+        if (workspaceRelativeTarget(worktreePath, resolved)) counts.workspaceLinks += 1;
+        else counts.externalLinks += 1;
+        return;
+    }
+    if (stat.isDirectory() && (name.startsWith('@') || name === '.bin')) {
+        for (const entry of await fs.readdir(target)) {
+            await countDependencyEntry(worktreePath, path.join(target, entry), counts);
+        }
+        return;
+    }
+    if (stat.isDirectory()) counts.externalLinks += 1;
+    else counts.copiedFiles += 1;
+}
+
+async function executePnpm(args: string[], cwd: string): Promise<void> {
+    const options = {
+        cwd,
+        env: { ...process.env, CI: 'true' },
+        maxBuffer: 4 * 1024 * 1024,
+    };
+    if (process.platform === 'win32') {
+        await execFileAsync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'pnpm.cmd', ...args], options);
+        return;
+    }
+    await execFileAsync('pnpm', args, options);
+}
+
+async function materializeTaskDependencies(repoPath: string, worktreePath: string, taskId: string): Promise<DependencyPreparation> {
+    const lockfilePath = path.join(worktreePath, 'pnpm-lock.yaml');
+    const workspaceConfigPath = path.join(worktreePath, 'pnpm-workspace.yaml');
+    if (!await pathExists(lockfilePath) || !await pathExists(workspaceConfigPath)) {
+        throw new Error('task requires pnpm-lock.yaml and pnpm-workspace.yaml to materialize');
+    }
+    const lockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+    const workspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
+    const cacheRoot = dependencyCachePath(repoPath, taskId);
+    assertSafeDependencyCachePath(repoPath, cacheRoot);
+    const cacheMarker = path.join(cacheRoot, '.ia-graft-task-cache.json');
+    if (await pathExists(cacheRoot) && !await pathExists(cacheMarker)) {
+        throw new Error(`refusing to use unmanaged dependency cache: ${cacheRoot}`);
+    }
+    await fs.mkdir(cacheRoot, { recursive: true });
+    await fs.writeFile(cacheMarker, JSON.stringify({ version: 1, taskId, source: repoPath }));
+    const virtualStorePath = path.join(cacheRoot, lockfileHash, '.pnpm');
+
+    await unlinkTaskDependencies(worktreePath);
+    try {
+        await executePnpm([
+            'install', '--dir', worktreePath, '--frozen-lockfile', '--ignore-scripts', '--prefer-offline',
+            '--virtual-store-dir', virtualStorePath, '--reporter', 'append-only',
+        ], repoPath);
+    } catch (error) {
+        // A failed pnpm run may leave a partial node_modules. Mark only the
+        // directories created by this invocation, remove them through the
+        // guarded cleanup, and restore the reusable main-checkout overlay.
+        for (const rel of await findNodeModulesDirs(worktreePath)) {
+            await fs.writeFile(
+                path.join(worktreePath, rel, DEPENDENCY_OVERLAY_MARKER),
+                JSON.stringify({ version: 3, source: repoPath }),
+            );
+        }
+        await unlinkTaskDependencies(worktreePath).catch(() => undefined);
+        await prepareDependencyOverlays(repoPath, worktreePath, false).catch(() => undefined);
+        const summary = capSummary(commandError(error).split(/\r?\n/).slice(-40));
+        throw new Error(`pnpm dependency materialization failed: ${summary}`);
+    }
+
+    const relativeDirs = await findNodeModulesDirs(worktreePath);
+    const counts = { workspaceLinks: 0, externalLinks: 0, copiedFiles: 0 };
+    for (const rel of relativeDirs) {
+        const nodeModules = path.join(worktreePath, rel);
+        for (const entry of await fs.readdir(nodeModules)) {
+            await countDependencyEntry(worktreePath, path.join(nodeModules, entry), counts);
+        }
+    }
+    const virtualStore = path.relative(repoPath, virtualStorePath);
+    const marker: DependencyOverlayMarker = {
+        version: 3,
+        source: repoPath,
+        materialized: true,
+        lockfileHash,
+        workspaceConfigHash,
+        virtualStore,
+        ...counts,
+    };
+    for (const rel of relativeDirs) {
+        await fs.writeFile(path.join(worktreePath, rel, DEPENDENCY_OVERLAY_MARKER), JSON.stringify(marker));
+    }
+    return {
+        linked: true,
+        mode: 'workspace-aware',
+        overlays: relativeDirs.length,
+        ...counts,
+        materialized: true,
+        lockfileHash,
+        workspaceConfigHash,
+        virtualStore,
+    };
+}
+
+async function removeTaskDependencyCache(repoPath: string, taskId: string): Promise<boolean> {
+    const target = dependencyCachePath(repoPath, taskId);
+    assertSafeDependencyCachePath(repoPath, target);
+    if (!await pathExists(target)) return false;
+    const markerPath = path.join(target, '.ia-graft-task-cache.json');
+    if (!await pathExists(markerPath)) throw new Error(`refusing to remove unmanaged dependency cache: ${target}`);
+    const marker = JSON.parse(await fs.readFile(markerPath, 'utf8')) as { version?: number; taskId?: string; source?: string };
+    if (marker.version !== 1 || marker.taskId !== taskId || !marker.source || !samePath(marker.source, repoPath)) {
+        throw new Error(`refusing to remove dependency cache with invalid ownership marker: ${target}`);
+    }
+    await removeWithRetry(target);
+    return true;
+}
+
 /** Removes only ia-graft-created node_modules links; it never traverses them. */
-async function unlinkSharedNodeModules(dir: string): Promise<string[]> {
+async function unlinkTaskDependencies(dir: string): Promise<string[]> {
     let entries;
     try { entries = await fs.readdir(dir, { withFileTypes: true }); }
     catch { return []; }
@@ -145,13 +438,16 @@ async function unlinkSharedNodeModules(dir: string): Promise<string[]> {
             if (stat.isSymbolicLink()) {
                 await fs.unlink(target);
                 removed.push(target);
+            } else if (await pathExists(path.join(target, DEPENDENCY_OVERLAY_MARKER))) {
+                await removeLinkTree(target);
+                removed.push(target);
+            } else {
+                throw new Error(`refusing cleanup of unmanaged dependency directory: ${target}`);
             }
-            // A real directory stays inside the already validated task root and
-            // is removed with that root; only link-specific removal requires proof.
             continue;
         }
         if (entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== '.git' && entry.name !== '.worktrees') {
-            removed.push(...await unlinkSharedNodeModules(target));
+            removed.push(...await unlinkTaskDependencies(target));
         }
     }
     return removed;
@@ -177,7 +473,7 @@ async function safeRemoveTaskDirectory(repoPath: string, target: string): Promis
     if ((await fs.lstat(target)).isSymbolicLink()) {
         throw new Error(`refusing cleanup: task root itself is a symlink or junction: ${target}`);
     }
-    await unlinkSharedNodeModules(target);
+    await unlinkTaskDependencies(target);
     try { await removeWithRetry(target); }
     catch (firstError) {
         try { await windowsMirrorEmpty(target); }
@@ -214,21 +510,35 @@ function commandError(error: unknown): string {
 
 const TAP_SUMMARY_LINE = /^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)\b/;
 const TAP_FAILURE_LINE = /^not ok\b/;
+const MAX_SUMMARY_CHARS = 6_000;
+const MAX_SUMMARY_LINE_CHARS = 1_000;
+
+function capSummary(lines: string[]): string {
+    const bounded = lines.map((line) => line.length <= MAX_SUMMARY_LINE_CHARS
+        ? line
+        : `${line.slice(0, MAX_SUMMARY_LINE_CHARS)}...[line truncated]`);
+    const joined = bounded.join('\n');
+    if (joined.length <= MAX_SUMMARY_CHARS) return joined;
+    const marker = '\n...[output truncated]...\n';
+    const side = Math.floor((MAX_SUMMARY_CHARS - marker.length) / 2);
+    return `${joined.slice(0, side)}${marker}${joined.slice(-side)}`;
+}
 
 /**
  * Reduces test-runner output to what actually matters: for node:test's TAP
  * output, the failing test lines plus the summary counters; for anything
- * else (no recognizable TAP summary present), the last 40 lines, on the
- * assumption the interesting part -- especially a failure -- is at the end.
+ * else (no recognizable TAP summary present), the last 40 lines. Both lines
+ * and the final summary are bounded so generated/minified output cannot
+ * consume the caller's context budget.
  */
 function summarizeTestOutput(output: string): string {
     const lines = output.split(/\r?\n/).filter((line) => line.length > 0);
     const summary = lines.filter((line) => TAP_SUMMARY_LINE.test(line));
     if (summary.length > 0) {
         const failures = lines.filter((line) => TAP_FAILURE_LINE.test(line));
-        return [...failures, ...summary].join('\n');
+        return capSummary([...failures, ...summary]);
     }
-    return lines.slice(-40).join('\n');
+    return capSummary(lines.slice(-40));
 }
 
 /**
@@ -274,6 +584,22 @@ export class GitWorktreeSession {
         await executeGit(['add', ...files], this.worktreePath);
     }
 
+    async unmergedPaths(): Promise<string[]> {
+        const output = await executeGit(['diff', '--name-only', '--diff-filter=U'], this.worktreePath);
+        return output.split(/\r?\n/).filter(Boolean);
+    }
+
+    async conflictMarkerPaths(filePaths: string[]): Promise<string[]> {
+        const marked: string[] = [];
+        for (const filePath of filePaths) {
+            try {
+                const content = await fs.readFile(path.join(this.worktreePath, filePath), 'utf8');
+                if (/^(?:<<<<<<< |>>>>>>> )/m.test(content)) marked.push(filePath);
+            } catch { /* deleted and binary conflicts are resolved by Git staging rules */ }
+        }
+        return marked;
+    }
+
     /**
      * Commits the staged changes to the worktree's branch.
      * @param message The commit message.
@@ -284,6 +610,7 @@ export class GitWorktreeSession {
         await fs.writeFile(tempMsgFile, message);
         try {
             await executeGit(['commit', '-F', tempMsgFile], this.worktreePath);
+            await executeGit(['config', '--unset', `branch.${this.branchName}.ia-graft-sync-source`], this.worktreePath).catch(() => undefined);
         } finally {
             await fs.unlink(tempMsgFile);
         }
@@ -403,7 +730,7 @@ export class GitWorktreeSession {
      */
     async cleanup(): Promise<void> {
         assertSafeTaskPath(this.repoPath, this.worktreePath);
-        if (await pathExists(this.worktreePath)) await unlinkSharedNodeModules(this.worktreePath);
+        if (await pathExists(this.worktreePath)) await unlinkTaskDependencies(this.worktreePath);
         try {
             await executeGit(['worktree', 'remove', '--force', this.worktreePath], this.repoPath);
         } catch (error) {
@@ -460,13 +787,17 @@ export class GitClient {
         }
     }
 
-    private async branchConfig(branch: string, key: 'base' | 'parent'): Promise<string | undefined> {
+    private async branchConfig(branch: string, key: 'base' | 'parent' | 'sync-source'): Promise<string | undefined> {
         try { return await executeGit(['config', '--get', `branch.${branch}.ia-graft-${key}`], this.repoPath); }
         catch { return undefined; }
     }
 
-    private async setBranchConfig(branch: string, key: 'base' | 'parent', value: string): Promise<void> {
+    private async setBranchConfig(branch: string, key: 'base' | 'parent' | 'sync-source', value: string): Promise<void> {
         await executeGit(['config', `branch.${branch}.ia-graft-${key}`, value], this.repoPath);
+    }
+
+    private async unsetBranchConfig(branch: string, key: 'base' | 'parent' | 'sync-source'): Promise<void> {
+        await executeGit(['config', '--unset', `branch.${branch}.ia-graft-${key}`], this.repoPath).catch(() => undefined);
     }
 
     async resolveDefaultBranch(): Promise<{ branch: string; source: string }> {
@@ -524,7 +855,7 @@ export class GitClient {
     async createOrResumeSession(
         taskId: string,
         options: { base?: string; parentTaskId?: string } = {},
-    ): Promise<{ session: GitWorktreeSession; resumed: boolean; repaired: boolean; base: string; parent?: string }> {
+    ): Promise<{ session: GitWorktreeSession; resumed: boolean; repaired: boolean; base: string; parent?: string; dependencies: DependencyPreparation }> {
         const branch = branchNameForTask(taskId);
         const worktree = worktreePathForTask(this.repoPath, taskId);
         let status = await this.taskStatus(taskId);
@@ -544,10 +875,12 @@ export class GitClient {
             const base = status.base ?? requestedBase ?? (await this.resolveDefaultBranch()).branch;
             if (!status.base) await this.setBranchConfig(branch, 'base', base);
             if (options.parentTaskId && !status.parent) await this.setBranchConfig(branch, 'parent', options.parentTaskId);
+            const dependencies = await prepareDependencyOverlays(this.repoPath, worktree);
             return {
-                session: GitWorktreeSession.open(this.repoPath, taskId, await pathExists(path.join(worktree, 'node_modules'))), resumed: true, repaired: false,
+                session: GitWorktreeSession.open(this.repoPath, taskId, dependencies.linked), resumed: true, repaired: false,
                 base,
                 parent: options.parentTaskId ?? status.parent,
+                dependencies,
             };
         }
         let repaired = false;
@@ -576,17 +909,25 @@ export class GitClient {
         }
         if (!status.base) await this.setBranchConfig(branch, 'base', base);
         if (options.parentTaskId && !status.parent) await this.setBranchConfig(branch, 'parent', options.parentTaskId);
-        const { linked, reason } = await linkSharedNodeModules(this.repoPath, worktree);
-        if (!linked && reason !== 'main checkout has no node_modules; run pnpm install there first') {
-            throw new Error(`worktree created but failed to link node_modules: ${reason}`);
+        const dependencies = await prepareDependencyOverlays(this.repoPath, worktree);
+        if (!dependencies.linked && dependencies.reason !== 'main checkout has no node_modules; run pnpm install there first') {
+            throw new Error(`worktree created but failed to prepare node_modules: ${dependencies.reason}`);
         }
-        return { session: GitWorktreeSession.open(this.repoPath, taskId, linked), resumed: status.branchLocal || status.branchRemote, repaired, base, parent: options.parentTaskId ?? status.parent };
+        return {
+            session: GitWorktreeSession.open(this.repoPath, taskId, dependencies.linked),
+            resumed: status.branchLocal || status.branchRemote,
+            repaired,
+            base,
+            parent: options.parentTaskId ?? status.parent,
+            dependencies,
+        };
     }
 
     async taskStatus(taskId: string): Promise<{
         taskId: string; exists: boolean; branch: string; worktreePath: string; branchLocal: boolean; branchRemote: boolean;
         worktreeRegistered: boolean; directoryExists: boolean; orphanDirectory: boolean; checkoutMode: 'worktree' | 'main' | 'missing' | 'unexpected';
-        location?: string; dirty?: boolean; head?: string; base?: string; parent?: string; pr?: unknown; issues: string[];
+        location?: string; dirty?: boolean; head?: string; base?: string; parent?: string; syncSource?: string; pr?: unknown; issues: string[];
+        mergeInProgress: boolean; conflicts: string[]; dependencyMode: DependencyMode;
     }> {
         const branch = branchNameForTask(taskId);
         const worktreePath = worktreePathForTask(this.repoPath, taskId);
@@ -606,9 +947,16 @@ export class GitClient {
             : location ? 'unexpected' as const : 'missing' as const;
         let dirty: boolean | undefined;
         let head: string | undefined;
+        let mergeInProgress = false;
+        let conflicts: string[] = [];
         if (location) {
             dirty = (await executeGit(['status', '--porcelain'], location)).length > 0;
             head = await executeGit(['rev-parse', '--short', 'HEAD'], location);
+            try {
+                await executeGit(['rev-parse', '--verify', '-q', 'MERGE_HEAD'], location);
+                mergeInProgress = true;
+                conflicts = (await executeGit(['diff', '--name-only', '--diff-filter=U'], location)).split(/\r?\n/).filter(Boolean);
+            } catch { /* no merge in progress */ }
         } else if (branchLocal) head = await executeGit(['rev-parse', '--short', branch], this.repoPath);
         return {
             taskId, branch, worktreePath,
@@ -616,13 +964,25 @@ export class GitClient {
             branchLocal, branchRemote, worktreeRegistered: Boolean(expected), directoryExists,
             orphanDirectory: directoryExists && !expected, checkoutMode, location, dirty, head,
             base: await this.branchConfig(branch, 'base'), parent: await this.branchConfig(branch, 'parent'),
+            syncSource: await this.branchConfig(branch, 'sync-source'),
             pr: await this.pullRequestForBranch(branch), issues,
+            mergeInProgress,
+            conflicts,
+            dependencyMode: checkoutMode === 'worktree' ? await dependencyMode(worktreePath) : 'none',
         };
     }
 
-    async cleanupTask(taskId: string, force: boolean): Promise<{ discarded: boolean; removedOrphan: boolean }> {
+    async cleanupTask(taskId: string, force: boolean): Promise<{
+        discarded: boolean; removedOrphan: boolean; dependencyCacheRemoved: boolean;
+    }> {
         const status = await this.taskStatus(taskId);
-        if (!status.exists) return { discarded: force, removedOrphan: false };
+        if (!status.exists) {
+            return {
+                discarded: force,
+                removedOrphan: false,
+                dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+            };
+        }
         if (status.checkoutMode === 'main') throw new Error('refusing cleanup while task is checked out in main; run task checkout --restore first');
         if (status.dirty && !force) throw new Error('refusing cleanup: task worktree has uncommitted changes (use --force only to abandon them)');
         if (!force) {
@@ -632,7 +992,11 @@ export class GitClient {
         if (status.worktreeRegistered) await GitWorktreeSession.open(this.repoPath, taskId).cleanup();
         else if (status.directoryExists) await safeRemoveTaskDirectory(this.repoPath, status.worktreePath);
         if (status.branchLocal) await executeGit(['branch', '-D', status.branch], this.repoPath);
-        return { discarded: force, removedOrphan: status.orphanDirectory };
+        return {
+            discarded: force,
+            removedOrphan: status.orphanDirectory,
+            dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+        };
     }
 
     /** Opens only a structurally healthy linked task worktree; never main. */
@@ -720,6 +1084,97 @@ export class GitClient {
             throw new Error(`parent task branch ${resolved} is not published; run task done for the parent before the child`);
         }
         return resolved;
+    }
+
+    async prepareTaskDependencies(taskId: string, options: { install?: boolean } = {}): Promise<DependencyPreparation> {
+        const status = await this.taskStatus(taskId);
+        if (status.checkoutMode !== 'worktree' || status.issues.length > 0) {
+            throw new Error(`task worktree is not healthy: ${status.issues.join('; ') || status.checkoutMode}`);
+        }
+        return options.install
+            ? materializeTaskDependencies(this.repoPath, status.worktreePath, taskId)
+            : prepareDependencyOverlays(this.repoPath, status.worktreePath, false);
+    }
+
+    async syncTask(taskId: string, options: { fetch?: boolean; abort?: boolean } = {}) {
+        const status = await this.taskStatus(taskId);
+        if (status.checkoutMode !== 'worktree' || status.issues.length > 0 || !status.location) {
+            throw new Error(`task worktree is not healthy: ${status.issues.join('; ') || status.checkoutMode}`);
+        }
+        if (options.abort) {
+            if (!status.mergeInProgress) throw new Error('no task sync merge is in progress');
+            if (!status.syncSource) throw new Error('refusing abort: the merge was not started by task sync');
+            await executeGit(['merge', '--abort'], status.location);
+            await this.unsetBranchConfig(status.branch, 'sync-source');
+            return {
+                aborted: true,
+                completed: false,
+                mergeInProgress: false,
+                conflicts: [] as string[],
+                head: await executeGit(['rev-parse', '--short', 'HEAD'], status.location),
+            };
+        }
+        if (status.mergeInProgress) {
+            return {
+                aborted: false,
+                completed: false,
+                mergeInProgress: true,
+                conflicts: status.conflicts,
+                head: status.head,
+                recommendedAction: status.syncSource ? 'resolve conflicts, then task commit; or task sync --abort' : 'resolve conflicts, then task commit',
+            };
+        }
+        if (status.syncSource) await this.unsetBranchConfig(status.branch, 'sync-source');
+        if (status.dirty) throw new Error('refusing sync: task worktree has uncommitted changes');
+
+        const base = await this.resolveTaskBase(taskId);
+        let source: string;
+        if (base.startsWith('task/') && await this.localBranchExists(base)) {
+            source = base;
+        } else if (options.fetch) {
+            await executeGit(['fetch', 'origin', `${base}:refs/remotes/origin/${base}`], status.location);
+            source = `origin/${base}`;
+        } else if (await this.localBranchExists(base)) {
+            source = base;
+        } else if (await this.remoteBranchExists(base)) {
+            source = `origin/${base}`;
+        } else {
+            throw new Error(`recorded task base does not exist locally or remotely: ${base}`);
+        }
+
+        const before = await executeGit(['rev-parse', '--short', 'HEAD'], status.location);
+        const divergence = await executeGit(['rev-list', '--left-right', '--count', `HEAD...${source}`], status.location);
+        const [ahead = 0, behind = 0] = divergence.split(/\s+/).map(Number);
+        if (behind === 0) {
+            return {
+                aborted: false, completed: true, updated: false, mergeInProgress: false,
+                base, source, before, after: before, ahead, behind, conflicts: [] as string[],
+            };
+        }
+
+        await this.setBranchConfig(status.branch, 'sync-source', source);
+        try {
+            await execFileAsync('git', ['merge', '--no-edit', source], { cwd: status.location });
+        } catch (error) {
+            const refreshed = await this.taskStatus(taskId);
+            if (refreshed.mergeInProgress) {
+                return {
+                    aborted: false, completed: false, updated: false, mergeInProgress: true,
+                    base, source, before, after: before, ahead, behind, conflicts: refreshed.conflicts,
+                    recommendedAction: refreshed.syncSource ? 'resolve conflicts, then task commit; or task sync --abort' : 'resolve conflicts, then task commit',
+                };
+            }
+            await this.unsetBranchConfig(status.branch, 'sync-source');
+            throw new Error(`could not sync ${source}: ${commandError(error)}`);
+        }
+        await this.unsetBranchConfig(status.branch, 'sync-source');
+        const after = await executeGit(['rev-parse', '--short', 'HEAD'], status.location);
+        const parentLine = await executeGit(['rev-list', '--parents', '-n', '1', 'HEAD'], status.location);
+        return {
+            aborted: false, completed: true, updated: after !== before, mergeInProgress: false,
+            base, source, before, after, ahead, behind, conflicts: [] as string[],
+            mergeCommit: parentLine.split(/\s+/).length > 2,
+        };
     }
 
     async taskGraph(): Promise<Array<{ taskId: string; branch: string; base?: string; parent?: string; head: string; location?: string; pr?: unknown }>> {
