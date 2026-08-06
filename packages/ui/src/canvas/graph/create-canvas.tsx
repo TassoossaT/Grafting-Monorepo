@@ -23,6 +23,7 @@ import type {
 } from "./contracts.js";
 import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
 import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
+import { isReportableMovement } from "./movement-policy.js";
 
 class CanvasSocketModel extends ClassicPreset.Socket {
   constructor(readonly definition: CanvasPortDefinition) {
@@ -674,8 +675,11 @@ export function createCanvasAdapter(
       }
     }
     if (context.type === "nodetranslated" && !initializing && interaction.movableNodes) {
+      const model = nodeModels.get(context.data.id);
       const { x, y } = context.data.position;
-      options.editing?.onNodeMoved?.(context.data.id, x, y);
+      if (isReportableMovement(model?.source, context.data.position)) {
+        options.editing?.onNodeMoved?.(context.data.id, x, y);
+      }
     }
     return context;
   });

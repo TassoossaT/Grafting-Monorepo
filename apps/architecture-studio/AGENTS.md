@@ -41,11 +41,25 @@ that declaration. Adding an element MUST be a registration, never a change to a
 bench UI file; if a new element needs a control the schema cannot express,
 extend `BenchParamSpec`, do not special-case the panel.
 
-`src/bench/` declares what an element *is*, never how it runs. Value-kind
-compatibility (`checkBenchConnection`) is product policy that belongs here
-because the generic canvas cannot have it, but evaluation order and cycle
-detection remain Rust-owned in `grafting-graph-core` (DEC-051); do not compute
-either in TypeScript.
+`src/bench/registry.ts` declares what an element *is*; `src/bench/evaluators.ts`
+declares what it *does*, and receives its Wasm entry points by injection so it
+stays testable outside a browser. `evaluatorCoverage` asserts the two halves
+have not drifted apart — keep that assertion passing rather than deleting it.
+
+Value-kind compatibility (`checkBenchConnection`) is product policy that belongs
+here because the generic canvas cannot have it. Evaluation order and cycle
+detection remain Rust-owned in `grafting-graph-core` and reach the bench through
+`evaluation-order-client.ts` (DEC-051); do not compute either in TypeScript.
+
+The TypeScript filters in `evaluators.ts` are laboratory instruments, not domain
+logic. Nothing authoritative may depend on them; a filter that becomes part of
+how Grafting actually generates terrain belongs in a Rust crate under
+`libs/domains`, like `discretize` already is.
+
+The bench worker is long-lived and owns the result cache keyed by the plan's
+content hashes. Intermediate values MUST NOT cross to the main thread — only
+the previews the surface asked for. Adding a value kind means teaching
+`preview.ts` how to flatten it, not shipping the raw grid to React.
 
 ADR-0016's VTT generation-test surface may render Rust/Wasm output through
 `@grafting/ui`'s heightfield element. VTT map/domain logic

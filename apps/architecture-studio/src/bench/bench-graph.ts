@@ -5,7 +5,7 @@ import {
   type BenchParamValue,
   type BenchParamValues,
 } from "./node-kind.ts";
-import { findNodeKind } from "./registry.ts";
+import { BENCH_DATA_TYPES, findNodeKind } from "./registry.ts";
 
 // The authored graph, as plain immutable data with no renderer involved. Every
 // bench edit is a function from one graph to the next, which keeps the rules
@@ -211,7 +211,12 @@ export function checkBenchConnection(
   const output = sourceKind.outputs.find((port) => port.id === source.portId);
   const input = targetKind.inputs.find((port) => port.id === target.portId);
   if (output === undefined || input === undefined) return "unknown-port";
-  if (output.dataType !== input.dataType) return "type-mismatch";
+  // An input may declare that it takes anything, which is how a viewport shows
+  // whatever it is pointed at. An output never may: something downstream has to
+  // be able to decide whether to accept what it produces.
+  if (input.dataType !== BENCH_DATA_TYPES.any && output.dataType !== input.dataType) {
+    return "type-mismatch";
+  }
   const occupied = graph.edges.some(
     (edge) => edge.target.nodeId === target.nodeId && edge.target.portId === target.portId,
   );

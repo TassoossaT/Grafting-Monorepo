@@ -47,6 +47,10 @@ is granted here.
 
 ### `type architecture-studio.quantization.worker.QuantizationWorkerResponse = { continuous: Float32Array; height: number; levels: number; quantized: Int32Array; type: "result"; width: number } | { message: string; type: "error" }`
 
+### `type architecture-studio.bench-composition.BenchNodeStatus = "idle" | "evaluated" | "reused" | "waiting" | "failed"`
+
+What the last evaluation pass did with one node.
+
 ### `variable architecture-studio.bench-composition.BENCH_CANVAS_VIEWS: Readonly<{ edge: Readonly<{ value: "bench.value" }>; node: Readonly<{ element: "bench.element" }> }>`
 
 View identifiers this surface registers with the canvas.
@@ -79,7 +83,7 @@ Draws a connection in the color of the value it carries.
 
 Projects one authored connection into canvas presentation data.
 
-### `function architecture-studio.bench-composition.toCanvasNode(node: BenchNode): CanvasNode`
+### `function architecture-studio.bench-composition.toCanvasNode(node: BenchNode, status: BenchNodeStatus): CanvasNode`
 
 Projects one authored node into canvas presentation data.
 
@@ -188,6 +192,271 @@ Removes a node and every connection touching it.
 
 Changes one parameter of one node instance.
 
+### `interface architecture-studio.evaluation-client.EvaluationOutcome`
+
+What one pass produced.
+
+### `property architecture-studio.evaluation-client.EvaluationOutcome.evaluated: readonly string[]`
+
+Nodes that actually ran.
+
+### `property architecture-studio.evaluation-client.EvaluationOutcome.failures: Readonly<Record<string, string>>`
+
+Node identity to the message explaining why it failed, when one did.
+
+### `property architecture-studio.evaluation-client.EvaluationOutcome.previews: Readonly<Record<string, EvaluationPreview>>`
+
+Requested previews, by node identity.
+
+### `property architecture-studio.evaluation-client.EvaluationOutcome.reused: readonly string[]`
+
+Nodes served from cache without running.
+
+### `interface architecture-studio.evaluation-client.EvaluationPreview`
+
+A node's result, flattened into something the heightfield renderer accepts.
+
+### `property architecture-studio.evaluation-client.EvaluationPreview.dataType: string`
+
+The value kind this preview was flattened from.
+
+### `property architecture-studio.evaluation-client.EvaluationPreview.height: number`
+
+Cells along the vertical axis.
+
+### `property architecture-studio.evaluation-client.EvaluationPreview.values: Float32Array`
+
+Normalized to zero-to-one so any value kind renders on the same scale.
+
+### `property architecture-studio.evaluation-client.EvaluationPreview.width: number`
+
+Cells along the horizontal axis.
+
+### `interface architecture-studio.evaluation-client.EvaluationRequest`
+
+One evaluation pass and the previews the surface wants back.
+
+### `property architecture-studio.evaluation-client.EvaluationRequest.plan: EvaluationPlan`
+
+Executions in dependency order.
+
+### `property architecture-studio.evaluation-client.EvaluationRequest.previewNodeIds: readonly string[]`
+
+Nodes whose results should be returned for rendering.
+
+### `interface architecture-studio.evaluation-client.EvaluationWorkerRequest`
+
+Message sent to the evaluation worker.
+
+### `property architecture-studio.evaluation-client.EvaluationWorkerRequest.id: number`
+
+### `property architecture-studio.evaluation-client.EvaluationWorkerRequest.request: EvaluationRequest`
+
+### `property architecture-studio.evaluation-client.EvaluationWorkerRequest.type: "evaluate"`
+
+### `type architecture-studio.evaluation-client.EvaluationWorkerResponse = { id: number; outcome: EvaluationOutcome; type: "result" } | { id: number; message: string; type: "error" }`
+
+Message returned by the evaluation worker.
+
+### `function architecture-studio.evaluation-client.disposeEvaluation(): void`
+
+Discards the worker and everything it has cached.
+
+Called when the bench unmounts so a long session does not keep whole grids
+alive behind a page the user has left.
+
+### `function architecture-studio.evaluation-client.requestEvaluation(request: EvaluationRequest): Promise<EvaluationOutcome>`
+
+Runs one evaluation pass in the long-lived bench worker.
+
+### `interface architecture-studio.evaluation-order-client.EvaluationOrderEdge`
+
+One directed connection described for the ordering request.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderEdge.id: string`
+
+Stable connection identity.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderEdge.source: string`
+
+Producing node.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderEdge.target: string`
+
+Consuming node.
+
+### `interface architecture-studio.evaluation-order-client.EvaluationOrderRequest`
+
+Batched ordering request.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderRequest.edges: readonly EvaluationOrderEdge[]`
+
+Every connection between them.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderRequest.nodes: readonly string[]`
+
+Every node identity in the graph.
+
+### `interface architecture-studio.evaluation-order-client.EvaluationOrderWorkerRequest`
+
+Message sent to the ordering worker.
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderWorkerRequest.request: EvaluationOrderRequest`
+
+### `property architecture-studio.evaluation-order-client.EvaluationOrderWorkerRequest.type: "order"`
+
+### `type architecture-studio.evaluation-order-client.EvaluationOrderResult = { order: readonly string[]; outcome: "ordered" } | { blocked: readonly string[]; outcome: "cyclic" }`
+
+Rust's answer.
+
+A cycle is a normal authoring state rather than a failure, so it arrives as
+a result the surface can explain by naming the blocked nodes.
+
+### `type architecture-studio.evaluation-order-client.EvaluationOrderWorkerResponse = { result: EvaluationOrderResult; type: "result" } | { message: string; type: "error" }`
+
+Message returned by the ordering worker.
+
+### `function architecture-studio.evaluation-order-client.requestEvaluationOrder(request: EvaluationOrderRequest): Promise<EvaluationOrderResult>`
+
+Runs one Rust-owned evaluation ordering outside the browser UI thread.
+
+### `interface architecture-studio.evaluation-plan.EvaluationPlan`
+
+A complete evaluation pass.
+
+### `property architecture-studio.evaluation-plan.EvaluationPlan.hashes: Readonly<Record<string, string>>`
+
+Node identity to its result hash, for every node that will run.
+
+### `property architecture-studio.evaluation-plan.EvaluationPlan.skipped: readonly SkippedEvaluation[]`
+
+Nodes left out of this pass.
+
+### `property architecture-studio.evaluation-plan.EvaluationPlan.steps: readonly EvaluationStep[]`
+
+Executions in dependency order.
+
+### `interface architecture-studio.evaluation-plan.EvaluationStep`
+
+One node execution, with everything needed to run it and to cache it.
+
+### `property architecture-studio.evaluation-plan.EvaluationStep.hash: string`
+
+Identity of this exact result: same hash means same value.
+
+### `property architecture-studio.evaluation-plan.EvaluationStep.inputs: Readonly<Record<string, string>>`
+
+Input port to the hash of the value feeding it.
+
+### `property architecture-studio.evaluation-plan.EvaluationStep.kindId: string`
+
+Element the node instantiates.
+
+### `property architecture-studio.evaluation-plan.EvaluationStep.nodeId: string`
+
+Node this step evaluates.
+
+### `property architecture-studio.evaluation-plan.EvaluationStep.params: BenchParamValues`
+
+The node instance's parameter values.
+
+### `interface architecture-studio.evaluation-plan.SkippedEvaluation`
+
+A node that cannot run yet, and why.
+
+### `property architecture-studio.evaluation-plan.SkippedEvaluation.missingInputs: readonly string[]`
+
+Input ports with nothing connected, or fed by a node that itself cannot run.
+
+### `property architecture-studio.evaluation-plan.SkippedEvaluation.nodeId: string`
+
+Node that will not run.
+
+### `function architecture-studio.evaluation-plan.buildEvaluationPlan(graph: BenchGraph, order: readonly string[]): EvaluationPlan`
+
+Builds an evaluation pass from an authored graph and a Rust-supplied order.
+
+Nodes whose inputs are not all connected are skipped rather than run with a
+missing value, and anything downstream of a skipped node is skipped too — a
+partially wired graph is the normal state while a user is still building it.
+
+### `function architecture-studio.evaluation-plan.computeStepHash(kindId: string, params: BenchParamValues, inputHashes: Readonly<Record<string, string>>): string`
+
+Computes the identity of one node's result.
+
+### `function architecture-studio.evaluation-status.resolveNodeStatuses(plan: EvaluationPlan, outcome: EvaluationOutcome | null, cyclicNodeIds: readonly string[]): Readonly<Record<string, BenchNodeStatus>>`
+
+Decides what badge each node wears after one evaluation pass.
+
+Kept apart from the React component so the precedence between overlapping
+signals is a testable rule rather than a rendering accident.
+
+### `function architecture-studio.evaluation-status.resolvePreviewTarget(viewportNodeIds: readonly string[], selectedNodeId: string | null): string | null`
+
+Chooses which node's result the 3D panel should show.
+
+A viewport element exists to be watched, so it wins over the selection; that
+is what lets a user click around a chain while the render keeps showing the
+end of it. Without one, the selected node is previewed, which is how a single
+element is inspected in isolation.
+
+### `interface architecture-studio.evaluators.BenchWasm`
+
+The Rust entry points the laboratory elements are built on.
+
+### `method architecture-studio.evaluators.BenchWasm.discretize(values: Float32Array, levels: number): Int32Array`
+
+Collapses continuous values into discrete level indices.
+
+### `method architecture-studio.evaluators.BenchWasm.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
+
+Generates a Perlin heightmap.
+
+### `interface architecture-studio.evaluators.HeightmapValue`
+
+A continuous grid of floating-point heights.
+
+### `property architecture-studio.evaluators.HeightmapValue.dataType: "heightmap"`
+
+### `property architecture-studio.evaluators.HeightmapValue.height: number`
+
+### `property architecture-studio.evaluators.HeightmapValue.values: Float32Array`
+
+### `property architecture-studio.evaluators.HeightmapValue.width: number`
+
+### `interface architecture-studio.evaluators.LevelsValue`
+
+A grid of discrete level indices.
+
+### `property architecture-studio.evaluators.LevelsValue.dataType: "levels"`
+
+### `property architecture-studio.evaluators.LevelsValue.height: number`
+
+### `property architecture-studio.evaluators.LevelsValue.indices: Int32Array`
+
+### `property architecture-studio.evaluators.LevelsValue.levelCount: number`
+
+### `property architecture-studio.evaluators.LevelsValue.width: number`
+
+### `type architecture-studio.evaluators.BenchEvaluator = (inputs: Readonly<Record<string, BenchValue>>, params: BenchParamValues) => BenchValue`
+
+Runs one element.
+
+### `type architecture-studio.evaluators.BenchValue = HeightmapValue | LevelsValue`
+
+Any value that may travel along a connection.
+
+### `function architecture-studio.evaluators.createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, BenchEvaluator>`
+
+Builds the evaluator for every registered element.
+
+### `function architecture-studio.evaluators.evaluatorCoverage(evaluators: ReadonlyMap<string, BenchEvaluator>): { withoutEvaluator: readonly string[]; withoutKind: readonly string[] }`
+
+Reports which registered elements have no evaluator, and vice versa.
+
+An element that renders but cannot run, or an evaluator for an element the
+menu never offers, are both silent failures; this makes them assertable.
+
 ### `interface architecture-studio.node-kind.BenchEnumOption`
 
 One choice offered by an enumerated parameter.
@@ -287,7 +556,33 @@ Builds the starting parameter values for a new node instance.
 
 Resolves how many connections a port accepts.
 
-### `variable architecture-studio.registry.BENCH_DATA_TYPES: Readonly<{ heightmap: "heightmap"; levels: "levels" }>`
+### `interface architecture-studio.node-refresh.NodeStatusChange`
+
+One node whose badge on the surface no longer matches the last pass.
+
+### `property architecture-studio.node-refresh.NodeStatusChange.node: BenchNode`
+
+Node to refresh.
+
+### `property architecture-studio.node-refresh.NodeStatusChange.status: BenchNodeStatus`
+
+Badge it should now carry.
+
+### `function architecture-studio.node-refresh.diffNodeStatuses(nodes: readonly BenchNode[], statuses: Readonly<Record<string, BenchNodeStatus>>, rendered: Readonly<Record<string, BenchNodeStatus>>): { changed: readonly NodeStatusChange[]; next: Readonly<Record<string, BenchNodeStatus>> }`
+
+Compares the statuses a pass produced against what the surface last rendered.
+
+The returned record is the complete new baseline, not a patch: it holds an
+entry for every current node and none for nodes that have been removed. That
+matters because the previous baseline stored only the nodes a pass had
+touched, so an untouched node compared `undefined` against `"idle"` forever
+and was refreshed on every single render.
+
+### `function architecture-studio.preview.toEvaluationPreview(value: BenchValue): EvaluationPreview`
+
+Projects one element result into something the heightfield renderer accepts.
+
+### `variable architecture-studio.registry.BENCH_DATA_TYPES: Readonly<{ any: "any"; heightmap: "heightmap"; levels: "levels" }>`
 
 Opaque value kinds exchanged between elements.
 

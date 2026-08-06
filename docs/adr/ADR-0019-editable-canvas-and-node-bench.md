@@ -49,8 +49,10 @@ subgraph downstream of it.
 
 The existing `heightmap` and `terrain-quantization` trials are re-expressed as
 `NodeKind`s over the same Wasm entry points they call today. Their standalone
-pages remain in the repository, unlinked from the navigation, until the bench
-demonstrably covers both; they are then removed in a follow-up change.
+pages move to `/lab/trials` and stay there rather than being removed: each one
+still demonstrates a capture-and-compare workflow against the research registry
+that the bench does not replace. `/lab` itself becomes the bench, and the two
+surfaces link to each other.
 
 ## Context
 
@@ -88,8 +90,9 @@ authoring requires.
 - Risk: an evaluation cache keyed on parameter and input hashes is wrong if a
   node is non-deterministic. Elements declare their inputs completely — a seed
   is a parameter, never an implicit source of randomness.
-- Risk: `/lab` replacing the gallery removes the current path to the trials. The
-  standalone pages stay reachable by URL during the transition.
+- Risk: `/lab` replacing the gallery removes the current path to the trials.
+  The gallery keeps its own route at `/lab/trials`, linked from the bench, so
+  no trial becomes reachable only by remembering its URL.
 
 ## Evidence
 

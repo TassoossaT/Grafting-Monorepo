@@ -8,6 +8,7 @@ import {
   resolveCanvasInteractionPolicy,
   resolveCanvasZoomRange,
 } from "../dist/canvas/graph/interaction-policy.js";
+import { isReportableMovement } from "../dist/canvas/graph/movement-policy.js";
 
 const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
   nodeId,
@@ -218,6 +219,23 @@ test("treats an omitted capacity as unlimited", () => {
     ),
     null,
   );
+});
+
+test("withholds a translation that only repeats the caller's own coordinates", () => {
+  // The regression this guards: the renderer reports the adapter's own
+  // translations too. Passing those on as user movement closed a loop --
+  // consumer records a move, re-renders, calls updateNode, which translates
+  // again -- that froze the browser tab outright.
+  assert.equal(isReportableMovement({ x: 40, y: 40 }, { x: 40, y: 40 }), false);
+});
+
+test("reports a translation that actually moved the node", () => {
+  assert.equal(isReportableMovement({ x: 40, y: 40 }, { x: 41, y: 40 }), true);
+  assert.equal(isReportableMovement({ x: 40, y: 40 }, { x: 40, y: 41 }), true);
+});
+
+test("withholds a translation for a node the caller no longer owns", () => {
+  assert.equal(isReportableMovement(undefined, { x: 1, y: 2 }), false);
 });
 
 test("keeps canvas interactions neutral until a consumer opts in", () => {

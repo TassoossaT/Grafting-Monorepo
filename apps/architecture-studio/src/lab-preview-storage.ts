@@ -1,5 +1,5 @@
 // Shared between individual /lab trial pages (which capture a preview image
-// of what they're rendering) and the /lab gallery (which shows that image as
+// of what they're rendering) and the /lab/trials gallery (which shows that image as
 // a PreviewCard cover). Trial pages and the gallery are separate routes with
 // no shared React state, so localStorage is the simplest thing that survives
 // navigation between them without introducing a server-side store.
