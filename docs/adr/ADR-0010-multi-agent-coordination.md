@@ -1,6 +1,6 @@
 # ADR-0010: provider-neutral task coordination
 
-- Status: **Accepted; replaced in place on 2026-08-03, safety/stack lifecycle amended on 2026-08-04, and dependency isolation/base sync plus controlled materialization amended on 2026-08-05 with explicit owner approval.**
+- Status: **Accepted; replaced in place on 2026-08-03, safety/stack lifecycle amended on 2026-08-04, and dependency isolation/base sync, controlled materialization, plus verified remote pruning amended on 2026-08-05 with explicit owner approval.**
 - Decision owner: repository-owner
 - Records: DEC-031, DEC-048
 - Related: ADR-0015
@@ -27,6 +27,10 @@ task branch is reattached when its directory is missing; a reserved orphan
 directory is diagnosed and safely repaired; `task doctor` exposes inconsistent
 Git/filesystem/PR, dependency-overlay and sync-conflict state; and cleanup detaches
 only confirmed dependency links or marked overlays before removing a worktree.
+After a confirmed merge it also prunes the remote task branch only when the live
+remote SHA equals the merged PR head and no open stacked PR uses that branch as
+its base. The deletion is protected by an exact force-with-lease; unverifiable
+dependency state preserves the remote ref. Force cleanup never deletes remotely.
 Workspace-aware overlays reuse the main installation but bind workspace packages
 to task-local sources. When a task's frozen lockfile contains an external package
 absent from that installation, `task deps --install` may materialize it through
@@ -70,6 +74,7 @@ a second coordination database.
 - no agent pushes or commits on `main`/`master`;
 - no history rewriting or agent-side PR merge; recorded-base integration is allowed only through the forward-only `task sync` flow;
 - cleanup refuses dirty or unmerged work unless abandonment is explicit;
+- merged cleanup prunes only an exact, unused `task/*` remote ref; force cleanup preserves it;
 - CLI stdout is one JSON object; diagnostics belong in returned data or stderr;
 - changes to this control plane require explicit owner approval.
 

@@ -46,6 +46,47 @@ interface DependencyOverlayMarker {
     copiedFiles?: number;
 }
 
+export interface MergedBranchProof {
+    number: number;
+    headRefName: string;
+    headRefOid: string;
+}
+
+export type RemoteBranchDeletionPlan =
+    | { remove: true; state: 'delete'; expectedHead: string; mergedPr: number }
+    | { remove: false; state: 'already-absent' | 'preserved-open-dependent-pr' | 'preserved-verification-unavailable'; reason: string };
+
+export function remoteBranchDeletionPlan(
+    branch: string,
+    remoteHead: string | undefined,
+    mergedProof: MergedBranchProof,
+    openDependentPrNumbers: number[] | undefined,
+): RemoteBranchDeletionPlan {
+    if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+    if (!remoteHead) return { remove: false, state: 'already-absent', reason: 'remote branch is already absent' };
+    if (mergedProof.headRefName !== branch) {
+        throw new Error(`merged PR #${mergedProof.number} head is ${mergedProof.headRefName}, expected ${branch}`);
+    }
+    if (mergedProof.headRefOid.toLowerCase() !== remoteHead.toLowerCase()) {
+        throw new Error(`remote head ${remoteHead} does not match merged PR #${mergedProof.number} head ${mergedProof.headRefOid}`);
+    }
+    if (!openDependentPrNumbers) {
+        return {
+            remove: false,
+            state: 'preserved-verification-unavailable',
+            reason: 'could not verify whether open PRs still use the branch as their base',
+        };
+    }
+    if (openDependentPrNumbers.length > 0) {
+        return {
+            remove: false,
+            state: 'preserved-open-dependent-pr',
+            reason: `open PRs still use the branch as their base: ${openDependentPrNumbers.map((number) => `#${number}`).join(', ')}`,
+        };
+    }
+    return { remove: true, state: 'delete', expectedHead: remoteHead, mergedPr: mergedProof.number };
+}
+
 /**
  * A long-lived process's inherited PATH predates any install that happened
  * after it started -- e.g. `gh` installed via winget mid-session. Appending
@@ -558,6 +599,22 @@ async function executeGit(args: string[], cwd: string): Promise<string> {
     }
 }
 
+export async function deleteRemoteBranchWithLease(
+    repoPath: string,
+    branch: string,
+    expectedHead: string,
+): Promise<void> {
+    if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+    if (!/^[a-f0-9]{40}$/i.test(expectedHead)) throw new Error(`invalid expected remote SHA: ${expectedHead}`);
+    const remoteRef = `refs/heads/${branch}`;
+    await executeGit([
+        'push',
+        `--force-with-lease=${remoteRef}:${expectedHead}`,
+        'origin',
+        `:${remoteRef}`,
+    ], repoPath);
+}
+
 /**
  * Represents an isolated Git worktree session for a single task.
  * This ensures that concurrent operations do not conflict with each other.
@@ -787,6 +844,26 @@ export class GitClient {
         }
     }
 
+    private async remoteBranchHead(branch: string): Promise<string | undefined> {
+        const output = await executeGit(['ls-remote', '--heads', 'origin', `refs/heads/${branch}`], this.repoPath);
+        const match = output.match(/^([a-f0-9]{40})\s+refs\/heads\/(.+)$/i);
+        return match?.[2] === branch ? match[1]!.toLowerCase() : undefined;
+    }
+
+    private async openPullRequestsBasedOn(branch: string): Promise<number[] | undefined> {
+        try {
+            const { stdout } = await execFileAsync(
+                'gh',
+                ['pr', 'list', '--base', branch, '--state', 'open', '--json', 'number'],
+                { cwd: this.repoPath, env: envWithGhFallbackPath() },
+            );
+            const rows = JSON.parse(stdout) as Array<{ number?: number }>;
+            return rows.flatMap((row) => Number.isInteger(row.number) ? [row.number!] : []);
+        } catch {
+            return undefined;
+        }
+    }
+
     private async branchConfig(branch: string, key: 'base' | 'parent' | 'sync-source'): Promise<string | undefined> {
         try { return await executeGit(['config', '--get', `branch.${branch}.ia-graft-${key}`], this.repoPath); }
         catch { return undefined; }
@@ -974,6 +1051,7 @@ export class GitClient {
 
     async cleanupTask(taskId: string, force: boolean): Promise<{
         discarded: boolean; removedOrphan: boolean; dependencyCacheRemoved: boolean;
+        remoteBranchRemoved: boolean; remoteBranchState: string; remoteBranchReason?: string;
     }> {
         const status = await this.taskStatus(taskId);
         if (!status.exists) {
@@ -981,21 +1059,45 @@ export class GitClient {
                 discarded: force,
                 removedOrphan: false,
                 dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+                remoteBranchRemoved: false,
+                remoteBranchState: 'already-absent',
             };
         }
         if (status.checkoutMode === 'main') throw new Error('refusing cleanup while task is checked out in main; run task checkout --restore first');
         if (status.dirty && !force) throw new Error('refusing cleanup: task worktree has uncommitted changes (use --force only to abandon them)');
+        let deletionPlan: RemoteBranchDeletionPlan | undefined;
         if (!force) {
-            const merge = await this.branchMergeStatus(status.branch);
+            const remoteHead = await this.remoteBranchHead(status.branch);
+            const merge = await this.branchMergeStatus(status.branch, remoteHead);
             if (!merge.merged) throw new Error(`refusing cleanup: ${merge.reason}`);
+            deletionPlan = remoteBranchDeletionPlan(
+                status.branch,
+                remoteHead,
+                merge.proof!,
+                remoteHead ? await this.openPullRequestsBasedOn(status.branch) : [],
+            );
         }
         if (status.worktreeRegistered) await GitWorktreeSession.open(this.repoPath, taskId).cleanup();
         else if (status.directoryExists) await safeRemoveTaskDirectory(this.repoPath, status.worktreePath);
         if (status.branchLocal) await executeGit(['branch', '-D', status.branch], this.repoPath);
+        let remoteBranchRemoved = false;
+        if (deletionPlan?.remove) {
+            await deleteRemoteBranchWithLease(this.repoPath, status.branch, deletionPlan.expectedHead);
+            remoteBranchRemoved = true;
+        }
+        if (remoteBranchRemoved || deletionPlan?.state === 'already-absent') {
+            await executeGit(['update-ref', '-d', `refs/remotes/origin/${status.branch}`], this.repoPath);
+        }
+        const remoteBranchState = force ? 'preserved-force' : deletionPlan?.state ?? 'already-absent';
         return {
             discarded: force,
             removedOrphan: status.orphanDirectory,
             dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+            remoteBranchRemoved,
+            remoteBranchState,
+            remoteBranchReason: force
+                ? 'force cleanup never deletes remote branches'
+                : deletionPlan && !deletionPlan.remove ? deletionPlan.reason : undefined,
         };
     }
 
@@ -1196,7 +1298,8 @@ export class GitClient {
 
     /**
      * Finds every task worktree under `.worktrees/`, checks each one's PR
-     * merge status, and cleans up (worktree + local branch) the ones that
+     * merge status, and cleans up (worktree + local branch + verified remote
+     * branch when unused) the ones that
      * are already merged -- so worktrees stop accumulating and nobody has
      * to remember to run `task cleanup` by hand after every merge.
      * Anything not merged, or whose merge status can't be determined, is
@@ -1205,17 +1308,19 @@ export class GitClient {
     async sweepMergedWorktrees(): Promise<{
         cleaned: string[];
         skipped: Array<{ id: string; reason: string }>;
+        remoteBranches: Array<{ id: string; removed: boolean; state: string; reason?: string }>;
     }> {
         const worktreesDir = path.join(this.repoPath, '.worktrees');
         let entries;
         try {
             entries = await fs.readdir(worktreesDir, { withFileTypes: true });
         } catch {
-            return { cleaned: [], skipped: [] };
+            return { cleaned: [], skipped: [], remoteBranches: [] };
         }
 
         const cleaned: string[] = [];
         const skipped: Array<{ id: string; reason: string }> = [];
+        const remoteBranches: Array<{ id: string; removed: boolean; state: string; reason?: string }> = [];
         for (const entry of entries) {
             if (!entry.isDirectory()) continue;
             const id = entry.name;
@@ -1226,8 +1331,14 @@ export class GitClient {
                 continue;
             }
             try {
-                await this.cleanupTask(id, false);
+                const cleanup = await this.cleanupTask(id, false);
                 cleaned.push(id);
+                remoteBranches.push({
+                    id,
+                    removed: cleanup.remoteBranchRemoved,
+                    state: cleanup.remoteBranchState,
+                    reason: cleanup.remoteBranchReason,
+                });
             } catch (error) {
                 skipped.push({
                     id,
@@ -1235,7 +1346,7 @@ export class GitClient {
                 });
             }
         }
-        return { cleaned, skipped };
+        return { cleaned, skipped, remoteBranches };
     }
 
     /**
@@ -1249,17 +1360,30 @@ export class GitClient {
      * risk deleting a worktree that was never actually merged. Without a
      * working `gh`, merge status is undetermined -- skip, don't guess.
      */
-    private async branchMergeStatus(branch: string): Promise<{ merged: boolean; reason: string }> {
+    private async branchMergeStatus(
+        branch: string,
+        expectedHead?: string,
+    ): Promise<{ merged: boolean; reason: string; proof?: MergedBranchProof }> {
         try {
             const { stdout } = await execFileAsync(
                 'gh',
-                ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number'],
+                ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number,headRefName,headRefOid'],
                 { cwd: this.repoPath, env: envWithGhFallbackPath() },
             );
-            const merged = JSON.parse(stdout);
-            return Array.isArray(merged) && merged.length > 0
-                ? { merged: true, reason: `merged via PR #${merged[0].number}` }
-                : { merged: false, reason: 'no merged PR found for this branch' };
+            const rows = JSON.parse(stdout) as Array<Partial<MergedBranchProof>>;
+            const proofs = rows.filter((row): row is MergedBranchProof =>
+                Number.isInteger(row.number) && row.headRefName === branch && typeof row.headRefOid === 'string'
+                && /^[a-f0-9]{40}$/i.test(row.headRefOid));
+            const proof = expectedHead
+                ? proofs.find((candidate) => candidate.headRefOid.toLowerCase() === expectedHead.toLowerCase())
+                : proofs[0];
+            if (proof) return { merged: true, reason: `merged via PR #${proof.number}`, proof };
+            return {
+                merged: false,
+                reason: expectedHead && proofs.length > 0
+                    ? `remote head ${expectedHead} does not match any merged PR for this branch`
+                    : 'no merged PR found for this branch',
+            };
         } catch {
             return { merged: false, reason: 'could not reach gh to check merge status' };
         }

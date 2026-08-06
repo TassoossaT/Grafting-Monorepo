@@ -134,7 +134,8 @@ instructions; they must not restate or override them.
   yourself. For requested changes, run `task resume --pr <number>` (or `task new`
   with the same ID), commit/test, and run `task done` again; it returns the
   existing PR. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
-  to remove the worktree.
+  to remove the worktree, local branch, and the remote task branch when its SHA
+  still matches the merged PR and no open stacked PR uses it as a base.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
   MCPs still requires explicit owner approval — open the PR and wait for
   review, do not merge your own.

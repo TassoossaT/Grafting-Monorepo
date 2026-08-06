@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "./git-client.ts";
 import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
@@ -176,6 +177,7 @@ test("taskSweep reports empty results when there is no .worktrees directory yet"
   if (!result.ok) return;
   assert.deepEqual(result.cleaned, []);
   assert.deepEqual(result.skipped, []);
+  assert.deepEqual(result.remoteBranches, []);
 });
 
 test("taskSweep never deletes anything when it cannot reach gh to confirm a real merge -- not even a branch that is a trivial ancestor of the base", async () => {
@@ -255,6 +257,56 @@ test("taskCleanup refuses an unmerged task unless force is explicit", async () =
   const cleaned = await taskCleanup(root, { taskId: "KEEP-TASK", force: true });
   assert.equal(cleaned.ok, true);
 });
+
+test("remote branch deletion requires a matching merged SHA and no open dependent PR", () => {
+  const branch = "task/MERGED-TASK";
+  const head = "a".repeat(40);
+  const proof = { number: 42, headRefName: branch, headRefOid: head };
+
+  assert.deepEqual(remoteBranchDeletionPlan(branch, undefined, proof, []), {
+    remove: false,
+    state: "already-absent",
+    reason: "remote branch is already absent",
+  });
+  assert.equal(remoteBranchDeletionPlan(branch, head, proof, [77]).state, "preserved-open-dependent-pr");
+  assert.equal(remoteBranchDeletionPlan(branch, head, proof, undefined).state, "preserved-verification-unavailable");
+  assert.deepEqual(remoteBranchDeletionPlan(branch, head, proof, []), {
+    remove: true,
+    state: "delete",
+    expectedHead: head,
+    mergedPr: 42,
+  });
+  assert.throws(
+    () => remoteBranchDeletionPlan(branch, "b".repeat(40), proof, []),
+    /does not match merged PR/,
+  );
+  assert.throws(
+    () => remoteBranchDeletionPlan("feature/not-a-task", head, proof, []),
+    /outside task\/\*/,
+  );
+});
+
+test("remote task branch deletion is atomic against the expected SHA", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "REMOTE-DELETE", base: "main" });
+  const worktree = join(root, ".worktrees", "REMOTE-DELETE");
+  await writeFile(join(worktree, "remote-delete.txt"), "delete me\n", "utf8");
+  await taskCommit(root, { taskId: "REMOTE-DELETE", message: "remote deletion fixture" });
+  const branch = "task/REMOTE-DELETE";
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: worktree }).toString().trim();
+  execFileSync("git", ["push", "origin", branch], { cwd: worktree });
+
+  await assert.rejects(
+    deleteRemoteBranchWithLease(root, branch, "0".repeat(40)),
+    /stale info|rejected/,
+  );
+  assert.match(execFileSync("git", ["ls-remote", "--heads", "origin", branch], { cwd: root }).toString(), new RegExp(head));
+
+  await deleteRemoteBranchWithLease(root, branch, head);
+  assert.equal(execFileSync("git", ["ls-remote", "--heads", "origin", branch], { cwd: root }).toString().trim(), "");
+  await taskCleanup(root, { taskId: "REMOTE-DELETE", force: true });
+});
+
 test("taskTest refuses dependency mutations inside a task worktree", async () => {
   const root = await makeRoot();
   const result = await taskTest(root, { taskId: "DEMO-TASK", command: "pnpm install" });
