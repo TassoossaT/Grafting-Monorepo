@@ -103,10 +103,15 @@ ADR-per-task.
   prunes Git metadata. Cleanup validates the exact reserved target and removes only
   confirmed dependency junctions or ia-graft-marked overlays before recursive deletion, with a
   long-path Windows fallback that cannot traverse those links. Without `--force`,
-  dirty or unmerged tasks are refused. Force means explicit abandonment and is the
-  supported way to discard an unmerged task. The remote branch is left intact deliberately.
+  dirty or unmerged tasks are refused. A merged cleanup also deletes the remote
+  `task/*` branch only when its live SHA matches the merged PR head and no open PR
+  still uses it as a stacked base; deletion uses an exact force-with-lease. If the
+  dependent-PR check is unavailable, the remote branch is preserved and the JSON
+  result explains why. Force means explicit abandonment and is the supported way
+  to discard an unmerged task; it never deletes the remote branch.
 - `task sweep` — checks every worktree under `.worktrees/` against `gh` and
-  cleans up (worktree + local branch) whichever ones already have a merged
+  cleans up (worktree + local branch + safely verified unused remote branch)
+  whichever ones already have a merged
   PR. `task new` already calls this itself before creating anything, so
   nobody needs to invoke it directly — it's exposed as its own subcommand
   only for manual/debugging use. Anything `gh` can't confirm as merged is
@@ -142,7 +147,7 @@ ADR-per-task.
    `gh`, when available — otherwise it still pushes and returns a manual
    compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
    `ia-graft task cleanup --id <TASK-ID>` removes the
-   worktree.
+   worktree and its verified unused local/remote task branches.
 
 Isolation between agents comes entirely from separate worktrees/branches. If
 two agents need to touch the same area, that surfaces as a normal Git merge

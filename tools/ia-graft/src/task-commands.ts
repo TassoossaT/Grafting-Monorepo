@@ -158,7 +158,7 @@ export interface TaskCleanupInput {
   force?: boolean;
 }
 
-/** Removes a task's worktree after its pull request has merged. The remote branch is left intact. */
+/** Removes a merged task's worktree/local branch and prunes its verified, unused remote branch. */
 export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const client = new GitClient(repoRoot);
@@ -242,6 +242,6 @@ export async function taskGraph(repoRoot: string) {
  */
 export async function taskSweep(repoRoot: string) {
   const client = new GitClient(repoRoot);
-  const { cleaned, skipped } = await client.sweepMergedWorktrees();
-  return { ok: true as const, cleaned, skipped };
+  const { cleaned, skipped, remoteBranches } = await client.sweepMergedWorktrees();
+  return { ok: true as const, cleaned, skipped, remoteBranches };
 }
