@@ -31,6 +31,22 @@ them across UI files.
 boundary to generated Wasm. Do not reproduce the Rust layout heuristic in
 TypeScript.
 
+`src/bench/` owns the dataflow node bench (DEC-057,
+`docs/adr/ADR-0019-editable-canvas-and-node-bench.md`) and is deliberately
+separate from the explorer's `presentation.ts`/`canvas-composition.ts`/
+`canvas-views.ts`. A laboratory element is declared once in
+`src/bench/registry.ts` — identity, ports, and a parameter schema — and the
+menu, the parameter controls, the port colors, and duplication all derive from
+that declaration. Adding an element MUST be a registration, never a change to a
+bench UI file; if a new element needs a control the schema cannot express,
+extend `BenchParamSpec`, do not special-case the panel.
+
+`src/bench/` declares what an element *is*, never how it runs. Value-kind
+compatibility (`checkBenchConnection`) is product policy that belongs here
+because the generic canvas cannot have it, but evaluation order and cycle
+detection remain Rust-owned in `grafting-graph-core` (DEC-051); do not compute
+either in TypeScript.
+
 ADR-0016's VTT generation-test surface may render Rust/Wasm output through
 `@grafting/ui`'s heightfield element. VTT map/domain logic
 must not leak into the Graph IR explorer's `presentation.ts`,

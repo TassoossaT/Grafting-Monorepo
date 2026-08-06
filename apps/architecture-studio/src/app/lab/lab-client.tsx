@@ -74,6 +74,21 @@ export default function LabClient({ sections }: { sections: readonly RegistrySec
       </div>
 
       <section>
+        <Text content="Node bench" strong />
+        <div style={{ marginTop: 8 }}>
+          <Card ariaLabel="Node bench">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Text
+                content="Wire elements together, give each one its own parameters, and compare configurations as a graph edit instead of a code edit."
+                tone="muted"
+              />
+              <Link href="/lab/bench">Open bench &rarr;</Link>
+            </div>
+          </Card>
+        </div>
+      </section>
+
+      <section>
         <Text content="Active trials" strong />
         <div style={{ marginTop: 8 }}>
           <GridLayout panels={trialPanels} ariaLabel="Active lab trials" rowHeight={32} draggable resizable />
