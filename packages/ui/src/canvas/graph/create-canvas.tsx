@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, type CSSProperties, type PointerEvent a
 import { createRoot } from "react-dom/client";
 import { ClassicPreset, GetSchemes, NodeEditor } from "rete";
 import { AreaExtensions, AreaPlugin, Zoom } from "rete-area-plugin";
+import { ClassicFlow, ConnectionPlugin, getSourceTarget, type SocketData } from "rete-connection-plugin";
 import { Presets, ReactPlugin, type ReactArea2D } from "rete-react-plugin";
 
 import type {
@@ -20,6 +21,7 @@ import type {
   CanvasPortDefinition,
   CanvasPortPosition,
 } from "./contracts.js";
+import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
 import { resolveCanvasInteractionPolicy } from "./interaction-policy.js";
 
 class CanvasSocketModel extends ClassicPreset.Socket {
@@ -29,18 +31,20 @@ class CanvasSocketModel extends ClassicPreset.Socket {
 }
 
 class CanvasNodeModel extends ClassicPreset.Node {
-  readonly width: number;
-  readonly height: number;
+  width: number;
+  height: number;
+  source: CanvasNode;
   selected = false;
 
   constructor(
-    readonly source: CanvasNode,
+    source: CanvasNode,
     readonly definition: CanvasNodeViewDefinition,
     readonly activate: (reference: CanvasEntityReference) => void,
     readonly clickThreshold: number,
   ) {
     super(source.id);
     this.id = source.id;
+    this.source = source;
     this.width = source.width ?? definition.defaultWidth;
     this.height = source.height ?? definition.defaultHeight;
   }
@@ -102,6 +106,16 @@ function resolveView<Definition>(
   return definition;
 }
 
+const outputKey = (portId: string): string => `output:${portId}`;
+const inputKey = (portId: string): string => `input:${portId}`;
+
+function declaredPorts(
+  node: CanvasNode,
+  definition: CanvasNodeViewDefinition,
+): readonly CanvasPortDefinition[] {
+  return node.ports ?? definition.ports ?? [];
+}
+
 function resolvePort(
   node: CanvasNode,
   definition: CanvasNodeViewDefinition,
@@ -109,12 +123,32 @@ function resolvePort(
   fallback: CanvasPortDefinition,
 ): CanvasPortDefinition {
   if (portId === undefined) return fallback;
-  const ports = node.ports ?? definition.ports ?? [];
-  const port = ports.find((candidate) => candidate.id === portId);
+  const port = declaredPorts(node, definition).find((candidate) => candidate.id === portId);
   if (port === undefined) {
     throw new Error(`Canvas node ${node.id} does not define port ${portId}`);
   }
   return port;
+}
+
+/**
+ * Instantiates every declared port on a node model.
+ *
+ * Authoring requires a socket to exist before any edge references it, so ports
+ * are declared eagerly rather than on first use. A port that names no direction
+ * stays undirected and is instantiated on both sides, preserving the behavior
+ * of ports written before directions existed.
+ */
+function declarePorts(model: CanvasNodeModel): void {
+  for (const port of declaredPorts(model.source, model.definition)) {
+    const direction = port.direction ?? "both";
+    const multiple = port.capacity === undefined || port.capacity > 1;
+    if (direction !== "in" && !model.hasOutput(outputKey(port.id))) {
+      model.addOutput(outputKey(port.id), new ClassicPreset.Output(new CanvasSocketModel(port), "", multiple));
+    }
+    if (direction !== "out" && !model.hasInput(inputKey(port.id))) {
+      model.addInput(inputKey(port.id), new ClassicPreset.Input(new CanvasSocketModel(port), "", multiple));
+    }
+  }
 }
 
 function assertUniqueIds(kind: "node" | "edge", values: readonly { readonly id: string }[]): void {
@@ -151,9 +185,26 @@ function socketPosition(position: CanvasPortPosition): CSSProperties {
   }
 }
 
+/** Places a port label outside the node boundary the port sits on. */
+function socketLabelPosition(position: CanvasPortPosition, offset: number): CSSProperties {
+  const side = typeof position === "object" ? "right" : position;
+  switch (side) {
+    case "top":
+      return { bottom: offset, left: "50%", transform: "translateX(-50%)" };
+    case "bottom":
+      return { top: offset, left: "50%", transform: "translateX(-50%)" };
+    case "left":
+      return { right: offset, top: "50%", transform: "translateY(-50%)" };
+    case "right":
+      return { left: offset, top: "50%", transform: "translateY(-50%)" };
+  }
+}
+
 function CanvasSocketView({ data }: { readonly data: ClassicPreset.Socket }) {
-  const presentation = (data as CanvasSocketModel).definition.presentation;
-  const diameter = (presentation?.radius ?? 4) * 2;
+  const definition = (data as CanvasSocketModel).definition;
+  const presentation = definition.presentation;
+  const radius = presentation?.radius ?? 4;
+  const diameter = radius * 2;
   return (
     <span
       aria-hidden="true"
@@ -169,7 +220,22 @@ function CanvasSocketView({ data }: { readonly data: ClassicPreset.Socket }) {
         pointerEvents: "none",
         transform: "translate(-50%, -50%)",
       }}
-    />
+    >
+      {presentation?.label === undefined ? null : (
+        <span
+          style={{
+            position: "absolute",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            color: presentation.labelColor ?? presentation.stroke ?? "currentColor",
+            fontSize: presentation.labelFontSize ?? 9,
+            ...socketLabelPosition(definition.position, radius + 4),
+          }}
+        >
+          {presentation.label}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -288,10 +354,36 @@ function markerShape(marker: CanvasEdgeMarkerPresentation): string {
   return marker.kind === "classic" ? "M 0 0 L 10 5 L 0 10 L 3 5 z" : "M 0 0 L 10 5 L 0 10 z";
 }
 
+/**
+ * Trailing line drawn while a user is still dragging a connection.
+ *
+ * The endpoint is not known yet, so no consumer edge exists to present. The
+ * treatment stays deliberately plain; a product styles committed edges through
+ * its own edge view.
+ */
+function CanvasPseudoConnectionView() {
+  const connection = Presets.classic.useConnection();
+  if (connection.start == null || connection.end == null) return null;
+  return (
+    <svg aria-hidden="true" style={{ overflow: "visible", position: "absolute", pointerEvents: "none", width: 9999, height: 9999 }}>
+      <path
+        d={edgePath(connection.start, connection.end, undefined, connection.path)}
+        fill="none"
+        stroke="#94a3b8"
+        strokeWidth={2}
+        strokeDasharray="4 4"
+      />
+    </svg>
+  );
+}
+
 function CanvasConnectionView({ data }: { readonly data: CanvasConnectionModel }) {
   const connection = Presets.classic.useConnection();
   const uniqueId = useId().replaceAll(":", "");
   const pointerStartRef = useRef<{ readonly x: number; readonly y: number } | null>(null);
+  // The connection plugin renders an in-progress drag through the same channel
+  // as committed connections, but it carries no consumer edge or edge view.
+  if ((data as Partial<CanvasConnectionModel>).definition === undefined) return <CanvasPseudoConnectionView />;
   if (connection.start == null || connection.end == null) return null;
 
   const presentation: CanvasEdgePresentation = data.definition.present({
@@ -479,15 +571,17 @@ export function createCanvasAdapter(
   const connectionModels = new Map<string, CanvasConnectionModel>();
   let activate: (reference: CanvasEntityReference) => void = () => undefined;
 
-  for (const node of nodes) {
+  const buildNodeModel = (node: CanvasNode): CanvasNodeModel => {
     const definition = resolveView("node", nodeViews, node.view);
     if (definition.defaultWidth <= 0 || definition.defaultHeight <= 0) {
       throw new Error(`Canvas node view ${definition.id} must define positive dimensions`);
     }
-    nodeModels.set(node.id, new CanvasNodeModel(node, definition, (reference) => activate(reference), clickThreshold));
-  }
+    const model = new CanvasNodeModel(node, definition, (reference) => activate(reference), clickThreshold);
+    declarePorts(model);
+    return model;
+  };
 
-  for (const edge of edges) {
+  const buildConnectionModel = (edge: CanvasEdge): CanvasConnectionModel => {
     const source = nodeModels.get(edge.source.nodeId);
     const target = nodeModels.get(edge.target.nodeId);
     if (source === undefined || target === undefined) {
@@ -495,28 +589,41 @@ export function createCanvasAdapter(
     }
     const sourcePort = resolvePort(source.source, source.definition, edge.source.portId, DEFAULT_SOURCE_PORT);
     const targetPort = resolvePort(target.source, target.definition, edge.target.portId, DEFAULT_TARGET_PORT);
-    const sourceKey = `output:${sourcePort.id}`;
-    const targetKey = `input:${targetPort.id}`;
+    const sourceKey = outputKey(sourcePort.id);
+    const targetKey = inputKey(targetPort.id);
+    // A port that declares itself an input never received an output socket in
+    // `declarePorts`, and vice versa; an edge naming it that way is a caller
+    // error, not something to silently repair with a second socket.
     if (!source.hasOutput(sourceKey)) {
+      if (edge.source.portId !== undefined && sourcePort.direction === "in") {
+        throw new Error(`Canvas edge ${edge.id} leaves ${source.id} through input-only port ${sourcePort.id}`);
+      }
       source.addOutput(sourceKey, new ClassicPreset.Output(new CanvasSocketModel(sourcePort), "", true));
     }
     if (!target.hasInput(targetKey)) {
+      if (edge.target.portId !== undefined && targetPort.direction === "out") {
+        throw new Error(`Canvas edge ${edge.id} enters ${target.id} through output-only port ${targetPort.id}`);
+      }
       target.addInput(targetKey, new ClassicPreset.Input(new CanvasSocketModel(targetPort), "", true));
     }
     const definition = resolveView("edge", edgeViews, edge.view);
-    connectionModels.set(
-      edge.id,
-      new CanvasConnectionModel(
-        source,
-        sourceKey,
-        target,
-        targetKey,
-        edge,
-        definition,
-        (reference) => activate(reference),
-        clickThreshold,
-      ),
+    return new CanvasConnectionModel(
+      source,
+      sourceKey,
+      target,
+      targetKey,
+      edge,
+      definition,
+      (reference) => activate(reference),
+      clickThreshold,
     );
+  };
+
+  for (const node of nodes) {
+    nodeModels.set(node.id, buildNodeModel(node));
+  }
+  for (const edge of edges) {
+    connectionModels.set(edge.id, buildConnectionModel(edge));
   }
 
   const previousStyle = applySurface(container, options);
@@ -566,6 +673,10 @@ export function createCanvasAdapter(
         return;
       }
     }
+    if (context.type === "nodetranslated" && !initializing && interaction.movableNodes) {
+      const { x, y } = context.data.position;
+      options.editing?.onNodeMoved?.(context.data.id, x, y);
+    }
     return context;
   });
 
@@ -579,12 +690,16 @@ export function createCanvasAdapter(
     }
   };
 
+  const attachNode = async (model: CanvasNodeModel): Promise<void> => {
+    await editor.addNode(model);
+    await area.translate(model.id, { x: model.source.x, y: model.source.y });
+    await area.resize(model.id, model.width, model.height);
+  };
+
   const ready = (async () => {
     for (const node of nodeModels.values()) {
       if (disposed) return;
-      await editor.addNode(node);
-      await area.translate(node.id, { x: node.source.x, y: node.source.y });
-      await area.resize(node.id, node.width, node.height);
+      await attachNode(node);
     }
     for (const connection of connectionModels.values()) {
       if (disposed) return;
@@ -594,17 +709,26 @@ export function createCanvasAdapter(
     if (options.viewport?.fitOnCreate ?? true) await center();
   })();
 
+  // Rete's editor mutations are asynchronous, so every caller-driven change is
+  // appended to one chain. Without it, two mutations issued in the same tick
+  // could interleave and leave the surface disagreeing with `nodeModels`.
+  let pending: Promise<void> = ready;
+  const enqueue = (work: () => Promise<void>): void => {
+    pending = pending.then(() => (disposed ? undefined : work()));
+    void pending;
+  };
+
   const updateSelection = (reference: CanvasEntityReference, value: boolean): void => {
     if (reference.kind === "node") {
       const node = nodeModels.get(reference.id);
       if (node === undefined) throw new Error(`Canvas node not found: ${reference.id}`);
       node.selected = value;
-      void ready.then(() => area.update("node", node.id));
+      enqueue(() => area.update("node", node.id));
     } else {
       const connectionModel = connectionModels.get(reference.id);
       if (connectionModel === undefined) throw new Error(`Canvas edge not found: ${reference.id}`);
       connectionModel.selected = value;
-      void ready.then(() => area.update("connection", connectionModel.id));
+      enqueue(() => area.update("connection", connectionModel.id));
     }
   };
 
@@ -620,13 +744,207 @@ export function createCanvasAdapter(
     options.onActivate?.(Object.freeze({ ...reference }));
   };
 
+  const clearSelectionOf = (reference: CanvasEntityReference): void => {
+    if (selected !== null && selected.kind === reference.kind && selected.id === reference.id) {
+      selected = null;
+    }
+  };
+
+  // The connection flow removes an occupied input's edge on its own, so the
+  // editor is the single place where a removal becomes visible regardless of
+  // who started it.
+  let removingProgrammatically = false;
+  editor.addPipe((context) => {
+    if (context.type === "connectionremove" && !removingProgrammatically && options.editing?.removableEdges !== true) {
+      return;
+    }
+    if (context.type === "connectionremoved" && !removingProgrammatically) {
+      const edgeId = String(context.data.id);
+      if (connectionModels.delete(edgeId)) {
+        clearSelectionOf({ kind: "edge", id: edgeId });
+        options.editing?.onDisconnected?.(edgeId);
+      }
+    }
+    return context;
+  });
+
+  const addNode = (node: CanvasNode): void => {
+    if (nodeModels.has(node.id)) throw new Error(`Duplicate canvas node id: ${node.id}`);
+    const model = buildNodeModel(node);
+    nodeModels.set(node.id, model);
+    enqueue(() => attachNode(model));
+  };
+
+  const addEdge = (edge: CanvasEdge): void => {
+    if (connectionModels.has(edge.id)) throw new Error(`Duplicate canvas edge id: ${edge.id}`);
+    const model = buildConnectionModel(edge);
+    connectionModels.set(edge.id, model);
+    enqueue(async () => {
+      await editor.addConnection(model);
+    });
+  };
+
+  const removeEdge = (edgeId: string): void => {
+    if (!connectionModels.delete(edgeId)) throw new Error(`Canvas edge not found: ${edgeId}`);
+    clearSelectionOf({ kind: "edge", id: edgeId });
+    enqueue(async () => {
+      removingProgrammatically = true;
+      try {
+        await editor.removeConnection(edgeId);
+      } finally {
+        removingProgrammatically = false;
+      }
+    });
+  };
+
+  const edgesTouching = (nodeId: string, portIds?: ReadonlySet<string>): readonly string[] =>
+    [...connectionModels.values()]
+      .filter((model) => {
+        for (const terminal of [model.edge.source, model.edge.target]) {
+          if (terminal.nodeId !== nodeId) continue;
+          if (portIds === undefined) return true;
+          if (terminal.portId !== undefined && portIds.has(terminal.portId)) return true;
+        }
+        return false;
+      })
+      .map((model) => model.edge.id);
+
+  const removeNode = (nodeId: string): void => {
+    if (!nodeModels.has(nodeId)) throw new Error(`Canvas node not found: ${nodeId}`);
+    for (const edgeId of edgesTouching(nodeId)) removeEdge(edgeId);
+    nodeModels.delete(nodeId);
+    clearSelectionOf({ kind: "node", id: nodeId });
+    enqueue(async () => {
+      await editor.removeNode(nodeId);
+    });
+  };
+
+  const updateNode = (node: CanvasNode): void => {
+    const model = nodeModels.get(node.id);
+    if (model === undefined) throw new Error(`Canvas node not found: ${node.id}`);
+    if (node.view !== model.source.view) {
+      // A different view is a different mount with different geometry; keeping
+      // the identity would hide that. Removing and adding makes it explicit.
+      throw new Error(`Canvas node ${node.id} cannot change view in place: ${model.source.view} to ${node.view}`);
+    }
+    const previousPorts = new Set(declaredPorts(model.source, model.definition).map((port) => port.id));
+    const nextPorts = new Set(declaredPorts(node, model.definition).map((port) => port.id));
+    const droppedPorts = new Set([...previousPorts].filter((portId) => !nextPorts.has(portId)));
+    if (droppedPorts.size > 0) {
+      for (const edgeId of edgesTouching(node.id, droppedPorts)) removeEdge(edgeId);
+    }
+
+    model.source = node;
+    model.width = node.width ?? model.definition.defaultWidth;
+    model.height = node.height ?? model.definition.defaultHeight;
+    for (const portId of droppedPorts) {
+      if (model.hasInput(inputKey(portId))) model.removeInput(inputKey(portId));
+      if (model.hasOutput(outputKey(portId))) model.removeOutput(outputKey(portId));
+    }
+    declarePorts(model);
+
+    enqueue(async () => {
+      await area.translate(node.id, { x: node.x, y: node.y });
+      await area.resize(node.id, model.width, model.height);
+      await area.update("node", node.id);
+    });
+  };
+
+  const editing = options.editing;
+  if (editing?.connectable === true || editing?.removableEdges === true) {
+    // Resolves a socket the plugin reports back into the caller's own port.
+    const readSocket = (socket: SocketData): ConnectionCandidate | null => {
+      const model = nodeModels.get(socket.nodeId);
+      if (model === undefined) return null;
+      const portId = socket.key.slice(socket.key.indexOf(":") + 1);
+      const port = declaredPorts(model.source, model.definition).find((candidate) => candidate.id === portId);
+      if (port === undefined) return null;
+      const connectionCount = [...connectionModels.values()].filter((connection) =>
+        socket.side === "input"
+          ? connection.target === socket.nodeId && connection.targetInput === socket.key
+          : connection.source === socket.nodeId && connection.sourceOutput === socket.key,
+      ).length;
+      return { nodeId: socket.nodeId, port, side: socket.side, connectionCount };
+    };
+
+    const orderedEnds = (from: SocketData, to: SocketData): readonly [SocketData, SocketData] | null => {
+      const ordered = getSourceTarget(from, to);
+      const [orderedSource, orderedTarget] = ordered ?? [];
+      if (orderedSource === undefined || orderedTarget === undefined) return null;
+      return [orderedSource, orderedTarget];
+    };
+
+    const review = (from: SocketData, to: SocketData): {
+      readonly source: ConnectionCandidate;
+      readonly target: ConnectionCandidate;
+      readonly sourcePortId: string;
+      readonly targetPortId: string;
+    } | null => {
+      const ends = orderedEnds(from, to);
+      if (ends === null) return null;
+      const source = readSocket(ends[0]);
+      const target = readSocket(ends[1]);
+      if (source === null || target === null) return null;
+      const alreadyConnected = [...connectionModels.values()].some(
+        (model) =>
+          model.edge.source.nodeId === source.nodeId &&
+          model.edge.target.nodeId === target.nodeId &&
+          model.edge.source.portId === source.port.id &&
+          model.edge.target.portId === target.port.id,
+      );
+      if (checkCanvasConnection(source, target, alreadyConnected) !== null) return null;
+      return { source, target, sourcePortId: source.port.id, targetPortId: target.port.id };
+    };
+
+    const connectionPlugin = new ConnectionPlugin<Schemes, AreaExtra>();
+    connectionPlugin.addPreset(
+      () =>
+        new ClassicFlow<Schemes, [AreaExtra]>({
+          canMakeConnection: (from, to) => editing.connectable === true && review(from, to) !== null,
+          makeConnection: (from, to) => {
+            if (editing.connectable !== true) return undefined;
+            const reviewed = review(from, to);
+            if (reviewed === null) return undefined;
+            const decision = editing.onConnectRequest?.({
+              source: Object.freeze({
+                nodeId: reviewed.source.nodeId,
+                portId: reviewed.sourcePortId,
+                dataType: reviewed.source.port.dataType,
+              }),
+              target: Object.freeze({
+                nodeId: reviewed.target.nodeId,
+                portId: reviewed.targetPortId,
+                dataType: reviewed.target.port.dataType,
+              }),
+            });
+            // No callback means no product opinion, and the canvas will not
+            // invent an edge identity or guess value-kind compatibility.
+            if (decision === undefined || !decision.accepted) return undefined;
+            addEdge(decision.edge);
+            editing.onConnected?.(decision.edge);
+            return true;
+          },
+        }),
+    );
+    area.use(connectionPlugin);
+  }
+
   return Object.freeze({
-    nodeCount: nodes.length,
-    edgeCount: edges.length,
+    get nodeCount() {
+      return nodeModels.size;
+    },
+    get edgeCount() {
+      return connectionModels.size;
+    },
     center: () => {
-      void ready.then(center);
+      enqueue(center);
     },
     setSelection,
+    addNode,
+    updateNode,
+    removeNode,
+    addEdge,
+    removeEdge,
     dispose: () => {
       if (disposed) return;
       disposed = true;

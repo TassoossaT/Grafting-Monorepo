@@ -12,6 +12,9 @@ import type {
 } from "./heightfield/contracts.js";
 
 export type {
+  CanvasConnectionDecision,
+  CanvasConnectionEndpoint,
+  CanvasConnectionRequest,
   CanvasEdge,
   CanvasEdgeConnector,
   CanvasEdgeLabelPresentation,
@@ -21,6 +24,7 @@ export type {
   CanvasEdgeRenderContext,
   CanvasEdgeTerminal,
   CanvasEdgeViewDefinition,
+  CanvasEditingOptions,
   CanvasEntityReference,
   CanvasGridPresentation,
   CanvasHandle,
@@ -32,6 +36,7 @@ export type {
   CanvasNodeViewDefinition,
   CanvasOptions,
   CanvasPortDefinition,
+  CanvasPortDirection,
   CanvasPortPosition,
   CanvasPortPresentation,
   CanvasSurfacePresentation,

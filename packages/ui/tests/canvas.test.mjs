@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createCanvas } from "../dist/index.js";
+import { checkCanvasConnection } from "../dist/canvas/graph/connection-policy.js";
 import { resolveCanvasInteractionPolicy } from "../dist/canvas/graph/interaction-policy.js";
+
+const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
+  nodeId,
+  side,
+  port: { id: `${side}-port`, position: side === "input" ? "left" : "right", ...port },
+  connectionCount,
+});
 
 const NODE_VIEW = Object.freeze({
   id: "summary",
@@ -71,6 +79,140 @@ test("rejects renderer view identifiers that were not registered", () => {
         { nodeViews: [NODE_VIEW] },
       ),
     /Canvas node view is not registered: absent/,
+  );
+});
+
+test("refuses an edge that leaves a node through an input-only port", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [
+      { id: "value", position: "left", direction: "in" },
+      { id: "result", position: "right", direction: "out" },
+    ],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [
+          { ...node("a"), view: view.id },
+          { ...node("b"), view: view.id },
+        ],
+        [
+          {
+            id: "backwards",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "value" },
+            target: { nodeId: "b", portId: "value" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    /leaves a through input-only port value/,
+  );
+});
+
+test("refuses an edge that enters a node through an output-only port", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [
+      { id: "value", position: "left", direction: "in" },
+      { id: "result", position: "right", direction: "out" },
+    ],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [
+          { ...node("a"), view: view.id },
+          { ...node("b"), view: view.id },
+        ],
+        [
+          {
+            id: "backwards",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "result" },
+            target: { nodeId: "b", portId: "result" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    /enters b through output-only port result/,
+  );
+});
+
+test("still accepts an edge through a port that declares no direction", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [{ id: "any", position: "right" }],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [{ ...node("a"), view: view.id }],
+        [
+          {
+            id: "undirected",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "any" },
+            target: { nodeId: "a", portId: "any" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    // Reaching the renderer proves the undirected port was accepted on both
+    // sides; a real surface is out of scope for a DOM-free contract test.
+    /container|replaceChildren|style/,
+  );
+});
+
+test("accepts a structurally sound user-drawn connection", () => {
+  assert.equal(
+    checkCanvasConnection(
+      candidate("a", "output", { direction: "out", dataType: "heightmap" }),
+      candidate("b", "input", { direction: "in", dataType: "mask" }),
+      false,
+    ),
+    // Mismatched value kinds are deliberately not the canvas's business; only
+    // the consumer's onConnectRequest decides that.
+    null,
+  );
+});
+
+test("refuses user-drawn connections that violate a structural rule", () => {
+  const out = candidate("a", "output", { direction: "out" });
+  const into = candidate("b", "input", { direction: "in" });
+
+  assert.equal(checkCanvasConnection(out, candidate("b", "output"), false), "same-side");
+  assert.equal(
+    checkCanvasConnection(out, candidate("a", "input", { direction: "in" }), false),
+    "self-connection",
+  );
+  assert.equal(
+    checkCanvasConnection(candidate("a", "output", { direction: "in" }), into, false),
+    "direction",
+  );
+  assert.equal(
+    checkCanvasConnection(out, candidate("b", "input", { direction: "out" }), false),
+    "direction",
+  );
+  assert.equal(checkCanvasConnection(out, into, true), "duplicate");
+  assert.equal(
+    checkCanvasConnection(out, candidate("b", "input", { direction: "in", capacity: 1 }, 1), false),
+    "capacity",
+  );
+});
+
+test("treats an omitted capacity as unlimited", () => {
+  assert.equal(
+    checkCanvasConnection(
+      candidate("a", "output", { direction: "out" }, 99),
+      candidate("b", "input", { direction: "in" }, 99),
+      false,
+    ),
+    null,
   );
 });
 
