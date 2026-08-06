@@ -9,6 +9,7 @@ import {
   presentBenchEdge,
   toCanvasEdge,
   toCanvasNode,
+  type BenchNodeStatus,
 } from "../../../bench/bench-composition.ts";
 import {
   EMPTY_BENCH_GRAPH,
@@ -21,15 +22,33 @@ import {
   setBenchParam,
   type BenchGraph,
 } from "../../../bench/bench-graph.ts";
+import {
+  disposeEvaluation,
+  requestEvaluation,
+  type EvaluationPreview,
+} from "../../../bench/evaluation-client.ts";
+import { requestEvaluationOrder } from "../../../bench/evaluation-order-client.ts";
+import { buildEvaluationPlan } from "../../../bench/evaluation-plan.ts";
+import { resolveNodeStatuses, resolvePreviewTarget } from "../../../bench/evaluation-status.ts";
 import type { BenchParamValue } from "../../../bench/node-kind.ts";
 import { findNodeKind, nodeKindsByCategory } from "../../../bench/registry.ts";
 import ParameterPanel from "./parameter-panel.tsx";
+import PreviewPanel from "./preview-panel.tsx";
 
 const REFUSAL_MESSAGES: Readonly<Record<string, string>> = {
   "type-mismatch": "Those ports carry different value kinds.",
   "input-occupied": "That input already receives a value.",
   "unknown-port": "One of those ports is no longer declared.",
 };
+
+const VIEWPORT_KIND_ID = "output.viewport";
+
+// Parameters are edited by typing and dragging, so a pass is scheduled rather
+// than fired per keystroke. Long enough to swallow a burst of edits, short
+// enough that the render still feels attached to the control.
+const EVALUATION_DEBOUNCE_MS = 160;
+
+const EMPTY_STATUSES: Readonly<Record<string, BenchNodeStatus>> = Object.freeze({});
 
 /**
  * The dataflow node bench.
@@ -49,6 +68,9 @@ export default function BenchClient() {
   const [graph, setGraph] = useState<BenchGraph>(EMPTY_BENCH_GRAPH);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
+  const [preview, setPreview] = useState<EvaluationPreview | null>(null);
+  const [runSummary, setRunSummary] = useState<string | null>(null);
 
   const commit = useCallback((next: BenchGraph) => {
     graphRef.current = next;
@@ -95,8 +117,87 @@ export default function BenchClient() {
     return () => {
       handleRef.current?.dispose();
       handleRef.current = null;
+      disposeEvaluation();
     };
   }, [commit]);
+
+  // One evaluation pass per settled edit: Rust orders the graph, the plan gives
+  // every step a content hash, and the worker runs only what that hash says is
+  // new. A pass superseded by a newer edit drops its result on the floor.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        const current = graphRef.current;
+        if (current.nodes.length === 0) {
+          setStatuses(EMPTY_STATUSES);
+          setPreview(null);
+          setRunSummary(null);
+          return;
+        }
+
+        try {
+          const ordering = await requestEvaluationOrder({
+            nodes: current.nodes.map((node) => node.id),
+            edges: current.edges.map((edge) => ({
+              id: edge.id,
+              source: edge.source.nodeId,
+              target: edge.target.nodeId,
+            })),
+          });
+          if (cancelled) return;
+
+          if (ordering.outcome === "cyclic") {
+            setStatuses(resolveNodeStatuses({ steps: [], skipped: [], hashes: {} }, null, ordering.blocked));
+            setPreview(null);
+            setRunSummary(null);
+            setNotice(`A cycle blocks ${ordering.blocked.length} element(s); break it to evaluate.`);
+            return;
+          }
+
+          const plan = buildEvaluationPlan(current, ordering.order);
+          const viewportNodeIds = current.nodes
+            .filter((node) => node.kindId === VIEWPORT_KIND_ID)
+            .map((node) => node.id);
+          const target = resolvePreviewTarget(viewportNodeIds, selectedNodeId);
+
+          const outcome = await requestEvaluation({
+            plan,
+            previewNodeIds: target === null ? [] : [target],
+          });
+          if (cancelled) return;
+
+          setStatuses(resolveNodeStatuses(plan, outcome));
+          setPreview(target === null ? null : (outcome.previews[target] ?? null));
+          setRunSummary(`${outcome.evaluated.length} evaluated, ${outcome.reused.length} cached`);
+          const firstFailure = Object.values(outcome.failures)[0];
+          setNotice(firstFailure ?? null);
+        } catch (error) {
+          if (cancelled) return;
+          setNotice(error instanceof Error ? error.message : String(error));
+        }
+      })();
+    }, EVALUATION_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [graph, selectedNodeId]);
+
+  // Badges live on the node itself, so the surface has to be told when a pass
+  // changes them. Only nodes whose badge actually moved are touched.
+  const renderedStatuses = useRef<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
+  useEffect(() => {
+    const handle = handleRef.current;
+    if (handle === null) return;
+    for (const node of graph.nodes) {
+      const next = statuses[node.id] ?? "idle";
+      if (renderedStatuses.current[node.id] === next) continue;
+      handle.updateNode(toCanvasNode(node, next));
+    }
+    renderedStatuses.current = statuses;
+  }, [graph, statuses]);
 
   const placeNode = useCallback(
     (kindId: string) => {
@@ -139,16 +240,23 @@ export default function BenchClient() {
       const next = setBenchParam(graphRef.current, selectedNodeId, paramId, raw);
       commit(next);
       const node = next.nodes.find((candidate) => candidate.id === selectedNodeId);
-      if (node !== undefined) handleRef.current?.updateNode(toCanvasNode(node));
+      if (node !== undefined) {
+        handleRef.current?.updateNode(toCanvasNode(node, statuses[selectedNodeId] ?? "idle"));
+      }
     },
-    [commit, selectedNodeId],
+    [commit, selectedNodeId, statuses],
   );
 
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedKind = selectedNode === null ? null : findNodeKind(selectedNode.kindId);
+  const previewTarget = resolvePreviewTarget(
+    graph.nodes.filter((node) => node.kindId === VIEWPORT_KIND_ID).map((node) => node.id),
+    selectedNodeId,
+  );
+  const previewNode = graph.nodes.find((node) => node.id === previewTarget) ?? null;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 260px", gap: 12, padding: 12, height: "calc(100vh - 96px)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "190px 1fr 300px", gap: 12, padding: 12, height: "calc(100vh - 96px)" }}>
       <aside style={{ overflowY: "auto" }}>
         <Text content="Elements" strong />
         {nodeKindsByCategory().map((group) => (
@@ -164,53 +272,62 @@ export default function BenchClient() {
       </aside>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 24 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", minHeight: 24, flexWrap: "wrap" }}>
           <Text content={`${graph.nodes.length} elements, ${graph.edges.length} connections`} tone="muted" />
+          {runSummary === null ? null : <Text content={runSummary} tone="muted" />}
           {notice === null ? null : <Text content={notice} tone="danger" />}
         </div>
         <div ref={containerRef} style={{ flex: 1, minHeight: 0, border: "1px solid #e2e8f0", borderRadius: 8 }} />
       </div>
 
-      <aside style={{ overflowY: "auto" }}>
-        {selectedNode === null || selectedKind === null ? (
-          <Text content="Select an element to edit its parameters." tone="muted" />
-        ) : (
-          <Card ariaLabel={`${selectedKind.title} parameters`}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div>
-                <Text content={selectedKind.title} strong />
-                <Text content={selectedKind.description} tone="muted" />
+      <aside style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
+        <div style={{ height: 260, flexShrink: 0 }}>
+          <PreviewPanel
+            preview={preview}
+            label={previewNode === null ? null : findNodeKind(previewNode.kindId).title}
+          />
+        </div>
+        <div style={{ overflowY: "auto", minHeight: 0 }}>
+          {selectedNode === null || selectedKind === null ? (
+            <Text content="Select an element to edit its parameters." tone="muted" />
+          ) : (
+            <Card ariaLabel={`${selectedKind.title} parameters`}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <Text content={selectedKind.title} strong />
+                  <Text content={selectedKind.description} tone="muted" />
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Button label="Duplicate" onClick={duplicateSelected} />
+                  <Button label="Delete" onClick={removeSelected} />
+                </div>
+                <ParameterPanel
+                  specs={selectedKind.params}
+                  values={selectedNode.params}
+                  onChange={changeParam}
+                />
+                <div>
+                  <Text content="Ports" strong />
+                  {[...selectedKind.inputs, ...selectedKind.outputs].map((port) => (
+                    <div key={`${port.id}:${port.dataType}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          background: colorForDataType(port.dataType),
+                          display: "inline-block",
+                        }}
+                      />
+                      <Text content={`${port.label} · ${port.dataType}`} tone="muted" />
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <Button label="Duplicate" onClick={duplicateSelected} />
-                <Button label="Delete" onClick={removeSelected} />
-              </div>
-              <ParameterPanel
-                specs={selectedKind.params}
-                values={selectedNode.params}
-                onChange={changeParam}
-              />
-              <div>
-                <Text content="Ports" strong />
-                {[...selectedKind.inputs, ...selectedKind.outputs].map((port) => (
-                  <div key={`${port.id}:${port.dataType}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: colorForDataType(port.dataType),
-                        display: "inline-block",
-                      }}
-                    />
-                    <Text content={`${port.label} · ${port.dataType}`} tone="muted" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
+            </Card>
+          )}
+        </div>
       </aside>
     </div>
   );
