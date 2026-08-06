@@ -95,7 +95,24 @@ instructions; they must not restate or override them.
   a file-ownership ledger. It also sweeps any already-merged worktree out of
   `.worktrees/` first, silently — nothing to invoke or remember, it's just
   what `task new` does.
-  Treat linked `node_modules` as read-only; dependency installation or mutation runs only in the main checkout, never inside a task worktree.
+  Treat linked `node_modules` as read-only; dependency installation or mutation
+  runs only in the main checkout, never inside a task worktree. The reason is
+  mechanical, not a prohibition on adding dependencies: a worktree's
+  `node_modules` is a link to the main checkout's, so an install issued from
+  inside the worktree writes through the link and corrupts the shared tree.
+  Adding a dependency for a task is therefore a three-step move, and all three
+  steps are required:
+  1. run the install from the **main checkout** (`pnpm --filter <pkg> add <dep>`),
+     which populates the shared `node_modules` every worktree already sees;
+  2. copy the resulting `package.json` and `pnpm-lock.yaml` into the task
+     worktree and commit them there with the code that needs them — the
+     dependency belongs to the task's PR, not to the default branch;
+  3. leave the main checkout's two files modified until that PR merges, so the
+     manifest keeps describing the `node_modules` actually on disk. Reverting
+     them early makes the next `pnpm install` in the main checkout silently
+     remove a dependency the task branch still requires.
+  This is the only sanctioned reason to modify tracked files in the main
+  checkout, and it still never means committing there.
 - **Review feedback is the same task**: use `ia-graft task resume --pr <number>`
   or `task new` with the exact same ID; never create a second task for requested
   changes on an open PR. For genuinely dependent new work, use

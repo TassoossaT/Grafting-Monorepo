@@ -12,7 +12,7 @@
     "publicApi": {
       "entryPoint": "src/index.ts",
       "baseline": "tests/snapshots/public-api.md",
-      "forbiddenModules": ["antd", "react-dom", "react-grid-layout", "rete", "rete-area-plugin", "rete-react-plugin", "rete-render-utils", "styled-components", "three"]
+      "forbiddenModules": ["antd", "react-dom", "react-grid-layout", "rete", "rete-area-plugin", "rete-connection-plugin", "rete-react-plugin", "rete-render-utils", "styled-components", "three"]
     }
   },
   "targets": {

@@ -276,6 +276,15 @@ Current canvas dependencies were verified from registry metadata on 2026-08-04:
 
 - `rete` `2.0.6`, `rete-area-plugin` `2.3.2`, `rete-react-plugin` `2.1.2`,
   and `rete-render-utils` `2.0.3`: MIT, private graph-canvas implementation;
+- `rete-connection-plugin` `2.0.5` (added 2026-08-05, DEC-057): MIT, peers
+  `rete@^2.0.1` and `rete-area-plugin@^2.0.0`, no install scripts. It owns the
+  pointer choreography of drawing a connection — socket pick-up, the trailing
+  pseudo-connection, and drop resolution. Its `ClassicFlow` exposes
+  `canMakeConnection`/`makeConnection` overrides, which is why it was preferred
+  over hand-written pointer handling: the structural rules
+  (`connection-policy.ts`) and the consumer's compatibility decision plug into
+  those two hooks, so the vendor keeps only the interaction mechanics and none
+  of the policy;
 - their optional informational `rete` postinstall is denied by workspace
   `allowBuilds`; no runtime build step is required;
 - `styled-components` `6.1.19`: MIT, private renderer peer/runtime dependency;

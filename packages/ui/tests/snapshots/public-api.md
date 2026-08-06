@@ -4,7 +4,7 @@ Package: `@grafting/ui`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`, `rete`, `rete-area-plugin`, `rete-react-plugin`, `rete-render-utils`, `styled-components`, `three`
+Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`, `rete`, `rete-area-plugin`, `rete-connection-plugin`, `rete-react-plugin`, `rete-render-utils`, `styled-components`, `three`
 
 ## Declaration entry point
 
