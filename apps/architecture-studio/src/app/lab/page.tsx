@@ -1,14 +1,12 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { parseResearchRegistry } from "../../research-registry.ts";
-import LabClient from "./lab-client.tsx";
+import BenchClient from "./bench-client.tsx";
 
-// Server Component: reads the registry directly at render time, same
-// rationale as /registry's page.tsx (research-registry.ts's own header).
-const REGISTRY_PATH = resolve(process.cwd(), "..", "..", "docs", "research", "RESEARCH-DECISIONS-REGISTRY.md");
-
+// Lab is the node bench (DEC-057). The standalone trial pages that used to be
+// the whole of this route now live under /lab/trials; they stay because each
+// one still demonstrates its own capture-and-compare workflow, which the bench
+// does not replace.
+//
+// Client-only: the bench mounts a browser canvas and holds authored state that
+// has no server counterpart.
 export default function LabPage() {
-  const markdown = readFileSync(REGISTRY_PATH, "utf8");
-  const sections = parseResearchRegistry(markdown);
-  return <LabClient sections={sections} />;
+  return <BenchClient />;
 }

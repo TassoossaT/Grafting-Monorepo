@@ -9,7 +9,7 @@ import type { HeightmapWorkerRequest, HeightmapWorkerResponse } from "./generati
 
 const GRID_WIDTH = 64;
 const GRID_HEIGHT = 64;
-/** Must match the "noise-rs" key in `DEMO_LINKS` (research-registry-ui.ts) so the /lab gallery finds this trial's captured preview. */
+/** Must match the "noise-rs" key in `DEMO_LINKS` (research-registry-ui.ts) so the /lab/trials gallery finds this trial's captured preview. */
 const CANDIDATE = "noise-rs";
 
 interface Heightmap {

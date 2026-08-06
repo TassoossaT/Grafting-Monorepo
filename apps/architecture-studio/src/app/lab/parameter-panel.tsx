@@ -2,7 +2,7 @@
 
 import { Text } from "@grafting/ui";
 import type { ReactElement } from "react";
-import type { BenchParamSpec, BenchParamValue, BenchParamValues } from "../../../bench/node-kind.ts";
+import type { BenchParamSpec, BenchParamValue, BenchParamValues } from "../../bench/node-kind.ts";
 
 const CONTROL_STYLE = { width: "100%", boxSizing: "border-box" as const, padding: "2px 6px" };
 

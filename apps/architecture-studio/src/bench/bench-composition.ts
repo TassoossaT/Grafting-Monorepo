@@ -6,6 +6,7 @@ import type {
   CanvasNodeRenderContext,
   CanvasNodeViewDefinition,
   CanvasPortDefinition,
+  UiStatus,
 } from "@grafting/ui";
 import type { BenchEdge, BenchGraph, BenchNode } from "./bench-graph.ts";
 import { portCapacity, type BenchNodeKind, type BenchParamValues } from "./node-kind.ts";
@@ -29,6 +30,7 @@ export const BENCH_NODE_SIZE = Object.freeze({ width: 208, height: 96 });
 const DATA_TYPE_COLORS: Readonly<Record<string, string>> = Object.freeze({
   [BENCH_DATA_TYPES.heightmap]: "#0ea5e9",
   [BENCH_DATA_TYPES.levels]: "#f59e0b",
+  [BENCH_DATA_TYPES.any]: "#64748b",
 });
 
 const FALLBACK_COLOR = "#94a3b8";
@@ -44,11 +46,27 @@ export function colorForDataType(dataType: string): string {
   return DATA_TYPE_COLORS[dataType] ?? FALLBACK_COLOR;
 }
 
+/** What the last evaluation pass did with one node. */
+export type BenchNodeStatus = "idle" | "evaluated" | "reused" | "waiting" | "failed";
+
+const STATUS_PRESENTATION: Readonly<
+  Record<BenchNodeStatus, { readonly status: UiStatus; readonly label: string } | undefined>
+> = Object.freeze({
+  idle: undefined,
+  evaluated: Object.freeze({ status: "success" as const, label: "Evaluated" }),
+  // Reusing a cached result is the intended outcome of an unrelated edit, not
+  // a lesser one, so it reads as information rather than as a warning.
+  reused: Object.freeze({ status: "info" as const, label: "Cached" }),
+  waiting: Object.freeze({ status: "warning" as const, label: "Waiting for input" }),
+  failed: Object.freeze({ status: "error" as const, label: "Failed" }),
+});
+
 /** Opaque node data this surface hands to its own node view. */
 interface BenchNodeViewData {
   readonly title: string;
   readonly summary: string;
   readonly tags: readonly string[];
+  readonly status: BenchNodeStatus;
 }
 
 const readBenchNodeViewData = (value: unknown): BenchNodeViewData => {
@@ -57,6 +75,7 @@ const readBenchNodeViewData = (value: unknown): BenchNodeViewData => {
     value === null ||
     typeof (value as Partial<BenchNodeViewData>).title !== "string" ||
     typeof (value as Partial<BenchNodeViewData>).summary !== "string" ||
+    typeof (value as Partial<BenchNodeViewData>).status !== "string" ||
     !Array.isArray((value as Partial<BenchNodeViewData>).tags)
   ) {
     throw new Error("Bench node view received invalid data");
@@ -122,9 +141,10 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
  * Projects one authored node into canvas presentation data.
  *
  * @param node - Placed element instance.
+ * @param status - What the last evaluation pass did with it.
  * @returns Canvas node carrying this surface's own view data.
  */
-export function toCanvasNode(node: BenchNode): CanvasNode {
+export function toCanvasNode(node: BenchNode, status: BenchNodeStatus = "idle"): CanvasNode {
   const kind = findNodeKind(node.kindId);
   return Object.freeze({
     id: node.id,
@@ -136,6 +156,7 @@ export function toCanvasNode(node: BenchNode): CanvasNode {
       title: kind.title,
       summary: kind.category,
       tags: describeParams(kind, node.params),
+      status,
     }),
   });
 }
@@ -164,9 +185,12 @@ export function toCanvasEdge(edge: BenchEdge, graph: BenchGraph): CanvasEdge {
 
 const toEntitySummaryProps = (context: CanvasNodeRenderContext): EntitySummaryProps => {
   const data = readBenchNodeViewData(context.node.data);
+  const statusPresentation = STATUS_PRESENTATION[data.status];
   return Object.freeze({
     title: data.title,
     description: data.summary,
+    status: statusPresentation?.status,
+    statusLabel: statusPresentation?.label,
     ariaLabel: `${data.title} (${data.summary})`,
     accentColor: "#6366f1",
     backgroundColor: "#ffffff",

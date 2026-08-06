@@ -15,6 +15,13 @@ export const BENCH_DATA_TYPES = Object.freeze({
   heightmap: "heightmap",
   /** A grid of discrete level indices. */
   levels: "levels",
+  /**
+   * Accepts any value kind.
+   *
+   * Only meaningful on an input. An output must always say what it actually
+   * produces, or nothing downstream could decide whether to accept it.
+   */
+  any: "any",
 });
 
 const GRID_PARAMS = Object.freeze([
@@ -93,8 +100,88 @@ const DISCRETIZE: BenchNodeKind = Object.freeze({
   ]),
 });
 
+// The two filters below are laboratory instruments, not domain logic. They
+// exist so a user can put something between two elements and watch the
+// difference propagate, which is the bench's whole purpose. Nothing
+// authoritative may depend on them: a filter that becomes part of how Grafting
+// actually generates terrain belongs in a Rust crate under `libs/domains`,
+// like `discretize` already is (root AGENTS.md, DEC-051).
+
+const SMOOTH: BenchNodeKind = Object.freeze({
+  id: "filter.smooth",
+  title: "Smooth",
+  category: "Filters",
+  description: "Averages each cell with its neighbours to remove small-scale noise.",
+  inputs: Object.freeze([
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "integer" as const,
+      id: "radius",
+      label: "Radius",
+      defaultValue: 1,
+      min: 0,
+      max: 8,
+      description: "How many cells in each direction are averaged. Zero passes the input through.",
+    }),
+  ]),
+});
+
+const REMAP: BenchNodeKind = Object.freeze({
+  id: "filter.remap",
+  title: "Remap",
+  category: "Filters",
+  description: "Rescales the full range of a heightmap onto a chosen range.",
+  inputs: Object.freeze([
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "number" as const,
+      id: "outputMin",
+      label: "Output minimum",
+      defaultValue: 0,
+      step: 0.05,
+      description: "Value the lowest input cell becomes.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "outputMax",
+      label: "Output maximum",
+      defaultValue: 1,
+      step: 0.05,
+      description: "Value the highest input cell becomes.",
+    }),
+  ]),
+});
+
+const VIEWPORT: BenchNodeKind = Object.freeze({
+  id: "output.viewport",
+  title: "3D viewport",
+  category: "Output",
+  description: "Renders whatever reaches it in the 3D panel. Connect one to watch a chain change.",
+  inputs: Object.freeze([
+    Object.freeze({ id: "value", label: "value", dataType: BENCH_DATA_TYPES.any }),
+  ]),
+  outputs: Object.freeze([]),
+  params: Object.freeze([]),
+});
+
 /** Every element the bench offers, in menu order. */
-export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([PERLIN_HEIGHTMAP, DISCRETIZE]);
+export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
+  PERLIN_HEIGHTMAP,
+  SMOOTH,
+  REMAP,
+  DISCRETIZE,
+  VIEWPORT,
+]);
 
 const BY_ID: ReadonlyMap<string, BenchNodeKind> = new Map(
   BENCH_NODE_KINDS.map((kind) => [kind.id, kind]),
