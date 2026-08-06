@@ -31,6 +31,7 @@ import {
 import { requestEvaluationOrder } from "../../bench/evaluation-order-client.ts";
 import { buildEvaluationPlan } from "../../bench/evaluation-plan.ts";
 import { resolveNodeStatuses, resolvePreviewTarget } from "../../bench/evaluation-status.ts";
+import { diffNodeStatuses } from "../../bench/node-refresh.ts";
 import type { BenchParamValue } from "../../bench/node-kind.ts";
 import { findNodeKind, nodeKindsByCategory } from "../../bench/registry.ts";
 import ParameterPanel from "./parameter-panel.tsx";
@@ -192,12 +193,9 @@ export default function BenchClient() {
   useEffect(() => {
     const handle = handleRef.current;
     if (handle === null) return;
-    for (const node of graph.nodes) {
-      const next = statuses[node.id] ?? "idle";
-      if (renderedStatuses.current[node.id] === next) continue;
-      handle.updateNode(toCanvasNode(node, next));
-    }
-    renderedStatuses.current = statuses;
+    const { changed, next } = diffNodeStatuses(graph.nodes, statuses, renderedStatuses.current);
+    for (const entry of changed) handle.updateNode(toCanvasNode(entry.node, entry.status));
+    renderedStatuses.current = next;
   }, [graph, statuses]);
 
   const placeNode = useCallback(
