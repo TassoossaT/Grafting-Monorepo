@@ -6,6 +6,10 @@ packages:
 # Both workspace Wasm packages invoke wasm-pack during postinstall. Their
 # shared Cargo/wasm-pack caches are not safe to mutate concurrently on Windows.
 childConcurrency: 1
+# ia-graft owns explicit per-task virtual stores under the main checkout.
+# Pinning this avoids pnpm default changes making a fresh install immediately
+# look stale to subsequent commands in worktrees and CI.
+enableGlobalVirtualStore: false
 # Nx targets may call pnpm-owned package scripts, but they must not turn a
 # normal `nx ...` invocation into an implicit dependency installation.
 verifyDepsBeforeRun: warn

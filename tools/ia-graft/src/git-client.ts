@@ -1,5 +1,5 @@
 import { exec, execFile } from 'child_process';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
@@ -16,6 +16,7 @@ export function branchNameForTask(taskId: string): string {
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
 const DEPENDENCY_OVERLAY_MARKER = '.ia-graft-overlay.json';
+const DEPENDENCY_CACHE_DIR = '.ia-graft-task-deps';
 
 export type DependencyMode = 'none' | 'legacy-shared' | 'workspace-aware' | 'unmanaged';
 
@@ -26,7 +27,23 @@ export interface DependencyPreparation {
     workspaceLinks: number;
     externalLinks: number;
     copiedFiles: number;
+    materialized?: boolean;
+    lockfileHash?: string;
+    workspaceConfigHash?: string;
+    virtualStore?: string;
     reason?: string;
+}
+
+interface DependencyOverlayMarker {
+    version: 1 | 2 | 3;
+    source: string;
+    materialized?: boolean;
+    lockfileHash?: string;
+    workspaceConfigHash?: string;
+    virtualStore?: string;
+    workspaceLinks?: number;
+    externalLinks?: number;
+    copiedFiles?: number;
 }
 
 /**
@@ -146,6 +163,36 @@ async function mirrorDependencyEntry(
     counts.copiedFiles += 1;
 }
 
+async function readMaterializedPreparation(repoPath: string, worktreePath: string): Promise<DependencyPreparation | undefined> {
+    const markerPath = path.join(worktreePath, 'node_modules', DEPENDENCY_OVERLAY_MARKER);
+    if (!await pathExists(markerPath)) return undefined;
+    try {
+        const marker = JSON.parse(await fs.readFile(markerPath, 'utf8')) as DependencyOverlayMarker;
+        if (marker.version !== 3 || !marker.materialized || !samePath(marker.source, repoPath)
+            || !marker.lockfileHash || !marker.workspaceConfigHash || !marker.virtualStore) return undefined;
+        const lockfilePath = path.join(worktreePath, 'pnpm-lock.yaml');
+        const workspaceConfigPath = path.join(worktreePath, 'pnpm-workspace.yaml');
+        if (!await pathExists(lockfilePath) || !await pathExists(workspaceConfigPath)) return undefined;
+        const currentLockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+        const currentWorkspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
+        if (currentLockfileHash !== marker.lockfileHash || currentWorkspaceConfigHash !== marker.workspaceConfigHash) return undefined;
+        return {
+            linked: true,
+            mode: 'workspace-aware',
+            overlays: (await findNodeModulesDirs(worktreePath)).length,
+            workspaceLinks: marker.workspaceLinks ?? 0,
+            externalLinks: marker.externalLinks ?? 0,
+            copiedFiles: marker.copiedFiles ?? 0,
+            materialized: true,
+            lockfileHash: marker.lockfileHash,
+            workspaceConfigHash: marker.workspaceConfigHash,
+            virtualStore: marker.virtualStore,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
 async function dependencyMode(worktreePath: string): Promise<DependencyMode> {
     const rootNodeModules = path.join(worktreePath, 'node_modules');
     if (!await pathExists(rootNodeModules)) return 'none';
@@ -159,7 +206,15 @@ async function dependencyMode(worktreePath: string): Promise<DependencyMode> {
  * point at the main checkout's installed store, while pnpm workspace links
  * are rebound to the corresponding package inside this task worktree.
  */
-async function prepareDependencyOverlays(repoPath: string, worktreePath: string): Promise<DependencyPreparation> {
+async function prepareDependencyOverlays(
+    repoPath: string,
+    worktreePath: string,
+    preserveMaterialized = true,
+): Promise<DependencyPreparation> {
+    if (preserveMaterialized) {
+        const materialized = await readMaterializedPreparation(repoPath, worktreePath);
+        if (materialized) return materialized;
+    }
     const rootNodeModules = path.join(repoPath, 'node_modules');
     try {
         await fs.access(rootNodeModules);
@@ -188,6 +243,7 @@ async function prepareDependencyOverlays(repoPath: string, worktreePath: string)
         // safely recoverable by task deps/cleanup after an interrupted run.
         await fs.writeFile(path.join(target, DEPENDENCY_OVERLAY_MARKER), JSON.stringify({ version: 1, source }));
         for (const entry of await fs.readdir(source)) {
+            if (rel === 'node_modules' && entry === DEPENDENCY_CACHE_DIR) continue;
             await mirrorDependencyEntry(repoPath, worktreePath, path.join(source, entry), path.join(target, entry), counts);
         }
     }
@@ -231,6 +287,142 @@ async function pathExists(target: string): Promise<boolean> {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
         throw error;
     }
+}
+
+function dependencyCachePath(repoPath: string, taskId: string): string {
+    return path.join(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR, taskId);
+}
+
+function assertSafeDependencyCachePath(repoPath: string, target: string): void {
+    const root = path.resolve(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR);
+    const resolved = path.resolve(target);
+    if (!samePath(path.dirname(resolved), root)) {
+        throw new Error(`refusing dependency-cache mutation outside one deterministic task path: ${resolved}`);
+    }
+}
+
+async function countDependencyEntry(
+    worktreePath: string,
+    target: string,
+    counts: { workspaceLinks: number; externalLinks: number; copiedFiles: number },
+): Promise<void> {
+    const name = path.basename(target);
+    if (name === DEPENDENCY_OVERLAY_MARKER || name === '.modules.yaml' || name.startsWith('.pnpm')) return;
+    const stat = await fs.lstat(target);
+    if (stat.isSymbolicLink()) {
+        const resolved = await fs.realpath(target);
+        if (workspaceRelativeTarget(worktreePath, resolved)) counts.workspaceLinks += 1;
+        else counts.externalLinks += 1;
+        return;
+    }
+    if (stat.isDirectory() && (name.startsWith('@') || name === '.bin')) {
+        for (const entry of await fs.readdir(target)) {
+            await countDependencyEntry(worktreePath, path.join(target, entry), counts);
+        }
+        return;
+    }
+    if (stat.isDirectory()) counts.externalLinks += 1;
+    else counts.copiedFiles += 1;
+}
+
+async function executePnpm(args: string[], cwd: string): Promise<void> {
+    const options = {
+        cwd,
+        env: { ...process.env, CI: 'true' },
+        maxBuffer: 4 * 1024 * 1024,
+    };
+    if (process.platform === 'win32') {
+        await execFileAsync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'pnpm.cmd', ...args], options);
+        return;
+    }
+    await execFileAsync('pnpm', args, options);
+}
+
+async function materializeTaskDependencies(repoPath: string, worktreePath: string, taskId: string): Promise<DependencyPreparation> {
+    const lockfilePath = path.join(worktreePath, 'pnpm-lock.yaml');
+    const workspaceConfigPath = path.join(worktreePath, 'pnpm-workspace.yaml');
+    if (!await pathExists(lockfilePath) || !await pathExists(workspaceConfigPath)) {
+        throw new Error('task requires pnpm-lock.yaml and pnpm-workspace.yaml to materialize');
+    }
+    const lockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+    const workspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
+    const cacheRoot = dependencyCachePath(repoPath, taskId);
+    assertSafeDependencyCachePath(repoPath, cacheRoot);
+    const cacheMarker = path.join(cacheRoot, '.ia-graft-task-cache.json');
+    if (await pathExists(cacheRoot) && !await pathExists(cacheMarker)) {
+        throw new Error(`refusing to use unmanaged dependency cache: ${cacheRoot}`);
+    }
+    await fs.mkdir(cacheRoot, { recursive: true });
+    await fs.writeFile(cacheMarker, JSON.stringify({ version: 1, taskId, source: repoPath }));
+    const virtualStorePath = path.join(cacheRoot, lockfileHash, '.pnpm');
+
+    await unlinkTaskDependencies(worktreePath);
+    try {
+        await executePnpm([
+            'install', '--dir', worktreePath, '--frozen-lockfile', '--ignore-scripts', '--prefer-offline',
+            '--virtual-store-dir', virtualStorePath, '--reporter', 'append-only',
+        ], repoPath);
+    } catch (error) {
+        // A failed pnpm run may leave a partial node_modules. Mark only the
+        // directories created by this invocation, remove them through the
+        // guarded cleanup, and restore the reusable main-checkout overlay.
+        for (const rel of await findNodeModulesDirs(worktreePath)) {
+            await fs.writeFile(
+                path.join(worktreePath, rel, DEPENDENCY_OVERLAY_MARKER),
+                JSON.stringify({ version: 3, source: repoPath }),
+            );
+        }
+        await unlinkTaskDependencies(worktreePath).catch(() => undefined);
+        await prepareDependencyOverlays(repoPath, worktreePath, false).catch(() => undefined);
+        const summary = capSummary(commandError(error).split(/\r?\n/).slice(-40));
+        throw new Error(`pnpm dependency materialization failed: ${summary}`);
+    }
+
+    const relativeDirs = await findNodeModulesDirs(worktreePath);
+    const counts = { workspaceLinks: 0, externalLinks: 0, copiedFiles: 0 };
+    for (const rel of relativeDirs) {
+        const nodeModules = path.join(worktreePath, rel);
+        for (const entry of await fs.readdir(nodeModules)) {
+            await countDependencyEntry(worktreePath, path.join(nodeModules, entry), counts);
+        }
+    }
+    const virtualStore = path.relative(repoPath, virtualStorePath);
+    const marker: DependencyOverlayMarker = {
+        version: 3,
+        source: repoPath,
+        materialized: true,
+        lockfileHash,
+        workspaceConfigHash,
+        virtualStore,
+        ...counts,
+    };
+    for (const rel of relativeDirs) {
+        await fs.writeFile(path.join(worktreePath, rel, DEPENDENCY_OVERLAY_MARKER), JSON.stringify(marker));
+    }
+    return {
+        linked: true,
+        mode: 'workspace-aware',
+        overlays: relativeDirs.length,
+        ...counts,
+        materialized: true,
+        lockfileHash,
+        workspaceConfigHash,
+        virtualStore,
+    };
+}
+
+async function removeTaskDependencyCache(repoPath: string, taskId: string): Promise<boolean> {
+    const target = dependencyCachePath(repoPath, taskId);
+    assertSafeDependencyCachePath(repoPath, target);
+    if (!await pathExists(target)) return false;
+    const markerPath = path.join(target, '.ia-graft-task-cache.json');
+    if (!await pathExists(markerPath)) throw new Error(`refusing to remove unmanaged dependency cache: ${target}`);
+    const marker = JSON.parse(await fs.readFile(markerPath, 'utf8')) as { version?: number; taskId?: string; source?: string };
+    if (marker.version !== 1 || marker.taskId !== taskId || !marker.source || !samePath(marker.source, repoPath)) {
+        throw new Error(`refusing to remove dependency cache with invalid ownership marker: ${target}`);
+    }
+    await removeWithRetry(target);
+    return true;
 }
 
 /** Removes only ia-graft-created node_modules links; it never traverses them. */
@@ -780,9 +972,17 @@ export class GitClient {
         };
     }
 
-    async cleanupTask(taskId: string, force: boolean): Promise<{ discarded: boolean; removedOrphan: boolean }> {
+    async cleanupTask(taskId: string, force: boolean): Promise<{
+        discarded: boolean; removedOrphan: boolean; dependencyCacheRemoved: boolean;
+    }> {
         const status = await this.taskStatus(taskId);
-        if (!status.exists) return { discarded: force, removedOrphan: false };
+        if (!status.exists) {
+            return {
+                discarded: force,
+                removedOrphan: false,
+                dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+            };
+        }
         if (status.checkoutMode === 'main') throw new Error('refusing cleanup while task is checked out in main; run task checkout --restore first');
         if (status.dirty && !force) throw new Error('refusing cleanup: task worktree has uncommitted changes (use --force only to abandon them)');
         if (!force) {
@@ -792,7 +992,11 @@ export class GitClient {
         if (status.worktreeRegistered) await GitWorktreeSession.open(this.repoPath, taskId).cleanup();
         else if (status.directoryExists) await safeRemoveTaskDirectory(this.repoPath, status.worktreePath);
         if (status.branchLocal) await executeGit(['branch', '-D', status.branch], this.repoPath);
-        return { discarded: force, removedOrphan: status.orphanDirectory };
+        return {
+            discarded: force,
+            removedOrphan: status.orphanDirectory,
+            dependencyCacheRemoved: await removeTaskDependencyCache(this.repoPath, taskId),
+        };
     }
 
     /** Opens only a structurally healthy linked task worktree; never main. */
@@ -882,12 +1086,14 @@ export class GitClient {
         return resolved;
     }
 
-    async prepareTaskDependencies(taskId: string): Promise<DependencyPreparation> {
+    async prepareTaskDependencies(taskId: string, options: { install?: boolean } = {}): Promise<DependencyPreparation> {
         const status = await this.taskStatus(taskId);
         if (status.checkoutMode !== 'worktree' || status.issues.length > 0) {
             throw new Error(`task worktree is not healthy: ${status.issues.join('; ') || status.checkoutMode}`);
         }
-        return prepareDependencyOverlays(this.repoPath, status.worktreePath);
+        return options.install
+            ? materializeTaskDependencies(this.repoPath, status.worktreePath, taskId)
+            : prepareDependencyOverlays(this.repoPath, status.worktreePath, false);
     }
 
     async syncTask(taskId: string, options: { fetch?: boolean; abort?: boolean } = {}) {

@@ -1,6 +1,6 @@
 # ADR-0010: provider-neutral task coordination
 
-- Status: **Accepted; replaced in place on 2026-08-03, safety/stack lifecycle amended on 2026-08-04, and dependency isolation/base sync amended on 2026-08-05 with explicit owner approval.**
+- Status: **Accepted; replaced in place on 2026-08-03, safety/stack lifecycle amended on 2026-08-04, and dependency isolation/base sync plus controlled materialization amended on 2026-08-05 with explicit owner approval.**
 - Decision owner: repository-owner
 - Records: DEC-031, DEC-048
 - Related: ADR-0015
@@ -28,7 +28,11 @@ directory is diagnosed and safely repaired; `task doctor` exposes inconsistent
 Git/filesystem/PR, dependency-overlay and sync-conflict state; and cleanup detaches
 only confirmed dependency links or marked overlays before removing a worktree.
 Workspace-aware overlays reuse the main installation but bind workspace packages
-to task-local sources. Agents use `task checkout`/`--restore` for temporary
+to task-local sources. When a task's frozen lockfile contains an external package
+absent from that installation, `task deps --install` may materialize it through
+the CLI with lifecycle scripts disabled and a per-task, ownership-marked virtual
+store under the main checkout. Direct package-manager installation in a worktree
+remains forbidden. Agents use `task checkout`/`--restore` for temporary
 main-checkout runtime testing rather than manually moving branches or directories.
 
 A task may integrate its recorded base only through `task sync`. This operation

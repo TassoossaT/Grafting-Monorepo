@@ -96,8 +96,12 @@ instructions; they must not restate or override them.
   not from a file-ownership ledger. It also sweeps any already-merged worktree
   out of `.worktrees/` first, silently — nothing to invoke or remember, it's
   just what `task new` does. Run `task deps --id <TASK-ID>` to rebuild the
-  overlays after the main installation changes. Dependency installation or
-  mutation still runs only in the main checkout, never inside a task worktree.
+  overlays after the main installation changes. If the task lockfile introduces
+  packages absent from the main installation, run `task deps --id <TASK-ID>
+  --install`: the CLI performs the only permitted task-scoped materialization,
+  with a frozen lockfile, lifecycle scripts disabled, a marked virtual store
+  under the main checkout, and only managed links in the worktree. Never run a
+  package-manager install or mutation directly inside a task worktree.
 - **Review feedback is the same task**: use `ia-graft task resume --pr <number>`
   or `task new` with the exact same ID; never create a second task for requested
   changes on an open PR. For genuinely dependent new work, use

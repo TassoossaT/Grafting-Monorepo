@@ -59,6 +59,11 @@ export async function taskNew(repoRoot: string, input: TaskNewInput) {
     dependencyMode: dependencies.mode,
     dependencyOverlays: dependencies.overlays,
     workspaceLinks: dependencies.workspaceLinks,
+    dependenciesMaterialized: dependencies.materialized ?? false,
+    dependencyLockfileHash: dependencies.lockfileHash,
+    dependencyWorkspaceConfigHash: dependencies.workspaceConfigHash,
+    dependencyVirtualStore: dependencies.virtualStore,
+    dependencyReason: dependencies.reason,
   };
 }
 
@@ -184,9 +189,12 @@ export async function taskDoctor(repoRoot: string, input: { taskId: string }) {
   return { ok: true as const, healthy, dependenciesReady, ...diagnosis, recommendedAction };
 }
 
-export async function taskDependencies(repoRoot: string, input: { taskId: string }) {
+export async function taskDependencies(repoRoot: string, input: { taskId: string; install?: boolean }) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
-  return { ok: true as const, ...(await new GitClient(repoRoot).prepareTaskDependencies(input.taskId)) };
+  return {
+    ok: true as const,
+    ...(await new GitClient(repoRoot).prepareTaskDependencies(input.taskId, { install: input.install })),
+  };
 }
 
 export async function taskSync(repoRoot: string, input: { taskId: string; fetch?: boolean; abort?: boolean }) {
@@ -206,6 +214,10 @@ export async function taskResume(repoRoot: string, input: { taskId?: string; pr?
     ok: true as const, taskId: input.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath,
     resumed: result.resumed, repaired: result.repaired, base: result.base,
     dependencyMode: result.dependencies.mode, dependencyOverlays: result.dependencies.overlays, workspaceLinks: result.dependencies.workspaceLinks,
+    dependenciesMaterialized: result.dependencies.materialized ?? false,
+    dependencyLockfileHash: result.dependencies.lockfileHash,
+    dependencyWorkspaceConfigHash: result.dependencies.workspaceConfigHash,
+    dependencyVirtualStore: result.dependencies.virtualStore,
   };
 }
 

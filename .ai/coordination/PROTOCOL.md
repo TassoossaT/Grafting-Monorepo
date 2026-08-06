@@ -47,9 +47,12 @@ ADR-per-task.
   package inside the task worktree. This prevents tests from silently loading a stale
   workspace package from the main checkout. It reports the overlay/link counts, or
   reports that the main checkout has no installation to reuse. Never run
-  `pnpm/npm/yarn/bun install/add/remove/update` inside a task worktree; install only in
-  the main checkout, then refresh the task through `task deps`. `task test` rejects
-  dependency-mutating commands.
+  `pnpm/npm/yarn/bun install/add/remove/update` directly inside a task worktree.
+  Normal installation remains a main-checkout operation. The sole task-scoped
+  exception is `task deps --install`, whose CLI-owned pnpm invocation requires
+  the task's frozen lockfile, disables lifecycle scripts, keeps its marked virtual
+  store under the main checkout and leaves only managed links in the worktree.
+  `task test` continues to reject dependency-mutating commands.
 - `task resume --id <TASK-ID>` / `task resume --pr <number>` — explicitly resumes
   an existing task. PR-based resume derives the canonical task ID, head and base from
   GitHub and refuses closed/merged PRs, so requested changes stay on the same PR.
@@ -60,9 +63,13 @@ ADR-per-task.
   state and remain for normal file editing plus `task commit`. `task sync --abort`
   aborts only an unfinished merge marked as started by this command. Raw Git merge,
   rebase, and history rewriting remain forbidden.
-- `task deps --id <TASK-ID>` — rebuilds the marked workspace-aware dependency
-  overlays from the main checkout's existing installation without running a package
-  manager or mutating its store. Unmanaged dependency directories are refused.
+- `task deps --id <TASK-ID> [--install]` — without `--install`, rebuilds the
+  marked workspace-aware overlays from the main checkout's existing installation
+  without running a package manager. With `--install`, materializes the task's
+  frozen pnpm lockfile into an ia-graft-owned virtual store under the main checkout,
+  without lifecycle scripts, so task-only external dependencies are available.
+  Resume preserves a valid materialized overlay; cleanup removes its ownership-marked
+  cache. Unmanaged dependency directories or caches are refused.
 - `task commit --id <TASK-ID> --message <msg> [--file <path>]...` — stages
   (all changed files, or a given subset) and commits inside that worktree. During a
   sync conflict it refuses unresolved paths and conflict markers.

@@ -8,6 +8,15 @@ import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies,
 
 const roots: string[] = [];
 
+const runPnpm = (args: string[], cwd: string): void => {
+  const options = { cwd, env: { ...process.env, CI: "true" }, stdio: "pipe" as const };
+  if (process.platform === "win32") {
+    execFileSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "pnpm.cmd", ...args], options);
+    return;
+  }
+  execFileSync("pnpm", args, options);
+};
+
 const makeRoot = async (): Promise<string> => {
   const root = await mkdtemp(join(tmpdir(), "ia-graft-"));
   roots.push(root);
@@ -52,7 +61,7 @@ test("taskCommit rejects an invalid task id or a missing message before touching
 const makeRepoWithBareRemote = async (): Promise<string> => {
   const root = await makeRoot();
   execFileSync("git", ["init", "-b", "main"], { cwd: root });
-  await writeFile(join(root, ".gitignore"), ".worktrees/\n", "utf8");
+  await writeFile(join(root, ".gitignore"), ".worktrees/\nnode_modules/\n", "utf8");
   execFileSync("git", ["add", ".gitignore"], { cwd: root });
   execFileSync("git", ["commit", "-m", "root"], { cwd: root });
 
@@ -429,6 +438,65 @@ test("dependency overlays resolve workspace packages from the task worktree", as
 
   await rm(join(worktree, "node_modules", ".ia-graft-overlay.json"));
   await assert.rejects(taskDependencies(root, { taskId: "WORKSPACE-LINKS" }), /unmanaged dependency directory/);
+});
+
+test("task deps --install materializes a frozen task lockfile without a main installation or lifecycle scripts", async () => {
+  const root = await makeRepoWithBareRemote();
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({
+      private: true,
+      scripts: { postinstall: "node -e \"require('node:fs').writeFileSync('postinstall-ran.txt','bad')\"" },
+      dependencies: { "fixture-external": "file:vendor/fixture-external" },
+    }),
+    "utf8",
+  );
+  await writeFile(join(root, "pnpm-workspace.yaml"), "packages: []\n", "utf8");
+  await mkdir(join(root, "vendor", "fixture-external"), { recursive: true });
+  await writeFile(
+    join(root, "vendor", "fixture-external", "package.json"),
+    JSON.stringify({ name: "fixture-external", version: "1.0.0", main: "index.js" }),
+    "utf8",
+  );
+  await writeFile(join(root, "vendor", "fixture-external", "index.js"), "module.exports = 'task-only';\n", "utf8");
+  runPnpm(["install", "--dir", root, "--lockfile-only", "--ignore-scripts"], root);
+  execFileSync("git", ["add", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "vendor"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "add task dependency fixture"], { cwd: root });
+  await rm(join(root, "node_modules"), { recursive: true, force: true });
+
+  const created = await taskNew(root, { taskId: "MATERIALIZED-DEPS", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.nodeModulesLinked, false);
+
+  const installed = await taskDependencies(root, { taskId: "MATERIALIZED-DEPS", install: true });
+  assert.equal(installed.ok, true);
+  if (!installed.ok) return;
+  assert.equal(installed.materialized, true);
+  assert.match(installed.virtualStore ?? "", /node_modules[\\/]+\.ia-graft-task-deps/);
+  const worktree = join(root, ".worktrees", "MATERIALIZED-DEPS");
+  assert.match(await readFile(join(worktree, "node_modules", "fixture-external", "index.js"), "utf8"), /task-only/);
+  await assert.rejects(readFile(join(worktree, "postinstall-ran.txt"), "utf8"));
+
+  const resumed = await taskNew(root, { taskId: "MATERIALIZED-DEPS", base: "main" });
+  assert.equal(resumed.ok, true);
+  if (!resumed.ok) return;
+  assert.equal(resumed.nodeModulesLinked, true);
+  assert.equal(resumed.dependencyMode, "workspace-aware");
+  assert.equal(resumed.dependenciesMaterialized, true);
+
+  await writeFile(join(worktree, "pnpm-workspace.yaml"), "packages: []\n# changed after install\n", "utf8");
+  const invalidated = await taskNew(root, { taskId: "MATERIALIZED-DEPS", base: "main" });
+  assert.equal(invalidated.ok, true);
+  if (!invalidated.ok) return;
+  assert.equal(invalidated.dependenciesMaterialized, false);
+
+  const cachePath = join(root, installed.virtualStore ?? "");
+  const cleaned = await taskCleanup(root, { taskId: "MATERIALIZED-DEPS", force: true });
+  assert.equal(cleaned.ok, true);
+  if (!cleaned.ok) return;
+  assert.equal(cleaned.dependencyCacheRemoved, true);
+  await assert.rejects(readFile(join(cachePath, "lock.yaml"), "utf8"));
 });
 
 test("taskTest batches commands and caps generated output", async () => {

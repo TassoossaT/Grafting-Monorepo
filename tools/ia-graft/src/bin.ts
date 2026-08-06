@@ -82,7 +82,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
       : { taskId, commands, keepGoing: argv.includes("--keep-going") };
   }
   if (subcommand === "sync") return { taskId, fetch: argv.includes("--fetch"), abort: argv.includes("--abort") };
-  if (subcommand === "deps") return { taskId };
+  if (subcommand === "deps") return { taskId, install: argv.includes("--install") };
   if (subcommand === "done") return { taskId, title: readValue(argv, "--title"), body: readValue(argv, "--body"), base: readValue(argv, "--base") };
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
   if (subcommand === "status") return { taskId };
