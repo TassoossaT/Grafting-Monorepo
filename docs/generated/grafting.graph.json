@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "graphId": "grafting.workspace",
-  "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+  "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
   "generator": {
     "id": "extractor:nx-graph-ir",
     "version": "1.0.0",
@@ -26,7 +26,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -56,7 +56,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -85,7 +85,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -114,7 +114,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -143,7 +143,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -173,7 +173,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -201,7 +201,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -230,7 +230,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -260,7 +260,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -289,7 +289,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -318,7 +318,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -347,7 +347,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -377,7 +377,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -407,7 +407,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -437,7 +437,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -468,7 +468,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -491,7 +491,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -514,7 +514,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -537,7 +537,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -560,7 +560,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -583,7 +583,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -606,7 +606,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -629,7 +629,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -652,7 +652,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -675,7 +675,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -698,7 +698,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -721,7 +721,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -744,7 +744,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -767,7 +767,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -790,7 +790,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -813,7 +813,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -836,7 +836,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -859,7 +859,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -882,7 +882,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -905,7 +905,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -928,7 +928,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -951,7 +951,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -974,7 +974,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -997,7 +997,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1020,7 +1020,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1043,7 +1043,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1066,7 +1066,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1089,7 +1089,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1112,7 +1112,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1135,7 +1135,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1158,7 +1158,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1181,7 +1181,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1204,7 +1204,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -1227,7 +1227,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1250,7 +1250,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1273,7 +1273,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1296,7 +1296,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1319,7 +1319,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1342,7 +1342,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1365,7 +1365,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1388,7 +1388,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1411,7 +1411,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1434,7 +1434,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1457,7 +1457,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1480,7 +1480,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1503,7 +1503,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1526,7 +1526,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1549,7 +1549,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1572,7 +1572,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1595,7 +1595,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1618,7 +1618,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1641,7 +1641,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1664,7 +1664,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1687,7 +1687,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1710,7 +1710,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1733,7 +1733,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1756,7 +1756,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1779,7 +1779,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1802,7 +1802,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1825,7 +1825,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1848,7 +1848,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -1871,7 +1871,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1894,7 +1894,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -1917,7 +1917,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1940,7 +1940,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1963,7 +1963,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -1986,7 +1986,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2009,7 +2009,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2032,7 +2032,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2055,7 +2055,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2078,7 +2078,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2101,7 +2101,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2124,7 +2124,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2147,7 +2147,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2170,7 +2170,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -2193,7 +2193,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2216,7 +2216,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2239,7 +2239,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2262,7 +2262,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2285,7 +2285,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2308,7 +2308,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2331,7 +2331,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2354,7 +2354,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2377,7 +2377,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2400,7 +2400,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2423,7 +2423,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2446,7 +2446,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2469,7 +2469,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2492,7 +2492,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2515,7 +2515,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2538,7 +2538,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2563,7 +2563,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2586,7 +2586,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2609,7 +2609,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2632,7 +2632,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2655,7 +2655,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2678,7 +2678,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2701,7 +2701,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2724,7 +2724,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2747,7 +2747,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2770,7 +2770,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2793,7 +2793,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2816,7 +2816,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2839,7 +2839,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2862,7 +2862,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2885,7 +2885,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2908,7 +2908,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2931,7 +2931,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -2954,7 +2954,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -2977,7 +2977,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3000,7 +3000,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3023,7 +3023,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3046,7 +3046,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3069,7 +3069,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3092,7 +3092,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3115,7 +3115,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3138,7 +3138,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3161,7 +3161,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3184,7 +3184,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3207,7 +3207,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3230,7 +3230,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3253,7 +3253,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3276,7 +3276,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3299,7 +3299,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3322,7 +3322,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3345,7 +3345,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3368,7 +3368,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3391,7 +3391,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -3414,7 +3414,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3437,7 +3437,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3460,7 +3460,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3483,7 +3483,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3506,7 +3506,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3529,7 +3529,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3552,7 +3552,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3575,7 +3575,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3598,7 +3598,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3621,7 +3621,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3644,7 +3644,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3667,7 +3667,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3690,7 +3690,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3713,7 +3713,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3736,7 +3736,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3759,7 +3759,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3782,7 +3782,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3805,7 +3805,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3828,7 +3828,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3851,7 +3851,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3874,7 +3874,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3897,7 +3897,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3920,7 +3920,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3943,7 +3943,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3966,7 +3966,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -3989,7 +3989,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4012,7 +4012,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4035,7 +4035,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -4058,7 +4058,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4081,7 +4081,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -4104,7 +4104,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4127,7 +4127,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4150,7 +4150,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4173,7 +4173,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4196,7 +4196,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4219,7 +4219,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4242,7 +4242,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4265,7 +4265,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4288,7 +4288,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4311,7 +4311,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4334,7 +4334,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4357,7 +4357,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4380,7 +4380,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4403,7 +4403,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4426,7 +4426,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 0.95,
         "evidence": [
           {
@@ -4449,7 +4449,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4472,7 +4472,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4495,7 +4495,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4518,7 +4518,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4541,7 +4541,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4564,7 +4564,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4587,7 +4587,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4610,7 +4610,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4633,7 +4633,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4656,7 +4656,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4679,7 +4679,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4702,7 +4702,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4725,7 +4725,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4748,7 +4748,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4771,7 +4771,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4794,7 +4794,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4817,7 +4817,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4840,7 +4840,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {
@@ -4863,7 +4863,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "git:5f993a18ff3b20466e827a4de36d5ad54e696605",
+        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
         "confidence": 1,
         "evidence": [
           {

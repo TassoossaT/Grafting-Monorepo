@@ -30,20 +30,8 @@ export const jsonPointerEscape = (key) => key.replace(/~/g, "~0").replace(/\//g,
 
 const EXTRACTOR = { id: "extractor:nx-graph-ir", version: "1.0.0" };
 
-function git(args) {
-  // Porcelain status uses its first two columns as meaningful state. Preserve
-  // a leading workspace-column space on the first line while removing only
-  // Git's trailing newline.
-  return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trimEnd();
-}
-
-export const pathsFromGitPorcelain = (status) =>
-  [...new Set(status.split("\n").filter(Boolean).map((line) => line.slice(3).trim()))].sort();
-
-export const sourceRevisionForInputs = (inputCommitSha, dirtyInputLines) =>
-  dirtyInputLines.length === 0
-    ? `git:${inputCommitSha}`
-    : `workspace:sha256:${sha256(`${inputCommitSha}\n${dirtyInputLines.join("\n")}`)}`;
+export const sourceRevisionForInputs = (inputHashLines) =>
+  `workspace:sha256:${sha256([...inputHashLines].sort().join("\n"))}`;
 
 /**
  * Builds the real Graph IR v1 document from the committed Nx project graph
@@ -94,21 +82,16 @@ export async function extractGraphIr({ check = false } = {}) {
   }
 
   // --- sourceRevision -----------------------------------------------
-  // Scoped strictly to this extractor's own real inputs (project-graph.json
-  // + every manifest read), never a whole-repo `git status` scan. A
-  // repo-wide scan and HEAD-based provenance are both self-referential: an
-  // unrelated commit (including the commit that stores this generated file)
-  // would make --check stale even when every real input is unchanged. Scope
-  // both dirtiness and the baseline commit to the fixed input-file list.
-  const inputPaths = [...new Set([projectGraphRelative, ...[...manifestByProject.values()].map((m) => m.path)])].sort();
-  const headSha = git(["rev-parse", "HEAD"]);
-  const inputCommitSha = git(["log", "-1", "--format=%H", "--", ...inputPaths]) || headSha;
-  const dirtyStatus = git(["status", "--porcelain=v1", "--", ...inputPaths]);
-  const dirtyPaths = pathsFromGitPorcelain(dirtyStatus);
-  const dirtyInputLines = await Promise.all(
-    dirtyPaths.map(async (path) => `${path} ${sha256(await readText(path))}`),
-  );
-  const sourceRevision = sourceRevisionForInputs(inputCommitSha, dirtyInputLines);
+  // Provenance is derived only from the exact input paths and bytes. Git SHAs
+  // are unsuitable here: GitHub checks a synthetic merge ref with shallow
+  // history, so identical inputs can otherwise receive a different revision
+  // locally and in CI. Content provenance is deterministic across commits,
+  // branches, dirty worktrees and clone depths without becoming self-referential.
+  const inputHashLines = [
+    `${projectGraphRelative}\0${projectGraphSha}`,
+    ...[...manifestByProject.values()].map((manifest) => `${manifest.path}\0${manifest.sha256}`),
+  ];
+  const sourceRevision = sourceRevisionForInputs(inputHashLines);
 
   const provenance = (confidence, evidence) => ({ extractor: EXTRACTOR, sourceRevision, confidence, evidence });
 

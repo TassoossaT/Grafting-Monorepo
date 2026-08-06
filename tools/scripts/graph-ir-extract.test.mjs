@@ -14,7 +14,6 @@ import { validateGraphIrDocument } from "./validate-graph-ir.mjs";
 import {
   extractGraphIr,
   jsonPointerEscape,
-  pathsFromGitPorcelain,
   sourceRevisionForInputs,
 } from "./graph-ir-extract.mjs";
 
@@ -25,22 +24,12 @@ test("jsonPointerEscape follows RFC 6901 (~ before /)", () => {
   assert.equal(jsonPointerEscape("a~/b"), "a~0~1b");
 });
 
-test("source revision depends only on the input commit and dirty input hashes", () => {
-  const inputCommit = "a".repeat(40);
-  assert.equal(sourceRevisionForInputs(inputCommit, []), `git:${inputCommit}`);
-  const dirtyRevision = sourceRevisionForInputs(inputCommit, ["project.json deadbeef"]);
-  assert.equal(dirtyRevision, sourceRevisionForInputs(inputCommit, ["project.json deadbeef"]));
-  assert.notEqual(dirtyRevision, sourceRevisionForInputs("b".repeat(40), ["project.json deadbeef"]));
-  assert.match(dirtyRevision, /^workspace:sha256:/);
-});
-
-test("Git porcelain parsing preserves the first path when its index status is blank", () => {
-  assert.deepEqual(
-    pathsFromGitPorcelain(
-      " M apps/architecture-studio/project.json\n D packages/graph-x6/project.json",
-    ),
-    ["apps/architecture-studio/project.json", "packages/graph-x6/project.json"],
-  );
+test("source revision depends only on sorted input paths and content hashes", () => {
+  const inputs = ["project.json\0deadbeef", "docs/generated/project-graph.json\0cafe"];
+  const revision = sourceRevisionForInputs(inputs);
+  assert.equal(revision, sourceRevisionForInputs([...inputs].reverse()));
+  assert.notEqual(revision, sourceRevisionForInputs(["project.json\0changed", inputs[1]]));
+  assert.match(revision, /^workspace:sha256:/);
 });
 
 test("extractGraphIr produces a document that passes both Graph IR v1 validation layers", async () => {
