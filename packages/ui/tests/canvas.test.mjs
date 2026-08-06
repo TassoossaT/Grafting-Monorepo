@@ -3,7 +3,11 @@ import test from "node:test";
 
 import { createCanvas } from "../dist/index.js";
 import { checkCanvasConnection } from "../dist/canvas/graph/connection-policy.js";
-import { resolveCanvasInteractionPolicy } from "../dist/canvas/graph/interaction-policy.js";
+import {
+  clampCanvasZoomScale,
+  resolveCanvasInteractionPolicy,
+  resolveCanvasZoomRange,
+} from "../dist/canvas/graph/interaction-policy.js";
 
 const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
   nodeId,
@@ -242,4 +246,14 @@ test("keeps canvas interactions neutral until a consumer opts in", () => {
       selectOnActivate: true,
     },
   );
+});
+
+test("keeps caller-driven zoom inside a valid consumer-owned range", () => {
+  const zoom = Object.freeze({ minScale: 0.3, maxScale: 2.4 });
+
+  assert.deepEqual(resolveCanvasZoomRange(zoom), { min: 0.3, max: 2.4 });
+  assert.equal(clampCanvasZoomScale(0.1, zoom), 0.3);
+  assert.equal(clampCanvasZoomScale(1.25, zoom), 1.25);
+  assert.equal(clampCanvasZoomScale(8, zoom), 2.4);
+  assert.deepEqual(resolveCanvasZoomRange({ minScale: 2, maxScale: 1 }), { min: 2, max: 2 });
 });

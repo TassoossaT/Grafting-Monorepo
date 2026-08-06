@@ -47,6 +47,265 @@ is granted here.
 
 ### `type architecture-studio.quantization.worker.QuantizationWorkerResponse = { continuous: Float32Array; height: number; levels: number; quantized: Int32Array; type: "result"; width: number } | { message: string; type: "error" }`
 
+### `variable architecture-studio.bench-composition.BENCH_CANVAS_VIEWS: Readonly<{ edge: Readonly<{ value: "bench.value" }>; node: Readonly<{ element: "bench.element" }> }>`
+
+View identifiers this surface registers with the canvas.
+
+### `variable architecture-studio.bench-composition.BENCH_ELEMENT_NODE_VIEW: CanvasNodeViewDefinition`
+
+Node view mounting a Grafting UI component as the element's full boundary.
+
+### `variable architecture-studio.bench-composition.BENCH_NODE_SIZE: Readonly<{ height: 96; width: 208 }>`
+
+Rendered size of one element node.
+
+### `function architecture-studio.bench-composition.benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]`
+
+Projects an element's declared ports into canvas ports.
+
+### `function architecture-studio.bench-composition.colorForDataType(dataType: string): string`
+
+Resolves the color a value kind is drawn in.
+
+### `function architecture-studio.bench-composition.describeParams(kind: BenchNodeKind, params: BenchParamValues): readonly string[]`
+
+Renders a node's parameters as short chips.
+
+### `function architecture-studio.bench-composition.presentBenchEdge(context: { edge: CanvasEdge; selected: boolean }): CanvasEdgePresentation`
+
+Draws a connection in the color of the value it carries.
+
+### `function architecture-studio.bench-composition.toCanvasEdge(edge: BenchEdge, graph: BenchGraph): CanvasEdge`
+
+Projects one authored connection into canvas presentation data.
+
+### `function architecture-studio.bench-composition.toCanvasNode(node: BenchNode): CanvasNode`
+
+Projects one authored node into canvas presentation data.
+
+### `interface architecture-studio.bench-graph.BenchEdge`
+
+One value flowing from an output port to an input port.
+
+### `property architecture-studio.bench-graph.BenchEdge.id: string`
+
+Identity unique within the graph.
+
+### `property architecture-studio.bench-graph.BenchEdge.source: { nodeId: string; portId: string }`
+
+Producing node and port.
+
+### `property architecture-studio.bench-graph.BenchEdge.target: { nodeId: string; portId: string }`
+
+Consuming node and port.
+
+### `interface architecture-studio.bench-graph.BenchGraph`
+
+The complete authored graph.
+
+### `property architecture-studio.bench-graph.BenchGraph.edges: readonly BenchEdge[]`
+
+Connections between them.
+
+### `property architecture-studio.bench-graph.BenchGraph.nodes: readonly BenchNode[]`
+
+Placed elements.
+
+### `property architecture-studio.bench-graph.BenchGraph.sequence: number`
+
+Monotonic counter behind generated identities, kept in state so edits stay deterministic.
+
+### `interface architecture-studio.bench-graph.BenchNode`
+
+One placed element instance.
+
+### `property architecture-studio.bench-graph.BenchNode.id: string`
+
+Identity unique within the graph.
+
+### `property architecture-studio.bench-graph.BenchNode.kindId: string`
+
+Registered element this instance is of.
+
+### `property architecture-studio.bench-graph.BenchNode.params: BenchParamValues`
+
+This instance's own parameter values.
+
+### `property architecture-studio.bench-graph.BenchNode.x: number`
+
+Horizontal placement on the surface.
+
+### `property architecture-studio.bench-graph.BenchNode.y: number`
+
+Vertical placement on the surface.
+
+### `type architecture-studio.bench-graph.BenchConnectionRefusal = "unknown-port" | "type-mismatch" | "input-occupied"`
+
+Why the bench refused a connection the canvas already found structurally sound.
+
+### `variable architecture-studio.bench-graph.EMPTY_BENCH_GRAPH: BenchGraph`
+
+An empty bench.
+
+### `function architecture-studio.bench-graph.addBenchEdge(graph: BenchGraph, source: { nodeId: string; portId: string }, target: { nodeId: string; portId: string }): { edge: BenchEdge; graph: BenchGraph; refusal?: undefined } | { edge?: undefined; graph?: undefined; refusal: BenchConnectionRefusal }`
+
+Connects two ports after the product's own rules accept them.
+
+### `function architecture-studio.bench-graph.addBenchNode(graph: BenchGraph, kindId: string, position: { x: number; y: number }): { graph: BenchGraph; nodeId: string }`
+
+Places a new instance of a registered element.
+
+### `function architecture-studio.bench-graph.checkBenchConnection(graph: BenchGraph, source: { nodeId: string; portId: string }, target: { nodeId: string; portId: string }): BenchConnectionRefusal | null`
+
+Applies the product's own connection rules.
+
+The canvas has already checked direction, capacity, self-connection, and
+duplicates. What remains is domain knowledge the canvas cannot have: whether
+the two value kinds match.
+
+### `function architecture-studio.bench-graph.duplicateBenchNode(graph: BenchGraph, nodeId: string, offset: { x: number; y: number }): { graph: BenchGraph; nodeId: string }`
+
+Copies a placed node, parameter values included, without its connections.
+
+Copying the values is the point: it is how a user compares two settings of
+the same element side by side. Connections are deliberately not copied,
+since the copy is a variant to wire deliberately, not a silent second
+consumer of the original's inputs.
+
+### `function architecture-studio.bench-graph.moveBenchNode(graph: BenchGraph, nodeId: string, position: { x: number; y: number }): BenchGraph`
+
+Records a node's new placement after a user moves it.
+
+### `function architecture-studio.bench-graph.removeBenchEdge(graph: BenchGraph, edgeId: string): BenchGraph`
+
+Removes one connection.
+
+### `function architecture-studio.bench-graph.removeBenchNode(graph: BenchGraph, nodeId: string): { graph: BenchGraph; removedEdgeIds: readonly string[] }`
+
+Removes a node and every connection touching it.
+
+### `function architecture-studio.bench-graph.setBenchParam(graph: BenchGraph, nodeId: string, paramId: string, raw: unknown): BenchGraph`
+
+Changes one parameter of one node instance.
+
+### `interface architecture-studio.node-kind.BenchEnumOption`
+
+One choice offered by an enumerated parameter.
+
+### `property architecture-studio.node-kind.BenchEnumOption.label: string`
+
+Human-readable text shown in the control.
+
+### `property architecture-studio.node-kind.BenchEnumOption.value: string`
+
+Stored value.
+
+### `interface architecture-studio.node-kind.BenchNodeKind`
+
+Complete declaration of one laboratory element.
+
+### `property architecture-studio.node-kind.BenchNodeKind.category: string`
+
+Menu grouping.
+
+### `property architecture-studio.node-kind.BenchNodeKind.description: string`
+
+One sentence explaining what the element does.
+
+### `property architecture-studio.node-kind.BenchNodeKind.id: string`
+
+Stable identity referenced by node instances and by the evaluation engine.
+
+### `property architecture-studio.node-kind.BenchNodeKind.inputs: readonly BenchPortSpec[]`
+
+Values the element consumes.
+
+### `property architecture-studio.node-kind.BenchNodeKind.outputs: readonly BenchPortSpec[]`
+
+Values the element produces.
+
+### `property architecture-studio.node-kind.BenchNodeKind.params: readonly BenchParamSpec[]`
+
+Parameters a user may edit per node instance.
+
+### `property architecture-studio.node-kind.BenchNodeKind.title: string`
+
+Human-readable name shown in the element menu and on the node.
+
+### `interface architecture-studio.node-kind.BenchPortSpec`
+
+One input or output of an element.
+
+### `property architecture-studio.node-kind.BenchPortSpec.capacity?: number`
+
+Maximum number of connections this port accepts.
+
+Inputs default to one, because an element consumes a single value per
+input; outputs default to unlimited, because one result may feed many
+elements.
+
+### `property architecture-studio.node-kind.BenchPortSpec.dataType: string`
+
+Opaque value kind used to decide whether a connection makes sense.
+
+### `property architecture-studio.node-kind.BenchPortSpec.id: string`
+
+Identity, unique within the element's own inputs or outputs.
+
+### `property architecture-studio.node-kind.BenchPortSpec.label: string`
+
+Human-readable text rendered beside the port.
+
+### `type architecture-studio.node-kind.BenchParamSpec = { defaultValue: number; description?: string; id: string; kind: "number"; label: string; max?: number; min?: number; step?: number } | { defaultValue: number; description?: string; id: string; kind: "integer"; label: string; max?: number; min?: number } | { defaultValue: boolean; description?: string; id: string; kind: "boolean"; label: string } | { defaultValue: string; description?: string; id: string; kind: "enum"; label: string; options: readonly BenchEnumOption[] } | { defaultValue: number; description?: string; id: string; kind: "seed"; label: string }`
+
+Declarative description of one editable parameter.
+
+The bench derives its whole control surface from this, which is what makes
+adding an element a registration rather than a UI change.
+
+### `type architecture-studio.node-kind.BenchParamValue = number | boolean | string`
+
+A value a user may edit for one node instance.
+
+### `type architecture-studio.node-kind.BenchParamValues = Readonly<Record<string, BenchParamValue>>`
+
+Parameter values held by one node instance.
+
+### `function architecture-studio.node-kind.coerceParamValue(spec: BenchParamSpec, raw: unknown): BenchParamValue`
+
+Brings a user-supplied value into the range its parameter declares.
+
+Controls can emit values a spec forbids — an empty numeric field, a slider
+dragged past a bound, a stale option — so every edit passes through here
+before it reaches node state.
+
+### `function architecture-studio.node-kind.defaultParamValues(kind: BenchNodeKind): BenchParamValues`
+
+Builds the starting parameter values for a new node instance.
+
+### `function architecture-studio.node-kind.portCapacity(port: BenchPortSpec, side: "output" | "input"): number | undefined`
+
+Resolves how many connections a port accepts.
+
+### `variable architecture-studio.registry.BENCH_DATA_TYPES: Readonly<{ heightmap: "heightmap"; levels: "levels" }>`
+
+Opaque value kinds exchanged between elements.
+
+These are product vocabulary, not canvas concepts — `@grafting/ui` carries
+the string through and never reads it.
+
+### `variable architecture-studio.registry.BENCH_NODE_KINDS: readonly BenchNodeKind[]`
+
+Every element the bench offers, in menu order.
+
+### `function architecture-studio.registry.findNodeKind(id: string): BenchNodeKind`
+
+Looks up a registered element.
+
+### `function architecture-studio.registry.nodeKindsByCategory(): readonly { category: string; kinds: readonly BenchNodeKind[] }[]`
+
+Groups the registered elements for the menu.
+
 ### `variable architecture-studio.canvas-composition.ARCHITECTURE_CANVAS_COMPOSITION: CanvasOptions`
 
 Complete product-owned composition consumed by the generic canvas package.
