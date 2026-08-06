@@ -81,7 +81,93 @@ export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, Benc
     } as LevelsValue;
   });
 
+  // Laboratory instruments, deliberately written here in TypeScript rather
+  // than in Rust: they exist so a user can drop something between two elements
+  // and watch the difference propagate. Nothing authoritative may depend on
+  // them (see the note in `registry.ts`).
+
+  evaluators.set("filter.smooth", (inputs, params) => {
+    const source = expectHeightmap(inputs.heightmap, "heightmap");
+    const radius = Math.trunc(asNumber(params.radius));
+    if (radius <= 0) return source;
+    return {
+      ...source,
+      values: boxBlur(source.values, source.width, source.height, radius),
+    };
+  });
+
+  evaluators.set("filter.remap", (inputs, params) => {
+    const source = expectHeightmap(inputs.heightmap, "heightmap");
+    const outputMin = asNumber(params.outputMin);
+    const outputMax = asNumber(params.outputMax);
+    return { ...source, values: remap(source.values, outputMin, outputMax) };
+  });
+
+  evaluators.set("output.viewport", (inputs) => {
+    const value = inputs.value;
+    if (value === undefined) throw new Error("Bench input value expected a connected element");
+    // A viewport observes; it does not transform. Passing the value straight
+    // through means the preview shows exactly what reached it.
+    return value;
+  });
+
   return evaluators;
+}
+
+/**
+ * Averages every cell with the square of neighbours around it.
+ *
+ * Separable passes would be faster, but a bench grid is small and one readable
+ * pass is easier to trust than two clever ones. Edges clamp rather than wrap,
+ * so a map does not acquire features from its opposite side.
+ */
+function boxBlur(
+  source: Float32Array,
+  width: number,
+  height: number,
+  radius: number,
+): Float32Array {
+  const result = new Float32Array(source.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let total = 0;
+      let count = 0;
+      for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+        const sampleY = Math.min(height - 1, Math.max(0, y + offsetY));
+        for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+          const sampleX = Math.min(width - 1, Math.max(0, x + offsetX));
+          total += source[sampleY * width + sampleX]!;
+          count += 1;
+        }
+      }
+      result[y * width + x] = total / count;
+    }
+  }
+  return result;
+}
+
+/**
+ * Rescales a grid's full range onto the requested one.
+ *
+ * A flat input has no range to rescale, so every cell takes the lower bound
+ * rather than dividing by zero.
+ */
+function remap(source: Float32Array, outputMin: number, outputMax: number): Float32Array {
+  let minimum = Number.POSITIVE_INFINITY;
+  let maximum = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < source.length; index += 1) {
+    const value = source[index]!;
+    if (value < minimum) minimum = value;
+    if (value > maximum) maximum = value;
+  }
+  const span = maximum - minimum;
+  const result = new Float32Array(source.length);
+  if (span <= 0) return result.fill(outputMin);
+  const scale = (outputMax - outputMin) / span;
+  for (let index = 0; index < source.length; index += 1) {
+    result[index] = outputMin + (source[index]! - minimum) * scale;
+  }
+  return result;
 }
 
 /**

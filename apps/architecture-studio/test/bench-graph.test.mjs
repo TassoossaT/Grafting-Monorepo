@@ -166,7 +166,7 @@ test("keeps every registered element declared well enough to render itself", () 
 test("groups elements for the menu in registration order", () => {
   assert.deepEqual(
     nodeKindsByCategory().map((group) => group.category),
-    ["Generation", "Terrain"],
+    ["Generation", "Filters", "Terrain", "Output"],
   );
 });
 

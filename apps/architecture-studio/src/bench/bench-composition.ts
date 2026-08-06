@@ -29,6 +29,7 @@ export const BENCH_NODE_SIZE = Object.freeze({ width: 208, height: 96 });
 const DATA_TYPE_COLORS: Readonly<Record<string, string>> = Object.freeze({
   [BENCH_DATA_TYPES.heightmap]: "#0ea5e9",
   [BENCH_DATA_TYPES.levels]: "#f59e0b",
+  [BENCH_DATA_TYPES.any]: "#64748b",
 });
 
 const FALLBACK_COLOR = "#94a3b8";
