@@ -2,14 +2,25 @@
   "name": "isekai-web-client",
   "root": "packages/isekai-web-client",
   "projectType": "library",
-  "tags": ["scope:engine", "lang:typescript", "platform:web", "type:lib"],
-  "implicitDependencies": ["isekai-wasm-bridge"],
+  "tags": [
+    "scope:engine",
+    "lang:typescript",
+    "platform:web",
+    "type:lib"
+  ],
+  "implicitDependencies": [
+    "isekai-wasm-bridge"
+  ],
   "metadata": {
     "graphIr": {
       "_comment": "Placeholder only -- no Graph IR v1 schema exists yet. Superseded once a real Graph IR extractor lands (DEC-028).",
       "id": "isekai-web-client",
       "kind": "lib",
-      "tags": ["scope:engine", "lang:typescript", "platform:web"]
+      "tags": [
+        "scope:engine",
+        "lang:typescript",
+        "platform:web"
+      ]
     }
   },
   "targets": {
@@ -19,25 +30,41 @@
         "command": "tsc --noEmit",
         "cwd": "packages/isekai-web-client"
       },
+      "dependsOn": [
+        "isekai-wasm-bridge:build"
+      ],
       "cache": true,
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
     },
     "test": {
       "executor": "nx:run-commands",
       "options": {
         "command": "pnpm --filter @grafting/isekai-web-client test"
       },
+      "dependsOn": [
+        "isekai-wasm-bridge:build"
+      ],
       "cache": true,
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
     },
     "docs-generate": {
       "executor": "nx:run-commands",
-      "options": { "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client" },
+      "options": {
+        "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client"
+      },
       "cache": false
     },
     "docs-check": {
       "executor": "nx:run-commands",
-      "options": { "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client --check" },
+      "options": {
+        "command": "node tools/scripts/generate-api-docs.mjs isekai-web-client --check"
+      },
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**/*",
