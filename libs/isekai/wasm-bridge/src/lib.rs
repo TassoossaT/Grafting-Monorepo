@@ -13,11 +13,13 @@ use wasm_bindgen::prelude::*;
 
 pub mod buffer;
 pub mod engine;
+mod graph_evaluation;
 mod graph_layout;
 pub mod handle;
 pub mod job;
 
 pub use engine::WasmEngine;
+pub use graph_evaluation::evaluation_order_json;
 pub use graph_layout::layout_graph_json;
 pub use job::JobStateCode;
 
