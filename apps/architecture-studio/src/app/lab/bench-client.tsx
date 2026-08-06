@@ -1,8 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
-import { Button, Card, Text, createCanvas, type CanvasHandle } from "@grafting/ui";
+import {
+  Button,
+  Card,
+  Text,
+  createCanvas,
+  type CanvasEntityReference,
+  type CanvasHandle,
+} from "@grafting/ui";
 import {
   BENCH_CANVAS_VIEWS,
   BENCH_ELEMENT_NODE_VIEW,
@@ -67,8 +80,11 @@ export default function BenchClient() {
   // instead of closing over a state value that would be stale by the time a
   // user draws their second connection.
   const graphRef = useRef<BenchGraph>(EMPTY_BENCH_GRAPH);
+  // Selection follows the graph through a ref for the same reason: the canvas
+  // callbacks below are registered once and would otherwise read a stale value.
+  const selectionRef = useRef<CanvasEntityReference | null>(null);
   const [graph, setGraph] = useState<BenchGraph>(EMPTY_BENCH_GRAPH);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<CanvasEntityReference | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
   const [preview, setPreview] = useState<EvaluationPreview | null>(null);
@@ -78,6 +94,14 @@ export default function BenchClient() {
     graphRef.current = next;
     setGraph(next);
   }, []);
+
+  const rememberSelection = useCallback((next: CanvasEntityReference | null) => {
+    selectionRef.current = next;
+    setSelection(next);
+  }, []);
+
+  // Evaluation only ever previews a node, so it reads the narrowed form.
+  const selectedNodeId = selection?.kind === "node" ? selection.id : null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -94,7 +118,7 @@ export default function BenchClient() {
         panning: true,
         movableNodes: true,
         clickThreshold: 4,
-        zoom: { modifiers: ["control", "meta"], factor: 1.08, minScale: 0.3, maxScale: 2.4 },
+        zoom: { modifiers: [], factor: 1.08, minScale: 0.3, maxScale: 2.4 },
         selectOnActivate: true,
       },
       editing: {
@@ -110,10 +134,14 @@ export default function BenchClient() {
           setNotice(null);
           return { accepted: true, edge: toCanvasEdge(result.edge, result.graph) };
         },
-        onDisconnected: (edgeId) => commit(removeBenchEdge(graphRef.current, edgeId)),
+        onDisconnected: (edgeId) => {
+          commit(removeBenchEdge(graphRef.current, edgeId));
+          const selected = selectionRef.current;
+          if (selected?.kind === "edge" && selected.id === edgeId) rememberSelection(null);
+        },
         onNodeMoved: (nodeId, x, y) => commit(moveBenchNode(graphRef.current, nodeId, { x, y })),
       },
-      onActivate: (entity) => setSelectedNodeId(entity.kind === "node" ? entity.id : null),
+      onActivate: rememberSelection,
     });
 
     return () => {
@@ -121,7 +149,7 @@ export default function BenchClient() {
       handleRef.current = null;
       disposeEvaluation();
     };
-  }, [commit]);
+  }, [commit, rememberSelection]);
 
   // One evaluation pass per settled edit: Rust orders the graph, the plan gives
   // every step a content hash, and the worker runs only what that hash says is
@@ -208,45 +236,75 @@ export default function BenchClient() {
       commit(result.graph);
       const node = result.graph.nodes.find((candidate) => candidate.id === result.nodeId);
       if (node !== undefined) handleRef.current?.addNode(toCanvasNode(node));
-      setSelectedNodeId(result.nodeId);
+      const nextSelection = Object.freeze({ kind: "node" as const, id: result.nodeId });
+      rememberSelection(nextSelection);
+      handleRef.current?.setSelection(nextSelection);
       setNotice(null);
     },
-    [commit],
+    [commit, rememberSelection],
   );
 
   const duplicateSelected = useCallback(() => {
-    if (selectedNodeId === null) return;
-    const result = duplicateBenchNode(graphRef.current, selectedNodeId);
+    const selected = selectionRef.current;
+    if (selected?.kind !== "node") return;
+    const result = duplicateBenchNode(graphRef.current, selected.id);
     commit(result.graph);
     const copy = result.graph.nodes.find((candidate) => candidate.id === result.nodeId);
     if (copy !== undefined) handleRef.current?.addNode(toCanvasNode(copy));
-    setSelectedNodeId(result.nodeId);
-  }, [commit, selectedNodeId]);
+    const nextSelection = Object.freeze({ kind: "node" as const, id: result.nodeId });
+    rememberSelection(nextSelection);
+    handleRef.current?.setSelection(nextSelection);
+  }, [commit, rememberSelection]);
 
   const removeSelected = useCallback(() => {
-    if (selectedNodeId === null) return;
-    const result = removeBenchNode(graphRef.current, selectedNodeId);
-    commit(result.graph);
-    // The canvas removes attached edges with the node, so only the node itself
-    // is reported here; asking it to remove them again would throw.
-    handleRef.current?.removeNode(selectedNodeId);
-    setSelectedNodeId(null);
-  }, [commit, selectedNodeId]);
+    const selected = selectionRef.current;
+    if (selected === null) return;
+    if (selected.kind === "node") {
+      const result = removeBenchNode(graphRef.current, selected.id);
+      commit(result.graph);
+      // The canvas removes attached edges with the node, so only the node itself
+      // is reported here; asking it to remove them again would throw.
+      handleRef.current?.removeNode(selected.id);
+    } else {
+      commit(removeBenchEdge(graphRef.current, selected.id));
+      handleRef.current?.removeEdge(selected.id);
+    }
+    rememberSelection(null);
+  }, [commit, rememberSelection]);
+
+  const handleCanvasKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      // A parameter field can hold focus inside the surface; deleting the node
+      // out from under someone editing a number would be its own bug.
+      const target = event.target;
+      if (target instanceof HTMLElement && target.matches("input, textarea, select, [contenteditable='true']")) {
+        return;
+      }
+      event.preventDefault();
+      removeSelected();
+    },
+    [removeSelected],
+  );
 
   const changeParam = useCallback(
     (paramId: string, raw: BenchParamValue) => {
-      if (selectedNodeId === null) return;
-      const next = setBenchParam(graphRef.current, selectedNodeId, paramId, raw);
+      const selected = selectionRef.current;
+      if (selected?.kind !== "node") return;
+      const next = setBenchParam(graphRef.current, selected.id, paramId, raw);
       commit(next);
-      const node = next.nodes.find((candidate) => candidate.id === selectedNodeId);
+      const node = next.nodes.find((candidate) => candidate.id === selected.id);
       if (node !== undefined) {
-        handleRef.current?.updateNode(toCanvasNode(node, statuses[selectedNodeId] ?? "idle"));
+        handleRef.current?.updateNode(toCanvasNode(node, statuses[selected.id] ?? "idle"));
       }
     },
-    [commit, selectedNodeId, statuses],
+    [commit, statuses],
   );
 
-  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNode =
+    selectedNodeId === null ? null : (graph.nodes.find((node) => node.id === selectedNodeId) ?? null);
+  const selectedEdge =
+    selection?.kind === "edge" ? (graph.edges.find((edge) => edge.id === selection.id) ?? null) : null;
   const selectedKind = selectedNode === null ? null : findNodeKind(selectedNode.kindId);
   const previewTarget = resolvePreviewTarget(
     graph.nodes.filter((node) => node.kindId === VIEWPORT_KIND_ID).map((node) => node.id),
@@ -275,11 +333,27 @@ export default function BenchClient() {
           <Text content={`${graph.nodes.length} elements, ${graph.edges.length} connections`} tone="muted" />
           {runSummary === null ? null : <Text content={runSummary} tone="muted" />}
           {notice === null ? null : <Text content={notice} tone="danger" />}
-          <span style={{ marginLeft: "auto" }}>
+          <span style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+            <Button label="Zoom out" onClick={() => handleRef.current?.zoomBy(1 / 1.2)} />
+            <Button label="Zoom in" onClick={() => handleRef.current?.zoomBy(1.2)} />
+            <Button label="100%" onClick={() => handleRef.current?.resetZoom()} />
+            <Button label="Fit" onClick={() => handleRef.current?.center()} />
+            {selection === null ? null : <Button label="Delete selected" onClick={removeSelected} />}
             <Link href="/lab/trials">Standalone trials &rarr;</Link>
           </span>
         </div>
-        <div ref={containerRef} style={{ flex: 1, minHeight: 0, border: "1px solid #e2e8f0", borderRadius: 8 }} />
+        <Text
+          content="Wheel: zoom · drag empty space: pan · drag an output port to an input port: connect · Delete: remove selection"
+          tone="muted"
+        />
+        <div
+          ref={containerRef}
+          aria-label="Editable dataflow canvas"
+          tabIndex={0}
+          onPointerDown={() => containerRef.current?.focus({ preventScroll: true })}
+          onKeyDown={handleCanvasKeyDown}
+          style={{ flex: 1, minHeight: 0, border: "1px solid #e2e8f0", borderRadius: 8, outlineOffset: 2 }}
+        />
       </div>
 
       <aside style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
@@ -290,7 +364,18 @@ export default function BenchClient() {
           />
         </div>
         <div style={{ overflowY: "auto", minHeight: 0 }}>
-          {selectedNode === null || selectedKind === null ? (
+          {selectedEdge !== null ? (
+            <Card ariaLabel="Selected connection">
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Text content="Connection selected" strong />
+                <Text
+                  content={`${selectedEdge.source.nodeId}:${selectedEdge.source.portId} → ${selectedEdge.target.nodeId}:${selectedEdge.target.portId}`}
+                  tone="muted"
+                />
+                <Button label="Delete connection" onClick={removeSelected} />
+              </div>
+            </Card>
+          ) : selectedNode === null || selectedKind === null ? (
             <Text content="Select an element to edit its parameters." tone="muted" />
           ) : (
             <Card ariaLabel={`${selectedKind.title} parameters`}>

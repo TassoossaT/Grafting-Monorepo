@@ -384,6 +384,17 @@ export interface CanvasHandle {
   readonly edgeCount: number;
   /** Fits and centers the current rendered content in the viewport. */
   center(): void;
+  /**
+   * Changes the current viewport scale by a multiplicative factor.
+   *
+   * Values above one zoom in and values below one zoom out. The result is
+   * clamped to the canvas zoom limits around the viewport center.
+   *
+   * @throws If `factor` is not a finite positive number.
+   */
+  zoomBy(factor: number): void;
+  /** Restores the viewport to 100% scale around its center. */
+  resetZoom(): void;
   /** Selects one rendered entity by its caller-owned identity, or clears the selection. */
   setSelection(selection: CanvasEntityReference | null): void;
   /**

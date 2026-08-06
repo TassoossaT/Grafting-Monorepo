@@ -22,7 +22,7 @@ import type {
   CanvasPortPosition,
 } from "./contracts.js";
 import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
-import { resolveCanvasInteractionPolicy } from "./interaction-policy.js";
+import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
 import { isReportableMovement } from "./movement-policy.js";
 
 class CanvasSocketModel extends ClassicPreset.Socket {
@@ -694,6 +694,19 @@ export function createCanvasAdapter(
     }
   };
 
+  const zoomAroundViewportCenter = async (scale: number): Promise<void> => {
+    programmaticZoom = true;
+    try {
+      await area.area.zoom(
+        clampCanvasZoomScale(scale, zoom),
+        container.clientWidth / 2,
+        container.clientHeight / 2,
+      );
+    } finally {
+      programmaticZoom = false;
+    }
+  };
+
   const attachNode = async (model: CanvasNodeModel): Promise<void> => {
     await editor.addNode(model);
     await area.translate(model.id, { x: model.source.x, y: model.source.y });
@@ -942,6 +955,15 @@ export function createCanvasAdapter(
     },
     center: () => {
       enqueue(center);
+    },
+    zoomBy: (factor: number) => {
+      if (!Number.isFinite(factor) || factor <= 0) {
+        throw new RangeError("Canvas zoom factor must be a finite positive number");
+      }
+      enqueue(() => zoomAroundViewportCenter(area.area.transform.k * factor));
+    },
+    resetZoom: () => {
+      enqueue(() => zoomAroundViewportCenter(1));
     },
     setSelection,
     addNode,

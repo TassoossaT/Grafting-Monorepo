@@ -20,6 +20,34 @@ Invoked when the button is activated.
 
 Optional semantic emphasis.
 
+### `interface ui.CanvasConnectionEndpoint`
+
+One endpoint of a connection a user is attempting to draw.
+
+### `property ui.CanvasConnectionEndpoint.dataType?: string`
+
+The port's opaque caller-owned value kind, when it declares one.
+
+### `property ui.CanvasConnectionEndpoint.nodeId: string`
+
+Stable identity of the endpoint node.
+
+### `property ui.CanvasConnectionEndpoint.portId: string`
+
+Identity of the port under the pointer.
+
+### `interface ui.CanvasConnectionRequest`
+
+A user-drawn connection awaiting a consumer's compatibility decision.
+
+### `property ui.CanvasConnectionRequest.source: CanvasConnectionEndpoint`
+
+Endpoint the connection was drawn from.
+
+### `property ui.CanvasConnectionRequest.target: CanvasConnectionEndpoint`
+
+Endpoint the connection was dropped on.
+
 ### `interface ui.CanvasEdge`
 
 Immutable presentation data for one directed canvas edge.
@@ -204,6 +232,43 @@ Stable identifier referenced by `CanvasEdge.view`.
 
 Projects product data and selection into a vendor-neutral edge presentation.
 
+### `interface ui.CanvasEditingOptions`
+
+Consumer-owned authoring policy.
+
+Omitting this whole option leaves the surface read-only to users; the
+programmatic mutation methods on CanvasHandle remain available
+regardless, since those are the caller acting on its own data.
+
+### `property ui.CanvasEditingOptions.connectable?: boolean`
+
+Whether users may draw new connections between ports.
+
+### `property ui.CanvasEditingOptions.onConnected?: (edge: CanvasEdge) => void`
+
+Receives the accepted edge once it has been added to the surface.
+
+### `property ui.CanvasEditingOptions.onConnectRequest?: (request: CanvasConnectionRequest) => CanvasConnectionDecision`
+
+Decides whether a user-drawn connection is allowed, and supplies the edge.
+
+The canvas has already verified direction, capacity, self-connection, and
+duplicate endpoints before calling this. Omitting it refuses every
+user-drawn connection, because only a product knows whether two value
+kinds are compatible.
+
+### `property ui.CanvasEditingOptions.onDisconnected?: (edgeId: string) => void`
+
+Receives the identity of a connection removed by a user.
+
+### `property ui.CanvasEditingOptions.onNodeMoved?: (nodeId: string, x: number, y: number) => void`
+
+Receives a node's new coordinates after a user finishes moving it.
+
+### `property ui.CanvasEditingOptions.removableEdges?: boolean`
+
+Whether users may remove an existing connection by activating it with the removal gesture.
+
 ### `interface ui.CanvasEntityReference`
 
 Stable reference to one caller-owned entity rendered on the canvas.
@@ -238,15 +303,23 @@ Grid mark or line thickness.
 
 ### `interface ui.CanvasHandle`
 
-Read-only controls returned to a canvas consumer.
+Controls returned to a canvas consumer.
 
 ### `property ui.CanvasHandle.edgeCount: number`
 
-Number of edges supplied when the canvas was created.
+Number of edges currently rendered.
 
 ### `property ui.CanvasHandle.nodeCount: number`
 
-Number of nodes supplied when the canvas was created.
+Number of nodes currently rendered.
+
+### `method ui.CanvasHandle.addEdge(edge: CanvasEdge): void`
+
+Adds one caller-owned edge between two rendered ports.
+
+### `method ui.CanvasHandle.addNode(node: CanvasNode): void`
+
+Adds one caller-owned node.
 
 ### `method ui.CanvasHandle.center(): void`
 
@@ -256,9 +329,35 @@ Fits and centers the current rendered content in the viewport.
 
 Releases the canvas resources owned by this adapter instance.
 
+### `method ui.CanvasHandle.removeEdge(edgeId: string): void`
+
+Removes one edge.
+
+### `method ui.CanvasHandle.removeNode(nodeId: string): void`
+
+Removes one node and every edge attached to it.
+
+### `method ui.CanvasHandle.resetZoom(): void`
+
+Restores the viewport to 100% scale around its center.
+
 ### `method ui.CanvasHandle.setSelection(selection: CanvasEntityReference | null): void`
 
 Selects one rendered entity by its caller-owned identity, or clears the selection.
+
+### `method ui.CanvasHandle.updateNode(node: CanvasNode): void`
+
+Replaces one rendered node's data, coordinates, and ports in place.
+
+The node keeps its identity and its connections, so this is how a product
+applies a changed parameter without rebuilding the surface.
+
+### `method ui.CanvasHandle.zoomBy(factor: number): void`
+
+Changes the current viewport scale by a multiplicative factor.
+
+Values above one zoom in and values below one zoom out. The result is
+clamped to the canvas zoom limits around the viewport center.
 
 ### `interface ui.CanvasInteractionOptions`
 
@@ -380,6 +479,10 @@ Composition and optional read-only callbacks for a canvas instance.
 
 Edge presenters available to this canvas instance.
 
+### `property ui.CanvasOptions.editing?: CanvasEditingOptions`
+
+Optional authoring policy; omission leaves the surface read-only to users.
+
 ### `property ui.CanvasOptions.interaction?: CanvasInteractionOptions`
 
 Optional replaceable interaction policy.
@@ -404,13 +507,31 @@ Optional replaceable fit-to-content behavior.
 
 Consumer-owned connection point exposed by a node view.
 
+### `property ui.CanvasPortDefinition.capacity?: number`
+
+Maximum number of connections this port accepts.
+
+Omit for no limit. A user-drawn connection that would exceed the limit is
+refused before the consumer is consulted.
+
+### `property ui.CanvasPortDefinition.dataType?: string`
+
+Opaque caller-owned value kind carried by this port.
+
+The canvas never interprets it; it is reported back to the consumer so a
+product can decide whether two ports are compatible.
+
+### `property ui.CanvasPortDefinition.direction?: CanvasPortDirection`
+
+Endpoint role used when a user draws a connection.
+
 ### `property ui.CanvasPortDefinition.id: string`
 
 Stable identifier referenced by edge terminals.
 
 ### `property ui.CanvasPortDefinition.magnet?: boolean`
 
-Whether the port may participate in future editable connections.
+Whether the port may participate in user-drawn connections.
 
 ### `property ui.CanvasPortDefinition.position: CanvasPortPosition`
 
@@ -427,6 +548,18 @@ Optional product-supplied appearance of a visible connection port.
 ### `property ui.CanvasPortPresentation.fill?: string`
 
 Fill color understood by the browser.
+
+### `property ui.CanvasPortPresentation.label?: string`
+
+Optional text rendered beside the port.
+
+### `property ui.CanvasPortPresentation.labelColor?: string`
+
+Color of the optional label; falls back to the port stroke.
+
+### `property ui.CanvasPortPresentation.labelFontSize?: number`
+
+Font size of the optional label in CSS pixels.
 
 ### `property ui.CanvasPortPresentation.opacity?: number`
 
@@ -1038,6 +1171,13 @@ Unmounts the component and releases the owned UI root.
 
 Re-renders the mounted component with complete next inputs.
 
+### `type ui.CanvasConnectionDecision = { accepted: false; reason?: string } | { accepted: true; edge: CanvasEdge }`
+
+A consumer's answer to a connection request.
+
+Accepting requires supplying the new edge, because identity, view selection,
+and edge data are caller-owned and the canvas cannot invent them.
+
 ### `type ui.CanvasEdgeConnector = { kind: "straight" } | { direction?: "horizontal" | "vertical"; kind: "smooth" } | { kind: "rounded"; radius?: number }`
 
 Connector geometry selected by a consumer without exposing renderer-specific names.
@@ -1045,6 +1185,13 @@ Connector geometry selected by a consumer without exposing renderer-specific nam
 ### `type ui.CanvasInteractionModifier = "control" | "meta" | "alt" | "shift"`
 
 Modifier used by the optional canvas zoom interaction.
+
+### `type ui.CanvasPortDirection = "in" | "out" | "both"`
+
+Role a port plays when a connection is drawn.
+
+`both` preserves the undirected behavior of ports that predate directional
+authoring: such a port may act as either endpoint.
 
 ### `type ui.CanvasPortPosition = "top" | "right" | "bottom" | "left" | { x: number; y: number }`
 

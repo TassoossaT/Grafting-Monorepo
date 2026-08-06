@@ -124,10 +124,10 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
         capacity: portCapacity(port, side),
         magnet: true,
         presentation: Object.freeze({
-          radius: 5,
+          radius: 7,
           fill: colorForDataType(port.dataType),
           stroke: "#ffffff",
-          strokeWidth: 1.5,
+          strokeWidth: 2,
           label: port.label,
           labelColor: "#475569",
           labelFontSize: 9,
