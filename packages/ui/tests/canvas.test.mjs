@@ -9,6 +9,7 @@ import {
   resolveCanvasZoomRange,
 } from "../dist/canvas/graph/interaction-policy.js";
 import { isReportableMovement } from "../dist/canvas/graph/movement-policy.js";
+import { resolveCanvasSocketPointerPolicy } from "../dist/canvas/graph/socket-policy.js";
 
 const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
   nodeId,
@@ -274,4 +275,47 @@ test("keeps caller-driven zoom inside a valid consumer-owned range", () => {
   assert.equal(clampCanvasZoomScale(1.25, zoom), 1.25);
   assert.equal(clampCanvasZoomScale(8, zoom), 2.4);
   assert.deepEqual(resolveCanvasZoomRange({ minScale: 2, maxScale: 1 }), { min: 2, max: 2 });
+});
+
+test("makes a magnet port a real pointer target, so a connection can be started", () => {
+  // The regression: the port was drawn with pointer-events none, inherited from
+  // when this canvas was read-only. The connection plugin resolves a socket by
+  // looking for its registered element in document.elementsFromPoint, and the
+  // port's wrapper has no width of its own -- so with the dot transparent to
+  // the pointer, nothing was hit there at all and the chain never included the
+  // element the plugin had registered. Dragging from a port did nothing.
+  const policy = resolveCanvasSocketPointerPolicy({
+    id: "heightmap",
+    position: "right",
+    magnet: true,
+    presentation: { radius: 5 },
+  });
+
+  assert.equal(policy.interactive, true);
+});
+
+test("keeps a decorative port transparent to the pointer", () => {
+  const policy = resolveCanvasSocketPointerPolicy({ id: "top", position: "top" });
+
+  // A read-only canvas's ports must not intercept clicks meant for the node.
+  assert.equal(policy.interactive, false);
+});
+
+test("gives a small port a target large enough to grab", () => {
+  const drawn = resolveCanvasSocketPointerPolicy({
+    id: "value",
+    position: "left",
+    magnet: true,
+    presentation: { radius: 5 },
+  });
+  const large = resolveCanvasSocketPointerPolicy({
+    id: "value",
+    position: "left",
+    magnet: true,
+    presentation: { radius: 20 },
+  });
+
+  assert.equal(drawn.hitSize, 18);
+  // A port drawn larger than the minimum keeps its own size.
+  assert.equal(large.hitSize, 40);
 });

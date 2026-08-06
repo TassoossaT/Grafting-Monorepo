@@ -24,6 +24,7 @@ import type {
 import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
 import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
 import { isReportableMovement } from "./movement-policy.js";
+import { resolveCanvasSocketPointerPolicy } from "./socket-policy.js";
 
 class CanvasSocketModel extends ClassicPreset.Socket {
   constructor(readonly definition: CanvasPortDefinition) {
@@ -206,36 +207,57 @@ function CanvasSocketView({ data }: { readonly data: ClassicPreset.Socket }) {
   const presentation = definition.presentation;
   const radius = presentation?.radius ?? 4;
   const diameter = radius * 2;
+  const { interactive, hitSize } = resolveCanvasSocketPointerPolicy(definition);
   return (
+    // The outer element is the pointer target, deliberately larger than the
+    // drawn dot: a connection is started by grabbing a port, and a ten-pixel
+    // circle is not a target anyone can hit reliably while the surface also
+    // pans and zooms. The dot itself stays transparent to the pointer so the
+    // whole target behaves as one.
     <span
       aria-hidden="true"
       style={{
-        display: "block",
-        width: diameter,
-        height: diameter,
-        boxSizing: "border-box",
+        position: "relative",
+        display: "grid",
+        placeItems: "center",
+        width: hitSize,
+        height: hitSize,
         borderRadius: "50%",
-        background: presentation?.fill ?? "transparent",
-        border: `${presentation?.strokeWidth ?? 0}px solid ${presentation?.stroke ?? "transparent"}`,
-        opacity: presentation?.opacity ?? 1,
-        pointerEvents: "none",
         transform: "translate(-50%, -50%)",
+        pointerEvents: interactive ? "auto" : "none",
+        cursor: interactive ? "crosshair" : undefined,
+        touchAction: interactive ? "none" : undefined,
       }}
     >
-      {presentation?.label === undefined ? null : (
-        <span
-          style={{
-            position: "absolute",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            color: presentation.labelColor ?? presentation.stroke ?? "currentColor",
-            fontSize: presentation.labelFontSize ?? 9,
-            ...socketLabelPosition(definition.position, radius + 4),
-          }}
-        >
-          {presentation.label}
-        </span>
-      )}
+      <span
+        style={{
+          position: "relative",
+          display: "block",
+          width: diameter,
+          height: diameter,
+          boxSizing: "border-box",
+          borderRadius: "50%",
+          background: presentation?.fill ?? "transparent",
+          border: `${presentation?.strokeWidth ?? 0}px solid ${presentation?.stroke ?? "transparent"}`,
+          opacity: presentation?.opacity ?? 1,
+          pointerEvents: "none",
+        }}
+      >
+        {presentation?.label === undefined ? null : (
+          <span
+            style={{
+              position: "absolute",
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+              color: presentation.labelColor ?? presentation.stroke ?? "currentColor",
+              fontSize: presentation.labelFontSize ?? 9,
+              ...socketLabelPosition(definition.position, radius + 4),
+            }}
+          >
+            {presentation.label}
+          </span>
+        )}
+      </span>
     </span>
   );
 }
