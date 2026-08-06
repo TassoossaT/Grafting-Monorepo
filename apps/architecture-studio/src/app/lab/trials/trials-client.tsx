@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, GridLayout, PreviewCard, StatusBadge, Text, type GridPanel } from "@grafting/ui";
 import "react-grid-layout/css/styles.css";
-import { readPreviewImage } from "../../lab-preview-storage.ts";
-import type { RegistrySection } from "../../research-registry.ts";
-import { DEMO_LINKS, SEMANTIC_STATUS, findRowByCandidate, inProgressRows, statusLabelFor } from "../../research-registry-ui.ts";
+import { readPreviewImage } from "../../../lab-preview-storage.ts";
+import type { RegistrySection } from "../../../research-registry.ts";
+import { DEMO_LINKS, SEMANTIC_STATUS, findRowByCandidate, inProgressRows, statusLabelFor } from "../../../research-registry-ui.ts";
 
 const TRIAL_TILE_WIDTH = 4;
 const TRIAL_TILE_HEIGHT = 9;
 const TRIAL_COLUMNS = 12;
 
-/** The actual testing laboratory: live trials you can go run, plus what's actively in development or review. Full history lives in /registry. */
-export default function LabClient({ sections }: { sections: readonly RegistrySection[] }) {
+/** Standalone trial pages, kept alongside the node bench at /lab. Full evaluation history lives in /registry. */
+export default function TrialsClient({ sections }: { sections: readonly RegistrySection[] }) {
   const trials = Object.entries(DEMO_LINKS).map(([candidate, href]) => ({
     href,
     candidate,
@@ -66,27 +66,12 @@ export default function LabClient({ sections }: { sections: readonly RegistrySec
   return (
     <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
-        <Text content="Lab" strong />
+        <Text content="Trials" strong />
         <Text
-          content="Where you go to actually run and try things, not just read about them. Full evaluation history lives in Registry."
+          content="Standalone trials, each with its own capture-and-compare workflow. The node bench lives at /lab; full evaluation history lives in Registry."
           tone="muted"
         />
       </div>
-
-      <section>
-        <Text content="Node bench" strong />
-        <div style={{ marginTop: 8 }}>
-          <Card ariaLabel="Node bench">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <Text
-                content="Wire elements together, give each one its own parameters, and compare configurations as a graph edit instead of a code edit."
-                tone="muted"
-              />
-              <Link href="/lab/bench">Open bench &rarr;</Link>
-            </div>
-          </Card>
-        </div>
-      </section>
 
       <section>
         <Text content="Active trials" strong />

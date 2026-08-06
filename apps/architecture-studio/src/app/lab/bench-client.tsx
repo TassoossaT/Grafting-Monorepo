@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Button, Card, Text, createCanvas, type CanvasHandle } from "@grafting/ui";
 import {
   BENCH_CANVAS_VIEWS,
@@ -10,7 +11,7 @@ import {
   toCanvasEdge,
   toCanvasNode,
   type BenchNodeStatus,
-} from "../../../bench/bench-composition.ts";
+} from "../../bench/bench-composition.ts";
 import {
   EMPTY_BENCH_GRAPH,
   addBenchEdge,
@@ -21,17 +22,17 @@ import {
   removeBenchNode,
   setBenchParam,
   type BenchGraph,
-} from "../../../bench/bench-graph.ts";
+} from "../../bench/bench-graph.ts";
 import {
   disposeEvaluation,
   requestEvaluation,
   type EvaluationPreview,
-} from "../../../bench/evaluation-client.ts";
-import { requestEvaluationOrder } from "../../../bench/evaluation-order-client.ts";
-import { buildEvaluationPlan } from "../../../bench/evaluation-plan.ts";
-import { resolveNodeStatuses, resolvePreviewTarget } from "../../../bench/evaluation-status.ts";
-import type { BenchParamValue } from "../../../bench/node-kind.ts";
-import { findNodeKind, nodeKindsByCategory } from "../../../bench/registry.ts";
+} from "../../bench/evaluation-client.ts";
+import { requestEvaluationOrder } from "../../bench/evaluation-order-client.ts";
+import { buildEvaluationPlan } from "../../bench/evaluation-plan.ts";
+import { resolveNodeStatuses, resolvePreviewTarget } from "../../bench/evaluation-status.ts";
+import type { BenchParamValue } from "../../bench/node-kind.ts";
+import { findNodeKind, nodeKindsByCategory } from "../../bench/registry.ts";
 import ParameterPanel from "./parameter-panel.tsx";
 import PreviewPanel from "./preview-panel.tsx";
 
@@ -276,6 +277,9 @@ export default function BenchClient() {
           <Text content={`${graph.nodes.length} elements, ${graph.edges.length} connections`} tone="muted" />
           {runSummary === null ? null : <Text content={runSummary} tone="muted" />}
           {notice === null ? null : <Text content={notice} tone="danger" />}
+          <span style={{ marginLeft: "auto" }}>
+            <Link href="/lab/trials">Standalone trials &rarr;</Link>
+          </span>
         </div>
         <div ref={containerRef} style={{ flex: 1, minHeight: 0, border: "1px solid #e2e8f0", borderRadius: 8 }} />
       </div>

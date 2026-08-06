@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Text, createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/ui";
-import type { EvaluationPreview } from "../../../bench/evaluation-client.ts";
+import type { EvaluationPreview } from "../../bench/evaluation-client.ts";
 
 /** Inputs for the 3D panel that renders one node's result. */
 export interface PreviewPanelProps {
