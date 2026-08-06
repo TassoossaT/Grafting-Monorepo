@@ -2,93 +2,49 @@
   "name": "discretize",
   "root": "libs/domains/procgen/discretize",
   "projectType": "library",
-  "tags": [
-    "scope:procgen",
-    "lang:rust",
-    "platform:web",
-    "type:lib"
-  ],
+  "tags": ["scope:procgen", "lang:rust", "platform:web", "type:lib"],
   "metadata": {
     "graphIr": {
       "id": "discretize",
       "kind": "lib",
-      "tags": [
-        "scope:procgen",
-        "lang:rust",
-        "platform:web",
-        "type:lib"
-      ]
+      "tags": ["scope:procgen", "lang:rust", "platform:web", "type:lib"]
     }
   },
   "targets": {
     "build": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "wasm-pack build --target web --out-dir pkg",
-        "cwd": "libs/domains/procgen/discretize"
-      },
+      "options": { "command": "wasm-pack build --target web --out-dir pkg", "cwd": "libs/domains/procgen/discretize" },
       "cache": true,
-      "inputs": [
-        "{projectRoot}/src/**/*",
-        "{projectRoot}/Cargo.toml",
-        "{projectRoot}/package.json",
-        "^default",
-        "{workspaceRoot}/Cargo.toml",
-        "{workspaceRoot}/Cargo.lock",
-        "{workspaceRoot}/rust-toolchain.toml"
-      ],
-      "outputs": [
-        "{projectRoot}/pkg"
-      ]
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{projectRoot}/package.json", "^default", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"],
+      "outputs": ["{projectRoot}/pkg"]
     },
     "check": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "cargo check -p grafting-procgen-discretize"
-      },
+      "options": { "command": "cargo check -p grafting-procgen-discretize" },
       "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "{workspaceRoot}/Cargo.toml",
-        "{workspaceRoot}/Cargo.lock",
-        "{workspaceRoot}/rust-toolchain.toml"
-      ]
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "cargo test -p grafting-procgen-discretize"
-      },
+      "options": { "command": "cargo test -p grafting-procgen-discretize" },
       "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "{workspaceRoot}/Cargo.toml",
-        "{workspaceRoot}/Cargo.lock",
-        "{workspaceRoot}/rust-toolchain.toml"
-      ]
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
     },
     "docs-generate": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-discretize"
-      },
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-discretize" },
       "cache": false
     },
     "docs-check": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-discretize --check"
-      },
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-discretize --check" },
       "cache": true,
       "inputs": [
-        "{projectRoot}/src/**/*",
-        "{projectRoot}/Cargo.toml",
-        "{workspaceRoot}/Cargo.toml",
+        "{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{workspaceRoot}/Cargo.toml",
         "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
         "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-discretize.md",
         "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
-        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
-        "sharedGlobals"
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs", "sharedGlobals"
       ]
     }
   }

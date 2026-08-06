@@ -2,123 +2,59 @@
   "name": "architecture-studio",
   "root": "apps/architecture-studio",
   "projectType": "application",
-  "tags": [
-    "scope:knowledge",
-    "lang:typescript",
-    "platform:web",
-    "type:app"
-  ],
-  "implicitDependencies": [
-    "generation-wasm",
-    "isekai-wasm-bridge",
-    "discretize",
-    "ui"
-  ],
+  "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
+  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "discretize", "ui"],
   "metadata": {
     "graphIr": {
       "id": "architecture-studio",
       "kind": "app",
-      "tags": [
-        "scope:knowledge",
-        "lang:typescript",
-        "platform:web"
-      ]
+      "tags": ["scope:knowledge", "lang:typescript", "platform:web"]
     }
   },
   "targets": {
     "check": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio check"
-      },
-      "dependsOn": [
-        "generation-wasm:build",
-        "isekai-wasm-bridge:build",
-        "discretize:build",
-        "ui:build"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio check" },
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
       "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "{workspaceRoot}/docs/generated/grafting.graph.json",
-        "{workspaceRoot}/pnpm-lock.yaml"
-      ]
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },
     "dev": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio dev"
-      },
-      "dependsOn": [
-        "generation-wasm:build",
-        "isekai-wasm-bridge:build",
-        "discretize:build",
-        "ui:watch"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:watch"],
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio build"
-      },
-      "dependsOn": [
-        "generation-wasm:build",
-        "isekai-wasm-bridge:build",
-        "discretize:build",
-        "ui:build"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
       "cache": true,
-      "inputs": [
-        "{projectRoot}/**/*",
-        "{workspaceRoot}/docs/generated/grafting.graph.json",
-        "{workspaceRoot}/pnpm-lock.yaml"
-      ],
-      "outputs": [
-        "{projectRoot}/.next"
-      ]
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/.next"]
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio test"
-      },
-      "dependsOn": [
-        "ui:build"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio test" },
+      "dependsOn": ["ui:build"],
       "cache": true,
-      "inputs": [
-        "{projectRoot}/src/**/*",
-        "{projectRoot}/test/**/*",
-        "{projectRoot}/package.json",
-        "{workspaceRoot}/pnpm-lock.yaml"
-      ]
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },
     "stories-generate": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node scripts/generate-stories.mjs"
-      },
-      "dependsOn": [
-        "ui:docs-mesh-export"
-      ],
+      "options": { "command": "node scripts/generate-stories.mjs" },
+      "dependsOn": ["ui:docs-mesh-export"],
       "cache": true,
       "inputs": [
         "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
         "{projectRoot}/scripts/generate-stories.mjs"
       ],
-      "outputs": [
-        "{projectRoot}/stories"
-      ]
+      "outputs": ["{projectRoot}/stories"]
     },
     "stories-check": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node scripts/generate-stories.mjs --check"
-      },
-      "dependsOn": [
-        "ui:docs-mesh-export"
-      ],
+      "options": { "command": "node scripts/generate-stories.mjs --check" },
+      "dependsOn": ["ui:docs-mesh-export"],
       "cache": true,
       "inputs": [
         "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json",
@@ -128,44 +64,26 @@
     },
     "storybook": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio storybook"
-      },
-      "dependsOn": [
-        "stories-generate"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio storybook" },
+      "dependsOn": ["stories-generate"],
       "cache": false
     },
     "build-storybook": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/architecture-studio build-storybook"
-      },
-      "dependsOn": [
-        "stories-generate"
-      ],
+      "options": { "command": "pnpm --filter @grafting/architecture-studio build-storybook" },
+      "dependsOn": ["stories-generate"],
       "cache": true,
-      "inputs": [
-        "{projectRoot}/.storybook/**/*",
-        "{projectRoot}/stories/**/*",
-        "{workspaceRoot}/pnpm-lock.yaml"
-      ],
-      "outputs": [
-        "{projectRoot}/storybook-static"
-      ]
+      "inputs": ["{projectRoot}/.storybook/**/*", "{projectRoot}/stories/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/storybook-static"]
     },
     "docs-generate": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node tools/scripts/generate-api-docs.mjs architecture-studio"
-      },
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs architecture-studio" },
       "cache": false
     },
     "docs-check": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node tools/scripts/generate-api-docs.mjs architecture-studio --check"
-      },
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs architecture-studio --check" },
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**/*",

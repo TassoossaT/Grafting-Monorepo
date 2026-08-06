@@ -80,6 +80,7 @@ the ADR or Graph IR contract.
 | [ADR-0017](ADR-0017-wasm-bindings-colocated-with-crate.md) | - (amends GRAFTING_MASTER_SOURCE.md 9.2) | Generated Wasm bindings are co-located with their Rust crate, not a separate `packages/` technical package | **Accepted (DEC-055)** |
 | [ADR-0018](ADR-0018-canvas-boundary-and-rete-adoption.md) | - (supersedes canvas clauses in ADR-0008/0013/0014/0016) | Vendor-neutral canvas in `@grafting/ui`, Rete.js adoption, X6 retirement | **Accepted (DEC-056)** |
 | [ADR-0019](ADR-0019-editable-canvas-and-node-bench.md) | — (amends ADR-0014/0016/0018) | Opt-in editable canvas with typed ports; `/lab` becomes a dataflow node bench | **Proposed (DEC-057)** |
+| [ADR-0020](ADR-0020-nx-rebuilds-wasm-bindings.md) | — (amends ADR-0017) | Nx `build` target rebuilds Wasm bindings; `postinstall` still generates them | **Proposed (DEC-058)** |
 
 Cross-reference: `CURRENT_PLANNING_STATE.md` lists GATE-001 through GATE-005 as
 priority gates; `docs/decisions/GATES.md` is the source of truth for each gate.
