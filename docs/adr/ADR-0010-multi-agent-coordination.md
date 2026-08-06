@@ -34,6 +34,9 @@ the CLI with lifecycle scripts disabled and a per-task, ownership-marked virtual
 store under the main checkout. Direct package-manager installation in a worktree
 remains forbidden. Agents use `task checkout`/`--restore` for temporary
 main-checkout runtime testing rather than manually moving branches or directories.
+The pnpm global virtual store is explicitly disabled at workspace level; ia-graft's
+per-task store is the single explicit sharing mechanism and cannot drift with pnpm
+default changes.
 
 A task may integrate its recorded base only through `task sync`. This operation
 is forward-only, refuses dirty state, preserves conflicts for explicit resolution
