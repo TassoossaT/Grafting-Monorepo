@@ -31,7 +31,23 @@ is granted here.
 
 ### `type architecture-studio.generation.worker.HeightmapWorkerResponse = { height: number; type: "result"; values: Float32Array; width: number } | { message: string; type: "error" }`
 
-### `variable architecture-studio.canvas-composition.ARCHITECTURE_CANVAS_COMPOSITION: ReadOnlyCanvasOptions`
+### `interface architecture-studio.quantization.worker.QuantizationWorkerRequest`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.height: number`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.levels: number`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.scale: number`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.seed: number`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.type: "generate"`
+
+### `property architecture-studio.quantization.worker.QuantizationWorkerRequest.width: number`
+
+### `type architecture-studio.quantization.worker.QuantizationWorkerResponse = { continuous: Float32Array; height: number; levels: number; quantized: Int32Array; type: "result"; width: number } | { message: string; type: "error" }`
+
+### `variable architecture-studio.canvas-composition.ARCHITECTURE_CANVAS_COMPOSITION: CanvasOptions`
 
 Complete product-owned composition consumed by the generic canvas package.
 
@@ -82,6 +98,14 @@ Narrows opaque edge data at the application composition boundary.
 ### `function architecture-studio.canvas-views.readArchitectureNodeViewData(value: unknown): ArchitectureNodeViewData`
 
 Narrows opaque canvas data at the application composition boundary.
+
+### `function architecture-studio.lab-preview-storage.readPreviewImage(candidate: string): string | undefined`
+
+Reads a previously captured preview image for `candidate`, if any. Safe to call during SSR (returns `undefined`).
+
+### `function architecture-studio.lab-preview-storage.writePreviewImage(candidate: string, dataUrl: string): void`
+
+Persists a captured preview image (a data URL) for `candidate`, so the /lab gallery can show it as a cover.
 
 ### `interface architecture-studio.layout-client.GraphLayoutEdge`
 
