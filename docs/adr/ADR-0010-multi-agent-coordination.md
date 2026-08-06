@@ -1,6 +1,6 @@
 # ADR-0010: provider-neutral task coordination
 
-- Status: **Accepted; replaced in place on 2026-08-03 and safety/stack lifecycle amended on 2026-08-04 with explicit owner approval.**
+- Status: **Accepted; replaced in place on 2026-08-03, safety/stack lifecycle amended on 2026-08-04, and dependency isolation/base sync, controlled materialization, plus verified remote pruning amended on 2026-08-05 with explicit owner approval.**
 - Decision owner: repository-owner
 - Records: DEC-031, DEC-048
 - Related: ADR-0015
@@ -25,9 +25,27 @@ non-authoritative.
 Lifecycle recovery is also canonical CLI behavior: an existing local/remote
 task branch is reattached when its directory is missing; a reserved orphan
 directory is diagnosed and safely repaired; `task doctor` exposes inconsistent
-Git/filesystem/PR state; and cleanup detaches confirmed shared dependency links
-before removing a worktree. Agents use `task checkout`/`--restore` for temporary
+Git/filesystem/PR, dependency-overlay and sync-conflict state; and cleanup detaches
+only confirmed dependency links or marked overlays before removing a worktree.
+After a confirmed merge it also prunes the remote task branch only when the live
+remote SHA equals the merged PR head and no open stacked PR uses that branch as
+its base. The deletion is protected by an exact force-with-lease; unverifiable
+dependency state preserves the remote ref. Force cleanup never deletes remotely.
+Workspace-aware overlays reuse the main installation but bind workspace packages
+to task-local sources. When a task's frozen lockfile contains an external package
+absent from that installation, `task deps --install` may materialize it through
+the CLI with lifecycle scripts disabled and a per-task, ownership-marked virtual
+store under the main checkout. Direct package-manager installation in a worktree
+remains forbidden. Agents use `task checkout`/`--restore` for temporary
 main-checkout runtime testing rather than manually moving branches or directories.
+The pnpm global virtual store is explicitly disabled at workspace level; ia-graft's
+per-task store is the single explicit sharing mechanism and cannot drift with pnpm
+default changes.
+
+A task may integrate its recorded base only through `task sync`. This operation
+is forward-only, refuses dirty state, preserves conflicts for explicit resolution
+and records enough local state for `--abort` to undo only its own unfinished
+merge. It does not change the human-only pull-request merge boundary.
 
 Review feedback resumes the same task/PR. A distinct task is either independent
 from the detected default branch or explicitly dependent through `--parent`,
@@ -54,8 +72,9 @@ a second coordination database.
 - dependent tasks name an explicit parent; independent tasks use the repository's detected default branch;
 - filesystem cleanup is limited to a validated `.worktrees/<TASK-ID>` target and never traverses shared dependency links;
 - no agent pushes or commits on `main`/`master`;
-- no history rewriting or agent-side PR merge;
+- no history rewriting or agent-side PR merge; recorded-base integration is allowed only through the forward-only `task sync` flow;
 - cleanup refuses dirty or unmerged work unless abandonment is explicit;
+- merged cleanup prunes only an exact, unused `task/*` remote ref; force cleanup preserves it;
 - CLI stdout is one JSON object; diagnostics belong in returned data or stderr;
 - changes to this control plane require explicit owner approval.
 

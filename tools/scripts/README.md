@@ -42,10 +42,11 @@ it.
   authored `implicitDependencies` entry exists, else `derived`/confidence
   0.95 from Nx's inference alone); the same declared/derived split applies
   to Nx-plugin-inferred targets absent from a project's own manifest (e.g.
-  `architecture-studio`'s `dev` target). `sourceRevision` is scoped
-  strictly to this extractor's own real inputs, never a whole-repo `git
-  status` scan (a repo-wide scan is self-referential once the generated
-  output itself becomes part of the working tree). Self-checks its own
+  `architecture-studio`'s `dev` target). `sourceRevision` is a deterministic
+  SHA-256 fingerprint of this extractor's exact input paths and bytes, never
+  Git history or a whole-repo `git status` scan. It therefore stays identical
+  in a local checkout, a shallow clone and GitHub's synthetic merge ref without
+  becoming self-referential. Self-checks its own
   output against both Graph IR validation layers (JS schema/semantics via
   `validate-graph-ir.mjs`, Rust structural invariants via
   `graph-ir-cli`, per DEC-051) before writing. `grafting.graph.spike.json`

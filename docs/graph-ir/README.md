@@ -48,10 +48,12 @@ Every node and edge records:
 - at least one repository-relative evidence locator and SHA-256 content hash;
 - an optional JSON Pointer or symbol within that evidence file.
 
-The root `sourceRevision` is either a committed Git revision
-(`git:<40-lowercase-hex>`) or a deterministic dirty-workspace fingerprint
-(`workspace:sha256:<64-lowercase-hex>`). Every record must use the same source
-revision as the graph document.
+The root `sourceRevision` contract accepts either a committed Git revision
+(`git:<40-lowercase-hex>`) or a deterministic workspace fingerprint
+(`workspace:sha256:<64-lowercase-hex>`). The Nx extractor uses the latter for
+all outputs, hashing its exact sorted input paths and content so shallow clones
+and synthetic merge refs produce the same revision. Every record must use the
+same source revision as the graph document.
 
 Declared relations have confidence `1`. Approximate relations must have
 confidence below `1` and can never be presented as normative truth.

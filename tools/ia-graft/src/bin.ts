@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCheckout, taskCleanup, taskCommit, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskTest } from "./task-commands.ts";
+import { taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -35,8 +35,9 @@ async function readStdin(): Promise<unknown> {
 }
 
 /**
- * `--input '<json>'` is the single-invocation-safe form (no pipe needed).
- * Stdin remains supported for interactive/scripted use.
+ * `--input '<json>'` is available when the caller can preserve JSON quoting.
+ * JSON stdin is the portable form for PowerShell and other shells that may
+ * strip quotes from a JSON value passed through an argument variable.
  */
 function readInputFlag(argv: string[]): unknown | undefined {
   const index = argv.indexOf("--input");
@@ -74,7 +75,14 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
     return { taskId, pr: pr === undefined ? undefined : Number(pr) };
   }
   if (subcommand === "commit") return { taskId, message: readValue(argv, "--message"), files: readValues(argv, "--file") };
-  if (subcommand === "test") return { taskId, command: readValue(argv, "--command") };
+  if (subcommand === "test") {
+    const commands = readValues(argv, "--command");
+    return commands.length <= 1
+      ? { taskId, command: commands[0], keepGoing: argv.includes("--keep-going") }
+      : { taskId, commands, keepGoing: argv.includes("--keep-going") };
+  }
+  if (subcommand === "sync") return { taskId, fetch: argv.includes("--fetch"), abort: argv.includes("--abort") };
+  if (subcommand === "deps") return { taskId, install: argv.includes("--install") };
   if (subcommand === "done") return { taskId, title: readValue(argv, "--title"), body: readValue(argv, "--body"), base: readValue(argv, "--base") };
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
   if (subcommand === "status") return { taskId };
@@ -84,7 +92,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
 }
 function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exit(result.ok ? 0 : 1);
+  process.exit(result.ok && result.passed !== false ? 0 : 1);
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -109,6 +117,8 @@ async function main(argv: string[]): Promise<void> {
       if (subcommand === "resume") printAndExit(await taskResume(root, input as Parameters<typeof taskResume>[1]));
       if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
       if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
+      if (subcommand === "sync") printAndExit(await taskSync(root, input as Parameters<typeof taskSync>[1]));
+      if (subcommand === "deps") printAndExit(await taskDependencies(root, input as Parameters<typeof taskDependencies>[1]));
       if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
       if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
       if (subcommand === "status") printAndExit(await taskStatus(root, input as Parameters<typeof taskStatus>[1]));
@@ -120,7 +130,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|resume|commit|test|done|cleanup|status|doctor|checkout|graph|sweep> (flags, --input JSON, or JSON stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep> (flags, --input JSON, or JSON stdin)`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

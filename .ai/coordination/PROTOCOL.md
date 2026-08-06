@@ -41,22 +41,44 @@ ADR-per-task.
   It refuses to resume an ID whose PR is already closed or merged; subsequent work
   gets a new ID from the current default branch instead of extending stale/squashed history.
   `--parent` creates a dependent branch from the parent's current local HEAD and records
-  the parent branch as the child's PR base; omit it for independent work. It links every `node_modules` in
-  the tree (root and each nested package, pnpm-workspace style) from the
-  main checkout into it — a plain `git worktree add` never brings gitignored
-  dependency trees, which breaks `tsc`/most tests otherwise. Only reports
-  success once linked (or once confirmed the main checkout itself has no
-  `node_modules` to give).
-  Shared dependency junctions are read-only operationally: never run `pnpm/npm/yarn/bun install/add/remove/update` inside a task worktree; install only in the main checkout. `task test` rejects these commands.
+  the parent branch as the child's PR base; omit it for independent work. It prepares
+  a task-owned overlay for every installed `node_modules`: external dependencies link
+  to the main checkout's pnpm store, while workspace dependencies link to the matching
+  package inside the task worktree. This prevents tests from silently loading a stale
+  workspace package from the main checkout. It reports the overlay/link counts, or
+  reports that the main checkout has no installation to reuse. Never run
+  `pnpm/npm/yarn/bun install/add/remove/update` directly inside a task worktree.
+  Normal installation remains a main-checkout operation. The sole task-scoped
+  exception is `task deps --install`, whose CLI-owned pnpm invocation requires
+  the task's frozen lockfile, disables lifecycle scripts, keeps its marked virtual
+  store under the main checkout and leaves only managed links in the worktree.
+  `task test` continues to reject dependency-mutating commands.
 - `task resume --id <TASK-ID>` / `task resume --pr <number>` — explicitly resumes
   an existing task. PR-based resume derives the canonical task ID, head and base from
   GitHub and refuses closed/merged PRs, so requested changes stay on the same PR.
+- `task sync --id <TASK-ID> [--fetch]` — integrates only the task's recorded base.
+  The worktree must be clean. The default uses the local base; `--fetch` refreshes a
+  non-task base from `origin` first. Integration is forward-only (fast-forward when
+  possible, otherwise a merge commit). Conflicts are returned as compact structured
+  state and remain for normal file editing plus `task commit`. `task sync --abort`
+  aborts only an unfinished merge marked as started by this command. Raw Git merge,
+  rebase, and history rewriting remain forbidden.
+- `task deps --id <TASK-ID> [--install]` — without `--install`, rebuilds the
+  marked workspace-aware overlays from the main checkout's existing installation
+  without running a package manager. With `--install`, materializes the task's
+  frozen pnpm lockfile into an ia-graft-owned virtual store under the main checkout,
+  without lifecycle scripts, so task-only external dependencies are available.
+  Resume preserves a valid materialized overlay; cleanup removes its ownership-marked
+  cache. Unmanaged dependency directories or caches are refused.
 - `task commit --id <TASK-ID> --message <msg> [--file <path>]...` — stages
-  (all changed files, or a given subset) and commits inside that worktree.
-- `task test --id <TASK-ID> --command <cmd>` — runs a test/check command
-  inside the worktree and returns a compact pass/fail summary (node:test's
-  TAP summary + failures, or the last 40 lines for any other runner)
-  instead of the raw transcript — spend tokens on the result, not the log.
+  (all changed files, or a given subset) and commits inside that worktree. During a
+  sync conflict it refuses unresolved paths and conflict markers.
+- `task test --id <TASK-ID> --command <cmd> [--command <cmd>...] [--keep-going]`
+  — runs up to 12 checks inside the worktree. One command preserves the original
+  result shape; a batch returns per-command results and stops at the first failure
+  unless `--keep-going` is explicit. TAP summaries are preserved, other output uses
+  the last 40 lines, and every line plus single/batch summaries have hard size caps.
+  A failed check returns `passed: false` and a non-zero CLI exit code.
 - `task done --id <TASK-ID> --title <title> --body <body> [--base <branch>]` —
   pushes the branch and opens a pull request via `gh pr create`. If `gh` is
   missing or unauthenticated, it still pushes and returns
@@ -66,8 +88,9 @@ ADR-per-task.
   The recorded base is validated, and the first push sets the task branch's own upstream.
 - `task status --id <TASK-ID>` / `task doctor --id <TASK-ID>` — derives local and
   remote branch existence, registered worktree, on-disk directory, orphan/mismatch,
-  dirty state, HEAD, parent/base and PR from Git/GitHub. `doctor` adds health and a
-  recommended recovery action; no committed task/status file is written.
+  dirty state, HEAD, parent/base, PR, dependency mode, merge-in-progress state and
+  conflict paths from Git/GitHub. `doctor` adds health and the exact recovery action;
+  no committed task/status file is written.
 - `task checkout --id <TASK-ID>` / `task checkout --restore [--force]` — temporarily moves a
   clean task branch from its linked worktree into a clean main checkout for local
   runtime testing, then restores the prior branch and recreates the linked worktree.
@@ -78,12 +101,17 @@ ADR-per-task.
 - `task cleanup --id <TASK-ID> [--force]` — after the PR has merged, removes the
   worktree directory (retrying briefly on a transient Windows file-lock) and
   prunes Git metadata. Cleanup validates the exact reserved target and removes only
-  confirmed shared `node_modules` links/junctions before recursive deletion, with a
+  confirmed dependency junctions or ia-graft-marked overlays before recursive deletion, with a
   long-path Windows fallback that cannot traverse those links. Without `--force`,
-  dirty or unmerged tasks are refused. Force means explicit abandonment and is the
-  supported way to discard an unmerged task. The remote branch is left intact deliberately.
+  dirty or unmerged tasks are refused. A merged cleanup also deletes the remote
+  `task/*` branch only when its live SHA matches the merged PR head and no open PR
+  still uses it as a stacked base; deletion uses an exact force-with-lease. If the
+  dependent-PR check is unavailable, the remote branch is preserved and the JSON
+  result explains why. Force means explicit abandonment and is the supported way
+  to discard an unmerged task; it never deletes the remote branch.
 - `task sweep` — checks every worktree under `.worktrees/` against `gh` and
-  cleans up (worktree + local branch) whichever ones already have a merged
+  cleans up (worktree + local branch + safely verified unused remote branch)
+  whichever ones already have a merged
   PR. `task new` already calls this itself before creating anything, so
   nobody needs to invoke it directly — it's exposed as its own subcommand
   only for manual/debugging use. Anything `gh` can't confirm as merged is
@@ -119,7 +147,7 @@ ADR-per-task.
    `gh`, when available — otherwise it still pushes and returns a manual
    compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
    `ia-graft task cleanup --id <TASK-ID>` removes the
-   worktree.
+   worktree and its verified unused local/remote task branches.
 
 Isolation between agents comes entirely from separate worktrees/branches. If
 two agents need to touch the same area, that surfaces as a normal Git merge
@@ -151,21 +179,25 @@ screen.
 ## Git write policy
 
 Agents commit forward on their own task branch as they work — that is the
-whole point of the worktree-per-task model. Agents never rewrite or discard
-history and never merge.
+whole point of the worktree-per-task model. Agents never rewrite committed
+history, merge a pull request, or invoke raw Git merge commands.
 
 Agents may:
 
 - inspect Git state and history;
 - commit on their own task branch (created by `ia-graft task new`);
+- integrate only that task's recorded base through `ia-graft task sync`, which
+  may create a forward merge commit and may abort only its own unfinished merge;
 - fetch and use `git pull --ff-only` when otherwise authorized;
 - push their own task branch;
 - prepare or open a pull request (`ia-graft task done` does this via `gh`).
 
 Agents never push to `main` or `master`, never force/bulk/mirror/tag/delete
-remote refs, never run `merge`/`rebase`/`cherry-pick`/`revert`/history-editing
-commands, and never merge a pull request (`gh pr merge`). The repository
-owner remains the only party who may merge a task's pull request.
+remote refs, never invoke raw `merge`/`rebase`/`cherry-pick`/`revert` or other
+history-editing commands, and never merge a pull request (`gh pr merge`). The
+repository owner remains the only party who may merge a task's pull request.
+The provider-neutral guard continues to reject raw merge commands; the narrow
+base-integration exception exists only inside the validated `task sync` flow.
 
 The provider-neutral task guard enforces this policy for every provider that
 adopts its runtime adapter. Canonical instructions govern providers without

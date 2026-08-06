@@ -1,6 +1,6 @@
 # ADR-0015: agent Git write policy
 
-- Status: **Accepted; superseded in place on 2026-08-03 and safe checkout/stack lifecycle amended on 2026-08-04 with explicit owner approval.**
+- Status: **Accepted; superseded in place on 2026-08-03, safe checkout/stack lifecycle amended on 2026-08-04, and controlled base sync amended on 2026-08-05 with explicit owner approval.**
 - Decision owner: repository-owner
 - Record: DEC-053
 - Amends: ADR-0010
@@ -16,12 +16,19 @@ Agents must never:
 
 - commit or push on `main`/`master`;
 - force, mirror, bulk, tag or delete remote refs;
-- merge, rebase, cherry-pick, revert, amend, reset/discard history or merge a PR;
+- invoke raw merge, rebase, cherry-pick, revert, amend, reset/discard history or merge a PR;
 - commit from the shared main checkout;
 - clean another task or abandon dirty/unmerged work without explicit force.
 
 A human remains the only party that merges a PR. Agent commits are proposals
-made durable for review; merge is the human approval boundary.
+made durable for review; PR merge is the human approval boundary.
+
+`ia-graft task sync` is the sole exception for integrating a task's recorded
+base. It may fast-forward the task branch or create a forward merge commit,
+but it refuses dirty state, never rewrites commits, never targets another
+source, and records unfinished conflict state. Its `--abort` form is allowed
+only while that recorded CLI merge is unfinished. Direct `git merge` and all
+other history-integration commands remain forbidden to agents.
 
 `ia-graft task checkout` may temporarily place a clean task branch in a clean
 main checkout solely for local runtime testing. The CLI records the previous
