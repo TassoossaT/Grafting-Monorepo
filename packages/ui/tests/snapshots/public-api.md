@@ -555,7 +555,7 @@ export declare function GridLayout(props: GridLayoutProps): ReactElement;
 
 import type { CanvasEdge, CanvasHandle, CanvasNode, CanvasOptions } from "./graph/contracts.js";
 import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "./heightfield/contracts.js";
-export type { CanvasEdge, CanvasEdgeConnector, CanvasEdgeLabelPresentation, CanvasEdgeLinePresentation, CanvasEdgeMarkerPresentation, CanvasEdgePresentation, CanvasEdgeRenderContext, CanvasEdgeTerminal, CanvasEdgeViewDefinition, CanvasEntityReference, CanvasGridPresentation, CanvasHandle, CanvasInteractionModifier, CanvasInteractionOptions, CanvasNode, CanvasNodeRenderContext, CanvasNodeRenderHandle, CanvasNodeViewDefinition, CanvasOptions, CanvasPortDefinition, CanvasPortPosition, CanvasPortPresentation, CanvasSurfacePresentation, CanvasViewportOptions, CanvasZoomOptions, } from "./graph/contracts.js";
+export type { CanvasConnectionDecision, CanvasConnectionEndpoint, CanvasConnectionRequest, CanvasEdge, CanvasEdgeConnector, CanvasEdgeLabelPresentation, CanvasEdgeLinePresentation, CanvasEdgeMarkerPresentation, CanvasEdgePresentation, CanvasEdgeRenderContext, CanvasEdgeTerminal, CanvasEdgeViewDefinition, CanvasEditingOptions, CanvasEntityReference, CanvasGridPresentation, CanvasHandle, CanvasInteractionModifier, CanvasInteractionOptions, CanvasNode, CanvasNodeRenderContext, CanvasNodeRenderHandle, CanvasNodeViewDefinition, CanvasOptions, CanvasPortDefinition, CanvasPortDirection, CanvasPortPosition, CanvasPortPresentation, CanvasSurfacePresentation, CanvasViewportOptions, CanvasZoomOptions, } from "./graph/contracts.js";
 export type { HeightfieldCanvas, HeightfieldCanvasOptions, } from "./heightfield/contracts.js";
 /**
  * Creates a graph canvas from caller-owned presentation data.

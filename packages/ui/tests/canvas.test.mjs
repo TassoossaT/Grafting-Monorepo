@@ -74,6 +74,92 @@ test("rejects renderer view identifiers that were not registered", () => {
   );
 });
 
+test("refuses an edge that leaves a node through an input-only port", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [
+      { id: "value", position: "left", direction: "in" },
+      { id: "result", position: "right", direction: "out" },
+    ],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [
+          { ...node("a"), view: view.id },
+          { ...node("b"), view: view.id },
+        ],
+        [
+          {
+            id: "backwards",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "value" },
+            target: { nodeId: "b", portId: "value" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    /leaves a through input-only port value/,
+  );
+});
+
+test("refuses an edge that enters a node through an output-only port", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [
+      { id: "value", position: "left", direction: "in" },
+      { id: "result", position: "right", direction: "out" },
+    ],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [
+          { ...node("a"), view: view.id },
+          { ...node("b"), view: view.id },
+        ],
+        [
+          {
+            id: "backwards",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "result" },
+            target: { nodeId: "b", portId: "result" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    /enters b through output-only port result/,
+  );
+});
+
+test("still accepts an edge through a port that declares no direction", () => {
+  const view = {
+    ...NODE_VIEW,
+    ports: [{ id: "any", position: "right" }],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [{ ...node("a"), view: view.id }],
+        [
+          {
+            id: "undirected",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "any" },
+            target: { nodeId: "a", portId: "any" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    // Reaching the renderer proves the undirected port was accepted on both
+    // sides; a real surface is out of scope for a DOM-free contract test.
+    /container|replaceChildren|style/,
+  );
+});
+
 test("keeps canvas interactions neutral until a consumer opts in", () => {
   assert.deepEqual(resolveCanvasInteractionPolicy(undefined), {
     panning: false,

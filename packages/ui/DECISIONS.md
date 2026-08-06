@@ -228,6 +228,41 @@ the Card would create two competing node geometries and is prohibited.
 Full data tables should not be embedded in compact graph nodes. A node receives
 a bounded summary; detailed tables belong in an inspector or adjacent panel.
 
+## Editable canvas decision
+
+**2026-08-05 (DEC-057, `docs/adr/ADR-0019-editable-canvas-and-node-bench.md`,
+Proposed).** ADR-0018 adopted Rete while deliberately withholding editing until
+"a concrete authored workflow" existed. Architecture Studio's node bench is that
+workflow, so the canvas gained an authoring capability.
+
+Two implementation choices are worth recording, because both were reversible and
+the reasoning is not obvious from the code:
+
+Ports are now instantiated **eagerly**. Previously a socket existed only if some
+edge already referenced it, which is sufficient for a read-only projection and
+useless for authoring — a user cannot drag from a port that does not exist yet.
+The cost is real (a node view with many declared ports renders every one of
+them), and it is accepted because the alternative, materializing a socket on
+pointer hover, would make the node's own geometry depend on interaction state.
+
+A port that names no `direction` stays undirected and is instantiated on both
+sides. This is what keeps `apps/architecture-studio`'s existing cardinal ports
+working unchanged; making `direction` required would have been a breaking change
+to a contract whose only current consumer does not need directions at all.
+
+Type compatibility is deliberately **not** in this package. A port carries an
+opaque `dataType` string that the canvas reports back and never reads. Deciding
+that a `heightmap` may feed a `mask` is domain knowledge, and encoding it here
+would be exactly the hardcoded product policy DEC-052 prohibits. The same logic
+applies to port colors: this package renders the color it is given.
+
+The public API baseline records the canvas contracts only as a re-export list —
+the generator expands declarations from `src/index.ts` but not the shapes behind
+a module re-export, so `CanvasHandle`'s new mutation members are not captured in
+`tests/snapshots/public-api.md`. That is a generator limitation, not an
+intentional exclusion; behavioral coverage lives in
+`tests/canvas.test.mjs` meanwhile.
+
 ## Logic boundary
 UI-local display state such as a selected row, visible column, or current page
 may remain in the React layer. Authoritative graph validation, semantic filters,

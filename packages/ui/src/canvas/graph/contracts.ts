@@ -6,10 +6,24 @@ export type CanvasPortPosition =
   | "left"
   | { readonly x: number; readonly y: number };
 
+/**
+ * Role a port plays when a connection is drawn.
+ *
+ * `both` preserves the undirected behavior of ports that predate directional
+ * authoring: such a port may act as either endpoint.
+ */
+export type CanvasPortDirection = "in" | "out" | "both";
+
 /** Optional product-supplied appearance of a visible connection port. */
 export interface CanvasPortPresentation {
   /** Radius in CSS pixels. */
   readonly radius?: number;
+  /** Optional text rendered beside the port. */
+  readonly label?: string;
+  /** Color of the optional label; falls back to the port stroke. */
+  readonly labelColor?: string;
+  /** Font size of the optional label in CSS pixels. */
+  readonly labelFontSize?: number;
   /** Fill color understood by the browser. */
   readonly fill?: string;
   /** Stroke color understood by the browser. */
@@ -26,7 +40,26 @@ export interface CanvasPortDefinition {
   readonly id: string;
   /** Boundary side or custom position of the port. */
   readonly position: CanvasPortPosition;
-  /** Whether the port may participate in future editable connections. */
+  /**
+   * Endpoint role used when a user draws a connection.
+   * @default "both"
+   */
+  readonly direction?: CanvasPortDirection;
+  /**
+   * Opaque caller-owned value kind carried by this port.
+   *
+   * The canvas never interprets it; it is reported back to the consumer so a
+   * product can decide whether two ports are compatible.
+   */
+  readonly dataType?: string;
+  /**
+   * Maximum number of connections this port accepts.
+   *
+   * Omit for no limit. A user-drawn connection that would exceed the limit is
+   * refused before the consumer is consulted.
+   */
+  readonly capacity?: number;
+  /** Whether the port may participate in user-drawn connections. */
   readonly magnet?: boolean;
   /** Optional visible treatment; omitted ports remain technically available. */
   readonly presentation?: CanvasPortPresentation;
@@ -268,6 +301,63 @@ export interface CanvasViewportOptions {
   readonly maxScale?: number;
 }
 
+/** One endpoint of a connection a user is attempting to draw. */
+export interface CanvasConnectionEndpoint {
+  /** Stable identity of the endpoint node. */
+  readonly nodeId: string;
+  /** Identity of the port under the pointer. */
+  readonly portId: string;
+  /** The port's opaque caller-owned value kind, when it declares one. */
+  readonly dataType?: string;
+}
+
+/** A user-drawn connection awaiting a consumer's compatibility decision. */
+export interface CanvasConnectionRequest {
+  /** Endpoint the connection was drawn from. */
+  readonly source: CanvasConnectionEndpoint;
+  /** Endpoint the connection was dropped on. */
+  readonly target: CanvasConnectionEndpoint;
+}
+
+/**
+ * A consumer's answer to a connection request.
+ *
+ * Accepting requires supplying the new edge, because identity, view selection,
+ * and edge data are caller-owned and the canvas cannot invent them.
+ */
+export type CanvasConnectionDecision =
+  | { readonly accepted: false; readonly reason?: string }
+  | { readonly accepted: true; readonly edge: CanvasEdge };
+
+/**
+ * Consumer-owned authoring policy.
+ *
+ * Omitting this whole option leaves the surface read-only to users; the
+ * programmatic mutation methods on {@link CanvasHandle} remain available
+ * regardless, since those are the caller acting on its own data.
+ */
+export interface CanvasEditingOptions {
+  /** Whether users may draw new connections between ports. */
+  readonly connectable?: boolean;
+  /** Whether users may remove an existing connection by activating it with the removal gesture. */
+  readonly removableEdges?: boolean;
+  /**
+   * Decides whether a user-drawn connection is allowed, and supplies the edge.
+   *
+   * The canvas has already verified direction, capacity, self-connection, and
+   * duplicate endpoints before calling this. Omitting it refuses every
+   * user-drawn connection, because only a product knows whether two value
+   * kinds are compatible.
+   */
+  readonly onConnectRequest?: (request: CanvasConnectionRequest) => CanvasConnectionDecision;
+  /** Receives the accepted edge once it has been added to the surface. */
+  readonly onConnected?: (edge: CanvasEdge) => void;
+  /** Receives the identity of a connection removed by a user. */
+  readonly onDisconnected?: (edgeId: string) => void;
+  /** Receives a node's new coordinates after a user finishes moving it. */
+  readonly onNodeMoved?: (nodeId: string, x: number, y: number) => void;
+}
+
 /** Composition and optional read-only callbacks for a canvas instance. */
 export interface CanvasOptions {
   /** Node view implementations available to this canvas instance. */
@@ -280,20 +370,56 @@ export interface CanvasOptions {
   readonly interaction?: CanvasInteractionOptions;
   /** Optional replaceable fit-to-content behavior. */
   readonly viewport?: CanvasViewportOptions;
+  /** Optional authoring policy; omission leaves the surface read-only to users. */
+  readonly editing?: CanvasEditingOptions;
   /** Receives an immutable entity reference when a rendered entity is activated. */
   readonly onActivate?: (entity: CanvasEntityReference) => void;
 }
 
-/** Read-only controls returned to a canvas consumer. */
+/** Controls returned to a canvas consumer. */
 export interface CanvasHandle {
-  /** Number of nodes supplied when the canvas was created. */
+  /** Number of nodes currently rendered. */
   readonly nodeCount: number;
-  /** Number of edges supplied when the canvas was created. */
+  /** Number of edges currently rendered. */
   readonly edgeCount: number;
   /** Fits and centers the current rendered content in the viewport. */
   center(): void;
   /** Selects one rendered entity by its caller-owned identity, or clears the selection. */
   setSelection(selection: CanvasEntityReference | null): void;
+  /**
+   * Adds one caller-owned node.
+   *
+   * @throws If the identifier is already rendered or the view is not registered.
+   */
+  addNode(node: CanvasNode): void;
+  /**
+   * Replaces one rendered node's data, coordinates, and ports in place.
+   *
+   * The node keeps its identity and its connections, so this is how a product
+   * applies a changed parameter without rebuilding the surface.
+   *
+   * @throws If the identifier is not rendered or the view is not registered.
+   */
+  updateNode(node: CanvasNode): void;
+  /**
+   * Removes one node and every edge attached to it.
+   *
+   * @throws If the identifier is not rendered.
+   */
+  removeNode(nodeId: string): void;
+  /**
+   * Adds one caller-owned edge between two rendered ports.
+   *
+   * @throws If the identifier is already rendered, an endpoint is missing, or
+   * the view is not registered.
+   */
+  addEdge(edge: CanvasEdge): void;
+  /**
+   * Removes one edge.
+   *
+   * @throws If the identifier is not rendered.
+   */
+  removeEdge(edgeId: string): void;
   /** Releases the canvas resources owned by this adapter instance. */
   dispose(): void;
 }

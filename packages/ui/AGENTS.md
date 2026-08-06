@@ -48,6 +48,18 @@ engine; Three.js is limited to 3D/heightfield rendering. Significant graph
 structure, validation, algorithms, queries, diffs, ordering, and layout remain
 Rust-owned, while applications own concrete presentation and interaction policy
 (DEC-051, DEC-052, DEC-056).
+
+The canvas separates what the *consumer* may do from what the *user* may do
+(DEC-057, `docs/adr/ADR-0019-editable-canvas-and-node-bench.md`). `CanvasHandle`
+always exposes programmatic mutation — the caller acting on its own nodes and
+edges. Anything a user does with the pointer stays neutral until a consumer
+supplies `CanvasOptions.editing`, exactly as `CanvasInteractionOptions` already
+works. Ports carry a `direction`, an opaque caller-owned `dataType`, and a
+`capacity`. The canvas MUST enforce only rules it can verify without domain
+knowledge — direction, capacity, self-connection, duplicate endpoints. Whether
+two `dataType` values are compatible is a product question answered by
+`onConnectRequest`; this package MUST NOT interpret a `dataType` or assign it a
+color, since that is the consuming application's visual identity (DEC-052).
 DOM-mountable components expose only Grafting-owned update/dispose handles.
 ReactDOM roots and renderer types remain private to this package.
 
