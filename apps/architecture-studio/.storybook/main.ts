@@ -7,7 +7,9 @@ import type { StorybookConfig } from "@storybook/react-vite";
 // scripts/generate-stories.mjs (in this app) is the one Storybook-aware
 // consumer that turns that JSON into real story files under stories/.
 const config: StorybookConfig = {
-  stories: ["../stories/**/*.stories.tsx"],
+  // `stories/` is generated and wiped on every regeneration; `stories-authored/`
+  // is hand-written and must never be placed there or it would be deleted.
+  stories: ["../stories/**/*.stories.tsx", "../stories-authored/**/*.stories.tsx"],
   framework: {
     name: "@storybook/react-vite",
     options: {},
