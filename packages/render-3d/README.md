@@ -1,0 +1,138 @@
+# `@grafting/render-3d`
+
+A generic 3D rendering engine. It draws things and has no idea what they mean.
+
+## Why it is not organized by what things are
+
+There is deliberately no `token`, no `wall`, no `spell`, and no `water` in this
+package — not as a type, not as a module, not as a special case.
+
+Those are product concepts, and the reason they do not belong here is that they
+do not partition the work cleanly. A marker sliding across a surface and a
+volume of water rippling in place are the same problem to a renderer and
+completely different problems to a game; a wall and a stationary marker are the
+same problem again. Modelling by product concept would create a boundary in the
+one place the renderer has no information to draw it, and every product that
+did not share those concepts would have to work around them.
+
+So the package is organized by **capability** instead. Each of the following is
+usable on its own, and each is unaware of the others' product meaning:
+
+| Module | Capability |
+| ------ | ---------- |
+| `clock/` | Simulated time, separate from real time. Pause, rate, and explicit stepping. |
+| `scene/` | Items placed in space, grouped into caller-named layers, every change carrying its origin. |
+| `visual/` | The registry of externally-supplied drawable kinds. |
+| `animation/` | Time-driven writers into the scene, defined as a function of progress. |
+| `invalidation/` | What changed since the last frame, and therefore what must be redrawn. |
+| `engine/` | Scheduling, invalidation, and lifetime. Imports no renderer. |
+| `backend/` | The seam a renderer plugs into, plus the private Three.js adapter behind it. The only place `three` is imported. |
+
+`backend/contract.ts` is package-private and never exported. It exists so the
+engine can own *when* things are drawn without knowing *how*, which is what
+keeps the renderer genuinely replaceable rather than nominally so. A test
+enforces the confinement, because `api-check` inspects the public API and is
+blind to a vendor import buried in an internal module.
+
+## The extension point
+
+The engine draws only what a registered visual kind describes. Registering one
+is the entire integration surface:
+
+```ts
+const registry = createVisualRegistry();
+
+registry.register({
+  kind: "wall-segment",
+  describe: (params) => ({
+    geometry: { shape: "box", width: params.length, height: 3, depth: 0.2 },
+    material: { surface: "lit", color: 0x8a8a8a },
+  }),
+});
+```
+
+Descriptors are plain data. That is what lets a completely separate package
+define its own concepts and hand a populated registry over, without either
+package importing the other and without the renderer leaking into either one.
+
+A material's `surface` decides how a geometry is drawn, and `points` pairs with
+any of them:
+
+```ts
+// The same heightfield, as a solid surface or as a cloud of its vertices.
+{ geometry: { shape: "heightfield", field }, material: { surface: "lit" } }
+{ geometry: { shape: "heightfield", field }, material: { surface: "points", size: 0.4 } }
+```
+
+Points convey silhouette and volume while being structurally unable to carry
+surface detail, which makes them the primitive for anything that must be shown
+to exist without being shown in full — partially-known space, a scan, a preview
+of unresolved data.
+Two kinds that happen to draw identically share a descriptor and cost nothing
+extra; two kinds that mean entirely different things to a product are still
+just two entries.
+
+## Time, pausing, and turns
+
+Nothing time-driven reads a real clock. Animation is defined as a function of
+simulated progress, so a track cannot tell whether its progress arrived as
+sixty real-time frames or as one deliberate step:
+
+```ts
+// Real-time product.
+engine.start();
+
+// Turn-based product: never plays, resolves a turn as one step.
+const engine = createEngine({ autoplay: false });
+engine.clock.advance(1000);
+```
+
+Both produce identical results. This is verified by a test, not by convention.
+
+## Views, not canvases
+
+An engine owns exactly one graphics context. A view is a camera onto the scene,
+presented into its own surface.
+
+Browsers cap live WebGL contexts — for many it is as low as eight, per the
+[three.js manual](https://threejs.org/manual/en/multiple-scenes.html) and
+[WebGL Fundamentals](https://webglfundamentals.org/webgl/lessons/webgl-multiple-views.html)
+— and enforce the cap by silently dropping the oldest, so a design that spends
+a context per rendered element does not fail with an error, it fails by having
+things vanish.
+Views share the engine's single context, so how many can be open at once is
+bounded by memory. `view.resize(width, height)` is a first-class operation
+rather than a reason to tear anything down.
+
+**Open question, stated rather than hidden.** Each view is presented by drawing
+into a shared buffer and copying its region into the view's own 2D canvas. The
+three.js manual describes this approach and recommends the other one — a single
+canvas fixed behind the page, scissored per element region — because the copy
+costs pixel bandwidth on every frame. This package chose the copy for layout
+freedom: each view is an ordinary DOM element rather than a region of one
+full-viewport canvas. That tradeoff has never been measured here.
+`src/backend/contract.ts` is where a second strategy plugs in without touching
+the engine, the scene, or any consumer. See
+`docs/research/render-3d-engine-libraries.md`.
+
+## What is redrawn
+
+Layers are the unit of invalidation as well as of ordering. A view redraws only
+when it changed itself, or when a layer it actually draws changed. Moving one
+item cannot force a view that does not show that item's layer to redraw.
+
+`engine.frame(realNow)` returns a `FrameReport` with views drawn, views
+skipped, and visuals rebuilt — so this can be asserted on rather than assumed.
+
+## Testing
+
+`tests/` covers the parts that hold no graphics state: the clock, the scene,
+invalidation, animation, and the registry. These run in plain Node with no
+browser.
+
+The engine itself is not covered there, on purpose. What matters about it —
+that a view is genuinely skipped, that contexts are not being leaked — is
+observable only in a real browser, and the repository has a headless
+Chrome/CDP harness for exactly that kind of assertion. A unit test with a
+faked context would assert on intent rather than on behaviour, which is
+precisely the failure mode recorded in `apps/vtt/notes/0001`.

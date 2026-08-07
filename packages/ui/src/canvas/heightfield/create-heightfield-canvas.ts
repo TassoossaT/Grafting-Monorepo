@@ -1,118 +1,108 @@
-import * as THREE from "three";
+import {
+  createEngine,
+  createVisualRegistry,
+  heightfieldVisual,
+  type HeightfieldParams,
+  type RenderEngine,
+} from "@grafting/render-3d";
 import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "./contracts.js";
 import { resolveHeightfieldOptions } from "./resolve-options.js";
 
-function buildTerrainMesh(
-  width: number,
-  height: number,
-  values: Float32Array,
-  heightScale: number,
-  planeSize: number,
-  meshColor: number,
-): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(planeSize, planeSize, width - 1, height - 1);
-  geometry.rotateX(-Math.PI / 2);
-
-  const position = geometry.getAttribute("position");
-  if (!(position instanceof THREE.BufferAttribute)) {
-    throw new Error("Heightfield geometry did not expose a writable position buffer");
-  }
-  for (let i = 0; i < values.length; i += 1) {
-    const value = values[i];
-    if (value === undefined) break;
-    position.setY(i, value * heightScale);
-  }
-  geometry.computeVertexNormals();
-
-  const material = new THREE.MeshStandardMaterial({
-    color: meshColor,
-    flatShading: true,
-    side: THREE.DoubleSide,
-  });
-  return new THREE.Mesh(geometry, material);
-}
-
+/**
+ * Thin translation from this package's canvas contract onto
+ * `@grafting/render-3d`.
+ *
+ * The rendering itself moved out: a 3D engine is a capability in its own right,
+ * with its own performance obligations, and keeping it inside a component
+ * library made both harder to reason about. What stays here is the older
+ * single-surface shape some consumers still use, expressed as a Grafting-owned
+ * translation rather than as a second implementation (DEC-049).
+ *
+ * This shim keeps one engine — and therefore one graphics context — per
+ * surface, which is the behaviour it already had. That is the limitation
+ * recorded in `apps/vtt/notes/0001` section 3, and it is removed by consumers
+ * moving to one shared engine with many views, not by changing this function.
+ */
 export function createHeightfieldCanvasAdapter(
   container: HTMLElement,
   options: HeightfieldCanvasOptions,
 ): HeightfieldCanvas {
   const resolved = resolveHeightfieldOptions(options);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(resolved.backgroundColor);
+  const registry = createVisualRegistry([heightfieldVisual as never]);
+  const engine: RenderEngine = createEngine({
+    registry,
+    lights: [
+      { light: "ambient", intensity: 0.6 },
+      { light: "directional", intensity: 1.2, direction: { x: 8, y: 14, z: 6 } },
+    ],
+  });
 
-  const camera = new THREE.PerspectiveCamera(
-    45,
-    container.clientWidth / Math.max(container.clientHeight, 1),
-    0.1,
-    100,
+  const paramsFor = (values: Float32Array): HeightfieldParams => ({
+    width: resolved.width,
+    depth: resolved.height,
+    values,
+    size: resolved.planeSize,
+    elevationScale: resolved.heightScale,
+    color: resolved.meshColor,
+  });
+
+  engine.scene.defineLayer({ id: "terrain", order: 0 }, "engine");
+  engine.scene.put(
+    {
+      id: "terrain",
+      layer: "terrain",
+      visual: { kind: heightfieldVisual.kind, params: paramsFor(resolved.values) },
+    },
+    "engine",
   );
-  camera.position.set(0, 16, 20);
-  camera.lookAt(0, 0, 0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  container.replaceChildren(renderer.domElement);
+  const view = engine.createView({
+    target: container,
+    background: resolved.backgroundColor,
+    camera: {
+      projection: "perspective",
+      fov: 45,
+      position: { x: 0, y: 16, z: 20 },
+      target: { x: 0, y: 0, z: 0 },
+      far: 100,
+    },
+  });
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-  sun.position.set(8, 14, 6);
-  scene.add(sun);
-
-  let terrain = buildTerrainMesh(
-    resolved.width,
-    resolved.height,
-    resolved.values,
-    resolved.heightScale,
-    resolved.planeSize,
-    resolved.meshColor,
-  );
-  scene.add(terrain);
-
-  let disposed = false;
-  let animationFrame = 0;
-  const animate = () => {
-    if (disposed) return;
-    if (resolved.autoRotate) terrain.rotation.y += 0.0025;
-    renderer.render(scene, camera);
-    animationFrame = requestAnimationFrame(animate);
-  };
-  animate();
+  if (resolved.autoRotate) {
+    // Expressed as a looping track rather than as a per-frame rotation so it
+    // stops when the engine's clock is paused, like everything else.
+    engine.animator.play({
+      id: "auto-rotate",
+      durationMs: 24_000,
+      loop: true,
+      apply(progress, scene) {
+        scene.setTransform(
+          "terrain",
+          { rotation: { x: 0, y: progress * Math.PI * 2, z: 0 } },
+          "engine",
+        );
+      },
+    });
+  }
 
   const handleResize = () => {
-    camera.aspect = container.clientWidth / Math.max(container.clientHeight, 1);
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    view.resize(container.clientWidth, container.clientHeight);
   };
   window.addEventListener("resize", handleResize);
 
+  engine.start();
+
   return {
     update(values: Float32Array) {
-      scene.remove(terrain);
-      terrain.geometry.dispose();
-      (terrain.material as THREE.Material).dispose();
-      terrain = buildTerrainMesh(
-        resolved.width,
-        resolved.height,
-        values,
-        resolved.heightScale,
-        resolved.planeSize,
-        resolved.meshColor,
-      );
-      scene.add(terrain);
+      engine.scene.setVisualParams("terrain", paramsFor(values), "local");
     },
     captureImage() {
-      renderer.render(scene, camera);
-      return renderer.domElement.toDataURL("image/png");
+      return view.capture("image/png");
     },
     dispose() {
-      disposed = true;
-      cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", handleResize);
-      terrain.geometry.dispose();
-      (terrain.material as THREE.Material).dispose();
-      renderer.dispose();
+      engine.dispose();
       container.replaceChildren();
     },
   };
