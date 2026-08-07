@@ -61,6 +61,12 @@ content hashes. Intermediate values MUST NOT cross to the main thread — only
 the previews the surface asked for. Adding a value kind means teaching
 `preview.ts` how to flatten it, not shipping the raw grid to React.
 
+`stories/` is generated: `scripts/generate-stories.mjs` deletes the whole
+directory before rewriting it from the UI doc mesh. Hand-written stories go in
+`stories-authored/`, which the generator never touches and `.storybook/main.ts`
+includes separately. Never place an authored story under `stories/` — it will be
+deleted on the next regeneration without warning.
+
 ADR-0016's VTT generation-test surface may render Rust/Wasm output through
 `@grafting/ui`'s heightfield element. VTT map/domain logic
 must not leak into the Graph IR explorer's `presentation.ts`,
