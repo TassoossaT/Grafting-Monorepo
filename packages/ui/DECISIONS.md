@@ -4,11 +4,14 @@ This file preserves the conclusions that led to the initial `@grafting/ui`
 boundary. Architectural authority remains in the master source and accepted
 ADRs; this is package-local implementation guidance.
 
-> **Current canvas decision (DEC-056, 2026-08-04):** `@grafting/ui` owns the
-> active vendor-neutral canvas API. Rete.js is the private graph engine and
-> Three.js is the private 3D/heightfield renderer. `@grafting/x6-canvas` is
-> retired. Historical X6 allocation notes below explain earlier decisions but
-> are no longer current package guidance.
+> **Current canvas decision (DEC-056, 2026-08-04; amended by DEC-059,
+> 2026-08-07):** `@grafting/ui` owns the active vendor-neutral canvas API and
+> Rete.js remains its private graph engine. The 3D renderer no longer lives
+> here: it moved to `@grafting/render-3d`, which owns Three.js privately, and
+> `createHeightfieldCanvas` is now a thin translation onto that package rather
+> than an implementation (ADR-0021). `@grafting/x6-canvas` is retired.
+> Historical X6 allocation notes below explain earlier decisions but are no
+> longer current package guidance.
 
 ## Current choice
 
