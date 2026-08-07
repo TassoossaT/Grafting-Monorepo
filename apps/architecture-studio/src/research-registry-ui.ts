@@ -14,6 +14,7 @@ import type { RegistryRow, RegistrySection, StatusId } from "./research-registry
 export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "noise-rs": "/lab/heightmap",
   "terrain-quantization": "/lab/terrain-quantization",
+  "irregular-quad-grid": "/lab/irregular-grid",
 };
 
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {

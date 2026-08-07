@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@grafting/isekai-wasm": "workspace:*",
+    "@grafting/render-3d": "workspace:*",
     "@grafting/ui": "workspace:*",
     "@grafting/procgen-generation-wasm": "workspace:*",
     "@grafting/procgen-discretize": "workspace:*",

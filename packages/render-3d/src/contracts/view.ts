@@ -29,7 +29,9 @@ export type CameraDescriptor =
 
 /** What a pointer hit. */
 export interface PickResult {
+  /** Which item was hit. */
   readonly itemId: string;
+  /** The layer that item belongs to. */
   readonly layer: LayerId;
   /** World-space intersection point. */
   readonly point: Vec3;
@@ -41,9 +43,11 @@ export interface PickResult {
 
 /** Everything needed to open a view onto the scene. */
 export interface ViewOptions {
+  /** Caller-chosen identity. Generated when omitted. */
   readonly id?: ViewId;
   /** Element that receives the view's output surface. Its contents are replaced. */
   readonly target: HTMLElement;
+  /** How this view projects the world. */
   readonly camera: CameraDescriptor;
   /**
    * Which layers this view draws, in the scene's order.
@@ -57,6 +61,7 @@ export interface ViewOptions {
   readonly background?: number;
   /** Initial size in CSS pixels. Measured from `target` when omitted. */
   readonly width?: number;
+  /** Initial height in CSS pixels. Measured from `target` when omitted. */
   readonly height?: number;
 }
 
@@ -69,9 +74,11 @@ export interface ViewOptions {
  * on live contexts, which is silently enforced by dropping the oldest.
  */
 export interface View {
+  /** This view's identity, as supplied or generated. */
   readonly id: ViewId;
-  /** Current size in CSS pixels. */
+  /** Current width in CSS pixels. */
   readonly width: number;
+  /** Current height in CSS pixels. */
   readonly height: number;
 
   /** Repoints the camera. Marks only this view dirty. */
