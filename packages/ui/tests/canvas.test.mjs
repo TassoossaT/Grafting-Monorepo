@@ -10,6 +10,7 @@ import {
 } from "../dist/canvas/graph/interaction-policy.js";
 import { isReportableMovement } from "../dist/canvas/graph/movement-policy.js";
 import { resolveCanvasSocketPointerPolicy } from "../dist/canvas/graph/socket-policy.js";
+import { resizeFromDrag } from "../dist/canvas/graph/resize-policy.js";
 import { findMagneticTarget } from "../dist/canvas/graph/magnetic-policy.js";
 
 const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
@@ -382,4 +383,42 @@ test("tells an input and an output apart when they share an identity", () => {
     // of scope for a DOM-free contract test.
     /container|replaceChildren|style/,
   );
+});
+
+test("keeps a node's proportions while its corner is dragged", () => {
+  const next = resizeFromDrag({ width: 200, height: 100 }, { dx: 100, dy: 0 }, 1);
+
+  assert.deepEqual(next, { width: 300, height: 150 });
+});
+
+test("follows the axis the pointer committed to", () => {
+  // Dragging mostly downward should read as height, even though both change.
+  const next = resizeFromDrag({ width: 200, height: 100 }, { dx: 5, dy: 50 }, 1);
+  assert.deepEqual(next, { width: 300, height: 150 });
+});
+
+test("shrinks a node when the corner is pulled inward", () => {
+  const next = resizeFromDrag({ width: 200, height: 100 }, { dx: -100, dy: 0 }, 1);
+  assert.deepEqual(next, { width: 100, height: 50 });
+});
+
+test("divides pointer movement by the canvas scale", () => {
+  // Zoomed to half, a hundred screen pixels are two hundred canvas pixels.
+  const next = resizeFromDrag({ width: 200, height: 100 }, { dx: 100, dy: 0 }, 0.5);
+  assert.deepEqual(next, { width: 400, height: 200 });
+});
+
+test("refuses to shrink a node past being usable", () => {
+  const next = resizeFromDrag({ width: 200, height: 100 }, { dx: -1000, dy: 0 }, 1);
+
+  assert.equal(next.height, 48);
+  // The shape survives even at the floor.
+  assert.equal(next.width / next.height, 2);
+});
+
+test("treats a missing or nonsensical scale as unzoomed", () => {
+  assert.deepEqual(resizeFromDrag({ width: 100, height: 100 }, { dx: 50, dy: 0 }, 0), {
+    width: 150,
+    height: 150,
+  });
 });

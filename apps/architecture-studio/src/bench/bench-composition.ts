@@ -336,7 +336,8 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
   id: BENCH_CANVAS_VIEWS.node.viewport,
   defaultWidth: 208,
   defaultHeight: 176,
-  mount: (host: HTMLElement, context: CanvasNodeRenderContext) => {
+  mount: (host: HTMLElement, initial: CanvasNodeRenderContext) => {
+    let context = initial;
     const data = context.node.data as { readonly title: string; readonly preview: { width: number; height: number; values: Float32Array } | null };
     const { root, body } = shell(data.title);
     const surface = document.createElement("div");
@@ -348,6 +349,8 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
 
     let canvas: HeightfieldCanvas | null = null;
     let shape = "";
+    let latest: { width: number; height: number; values: Float32Array } | null = null;
+    let box = "";
     const apply = (next: CanvasNodeRenderContext) => {
       const value = (next.node.data as { readonly preview: { width: number; height: number; values: Float32Array } | null }).preview;
       if (value === null) {
@@ -358,11 +361,14 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
         return;
       }
       empty.textContent = "";
+      latest = value;
       const nextShape = `${value.width}x${value.height}`;
-      // The heightfield fixes its grid when created, so only a changed shape
-      // justifies rebuilding it; anything else would restart the camera on
-      // every parameter tweak.
-      if (canvas === null || shape !== nextShape) {
+      // The heightfield fixes both its grid and its pixel size when created, so
+      // a changed grid *or* a resized node justifies rebuilding it; anything
+      // else would restart the camera on every parameter tweak.
+      const nextBox = `${Math.round(surface.clientWidth)}x${Math.round(surface.clientHeight)}`;
+      if (canvas === null || shape !== nextShape || box !== nextBox) {
+        box = nextBox;
         canvas?.dispose();
         canvas = createHeightfieldCanvas(surface, { width: value.width, height: value.height, values: value.values });
         shape = nextShape;
@@ -372,9 +378,27 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
     };
     apply(context);
 
+    // Growing the node has to grow the render, or enlarging a viewport to see
+    // it better would leave the same small picture in a bigger frame. Rebuilds
+    // are coalesced to one per frame so a drag does not thrash the renderer.
+    let scheduled = 0;
+    const observer = new ResizeObserver(() => {
+      if (latest === null || scheduled !== 0) return;
+      scheduled = requestAnimationFrame(() => {
+        scheduled = 0;
+        apply(context);
+      });
+    });
+    observer.observe(surface);
+
     return Object.freeze({
-      update: apply,
+      update: (next: CanvasNodeRenderContext) => {
+        context = next;
+        apply(next);
+      },
       dispose: () => {
+        observer.disconnect();
+        if (scheduled !== 0) cancelAnimationFrame(scheduled);
         canvas?.dispose();
         canvas = null;
         root.remove();

@@ -367,6 +367,15 @@ export interface CanvasEditingOptions {
   readonly onDisconnected?: (edgeId: string) => void;
   /** Receives a node's new coordinates after a user finishes moving it. */
   readonly onNodeMoved?: (nodeId: string, x: number, y: number) => void;
+  /**
+   * Whether users may resize a node by dragging its corner.
+   *
+   * The node keeps the proportions its view was designed for; the drag only
+   * chooses how large it is.
+   */
+  readonly resizableNodes?: boolean;
+  /** Receives a node's new size while a user drags its corner. */
+  readonly onNodeResized?: (nodeId: string, width: number, height: number) => void;
 }
 
 /** Composition and optional read-only callbacks for a canvas instance. */

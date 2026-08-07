@@ -23,6 +23,7 @@ import {
   BENCH_VIEWPORT_NODE_VIEW,
   benchNodeSize,
   colorForDataType,
+  type BenchNodeExtras,
   presentBenchEdge,
   toCanvasEdge,
   toCanvasNode,
@@ -127,6 +128,8 @@ export default function BenchClient() {
     [commit],
   );
 
+  const nodeExtrasRef = useRef<(nodeId: string) => BenchNodeExtras>(() => ({}));
+
   const nodeExtras = useCallback(
     (nodeId: string) => {
       const driven = graphRef.current.edges
@@ -191,6 +194,13 @@ export default function BenchClient() {
           if (selected?.kind === "edge" && selected.id === edgeId) rememberSelection(null);
         },
         onNodeMoved: (nodeId, x, y) => commit(moveBenchNode(graphRef.current, nodeId, { x, y })),
+        resizableNodes: true,
+        onNodeResized: (nodeId, width, height) => {
+          const next = resizeBenchNode(graphRef.current, nodeId, { width, height });
+          commit(next);
+          const node = next.nodes.find((candidate) => candidate.id === nodeId);
+          if (node !== undefined) handleRef.current?.updateNode(toCanvasNode(node, nodeExtrasRef.current(nodeId)));
+        },
       },
       onActivate: rememberSelection,
     });
@@ -362,6 +372,10 @@ export default function BenchClient() {
     },
     [commit, statuses],
   );
+
+  useEffect(() => {
+    nodeExtrasRef.current = nodeExtras;
+  }, [nodeExtras]);
 
   const selectedNode =
     selectedNodeId === null ? null : (graph.nodes.find((node) => node.id === selectedNodeId) ?? null);
