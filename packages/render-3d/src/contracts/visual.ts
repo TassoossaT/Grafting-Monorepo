@@ -46,7 +46,21 @@ export type GeometryDescriptor =
   | { readonly shape: "sphere"; readonly radius: number; readonly segments?: number }
   | { readonly shape: "cylinder"; readonly radius: number; readonly height: number; readonly segments?: number }
   | { readonly shape: "heightfield"; readonly field: HeightfieldData }
-  | { readonly shape: "mesh"; readonly data: MeshData };
+  | { readonly shape: "mesh"; readonly data: MeshData }
+  | {
+      /**
+       * Explicit line segments: consecutive pairs of `xyz` triples, two
+       * vertices per segment.
+       *
+       * Distinct from pairing another geometry with a `line` material, which
+       * derives edges from that geometry's *triangles* and therefore shows
+       * every internal split. When the edges are the subject — a grid, a
+       * route, a boundary, a debug overlay — the caller already knows which
+       * ones exist and does not want them rediscovered from triangulation.
+       */
+      readonly shape: "segments";
+      readonly positions: Float32Array;
+    };
 
 /** An image source a material may sample. DOM types only; no renderer texture type is exposed. */
 export type TextureSource = ImageBitmap | HTMLImageElement | HTMLCanvasElement;
@@ -104,7 +118,9 @@ export type MaterialDescriptor =
 
 /** A complete description of how to draw one item. */
 export interface VisualDescriptor {
+  /** The shape drawn. */
   readonly geometry: GeometryDescriptor;
+  /** How that shape is drawn. */
   readonly material: MaterialDescriptor;
   /**
    * Whether the item should be considered for pointer picking. Defaults to
@@ -140,7 +156,9 @@ export interface VisualDefinition<TParams = unknown> {
 
 /** An item's reference to a registered kind, plus that kind's parameters. */
 export interface VisualRef<TParams = unknown> {
+  /** Name of the registered kind that describes this item. */
   readonly kind: string;
+  /** Parameters handed to that kind's `describe`. */
   readonly params: TParams;
 }
 

@@ -16,6 +16,7 @@ export type Easing = (t: number) => number;
 
 /** One time-driven change to the scene. */
 export interface AnimationTrack {
+  /** Caller-chosen identity. Playing the same id again replaces the running track. */
   readonly id: TrackId;
   /** Simulated milliseconds from start to completion. Must be greater than zero. */
   readonly durationMs: number;
@@ -36,6 +37,7 @@ export interface AnimationTrack {
 
 /** A track in flight. */
 export interface RunningTrack {
+  /** Which track this reports on. */
   readonly id: TrackId;
   /** Simulated milliseconds elapsed within the track. */
   readonly elapsedMs: number;

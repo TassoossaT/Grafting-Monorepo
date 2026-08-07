@@ -33,6 +33,7 @@ export type ChangeOrigin =
  * they mean is the caller's job; the engine ships no layer names of its own.
  */
 export interface LayerDefinition {
+  /** Caller-chosen name, unique within a scene. */
   readonly id: LayerId;
   /** Draw order. Lower draws first, so higher values appear on top. */
   readonly order: number;
@@ -46,6 +47,7 @@ export interface LayerDefinition {
 
 /** One drawable thing placed in the world. */
 export interface SceneItem<TParams = unknown> {
+  /** Caller-chosen identity, stable across updates to this item. */
   readonly id: ItemId;
   /** The registered visual kind and its parameters. */
   readonly visual: VisualRef<TParams>;

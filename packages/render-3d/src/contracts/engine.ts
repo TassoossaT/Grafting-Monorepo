@@ -24,6 +24,7 @@ export type LightDescriptor =
 
 /** What the engine did during one frame. Reported for measurement, not for control flow. */
 export interface FrameReport {
+  /** The clock reading this frame ran at. */
   readonly tick: ClockTick;
   /** Views actually redrawn this frame. */
   readonly viewsDrawn: number;

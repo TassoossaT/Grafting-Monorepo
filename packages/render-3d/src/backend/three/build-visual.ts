@@ -36,8 +36,11 @@ export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
     dispose() {
       geometry.dispose();
       // A wireframe wraps the source geometry in a second one, which the line
-      // above does not reach.
-      if (object instanceof THREE.LineSegments) object.geometry.dispose();
+      // above does not reach. Segments reuse the source geometry directly, so
+      // there is no wrapper and nothing extra to release.
+      if (object instanceof THREE.LineSegments && object.geometry !== geometry) {
+        object.geometry.dispose();
+      }
       material.dispose();
       disposeTexture(material);
     },
@@ -51,10 +54,15 @@ function buildObject(
 ): THREE.Object3D {
   switch (descriptor.material.surface) {
     case "line":
-      return new THREE.LineSegments(
-        new THREE.WireframeGeometry(geometry),
-        material as THREE.LineBasicMaterial,
-      );
+      // Segments are already the edges the caller wants; deriving a wireframe
+      // from them would produce nothing useful. Any other geometry has its
+      // edges extracted from its triangles.
+      return descriptor.geometry.shape === "segments"
+        ? new THREE.LineSegments(geometry, material as THREE.LineBasicMaterial)
+        : new THREE.LineSegments(
+            new THREE.WireframeGeometry(geometry),
+            material as THREE.LineBasicMaterial,
+          );
     case "points":
       // Points draw the geometry's vertices directly, so any geometry works
       // and nothing has to be converted or duplicated first.
@@ -96,6 +104,11 @@ function buildGeometry(descriptor: GeometryDescriptor): THREE.BufferGeometry {
     }
     case "heightfield":
       return buildHeightfieldGeometry(descriptor.field);
+    case "segments": {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(descriptor.positions, 3));
+      return geometry;
+    }
     case "mesh": {
       const geometry = new THREE.BufferGeometry();
       const { data } = descriptor;
