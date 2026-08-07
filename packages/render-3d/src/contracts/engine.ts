@@ -31,6 +31,14 @@ export interface FrameReport {
   readonly viewsSkipped: number;
   /** Item visuals rebuilt this frame. */
   readonly visualsRebuilt: number;
+  /**
+   * Whether the graphics context was unusable during this frame.
+   *
+   * Nothing is drawn while this is true. The engine rebuilds everything from
+   * the scene once the context comes back, so a caller normally only needs
+   * this to surface the condition to the user.
+   */
+  readonly contextLost: boolean;
 }
 
 /** Called after every frame the engine runs. */
@@ -66,6 +74,8 @@ export interface RenderEngine {
   readonly animator: Animator;
   /** Visual kinds available to this engine's items. */
   readonly registry: VisualRegistry;
+  /** Whether the graphics context is currently lost. Nothing draws while true. */
+  readonly contextLost: boolean;
 
   /** Replaces the lighting. Marks every lit view dirty. */
   setLights(lights: readonly LightDescriptor[]): void;

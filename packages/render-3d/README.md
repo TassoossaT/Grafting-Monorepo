@@ -25,8 +25,14 @@ usable on its own, and each is unaware of the others' product meaning:
 | `visual/` | The registry of externally-supplied drawable kinds. |
 | `animation/` | Time-driven writers into the scene, defined as a function of progress. |
 | `invalidation/` | What changed since the last frame, and therefore what must be redrawn. |
-| `engine/` | One graphics context, one world, many views. |
-| `backend/three/` | The private renderer adapter. The only place `three` is imported. |
+| `engine/` | Scheduling, invalidation, and lifetime. Imports no renderer. |
+| `backend/` | The seam a renderer plugs into, plus the private Three.js adapter behind it. The only place `three` is imported. |
+
+`backend/contract.ts` is package-private and never exported. It exists so the
+engine can own *when* things are drawn without knowing *how*, which is what
+keeps the renderer genuinely replaceable rather than nominally so. A test
+enforces the confinement, because `api-check` inspects the public API and is
+blind to a vendor import buried in an internal module.
 
 ## The extension point
 

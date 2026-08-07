@@ -22,12 +22,6 @@ export interface Transform {
   readonly scale?: number | Vec3;
 }
 
-/** Axis-aligned extent used for visibility and spatial queries. */
-export interface Bounds {
-  readonly min: Vec3;
-  readonly max: Vec3;
-}
-
 /** The origin-of-identity transform, used when an item supplies none. */
 export const IDENTITY_TRANSFORM: Required<Pick<Transform, "position" | "rotation">> & {
   readonly scale: number;

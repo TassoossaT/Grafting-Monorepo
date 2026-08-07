@@ -32,7 +32,7 @@
  * either direction.
  */
 
-export type { Bounds, Euler, Transform, Vec3 } from "./contracts/space.js";
+export type { Euler, Transform, Vec3 } from "./contracts/space.js";
 export { IDENTITY_TRANSFORM } from "./contracts/space.js";
 
 export type { Clock, ClockMode, ClockTick } from "./contracts/clock.js";

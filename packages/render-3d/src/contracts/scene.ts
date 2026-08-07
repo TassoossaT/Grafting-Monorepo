@@ -1,4 +1,4 @@
-import type { Bounds, Transform } from "./space.js";
+import type { Transform } from "./space.js";
 import type { VisualRef } from "./visual.js";
 
 /** Caller-chosen identity for a scene item. */
@@ -53,8 +53,6 @@ export interface SceneItem<TParams = unknown> {
   readonly layer: LayerId;
   /** Placement. Defaults to the identity transform. */
   readonly transform?: Transform;
-  /** Extent used for visibility and spatial queries. Derived from geometry when omitted. */
-  readonly bounds?: Bounds;
   /** Whether the item is drawn. Defaults to `true`. */
   readonly visible?: boolean;
   /**

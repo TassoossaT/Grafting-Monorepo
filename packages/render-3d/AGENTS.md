@@ -10,10 +10,15 @@ Scope-local addendum to the root `AGENTS.md`.
   is building, it belongs to the consumer. Add a generic capability and let the
   consumer name it.
 - **No renderer type in the public API.** `three` may be imported only under
-  `src/backend/`. No `THREE.*` type appears in `src/contracts/`, in
-  `src/index.ts`, or in any signature reachable from them (DEC-049). The
-  `forbiddenModules` entry in `project.json` and the `api-check` target enforce
-  this; do not weaken either to make a change compile.
+  `src/backend/`, and only behind `src/backend/contract.ts`. No `THREE.*` type
+  appears in `src/contracts/`, in `src/engine/`, in `src/index.ts`, or in any
+  signature reachable from them (DEC-049).
+
+  Three things enforce this, and none of them may be weakened to make a change
+  compile: `project.json`'s `forbiddenModules`, the `api-check` target, and
+  `tests/backend-isolation.test.mjs`. The test exists because the first two are
+  blind to an internal module — this rule was broken by `src/engine/` itself
+  and nothing caught it.
 - **No visual identity.** Colors, sizes, easing curves, and lighting rigs are
   supplied by the consumer. Anything shipped here is a replaceable default with
   a neutral value, never a product's look (DEC-052).
