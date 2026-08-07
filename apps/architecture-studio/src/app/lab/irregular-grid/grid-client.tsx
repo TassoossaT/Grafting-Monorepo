@@ -159,61 +159,58 @@ export default function IrregularGridClient() {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, padding: 12 }}>
-      <Card title="Grid">
-        <Text>
-          Seed
-          <input
-            type="number"
-            value={controls.seed}
-            onChange={(event) => setControls({ ...controls, seed: Number(event.target.value) })}
-            style={{ width: "100%" }}
-          />
-        </Text>
-        <Text>
-          Triangles per hexagon side: {controls.trianglesPerSide}
-          <input
-            type="range"
-            min={2}
-            max={8}
-            value={controls.trianglesPerSide}
-            onChange={(event) =>
-              setControls({ ...controls, trianglesPerSide: Number(event.target.value) })
-            }
-            style={{ width: "100%" }}
-          />
-        </Text>
-        <Text>
-          Relaxation passes: {controls.iterations}
-          <input
-            type="range"
-            min={0}
-            max={40}
-            value={controls.iterations}
-            onChange={(event) =>
-              setControls({ ...controls, iterations: Number(event.target.value) })
-            }
-            style={{ width: "100%" }}
-          />
-        </Text>
-        <Text>
-          <label>
+      <Card ariaLabel="Grid parameters">
+        <div style={{ display: "grid", gap: 12 }}>
+          <label style={{ display: "grid", gap: 4 }}>
+            <Text content="Seed" strong />
+            <input
+              type="number"
+              value={controls.seed}
+              onChange={(event) => setControls({ ...controls, seed: Number(event.target.value) })}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 4 }}>
+            <Text content={`Triangles per hexagon side: ${controls.trianglesPerSide}`} strong />
+            <input
+              type="range"
+              min={2}
+              max={8}
+              value={controls.trianglesPerSide}
+              onChange={(event) =>
+                setControls({ ...controls, trianglesPerSide: Number(event.target.value) })
+              }
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 4 }}>
+            <Text content={`Relaxation passes: ${controls.iterations}`} strong />
+            <input
+              type="range"
+              min={0}
+              max={40}
+              value={controls.iterations}
+              onChange={(event) =>
+                setControls({ ...controls, iterations: Number(event.target.value) })
+              }
+            />
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input
               type="checkbox"
               checked={controls.showCentres}
-              onChange={(event) =>
-                setControls({ ...controls, showCentres: event.target.checked })
-              }
+              onChange={(event) => setControls({ ...controls, showCentres: event.target.checked })}
             />
-            {" Cell centres"}
+            <Text content="Cell centres" />
           </label>
-        </Text>
-        <Text>
-          {grid.quads.length} cells, {grid.vertices.length} vertices
-        </Text>
-        <Text>
-          Drag the relaxation slider to zero to see what the pairing alone produces — the
-          irregularity is already there; relaxation only makes the cells usable.
-        </Text>
+
+          <Text content={`${grid.quads.length} cells, ${grid.vertices.length} vertices`} />
+          <Text
+            content="Drag relaxation to zero to see what the pairing alone produces: the irregularity is already there, and relaxation only makes the cells usable."
+            tone="muted"
+          />
+        </div>
       </Card>
       <div
         ref={containerRef}
