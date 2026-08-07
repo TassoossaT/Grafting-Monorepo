@@ -1,4 +1,5 @@
 import {
+  allInputPorts,
   coerceParamValue,
   defaultParamValues,
   type BenchNodeKind,
@@ -209,7 +210,7 @@ export function checkBenchConnection(
   const sourceKind: BenchNodeKind = findNodeKind(findNode(graph, source.nodeId).kindId);
   const targetKind: BenchNodeKind = findNodeKind(findNode(graph, target.nodeId).kindId);
   const output = sourceKind.outputs.find((port) => port.id === source.portId);
-  const input = targetKind.inputs.find((port) => port.id === target.portId);
+  const input = allInputPorts(targetKind).find((port) => port.id === target.portId);
   if (output === undefined || input === undefined) return "unknown-port";
   // An input may declare that it takes anything, which is how a viewport shows
   // whatever it is pointed at. An output never may: something downstream has to

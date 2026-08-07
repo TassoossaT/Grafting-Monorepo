@@ -18,7 +18,9 @@ import {
 } from "@grafting/ui";
 import {
   BENCH_CANVAS_VIEWS,
+  BENCH_CONTROL_NODE_VIEW,
   BENCH_ELEMENT_NODE_VIEW,
+  BENCH_VIEWPORT_NODE_VIEW,
   colorForDataType,
   presentBenchEdge,
   toCanvasEdge,
@@ -46,6 +48,7 @@ import { buildEvaluationPlan } from "../../bench/evaluation-plan.ts";
 import { resolveNodeStatuses, resolvePreviewTarget } from "../../bench/evaluation-status.ts";
 import { diffNodeStatuses } from "../../bench/node-refresh.ts";
 import type { BenchParamValue } from "../../bench/node-kind.ts";
+import { paramIdFromPort } from "../../bench/node-kind.ts";
 import { findNodeKind, nodeKindsByCategory } from "../../bench/registry.ts";
 import ParameterPanel from "./parameter-panel.tsx";
 import PreviewPanel from "./preview-panel.tsx";
@@ -87,13 +90,40 @@ export default function BenchClient() {
   const [selection, setSelection] = useState<CanvasEntityReference | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
-  const [preview, setPreview] = useState<EvaluationPreview | null>(null);
+  const [previews, setPreviews] = useState<Readonly<Record<string, EvaluationPreview>>>({});
   const [runSummary, setRunSummary] = useState<string | null>(null);
+
+  const statusesRef = useRef<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
+  const previewsRef = useRef<Readonly<Record<string, EvaluationPreview>>>({});
 
   const commit = useCallback((next: BenchGraph) => {
     graphRef.current = next;
     setGraph(next);
   }, []);
+
+  const changeParamOf = useCallback(
+    (nodeId: string, paramId: string, raw: BenchParamValue) => {
+      const next = setBenchParam(graphRef.current, nodeId, paramId, raw);
+      commit(next);
+    },
+    [commit],
+  );
+
+  const nodeExtras = useCallback(
+    (nodeId: string) => {
+      const driven = graphRef.current.edges
+        .filter((edge) => edge.target.nodeId === nodeId)
+        .map((edge) => paramIdFromPort(edge.target.portId))
+        .filter((paramId): paramId is string => paramId !== null);
+      return {
+        status: statusesRef.current[nodeId] ?? ("idle" as const),
+        preview: previewsRef.current[nodeId] ?? null,
+        drivenParams: driven,
+        onParamChange: (paramId: string, raw: BenchParamValue) => changeParamOf(nodeId, paramId, raw),
+      };
+    },
+    [changeParamOf],
+  );
 
   const rememberSelection = useCallback((next: CanvasEntityReference | null) => {
     selectionRef.current = next;
@@ -108,7 +138,7 @@ export default function BenchClient() {
     if (container === null || handleRef.current !== null) return;
 
     handleRef.current = createCanvas(container, [], [], {
-      nodeViews: [BENCH_ELEMENT_NODE_VIEW],
+      nodeViews: [BENCH_ELEMENT_NODE_VIEW, BENCH_CONTROL_NODE_VIEW, BENCH_VIEWPORT_NODE_VIEW],
       edgeViews: [{ id: BENCH_CANVAS_VIEWS.edge.value, present: presentBenchEdge }],
       surface: {
         backgroundColor: "#f8fafc",
@@ -164,7 +194,7 @@ export default function BenchClient() {
         const current = graphRef.current;
         if (current.nodes.length === 0) {
           setStatuses(EMPTY_STATUSES);
-          setPreview(null);
+          setPreviews({});
           setRunSummary(null);
           return;
         }
@@ -182,7 +212,7 @@ export default function BenchClient() {
 
           if (ordering.outcome === "cyclic") {
             setStatuses(resolveNodeStatuses({ steps: [], skipped: [], hashes: {} }, null, ordering.blocked));
-            setPreview(null);
+            setPreviews({});
             setRunSummary(null);
             setNotice(`A cycle blocks ${ordering.blocked.length} element(s); break it to evaluate.`);
             return;
@@ -193,15 +223,17 @@ export default function BenchClient() {
             .filter((node) => node.kindId === VIEWPORT_KIND_ID)
             .map((node) => node.id);
           const target = resolvePreviewTarget(viewportNodeIds, selectedNodeId);
+          // Every viewport draws its own input, and the side panel follows one
+          // of them, so all of them are asked for at once.
+          const wanted = [...new Set([...viewportNodeIds, ...(target === null ? [] : [target])])];
 
-          const outcome = await requestEvaluation({
-            plan,
-            previewNodeIds: target === null ? [] : [target],
-          });
+          const outcome = await requestEvaluation({ plan, previewNodeIds: wanted });
           if (cancelled) return;
 
-          setStatuses(resolveNodeStatuses(plan, outcome));
-          setPreview(target === null ? null : (outcome.previews[target] ?? null));
+          statusesRef.current = resolveNodeStatuses(plan, outcome);
+          previewsRef.current = outcome.previews;
+          setStatuses(statusesRef.current);
+          setPreviews(outcome.previews);
           setRunSummary(`${outcome.evaluated.length} evaluated, ${outcome.reused.length} cached`);
           const firstFailure = Object.values(outcome.failures)[0];
           setNotice(firstFailure ?? null);
@@ -225,9 +257,18 @@ export default function BenchClient() {
     const handle = handleRef.current;
     if (handle === null) return;
     const { changed, next } = diffNodeStatuses(graph.nodes, statuses, renderedStatuses.current);
-    for (const entry of changed) handle.updateNode(toCanvasNode(entry.node, entry.status));
+    for (const entry of changed) handle.updateNode(toCanvasNode(entry.node, nodeExtras(entry.node.id)));
     renderedStatuses.current = next;
-  }, [graph, statuses]);
+  }, [graph, statuses, nodeExtras]);
+
+  useEffect(() => {
+    const handle = handleRef.current;
+    if (handle === null) return;
+    for (const node of graph.nodes) {
+      if (findNodeKind(node.kindId).outputs.length > 0) continue;
+      handle.updateNode(toCanvasNode(node, nodeExtras(node.id)));
+    }
+  }, [graph, previews, nodeExtras]);
 
   const placeNode = useCallback(
     (kindId: string) => {
@@ -238,7 +279,7 @@ export default function BenchClient() {
       });
       commit(result.graph);
       const node = result.graph.nodes.find((candidate) => candidate.id === result.nodeId);
-      if (node !== undefined) handleRef.current?.addNode(toCanvasNode(node));
+      if (node !== undefined) handleRef.current?.addNode(toCanvasNode(node, nodeExtras(node.id)));
       const nextSelection = Object.freeze({ kind: "node" as const, id: result.nodeId });
       rememberSelection(nextSelection);
       handleRef.current?.setSelection(nextSelection);
@@ -253,7 +294,7 @@ export default function BenchClient() {
     const result = duplicateBenchNode(graphRef.current, selected.id);
     commit(result.graph);
     const copy = result.graph.nodes.find((candidate) => candidate.id === result.nodeId);
-    if (copy !== undefined) handleRef.current?.addNode(toCanvasNode(copy));
+    if (copy !== undefined) handleRef.current?.addNode(toCanvasNode(copy, nodeExtras(copy.id)));
     const nextSelection = Object.freeze({ kind: "node" as const, id: result.nodeId });
     rememberSelection(nextSelection);
     handleRef.current?.setSelection(nextSelection);
@@ -298,7 +339,7 @@ export default function BenchClient() {
       commit(next);
       const node = next.nodes.find((candidate) => candidate.id === selected.id);
       if (node !== undefined) {
-        handleRef.current?.updateNode(toCanvasNode(node, statuses[selected.id] ?? "idle"));
+        handleRef.current?.updateNode(toCanvasNode(node, nodeExtras(selected.id)));
       }
     },
     [commit, statuses],
@@ -362,7 +403,7 @@ export default function BenchClient() {
       <aside style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
         <div style={{ height: 260, flexShrink: 0 }}>
           <PreviewPanel
-            preview={preview}
+            preview={previewTarget === null ? null : (previews[previewTarget] ?? null)}
             label={previewNode === null ? null : findNodeKind(previewNode.kindId).title}
           />
         </div>

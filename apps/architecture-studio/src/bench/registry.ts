@@ -15,6 +15,8 @@ export const BENCH_DATA_TYPES = Object.freeze({
   heightmap: "heightmap",
   /** A grid of discrete level indices. */
   levels: "levels",
+  /** A single scalar: what a control produces and what a parameter port takes. */
+  number: "number",
   /**
    * Accepts any value kind.
    *
@@ -174,9 +176,58 @@ const VIEWPORT: BenchNodeKind = Object.freeze({
   params: Object.freeze([]),
 });
 
+const NUMBER_CONTROL: BenchNodeKind = Object.freeze({
+  id: "control.number",
+  title: "Number",
+  category: "Controls",
+  description: "A value you can dial, to drive any parameter it is wired to.",
+  inputs: Object.freeze([]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "value", label: "value", dataType: BENCH_DATA_TYPES.number }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "number" as const,
+      id: "value",
+      label: "Value",
+      defaultValue: 1,
+      step: 1,
+      description: "Sent to every parameter this control feeds.",
+    }),
+  ]),
+});
+
+const CHOICE_CONTROL: BenchNodeKind = Object.freeze({
+  id: "control.choice",
+  title: "Choice",
+  category: "Controls",
+  description: "Picks one of a few preset values, for comparing settings quickly.",
+  inputs: Object.freeze([]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "value", label: "value", dataType: BENCH_DATA_TYPES.number }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "enum" as const,
+      id: "choice",
+      label: "Preset",
+      defaultValue: "2",
+      options: Object.freeze([
+        Object.freeze({ value: "1", label: "1 - none" }),
+        Object.freeze({ value: "2", label: "2 - light" }),
+        Object.freeze({ value: "4", label: "4 - medium" }),
+        Object.freeze({ value: "8", label: "8 - heavy" }),
+      ]),
+      description: "The chosen value is sent as a number.",
+    }),
+  ]),
+});
+
 /** Every element the bench offers, in menu order. */
 export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   PERLIN_HEIGHTMAP,
+  NUMBER_CONTROL,
+  CHOICE_CONTROL,
   SMOOTH,
   REMAP,
   DISCRETIZE,

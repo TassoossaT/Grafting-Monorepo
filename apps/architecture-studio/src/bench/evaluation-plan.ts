@@ -1,5 +1,5 @@
 import type { BenchGraph } from "./bench-graph.ts";
-import type { BenchParamValues } from "./node-kind.ts";
+import { paramPortId, type BenchParamValues } from "./node-kind.ts";
 import { findNodeKind } from "./registry.ts";
 
 // Turns an authored graph plus a Rust-supplied order into a flat list of
@@ -115,15 +115,27 @@ export function buildEvaluationPlan(
     if (node === undefined) continue;
     const kind = findNodeKind(node.kindId);
 
+    const producerFor = (portId: string): string | undefined => {
+      const edge = graph.edges.find(
+        (candidate) => candidate.target.nodeId === nodeId && candidate.target.portId === portId,
+      );
+      return edge === undefined ? undefined : hashes[edge.source.nodeId];
+    };
+
     const inputs: Record<string, string> = {};
     const missingInputs: string[] = [];
     for (const port of kind.inputs) {
-      const edge = graph.edges.find(
-        (candidate) => candidate.target.nodeId === nodeId && candidate.target.portId === port.id,
-      );
-      const producerHash = edge === undefined ? undefined : hashes[edge.source.nodeId];
+      const producerHash = producerFor(port.id);
       if (producerHash === undefined) missingInputs.push(port.id);
       else inputs[port.id] = producerHash;
+    }
+    // A parameter port is optional by nature: unconnected, the node simply uses
+    // the value typed on it. Treating an unwired parameter as a missing input
+    // would make every element unrunnable until all of them were fed.
+    for (const spec of kind.params) {
+      const portId = paramPortId(spec.id);
+      const producerHash = producerFor(portId);
+      if (producerHash !== undefined) inputs[portId] = producerHash;
     }
 
     if (missingInputs.length > 0) {

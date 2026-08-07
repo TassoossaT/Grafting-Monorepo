@@ -107,6 +107,53 @@ export interface BenchNodeKind {
   readonly params: readonly BenchParamSpec[];
 }
 
+/**
+ * Port identity that drives a parameter from a connection.
+ *
+ * Namespaced so a parameter can never collide with a value port declared by
+ * the element itself.
+ *
+ * @param paramId - Parameter the port feeds.
+ * @returns The port identity.
+ */
+export function paramPortId(paramId: string): string {
+  return `param:${paramId}`;
+}
+
+/**
+ * Reads the parameter a port drives.
+ *
+ * @param portId - Port identity.
+ * @returns The parameter identity, or `null` for an ordinary value port.
+ */
+export function paramIdFromPort(portId: string): string | null {
+  return portId.startsWith("param:") ? portId.slice("param:".length) : null;
+}
+
+/**
+ * Every input an element accepts, including one port per parameter.
+ *
+ * Exposing parameters as ports is what lets one element drive another's
+ * settings — a control feeding a radius, or a generator's own width feeding a
+ * downstream element — instead of every value being typed in by hand.
+ *
+ * @param kind - Element declaration.
+ * @returns Value inputs first, then one port per parameter.
+ */
+export function allInputPorts(kind: BenchNodeKind): readonly BenchPortSpec[] {
+  return Object.freeze([
+    ...kind.inputs,
+    ...kind.params.map((spec) =>
+      Object.freeze({
+        id: paramPortId(spec.id),
+        label: spec.label,
+        dataType: "number",
+        capacity: 1,
+      }),
+    ),
+  ]);
+}
+
 /** Parameter values held by one node instance. */
 export type BenchParamValues = Readonly<Record<string, BenchParamValue>>;
 
