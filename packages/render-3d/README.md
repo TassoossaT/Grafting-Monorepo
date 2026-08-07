@@ -54,6 +54,20 @@ registry.register({
 Descriptors are plain data. That is what lets a completely separate package
 define its own concepts and hand a populated registry over, without either
 package importing the other and without the renderer leaking into either one.
+
+A material's `surface` decides how a geometry is drawn, and `points` pairs with
+any of them:
+
+```ts
+// The same heightfield, as a solid surface or as a cloud of its vertices.
+{ geometry: { shape: "heightfield", field }, material: { surface: "lit" } }
+{ geometry: { shape: "heightfield", field }, material: { surface: "points", size: 0.4 } }
+```
+
+Points convey silhouette and volume while being structurally unable to carry
+surface detail, which makes them the primitive for anything that must be shown
+to exist without being shown in full — partially-known space, a scan, a preview
+of unresolved data.
 Two kinds that happen to draw identically share a descriptor and cost nothing
 extra; two kinds that mean entirely different things to a product are still
 just two entries.
@@ -80,12 +94,26 @@ Both produce identical results. This is verified by a test, not by convention.
 An engine owns exactly one graphics context. A view is a camera onto the scene,
 presented into its own surface.
 
-Browsers cap live WebGL contexts — commonly around sixteen — and enforce the
-cap by silently dropping the oldest, so a design that spends a context per
-rendered element does not fail with an error, it fails by having things vanish.
+Browsers cap live WebGL contexts — for many it is as low as eight, per the
+[three.js manual](https://threejs.org/manual/en/multiple-scenes.html) and
+[WebGL Fundamentals](https://webglfundamentals.org/webgl/lessons/webgl-multiple-views.html)
+— and enforce the cap by silently dropping the oldest, so a design that spends
+a context per rendered element does not fail with an error, it fails by having
+things vanish.
 Views share the engine's single context, so how many can be open at once is
 bounded by memory. `view.resize(width, height)` is a first-class operation
 rather than a reason to tear anything down.
+
+**Open question, stated rather than hidden.** Each view is presented by drawing
+into a shared buffer and copying its region into the view's own 2D canvas. The
+three.js manual describes this approach and recommends the other one — a single
+canvas fixed behind the page, scissored per element region — because the copy
+costs pixel bandwidth on every frame. This package chose the copy for layout
+freedom: each view is an ordinary DOM element rather than a region of one
+full-viewport canvas. That tradeoff has never been measured here.
+`src/backend/contract.ts` is where a second strategy plugs in without touching
+the engine, the scene, or any consumer. See
+`docs/research/render-3d-engine-libraries.md`.
 
 ## What is redrawn
 

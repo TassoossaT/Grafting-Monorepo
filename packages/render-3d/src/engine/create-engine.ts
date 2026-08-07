@@ -32,7 +32,7 @@ interface ViewState {
  * Creates an engine: one graphics context, one world, many views.
  *
  * The single context is the load-bearing decision. Browsers cap live WebGL
- * contexts — commonly around sixteen — and enforce the cap by silently
+ * contexts — for many it is as low as eight — and enforce the cap by silently
  * dropping the oldest, so a design that spends one context per rendered
  * element does not fail with an error, it fails by having things vanish. Here
  * every view shares this engine's one context and is presented into its own

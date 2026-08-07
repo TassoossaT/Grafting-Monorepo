@@ -77,6 +77,29 @@ export type MaterialDescriptor =
       readonly surface: "line";
       readonly color?: number;
       readonly opacity?: number;
+    }
+  | {
+      /**
+       * Draws each of the geometry's vertices as a point, filling nothing.
+       *
+       * Pairs with *any* geometry, which is the useful part: the same
+       * heightfield or mesh a caller already has can be drawn as a cloud of
+       * points instead of a solid surface, with no second copy of the data.
+       *
+       * Points convey silhouette and volume while being structurally unable to
+       * carry surface detail. That makes this the right primitive whenever
+       * something must be shown to exist without being shown in full — a
+       * partially-known space, a scan, a preview of data not yet resolved.
+       */
+      readonly surface: "points";
+      readonly color?: number;
+      readonly opacity?: number;
+      /** Point size. In world units when attenuated, in pixels when not. Defaults to `1`. */
+      readonly size?: number;
+      /** Whether points shrink with distance. Defaults to `true`. */
+      readonly sizeAttenuation?: boolean;
+      /** Sprite applied to each point, for soft or shaped points rather than squares. */
+      readonly texture?: TextureSource;
     };
 
 /** A complete description of how to draw one item. */

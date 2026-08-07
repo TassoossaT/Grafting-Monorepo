@@ -25,10 +25,7 @@ export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
   const geometry = buildGeometry(descriptor.geometry);
   const material = buildMaterial(descriptor.material);
 
-  const object =
-    descriptor.material.surface === "line"
-      ? new THREE.LineSegments(new THREE.WireframeGeometry(geometry), material as THREE.LineBasicMaterial)
-      : new THREE.Mesh(geometry, material);
+  const object = buildObject(descriptor, geometry, material);
 
   // Picking is resolved by raycasting against the live object graph, so the
   // flag has to live on the object rather than beside it.
@@ -38,11 +35,33 @@ export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
     object,
     dispose() {
       geometry.dispose();
+      // A wireframe wraps the source geometry in a second one, which the line
+      // above does not reach.
       if (object instanceof THREE.LineSegments) object.geometry.dispose();
       material.dispose();
       disposeTexture(material);
     },
   };
+}
+
+function buildObject(
+  descriptor: VisualDescriptor,
+  geometry: THREE.BufferGeometry,
+  material: THREE.Material,
+): THREE.Object3D {
+  switch (descriptor.material.surface) {
+    case "line":
+      return new THREE.LineSegments(
+        new THREE.WireframeGeometry(geometry),
+        material as THREE.LineBasicMaterial,
+      );
+    case "points":
+      // Points draw the geometry's vertices directly, so any geometry works
+      // and nothing has to be converted or duplicated first.
+      return new THREE.Points(geometry, material as THREE.PointsMaterial);
+    default:
+      return new THREE.Mesh(geometry, material);
+  }
 }
 
 function buildGeometry(descriptor: GeometryDescriptor): THREE.BufferGeometry {
@@ -152,6 +171,19 @@ function buildMaterial(descriptor: MaterialDescriptor): THREE.Material {
         color: descriptor.color ?? 0xffffff,
         opacity: descriptor.opacity ?? 1,
         transparent: (descriptor.opacity ?? 1) < 1,
+      });
+    case "points":
+      return new THREE.PointsMaterial({
+        color: descriptor.color ?? 0xffffff,
+        opacity: descriptor.opacity ?? 1,
+        transparent: (descriptor.opacity ?? 1) < 1,
+        size: descriptor.size ?? 1,
+        sizeAttenuation: descriptor.sizeAttenuation ?? true,
+        map: texture,
+        // A sprite's transparent border must cut the point out rather than
+        // being drawn as opaque black, which is what makes soft or shaped
+        // points possible at all.
+        alphaTest: texture ? 0.5 : 0,
       });
   }
 }
