@@ -87,6 +87,7 @@ workerScope.onmessage = async (event) => {
       const value = hash === undefined ? undefined : cache.get(hash);
       if (value === undefined) continue;
       const preview = toEvaluationPreview(value);
+      if (preview === null) continue;
       previews[nodeId] = preview;
       transfer.push(preview.values.buffer);
     }

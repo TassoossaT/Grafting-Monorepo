@@ -37,9 +37,11 @@ function extent(source: ArrayLike<number>): { minimum: number; maximum: number }
  * Projects one element result into something the heightfield renderer accepts.
  *
  * @param value - Any value produced by an element.
- * @returns A grid normalized to zero-to-one, tagged with its original kind.
+ * @returns A grid normalized to zero-to-one, or `null` for a value that has no
+ * grid to draw, such as the single number a control produces.
  */
-export function toEvaluationPreview(value: BenchValue): EvaluationPreview {
+export function toEvaluationPreview(value: BenchValue): EvaluationPreview | null {
+  if (value.dataType === "number") return null;
   if (value.dataType === "levels") {
     // Levels are already an ordered scale, so their declared count is the
     // range rather than whatever indices happen to be present. Otherwise a map

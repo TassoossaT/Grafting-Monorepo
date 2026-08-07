@@ -1,5 +1,5 @@
 import { BENCH_DATA_TYPES, BENCH_NODE_KINDS } from "./registry.ts";
-import type { BenchParamValues } from "./node-kind.ts";
+import { paramIdFromPort, type BenchParamValue, type BenchParamValues } from "./node-kind.ts";
 
 // What an element *does*, kept apart from what it *is* (`registry.ts`). The
 // Wasm entry points arrive by injection rather than by import so this module
@@ -23,8 +23,14 @@ export interface LevelsValue {
   readonly indices: Int32Array;
 }
 
+/** A single scalar travelling from a control into a parameter. */
+export interface NumberValue {
+  readonly dataType: "number";
+  readonly value: number;
+}
+
 /** Any value that may travel along a connection. */
-export type BenchValue = HeightmapValue | LevelsValue;
+export type BenchValue = HeightmapValue | LevelsValue | NumberValue;
 
 /** The Rust entry points the laboratory elements are built on. */
 export interface BenchWasm {
@@ -111,7 +117,45 @@ export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, Benc
     return value;
   });
 
-  return evaluators;
+  evaluators.set("control.number", (_inputs, params) => ({
+    dataType: BENCH_DATA_TYPES.number,
+    value: asNumber(params.value),
+  } as NumberValue));
+
+  evaluators.set("control.choice", (_inputs, params) => ({
+    dataType: BENCH_DATA_TYPES.number,
+    value: asNumber(params.choice),
+  } as NumberValue));
+
+  // A connected parameter wins over the value typed on the node. Wrapping here
+  // rather than inside each evaluator means an element never has to know that a
+  // parameter can arrive over a wire.
+  const wrapped = new Map<string, BenchEvaluator>();
+  for (const [id, evaluate] of evaluators) {
+    wrapped.set(id, (inputs, params) => evaluate(inputs, mergeParamInputs(params, inputs)));
+  }
+  return wrapped;
+}
+
+/**
+ * Applies values that arrived over parameter ports on top of a node's own.
+ *
+ * @param params - Values held by the node instance.
+ * @param inputs - Everything feeding the node, parameter ports included.
+ * @returns Parameters with connected values overriding typed ones.
+ */
+export function mergeParamInputs(
+  params: BenchParamValues,
+  inputs: Readonly<Record<string, BenchValue>>,
+): BenchParamValues {
+  let merged: Record<string, BenchParamValue> | null = null;
+  for (const [portId, value] of Object.entries(inputs)) {
+    const paramId = paramIdFromPort(portId);
+    if (paramId === null || value.dataType !== "number") continue;
+    merged ??= { ...params };
+    merged[paramId] = value.value;
+  }
+  return merged === null ? params : Object.freeze(merged);
 }
 
 /**

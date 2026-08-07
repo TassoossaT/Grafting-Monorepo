@@ -1,4 +1,4 @@
-import { mountEntitySummary, type EntitySummaryProps } from "@grafting/ui";
+import { createHeightfieldCanvas, mountEntitySummary, type EntitySummaryProps, type HeightfieldCanvas } from "@grafting/ui";
 import type {
   CanvasEdge,
   CanvasEdgePresentation,
@@ -9,7 +9,14 @@ import type {
   UiStatus,
 } from "@grafting/ui";
 import type { BenchEdge, BenchGraph, BenchNode } from "./bench-graph.ts";
-import { portCapacity, type BenchNodeKind, type BenchParamValues } from "./node-kind.ts";
+import {
+  allInputPorts,
+  portCapacity,
+  type BenchNodeKind,
+  type BenchParamSpec,
+  type BenchParamValue,
+  type BenchParamValues,
+} from "./node-kind.ts";
 import { BENCH_DATA_TYPES, findNodeKind } from "./registry.ts";
 
 // The bench's own concrete composition, kept separate from the Graph IR
@@ -19,7 +26,11 @@ import { BENCH_DATA_TYPES, findNodeKind } from "./registry.ts";
 
 /** View identifiers this surface registers with the canvas. */
 export const BENCH_CANVAS_VIEWS = Object.freeze({
-  node: Object.freeze({ element: "bench.element" }),
+  node: Object.freeze({
+    element: "bench.element",
+    control: "bench.control",
+    viewport: "bench.viewport",
+  }),
   edge: Object.freeze({ value: "bench.value" }),
 });
 
@@ -90,8 +101,13 @@ const readBenchNodeViewData = (value: unknown): BenchNodeViewData => {
  * @param params - This instance's values.
  * @returns One `label value` chip per parameter.
  */
-export function describeParams(kind: BenchNodeKind, params: BenchParamValues): readonly string[] {
+export function describeParams(
+  kind: BenchNodeKind,
+  params: BenchParamValues,
+  drivenParams: readonly string[] = [],
+): readonly string[] {
   return kind.params.map((spec) => {
+    if (drivenParams.includes(spec.id)) return `${spec.label} ← wired`;
     const value = params[spec.id];
     if (spec.kind === "enum") {
       const option = spec.options.find((candidate) => candidate.value === value);
@@ -112,7 +128,7 @@ const portPosition = (index: number, total: number, side: "left" | "right") =>
  */
 export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[] {
   const build = (
-    ports: BenchNodeKind["inputs"],
+    ports: readonly BenchNodeKind["inputs"][number][],
     side: "input" | "output",
   ): readonly CanvasPortDefinition[] =>
     ports.map((port, index) =>
@@ -134,7 +150,27 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
         }),
       }),
     );
-  return Object.freeze([...build(kind.inputs, "input"), ...build(kind.outputs, "output")]);
+  return Object.freeze([...build([...allInputPorts(kind)], "input"), ...build([...kind.outputs], "output")]);
+}
+
+/**
+ * Sizes a node so every port has room.
+ *
+ * Ports are spread evenly down a side, so a node with many parameters needs
+ * more height or they collide. The width is fixed: it is the label column that
+ * has to stay readable, not the port column.
+ *
+ * @param kind - Element declaration.
+ * @returns Rendered width and height in CSS pixels.
+ */
+export function benchNodeSize(kind: BenchNodeKind): { readonly width: number; readonly height: number } {
+  const sides = Math.max(allInputPorts(kind).length, kind.outputs.length);
+  const isViewport = kind.outputs.length === 0 && kind.inputs.length > 0;
+  const base = isViewport ? 176 : BENCH_NODE_SIZE.height;
+  return Object.freeze({
+    width: isViewport ? 208 : BENCH_NODE_SIZE.width,
+    height: Math.max(base, 34 + sides * 24),
+  });
 }
 
 /**
@@ -144,19 +180,44 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
  * @param status - What the last evaluation pass did with it.
  * @returns Canvas node carrying this surface's own view data.
  */
-export function toCanvasNode(node: BenchNode, status: BenchNodeStatus = "idle"): CanvasNode {
+export function viewForKind(kind: BenchNodeKind): string {
+  if (kind.category === "Controls") return BENCH_CANVAS_VIEWS.node.control;
+  if (kind.outputs.length === 0) return BENCH_CANVAS_VIEWS.node.viewport;
+  return BENCH_CANVAS_VIEWS.node.element;
+}
+
+/** Extra data a node view needs beyond the element's own declaration. */
+export interface BenchNodeExtras {
+  /** What the last evaluation pass did with the node. */
+  readonly status?: BenchNodeStatus;
+  /** Result to render, for a node whose view draws one. */
+  readonly preview?: { readonly width: number; readonly height: number; readonly values: Float32Array } | null;
+  /** Receives an edited value, for a node whose view is itself a control. */
+  readonly onParamChange?: (paramId: string, raw: BenchParamValue) => void;
+  /** Parameter ports currently fed by a connection, whose typed value is overridden. */
+  readonly drivenParams?: readonly string[];
+}
+
+export function toCanvasNode(node: BenchNode, extras: BenchNodeExtras = {}): CanvasNode {
   const kind = findNodeKind(node.kindId);
+  const size = benchNodeSize(kind);
   return Object.freeze({
     id: node.id,
-    view: BENCH_CANVAS_VIEWS.node.element,
+    view: viewForKind(kind),
     x: node.x,
     y: node.y,
+    width: size.width,
+    height: size.height,
     ports: benchPorts(kind),
     data: Object.freeze({
       title: kind.title,
       summary: kind.category,
-      tags: describeParams(kind, node.params),
-      status,
+      tags: describeParams(kind, node.params, extras.drivenParams ?? []),
+      status: extras.status ?? "idle",
+      params: kind.params,
+      values: node.params,
+      preview: extras.preview ?? null,
+      onParamChange: extras.onParamChange,
     }),
   });
 }
@@ -243,3 +304,139 @@ export function presentBenchEdge(context: {
     }),
   });
 }
+
+
+const shell = (title: string): { root: HTMLElement; body: HTMLElement } => {
+  const root = document.createElement("div");
+  root.style.cssText =
+    "width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;" +
+    "background:#ffffff;border:2px solid #6366f1;border-radius:10px;padding:8px;overflow:hidden";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  heading.style.cssText = "font-size:12px;color:#1e293b";
+  const body = document.createElement("div");
+  body.style.cssText = "flex:1;min-height:0;display:flex;flex-direction:column;gap:4px";
+  root.append(heading, body);
+  return { root, body };
+};
+
+/**
+ * Node view that renders its own input.
+ *
+ * A viewport exists to be looked at, so it draws the value that reaches it
+ * rather than describing it. Without this, seeing what a filter did meant
+ * reading a panel somewhere else, which is why a filter could look like it was
+ * doing nothing at all.
+ */
+export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze({
+  id: BENCH_CANVAS_VIEWS.node.viewport,
+  defaultWidth: 208,
+  defaultHeight: 176,
+  mount: (host: HTMLElement, context: CanvasNodeRenderContext) => {
+    const data = context.node.data as { readonly title: string; readonly preview: { width: number; height: number; values: Float32Array } | null };
+    const { root, body } = shell(data.title);
+    const surface = document.createElement("div");
+    surface.style.cssText = "flex:1;min-height:0;border-radius:6px;overflow:hidden;background:#0f172a";
+    const empty = document.createElement("span");
+    empty.style.cssText = "font-size:10px;color:#94a3b8;padding:4px";
+    body.append(surface, empty);
+    host.append(root);
+
+    let canvas: HeightfieldCanvas | null = null;
+    let shape = "";
+    const apply = (next: CanvasNodeRenderContext) => {
+      const value = (next.node.data as { readonly preview: { width: number; height: number; values: Float32Array } | null }).preview;
+      if (value === null) {
+        canvas?.dispose();
+        canvas = null;
+        shape = "";
+        empty.textContent = "Connect something to see it.";
+        return;
+      }
+      empty.textContent = "";
+      const nextShape = `${value.width}x${value.height}`;
+      // The heightfield fixes its grid when created, so only a changed shape
+      // justifies rebuilding it; anything else would restart the camera on
+      // every parameter tweak.
+      if (canvas === null || shape !== nextShape) {
+        canvas?.dispose();
+        canvas = createHeightfieldCanvas(surface, { width: value.width, height: value.height, values: value.values });
+        shape = nextShape;
+      } else {
+        canvas.update(value.values);
+      }
+    };
+    apply(context);
+
+    return Object.freeze({
+      update: apply,
+      dispose: () => {
+        canvas?.dispose();
+        canvas = null;
+        root.remove();
+      },
+    });
+  },
+});
+
+/**
+ * Node view that is itself a control.
+ *
+ * The element's own parameter is edited on the node, so a value can be dialled
+ * where it is wired rather than only in a side panel. Pointer events are kept
+ * from bubbling, or grabbing a slider would drag the node instead.
+ */
+export const BENCH_CONTROL_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze({
+  id: BENCH_CANVAS_VIEWS.node.control,
+  defaultWidth: BENCH_NODE_SIZE.width,
+  defaultHeight: BENCH_NODE_SIZE.height,
+  mount: (host: HTMLElement, context: CanvasNodeRenderContext) => {
+    type ControlData = {
+      readonly title: string;
+      readonly params: readonly BenchParamSpec[];
+      readonly values: BenchParamValues;
+      readonly onParamChange?: (paramId: string, raw: BenchParamValue) => void;
+    };
+    let data = context.node.data as ControlData;
+    const { root, body } = shell(data.title);
+    const fields = new Map<string, HTMLInputElement | HTMLSelectElement>();
+
+    for (const spec of data.params) {
+      const field =
+        spec.kind === "enum"
+          ? Object.assign(document.createElement("select"), {})
+          : Object.assign(document.createElement("input"), { type: spec.kind === "boolean" ? "checkbox" : "number" });
+      field.style.cssText = "width:100%;box-sizing:border-box;padding:2px 6px;font-size:12px";
+      if (spec.kind === "enum" && field instanceof HTMLSelectElement) {
+        for (const option of spec.options) {
+          field.append(new Option(option.label, option.value));
+        }
+      }
+      // Without this the surface treats the press as the start of a node drag
+      // and the control never receives it.
+      field.addEventListener("pointerdown", (event) => event.stopPropagation());
+      field.addEventListener("input", () => {
+        const raw = field instanceof HTMLInputElement && field.type === "checkbox" ? field.checked : field.value;
+        data.onParamChange?.(spec.id, raw as BenchParamValue);
+      });
+      const label = document.createElement("label");
+      label.textContent = spec.label;
+      label.style.cssText = "font-size:10px;color:#64748b";
+      body.append(label, field);
+      fields.set(spec.id, field);
+    }
+    host.append(root);
+
+    const apply = (next: CanvasNodeRenderContext) => {
+      data = next.node.data as ControlData;
+      for (const [id, field] of fields) {
+        const value = data.values[id];
+        if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = value === true;
+        else if (document.activeElement !== field) field.value = String(value ?? "");
+      }
+    };
+    apply(context);
+
+    return Object.freeze({ update: apply, dispose: () => root.remove() });
+  },
+});

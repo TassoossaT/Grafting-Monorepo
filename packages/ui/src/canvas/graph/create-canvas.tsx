@@ -310,7 +310,11 @@ function CanvasNodeView({
 
   useLayoutEffect(() => {
     mountedRef.current?.update({ node: data.source, selected: data.selected });
-  }, [data, data.selected]);
+    // `data` is the same model instance for the life of the node, so it cannot
+    // be the only dependency: `updateNode` replaces `data.source` with fresh
+    // caller-owned data and leaves the model's identity alone. Watching the
+    // model alone meant a mounted view never saw an update at all.
+  }, [data, data.source, data.selected]);
 
   const renderSocket = (
     side: "input" | "output",
