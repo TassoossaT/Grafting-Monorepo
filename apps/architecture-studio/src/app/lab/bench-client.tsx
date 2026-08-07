@@ -124,6 +124,9 @@ export default function BenchClient() {
       editing: {
         connectable: true,
         removableEdges: true,
+        // Ports are small and the surface zooms, so releasing near one is
+        // enough. Roughly one port-width of slack in each direction.
+        magneticRadius: 42,
         onConnectRequest: (request) => {
           const result = addBenchEdge(graphRef.current, request.source, request.target);
           if (result.refusal !== undefined) {

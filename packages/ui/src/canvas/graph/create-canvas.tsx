@@ -1,4 +1,11 @@
-import { useId, useLayoutEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+} from "react";
 import { createRoot } from "react-dom/client";
 import { ClassicPreset, GetSchemes, NodeEditor } from "rete";
 import { AreaExtensions, AreaPlugin, Zoom } from "rete-area-plugin";
@@ -23,6 +30,7 @@ import type {
 } from "./contracts.js";
 import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
 import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
+import { findMagneticTarget, type MagneticCandidate } from "./magnetic-policy.js";
 import { isReportableMovement } from "./movement-policy.js";
 import { resolveCanvasSocketPointerPolicy } from "./socket-policy.js";
 
@@ -161,33 +169,35 @@ function assertUniqueIds(kind: "node" | "edge", values: readonly { readonly id: 
   }
 }
 
-function socketPosition(position: CanvasPortPosition): CSSProperties {
+function socketPosition(position: CanvasPortPosition, size: number): CSSProperties {
+  // The anchor box is centred on the connection point using margins rather than
+  // a transform: the plugin resolves a socket by looking for its element in
+  // document.elementsFromPoint, and an untransformed box is the least
+  // surprising thing to hit-test.
+  const half = -size / 2;
   const base: CSSProperties = {
     position: "absolute",
-    width: 0,
-    height: 0,
+    width: size,
+    height: size,
+    marginLeft: half,
+    marginTop: half,
     zIndex: 3,
   };
   if (typeof position === "object") {
-    return {
-      ...base,
-      left: `${position.x * 100}%`,
-      top: `${position.y * 100}%`,
-    };
+    return { ...base, left: `${position.x * 100}%`, top: `${position.y * 100}%` };
   }
   switch (position) {
     case "top":
       return { ...base, left: "50%", top: 0 };
     case "right":
-      return { ...base, right: 0, top: "50%" };
+      return { ...base, right: 0, top: "50%", marginRight: half, marginLeft: undefined };
     case "bottom":
-      return { ...base, bottom: 0, left: "50%" };
+      return { ...base, bottom: 0, left: "50%", marginBottom: half, marginTop: undefined };
     case "left":
       return { ...base, left: 0, top: "50%" };
   }
 }
 
-/** Places a port label outside the node boundary the port sits on. */
 function socketLabelPosition(position: CanvasPortPosition, offset: number): CSSProperties {
   const side = typeof position === "object" ? "right" : position;
   switch (side) {
@@ -202,62 +212,67 @@ function socketLabelPosition(position: CanvasPortPosition, offset: number): CSSP
   }
 }
 
+/**
+ * Props for the element the renderer registers with the connection plugin.
+ *
+ * `RefSocket` spreads unrecognized props straight onto that element, but its
+ * published type does not admit them. Styling it is not cosmetic here: it is
+ * the element the plugin binds `pointerdown` to and looks for in
+ * `document.elementsFromPoint`, so its size and pointer behavior have to be
+ * ours. The cast is confined to this one declaration.
+ */
+type SocketAnchorProps = {
+  readonly name: string;
+  readonly side: "input" | "output";
+  readonly socketKey: string;
+  readonly nodeId: string;
+  readonly emit: (signal: ReactArea2D<Schemes>) => void;
+  readonly payload: ClassicPreset.Socket;
+  readonly style: CSSProperties;
+};
+
+const SocketAnchor = Presets.classic.RefSocket as unknown as (
+  props: SocketAnchorProps,
+) => ReactElement;
+
 function CanvasSocketView({ data }: { readonly data: ClassicPreset.Socket }) {
   const definition = (data as CanvasSocketModel).definition;
   const presentation = definition.presentation;
   const radius = presentation?.radius ?? 4;
   const diameter = radius * 2;
-  const { interactive, hitSize } = resolveCanvasSocketPointerPolicy(definition);
+  // Purely the visible mark. The pointer target is the element the renderer
+  // registered with the connection plugin, which this is centred inside; the
+  // mark stays transparent so the whole target behaves as one object.
   return (
-    // The outer element is the pointer target, deliberately larger than the
-    // drawn dot: a connection is started by grabbing a port, and a ten-pixel
-    // circle is not a target anyone can hit reliably while the surface also
-    // pans and zooms. The dot itself stays transparent to the pointer so the
-    // whole target behaves as one.
     <span
       aria-hidden="true"
       style={{
         position: "relative",
-        display: "grid",
-        placeItems: "center",
-        width: hitSize,
-        height: hitSize,
+        display: "block",
+        width: diameter,
+        height: diameter,
+        boxSizing: "border-box",
         borderRadius: "50%",
-        transform: "translate(-50%, -50%)",
-        pointerEvents: interactive ? "auto" : "none",
-        cursor: interactive ? "crosshair" : undefined,
-        touchAction: interactive ? "none" : undefined,
+        background: presentation?.fill ?? "transparent",
+        border: `${presentation?.strokeWidth ?? 0}px solid ${presentation?.stroke ?? "transparent"}`,
+        opacity: presentation?.opacity ?? 1,
+        pointerEvents: "none",
       }}
     >
-      <span
-        style={{
-          position: "relative",
-          display: "block",
-          width: diameter,
-          height: diameter,
-          boxSizing: "border-box",
-          borderRadius: "50%",
-          background: presentation?.fill ?? "transparent",
-          border: `${presentation?.strokeWidth ?? 0}px solid ${presentation?.stroke ?? "transparent"}`,
-          opacity: presentation?.opacity ?? 1,
-          pointerEvents: "none",
-        }}
-      >
-        {presentation?.label === undefined ? null : (
-          <span
-            style={{
-              position: "absolute",
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-              color: presentation.labelColor ?? presentation.stroke ?? "currentColor",
-              fontSize: presentation.labelFontSize ?? 9,
-              ...socketLabelPosition(definition.position, radius + 4),
-            }}
-          >
-            {presentation.label}
-          </span>
-        )}
-      </span>
+      {presentation?.label === undefined ? null : (
+        <span
+          style={{
+            position: "absolute",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            color: presentation.labelColor ?? presentation.stroke ?? "currentColor",
+            fontSize: presentation.labelFontSize ?? 9,
+            ...socketLabelPosition(definition.position, radius + 4),
+          }}
+        >
+          {presentation.label}
+        </span>
+      )}
     </span>
   );
 }
@@ -301,18 +316,37 @@ function CanvasNodeView({
     side: "input" | "output",
     key: string,
     port: ClassicPreset.Input<CanvasSocketModel> | ClassicPreset.Output<CanvasSocketModel>,
-  ) => (
-    <span key={`${side}:${key}`} style={socketPosition(port.socket.definition.position)}>
-      <Presets.classic.RefSocket
-        name="grafting-canvas-socket"
-        side={side}
-        socketKey={key}
-        nodeId={data.id}
-        emit={emit}
-        payload={port.socket}
-      />
-    </span>
-  );
+  ) => {
+    const definition = port.socket.definition;
+    const { interactive, hitSize } = resolveCanvasSocketPointerPolicy(definition);
+    return (
+      // The style goes on RefSocket itself, not on a wrapper. RefSocket's own
+      // element is what the renderer hands to the connection plugin, and what
+      // that plugin both listens on and looks for in document.elementsFromPoint.
+      // Sizing a parent instead left the registered element with no reliable
+      // hit area of its own, so pressing a port fell through to the node drag.
+      <span key={`${side}:${key}`} style={socketPosition(definition.position, hitSize)}>
+        <SocketAnchor
+          name="grafting-canvas-socket"
+          side={side}
+          socketKey={key}
+          nodeId={data.id}
+          emit={emit}
+          payload={port.socket}
+          style={{
+            display: "grid",
+            placeItems: "center",
+            width: hitSize,
+            height: hitSize,
+            borderRadius: "50%",
+            pointerEvents: interactive ? "auto" : "none",
+            cursor: interactive ? "crosshair" : undefined,
+            touchAction: interactive ? "none" : undefined,
+          }}
+        />
+      </span>
+    );
+  };
 
   return (
     <div
@@ -665,6 +699,137 @@ export function createCanvasAdapter(
     }),
   );
   editor.use(area);
+  // The connection plugin is attached before the renderer, matching the order
+  // Rete's own documentation uses. Both orders deliver the socket signal --
+  // `use` fans a parent's signals out to every child -- but registering the
+  // consumer of a signal before its producer keeps the chain readable.
+  const editing = options.editing;
+  if (editing?.connectable === true || editing?.removableEdges === true) {
+    // Resolves a socket the plugin reports back into the caller's own port.
+    const readSocket = (socket: SocketData): ConnectionCandidate | null => {
+      const model = nodeModels.get(socket.nodeId);
+      if (model === undefined) return null;
+      const portId = socket.key.slice(socket.key.indexOf(":") + 1);
+      const port = declaredPorts(model.source, model.definition).find((candidate) => candidate.id === portId);
+      if (port === undefined) return null;
+      const connectionCount = [...connectionModels.values()].filter((connection) =>
+        socket.side === "input"
+          ? connection.target === socket.nodeId && connection.targetInput === socket.key
+          : connection.source === socket.nodeId && connection.sourceOutput === socket.key,
+      ).length;
+      return { nodeId: socket.nodeId, port, side: socket.side, connectionCount };
+    };
+
+    const orderedEnds = (from: SocketData, to: SocketData): readonly [SocketData, SocketData] | null => {
+      const ordered = getSourceTarget(from, to);
+      const [orderedSource, orderedTarget] = ordered ?? [];
+      if (orderedSource === undefined || orderedTarget === undefined) return null;
+      return [orderedSource, orderedTarget];
+    };
+
+    const review = (from: SocketData, to: SocketData): {
+      readonly source: ConnectionCandidate;
+      readonly target: ConnectionCandidate;
+      readonly sourcePortId: string;
+      readonly targetPortId: string;
+    } | null => {
+      const ends = orderedEnds(from, to);
+      if (ends === null) return null;
+      const source = readSocket(ends[0]);
+      const target = readSocket(ends[1]);
+      if (source === null || target === null) return null;
+      const alreadyConnected = [...connectionModels.values()].some(
+        (model) =>
+          model.edge.source.nodeId === source.nodeId &&
+          model.edge.target.nodeId === target.nodeId &&
+          model.edge.source.portId === source.port.id &&
+          model.edge.target.portId === target.port.id,
+      );
+      if (checkCanvasConnection(source, target, alreadyConnected) !== null) return null;
+      return { source, target, sourcePortId: source.port.id, targetPortId: target.port.id };
+    };
+
+    const attemptConnection = (from: SocketData, to: SocketData): true | undefined => {
+      if (editing.connectable !== true) return undefined;
+      const reviewed = review(from, to);
+      if (reviewed === null) return undefined;
+      const decision = editing.onConnectRequest?.({
+        source: Object.freeze({
+          nodeId: reviewed.source.nodeId,
+          portId: reviewed.sourcePortId,
+          dataType: reviewed.source.port.dataType,
+        }),
+        target: Object.freeze({
+          nodeId: reviewed.target.nodeId,
+          portId: reviewed.targetPortId,
+          dataType: reviewed.target.port.dataType,
+        }),
+      });
+      // No callback means no product opinion, and the canvas will not invent an
+      // edge identity or guess value-kind compatibility.
+      if (decision === undefined || !decision.accepted) return undefined;
+      addEdge(decision.edge);
+      editing.onConnected?.(decision.edge);
+      return true;
+    };
+
+    const connectionPlugin = new ConnectionPlugin<Schemes, AreaExtra>();
+    connectionPlugin.addPreset(
+      () =>
+        new ClassicFlow<Schemes, [AreaExtra]>({
+          canMakeConnection: (from, to) => editing.connectable === true && review(from, to) !== null,
+          makeConnection: attemptConnection,
+        }),
+    );
+
+    // Sockets announce themselves through the render pipeline; keeping the
+    // elements lets a released connection be measured against every port on
+    // screen without reaching into the connection plugin's own bookkeeping.
+    const socketElements = new Map<Element, SocketData>();
+    let lastPointer = { x: 0, y: 0 };
+
+    connectionPlugin.addPipe((context) => {
+      if (!context || typeof context !== "object" || !("type" in context)) return context;
+      if (context.type === "render" && context.data.type === "socket") {
+        socketElements.set(context.data.element, context.data as unknown as SocketData);
+      } else if (context.type === "unmount") {
+        socketElements.delete(context.data.element);
+      } else if (context.type === "pointerup" || context.type === "pointermove") {
+        const { clientX, clientY } = context.data.event;
+        lastPointer = { x: clientX, y: clientY };
+      } else if (context.type === "connectiondrop") {
+        const { initial, socket, created } = context.data;
+        const radius = editing.magneticRadius ?? 0;
+        // Only a drop that landed on nothing is worth rescuing; a drop on a
+        // real port has already been judged on its own merits, including when
+        // that judgement was a refusal.
+        if (!created && socket === null && radius > 0) {
+          const candidates: MagneticCandidate[] = [];
+          for (const [element, data] of socketElements) {
+            if (data.nodeId === initial.nodeId && data.key === initial.key) continue;
+            if (review(initial, data) === null) continue;
+            const rect = (element as HTMLElement).getBoundingClientRect();
+            candidates.push({
+              nodeId: data.nodeId,
+              key: data.key,
+              side: data.side,
+              center: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+            });
+          }
+          const target = findMagneticTarget(lastPointer, candidates, radius);
+          if (target !== null) {
+            const resolved = [...socketElements.values()].find(
+              (data) => data.nodeId === target.nodeId && data.key === target.key,
+            );
+            if (resolved !== undefined) attemptConnection(initial, resolved);
+          }
+        }
+      }
+      return context;
+    });
+
+    area.use(connectionPlugin);
+  }
   area.use(render);
 
   const zoom = interaction.zoom;
@@ -678,6 +843,8 @@ export function createCanvasAdapter(
   if (!interaction.panning) area.area.setDragHandler(null);
 
   let initializing = true;
+  /** Nodes the adapter is still placing, whose movement is not the user's. */
+  const placingNodes = new Set<string>();
   let programmaticZoom = false;
   let disposed = false;
   let selected: CanvasEntityReference | null = null;
@@ -699,7 +866,7 @@ export function createCanvasAdapter(
     if (context.type === "nodetranslated" && !initializing && interaction.movableNodes) {
       const model = nodeModels.get(context.data.id);
       const { x, y } = context.data.position;
-      if (isReportableMovement(model?.source, context.data.position)) {
+      if (!placingNodes.has(context.data.id) && isReportableMovement(model?.source, context.data.position)) {
         options.editing?.onNodeMoved?.(context.data.id, x, y);
       }
     }
@@ -730,9 +897,18 @@ export function createCanvasAdapter(
   };
 
   const attachNode = async (model: CanvasNodeModel): Promise<void> => {
-    await editor.addNode(model);
-    await area.translate(model.id, { x: model.source.x, y: model.source.y });
-    await area.resize(model.id, model.width, model.height);
+    // A node is rendered at the origin before it is moved to the caller's
+    // coordinates, and the renderer reports that intermediate position like any
+    // other. Reported as user movement it would overwrite the caller's own
+    // placement with the origin, stacking every node on top of the first.
+    placingNodes.add(model.id);
+    try {
+      await editor.addNode(model);
+      await area.translate(model.id, { x: model.source.x, y: model.source.y });
+      await area.resize(model.id, model.width, model.height);
+    } finally {
+      placingNodes.delete(model.id);
+    }
   };
 
   const ready = (async () => {
@@ -889,84 +1065,6 @@ export function createCanvasAdapter(
     });
   };
 
-  const editing = options.editing;
-  if (editing?.connectable === true || editing?.removableEdges === true) {
-    // Resolves a socket the plugin reports back into the caller's own port.
-    const readSocket = (socket: SocketData): ConnectionCandidate | null => {
-      const model = nodeModels.get(socket.nodeId);
-      if (model === undefined) return null;
-      const portId = socket.key.slice(socket.key.indexOf(":") + 1);
-      const port = declaredPorts(model.source, model.definition).find((candidate) => candidate.id === portId);
-      if (port === undefined) return null;
-      const connectionCount = [...connectionModels.values()].filter((connection) =>
-        socket.side === "input"
-          ? connection.target === socket.nodeId && connection.targetInput === socket.key
-          : connection.source === socket.nodeId && connection.sourceOutput === socket.key,
-      ).length;
-      return { nodeId: socket.nodeId, port, side: socket.side, connectionCount };
-    };
-
-    const orderedEnds = (from: SocketData, to: SocketData): readonly [SocketData, SocketData] | null => {
-      const ordered = getSourceTarget(from, to);
-      const [orderedSource, orderedTarget] = ordered ?? [];
-      if (orderedSource === undefined || orderedTarget === undefined) return null;
-      return [orderedSource, orderedTarget];
-    };
-
-    const review = (from: SocketData, to: SocketData): {
-      readonly source: ConnectionCandidate;
-      readonly target: ConnectionCandidate;
-      readonly sourcePortId: string;
-      readonly targetPortId: string;
-    } | null => {
-      const ends = orderedEnds(from, to);
-      if (ends === null) return null;
-      const source = readSocket(ends[0]);
-      const target = readSocket(ends[1]);
-      if (source === null || target === null) return null;
-      const alreadyConnected = [...connectionModels.values()].some(
-        (model) =>
-          model.edge.source.nodeId === source.nodeId &&
-          model.edge.target.nodeId === target.nodeId &&
-          model.edge.source.portId === source.port.id &&
-          model.edge.target.portId === target.port.id,
-      );
-      if (checkCanvasConnection(source, target, alreadyConnected) !== null) return null;
-      return { source, target, sourcePortId: source.port.id, targetPortId: target.port.id };
-    };
-
-    const connectionPlugin = new ConnectionPlugin<Schemes, AreaExtra>();
-    connectionPlugin.addPreset(
-      () =>
-        new ClassicFlow<Schemes, [AreaExtra]>({
-          canMakeConnection: (from, to) => editing.connectable === true && review(from, to) !== null,
-          makeConnection: (from, to) => {
-            if (editing.connectable !== true) return undefined;
-            const reviewed = review(from, to);
-            if (reviewed === null) return undefined;
-            const decision = editing.onConnectRequest?.({
-              source: Object.freeze({
-                nodeId: reviewed.source.nodeId,
-                portId: reviewed.sourcePortId,
-                dataType: reviewed.source.port.dataType,
-              }),
-              target: Object.freeze({
-                nodeId: reviewed.target.nodeId,
-                portId: reviewed.targetPortId,
-                dataType: reviewed.target.port.dataType,
-              }),
-            });
-            // No callback means no product opinion, and the canvas will not
-            // invent an edge identity or guess value-kind compatibility.
-            if (decision === undefined || !decision.accepted) return undefined;
-            addEdge(decision.edge);
-            editing.onConnected?.(decision.edge);
-            return true;
-          },
-        }),
-    );
-    area.use(connectionPlugin);
-  }
 
   return Object.freeze({
     get nodeCount() {

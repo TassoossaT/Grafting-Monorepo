@@ -10,6 +10,7 @@ import {
 } from "../dist/canvas/graph/interaction-policy.js";
 import { isReportableMovement } from "../dist/canvas/graph/movement-policy.js";
 import { resolveCanvasSocketPointerPolicy } from "../dist/canvas/graph/socket-policy.js";
+import { findMagneticTarget } from "../dist/canvas/graph/magnetic-policy.js";
 
 const candidate = (nodeId, side, port = {}, connectionCount = 0) => ({
   nodeId,
@@ -318,4 +319,30 @@ test("gives a small port a target large enough to grab", () => {
   assert.equal(drawn.hitSize, 18);
   // A port drawn larger than the minimum keeps its own size.
   assert.equal(large.hitSize, 40);
+});
+
+const port = (nodeId, key, x, y) => ({ nodeId, key, side: "input", center: { x, y } });
+
+test("snaps a released connection to the nearest port within reach", () => {
+  const target = findMagneticTarget({ x: 100, y: 100 }, [port("a", "in", 130, 100), port("b", "in", 108, 100)], 40);
+  assert.equal(target.nodeId, "b");
+});
+
+test("leaves a connection unmade when every port is out of reach", () => {
+  assert.equal(findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 100, 0)], 40), null);
+});
+
+test("measures reach as a radius, not as a box", () => {
+  // (30, 30) is inside a 40-wide square but outside a 40 radius.
+  assert.equal(findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 30, 30)], 40), null);
+  assert.equal(findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 0, 39)], 40).nodeId, "a");
+});
+
+test("treats an absent or zero radius as requiring a direct hit", () => {
+  assert.equal(findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 1, 0)], 0), null);
+});
+
+test("resolves a tie to the first candidate, so the same input gives the same result", () => {
+  const first = findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 10, 0), port("b", "in", 10, 0)], 40);
+  assert.equal(first.nodeId, "a");
 });
