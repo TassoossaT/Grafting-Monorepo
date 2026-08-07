@@ -23,6 +23,7 @@ import type {
 } from "./contracts.js";
 import { checkCanvasConnection, type ConnectionCandidate } from "./connection-policy.js";
 import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
+import { findMagneticTarget, type MagneticCandidate } from "./magnetic-policy.js";
 import { isReportableMovement } from "./movement-policy.js";
 import { resolveCanvasSocketPointerPolicy } from "./socket-policy.js";
 
@@ -935,36 +936,85 @@ export function createCanvasAdapter(
       return { source, target, sourcePortId: source.port.id, targetPortId: target.port.id };
     };
 
+    const attemptConnection = (from: SocketData, to: SocketData): true | undefined => {
+      if (editing.connectable !== true) return undefined;
+      const reviewed = review(from, to);
+      if (reviewed === null) return undefined;
+      const decision = editing.onConnectRequest?.({
+        source: Object.freeze({
+          nodeId: reviewed.source.nodeId,
+          portId: reviewed.sourcePortId,
+          dataType: reviewed.source.port.dataType,
+        }),
+        target: Object.freeze({
+          nodeId: reviewed.target.nodeId,
+          portId: reviewed.targetPortId,
+          dataType: reviewed.target.port.dataType,
+        }),
+      });
+      // No callback means no product opinion, and the canvas will not invent an
+      // edge identity or guess value-kind compatibility.
+      if (decision === undefined || !decision.accepted) return undefined;
+      addEdge(decision.edge);
+      editing.onConnected?.(decision.edge);
+      return true;
+    };
+
     const connectionPlugin = new ConnectionPlugin<Schemes, AreaExtra>();
     connectionPlugin.addPreset(
       () =>
         new ClassicFlow<Schemes, [AreaExtra]>({
           canMakeConnection: (from, to) => editing.connectable === true && review(from, to) !== null,
-          makeConnection: (from, to) => {
-            if (editing.connectable !== true) return undefined;
-            const reviewed = review(from, to);
-            if (reviewed === null) return undefined;
-            const decision = editing.onConnectRequest?.({
-              source: Object.freeze({
-                nodeId: reviewed.source.nodeId,
-                portId: reviewed.sourcePortId,
-                dataType: reviewed.source.port.dataType,
-              }),
-              target: Object.freeze({
-                nodeId: reviewed.target.nodeId,
-                portId: reviewed.targetPortId,
-                dataType: reviewed.target.port.dataType,
-              }),
-            });
-            // No callback means no product opinion, and the canvas will not
-            // invent an edge identity or guess value-kind compatibility.
-            if (decision === undefined || !decision.accepted) return undefined;
-            addEdge(decision.edge);
-            editing.onConnected?.(decision.edge);
-            return true;
-          },
+          makeConnection: attemptConnection,
         }),
     );
+
+    // Sockets announce themselves through the render pipeline; keeping the
+    // elements lets a released connection be measured against every port on
+    // screen without reaching into the connection plugin's own bookkeeping.
+    const socketElements = new Map<Element, SocketData>();
+    let lastPointer = { x: 0, y: 0 };
+
+    connectionPlugin.addPipe((context) => {
+      if (!context || typeof context !== "object" || !("type" in context)) return context;
+      if (context.type === "render" && context.data.type === "socket") {
+        socketElements.set(context.data.element, context.data as unknown as SocketData);
+      } else if (context.type === "unmount") {
+        socketElements.delete(context.data.element);
+      } else if (context.type === "pointerup" || context.type === "pointermove") {
+        const { clientX, clientY } = context.data.event;
+        lastPointer = { x: clientX, y: clientY };
+      } else if (context.type === "connectiondrop") {
+        const { initial, socket, created } = context.data;
+        const radius = editing.magneticRadius ?? 0;
+        // Only a drop that landed on nothing is worth rescuing; a drop on a
+        // real port has already been judged on its own merits, including when
+        // that judgement was a refusal.
+        if (!created && socket === null && radius > 0) {
+          const candidates: MagneticCandidate[] = [];
+          for (const [element, data] of socketElements) {
+            if (data.nodeId === initial.nodeId && data.key === initial.key) continue;
+            if (review(initial, data) === null) continue;
+            const rect = (element as HTMLElement).getBoundingClientRect();
+            candidates.push({
+              nodeId: data.nodeId,
+              key: data.key,
+              side: data.side,
+              center: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+            });
+          }
+          const target = findMagneticTarget(lastPointer, candidates, radius);
+          if (target !== null) {
+            const resolved = [...socketElements.values()].find(
+              (data) => data.nodeId === target.nodeId && data.key === target.key,
+            );
+            if (resolved !== undefined) attemptConnection(initial, resolved);
+          }
+        }
+      }
+      return context;
+    });
+
     area.use(connectionPlugin);
   }
 

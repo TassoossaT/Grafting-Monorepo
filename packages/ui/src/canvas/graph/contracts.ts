@@ -342,6 +342,17 @@ export interface CanvasEditingOptions {
   /** Whether users may remove an existing connection by activating it with the removal gesture. */
   readonly removableEdges?: boolean;
   /**
+   * How far from a port a released connection still snaps to it, in CSS pixels.
+   *
+   * Enlarging the drop area is what makes connecting bearable when a port is
+   * small or the surface is zoomed out: the user aims at a region instead of a
+   * dot. Only ports that would have accepted the connection anyway are
+   * considered, so this never turns a refused connection into an allowed one.
+   *
+   * Omit, or use zero, to require releasing directly on the port.
+   */
+  readonly magneticRadius?: number;
+  /**
    * Decides whether a user-drawn connection is allowed, and supplies the edge.
    *
    * The canvas has already verified direction, capacity, self-connection, and
