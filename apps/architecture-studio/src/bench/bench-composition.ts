@@ -361,6 +361,7 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
         return;
       }
       empty.textContent = "";
+      if (value === latest && canvas !== null) return;
       latest = value;
       const nextShape = `${value.width}x${value.height}`;
       // The heightfield fixes both its grid and its pixel size when created, so
