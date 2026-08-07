@@ -1,48 +1,43 @@
 {
-  "name": "ui",
-  "root": "packages/ui",
+  "name": "render-3d",
+  "root": "packages/render-3d",
   "projectType": "library",
-  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui"],
+  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:render-engine"],
   "metadata": {
     "graphIr": {
-      "id": "ui",
+      "id": "render-3d",
       "kind": "lib",
-      "tags": ["scope:shared", "lang:typescript", "platform:web", "type:ui"]
+      "tags": ["scope:shared", "lang:typescript", "platform:web", "type:render-engine"]
     },
     "publicApi": {
       "entryPoint": "src/index.ts",
       "baseline": "tests/snapshots/public-api.md",
-      "forbiddenModules": ["antd", "react-dom", "react-grid-layout", "rete", "rete-area-plugin", "rete-connection-plugin", "rete-react-plugin", "rete-render-utils", "styled-components"]
+      "forbiddenModules": ["three"]
     }
   },
   "targets": {
     "check": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm --filter @grafting/ui check" },
+      "options": { "command": "pnpm --filter @grafting/render-3d check" },
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
     },
     "build": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "pnpm --filter @grafting/ui build && node packages/ui/scripts/export-doc-mesh.mjs"
-      },
+      "options": { "command": "pnpm --filter @grafting/render-3d build" },
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
-      "outputs": [
-        "{projectRoot}/dist",
-        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
-      ]
+      "outputs": ["{projectRoot}/dist"]
     },
     "watch": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm --filter @grafting/ui watch" },
+      "options": { "command": "pnpm --filter @grafting/render-3d watch" },
       "continuous": true,
       "cache": false
     },
     "test": {
       "executor": "nx:run-commands",
-      "options": { "command": "pnpm --filter @grafting/ui test" },
+      "options": { "command": "pnpm --filter @grafting/render-3d test" },
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**/*",
@@ -56,7 +51,7 @@
     "api-check": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/ui api-check"
+        "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/render-3d api-check"
       },
       "cache": true,
       "inputs": [
@@ -72,34 +67,19 @@
     },
     "docs-generate": {
       "executor": "nx:run-commands",
-      "options": { "command": "node tools/scripts/generate-api-docs.mjs ui" },
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs render-3d" },
       "cache": false
     },
     "docs-check": {
       "executor": "nx:run-commands",
-      "options": { "command": "node tools/scripts/generate-api-docs.mjs ui --check" },
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs render-3d --check" },
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**/*",
         "{projectRoot}/project.json",
-        "{workspaceRoot}/docs/generated/api/ts/ui.api.md",
+        "{workspaceRoot}/docs/generated/api/ts/render-3d.api.md",
         "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
         "sharedGlobals"
-      ]
-    },
-    "docs-mesh-export": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "node packages/ui/scripts/export-doc-mesh.mjs"
-      },
-      "cache": true,
-      "inputs": [
-        "{projectRoot}/src/index.ts",
-        "{projectRoot}/scripts/export-doc-mesh.mjs",
-        "{projectRoot}/project.json"
-      ],
-      "outputs": [
-        "{workspaceRoot}/docs/generated/meshes/ui-doc-mesh.v1.json"
       ]
     }
   }
