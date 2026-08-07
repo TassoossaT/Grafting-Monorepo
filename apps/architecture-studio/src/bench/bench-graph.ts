@@ -277,6 +277,35 @@ export function removeBenchEdge(graph: BenchGraph, edgeId: string): BenchGraph {
 }
 
 /**
+ * Summarises everything about a graph that can change what it computes.
+ *
+ * Position and size are deliberately absent: moving or resizing a node cannot
+ * alter a single value, yet a drag commits a new graph on every pointer move.
+ * Keying evaluation on this instead of on the graph keeps a drag from
+ * scheduling a pass — and from redrawing every viewport — for nothing.
+ *
+ * @param graph - Graph to summarise.
+ * @returns A string that changes exactly when a result could.
+ */
+export function benchEvaluationKey(graph: BenchGraph): string {
+  const nodes = graph.nodes
+    .map((node) => {
+      const params = Object.keys(node.params)
+        .sort()
+        .map((key) => `${key}=${String(node.params[key])}`)
+        .join(",");
+      return `${node.id}:${node.kindId}(${params})`;
+    })
+    .sort()
+    .join("|");
+  const edges = graph.edges
+    .map((edge) => `${edge.source.nodeId}.${edge.source.portId}>${edge.target.nodeId}.${edge.target.portId}`)
+    .sort()
+    .join("|");
+  return `${nodes}||${edges}`;
+}
+
+/**
  * Resizes one node.
  *
  * A node that draws something — a viewport above all — is unreadable at the
