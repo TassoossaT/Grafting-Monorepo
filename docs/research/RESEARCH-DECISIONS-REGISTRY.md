@@ -152,6 +152,28 @@ Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`
 | GoJS | Commercial | Discarded | Not free |
 | **Rete.js** | MIT | **Adopted** | Sole active graph-canvas engine, private inside `@grafting/ui`; consumers use only Grafting-owned canvas elements and contracts (DEC-056) |
 
+## 3D rendering engine package (`@grafting/render-3d`)
+
+Full reasoning: `docs/research/render-3d-engine-libraries.md`
+
+These sit *inside* the engine package and are Three.js-native helpers, not
+rival renderers — the one-renderer decision in the VTT map document below is
+unaffected by any of them. If adopted, each is confined to
+`packages/render-3d/src/backend/` under that package's own `AGENTS.md` and
+DEC-049.
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| **three-mesh-bvh** (gkjohnson) | MIT | Standby — first pick | Bounding-volume hierarchy for three.js geometry. Accelerates the engine's currently naive `pick()`, and the same library supplies `shapecast` (line of sight, fog of war), sphere intersection (area of effect, auras), and distance queries (movement range, snapping) — three hand-written spatial algorithms avoided. Caveats: the idiomatic setup mutates `Mesh.prototype.raycast` globally (must be avoided here), and the hierarchy is not dynamic, so deforming terrain needs refit/regeneration measured first |
+| **camera-controls** (yomotsu) | MIT | Standby — second pick | Orbit/truck/dolly/zoom/`fitToBox` with damping and collision. The engine has no camera interaction at all today. Chosen over alternatives because `update(delta)` returns whether a redraw is needed and it emits `wake`/`rest`/`sleep` — it already assumes on-demand rendering, which matches the engine's invalidation model instead of fighting it |
+| `@three.ez/instanced-mesh` (InstancedMesh2) | MIT | Standby | `InstancedMesh` with per-instance frustum culling, BVH raycasting, LOD, sorting, per-instance visibility/opacity. Would enter as an additional visual kind, not a replacement for the one-object-per-item model. Author's caveat: BVH upkeep is expensive for constantly moving instances, so it suits walls/vegetation/props over active markers |
+| `BatchedMesh` | — (three.js core) | Standby | Different geometries sharing one material in a single draw call, where `InstancedMesh` requires one shared geometry. No new dependency; should be reached for before adding any instancing library |
+| **postprocessing** (pmndrs) | **Zlib** | Standby — needs license review | `OutlineEffect` is the selection highlight a tabletop needs, and the same pass system is where the "dark vision" masking effect belongs. The only non-MIT candidate here; triggers the master source's rule 2.6 license/provenance review and a `THIRD_PARTY_NOTICES.md` entry |
+| miniplex / bitECS | MIT | Reference only | Entity-Component-System — the prior art naming what the engine's capability-based decomposition already is. Not adopted: no consumer needs behaviour composition yet, and the repository's rule is that a generic package needs a real consumer. miniplex is the gentle option if that changes (no upfront component declaration, no imposed scheduler) |
+| skyloutyr/VTT | MIT | Reference only (product) | C#/.NET, OpenGL 3.3, Windows desktop — no reusable code. Value is as an honest scope marker for a 3D tabletop: dynamic shadows, 3D+2D fog of war, particle editor, node-graph shaders |
+| gTove | MIT | Reference only (product) | React/TypeScript web 3D tabletop, the closest web analogue. Key design decision worth copying: fog of war is tied to the grid, so a map with no grid cannot hide anything — a large implementation simplification |
+| three-game-engine / the-world-engine.ts / three.gf | MIT | Discarded | Unity-style, **entity-typed**, bring their own scene and loop. Adopting one replaces the capability-based decomposition the owner specified rather than adding to it |
+
 ## VTT map, terrain, and rendering
 
 Full reasoning: `docs/research/vtt-map-and-terrain-construction-options.md`

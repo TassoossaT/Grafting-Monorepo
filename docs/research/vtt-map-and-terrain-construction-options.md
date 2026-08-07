@@ -103,7 +103,7 @@ inside the already-accepted rule.**
 | deck.gl (+ `@deck.gl-community/editable-layers`) | Reference/parameter only | **Reference only** — not a dependency. Its layer catalog is the specification of *what to replicate*, studied and reimplemented with Three.js's own primitives |
 | Architecture Studio's code graph and future node-graph surfaces | **Rete.js**, private inside `@grafting/ui` | **Adopted (DEC-056)** — the owner selected it as the sole active graph-canvas engine; consumers use vendor-neutral UI contracts |
 | `packages/x6-canvas` (X6) | Dormant reference only | **Retired (DEC-056)** — no active consumer, root validation, or generated API documentation; reactivation needs a new owner decision |
-| Procedural-generation and heightfield visualization | **Three.js**, private inside `@grafting/ui` | **Adopted boundary (DEC-056)** — it remains the non-graph 3D renderer and is not exposed through consumer contracts |
+| Procedural-generation and heightfield visualization | **Three.js**, private inside `@grafting/render-3d` | **Adopted boundary (DEC-056, moved by DEC-059)** — it remains the non-graph 3D renderer and is not exposed through consumer contracts. DEC-059 moved it out of `@grafting/ui` into its own engine package; `@grafting/ui` keeps `createHeightfieldCanvas` as a thin boundary translation. Engine-internal library candidates are in `docs/research/render-3d-engine-libraries.md` — all Three.js-native helpers, none of which reopens the one-renderer decision above |
 
 ### What deck.gl demonstrates, and its Three.js-native equivalent
 
