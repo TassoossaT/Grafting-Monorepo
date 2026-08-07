@@ -85,6 +85,10 @@ ADR-per-task.
   `{prState: "manual", prUrl: <manual compare URL>}` instead of failing. Leaves
   the worktree in place for any follow-up review commits. Any other `gh pr create`
   failure is explicit with its stderr; it is never mislabeled as a manual fallback.
+  When the branch already has an open PR, the call appends `--body` to that PR's
+  description rather than discarding it, updates `--title` when it differs, and reports
+  `bodyAppended`/`titleUpdated`. Appending rather than replacing preserves the account a
+  reviewer may already have read; an unchanged body is a no-op.
   The recorded base is validated, and the first push sets the task branch's own upstream.
 - `task status --id <TASK-ID>` / `task doctor --id <TASK-ID>` — derives local and
   remote branch existence, registered worktree, on-disk directory, orphan/mismatch,
@@ -149,7 +153,10 @@ ADR-per-task.
 6. When the task is ready for review, `ia-graft task done --id <TASK-ID> --title
    <title> --body <body>` pushes the branch and opens the pull request (via
    `gh`, when available — otherwise it still pushes and returns a manual
-   compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR. A human merges it; once merged,
+   compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR, **appends** the new body to that
+   PR's description under a `## Update` heading, and replaces the title when it changed.
+   The result reports `bodyAppended`/`titleUpdated` so a caller can tell whether its prose
+   landed. Re-running with an unchanged body appends nothing. A human merges it; once merged,
    `ia-graft task cleanup --id <TASK-ID>` removes the
    worktree and its verified unused local/remote task branches.
 

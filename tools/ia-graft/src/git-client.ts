@@ -15,6 +15,29 @@ export function branchNameForTask(taskId: string): string {
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
+
+/** A pull request that already exists for a task branch, as `gh pr view` reports it. */
+interface ExistingPullRequest {
+    number: number;
+    url: string;
+    baseRefName: string;
+    title: string;
+    body: string;
+}
+
+/**
+ * Separator between an existing PR body and a later `task done`'s prose.
+ *
+ * Deliberately a visible rule and heading rather than an invisible marker: the
+ * audience is a human reviewer returning to a PR they have already read, and
+ * what they need is to see where the part they have not read begins.
+ */
+export function appendPullRequestSection(existingBody: string, addition: string): string {
+    const current = existingBody.trimEnd();
+    const next = addition.trim();
+    if (current.length === 0) return next;
+    return `${current}\n\n---\n\n## Update\n\n${next}`;
+}
 const DEPENDENCY_OVERLAY_MARKER = '.ia-graft-overlay.json';
 const DEPENDENCY_CACHE_DIR = '.ia-graft-task-deps';
 
@@ -700,13 +723,14 @@ export class GitWorktreeSession {
      * @param baseBranch The branch to open the PR against.
      * @returns The PR URL (or manual compare URL) and whether it was actually opened.
      */
-    async createPullRequest(title: string, body: string, baseBranch: string): Promise<{ url: string; state: 'created' | 'existing' | 'manual'; reason?: string }> {
+    async createPullRequest(title: string, body: string, baseBranch: string): Promise<{ url: string; state: 'created' | 'existing' | 'manual'; reason?: string; bodyAppended?: boolean; titleUpdated?: boolean }> {
         const existing = await this.existingPullRequest();
         if (existing) {
             if (existing.baseRefName !== baseBranch) {
                 throw new Error(`existing PR #${existing.number} targets ${existing.baseRefName}, but task base is ${baseBranch}`);
             }
-            return { url: existing.url, state: 'existing' };
+            const applied = await this.applyPullRequestUpdate(existing, title, body);
+            return { url: existing.url, state: 'existing', ...applied };
         }
         try {
             await execFileAsync('gh', ['auth', 'status'], { cwd: this.worktreePath, env: envWithGhFallbackPath() });
@@ -732,19 +756,76 @@ export class GitWorktreeSession {
      * `gh` is unavailable. Returns `null` for any other reason (no such PR,
      * `gh` unreachable), which the caller treats the same as "couldn't open one."
      */
-    private async existingPullRequest(): Promise<{ number: number; url: string; baseRefName: string } | null> {
+    private async existingPullRequest(): Promise<ExistingPullRequest | null> {
         try {
             const { stdout } = await execFileAsync(
                 'gh',
-                ['pr', 'view', this.branchName, '--json', 'number,url,baseRefName'],
+                ['pr', 'view', this.branchName, '--json', 'number,url,baseRefName,title,body'],
                 { cwd: this.worktreePath, env: envWithGhFallbackPath() },
             );
-            const result = JSON.parse(stdout) as { number?: number; url?: string; baseRefName?: string };
+            const result = JSON.parse(stdout) as Partial<ExistingPullRequest>;
             return result.number && result.url && result.baseRefName
-                ? { number: result.number, url: result.url, baseRefName: result.baseRefName }
+                ? {
+                    number: result.number,
+                    url: result.url,
+                    baseRefName: result.baseRefName,
+                    title: result.title ?? '',
+                    body: result.body ?? '',
+                }
                 : null;
         } catch {
             return null;
+        }
+    }
+
+    /**
+     * Carries a repeated `task done`'s title and body onto the PR that already exists.
+     *
+     * Without this the second and later calls discarded both silently: the CLI
+     * reported the existing PR's URL and looked successful, while the
+     * description a caller had just written never left the machine. A caller
+     * has no way to notice, because the only observable difference is on
+     * GitHub. Hence `bodyAppended`/`titleUpdated` in the result — the outcome
+     * is reported either way rather than inferred.
+     *
+     * The body is **appended**, not replaced. Each `task done` after the first
+     * describes a further round of work on a branch already under review, and
+     * replacing would destroy the account of what a reviewer may have already
+     * read. Re-running with an unchanged body appends nothing, so the common
+     * case of pushing follow-up commits without new prose stays idempotent.
+     */
+    private async applyPullRequestUpdate(
+        existing: ExistingPullRequest,
+        title: string,
+        body: string,
+    ): Promise<{ bodyAppended: boolean; titleUpdated: boolean }> {
+        const args: string[] = [];
+        const titleUpdated = title.trim() !== existing.title.trim();
+        if (titleUpdated) args.push('--title', title);
+
+        const bodyAppended = body.trim().length > 0 && !existing.body.includes(body.trim());
+        let bodyFile: string | undefined;
+        if (bodyAppended) {
+            // A PR body can reach GitHub's 65536-character limit, which is past
+            // what a Windows command line accepts as a single argument, so the
+            // body goes through a file rather than argv.
+            bodyFile = path.join(tmpdir(), `ia-graft-pr-${existing.number}-${randomBytes(6).toString('hex')}.md`);
+            await fs.writeFile(bodyFile, appendPullRequestSection(existing.body, body), 'utf8');
+            args.push('--body-file', bodyFile);
+        }
+
+        if (args.length === 0) return { bodyAppended: false, titleUpdated: false };
+
+        try {
+            await execFileAsync('gh', ['pr', 'edit', String(existing.number), ...args], {
+                cwd: this.worktreePath,
+                env: envWithGhFallbackPath(),
+            });
+            return { bodyAppended, titleUpdated };
+        } catch (error) {
+            throw new Error(`gh pr edit failed for PR #${existing.number}: ${commandError(error)}`);
+        } finally {
+            if (bodyFile) await fs.rm(bodyFile, { force: true });
         }
     }
 

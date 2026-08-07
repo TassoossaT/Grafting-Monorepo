@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "./git-client.ts";
+import { appendPullRequestSection, deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "./git-client.ts";
 import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
@@ -37,6 +37,27 @@ test("taskNew rejects an invalid task id before touching git", async () => {
   const root = await makeRoot();
   const result = await taskNew(root, { taskId: "not valid" });
   assert.equal(result.ok, false);
+});
+
+test("appendPullRequestSection preserves what a reviewer may already have read", () => {
+  const appended = appendPullRequestSection("First round.", "Second round.");
+
+  assert.match(appended, /^First round\./, "the original description must survive");
+  assert.match(appended, /Second round\.$/, "the new prose goes after it");
+  assert.match(appended, /\n---\n/, "a visible rule marks where unread content starts");
+});
+
+test("appendPullRequestSection returns the addition alone when there is no body yet", () => {
+  assert.equal(appendPullRequestSection("", "Only round."), "Only round.");
+  assert.equal(appendPullRequestSection("   \n\n ", "Only round."), "Only round.");
+});
+
+test("appendPullRequestSection stacks repeated updates rather than collapsing them", () => {
+  const once = appendPullRequestSection("Base.", "One.");
+  const twice = appendPullRequestSection(once, "Two.");
+
+  assert.equal((twice.match(/## Update/g) ?? []).length, 2);
+  assert.ok(twice.indexOf("One.") < twice.indexOf("Two."), "updates stay in the order written");
 });
 
 test("taskDone rejects a task without a title or body before touching git", async () => {
