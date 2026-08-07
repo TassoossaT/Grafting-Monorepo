@@ -126,16 +126,39 @@ function declaredPorts(
   return node.ports ?? definition.ports ?? [];
 }
 
+/**
+ * Finds the port a side is talking about.
+ *
+ * A node may declare an input and an output under the same identity — a filter
+ * that takes a heightmap and returns one is the ordinary case. Matching on
+ * identity alone returns whichever was declared first, so dragging from such an
+ * output resolved to the *input*'s definition and was refused for pointing the
+ * wrong way. The side is part of the question, so it is part of the lookup.
+ */
+function findPortForSide(
+  ports: readonly CanvasPortDefinition[],
+  portId: string,
+  side: "input" | "output",
+): CanvasPortDefinition | undefined {
+  const wanted = side === "input" ? "in" : "out";
+  const matching = ports.filter((candidate) => candidate.id === portId);
+  return (
+    matching.find((candidate) => (candidate.direction ?? "both") === wanted) ??
+    matching.find((candidate) => (candidate.direction ?? "both") === "both")
+  );
+}
+
 function resolvePort(
   node: CanvasNode,
   definition: CanvasNodeViewDefinition,
   portId: string | undefined,
+  side: "input" | "output",
   fallback: CanvasPortDefinition,
 ): CanvasPortDefinition {
   if (portId === undefined) return fallback;
-  const port = declaredPorts(node, definition).find((candidate) => candidate.id === portId);
+  const port = findPortForSide(declaredPorts(node, definition), portId, side);
   if (port === undefined) {
-    throw new Error(`Canvas node ${node.id} does not define port ${portId}`);
+    throw new Error(`Canvas node ${node.id} does not define ${side} port ${portId}`);
   }
   return port;
 }
@@ -648,8 +671,8 @@ export function createCanvasAdapter(
     if (source === undefined || target === undefined) {
       throw new Error(`Canvas edge ${edge.id} references a missing endpoint`);
     }
-    const sourcePort = resolvePort(source.source, source.definition, edge.source.portId, DEFAULT_SOURCE_PORT);
-    const targetPort = resolvePort(target.source, target.definition, edge.target.portId, DEFAULT_TARGET_PORT);
+    const sourcePort = resolvePort(source.source, source.definition, edge.source.portId, "output", DEFAULT_SOURCE_PORT);
+    const targetPort = resolvePort(target.source, target.definition, edge.target.portId, "input", DEFAULT_TARGET_PORT);
     const sourceKey = outputKey(sourcePort.id);
     const targetKey = inputKey(targetPort.id);
     // A port that declares itself an input never received an output socket in
@@ -714,7 +737,7 @@ export function createCanvasAdapter(
       const model = nodeModels.get(socket.nodeId);
       if (model === undefined) return null;
       const portId = socket.key.slice(socket.key.indexOf(":") + 1);
-      const port = declaredPorts(model.source, model.definition).find((candidate) => candidate.id === portId);
+      const port = findPortForSide(declaredPorts(model.source, model.definition), portId, socket.side);
       if (port === undefined) return null;
       const connectionCount = [...connectionModels.values()].filter((connection) =>
         socket.side === "input"

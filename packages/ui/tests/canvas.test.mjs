@@ -115,7 +115,7 @@ test("refuses an edge that leaves a node through an input-only port", () => {
         ],
         { nodeViews: [view], edgeViews: [EDGE_VIEW] },
       ),
-    /leaves a through input-only port value/,
+    /does not define output port value/,
   );
 });
 
@@ -145,7 +145,7 @@ test("refuses an edge that enters a node through an output-only port", () => {
         ],
         { nodeViews: [view], edgeViews: [EDGE_VIEW] },
       ),
-    /enters b through output-only port result/,
+    /does not define input port result/,
   );
 });
 
@@ -345,4 +345,41 @@ test("treats an absent or zero radius as requiring a direct hit", () => {
 test("resolves a tie to the first candidate, so the same input gives the same result", () => {
   const first = findMagneticTarget({ x: 0, y: 0 }, [port("a", "in", 10, 0), port("b", "in", 10, 0)], 40);
   assert.equal(first.nodeId, "a");
+});
+
+test("tells an input and an output apart when they share an identity", () => {
+  // A filter that takes a heightmap and returns one declares the same identity
+  // on both sides. Resolving by identity alone returned whichever came first,
+  // so dragging from such an output was judged against the input's definition
+  // and refused for pointing the wrong way -- Smooth and Remap could take a
+  // connection but never give one.
+  const view = {
+    ...NODE_VIEW,
+    ports: [
+      { id: "heightmap", position: "left", direction: "in" },
+      { id: "heightmap", position: "right", direction: "out" },
+    ],
+  };
+  assert.throws(
+    () =>
+      createCanvas(
+        {},
+        [
+          { ...node("a"), view: view.id },
+          { ...node("b"), view: view.id },
+        ],
+        [
+          {
+            id: "forwards",
+            view: EDGE_VIEW.id,
+            source: { nodeId: "a", portId: "heightmap" },
+            target: { nodeId: "b", portId: "heightmap" },
+          },
+        ],
+        { nodeViews: [view], edgeViews: [EDGE_VIEW] },
+      ),
+    // Reaching the renderer proves both sides resolved; a real surface is out
+    // of scope for a DOM-free contract test.
+    /container|replaceChildren|style/,
+  );
 });

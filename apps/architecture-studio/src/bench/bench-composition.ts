@@ -140,10 +140,13 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
         capacity: portCapacity(port, side),
         magnet: true,
         presentation: Object.freeze({
-          radius: 7,
-          fill: colorForDataType(port.dataType),
-          stroke: "#ffffff",
-          strokeWidth: 2,
+          radius: 6,
+          // Direction is readable at a glance without spending the colour that
+          // already carries the value kind: an input is hollow, waiting to be
+          // filled; an output is solid, already holding something.
+          fill: side === "input" ? "#ffffff" : colorForDataType(port.dataType),
+          stroke: colorForDataType(port.dataType),
+          strokeWidth: side === "input" ? 3 : 2,
           label: port.label,
           labelColor: "#475569",
           labelFontSize: 9,
@@ -200,7 +203,8 @@ export interface BenchNodeExtras {
 
 export function toCanvasNode(node: BenchNode, extras: BenchNodeExtras = {}): CanvasNode {
   const kind = findNodeKind(node.kindId);
-  const size = benchNodeSize(kind);
+  const natural = benchNodeSize(kind);
+  const size = { width: node.width ?? natural.width, height: node.height ?? natural.height };
   return Object.freeze({
     id: node.id,
     view: viewForKind(kind),

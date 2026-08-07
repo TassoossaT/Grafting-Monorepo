@@ -21,6 +21,7 @@ import {
   BENCH_CONTROL_NODE_VIEW,
   BENCH_ELEMENT_NODE_VIEW,
   BENCH_VIEWPORT_NODE_VIEW,
+  benchNodeSize,
   colorForDataType,
   presentBenchEdge,
   toCanvasEdge,
@@ -35,6 +36,7 @@ import {
   moveBenchNode,
   removeBenchEdge,
   removeBenchNode,
+  resizeBenchNode,
   setBenchParam,
   type BenchGraph,
 } from "../../bench/bench-graph.ts";
@@ -51,7 +53,6 @@ import type { BenchParamValue } from "../../bench/node-kind.ts";
 import { paramIdFromPort } from "../../bench/node-kind.ts";
 import { findNodeKind, nodeKindsByCategory } from "../../bench/registry.ts";
 import ParameterPanel from "./parameter-panel.tsx";
-import PreviewPanel from "./preview-panel.tsx";
 
 const REFUSAL_MESSAGES: Readonly<Record<string, string>> = {
   "type-mismatch": "Those ports carry different value kinds.",
@@ -105,6 +106,23 @@ export default function BenchClient() {
     (nodeId: string, paramId: string, raw: BenchParamValue) => {
       const next = setBenchParam(graphRef.current, nodeId, paramId, raw);
       commit(next);
+    },
+    [commit],
+  );
+
+  const resizeSelected = useCallback(
+    (width: number | null, height: number | null) => {
+      const selected = selectionRef.current;
+      if (selected?.kind !== "node") return;
+      const current = graphRef.current.nodes.find((node) => node.id === selected.id);
+      if (current === undefined) return;
+      const natural = benchNodeSize(findNodeKind(current.kindId));
+      commit(
+        resizeBenchNode(graphRef.current, selected.id, {
+          width: width ?? current.width ?? natural.width,
+          height: height ?? current.height ?? natural.height,
+        }),
+      );
     },
     [commit],
   );
@@ -401,12 +419,6 @@ export default function BenchClient() {
       </div>
 
       <aside style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-        <div style={{ height: 260, flexShrink: 0 }}>
-          <PreviewPanel
-            preview={previewTarget === null ? null : (previews[previewTarget] ?? null)}
-            label={previewNode === null ? null : findNodeKind(previewNode.kindId).title}
-          />
-        </div>
         <div style={{ overflowY: "auto", minHeight: 0 }}>
           {selectedEdge !== null ? (
             <Card ariaLabel="Selected connection">
@@ -431,6 +443,29 @@ export default function BenchClient() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <Button label="Duplicate" onClick={duplicateSelected} />
                   <Button label="Delete" onClick={removeSelected} />
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <Text content="Size" strong />
+                  <input
+                    aria-label="Node width"
+                    type="number"
+                    min={140}
+                    max={720}
+                    step={20}
+                    value={selectedNode.width ?? benchNodeSize(selectedKind).width}
+                    onChange={(event) => resizeSelected(Number(event.target.value), null)}
+                    style={{ width: 68 }}
+                  />
+                  <input
+                    aria-label="Node height"
+                    type="number"
+                    min={90}
+                    max={720}
+                    step={20}
+                    value={selectedNode.height ?? benchNodeSize(selectedKind).height}
+                    onChange={(event) => resizeSelected(null, Number(event.target.value))}
+                    style={{ width: 68 }}
+                  />
                 </div>
                 <ParameterPanel
                   specs={selectedKind.params}
