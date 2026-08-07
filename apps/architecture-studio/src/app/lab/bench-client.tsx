@@ -34,6 +34,7 @@ import {
   addBenchEdge,
   addBenchNode,
   duplicateBenchNode,
+  benchEvaluationKey,
   moveBenchNode,
   removeBenchEdge,
   removeBenchNode,
@@ -97,6 +98,8 @@ export default function BenchClient() {
 
   const statusesRef = useRef<Readonly<Record<string, BenchNodeStatus>>>(EMPTY_STATUSES);
   const previewsRef = useRef<Readonly<Record<string, EvaluationPreview>>>({});
+
+  const evaluationKey = benchEvaluationKey(graph);
 
   const commit = useCallback((next: BenchGraph) => {
     graphRef.current = next;
@@ -276,7 +279,9 @@ export default function BenchClient() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [graph, selectedNodeId]);
+    // Keyed on what can change a result, not on the graph: dragging a node
+    // commits a new graph on every pointer move and cannot alter any value.
+  }, [evaluationKey, selectedNodeId]);
 
   // Badges live on the node itself, so the surface has to be told when a pass
   // changes them. Only nodes whose badge actually moved are touched.
@@ -289,13 +294,18 @@ export default function BenchClient() {
     renderedStatuses.current = next;
   }, [graph, statuses, nodeExtras]);
 
+  const renderedPreviews = useRef<Readonly<Record<string, EvaluationPreview>>>({});
   useEffect(() => {
     const handle = handleRef.current;
     if (handle === null) return;
     for (const node of graph.nodes) {
       if (findNodeKind(node.kindId).outputs.length > 0) continue;
+      // Identity is the right comparison: a pass that produced the same result
+      // hands back the very object already on screen.
+      if (renderedPreviews.current[node.id] === previews[node.id]) continue;
       handle.updateNode(toCanvasNode(node, nodeExtras(node.id)));
     }
+    renderedPreviews.current = previews;
   }, [graph, previews, nodeExtras]);
 
   const placeNode = useCallback(

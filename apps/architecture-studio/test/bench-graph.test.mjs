@@ -5,11 +5,13 @@ import {
   EMPTY_BENCH_GRAPH,
   addBenchEdge,
   addBenchNode,
+  benchEvaluationKey,
   checkBenchConnection,
   duplicateBenchNode,
   moveBenchNode,
   removeBenchEdge,
   removeBenchNode,
+  resizeBenchNode,
   setBenchParam,
 } from "../src/bench/bench-graph.ts";
 import { coerceParamValue, defaultParamValues, portCapacity } from "../src/bench/node-kind.ts";
@@ -172,4 +174,33 @@ test("groups elements for the menu in registration order", () => {
 
 test("refuses to instantiate an unregistered element", () => {
   assert.throws(() => addBenchNode(EMPTY_BENCH_GRAPH, "absent.kind", { x: 0, y: 0 }), /not registered/);
+});
+
+test("ignores position and size when summarising what a graph computes", () => {
+  const placed = addBenchNode(EMPTY_BENCH_GRAPH, "heightmap.perlin", { x: 0, y: 0 });
+  const moved = moveBenchNode(placed.graph, placed.nodeId, { x: 900, y: 400 });
+  const resized = resizeBenchNode(moved, placed.nodeId, { width: 400, height: 400 });
+
+  // Dragging a node commits a new graph on every pointer move; none of it can
+  // change a single computed value, and redrawing on it made viewports flicker.
+  assert.equal(benchEvaluationKey(resized), benchEvaluationKey(placed.graph));
+});
+
+test("notices a changed parameter when summarising what a graph computes", () => {
+  const placed = addBenchNode(EMPTY_BENCH_GRAPH, "heightmap.perlin", { x: 0, y: 0 });
+  const tweaked = setBenchParam(placed.graph, placed.nodeId, "seed", 12);
+
+  assert.notEqual(benchEvaluationKey(tweaked), benchEvaluationKey(placed.graph));
+});
+
+test("notices a new connection when summarising what a graph computes", () => {
+  const source = addBenchNode(EMPTY_BENCH_GRAPH, "heightmap.perlin", { x: 0, y: 0 });
+  const sink = addBenchNode(source.graph, "terrain.discretize", { x: 300, y: 0 });
+  const connected = addBenchEdge(
+    sink.graph,
+    { nodeId: source.nodeId, portId: "heightmap" },
+    { nodeId: sink.nodeId, portId: "heightmap" },
+  );
+
+  assert.notEqual(benchEvaluationKey(connected.graph), benchEvaluationKey(sink.graph));
 });
