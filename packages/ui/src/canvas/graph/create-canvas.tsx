@@ -32,6 +32,7 @@ import { checkCanvasConnection, type ConnectionCandidate } from "./connection-po
 import { clampCanvasZoomScale, resolveCanvasInteractionPolicy } from "./interaction-policy.js";
 import { findMagneticTarget, type MagneticCandidate } from "./magnetic-policy.js";
 import { isReportableMovement } from "./movement-policy.js";
+import { resizeFromDrag } from "./resize-policy.js";
 import { resolveCanvasSocketPointerPolicy } from "./socket-policy.js";
 
 class CanvasSocketModel extends ClassicPreset.Socket {
@@ -51,6 +52,8 @@ class CanvasNodeModel extends ClassicPreset.Node {
     readonly definition: CanvasNodeViewDefinition,
     readonly activate: (reference: CanvasEntityReference) => void,
     readonly clickThreshold: number,
+    readonly resize: ((size: { width: number; height: number }) => void) | null,
+    readonly currentScale: () => number,
   ) {
     super(source.id);
     this.id = source.id;
@@ -400,6 +403,53 @@ function CanvasNodeView({
       }}
     >
       <div ref={hostRef} style={{ position: "absolute", inset: 0 }} />
+      {data.resize === null ? null : (
+        <span
+          data-canvas-resize-handle={data.source.id}
+          title="Drag to resize"
+          style={{
+            position: "absolute",
+            right: -2,
+            bottom: -2,
+            width: 14,
+            height: 14,
+            zIndex: 4,
+            cursor: "nwse-resize",
+            touchAction: "none",
+            borderRight: "3px solid #94a3b8",
+            borderBottom: "3px solid #94a3b8",
+            borderBottomRightRadius: 4,
+          }}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            // Without this the surface reads the press as the start of a node
+            // drag and the node runs away from the corner being pulled.
+            event.stopPropagation();
+            event.preventDefault();
+            const origin = { x: event.clientX, y: event.clientY };
+            const start = { width: data.width, height: data.height };
+            const target = event.currentTarget;
+            target.setPointerCapture(event.pointerId);
+            const move = (moved: PointerEvent) => {
+              data.resize?.(
+                resizeFromDrag(
+                  start,
+                  { dx: moved.clientX - origin.x, dy: moved.clientY - origin.y },
+                  data.currentScale(),
+                ),
+              );
+            };
+            const stop = () => {
+              target.removeEventListener("pointermove", move);
+              target.removeEventListener("pointerup", stop);
+              target.removeEventListener("pointercancel", stop);
+            };
+            target.addEventListener("pointermove", move);
+            target.addEventListener("pointerup", stop);
+            target.addEventListener("pointercancel", stop);
+          }}
+        />
+      )}
       {Object.entries(data.outputs).map(([key, output]) =>
         output instanceof ClassicPreset.Output ? renderSocket("output", key, output as ClassicPreset.Output<CanvasSocketModel>) : null,
       )}
@@ -660,7 +710,17 @@ export function createCanvasAdapter(
     if (definition.defaultWidth <= 0 || definition.defaultHeight <= 0) {
       throw new Error(`Canvas node view ${definition.id} must define positive dimensions`);
     }
-    const model = new CanvasNodeModel(node, definition, (reference) => activate(reference), clickThreshold);
+    const resizable = options.editing?.resizableNodes === true;
+    const model = new CanvasNodeModel(
+      node,
+      definition,
+      (reference) => activate(reference),
+      clickThreshold,
+      resizable
+        ? (size) => options.editing?.onNodeResized?.(node.id, size.width, size.height)
+        : null,
+      () => area.area.transform.k,
+    );
     declarePorts(model);
     return model;
   };
