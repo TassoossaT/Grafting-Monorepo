@@ -150,7 +150,17 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
   const base = await client.resolveTaskBase(input.taskId, input.base);
   await session.push();
   const pr = await session.createPullRequest(input.title, input.body, base);
-  return { ok: true as const, prUrl: pr.url, prState: pr.state, base, note: pr.state === "manual" ? `branch pushed; open the PR manually at prUrl (${pr.reason})` : undefined };
+  return {
+    ok: true as const,
+    prUrl: pr.url,
+    prState: pr.state,
+    base,
+    // Reported on every call, so a caller never has to open GitHub to find out
+    // whether the prose it just wrote actually landed.
+    bodyAppended: pr.bodyAppended ?? pr.state === "created",
+    titleUpdated: pr.titleUpdated ?? pr.state === "created",
+    note: pr.state === "manual" ? `branch pushed; open the PR manually at prUrl (${pr.reason})` : undefined,
+  };
 }
 
 export interface TaskCleanupInput {
