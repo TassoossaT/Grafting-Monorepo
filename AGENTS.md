@@ -14,6 +14,12 @@ order here — it is the single source and the two must never drift apart). A
 genuinely small, direct edit (see `Task-based work` below) does not need this
 full pass.
 
+"Read `GRAFTING_MASTER_SOURCE.md`" means read its section 0 — the normative
+layer and the precedence rule — and then use its S0.4 router table to fetch
+only the sections the task actually needs. Most section bodies now live in
+`docs/architecture/`; the router says which file holds which. Reading the
+whole chain end to end was never the intent and is now avoidable.
+
 ## Initial state
 
 While `docs/decisions/GATES.md` still has open Decision Gates and the
