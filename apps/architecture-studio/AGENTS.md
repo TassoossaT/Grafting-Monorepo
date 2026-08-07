@@ -27,6 +27,16 @@ presentation, effects, surface, and interaction policy (DEC-052). Do not move
 those product choices into the generic UI canvas implementation or duplicate
 them across UI files.
 
+`src/app/lab/` is where a new **spike** lives (root `AGENTS.md` Mandatory
+rules, `GRAFTING_MASTER_SOURCE.md` "Throwaway spikes", 2026-08-07). A
+disposable experiment is declared as a trial page here rather than as a new
+top-level `spikes/` directory, so it is runnable and comparable next to the
+other trials in the `/lab/trials` gallery instead of being an orphan tree at
+the repository root. A trial captures a preview image through
+`src/lab-preview-storage.ts`, which the gallery shows as its cover. A trial is
+experimental by definition: it carries no stability promise and may be deleted
+outright once accepted, rejected, or rewritten as production code.
+
 `src/layout-client.ts` and `src/layout.worker.ts` are a thin app-owned batch
 boundary to generated Wasm. Do not reproduce the Rust layout heuristic in
 TypeScript.

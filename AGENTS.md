@@ -56,10 +56,19 @@ The agent MUST NOT:
 - promise zero-copy between distinct domains;
 - call authoritative replication "Event Sourcing";
 - create a second workspace root or lockfile without an ADR;
-- merge a pull request or push directly to `main`/`master`; agents commit and
-  push within their own task branch/worktree (created by `ia-graft task new`)
-  and may open a pull request, but only a human merges it (DEC-053,
+- merge a pull request; only a human merges one (DEC-053,
   `docs/adr/ADR-0015-agent-git-write-policy.md`);
+- commit or push directly to `main`/`master` any change that touches a
+  non-Markdown file; those commit and push within their own task
+  branch/worktree (created by `ia-graft task new`). Documentation-only
+  commits are the single exception — see "Task-based work" below (DEC-053,
+  `docs/adr/ADR-0015-agent-git-write-policy.md`);
+- create an experimental spike as a top-level `spikes/` directory; new
+  disposable experiments are declared as laboratory items inside
+  `apps/architecture-studio` (its `/lab` trials surface) so an experiment is
+  visible, runnable, and comparable next to the others instead of being an
+  orphan tree at the repository root. The existing `spikes/` entries stay
+  where they are as historical record;
 - use Nx to replace native toolchains;
 - create the entire future tree empty;
 - introduce a tool, agent, skill, or MCP without need and evaluation;
@@ -80,11 +89,23 @@ and the same coordination mechanism: `tools/ia-graft`. Vendor adapters
 (`CLAUDE.md`, `GEMINI.md`, and equivalent files) may only point to canonical
 instructions; they must not restate or override them.
 
-- **Never commit on `master`/`main` directly, no exception for small edits.**
-  Every commit, however small, happens on a task branch and goes through a
-  pull request.
-- **Direct/simple edits** (a typo, a comment, a small non-structural change
-  that doesn't touch a contract/config/policy file): still skip the
+- **Documentation-only edits commit directly on `master`/`main`, with no task
+  and no pull request.** A change qualifies only when *every* touched file is
+  Markdown prose — research documents, registries, ADRs, READMEs, planning
+  logs, this file, `.ai/coordination/PROTOCOL.md`. No source file, no
+  contract (`.fbs`, JSON schema), no config (`project.json`, `package.json`,
+  `Cargo.toml`, `nx.json`, …), no script, no test, and no generated Markdown
+  under `docs/generated/` (that tree is produced by its generator and
+  validated by `docs:check`, never hand-edited). Task ceremony was pure
+  overhead for prose; tasks are for heavy work. Changing the
+  protocol/registries/policies/hooks/permissions/skills/MCPs still requires
+  explicit owner approval before the commit — the relaxed path removes the
+  branch and PR, not the approval.
+- **Never commit on `master`/`main` for anything else.** The moment a change
+  touches one non-Markdown file, it is not documentation-only: the whole
+  change goes to a task branch and a pull request, however small it is.
+- **Direct/simple edits** (a typo in code, a comment, a small non-structural
+  change that doesn't touch a contract/config/policy file): skip the
   required-reading chain, but still go through
   `ia-graft task new`/`commit`/`done` below — just with a terser title/body,
   not a full task declaration.
@@ -137,8 +158,11 @@ instructions; they must not restate or override them.
   to remove the worktree, local branch, and the remote task branch when its SHA
   still matches the merged PR and no open stacked PR uses it as a base.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
-  MCPs still requires explicit owner approval — open the PR and wait for
-  review, do not merge your own.
+  MCPs still requires explicit owner approval. When the change reaches beyond
+  Markdown, open the PR and wait for review, do not merge your own. When it
+  is documentation-only, the approval must be explicit *before* the commit —
+  the direct-to-`master` path removes the review gate, so the owner's
+  go-ahead is the only gate left.
 - Provider chat history is never treated as shared state or evidence.
 
 ## Agent Efficiency and Token Economy
@@ -165,15 +189,18 @@ Minimize tokens read and produced; do not fetch more than a task needs.
 
 ## What counts as a direct/simple edit
 
-Both paths above go through `ia-graft task new`/`commit`/`done` and a PR —
-this only decides whether the *required-reading* chain and a full
+This section is about changes that touch at least one non-Markdown file.
+Documentation-only edits are covered by the first bullet of "Task-based
+work" above and need no task, no branch, and no PR at all. Everything else
+goes through `ia-graft task new`/`commit`/`done` and a PR — the criteria
+below only decide whether the *required-reading* chain and a full
 title/body can be skipped. A change qualifies only if it meets every
 criterion:
 
-- **Limited scope:** touches at most two files, or up to four when every
-  touched file is Markdown documentation. This raised cap never applies to
-  the protocol/registry/policy/hook/permission/skill/MCP files named in
-  Mandatory rules above — a change to any of those always gets the full
+- **Limited scope:** touches at most two files. Documentation that rides
+  along with a code change counts toward that cap like any other file.
+  A change to the protocol/registry/policy/hook/permission/skill/MCP files
+  named in Mandatory rules above never qualifies — it always gets the full
   required-reading pass, regardless of file count.
 - **No contract changes:** no public API, data contract (`.fbs`, JSON
   schema), or critical config (`project.json`, `nx.json`, `package.json`,

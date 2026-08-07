@@ -122,11 +122,15 @@ ADR-per-task.
 
 ## Starting work
 
-1. Decide whether the change is a direct/simple edit (see `AGENTS.md`'s "What
-   counts as a direct/simple edit") or a full task — either way, it goes
-   through a task branch and a PR; only the ceremony differs (a direct/simple
-   edit skips required-reading and gets a terser title/body). Never commit
-   on `master`/`main` directly, with no exception.
+1. Decide which of the three paths the change takes (see `AGENTS.md`'s
+   "Task-based work" and "What counts as a direct/simple edit"):
+   **documentation-only** — every touched file is Markdown prose, excluding
+   `docs/generated/` — commits straight to `master`/`main` with no task,
+   branch, or PR, and the rest of this section does not apply; a
+   **direct/simple edit** goes through a task branch and a PR but skips
+   required-reading and gets a terser title/body; a **full task** does
+   everything. The moment one non-Markdown file is touched, the change is
+   not documentation-only and never commits on `master`/`main`.
 2. Classify the request before creating anything: requested changes on an open
    PR use `task resume --pr <number>` (or the same task ID); independent work
    uses `task new --id <TASK-ID>`; work that truly depends on an unmerged task
@@ -192,7 +196,11 @@ Agents may:
 - push their own task branch;
 - prepare or open a pull request (`ia-graft task done` does this via `gh`).
 
-Agents never push to `main` or `master`, never force/bulk/mirror/tag/delete
+Agents push to `main` or `master` only for a documentation-only change as
+defined in `AGENTS.md`'s "Task-based work" — every touched file Markdown
+prose, nothing under `docs/generated/`, and owner approval already given when
+the file is a protocol/registry/policy file. For every other change they
+never push to `main` or `master`, never force/bulk/mirror/tag/delete
 remote refs, never invoke raw `merge`/`rebase`/`cherry-pick`/`revert` or other
 history-editing commands, and never merge a pull request (`gh pr merge`). The
 repository owner remains the only party who may merge a task's pull request.
@@ -205,7 +213,9 @@ an adapter.
 
 ## Before opening the pull request
 
-Whether the change was a direct/simple edit or a full task, before running
+This section applies to direct/simple edits and full tasks. A
+documentation-only change opens no pull request; it still runs whatever
+Markdown validation applies before committing. Before running
 `ia-graft task done` (or, for a direct edit, before considering it finished):
 
 1. Run the validations the change actually calls for (format, lint,

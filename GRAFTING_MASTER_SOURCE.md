@@ -2206,6 +2206,15 @@ Each session must end in an ADR, not in code.
 
 Spikes must be small and measurable. They do not automatically become the foundation.
 
+**Where a new spike lives (2026-08-07):** a new spike is declared as an
+experimental laboratory item inside `apps/architecture-studio` — its `/lab`
+trials surface — not as a new top-level `spikes/` directory. The Studio is
+already the place where a capability is exercised, previewed, and compared
+against its alternatives, so an experiment that lives there is runnable and
+visible next to the others instead of being an orphan tree at the repository
+root that nobody opens again. The existing `spikes/` entries listed below stay
+where they are as historical record; the rule applies to new spikes.
+
 After the result:
 
 - accept;

@@ -1,6 +1,6 @@
 # ADR-0015: agent Git write policy
 
-- Status: **Accepted; superseded in place on 2026-08-03, safe checkout/stack lifecycle amended on 2026-08-04, and controlled base sync amended on 2026-08-05 with explicit owner approval.**
+- Status: **Accepted; superseded in place on 2026-08-03, safe checkout/stack lifecycle amended on 2026-08-04, controlled base sync amended on 2026-08-05, and a documentation-only direct-commit exception amended on 2026-08-07, each with explicit owner approval.**
 - Decision owner: repository-owner
 - Record: DEC-053
 - Amends: ADR-0010
@@ -12,9 +12,18 @@ Agents may create forward-only commits and push only inside the deterministic
 `ia-graft task commit` is the canonical commit path because it fixes the target
 worktree and makes the mutation auditable.
 
+One exception, added 2026-08-07: a **documentation-only** change commits and
+pushes directly on `main`/`master`, with no task, branch, or pull request. It
+qualifies only when every touched file is Markdown prose and none lives under
+`docs/generated/`. A single non-Markdown file disqualifies the whole change.
+Protocol, registry, and policy documents are included, but their standing
+requirement of explicit owner approval moves *ahead* of the commit, since
+this path has no review gate behind it.
+
 Agents must never:
 
-- commit or push on `main`/`master`;
+- commit or push on `main`/`master`, except for the documentation-only
+  change defined above;
 - force, mirror, bulk, tag or delete remote refs;
 - invoke raw merge, rebase, cherry-pick, revert, amend, reset/discard history or merge a PR;
 - commit from the shared main checkout;
@@ -52,9 +61,24 @@ uncommitted shared state and prevented an automated PR lifecycle. Worktree
 isolation removes the mixed-tree risk that motivated that ban while preserving
 a human merge boundary.
 
+The documentation-only exception exists because the ceremony's cost had grown
+larger than its benefit for prose. A worktree, a branch, a PR, and a merge for
+a paragraph in a research document bought no isolation worth having: Markdown
+prose builds nothing, breaks no contract, fails no test, and conflicts
+textually rather than semantically. The mixed-tree risk the task flow protects
+against comes from source and configuration, so the exception is drawn exactly
+there — at the file-type boundary, not at a subjective size threshold that
+each agent would interpret differently. Tasks are reserved for heavy work.
+
 ## Enforcement and evidence
 
 `AGENTS.md`, `.ai/coordination/PROTOCOL.md`, the provider-neutral guard and its
-tests must agree. The CLI validates task IDs, derives the worktree path, returns
+tests must agree. The guard
+(`tools/scripts/agent-task-guard.mjs`) still denies every push to
+`main`/`master` and therefore does not yet implement the documentation-only
+exception; until it does, the canonical instructions above are ahead of the
+enforcement, and a documentation-only push is expected to be refused by the
+guard. Closing that gap is tracked as its own task, since it changes a script
+and its tests. The CLI validates task IDs, derives the worktree path, returns
 strict JSON, and protects cleanup. A policy change requires explicit owner
 approval and matching updates to the decision log, protocol and tests.
