@@ -25,6 +25,10 @@ export interface BenchNode {
   readonly y: number;
   /** This instance's own parameter values. */
   readonly params: BenchParamValues;
+  /** Rendered width, when the instance overrides its element's default. */
+  readonly width?: number;
+  /** Rendered height, when the instance overrides its element's default. */
+  readonly height?: number;
 }
 
 /** One value flowing from an output port to an input port. */
@@ -268,6 +272,35 @@ export function removeBenchEdge(graph: BenchGraph, edgeId: string): BenchGraph {
   return Object.freeze({
     nodes: graph.nodes,
     edges: Object.freeze(graph.edges.filter((edge) => edge.id !== edgeId)),
+    sequence: graph.sequence,
+  });
+}
+
+/**
+ * Resizes one node.
+ *
+ * A node that draws something — a viewport above all — is unreadable at the
+ * size that suits a node that only shows a title, so size belongs to the
+ * instance rather than to the element.
+ *
+ * @param graph - Current graph.
+ * @param nodeId - Node to resize.
+ * @param size - New rendered size in CSS pixels, clamped to something usable.
+ * @returns The next graph.
+ */
+export function resizeBenchNode(
+  graph: BenchGraph,
+  nodeId: string,
+  size: { readonly width: number; readonly height: number },
+): BenchGraph {
+  findNode(graph, nodeId);
+  const width = Math.min(720, Math.max(140, Math.round(size.width)));
+  const height = Math.min(720, Math.max(90, Math.round(size.height)));
+  return Object.freeze({
+    nodes: Object.freeze(
+      graph.nodes.map((node) => (node.id === nodeId ? Object.freeze({ ...node, width, height }) : node)),
+    ),
+    edges: graph.edges,
     sequence: graph.sequence,
   });
 }
