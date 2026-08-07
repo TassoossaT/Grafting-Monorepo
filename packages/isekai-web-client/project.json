@@ -19,6 +19,7 @@
         "command": "tsc --noEmit",
         "cwd": "packages/isekai-web-client"
       },
+      "dependsOn": ["isekai-wasm-bridge:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
     },
@@ -27,6 +28,7 @@
       "options": {
         "command": "pnpm --filter @grafting/isekai-web-client test"
       },
+      "dependsOn": ["isekai-wasm-bridge:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
     },

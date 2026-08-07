@@ -15,19 +15,20 @@
     "check": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio check" },
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },
     "dev": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
-      "dependsOn": ["ui:watch"],
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:watch"],
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
-      "dependsOn": ["ui:build"],
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/.next"]

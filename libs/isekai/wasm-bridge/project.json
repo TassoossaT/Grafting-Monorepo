@@ -13,11 +13,20 @@
     }
   },
   "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "wasm-pack build --target web --out-dir pkg", "cwd": "libs/isekai/wasm-bridge" },
+      "dependsOn": ["engine-domain-core:generate"],
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{projectRoot}/package.json", "^default", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"],
+      "outputs": ["{projectRoot}/pkg"]
+    },
     "check": {
       "executor": "nx:run-commands",
       "options": {
         "command": "cargo check -p grafting-isekai-wasm"
       },
+      "dependsOn": ["engine-domain-core:generate"],
       "cache": true,
       "inputs": [
         "{projectRoot}/**/*",
@@ -31,6 +40,7 @@
       "options": {
         "command": "cargo test -p grafting-isekai-wasm && wasm-pack test --node libs/isekai/wasm-bridge"
       },
+      "dependsOn": ["engine-domain-core:generate"],
       "cache": true,
       "inputs": [
         "{projectRoot}/**/*",
