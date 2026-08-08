@@ -32,6 +32,15 @@
  * needs either pinned border cells or a socket convention the tileset applies
  * itself; {@link openFaces} exists so a caller can do the former without
  * rediscovering which faces those are.
+ *
+ * # This is the volume, and a solver does not want the volume
+ *
+ * Everything above is a faithful description of the stack, and that is all it
+ * claims to be. Handing it to a tileset solver spends the solve on buried boxes
+ * while leaving every exposed face unlinked and therefore unconstrained --
+ * precisely inverted, since the exposed faces are the visible ones. See
+ * `shell-cell-graph.ts`, which derives the solid/air boundary from the same
+ * inputs and is what the terrain trial solves against.
  */
 
 import { quadAdjacency, normaliseWinding } from "./grid-adjacency.ts";

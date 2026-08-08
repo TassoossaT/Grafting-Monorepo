@@ -102,7 +102,15 @@ as baked world-space vertices. Baking breaks point editing.
 - **"a 4×4×4×4 mesh"** from the session is not understood well enough to record
   faithfully, and is deliberately left unrecorded rather than guessed at.
 
-## Known defect: stage 4 solves the volume, not the shell
+## Known defect: stage 4 solved the volume, not the shell — addressed
+
+Recorded below as it was diagnosed. `shell-cell-graph.ts` now derives the
+solid/air boundary from the same inputs: buried boxes are dropped, the empty
+space beside a cliff is materialised as pinned air cells so exposed faces are
+constrained rather than silent, and only a column's top draws a surface, which
+removes the `hollow` coplanarity. What is *not* done is a per-face facade
+tileset — a cliff face is still one cell carrying one corner-height module.
+
 
 `/lab/terrain-tileset` stacks cells to the ground and gives every cell a
 module. Consequences, from reading rather than measurement:
