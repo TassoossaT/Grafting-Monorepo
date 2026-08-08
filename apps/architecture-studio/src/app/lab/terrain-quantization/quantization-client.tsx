@@ -143,9 +143,13 @@ export default function QuantizationClient() {
           </label>
           <label>
             Scale{" "}
+            {/* The crate rejects 0.5 and above as aliased; a whole number
+                there used to come back as a silently flat map. */}
             <input
               type="number"
               step="0.01"
+              min="0.01"
+              max="0.49"
               value={scale}
               onChange={(event) => setScale(Number(event.target.value))}
               style={{ width: 80 }}

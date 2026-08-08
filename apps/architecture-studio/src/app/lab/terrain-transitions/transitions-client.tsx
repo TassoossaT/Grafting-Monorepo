@@ -30,7 +30,24 @@ interface Controls {
   readonly smooth: boolean;
 }
 
-const INITIAL: Controls = { seed: 1, trianglesPerSide: 5, levels: 5, scale: 3, smooth: true };
+/**
+ * `scale` multiplies integer sample coordinates before they reach Perlin, and
+ * Perlin is exactly zero at every integer lattice point. A whole-number scale
+ * therefore lands every sample on a lattice point and returns a field of pure
+ * zeros — a perfectly flat map. A half-step is no better: it zeros every other
+ * sample and saturates the rest at the extremes, which is aliasing, not
+ * terrain. Usable values are well below one, matching the crate's own doc
+ * comment and its tests.
+ */
+const SCALE_RANGE = { min: 0.02, max: 0.4, step: 0.01, initial: 0.12 } as const;
+
+const INITIAL: Controls = {
+  seed: 1,
+  trianglesPerSide: 5,
+  levels: 5,
+  scale: SCALE_RANGE.initial,
+  smooth: true,
+};
 
 /** Runs the same Rust generate-sample-quantize pipeline stage 2's trial uses. */
 function requestLevels(centres: Float32Array, controls: Controls): Promise<Int32Array> {
@@ -241,12 +258,12 @@ export default function TerrainTransitionsClient() {
           </label>
 
           <label style={{ display: "grid", gap: 4 }}>
-            <Text content={`Noise scale: ${controls.scale}`} strong />
+            <Text content={`Noise scale: ${controls.scale.toFixed(2)}`} strong />
             <input
               type="range"
-              min={1}
-              max={10}
-              step={0.5}
+              min={SCALE_RANGE.min}
+              max={SCALE_RANGE.max}
+              step={SCALE_RANGE.step}
               value={controls.scale}
               onChange={(event) => setControls({ ...controls, scale: Number(event.target.value) })}
             />
