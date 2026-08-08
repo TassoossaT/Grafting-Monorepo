@@ -13,9 +13,11 @@ import {
 import { buildIrregularQuadGrid } from "../../../vtt/irregular-grid.ts";
 import { normaliseWinding } from "../../../vtt/grid-adjacency.ts";
 import { cellCentres } from "../../../vtt/stacked-terrain.ts";
-import { buildQuadCellGraph, LATERAL_FACES } from "../../../vtt/quad-cell-graph.ts";
+import { LATERAL_FACES } from "../../../vtt/quad-cell-graph.ts";
+import { buildShellCellGraph, pinCells } from "../../../vtt/shell-cell-graph.ts";
 import { placeModule } from "../../../vtt/module-placement.ts";
 import {
+  EMPTY_MODULE_NAME,
   MODULE_FACES,
   SOCKET,
   STARTING_COMPATIBILITY,
@@ -41,7 +43,7 @@ const TERRAIN_LAYER = "terrain";
 const FIELD_SIZE = 64;
 const LEVEL_HEIGHT = 0.22;
 const BASE_HEIGHT = -0.6;
-const SOCKET_NAMES = ["low", "high", "rise", "fall", "ground", "sky"];
+const SOCKET_NAMES = ["low", "high", "rise", "fall", "ground", "sky", "air"];
 const FACE_NAMES = ["side 0", "side 1", "side 2", "side 3", "up", "down"];
 
 /** Starting framing. Orbiting recovers its yaw, pitch and distance from this. */
@@ -138,12 +140,18 @@ export default function TerrainTilesetClient() {
     [controls.seed, controls.trianglesPerSide],
   );
 
-  // A quad at level `n` contributes `n + 1` boxes, so even the lowest ground
-  // is one cell rather than nothing.
+  // A quad at level `n` holds `n + 1` boxes of terrain, so even the lowest
+  // ground is solid rather than nothing. The shell graph then keeps only the
+  // boxes that meet air, and materialises the air they meet.
   const graph = useMemo(() => {
     if (levels === null || levels.length !== grid.quads.length) return null;
-    return buildQuadCellGraph(grid, [...levels].map((level) => Math.max(0, level) + 1));
+    return buildShellCellGraph(grid, [...levels].map((level) => Math.max(0, level) + 1));
   }, [grid, levels]);
+
+  const emptyIndex = useMemo(
+    () => modules.findIndex((module) => module.name === EMPTY_MODULE_NAME),
+    [modules],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -227,6 +235,10 @@ export default function TerrainTilesetClient() {
 
   const solve = useCallback(() => {
     if (graph === null) return;
+    if (emptyIndex < 0) {
+      setError(`The tileset has no "${EMPTY_MODULE_NAME}" module for air cells to be pinned to.`);
+      return;
+    }
     let flattened: { sockets: Uint32Array; weights: Float32Array };
     try {
       flattened = flattenModules(modules);
@@ -248,7 +260,9 @@ export default function TerrainTilesetClient() {
       // Only the lateral faces rotate. Including 4 or 5 here would let a
       // module land on its side.
       rotationCycle: Uint32Array.from(LATERAL_FACES),
-      pinned: new Uint32Array(),
+      // Air is not decided, it is stated. Pinning it is what turns a face that
+      // used to have no link at all into a constraint on the terrain beside it.
+      pinned: pinCells(graph.airCells, emptyIndex),
       seed: controls.solveSeed,
     })
       .then((response) => {
@@ -264,7 +278,7 @@ export default function TerrainTilesetClient() {
         setSolving(false);
         setError(cause instanceof Error ? cause.message : String(cause));
       });
-  }, [graph, modules, compatibility, controls.solveSeed]);
+  }, [graph, modules, compatibility, controls.solveSeed, emptyIndex]);
 
   useEffect(() => {
     setSolution(null);
@@ -281,13 +295,18 @@ export default function TerrainTilesetClient() {
     // renderer sees a handful of meshes rather than one per cell.
     const perModule = modules.map(() => ({ positions: [] as number[], indices: [] as number[] }));
 
-    for (let cell = 0; cell < graph.cellCount; cell += 1) {
+    // Only the top of each column draws a surface. Drawing every shell cell's
+    // top was what put a `hollow` exactly on the plane of the `flat` below it,
+    // and two coplanar surfaces are a z-fight, not a decision the depth buffer
+    // can make. The cliff faces below come from this cell's own skirt.
+    for (const cell of graph.topCells) {
       const source = solution.sources[cell] as number;
       const module = modules[source];
       const bucket = perModule[source];
       if (module === undefined || bucket === undefined || !module.visible) continue;
 
-      const unit = moduleMesh(module, solution.turns[cell] as number);
+      const layer = graph.layerOfCell[cell] as number;
+      const unit = moduleMesh(module, solution.turns[cell] as number, { skirtBottom: -layer });
       const scaled = {
         vertices: unit.vertices.map((vertex) => ({
           u: vertex.u,
@@ -406,7 +425,7 @@ export default function TerrainTilesetClient() {
               content={
                 graph === null
                   ? "Waiting for elevation…"
-                  : `${grid.quads.length} quads, ${graph.cellCount} cells, ${graph.links.length / 4} links`
+                  : `${grid.quads.length} quads, ${graph.cellCount} shell cells (${graph.airCells.length} of them air) against ${graph.volumeCellCount} boxes of solid, ${graph.links.length / 4} links`
               }
             />
             {solution !== null ? (
@@ -456,8 +475,13 @@ export default function TerrainTilesetClient() {
                       {module.name}
                     </th>
                     {Array.from({ length: MODULE_FACES }, (_, face) => {
+                      // An invisible module draws nothing, so its lateral
+                      // sockets describe exposure rather than corner heights
+                      // and cannot disagree with geometry it does not have.
                       const consistent =
-                        face >= 4 || labelFor(edgeProfile(module, face)) === module.sockets[face];
+                        face >= 4 ||
+                        !module.visible ||
+                        labelFor(edgeProfile(module, face)) === module.sockets[face];
                       return (
                         <td key={face} style={{ padding: "1px 3px" }}>
                           <select

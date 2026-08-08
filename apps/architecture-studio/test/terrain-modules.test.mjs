@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  EMPTY_MODULE_NAME,
   MODULE_FACES,
   SOCKET,
   STARTING_COMPATIBILITY,
@@ -88,7 +89,10 @@ test("the starting tileset's sockets describe its corner heights", () => {
     if (from === to) return from === 1 ? SOCKET.HIGH : SOCKET.LOW;
     return to > from ? SOCKET.RISE : SOCKET.FALL;
   };
-  STARTING_TILESET.forEach((module) => {
+  // `empty` is exempt: its lateral sockets say "this face is exposed", which is
+  // a fact about the neighbourhood rather than about any corner height. Nothing
+  // is drawn for it either way.
+  STARTING_TILESET.filter((module) => module.visible).forEach((module) => {
     for (let face = 0; face < 4; face += 1) {
       assert.equal(
         module.sockets[face],
@@ -138,4 +142,39 @@ test("a malformed module is named rather than sent across the boundary", () => {
   assert.throws(() => flattenModules([broken]), /flat.*4 faces/s);
   assert.throws(() => flattenModules([{ ...STARTING_TILESET[0], weight: 0 }]), /flat/);
   assert.throws(() => flattenModules([{ ...STARTING_TILESET[0], weight: NaN }]), /flat/);
+});
+
+test("the tileset carries an empty module for air to be pinned to", () => {
+  const empty = STARTING_TILESET.find((module) => module.name === EMPTY_MODULE_NAME);
+  assert.ok(empty, "air has nothing to be pinned to without it");
+  assert.equal(empty.visible, false, "air must draw nothing");
+  for (let face = 0; face < 4; face += 1) assert.equal(empty.sockets[face], SOCKET.AIR);
+});
+
+test("air may be a cliff face but may not close a hollow", () => {
+  const meets = (a, b) =>
+    STARTING_COMPATIBILITY.some(
+      ([left, right]) => (left === a && right === b) || (left === b && right === a),
+    );
+  // Keeps all-`flat` a solution however the terrain steps, so the starting
+  // tileset stays satisfiable now that exposed faces are constrained at all.
+  assert.ok(meets(SOCKET.AIR, SOCKET.HIGH));
+  assert.ok(meets(SOCKET.AIR, SOCKET.AIR));
+  // A depression open on one side is not a depression.
+  assert.ok(!meets(SOCKET.AIR, SOCKET.LOW));
+});
+
+test("the skirt drops to where it is told, not always to the cell floor", () => {
+  const flat = STARTING_TILESET.find((module) => module.name === "flat");
+  const shallow = moduleMesh(flat, 0);
+  const deep = moduleMesh(flat, 0, { skirtBottom: -3 });
+
+  assert.equal(Math.min(...shallow.vertices.map((vertex) => vertex.height)), 0);
+  assert.equal(Math.min(...deep.vertices.map((vertex) => vertex.height)), -3);
+  // Only the skirt moves: the top surface is still the corner profile.
+  assert.deepEqual(
+    deep.vertices.slice(0, 4).map((vertex) => vertex.height),
+    shallow.vertices.slice(0, 4).map((vertex) => vertex.height),
+  );
+  assert.deepEqual(deep.indices, shallow.indices);
 });

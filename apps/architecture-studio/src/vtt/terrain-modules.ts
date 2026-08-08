@@ -79,19 +79,36 @@ const CORNER_UV: readonly (readonly [number, number])[] = [
   [0, 1],
 ];
 
+/** Options controlling how much of a module's sides are drawn. */
+export interface MeshOptions {
+  /**
+   * Height the skirt drops to, in cell heights. Defaults to `0`, the module's
+   * own floor.
+   *
+   * Only the top of a column is drawn now that the solver works on the shell,
+   * so its skirt has to reach the ground rather than stopping one cell down --
+   * otherwise a raised column reads as a floating sheet. Passing the column's
+   * layer here is what makes it a column again.
+   */
+  readonly skirtBottom?: number;
+}
+
 /**
  * Builds a module's geometry in unit-cell space, already turned.
  *
- * The top surface is the corner-height profile; a skirt drops from each edge
- * to `0` so a raised cell reads as a solid box rather than a floating sheet.
- * Both are emitted for every visible module: which faces are genuinely exposed
- * is stage 2's problem, and the trial is about the tile decision, not about
- * triangle count.
+ * The top surface is the corner-height profile; a skirt drops from each edge to
+ * {@link MeshOptions.skirtBottom} so a raised cell reads as a solid column
+ * rather than a floating sheet.
  *
  * @throws RangeError if the module does not give exactly four corner heights,
  * since a partial profile would silently render as a hole in the surface.
  */
-export function moduleMesh(module: TerrainModule, turns: number): ModuleMesh {
+export function moduleMesh(
+  module: TerrainModule,
+  turns: number,
+  options: MeshOptions = {},
+): ModuleMesh {
+  const skirtBottom = options.skirtBottom ?? 0;
   if (module.corners.length !== MODULE_CORNERS) {
     throw new RangeError(
       `module "${module.name}" gives ${module.corners.length} corner heights, not ${MODULE_CORNERS}`,
@@ -118,8 +135,8 @@ export function moduleMesh(module: TerrainModule, turns: number): ModuleMesh {
     vertices.push(
       { u: a.u, v: a.v, height: module.corners[corner] as number },
       { u: b.u, v: b.v, height: module.corners[next] as number },
-      { u: b.u, v: b.v, height: 0 },
-      { u: a.u, v: a.v, height: 0 },
+      { u: b.u, v: b.v, height: skirtBottom },
+      { u: a.u, v: a.v, height: skirtBottom },
     );
     indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
@@ -178,13 +195,27 @@ export function flattenCompatibility(
  * falls in theirs -- a single `STEP` socket meeting itself would let a ramp
  * meet another ramp climbing the same way and open a cliff between them.
  */
-export const SOCKET = { LOW: 0, HIGH: 1, RISE: 2, FALL: 3, GROUND: 4, SKY: 5 } as const;
+/**
+ * `AIR` is what a face meets when there is nothing across it -- the top of a
+ * cliff, the rim, the space over a hole. It exists because the solver used to
+ * be *silent* about those faces rather than constrained on them, which left the
+ * visible surface the freest part of the map. A tileset can now say "this piece
+ * may not be exposed"; the starting one mostly declines to, on purpose.
+ */
+export const SOCKET = { LOW: 0, HIGH: 1, RISE: 2, FALL: 3, GROUND: 4, SKY: 5, AIR: 6 } as const;
+
+/**
+ * The module every air cell is pinned to. Found by name rather than by index so
+ * reordering the composer's list cannot silently pin air to terrain.
+ */
+export const EMPTY_MODULE_NAME = "empty";
 
 /**
  * A starting point for the composer, not a recommendation.
  *
- * Four modules over six sockets: enough for a solved map to look like
- * something, small enough to hold in your head while editing. Sockets here
+ * Four terrain modules over seven sockets, plus the pinned `empty` that stands
+ * for air: enough for a solved map to look like something, small enough to hold
+ * in your head while editing. Sockets here
  * happen to describe the corner heights faithfully -- `flat` is `HIGH` on
  * every side, `ramp` rises on one and falls on the opposite -- so the starting
  * map is geometrically continuous, and every departure from that is one you
@@ -235,14 +266,37 @@ export const STARTING_TILESET: readonly TerrainModule[] = [
     weight: 2,
     visible: true,
   },
+  {
+    // Never chosen: every air cell is pinned to it. Its weight is therefore
+    // irrelevant, and its sockets are the whole of its content.
+    name: EMPTY_MODULE_NAME,
+    colour: 0x000000,
+    sockets: [SOCKET.AIR, SOCKET.AIR, SOCKET.AIR, SOCKET.AIR, SOCKET.SKY, SOCKET.GROUND],
+    corners: [0, 0, 0, 0],
+    weight: 1,
+    visible: false,
+  },
 ];
 
-/** Socket compatibility for {@link STARTING_TILESET}. Symmetric; list once. */
+/**
+ * Socket compatibility for {@link STARTING_TILESET}. Symmetric; list once.
+ *
+ * `AIR` meets `HIGH`, `RISE` and `FALL`, so any of those may be a cliff face,
+ * and all-`flat` remains a solution however the terrain steps. It deliberately
+ * does **not** meet `LOW`: `hollow` is a depression, and a depression with one
+ * side open to nothing is not a depression. That single omission is the whole
+ * demonstration that exposure is now expressible -- undo it in the composer and
+ * hollows return to the cliff edges, which is worth seeing once.
+ */
 export const STARTING_COMPATIBILITY: readonly (readonly [number, number])[] = [
   [SOCKET.LOW, SOCKET.LOW],
   [SOCKET.HIGH, SOCKET.HIGH],
   [SOCKET.RISE, SOCKET.FALL],
   [SOCKET.GROUND, SOCKET.SKY],
+  [SOCKET.AIR, SOCKET.AIR],
+  [SOCKET.AIR, SOCKET.HIGH],
+  [SOCKET.AIR, SOCKET.RISE],
+  [SOCKET.AIR, SOCKET.FALL],
 ];
 
 /**
