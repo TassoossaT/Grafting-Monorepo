@@ -123,10 +123,18 @@ clothes: it forbade every overhang, arch, balcony and cave, all of which are
 at a time — the Townscaper-shaped editing this document already assumed when it
 said generation is fixed and grows incrementally.
 
-The remaining heightfield assumption is the module vocabulary, not the grid:
-`TerrainModule` is a corner-height profile with a top surface and a skirt, which
-cannot describe an overhang's underside. That is the per-face facade tileset
-above, and it is now the thing in the way rather than the topology.
+The module vocabulary was the last heightfield assumption, and is no longer
+exclusive: `ModuleShape` is now either a corner-height profile — still the right
+vocabulary for terrain — or geometry authored in the unit cell, which owns its
+own underside. A module declares which it is, and the renderer draws a surface
+only where it roofs something while drawing a piece wherever it lands.
+
+The starting tileset demonstrates this with one module, `slab`, whose `UNDER`
+socket meets only `AIR`. That single pair forces a ceiling exactly where a cell
+hangs over nothing and forbids it everywhere else, so it never competes with
+flat ground. Still not done: a genuine per-face facade tileset, where a cliff
+face is decided separately from the cell it belongs to. The vocabulary now
+allows one; nobody has authored it.
 
 
 `/lab/terrain-tileset` stacks cells to the ground and gives every cell a

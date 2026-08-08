@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { buildIrregularQuadGrid } from "../src/vtt/irregular-grid.ts";
 import { occupancyFromHeights, occupancyOf, withCell } from "../src/vtt/cell-occupancy.ts";
+import { STARTING_COMPATIBILITY, STARTING_TILESET } from "../src/vtt/terrain-modules.ts";
 import {
   CELL_AIR,
   CELL_SOLID,
@@ -218,4 +219,50 @@ test("an occupancy that does not describe the mesh is refused", () => {
 test("pinCells packs (cell, module) pairs", () => {
   assert.deepEqual(pinCells(Uint32Array.from([2, 5]), 4), Uint32Array.from([2, 4, 5, 4]));
   assert.deepEqual(pinCells([], 4), new Uint32Array());
+});
+
+test("the starting tileset can actually solve a map with an overhang", () => {
+  // Not a solver run -- a proof that a solution exists, which is what the
+  // solver would have to find. The vertical socket scheme changed to force a
+  // ceiling over air, and an unsatisfiable tileset would take the whole trial
+  // down rather than degrade, so it is worth checking without the wasm.
+  const layers = Array.from({ length: 9 }, (_, quad) => (quad === CENTRE ? [0, 2] : [0, 1, 2]));
+  const occupancy = occupancyOf(layers);
+  const graph = buildShellCellGraph(threeByThree, occupancy);
+
+  const byName = (name) => STARTING_TILESET.find((module) => module.name === name);
+  const meets = (a, b) =>
+    STARTING_COMPATIBILITY.some(
+      ([left, right]) => (left === a && right === b) || (left === b && right === a),
+    );
+
+  // The intended assignment: air is pinned, a cell hanging over nothing takes
+  // the only module with an underside, everything else is flat ground. Every
+  // one of the three is laterally symmetric, so rotation cannot rescue a
+  // mismatch and this is the strict case.
+  const assign = (cell) => {
+    if (graph.kindOfCell[cell] === CELL_AIR) return byName("empty");
+    const quad = graph.quadOfCell[cell];
+    const layer = graph.layerOfCell[cell];
+    return layer > 0 && !occupancy.has(quad, layer - 1) ? byName("slab") : byName("flat");
+  };
+
+  const failures = [];
+  for (let index = 0; index < graph.links.length; index += LINK_STRIDE) {
+    const from = graph.links[index];
+    const to = graph.links[index + 2];
+    const ours = assign(from).sockets[graph.links[index + 1]];
+    const theirs = assign(to).sockets[graph.links[index + 3]];
+    if (!meets(ours, theirs)) {
+      failures.push(
+        `cell ${from} (${assign(from).name}) face ${graph.links[index + 1]} against cell ${to} (${assign(to).name}) face ${graph.links[index + 3]}`,
+      );
+    }
+  }
+  assert.deepEqual(failures, [], "every link must admit the intended assignment");
+
+  const slabs = [...Array(graph.cellCount).keys()].filter(
+    (cell) => graph.kindOfCell[cell] === CELL_SOLID && assign(cell).name === "slab",
+  );
+  assert.equal(slabs.length, 1, "the carved overhang is the one cell needing a ceiling");
 });
