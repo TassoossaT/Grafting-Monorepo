@@ -4,17 +4,17 @@
   "projectType": "library",
   "tags": ["scope:root", "type:tooling"],
   "targets": {
-    "workspace-install": {
+    "install": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm run workspace:install" },
       "cache": false
     },
-    "workspace-update": {
+    "update": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm run workspace:update" },
       "cache": false
     },
-    "workspace-build": {
+    "build": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm run workspace:build" },
       "cache": false
