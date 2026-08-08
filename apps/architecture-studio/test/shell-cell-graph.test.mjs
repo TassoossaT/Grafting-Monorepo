@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildIrregularQuadGrid } from "../src/vtt/irregular-grid.ts";
+import { occupancyFromHeights, occupancyOf, withCell } from "../src/vtt/cell-occupancy.ts";
 import {
   CELL_AIR,
   CELL_SOLID,
@@ -63,39 +64,83 @@ function linksOf(graph) {
   return links;
 }
 
-test("a solid box surrounded by solid is left out of the shell", () => {
-  const graph = buildShellCellGraph(threeByThree, Array(9).fill(3));
+const solidCellsOf = (graph) => [...graph.kindOfCell].filter((kind) => kind === CELL_SOLID).length;
+
+test("a cell surrounded by occupied cells is left out of the shell", () => {
+  const graph = buildShellCellGraph(threeByThree, occupancyFromHeights(Array(9).fill(3)));
 
   // The centre column is the only one not on the rim, so it is the only one
-  // that can have interior at all: layers 0 and 1 are buried, layer 2 is its top.
+  // that can have interior at all: layers 0 and 1 are buried, layer 2 is its roof.
   assert.equal(graph.cellAt(CENTRE, 0), null);
   assert.equal(graph.cellAt(CENTRE, 1), null);
   assert.notEqual(graph.cellAt(CENTRE, 2), null);
 
-  assert.equal(graph.volumeCellCount, 27);
-  const solidCells = [...graph.kindOfCell].filter((kind) => kind === CELL_SOLID).length;
-  assert.equal(solidCells, 25, "only the centre column's two buried boxes are dropped");
+  assert.equal(graph.occupiedCellCount, 27);
+  assert.equal(solidCellsOf(graph), 25, "only the centre column's two buried cells are dropped");
 });
 
-test("a rim column keeps every box, because the map ending is a cliff too", () => {
-  const graph = buildShellCellGraph(threeByThree, Array(9).fill(3));
+test("bedrock is not exposure: a ground cell is not shell just for being lowest", () => {
+  // Layer 0 of the centre column has nothing under it, and that must not count
+  // as a face open to air -- otherwise every ground cell joins the shell and
+  // the solver decides undersides no camera reaches.
+  const graph = buildShellCellGraph(threeByThree, occupancyFromHeights(Array(9).fill(2)));
+  assert.equal(graph.cellAt(CENTRE, 0), null);
+  assert.notEqual(graph.cellAt(CENTRE, 1), null);
+});
+
+test("a rim column keeps every cell, because the map ending is a cliff too", () => {
+  const graph = buildShellCellGraph(threeByThree, occupancyFromHeights(Array(9).fill(3)));
   for (let layer = 0; layer < 3; layer += 1) {
     assert.notEqual(graph.cellAt(0, layer), null, `corner quad, layer ${layer}`);
   }
 });
 
-test("air is materialised beside a cliff, and links to it", () => {
-  const graph = buildShellCellGraph(twoQuads, [3, 1]);
+test("an overhang has an underside, which the heightfield could not express", () => {
+  // The centre quad is occupied at 0 and 2 with a gap at 1: a floor, air, and a
+  // slab over it. No height per quad can say this.
+  const layers = Array.from({ length: 9 }, (_, quad) => (quad === CENTRE ? [0, 2] : [0, 1, 2]));
+  const graph = buildShellCellGraph(threeByThree, occupancyOf(layers));
 
-  // Quad 1 is one box tall against a neighbour three boxes tall, so layers 1
-  // and 2 above it are air that the cliff can be constrained against.
+  const gap = graph.cellAt(CENTRE, 1);
+  assert.notEqual(gap, null, "the gap must be materialised as air");
+  assert.equal(graph.kindOfCell[gap], CELL_AIR);
+
+  const floor = graph.cellAt(CENTRE, 0);
+  const slab = graph.cellAt(CENTRE, 2);
+  assert.notEqual(floor, null, "the floor is exposed upward into the gap");
+  assert.notEqual(slab, null, "the slab is exposed downward into the gap");
+
+  const vertical = linksOf(graph).filter(
+    (link) =>
+      (link.from === floor && link.to === gap) ||
+      (link.from === gap && link.to === slab),
+  );
+  assert.equal(vertical.length, 2, "the air must link to what is above and below it");
+});
+
+test("every cell with nothing above it is a roof, not only a column top", () => {
+  const layers = Array.from({ length: 9 }, (_, quad) => (quad === CENTRE ? [0, 2] : [0, 1, 2]));
+  const graph = buildShellCellGraph(threeByThree, occupancyOf(layers));
+
+  const centreRoofs = [...graph.roofCells].filter((cell) => graph.quadOfCell[cell] === CENTRE);
+  assert.equal(centreRoofs.length, 2, "the floor and the slab both show a top surface");
+  assert.deepEqual(
+    centreRoofs.map((cell) => graph.layerOfCell[cell]).sort(),
+    [0, 2],
+  );
+  for (const cell of graph.roofCells) assert.equal(graph.kindOfCell[cell], CELL_SOLID);
+});
+
+test("air is materialised beside a cliff, and links to it", () => {
+  const graph = buildShellCellGraph(twoQuads, occupancyFromHeights([3, 1]));
+
+  // Quad 1 is one cell tall against a neighbour three tall, so layers 1 and 2
+  // above it are air the cliff can be constrained against.
   const airBelow = graph.cellAt(1, 1);
   const airTop = graph.cellAt(1, 2);
-  assert.notEqual(airBelow, null);
-  assert.notEqual(airTop, null);
   assert.equal(graph.kindOfCell[airBelow], CELL_AIR);
   assert.equal(graph.kindOfCell[airTop], CELL_AIR);
-  assert.equal(graph.cellAt(1, 3), null, "air stops once it touches only air");
+  assert.equal(graph.cellAt(1, 4), null, "air stops once it touches only air");
 
   const cliff = graph.cellAt(0, 2);
   const touching = linksOf(graph).some(
@@ -106,25 +151,17 @@ test("air is materialised beside a cliff, and links to it", () => {
 });
 
 test("a hole is air its neighbours can see", () => {
-  const graph = buildShellCellGraph(twoQuads, [2, 0]);
+  const graph = buildShellCellGraph(twoQuads, occupancyFromHeights([2, 0]));
   const hole = graph.cellAt(1, 0);
-  assert.notEqual(hole, null);
   assert.equal(graph.kindOfCell[hole], CELL_AIR);
-  assert.equal(graph.topCells.length, 1, "an empty column has no top");
+  assert.equal(graph.roofCells.length, 1, "an empty column has no roof");
 });
 
-test("every top cell is solid and sits at the top of its column", () => {
-  const solid = [3, 1, 2, 0, 4, 1, 2, 2, 3];
-  const graph = buildShellCellGraph(threeByThree, solid);
-  assert.equal(graph.topCells.length, solid.filter((height) => height > 0).length);
-  for (const cell of graph.topCells) {
-    assert.equal(graph.kindOfCell[cell], CELL_SOLID);
-    assert.equal(graph.layerOfCell[cell], solid[graph.quadOfCell[cell]] - 1);
-  }
-});
-
-test("air cells and solid cells partition the graph", () => {
-  const graph = buildShellCellGraph(threeByThree, [3, 1, 2, 0, 4, 1, 2, 2, 3]);
+test("air cells and occupied cells partition the graph", () => {
+  const graph = buildShellCellGraph(
+    threeByThree,
+    occupancyFromHeights([3, 1, 2, 0, 4, 1, 2, 2, 3]),
+  );
   const air = new Set(graph.airCells);
   assert.equal(air.size, graph.airCells.length);
   for (let cell = 0; cell < graph.cellCount; cell += 1) {
@@ -134,8 +171,10 @@ test("air cells and solid cells partition the graph", () => {
 
 test("every link names a cell the shell actually has", () => {
   const mesh = buildIrregularQuadGrid({ trianglesPerSide: 3, triangleSide: 0.5, seed: 7 });
-  const solid = mesh.quads.map((_, quad) => (quad * 7) % 5);
-  const graph = buildShellCellGraph(mesh, solid);
+  const graph = buildShellCellGraph(
+    mesh,
+    occupancyFromHeights(mesh.quads.map((_, quad) => (quad * 7) % 5)),
+  );
 
   assert.ok(graph.cellCount > 0);
   for (const link of linksOf(graph)) {
@@ -147,19 +186,33 @@ test("every link names a cell the shell actually has", () => {
 
 test("the shell is smaller than the volume it describes", () => {
   const mesh = buildIrregularQuadGrid({ trianglesPerSide: 4, triangleSide: 0.5, seed: 3 });
-  const solid = mesh.quads.map(() => 5);
-  const graph = buildShellCellGraph(mesh, solid);
-  const solidCells = [...graph.kindOfCell].filter((kind) => kind === CELL_SOLID).length;
+  const graph = buildShellCellGraph(mesh, occupancyFromHeights(mesh.quads.map(() => 5)));
   assert.ok(
-    solidCells < graph.volumeCellCount,
-    `${solidCells} solid shell cells should be fewer than ${graph.volumeCellCount} boxes`,
+    solidCellsOf(graph) < graph.occupiedCellCount,
+    `${solidCellsOf(graph)} shell cells should be fewer than ${graph.occupiedCellCount} occupied`,
   );
 });
 
-test("a solid height that is not a count is refused", () => {
-  assert.throws(() => buildShellCellGraph(twoQuads, [1]), RangeError);
-  assert.throws(() => buildShellCellGraph(twoQuads, [1, -1]), RangeError);
-  assert.throws(() => buildShellCellGraph(twoQuads, [1, 1.5]), RangeError);
+test("adding a cell only grows the shell around it", () => {
+  const before = occupancyFromHeights(Array(9).fill(2));
+  const after = withCell(before, CENTRE, 5);
+  const graph = buildShellCellGraph(threeByThree, after);
+
+  // A cell floating two layers clear of the ground: occupied, exposed on every
+  // side including underneath, and surrounded by newly materialised air.
+  const floating = graph.cellAt(CENTRE, 5);
+  assert.notEqual(floating, null);
+  assert.equal(graph.kindOfCell[floating], CELL_SOLID);
+  assert.notEqual(graph.cellAt(CENTRE, 4), null, "air under it");
+  assert.notEqual(graph.cellAt(CENTRE, 6), null, "air over it");
+  assert.equal(graph.occupiedCellCount, before.size + 1);
+});
+
+test("an occupancy that does not describe the mesh is refused", () => {
+  assert.throws(
+    () => buildShellCellGraph(twoQuads, occupancyFromHeights([1])),
+    RangeError,
+  );
 });
 
 test("pinCells packs (cell, module) pairs", () => {
