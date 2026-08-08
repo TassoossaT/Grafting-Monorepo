@@ -435,12 +435,6 @@ The same face appeared twice in the cycle, which is not a permutation.
 
 ### `pub grafting_procgen_tileset_wfc::RotationError::RepeatedFace::face: grafting_procgen_tileset_wfc::graph::FaceId`
 
-### `pub grafting_procgen_tileset_wfc::SolveError::Contradiction`
-
-The constraints admit no solution.
-
-### `pub grafting_procgen_tileset_wfc::SolveError::Contradiction::detail: alloc::string::String`
-
 ### `pub grafting_procgen_tileset_wfc::SolveError::InvalidResult`
 
 The backend produced something that does not satisfy the problem.
@@ -450,6 +444,20 @@ The backend produced something that does not satisfy the problem.
 ### `pub grafting_procgen_tileset_wfc::SolveError::NoBackend`
 
 No backend is compiled in.
+
+### `pub grafting_procgen_tileset_wfc::SolveError::SearchFailed`
+
+The backend gave up without an assignment.
+
+This is **not** a proof that none exists. The backend is a greedy
+wave-function collapse: it settles cells one at a time and cannot undo
+a choice, so it reaches dead ends on problems that are perfectly
+satisfiable. Distinguishing the two would mean a complete search, which
+this crate does not do -- so it says what actually happened and leaves
+the conclusion to the caller. Retrying with another seed is the
+conventional response and is often enough.
+
+### `pub grafting_procgen_tileset_wfc::SolveError::SearchFailed::detail: alloc::string::String`
 
 ### `pub grafting_procgen_tileset_wfc::TilesetError::Empty`
 
@@ -601,12 +609,6 @@ The same face appeared twice in the cycle, which is not a permutation.
 
 ### `pub grafting_procgen_tileset_wfc::rotation::RotationError::RepeatedFace::face: grafting_procgen_tileset_wfc::graph::FaceId`
 
-### `pub grafting_procgen_tileset_wfc::solver::SolveError::Contradiction`
-
-The constraints admit no solution.
-
-### `pub grafting_procgen_tileset_wfc::solver::SolveError::Contradiction::detail: alloc::string::String`
-
 ### `pub grafting_procgen_tileset_wfc::solver::SolveError::InvalidResult`
 
 The backend produced something that does not satisfy the problem.
@@ -616,6 +618,20 @@ The backend produced something that does not satisfy the problem.
 ### `pub grafting_procgen_tileset_wfc::solver::SolveError::NoBackend`
 
 No backend is compiled in.
+
+### `pub grafting_procgen_tileset_wfc::solver::SolveError::SearchFailed`
+
+The backend gave up without an assignment.
+
+This is **not** a proof that none exists. The backend is a greedy
+wave-function collapse: it settles cells one at a time and cannot undo
+a choice, so it reaches dead ends on problems that are perfectly
+satisfiable. Distinguishing the two would mean a complete search, which
+this crate does not do -- so it says what actually happened and leaves
+the conclusion to the caller. Retrying with another seed is the
+conventional response and is often enough.
+
+### `pub grafting_procgen_tileset_wfc::solver::SolveError::SearchFailed::detail: alloc::string::String`
 
 ### `pub grafting_procgen_tileset_wfc::solver::Violation::IncompatibleNeighbours`
 

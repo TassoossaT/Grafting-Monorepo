@@ -109,13 +109,13 @@ impl ConstraintSolver for WaveFunctionCollapseSolver {
 
         let wave = WaveFunction::new(nodes, collections);
         wave.validate()
-            .map_err(|detail| SolveError::Contradiction { detail })?;
+            .map_err(|detail| SolveError::SearchFailed { detail })?;
 
         let mut collapsable: EntropicCollapsableWaveFunction<String> =
             wave.get_collapsable_wave_function(Some(seed));
         let collapsed = collapsable
             .collapse()
-            .map_err(|detail| SolveError::Contradiction { detail })?;
+            .map_err(|detail| SolveError::SearchFailed { detail })?;
 
         let mut modules = vec![usize::MAX; problem.cell_count()];
         for (id, state) in collapsed.node_state_per_node_id {

@@ -148,7 +148,21 @@ interface SolveResult {
   readonly turns: Uint32Array;
   readonly variantCount: number;
   readonly elapsedMs: number;
+  /** Which try produced this, counting from one. */
+  readonly attempts: number;
 }
+
+/**
+ * How many consecutive seeds to try before giving up.
+ *
+ * The backend is a greedy wave-function collapse: it settles cells one at a
+ * time and cannot undo a choice, so it reaches dead ends on problems that do
+ * have solutions. Measured on this trial's own grid, a workable tileset still
+ * fails roughly one seed in twenty. Retrying is the conventional answer and the
+ * attempt count is reported rather than hidden, because a tileset that needs
+ * several tries is telling you something about itself.
+ */
+const SOLVE_ATTEMPTS = 8;
 
 export default function TerrainTilesetClient() {
   const [controls, setControls] = useState<Controls>(INITIAL);
@@ -292,10 +306,8 @@ export default function TerrainTilesetClient() {
       return;
     }
 
-    setSolving(true);
-    setError(null);
-    requestSolve({
-      type: "solve",
+    const base = {
+      type: "solve" as const,
       cellCount: graph.cellCount,
       facesPerCell: graph.facesPerCell,
       links: graph.links,
@@ -308,21 +320,32 @@ export default function TerrainTilesetClient() {
       // Air is not decided, it is stated. Pinning it is what turns a face that
       // used to have no link at all into a constraint on the terrain beside it.
       pinned: pinCells(graph.airCells, emptyIndex),
-      seed: controls.solveSeed,
-    })
-      .then((response) => {
-        setSolving(false);
-        if (response.type === "error") {
-          setSolution(null);
-          setError(response.message);
+    };
+
+    setSolving(true);
+    setError(null);
+    void (async () => {
+      let last = "";
+      for (let attempt = 0; attempt < SOLVE_ATTEMPTS; attempt += 1) {
+        let response: TilesetWorkerResponse;
+        try {
+          response = await requestSolve({ ...base, seed: controls.solveSeed + attempt });
+        } catch (cause) {
+          setSolving(false);
+          setError(cause instanceof Error ? cause.message : String(cause));
           return;
         }
-        setSolution(response);
-      })
-      .catch((cause: unknown) => {
-        setSolving(false);
-        setError(cause instanceof Error ? cause.message : String(cause));
-      });
+        if (response.type === "result") {
+          setSolving(false);
+          setSolution({ ...response, attempts: attempt + 1 });
+          return;
+        }
+        last = response.message;
+      }
+      setSolving(false);
+      setSolution(null);
+      setError(`${SOLVE_ATTEMPTS} seeds in a row failed. Last: ${last}`);
+    })();
   }, [graph, modules, compatibility, controls.solveSeed, emptyIndex]);
 
   useEffect(() => {
@@ -517,7 +540,7 @@ export default function TerrainTilesetClient() {
             />
             {solution !== null ? (
               <Text
-                content={`Solved in ${solution.elapsedMs.toFixed(1)} ms; ${modules.length} modules expanded to ${solution.variantCount} orientations.`}
+                content={`Solved in ${solution.elapsedMs.toFixed(1)} ms on attempt ${solution.attempts} of ${SOLVE_ATTEMPTS}; ${modules.length} modules expanded to ${solution.variantCount} orientations.`}
                 tone="muted"
               />
             ) : null}

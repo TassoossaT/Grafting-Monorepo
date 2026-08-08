@@ -402,12 +402,29 @@ export const STARTING_TILESET: readonly TerrainModule[] = [
 /**
  * Socket compatibility for {@link STARTING_TILESET}. Symmetric; list once.
  *
- * `AIR` meets `HIGH`, `RISE` and `FALL`, so any of those may be a cliff face,
- * and all-`flat` remains a solution however the terrain steps. It deliberately
- * does **not** meet `LOW`: `hollow` is a depression, and a depression with one
- * side open to nothing is not a depression. That single omission is the whole
- * demonstration that exposure is now expressible -- undo it in the composer and
- * hollows return to the cliff edges, which is worth seeing once.
+ * `AIR` meets every lateral socket, so any of them may be a cliff face and
+ * all-`flat` remains a solution however the terrain steps.
+ *
+ * # Why `AIR` meets `LOW`, after once not doing so
+ *
+ * An earlier version banned that one pair, meaning to keep `hollow` -- a full
+ * depression -- off a cliff edge, on the grounds that a depression open on one
+ * side is not a depression. That reasoning was about a *module* and the ban was
+ * on a *socket*, and `LOW` is not `hollow`'s alone: `ramp` and `corner` each
+ * present it on their low edge, which is a slope descending to a drop, and
+ * ordinary terrain.
+ *
+ * Measured consequence, on the real grid at `trianglesPerSide: 5`: with the ban
+ * the solver failed on 5 to 14 of every 20 seeds, because a ramp's low edge
+ * demanded a neighbour showing `LOW`, only `hollow` could show one, and `hollow`
+ * could not be anywhere near air -- which in a shell graph is nearly everywhere.
+ * A solution still existed every time (all-`flat` satisfies every link), so the
+ * tileset was never unsatisfiable; it was unsearchable, which a greedy solver
+ * cannot tell apart. Allowing the pair takes it to 17 to 20 of 20.
+ *
+ * Moving the ban onto a socket of `hollow`'s own was tried and does not help:
+ * it is `hollow` being unplaceable at all that strands the ramps, whichever
+ * socket carries it.
  */
 export const STARTING_COMPATIBILITY: readonly (readonly [number, number])[] = [
   [SOCKET.LOW, SOCKET.LOW],
@@ -425,6 +442,8 @@ export const STARTING_COMPATIBILITY: readonly (readonly [number, number])[] = [
   // A ceiling, and only over air. Together with the line above this is what
   // forces `slab` exactly where an overhang exists and forbids it elsewhere.
   [SOCKET.AIR, SOCKET.UNDER],
+  // A ramp's low edge descending to a drop. See this list's own note.
+  [SOCKET.AIR, SOCKET.LOW],
 ];
 
 /**

@@ -90,10 +90,14 @@ fn an_unsatisfiable_problem_is_reported_rather_than_solved_wrongly() {
     // An odd ring cannot be two-coloured. `compile` cannot see this -- every
     // individual link has compatible pairs -- so it reaches the backend, and
     // the backend must say so instead of returning something invalid.
+    //
+    // It reports `SearchFailed` rather than anything stronger: this problem
+    // really has no solution, but the backend cannot tell that apart from its
+    // own dead end, and claiming otherwise would be a lie in the common case.
     let problem = Problem::compile(&ring(5), &distinct_neighbours(2), &[]).unwrap();
     match solve_verified(&WaveFunctionCollapseSolver, &problem, 0) {
-        Err(SolveError::Contradiction { .. }) => {}
-        Err(other) => panic!("expected a contradiction, got {other}"),
+        Err(SolveError::SearchFailed { .. }) => {}
+        Err(other) => panic!("expected a failed search, got {other}"),
         Ok(assignment) => panic!("expected no solution, got {:?}", assignment.modules()),
     }
 }

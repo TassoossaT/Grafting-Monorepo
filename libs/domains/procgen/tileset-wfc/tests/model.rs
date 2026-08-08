@@ -180,7 +180,7 @@ impl ConstraintSolver for FirstFitSolver {
             match pick {
                 Some(module) => chosen[cell] = Some(module),
                 None => {
-                    return Err(SolveError::Contradiction {
+                    return Err(SolveError::SearchFailed {
                         detail: format!("first-fit stuck at cell {cell}"),
                     });
                 }

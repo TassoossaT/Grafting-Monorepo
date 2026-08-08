@@ -156,17 +156,17 @@ test("the tileset carries an empty module for air to be pinned to", () => {
   for (let face = 0; face < 4; face += 1) assert.equal(empty.sockets[face], SOCKET.AIR);
 });
 
-test("air may be a cliff face but may not close a hollow", () => {
+test("air may be any lateral face, which keeps all-flat a solution", () => {
   const meets = (a, b) =>
     STARTING_COMPATIBILITY.some(
       ([left, right]) => (left === a && right === b) || (left === b && right === a),
     );
-  // Keeps all-`flat` a solution however the terrain steps, so the starting
-  // tileset stays satisfiable now that exposed faces are constrained at all.
   assert.ok(meets(SOCKET.AIR, SOCKET.HIGH));
   assert.ok(meets(SOCKET.AIR, SOCKET.AIR));
-  // A depression open on one side is not a depression.
-  assert.ok(!meets(SOCKET.AIR, SOCKET.LOW));
+  // Was once banned, to keep `hollow` off a cliff. That ban was on a socket
+  // and the intent was about a module, and it stranded every ramp -- see the
+  // note on STARTING_COMPATIBILITY.
+  assert.ok(meets(SOCKET.AIR, SOCKET.LOW));
 });
 
 test("the skirt drops to where it is told, not always to the cell floor", () => {
@@ -243,4 +243,27 @@ test("a ceiling is forced over air and forbidden anywhere else", () => {
 test("air still stacks, so a column can end", () => {
   assert.ok(meets(SOCKET.AIR, SOCKET.SKY), "air rests on a solid top");
   assert.ok(meets(SOCKET.AIR, SOCKET.AIR));
+});
+
+test("every lateral socket in the tileset may face air", () => {
+  // The regression that took the trial down: `AIR` did not meet `LOW`, meaning
+  // to keep `hollow` off a cliff. But `LOW` is also a ramp's low edge -- a
+  // slope descending to a drop -- so every ramp needed a neighbour showing
+  // `LOW`, only `hollow` could show one, and `hollow` could not be near air.
+  // A solution still existed; the greedy solver just could not walk to it.
+  //
+  // Checking the property rather than the one pair: a lateral socket no
+  // exposed face can present is a module that cannot be on the shell, and on a
+  // shell graph nearly every face is exposed.
+  const lateral = new Set(
+    STARTING_TILESET.filter((module) => module.visible).flatMap((module) =>
+      module.sockets.slice(0, 4),
+    ),
+  );
+  const stranded = [...lateral].filter((socket) => !meets(socket, SOCKET.AIR));
+  assert.deepEqual(
+    stranded.map((socket) => Object.keys(SOCKET).find((name) => SOCKET[name] === socket)),
+    [],
+    "a lateral socket that cannot face air strands every module presenting it",
+  );
 });
