@@ -6,11 +6,10 @@ publish = false
 description = "Solver-agnostic constraint model for tile assignment over an arbitrary cell graph, with a swappable solver backend. Not tied to terrain, to a grid shape, or to any one third-party solver."
 
 [lib]
-# `rlib` only, deliberately. The sibling procgen crates are `cdylib` because
-# they expose a `wasm_bindgen` boundary; this one has no exported function yet,
-# and declaring a `cdylib` with nothing in it would create a build target that
-# produces an empty artifact. The boundary arrives with its first consumer.
-crate-type = ["rlib"]
+# The boundary arrived with its first consumer (Architecture Studio's terrain
+# tileset lab), so this now matches the sibling procgen crates: `cdylib` for
+# `wasm-pack`, `rlib` so the bridge stays reachable from a native test.
+crate-type = ["cdylib", "rlib"]
 
 [features]
 # The domain model compiles and is testable with no solver at all; a backend is
@@ -20,6 +19,10 @@ default = ["solver-wfc"]
 solver-wfc = ["dep:wave-function-collapse", "dep:uuid"]
 
 [dependencies]
+# The bridge only. No domain type in this crate mentions it, and the ABI it
+# exposes is numbers, so the solver behind it can change without any consumer
+# changing.
+wasm-bindgen = "0.2"
 wave-function-collapse = { version = "0.3", optional = true }
 
 # `uuid` reaches this crate only through `wave-function-collapse`, and refuses

@@ -27,11 +27,14 @@
 pub mod backend;
 pub mod graph;
 pub mod problem;
+pub mod rotation;
 pub mod solver;
 pub mod tileset;
+pub mod wasm;
 
 pub use graph::{CellGraph, CellId, FaceId, GraphError, Link};
 pub use problem::{LinkConstraint, Problem, ProblemError};
+pub use rotation::{ModuleOrigin, Rotation, RotationError};
 pub use solver::{
     Assignment, ConstraintSolver, SolveError, Violation, solve_verified,
 };

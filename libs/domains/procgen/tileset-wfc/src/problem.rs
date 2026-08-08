@@ -12,6 +12,7 @@
 //! to understand them.
 
 use crate::graph::{CellGraph, CellId};
+use crate::rotation::ModuleOrigin;
 use crate::tileset::{ModuleId, Tileset};
 
 /// Allowed module pairs across one adjacency.
@@ -31,6 +32,7 @@ pub struct Problem {
     candidates: Vec<Vec<ModuleId>>,
     weights: Vec<f32>,
     names: Vec<String>,
+    origins: Vec<ModuleOrigin>,
     links: Vec<LinkConstraint>,
 }
 
@@ -138,6 +140,11 @@ impl Problem {
             candidates,
             weights: tileset.modules().iter().map(|module| module.weight).collect(),
             names: tileset.modules().iter().map(|module| module.name.clone()).collect(),
+            origins: (0..module_count)
+                .map(|module| {
+                    tileset.origin(module).unwrap_or(ModuleOrigin { source: module, turns: 0 })
+                })
+                .collect(),
             links,
         })
     }
@@ -165,6 +172,14 @@ impl Problem {
     /// Caller-facing module names, by [`ModuleId`].
     pub fn names(&self) -> &[String] {
         &self.names
+    }
+
+    /// Which authored module each [`ModuleId`] came from, and how far it
+    /// turned. Carried through the compile so a caller on the far side of a
+    /// language boundary can map a result back to its asset without holding
+    /// the tileset.
+    pub fn origins(&self) -> &[ModuleOrigin] {
+        &self.origins
     }
 
     /// The per-link constraints, in graph order.
