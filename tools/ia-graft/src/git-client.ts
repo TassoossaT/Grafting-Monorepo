@@ -1260,13 +1260,45 @@ export class GitClient {
         const branch = branchNameForTask(taskId);
         const recorded = await this.branchConfig(branch, 'base');
         const pr = await this.pullRequestForBranch(branch);
-        const expected = recorded ?? pr?.baseRefName ?? (await this.resolveDefaultBranch()).branch;
+        const fallback = (await this.resolveDefaultBranch()).branch;
+        let expected = recorded ?? pr?.baseRefName ?? fallback;
+        // A stacked task whose parent has already landed must target the
+        // default branch instead, the way GitHub retargets a stack when its
+        // parent merges. Without this the child's PR merges into a branch that
+        // is no longer going anywhere, and the work silently never reaches the
+        // default branch even though the PR reads as merged.
+        if (expected.startsWith('task/')) {
+            // Two signals, because neither covers the other. A merged parent PR
+            // catches the case where the parent branch has drifted ahead of what
+            // was merged -- the graph still shows unmerged commits there, but its
+            // pull request is closed and nothing more will ever land from it.
+            const parentPr = await this.pullRequestForBranch(expected);
+            if (parentPr?.state === 'MERGED') expected = parentPr.baseRefName;
+            // The graph check needs no `gh`, and catches a parent merged by any
+            // other route.
+            else if (await this.branchIsContainedIn(expected, fallback)) expected = fallback;
+        }
         if (requested && requested !== expected) throw new Error(`task base mismatch: recorded ${expected}, requested ${requested}`);
         const resolved = requested ?? expected;
         if (resolved.startsWith('task/') && !await this.remoteBranchExists(resolved)) {
             throw new Error(`parent task branch ${resolved} is not published; run task done for the parent before the child`);
         }
         return resolved;
+    }
+
+    /**
+     * Whether `branch` has already landed in `target`, judged from the commit
+     * graph rather than from a pull request's state -- a branch can be merged
+     * by any route, and this stays correct without `gh` being reachable.
+     */
+    private async branchIsContainedIn(branch: string, target: string): Promise<boolean> {
+        try {
+            const ahead = await executeGit(
+                ['rev-list', '--count', `refs/remotes/origin/${target}..refs/remotes/origin/${branch}`],
+                this.repoPath,
+            );
+            return ahead.trim() === '0';
+        } catch { return false; }
     }
 
     async prepareTaskDependencies(taskId: string, options: { install?: boolean } = {}): Promise<DependencyPreparation> {
