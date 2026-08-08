@@ -15,6 +15,7 @@ export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "noise-rs": "/lab/heightmap",
   "terrain-quantization": "/lab/terrain-quantization",
   "irregular-quad-grid": "/lab/irregular-grid",
+  "stacked-terrain": "/lab/stacked-terrain",
 };
 
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {
