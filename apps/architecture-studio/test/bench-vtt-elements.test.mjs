@@ -145,14 +145,25 @@ test("a missing or wrongly typed input is named, not guessed at", () => {
   );
 });
 
-test("geometry has no raster preview, and says so rather than inventing one", () => {
-  // The viewport draws a heightfield. A grid off the lattice and a triangle
-  // soup have nothing to normalise, and projecting them anyway would show a
-  // picture that misrepresents them.
-  assert.equal(toEvaluationPreview(buildGrid()), null);
-  const mesh = evaluators.get("terrain.stack")(
-    { grid: buildGrid(), heightmap: heightmap() },
-    paramsOf("terrain.stack"),
+test("geometry declares a geometry preview rather than a fake raster", () => {
+  // A grid off the lattice and a triangle soup have no raster to normalise.
+  // They used to show nothing at all; now they declare their own form, and the
+  // viewport looks the renderer up rather than knowing what a grid is.
+  const grid = toEvaluationPreview(buildGrid());
+  assert.equal(grid.form, "geometry");
+  assert.equal(grid.dataType, "quadmesh");
+  assert.ok(grid.positions.length > 0);
+  assert.ok(
+    grid.indices.every((index) => index * 3 < grid.positions.length),
+    "every index must address a vertex",
   );
-  assert.equal(toEvaluationPreview(mesh), null);
+
+  const mesh = toEvaluationPreview(
+    evaluators.get("terrain.stack")(
+      { grid: buildGrid(), heightmap: heightmap() },
+      paramsOf("terrain.stack"),
+    ),
+  );
+  assert.equal(mesh.form, "geometry");
+  assert.equal(mesh.dataType, "mesh");
 });

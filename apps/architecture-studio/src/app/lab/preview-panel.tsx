@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Text, createHeightfieldCanvas, type HeightfieldCanvas } from "@grafting/ui";
+import {
+  Text,
+  createGeometryCanvas,
+  createHeightfieldCanvas,
+  type GeometryCanvas,
+  type HeightfieldCanvas,
+} from "@grafting/ui";
 import type { EvaluationPreview } from "../../bench/evaluation-client.ts";
 
 /** Inputs for the 3D panel that renders one node's result. */
@@ -23,7 +29,7 @@ export interface PreviewPanelProps {
  */
 export default function PreviewPanel({ preview, label }: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HeightfieldCanvas | null>(null);
+  const canvasRef = useRef<HeightfieldCanvas | GeometryCanvas | null>(null);
   const shapeRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -37,17 +43,28 @@ export default function PreviewPanel({ preview, label }: PreviewPanelProps) {
       return;
     }
 
-    const shape = `${preview.width}x${preview.height}`;
+    // Keyed by form as well as size: switching form switches renderer.
+    const shape =
+      preview.form === "raster" ? `raster:${preview.width}x${preview.height}` : "geometry";
     if (canvasRef.current === null || shapeRef.current !== shape) {
       canvasRef.current?.dispose();
-      canvasRef.current = createHeightfieldCanvas(container, {
-        width: preview.width,
-        height: preview.height,
-        values: preview.values,
-      });
+      canvasRef.current =
+        preview.form === "raster"
+          ? createHeightfieldCanvas(container, {
+              width: preview.width,
+              height: preview.height,
+              values: preview.values,
+            })
+          : createGeometryCanvas(container, {
+              positions: preview.positions,
+              indices: preview.indices,
+              navigable: true,
+            });
       shapeRef.current = shape;
+    } else if (preview.form === "raster") {
+      (canvasRef.current as HeightfieldCanvas).update(preview.values);
     } else {
-      canvasRef.current.update(preview.values);
+      (canvasRef.current as GeometryCanvas).update(preview.positions, preview.indices);
     }
   }, [preview]);
 
