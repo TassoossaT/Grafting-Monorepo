@@ -519,19 +519,57 @@ is private too. There is therefore **no public path to build `Rules<C>` for a
 coordinate system we define**, in `ghx_proc_gen` 0.8.0.
 
 This does not invalidate the `ghx_proc_gen` decision, but it does mean the
-crate cannot be adopted as-is for terrain on this grid. Three options, none
-yet chosen — an open Decision Gate, not a settled point:
+crate cannot be adopted as-is for terrain on this grid. Three options were
+put to the owner — upstream a generic `RulesBuilder::new`, vendor a patched
+fork, or implement AC-4 ourselves — and the gate was **closed in favour of a
+fourth**, found by surveying the alternatives rather than forking:
+`wave-function-collapse`.
 
-1. **Upstream a generic `RulesBuilder::new`.** The crate is MIT/Apache-2.0
-   and actively maintained; the change is one public constructor over
-   machinery that is already generic. Lowest long-term cost, but gated on a
-   maintainer's response.
-2. **Vendor a patched fork** via `[patch]`, optionally alongside (1). Removes
-   the scheduling risk; adds a fork to carry.
-3. **Implement AC-4 ourselves** over plain per-edge adjacency, which needs no
-   direction model at all. Well-understood and removes the impedance mismatch
-   entirely, but is the option this project's stated preference for
-   well-scoped third-party libraries argues against.
+#### Decided: `wave-function-collapse`, with the solver behind our own seam
+
+Roughly a hundred WFC crates exist; the filter that removes almost all of
+them is arbitrary topology, since most target rectangular image or tilemap
+synthesis. Three survived, and were compared on measurements rather than
+descriptions:
+
+| | irregular topology | determinism | contradictions | maintained | licence |
+|---|---|---|---|---|---|
+| `ghx_proc_gen` | generic trait, but **private constructor** | seeded (`RngMode`) | retry count | Jan 2026 | MIT/Apache |
+| `kahuna` | yes, unrestricted | **no — internal `thread_rng()`** | none reported | May 2022 | MIT/Apache |
+| `wave-function-collapse` | per-neighbour-pair, no direction concept | `random_seed: Option<u64>` | `Result<_, String>` | Sep 2024 | MIT/Apache |
+
+`kahuna` deserves a note because its `Space` trait is the cleanest fit of the
+three — the caller defines what a coordinate delta is, and no `opposite()`
+relation is required at all. It is nonetheless unusable here: `collapse()`
+draws from `thread_rng()` with no seed injection, and the map is replicated
+authoritative state that two hosts must generate identically. `billow` was
+excluded on licence (GPL-3.0).
+
+`wave-function-collapse` declares constraints per neighbour pair, so the
+irregular graph is native rather than worked around. It was measured before
+adoption, not after: deterministic from a seed, varied across seeds
+(15 distinct results over 24 seeds on a small case), contradictions returned
+as errors, compiles to `wasm32-unknown-unknown` given `uuid`'s `js` feature,
+and about 7 ms for 225 cells on a grid-like topology.
+
+Two costs are real and recorded rather than glossed:
+
+- **Proving unsatisfiability is not time-bounded.** A complete graph of six
+  cells with three mutually-exclusive modules was measured at over seven
+  minutes. `Problem::compile` in the crate below therefore rejects the cheap
+  cases up front, while it can still name the cell or link at fault.
+- **No socket or rotation machinery.** That layer is ours to write — which it
+  would have been in any case, since it is the domain part.
+
+The capability lives in `libs/domains/procgen/tileset-wfc`, and the solver
+sits behind `ConstraintSolver`/`Problem`/`Assignment`, all ours: **no
+third-party type appears in any public signature**, and the backend occupies
+one module behind one cargo feature. Switching later to another crate, to our
+own implementation, or to a maintained `ghx_proc_gen` fork is a change to that
+module plus the feature. This is enforced rather than intended — the crate
+builds and its model tests pass with `--no-default-features`, i.e. with no
+solver at all, and one of those tests implements the trait from outside the
+crate.
 
 ### Physics: collision and grounding only (not a full engine)
 
