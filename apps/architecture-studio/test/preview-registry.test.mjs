@@ -94,3 +94,23 @@ test("a preview always names the value kind it came from", () => {
     assert.equal(toEvaluationPreview(raster(dataType)).dataType, dataType);
   }
 });
+
+test("a preview never hands out the buffers of the value it came from", () => {
+  // Previews are transferred, which detaches their buffers, and the value stays
+  // in the worker's result cache. Sharing them detaches the cache, and the next
+  // pass that reuses it fails with "ArrayBuffer is already detached" -- which is
+  // exactly what shipped.
+  const mesh = {
+    dataType: "mesh",
+    positions: Float32Array.from([0, 0, 0, 1, 0, 0, 0, 0, 1]),
+    indices: Uint32Array.from([0, 1, 2]),
+  };
+  const preview = toEvaluationPreview(mesh);
+  assert.notEqual(preview.positions.buffer, mesh.positions.buffer);
+  assert.notEqual(preview.indices.buffer, mesh.indices.buffer);
+  assert.deepEqual([...preview.positions], [...mesh.positions]);
+
+  const grid = { dataType: "quadmesh", mesh: { vertices: [{ x: 0, y: 0 }], quads: [] } };
+  const gridPreview = toEvaluationPreview(grid);
+  assert.ok(gridPreview.positions.buffer instanceof ArrayBuffer);
+});
