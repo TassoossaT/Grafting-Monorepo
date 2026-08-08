@@ -4,6 +4,21 @@
   "projectType": "library",
   "tags": ["scope:root", "type:tooling"],
   "targets": {
+    "install": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run workspace:install" },
+      "cache": false
+    },
+    "update": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run workspace:update" },
+      "cache": false
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm run workspace:build" },
+      "cache": false
+    },
     "graph-generate": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm run graph:generate" },
