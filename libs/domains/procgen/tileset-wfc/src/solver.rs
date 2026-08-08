@@ -81,8 +81,16 @@ pub enum Violation {
 /// Why a solve did not produce an assignment.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SolveError {
-    /// The constraints admit no solution.
-    Contradiction { detail: String },
+    /// The backend gave up without an assignment.
+    ///
+    /// This is **not** a proof that none exists. The backend is a greedy
+    /// wave-function collapse: it settles cells one at a time and cannot undo
+    /// a choice, so it reaches dead ends on problems that are perfectly
+    /// satisfiable. Distinguishing the two would mean a complete search, which
+    /// this crate does not do -- so it says what actually happened and leaves
+    /// the conclusion to the caller. Retrying with another seed is the
+    /// conventional response and is often enough.
+    SearchFailed { detail: String },
     /// The backend produced something that does not satisfy the problem.
     InvalidResult { violations: Vec<Violation> },
     /// No backend is compiled in.
@@ -92,7 +100,10 @@ pub enum SolveError {
 impl core::fmt::Display for SolveError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Contradiction { detail } => write!(f, "no solution exists: {detail}"),
+            Self::SearchFailed { detail } => write!(
+                f,
+                "the solver found no solution, which does not prove none exists -- try another seed: {detail}"
+            ),
             Self::InvalidResult { violations } => {
                 write!(f, "the backend returned an invalid assignment: {violations:?}")
             }
