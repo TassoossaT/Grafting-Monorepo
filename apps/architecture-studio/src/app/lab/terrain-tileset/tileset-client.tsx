@@ -14,8 +14,13 @@ import { buildIrregularQuadGrid } from "../../../vtt/irregular-grid.ts";
 import { normaliseWinding } from "../../../vtt/grid-adjacency.ts";
 import { cellCentres } from "../../../vtt/stacked-terrain.ts";
 import { LATERAL_FACES } from "../../../vtt/quad-cell-graph.ts";
-import { buildShellCellGraph, pinCells } from "../../../vtt/shell-cell-graph.ts";
-import { occupancyFromHeights, runBelow } from "../../../vtt/cell-occupancy.ts";
+import { CELL_SOLID, buildShellCellGraph, pinCells } from "../../../vtt/shell-cell-graph.ts";
+import {
+  occupancyFromHeights,
+  runBelow,
+  withoutCell,
+  type Occupancy,
+} from "../../../vtt/cell-occupancy.ts";
 import { placeModule } from "../../../vtt/module-placement.ts";
 import {
   EMPTY_MODULE_NAME,
@@ -26,6 +31,7 @@ import {
   edgeProfile,
   flattenCompatibility,
   flattenModules,
+  isSurface,
   moduleMesh,
   type TerrainModule,
 } from "../../../vtt/terrain-modules.ts";
@@ -44,7 +50,7 @@ const TERRAIN_LAYER = "terrain";
 const FIELD_SIZE = 64;
 const LEVEL_HEIGHT = 0.22;
 const BASE_HEIGHT = -0.6;
-const SOCKET_NAMES = ["low", "high", "rise", "fall", "ground", "sky", "air"];
+const SOCKET_NAMES = ["low", "high", "rise", "fall", "ground", "sky", "air", "under"];
 const FACE_NAMES = ["side 0", "side 1", "side 2", "side 3", "up", "down"];
 
 /** Starting framing. Orbiting recovers its yaw, pitch and distance from this. */
@@ -62,9 +68,38 @@ interface Controls {
   readonly levels: number;
   readonly scale: number;
   readonly solveSeed: number;
+  readonly overhangs: boolean;
 }
 
-const INITIAL: Controls = { seed: 1, trianglesPerSide: 4, levels: 4, scale: 0.12, solveSeed: 1 };
+const INITIAL: Controls = {
+  seed: 1,
+  trianglesPerSide: 4,
+  levels: 4,
+  scale: 0.12,
+  solveSeed: 1,
+  overhangs: false,
+};
+
+/** Every third tall column loses the layer under its top, leaving a gap. */
+const OVERHANG_STRIDE = 3;
+
+/**
+ * Carves overhangs into an occupancy seeded from heights.
+ *
+ * Elevation alone can never produce one -- a height is a contiguous column by
+ * definition -- so without this the new vocabulary would have nothing to be
+ * seen doing. It is the same `withoutCell` a construction mode would call; the
+ * only thing this trial lacks is somewhere to click.
+ */
+function carveOverhangs(occupancy: Occupancy): Occupancy {
+  let carved = occupancy;
+  for (let quad = 0; quad < occupancy.quadCount; quad += OVERHANG_STRIDE) {
+    const layers = occupancy.layersOf(quad);
+    if (layers.length < 3) continue;
+    carved = withoutCell(carved, quad, layers[layers.length - 2] as number);
+  }
+  return carved;
+}
 
 /** Stage 2's pipeline, unchanged: the tileset pass consumes its levels. */
 function requestLevels(centres: Float32Array, controls: Controls): Promise<Int32Array> {
@@ -147,8 +182,9 @@ export default function TerrainTilesetClient() {
   // does not edit it yet.
   const occupancy = useMemo(() => {
     if (levels === null || levels.length !== grid.quads.length) return null;
-    return occupancyFromHeights([...levels].map((level) => Math.max(0, level) + 1));
-  }, [grid, levels]);
+    const seeded = occupancyFromHeights([...levels].map((level) => Math.max(0, level) + 1));
+    return controls.overhangs ? carveOverhangs(seeded) : seeded;
+  }, [grid, levels, controls.overhangs]);
 
   // The shell graph then keeps only the cells that meet air, and materialises
   // the air they meet.
@@ -304,22 +340,47 @@ export default function TerrainTilesetClient() {
     // renderer sees a handful of meshes rather than one per cell.
     const perModule = modules.map(() => ({ positions: [] as number[], indices: [] as number[] }));
 
-    // Only a cell with nothing above it draws a surface. Drawing every shell
-    // cell's top was what put a `hollow` exactly on the plane of the `flat`
-    // below it, and two coplanar surfaces are a z-fight, not a decision the
-    // depth buffer can make. The sides below come from this cell's own skirt,
-    // dropped as far as the run of occupied cells under it -- to the floor for
-    // ordinary ground, and no further than the overhang for an overhang.
-    for (const cell of graph.roofCells) {
+    const moduleAt = (cell: number) => modules[solution.sources[cell] as number];
+
+    /**
+     * How far a surface module's skirt drops, in layers.
+     *
+     * It closes the column beneath the roof, so it passes through interior
+     * cells -- but it must stop at the first cell holding a *piece*, which
+     * draws its own sides at the same cell boundary. Two coplanar side faces
+     * are a z-fight, not a decision the depth buffer can make.
+     */
+    const skirtDepth = (quad: number, layer: number): number => {
+      const limit = runBelow(occupancy, quad, layer);
+      let depth = 0;
+      while (depth < limit) {
+        const below = graph.cellAt(quad, layer - depth - 1);
+        const module = below === null ? undefined : moduleAt(below);
+        if (module !== undefined && !isSurface(module)) break;
+        depth += 1;
+      }
+      return depth;
+    };
+
+    const roofs = new Set(graph.roofCells);
+
+    for (let cell = 0; cell < graph.cellCount; cell += 1) {
+      if (graph.kindOfCell[cell] !== CELL_SOLID) continue;
       const source = solution.sources[cell] as number;
       const module = modules[source];
       const bucket = perModule[source];
       if (module === undefined || bucket === undefined || !module.visible) continue;
 
+      // A surface only means anything where it roofs something; a piece owns
+      // its own six faces and is drawn wherever the solver put it. Drawing a
+      // surface at every cell stacks coplanar tops inside a column; drawing a
+      // piece only at roofs makes an overhang's ceiling disappear.
+      if (isSurface(module) && !roofs.has(cell)) continue;
+
       const quad = graph.quadOfCell[cell] as number;
       const layer = graph.layerOfCell[cell] as number;
       const unit = moduleMesh(module, solution.turns[cell] as number, {
-        skirtBottom: -runBelow(occupancy, quad, layer),
+        skirtBottom: -skirtDepth(quad, layer),
       });
       const scaled = {
         vertices: unit.vertices.map((vertex) => ({
@@ -435,6 +496,18 @@ export default function TerrainTilesetClient() {
                 }
               />
             </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={controls.overhangs}
+                onChange={(event) => setControls({ ...controls, overhangs: event.target.checked })}
+              />
+              <Text content="Carve overhangs" strong />
+            </label>
+            <Text
+              content="Removes the layer under every third tall column, which elevation alone can never produce. The cells left hanging must take `slab` — the only module with an underside — so orbit below one to see a ceiling instead of seeing straight through."
+              tone="muted"
+            />
             <Text
               content={
                 graph === null
@@ -489,13 +562,14 @@ export default function TerrainTilesetClient() {
                       {module.name}
                     </th>
                     {Array.from({ length: MODULE_FACES }, (_, face) => {
-                      // An invisible module draws nothing, so its lateral
-                      // sockets describe exposure rather than corner heights
-                      // and cannot disagree with geometry it does not have.
+                      // `null` where there is nothing to check against: an
+                      // invisible module draws no geometry, and an authored
+                      // mesh has no single pair of heights along an edge. Both
+                      // label exposure rather than a profile, so neither can
+                      // disagree with a shape it does not have.
+                      const profile = module.visible ? edgeProfile(module, face) : null;
                       const consistent =
-                        face >= 4 ||
-                        !module.visible ||
-                        labelFor(edgeProfile(module, face)) === module.sockets[face];
+                        face >= 4 || profile === null || labelFor(profile) === module.sockets[face];
                       return (
                         <td key={face} style={{ padding: "1px 3px" }}>
                           <select
@@ -510,7 +584,7 @@ export default function TerrainTilesetClient() {
                             title={
                               consistent
                                 ? undefined
-                                : `This face's corner heights are ${edgeProfile(module, face).join(" → ")}, which this socket does not describe.`
+                                : `This face's corner heights are ${(profile ?? []).join(" → ")}, which this socket does not describe.`
                             }
                           >
                             {socketIds.map((socket) => (

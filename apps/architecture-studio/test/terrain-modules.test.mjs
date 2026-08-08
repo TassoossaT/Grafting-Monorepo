@@ -10,6 +10,7 @@ import {
   edgeProfile,
   flattenCompatibility,
   flattenModules,
+  isSurface,
   moduleMesh,
   rotateUnitCell,
 } from "../src/vtt/terrain-modules.ts";
@@ -60,7 +61,7 @@ test("rotating carries a corner's height with it", () => {
     const vertex = turned.vertices[corner];
     assert.ok(Math.abs(vertex.u - expected.u) < 1e-12, `corner ${corner} u`);
     assert.ok(Math.abs(vertex.v - expected.v) < 1e-12, `corner ${corner} v`);
-    assert.equal(vertex.height, ramp.corners[corner], `corner ${corner} height`);
+    assert.equal(vertex.height, ramp.shape.corners[corner], `corner ${corner} height`);
   });
 });
 
@@ -76,7 +77,7 @@ test("a module's mesh is a top quad plus a closing skirt", () => {
 
 test("a module missing a corner height is refused rather than rendered as a hole", () => {
   assert.throws(
-    () => moduleMesh({ ...STARTING_TILESET[0], corners: [1, 1, 1] }, 0),
+    () => moduleMesh({ ...STARTING_TILESET[0], shape: { kind: "corner-heights", corners: [1, 1, 1] } }, 0),
     RangeError,
   );
 });
@@ -92,7 +93,11 @@ test("the starting tileset's sockets describe its corner heights", () => {
   // `empty` is exempt: its lateral sockets say "this face is exposed", which is
   // a fact about the neighbourhood rather than about any corner height. Nothing
   // is drawn for it either way.
-  STARTING_TILESET.filter((module) => module.visible).forEach((module) => {
+  // Only corner-height modules: `empty` draws nothing and `slab` is an authored
+  // mesh, and both label exposure rather than a height profile.
+  STARTING_TILESET.filter(
+    (module) => module.visible && module.shape.kind === "corner-heights",
+  ).forEach((module) => {
     for (let face = 0; face < 4; face += 1) {
       assert.equal(
         module.sockets[face],
@@ -177,4 +182,65 @@ test("the skirt drops to where it is told, not always to the cell floor", () => 
     shallow.vertices.slice(0, 4).map((vertex) => vertex.height),
   );
   assert.deepEqual(deep.indices, shallow.indices);
+});
+
+const slab = STARTING_TILESET.find((module) => module.name === "slab");
+const meets = (a, b) =>
+  STARTING_COMPATIBILITY.some(
+    ([left, right]) => (left === a && right === b) || (left === b && right === a),
+  );
+
+test("a surface and a piece are told apart, because they are drawn differently", () => {
+  assert.equal(isSurface(STARTING_TILESET.find((module) => module.name === "flat")), true);
+  assert.equal(isSurface(slab), false);
+});
+
+test("the slab is closed, which is the thing corner heights cannot do", () => {
+  const mesh = moduleMesh(slab, 0);
+  assert.equal(mesh.indices.length, 6 * 6, "six quads: a top, four sides, and a bottom");
+
+  const bottom = mesh.vertices.filter((vertex) => vertex.height === 0);
+  const top = mesh.vertices.filter((vertex) => vertex.height === 1);
+  assert.ok(bottom.length >= 4 && top.length >= 4);
+
+  // The bottom quad's winding is the top's reversed, which is what makes it
+  // face downward instead of being an invisible duplicate of the top.
+  const first = [...mesh.indices.slice(0, 3)];
+  const last = [...mesh.indices.slice(-6, -3)];
+  const rebase = (triangle) => triangle.map((index) => index - Math.min(...triangle));
+  assert.deepEqual(rebase(first), [0, 1, 2]);
+  assert.deepEqual(rebase(last), [0, 2, 1]);
+});
+
+test("an authored mesh is turned, not rebuilt", () => {
+  const straight = moduleMesh(slab, 0);
+  const turned = moduleMesh(slab, 1);
+  assert.deepEqual(turned.indices, straight.indices, "topology is authored, not derived");
+  straight.vertices.forEach((vertex, index) => {
+    const expected = rotateUnitCell(vertex.u, vertex.v, 1);
+    assert.ok(Math.abs(turned.vertices[index].u - expected.u) < 1e-12, `vertex ${index} u`);
+    assert.ok(Math.abs(turned.vertices[index].v - expected.v) < 1e-12, `vertex ${index} v`);
+    assert.equal(turned.vertices[index].height, vertex.height, `vertex ${index} height`);
+  });
+});
+
+test("skirtBottom does nothing to a piece, which owns its own underside", () => {
+  assert.deepEqual(moduleMesh(slab, 0, { skirtBottom: -5 }), moduleMesh(slab, 0));
+});
+
+test("an authored mesh has no edge profile to check a socket against", () => {
+  for (let face = 0; face < 4; face += 1) assert.equal(edgeProfile(slab, face), null);
+});
+
+test("a ceiling is forced over air and forbidden anywhere else", () => {
+  // The whole demonstration, as two compatibility facts.
+  assert.ok(meets(SOCKET.UNDER, SOCKET.AIR), "a slab may hang over nothing");
+  assert.ok(!meets(SOCKET.GROUND, SOCKET.AIR), "a corner-height module may not");
+  assert.ok(!meets(SOCKET.UNDER, SOCKET.SKY), "and a slab may not sit on solid ground");
+  assert.equal(slab.sockets[5], SOCKET.UNDER);
+});
+
+test("air still stacks, so a column can end", () => {
+  assert.ok(meets(SOCKET.AIR, SOCKET.SKY), "air rests on a solid top");
+  assert.ok(meets(SOCKET.AIR, SOCKET.AIR));
 });
