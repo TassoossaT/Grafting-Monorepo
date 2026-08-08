@@ -468,9 +468,70 @@ narrows from "the terrain system" to two still-real, narrower jobs:
    specifically to this background-scenery use, not the buildable area).
 
 Not yet designed: the actual terrain tileset (tile count, adjacency rules
-that produce believable slopes/cliffs rather than blocky staircases) and the
-quantization step from a noise/heightmap seed into discrete stacked levels —
-recorded as a new open item.
+that produce believable slopes/cliffs rather than blocky staircases). The
+quantization step from a noise/heightmap seed into discrete stacked levels is
+no longer open — it shipped as `grafting-procgen-discretize`.
+
+#### Running `ghx_proc_gen` on the irregular grid: measured, with one blocker
+
+The plan above assumed the terrain WFC pass could run on the same irregular
+quad grid the earlier stages produce. That assumption was tested rather than
+carried forward, because the solver's grid contract is stricter than "cell A
+touches cell B". `ghx_proc_gen`'s AC-4 support counting requires, of any grid
+handed to it:
+
+> if the neighbour of `n` in direction `d` is `m`, then the neighbour of `m`
+> in direction `opposite(d)` must be `n`
+
+with direction indices fixed globally and `opposite` a static function of the
+index alone (`ghx_proc_gen/src/generator/internal_generator.rs`, the support
+initialisation loop).
+
+**The obvious encoding does not work.** Labelling each quad's four edge slots
+as four compass directions, with `opposite(d) == (d + 2) % 4`, has no valid
+global assignment on our grid. This is measured, not argued:
+`apps/architecture-studio/test/grid-adjacency.test.mjs` searches every
+rotation of every quad's labels (a complete search once winding is
+normalised, since a reflection would reverse the winding) and finds 58–93
+irreducibly contradictory edges across three seeds. The same search on a
+regular 8×8 grid returns zero, which is what makes the failure evidence about
+the grid rather than about the search. The obstruction is interior vertices
+of valence other than four — 23–35 of them per grid, and the contradiction
+count tracks them.
+
+**An encoding that does work.** Let a direction be the *ordered pair of edge
+slots* `(mine, theirs)` rather than a compass bearing: sixteen lateral
+directions, with `opposite((i, j)) == (j, i)`. The invariant then holds by
+construction, because a shared edge is shared — measured at zero violations
+on every grid tested. Most of the sixteen directions are unoccupied for any
+given quad, which the solver already tolerates, since an absent neighbour is
+how it represents a grid border. Adding up/down for the stacked layers gives
+eighteen directions. `apps/architecture-studio/src/vtt/grid-adjacency.ts`
+implements both encodings and the violation check.
+
+**The blocker is API visibility, not the algorithm.** `GeneratorBuilder` is
+already generic over `T: Grid<C>`, and `ModelCollection::new` and
+`SocketCollection::new` are public and generic — so a custom grid and custom
+coordinate system are anticipated almost everywhere. The single gap is
+`RulesBuilder`: its fields are private and its only constructors are
+`new_cartesian_2d` and `new_cartesian_3d`, while the underlying `Rules::new`
+is private too. There is therefore **no public path to build `Rules<C>` for a
+coordinate system we define**, in `ghx_proc_gen` 0.8.0.
+
+This does not invalidate the `ghx_proc_gen` decision, but it does mean the
+crate cannot be adopted as-is for terrain on this grid. Three options, none
+yet chosen — an open Decision Gate, not a settled point:
+
+1. **Upstream a generic `RulesBuilder::new`.** The crate is MIT/Apache-2.0
+   and actively maintained; the change is one public constructor over
+   machinery that is already generic. Lowest long-term cost, but gated on a
+   maintainer's response.
+2. **Vendor a patched fork** via `[patch]`, optionally alongside (1). Removes
+   the scheduling risk; adds a fork to carry.
+3. **Implement AC-4 ourselves** over plain per-edge adjacency, which needs no
+   direction model at all. Well-understood and removes the impedance mismatch
+   entirely, but is the option this project's stated preference for
+   well-scoped third-party libraries argues against.
 
 ### Physics: collision and grounding only (not a full engine)
 
