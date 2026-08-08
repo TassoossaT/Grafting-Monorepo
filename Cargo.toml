@@ -9,5 +9,6 @@ members = [
     "libs/isekai/wasm-bridge",
     "libs/domains/procgen/generation-wasm",
     "libs/domains/procgen/discretize",
+    "libs/domains/procgen/tileset-wfc",
     "tools/rust-api-docgen",
 ]
