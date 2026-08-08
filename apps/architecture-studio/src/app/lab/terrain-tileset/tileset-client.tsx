@@ -15,6 +15,7 @@ import { normaliseWinding } from "../../../vtt/grid-adjacency.ts";
 import { cellCentres } from "../../../vtt/stacked-terrain.ts";
 import { LATERAL_FACES } from "../../../vtt/quad-cell-graph.ts";
 import { buildShellCellGraph, pinCells } from "../../../vtt/shell-cell-graph.ts";
+import { occupancyFromHeights, runBelow } from "../../../vtt/cell-occupancy.ts";
 import { placeModule } from "../../../vtt/module-placement.ts";
 import {
   EMPTY_MODULE_NAME,
@@ -140,13 +141,21 @@ export default function TerrainTilesetClient() {
     [controls.seed, controls.trianglesPerSide],
   );
 
-  // A quad at level `n` holds `n + 1` boxes of terrain, so even the lowest
-  // ground is solid rather than nothing. The shell graph then keeps only the
-  // boxes that meet air, and materialises the air they meet.
-  const graph = useMemo(() => {
+  // A quad at level `n` holds `n + 1` cells of terrain, so even the lowest
+  // ground is occupied rather than nothing. Heights are only the *seed* of the
+  // occupancy: from here on the world is a set of cells, and this trial simply
+  // does not edit it yet.
+  const occupancy = useMemo(() => {
     if (levels === null || levels.length !== grid.quads.length) return null;
-    return buildShellCellGraph(grid, [...levels].map((level) => Math.max(0, level) + 1));
+    return occupancyFromHeights([...levels].map((level) => Math.max(0, level) + 1));
   }, [grid, levels]);
+
+  // The shell graph then keeps only the cells that meet air, and materialises
+  // the air they meet.
+  const graph = useMemo(
+    () => (occupancy === null ? null : buildShellCellGraph(grid, occupancy)),
+    [grid, occupancy],
+  );
 
   const emptyIndex = useMemo(
     () => modules.findIndex((module) => module.name === EMPTY_MODULE_NAME),
@@ -288,25 +297,30 @@ export default function TerrainTilesetClient() {
   useEffect(() => {
     const engine = engineRef.current;
     const view = viewRef.current;
-    if (engine === null || view === null || graph === null || solution === null) return;
-    if (solution.sources.length !== graph.cellCount) return;
+    if (engine === null || view === null || graph === null || occupancy === null) return;
+    if (solution === null || solution.sources.length !== graph.cellCount) return;
 
     // One batch per module, so a solved map is legible by colour and the
     // renderer sees a handful of meshes rather than one per cell.
     const perModule = modules.map(() => ({ positions: [] as number[], indices: [] as number[] }));
 
-    // Only the top of each column draws a surface. Drawing every shell cell's
-    // top was what put a `hollow` exactly on the plane of the `flat` below it,
-    // and two coplanar surfaces are a z-fight, not a decision the depth buffer
-    // can make. The cliff faces below come from this cell's own skirt.
-    for (const cell of graph.topCells) {
+    // Only a cell with nothing above it draws a surface. Drawing every shell
+    // cell's top was what put a `hollow` exactly on the plane of the `flat`
+    // below it, and two coplanar surfaces are a z-fight, not a decision the
+    // depth buffer can make. The sides below come from this cell's own skirt,
+    // dropped as far as the run of occupied cells under it -- to the floor for
+    // ordinary ground, and no further than the overhang for an overhang.
+    for (const cell of graph.roofCells) {
       const source = solution.sources[cell] as number;
       const module = modules[source];
       const bucket = perModule[source];
       if (module === undefined || bucket === undefined || !module.visible) continue;
 
+      const quad = graph.quadOfCell[cell] as number;
       const layer = graph.layerOfCell[cell] as number;
-      const unit = moduleMesh(module, solution.turns[cell] as number, { skirtBottom: -layer });
+      const unit = moduleMesh(module, solution.turns[cell] as number, {
+        skirtBottom: -runBelow(occupancy, quad, layer),
+      });
       const scaled = {
         vertices: unit.vertices.map((vertex) => ({
           u: vertex.u,
@@ -315,7 +329,7 @@ export default function TerrainTilesetClient() {
         })),
         indices: unit.indices,
       };
-      const placed = placeModule(scaled, grid, graph.quadOfCell[cell] as number, {
+      const placed = placeModule(scaled, grid, quad, {
         baseHeight: BASE_HEIGHT + (graph.layerOfCell[cell] as number) * LEVEL_HEIGHT,
       });
 
@@ -346,7 +360,7 @@ export default function TerrainTilesetClient() {
 
     engine.frame(performance.now());
     writePreviewImage(CANDIDATE, view.capture("image/png"));
-  }, [grid, graph, solution, modules]);
+  }, [grid, graph, occupancy, solution, modules]);
 
   const setSocket = (moduleIndex: number, face: number, socket: number) => {
     setModules((current) =>
@@ -425,7 +439,7 @@ export default function TerrainTilesetClient() {
               content={
                 graph === null
                   ? "Waiting for elevation…"
-                  : `${grid.quads.length} quads, ${graph.cellCount} shell cells (${graph.airCells.length} of them air) against ${graph.volumeCellCount} boxes of solid, ${graph.links.length / 4} links`
+                  : `${grid.quads.length} quads, ${graph.cellCount} shell cells (${graph.airCells.length} of them air) against ${graph.occupiedCellCount} occupied, ${graph.links.length / 4} links`
               }
             />
             {solution !== null ? (

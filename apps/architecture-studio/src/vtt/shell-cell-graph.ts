@@ -1,5 +1,6 @@
 /**
- * The stacked grid restated as a *shell*: the boundary between solid and air.
+ * The stacked grid restated as a *shell*: the boundary between occupied and
+ * empty.
  *
  * {@link buildQuadCellGraph} describes the stack faithfully -- every box of
  * every column is a cell -- and that is the right description of the stack. It
@@ -21,17 +22,18 @@
  *
  * # Air is a cell
  *
- * The space above a column is materialised as {@link CELL_AIR} cells, one layer
- * at a time, but only where they touch solid. A face that used to be unlinked
- * now links to an air cell, so "this side faces nothing" becomes a constraint
- * the tileset can speak about instead of a silence. Air cells are not decided
- * by the solver -- the caller pins them -- they exist to carry that constraint.
+ * The empty space touching the world is materialised as {@link CELL_AIR} cells,
+ * one layer deep. A face that used to be unlinked now links to an air cell, so
+ * "this side faces nothing" becomes a constraint the tileset can speak about
+ * instead of a silence. Air cells are not decided by the solver -- the caller
+ * pins them -- they exist to carry that constraint.
  *
- * # Solid is a cell only where it meets air
+ * # Occupied is a cell only where it meets air
  *
- * A solid box with solid on all six sides is dropped. It is interior; nothing
- * sees it and nothing it could be changes anything outside it. What survives is
- * the shell: tops, cliff faces, and the rim.
+ * An occupied cell with occupied neighbours on all six sides is dropped. It is
+ * interior; nothing sees it and nothing it could be changes anything outside
+ * it. What survives is the shell: roofs, cliff faces, overhang undersides, and
+ * the rim.
  *
  * The result is a graph over the same mesh whose cell count tracks the
  * *surface* rather than the volume, which is the shape a facade tileset wants.
@@ -40,24 +42,26 @@
  *
  * It does not split a cell's faces into separately decided pieces. A cliff face
  * is still a whole cell carrying one module, in the corner-height vocabulary
- * {@link TerrainModule} already uses. A true per-face facade tileset is a
- * content redesign, and a larger one; this module is the topology it would need
- * underneath either way.
+ * {@link TerrainModule} still uses -- a vocabulary that cannot describe an
+ * overhang's underside, and so is the next thing in the way of building freely
+ * in three dimensions. This module is the topology that redesign needs
+ * underneath it either way.
  */
 
 import { quadAdjacency, normaliseWinding } from "./grid-adjacency.ts";
 import type { QuadMesh } from "./irregular-grid.ts";
+import type { Occupancy } from "./cell-occupancy.ts";
 import { FACES_PER_CELL, FACE_DOWN, FACE_UP, LINK_STRIDE } from "./quad-cell-graph.ts";
 
 export { FACES_PER_CELL, FACE_DOWN, FACE_UP, LINK_STRIDE };
 
-/** A cell holding terrain. */
+/** A cell holding something. */
 export const CELL_SOLID = 1;
 
-/** A cell holding nothing, present only to constrain the solid it touches. */
+/** A cell holding nothing, present only to constrain what it touches. */
 export const CELL_AIR = 0;
 
-/** The stacked grid's solid/air boundary, as the solver's cells and links. */
+/** The occupied/empty boundary of a stacked grid, as the solver's cells. */
 export interface ShellCellGraph {
   readonly cellCount: number;
   readonly facesPerCell: number;
@@ -69,42 +73,35 @@ export interface ShellCellGraph {
   readonly layerOfCell: Uint32Array;
   /** {@link CELL_SOLID} or {@link CELL_AIR}, indexed by cell. */
   readonly kindOfCell: Uint8Array;
-  /** Solid cells at the top of their column -- the ones with a visible top. */
-  readonly topCells: Uint32Array;
+  /**
+   * Occupied cells with nothing directly above -- the ones showing a top
+   * surface. Under a heightfield this was the top of each column; with a
+   * general occupancy every storey of an overhang has one.
+   */
+  readonly roofCells: Uint32Array;
   /** Every {@link CELL_AIR} cell, for the caller to pin in one pass. */
   readonly airCells: Uint32Array;
-  /** How many boxes the *unreduced* stack would have held, for comparison. */
-  readonly volumeCellCount: number;
+  /** How many cells the occupancy holds, shell or interior, for comparison. */
+  readonly occupiedCellCount: number;
   /** The cell at `(quad, layer)`, or `null` if the shell does not include it. */
   cellAt(quad: number, layer: number): number | null;
 }
 
 /**
- * Builds the shell graph for a stacked quad grid.
+ * Builds the shell graph for an occupancy over `mesh`.
  *
- * `solidPerQuad[q]` is how many boxes of terrain quad `q` holds; `0` is a hole,
- * and still takes part -- its neighbours' sides face air across it, which is
- * the whole point of materialising air.
+ * An empty quad takes part rather than being skipped: its neighbours' sides
+ * face air across it, which is the whole point of materialising air.
  *
- * @throws RangeError if `solidPerQuad` does not describe every quad, or holds a
- * value that is not a non-negative integer. A silently wrong stack produces a
- * plausible-looking map that is wrong, which is worse than a refusal.
+ * @throws RangeError if the occupancy does not describe every quad of the mesh.
  */
-export function buildShellCellGraph(
-  mesh: QuadMesh,
-  solidPerQuad: readonly number[],
-): ShellCellGraph {
+export function buildShellCellGraph(mesh: QuadMesh, occupancy: Occupancy): ShellCellGraph {
   const normalised = normaliseWinding(mesh);
-  if (solidPerQuad.length !== normalised.quads.length) {
+  if (occupancy.quadCount !== normalised.quads.length) {
     throw new RangeError(
-      `solidPerQuad describes ${solidPerQuad.length} quads, but the mesh has ${normalised.quads.length}`,
+      `the occupancy describes ${occupancy.quadCount} quads, but the mesh has ${normalised.quads.length}`,
     );
   }
-  solidPerQuad.forEach((solid, quad) => {
-    if (!Number.isInteger(solid) || solid < 0) {
-      throw new RangeError(`quad ${quad} has a solid height of ${solid}, which is not a count`);
-    }
-  });
 
   const adjacency = quadAdjacency(normalised);
 
@@ -115,59 +112,54 @@ export function buildShellCellGraph(
     );
 
   // A quad's rim slots face air by definition: the map simply stops there. That
-  // makes every solid cell of a rim quad part of the shell, which is correct --
-  // the rim is a cliff like any other.
-  const onRim = solidPerQuad.map(
+  // makes every occupied cell of a rim quad part of the shell, which is correct
+  // -- the rim is a cliff like any other.
+  const onRim = Array.from(
+    { length: occupancy.quadCount },
     (_, quad) => neighboursOf(quad).length < (normalised.quads[quad]?.length ?? 4),
   );
 
-  const tallestNeighbour = solidPerQuad.map((_, quad) =>
-    neighboursOf(quad).reduce(
-      (tallest, { neighbour }) => Math.max(tallest, solidPerQuad[neighbour] as number),
-      0,
-    ),
-  );
+  /**
+   * Is `(quad, layer)` empty *as air*?
+   *
+   * Below layer zero is bedrock rather than sky, so a ground-level cell is not
+   * exposed from underneath. See `cell-occupancy.ts` for why.
+   */
+  const isAir = (quad: number, layer: number): boolean =>
+    layer >= 0 && !occupancy.has(quad, layer);
 
-  // Air is materialised from a column's own top up to the tallest neighbour's
-  // top, plus the one layer resting on this column. Above that, air touches
-  // only air, and constrains nothing.
-  const airTop = solidPerQuad.map((solid, quad) =>
-    Math.max(tallestNeighbour[quad] as number, solid > 0 ? solid + 1 : solid),
-  );
+  /** Does `(quad, layer)` have air across at least one of its six faces? */
+  const meetsAir = (quad: number, layer: number): boolean =>
+    isAir(quad, layer + 1) ||
+    (layer > 0 && isAir(quad, layer - 1)) ||
+    onRim[quad] === true ||
+    neighboursOf(quad).some(({ neighbour }) => isAir(neighbour, layer));
 
-  /** Is the solid box `(quad, layer)` part of the shell rather than interior? */
-  const solidIsShell = (quad: number, layer: number): boolean => {
-    const solid = solidPerQuad[quad] as number;
-    if (layer === solid - 1) return true; // air directly above
-    if (onRim[quad] === true) return true; // the map ends beside it
-    return neighboursOf(quad).some(({ neighbour }) => (solidPerQuad[neighbour] as number) <= layer);
-  };
+  /** Does empty `(quad, layer)` touch anything occupied? */
+  const touchesOccupied = (quad: number, layer: number): boolean =>
+    occupancy.has(quad, layer + 1) ||
+    occupancy.has(quad, layer - 1) ||
+    neighboursOf(quad).some(({ neighbour }) => occupancy.has(neighbour, layer));
 
-  const included = solidPerQuad.map((solid, quad) => {
-    const layers: { layer: number; kind: number }[] = [];
-    for (let layer = 0; layer < solid; layer += 1) {
-      if (solidIsShell(quad, layer)) layers.push({ layer, kind: CELL_SOLID });
-    }
-    for (let layer = solid; layer < (airTop[quad] as number); layer += 1) {
-      layers.push({ layer, kind: CELL_AIR });
-    }
-    return layers;
-  });
+  // One layer past the highest occupied one, so a roof always has air above it.
+  const layerLimit = occupancy.layerCount + 1;
 
   // Cells are numbered quad by quad, layer ascending, so a cell id is stable
-  // for a given mesh and stack -- which is what lets a seed reproduce a map.
+  // for a given mesh and occupancy -- which is what lets a seed reproduce a map.
   const cellOf = new Map<number, number>();
   const quadOf: number[] = [];
   const layerOf: number[] = [];
   const kindOf: number[] = [];
-  included.forEach((layers, quad) => {
-    for (const { layer, kind } of layers) {
+  for (let quad = 0; quad < occupancy.quadCount; quad += 1) {
+    for (let layer = 0; layer < layerLimit; layer += 1) {
+      const occupied = occupancy.has(quad, layer);
+      if (occupied ? !meetsAir(quad, layer) : !touchesOccupied(quad, layer)) continue;
       cellOf.set(quad * KEY_STRIDE + layer, quadOf.length);
       quadOf.push(quad);
       layerOf.push(layer);
-      kindOf.push(kind);
+      kindOf.push(occupied ? CELL_SOLID : CELL_AIR);
     }
-  });
+  }
 
   const cellAt = (quad: number, layer: number): number | null =>
     cellOf.get(quad * KEY_STRIDE + layer) ?? null;
@@ -175,14 +167,13 @@ export function buildShellCellGraph(
   const links: number[] = [];
 
   // Lateral: two quads that touch are linked at every layer both materialised.
-  // A layer only one of them reaches produces no link -- but with air present
-  // that now means "outside the shell entirely", not "a step down".
+  // A layer only one of them reaches is outside the shell entirely, so there is
+  // genuinely nothing there to constrain.
   adjacency.forEach((slots, quad) => {
     slots.forEach((link, slot) => {
       // Each undirected adjacency is recorded once, from the lower quad.
       if (link === null || link.neighbour < quad) return;
-      const top = Math.max(airTop[quad] as number, airTop[link.neighbour] as number);
-      for (let layer = 0; layer < top; layer += 1) {
+      for (let layer = 0; layer < layerLimit; layer += 1) {
         const here = cellAt(quad, layer);
         const there = cellAt(link.neighbour, layer);
         if (here === null || there === null) continue;
@@ -192,22 +183,22 @@ export function buildShellCellGraph(
   });
 
   // Vertical: within a quad, each cell meets the one above it when the shell
-  // kept both. An interior box below a shell box leaves its underside silent,
+  // kept both. An interior cell below a shell cell leaves its underside silent,
   // which is correct: there is nothing there to disagree with.
-  included.forEach((layers, quad) => {
-    for (const { layer } of layers) {
+  for (let quad = 0; quad < occupancy.quadCount; quad += 1) {
+    for (let layer = 0; layer + 1 < layerLimit; layer += 1) {
       const here = cellAt(quad, layer);
       const above = cellAt(quad, layer + 1);
       if (here === null || above === null) continue;
       links.push(here, FACE_UP, above, FACE_DOWN);
     }
-  });
+  }
 
-  const topCells: number[] = [];
+  const roofCells: number[] = [];
   const airCells: number[] = [];
   quadOf.forEach((quad, cell) => {
     if (kindOf[cell] === CELL_AIR) airCells.push(cell);
-    else if (layerOf[cell] === (solidPerQuad[quad] as number) - 1) topCells.push(cell);
+    else if (!occupancy.has(quad, (layerOf[cell] as number) + 1)) roofCells.push(cell);
   });
 
   return {
@@ -217,9 +208,9 @@ export function buildShellCellGraph(
     quadOfCell: Uint32Array.from(quadOf),
     layerOfCell: Uint32Array.from(layerOf),
     kindOfCell: Uint8Array.from(kindOf),
-    topCells: Uint32Array.from(topCells),
+    roofCells: Uint32Array.from(roofCells),
     airCells: Uint32Array.from(airCells),
-    volumeCellCount: solidPerQuad.reduce((total, solid) => total + solid, 0),
+    occupiedCellCount: occupancy.size,
     cellAt,
   };
 }

@@ -111,6 +111,19 @@ constrained rather than silent, and only a column's top draws a surface, which
 removes the `hollow` coplanarity. What is *not* done is a per-face facade
 tileset — a cliff face is still one cell carrying one corner-height module.
 
+Occupancy is now a **set of `(quad, layer)` cells** (`cell-occupancy.ts`), not
+a height per quad. The height per quad was a heightfield wearing a 3D grid's
+clothes: it forbade every overhang, arch, balcony and cave, all of which are
+"occupied at layer 5 with nothing at layer 3". The elevation pass is now the
+*seed* of an occupancy rather than its definition, and the world grows a cell
+at a time — the Townscaper-shaped editing this document already assumed when it
+said generation is fixed and grows incrementally.
+
+The remaining heightfield assumption is the module vocabulary, not the grid:
+`TerrainModule` is a corner-height profile with a top surface and a skirt, which
+cannot describe an overhang's underside. That is the per-face facade tileset
+above, and it is now the thing in the way rather than the topology.
+
 
 `/lab/terrain-tileset` stacks cells to the ground and gives every cell a
 module. Consequences, from reading rather than measurement:
