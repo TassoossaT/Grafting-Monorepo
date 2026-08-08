@@ -42,6 +42,11 @@ function extent(source: ArrayLike<number>): { minimum: number; maximum: number }
  */
 export function toEvaluationPreview(value: BenchValue): EvaluationPreview | null {
   if (value.dataType === "number") return null;
+  // A grid off the lattice and a triangle soup have no raster to normalise.
+  // Drawing them needs a viewport that renders geometry rather than a
+  // heightfield; until there is one, they evaluate but show nothing, which is
+  // better than projecting them into a picture that misrepresents them.
+  if (value.dataType === "quadmesh" || value.dataType === "mesh") return null;
   if (value.dataType === "levels") {
     // Levels are already an ordered scale, so their declared count is the
     // range rather than whatever indices happen to be present. Otherwise a map

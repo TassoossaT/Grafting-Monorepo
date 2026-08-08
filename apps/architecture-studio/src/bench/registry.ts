@@ -18,6 +18,16 @@ export const BENCH_DATA_TYPES = Object.freeze({
   /** A single scalar: what a control produces and what a parameter port takes. */
   number: "number",
   /**
+   * An irregular quad grid: vertices, and the quads indexing them.
+   *
+   * Carried whole rather than as a heightmap because the whole point of the
+   * grid is that it is *not* on a lattice; flattening it to a raster would
+   * throw away the adjacency every later stage depends on.
+   */
+  quadmesh: "quadmesh",
+  /** Renderable geometry: positions and triangles, ready for a viewport. */
+  mesh: "mesh",
+  /**
    * Accepts any value kind.
    *
    * Only meaningful on an input. An output must always say what it actually
@@ -223,6 +233,95 @@ const CHOICE_CONTROL: BenchNodeKind = Object.freeze({
   ]),
 });
 
+
+const IRREGULAR_GRID: BenchNodeKind = Object.freeze({
+  id: "grid.irregular",
+  title: "Irregular quad grid",
+  category: "Grid",
+  description:
+    "Townscaper's grid substrate: a triangulated hexagon, randomly paired into quads, then relaxed off the lattice.",
+  inputs: Object.freeze([]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "grid", label: "grid", dataType: BENCH_DATA_TYPES.quadmesh }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "integer" as const,
+      id: "trianglesPerSide",
+      label: "Triangles per side",
+      defaultValue: 4,
+      min: 2,
+      max: 8,
+      description:
+        "Subdivision of the seed hexagon. Cell count grows with its square, so a large value is expensive rather than merely detailed.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "triangleSide",
+      label: "Triangle side",
+      defaultValue: 0.5,
+      min: 0.05,
+      max: 2,
+      step: 0.05,
+      description: "World size of one seed triangle's edge.",
+    }),
+    Object.freeze({
+      kind: "seed" as const,
+      id: "seed",
+      label: "Seed",
+      defaultValue: 1,
+      description: "Decides the random pairing and the relaxation. Same seed, same grid.",
+    }),
+  ]),
+});
+
+const STACK_TERRAIN: BenchNodeKind = Object.freeze({
+  id: "terrain.stack",
+  title: "Stacked terrain",
+  category: "Terrain",
+  description:
+    "Gives the grid relief: each cell samples the heightmap at its own centre, takes one discrete level, and is extruded to it.",
+  inputs: Object.freeze([
+    Object.freeze({ id: "grid", label: "grid", dataType: BENCH_DATA_TYPES.quadmesh }),
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "mesh", label: "mesh", dataType: BENCH_DATA_TYPES.mesh }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "integer" as const,
+      id: "levels",
+      label: "Discrete levels",
+      defaultValue: 5,
+      min: 2,
+      max: 12,
+      description:
+        "How many steps the terrain may take. Elevation attaches to cells, so neighbours at different levels meet at a vertical wall rather than a slope.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "levelHeight",
+      label: "Level height",
+      defaultValue: 0.22,
+      min: 0.02,
+      max: 1,
+      step: 0.02,
+      description: "World height of one step.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "baseHeight",
+      label: "Base height",
+      defaultValue: -0.6,
+      min: -4,
+      max: 4,
+      step: 0.1,
+      description: "World height of the lowest level's floor.",
+    }),
+  ]),
+});
+
 /** Every element the bench offers, in menu order. */
 export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   PERLIN_HEIGHTMAP,
@@ -230,7 +329,9 @@ export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   CHOICE_CONTROL,
   SMOOTH,
   REMAP,
+  IRREGULAR_GRID,
   DISCRETIZE,
+  STACK_TERRAIN,
   VIEWPORT,
 ]);
 

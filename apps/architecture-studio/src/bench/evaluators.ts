@@ -1,5 +1,7 @@
 import { BENCH_DATA_TYPES, BENCH_NODE_KINDS } from "./registry.ts";
 import { paramIdFromPort, type BenchParamValue, type BenchParamValues } from "./node-kind.ts";
+import { buildIrregularQuadGrid, type QuadMesh } from "../vtt/irregular-grid.ts";
+import { buildStackedTerrain, sampleCellValues } from "../vtt/stacked-terrain.ts";
 
 // What an element *does*, kept apart from what it *is* (`registry.ts`). The
 // Wasm entry points arrive by injection rather than by import so this module
@@ -29,8 +31,34 @@ export interface NumberValue {
   readonly value: number;
 }
 
+/**
+ * An irregular quad grid.
+ *
+ * Carried whole rather than rasterised: the grid's value is precisely that it
+ * is not on a lattice, and a raster would throw away the adjacency every later
+ * stage is built on.
+ */
+export interface QuadMeshValue {
+  readonly dataType: "quadmesh";
+  readonly mesh: QuadMesh;
+}
+
+/** Renderable geometry, ready for a viewport. */
+export interface MeshValue {
+  readonly dataType: "mesh";
+  /** Flat `xyz` triples. */
+  readonly positions: Float32Array;
+  /** Triangles indexing them. */
+  readonly indices: Uint32Array;
+}
+
 /** Any value that may travel along a connection. */
-export type BenchValue = HeightmapValue | LevelsValue | NumberValue;
+export type BenchValue =
+  | HeightmapValue
+  | LevelsValue
+  | MeshValue
+  | NumberValue
+  | QuadMeshValue;
 
 /** The Rust entry points the laboratory elements are built on. */
 export interface BenchWasm {
@@ -55,6 +83,13 @@ const expectHeightmap = (value: BenchValue | undefined, port: string): Heightmap
   return value;
 };
 
+const expectQuadMesh = (value: BenchValue | undefined, port: string): QuadMeshValue => {
+  if (value === undefined || value.dataType !== "quadmesh") {
+    throw new Error(`Bench input ${port} expected a grid`);
+  }
+  return value;
+};
+
 /**
  * Builds the evaluator for every registered element.
  *
@@ -63,6 +98,40 @@ const expectHeightmap = (value: BenchValue | undefined, port: string): Heightmap
  */
 export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, BenchEvaluator> {
   const evaluators = new Map<string, BenchEvaluator>();
+
+  evaluators.set("grid.irregular", (_inputs, params) => ({
+    dataType: "quadmesh" as const,
+    mesh: buildIrregularQuadGrid({
+      trianglesPerSide: asNumber(params.trianglesPerSide),
+      triangleSide: asNumber(params.triangleSide),
+      seed: asNumber(params.seed),
+    }),
+  }));
+
+  evaluators.set("terrain.stack", (inputs, params) => {
+    const grid = expectQuadMesh(inputs.grid, "grid").mesh;
+    const field = expectHeightmap(inputs.heightmap, "heightmap");
+
+    // The cells are irregular and the heightmap is not, so nothing lines a
+    // cell centre up with a sample; the sampling is bilinear so two adjacent
+    // cells cannot land on the same sample and flatten a step that exists.
+    const sampled = sampleCellValues(grid, field);
+    // Quantised by the Rust crate rather than here: the repository has one
+    // authoritative binning implementation and this is not it.
+    const levels = wasm.discretize(sampled, asNumber(params.levels));
+
+    const terrain = buildStackedTerrain(grid, levels, {
+      levelHeight: asNumber(params.levelHeight),
+      baseHeight: asNumber(params.baseHeight),
+    });
+
+    // Tops and walls are one mesh here. They are separate in the trial only
+    // because it shades them differently; the value kind carries geometry.
+    const indices = new Uint32Array(terrain.topIndices.length + terrain.wallIndices.length);
+    indices.set(terrain.topIndices, 0);
+    indices.set(terrain.wallIndices, terrain.topIndices.length);
+    return { dataType: "mesh" as const, positions: terrain.positions, indices };
+  });
 
   evaluators.set("heightmap.perlin", (_inputs, params) => {
     const width = asNumber(params.width);
