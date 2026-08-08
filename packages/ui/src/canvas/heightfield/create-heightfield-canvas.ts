@@ -98,6 +98,9 @@ export function createHeightfieldCanvasAdapter(
     // Left mid-lap the mesh would sit at whatever angle the track had reached,
     // so the camera the user then aims is aiming at an arbitrary orientation.
     engine.scene.setTransform("terrain", { rotation: { x: 0, y: 0, z: 0 } }, "engine");
+    // And with the track stopped, nothing else will ask for the frame that
+    // shows it back at zero.
+    engine.frame(performance.now());
   };
 
   let detachOrbit: (() => void) | null = null;
@@ -135,6 +138,11 @@ export function createHeightfieldCanvasAdapter(
     detachOrbit = attachOrbit(container, view, orbitFromCamera(CAMERA.position, CAMERA.target), {
       fov: CAMERA.fov,
       far: CAMERA.far,
+      // The frame loop is driven by the host's animation frames, and turning
+      // auto-rotation off leaves nothing asking for one. Without this the
+      // camera moves and the picture does not, which reads exactly like the
+      // controls being dead -- and did.
+      onChange: () => engine.frame(performance.now()),
     });
   };
 
@@ -158,6 +166,7 @@ export function createHeightfieldCanvasAdapter(
     setNavigable,
     resetCamera() {
       view.setCamera(CAMERA);
+      engine.frame(performance.now());
     },
     dispose() {
       setNavigable(false);
