@@ -359,7 +359,28 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
     surface.style.cssText = "flex:1;min-height:0;border-radius:6px;overflow:hidden;background:#0f172a";
     const empty = document.createElement("span");
     empty.style.cssText = "font-size:10px;color:#94a3b8;padding:4px";
+
+    // Navigation is a mode rather than always-on because the two gestures are
+    // the same gesture: dragging inside the node would otherwise both aim the
+    // camera and drag the node across the surface. While it is on, this
+    // canvas takes the pointer and the surface below stops receiving it --
+    // which is exactly why leaving it on by default would be wrong.
+    let navigating = false;
+    const navigate = document.createElement("button");
+    navigate.type = "button";
+    navigate.style.cssText =
+      "position:absolute;right:6px;bottom:6px;z-index:1;font-size:10px;padding:2px 6px;" +
+      "border-radius:4px;border:1px solid #475569;background:#1e293b;color:#e2e8f0;cursor:pointer";
+    const paintNavigate = () => {
+      navigate.textContent = navigating ? "navigating" : "navigate";
+      navigate.style.background = navigating ? "#0ea5e9" : "#1e293b";
+      navigate.title = navigating
+        ? "Drag to orbit, scroll to zoom. The node stays put while this is on."
+        : "Take the pointer so dragging aims the camera instead of moving the node.";
+    };
+    surface.style.position = "relative";
     body.append(surface, empty);
+    surface.append(navigate);
     host.append(root);
 
     let canvas: HeightfieldCanvas | null = null;
@@ -386,13 +407,32 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
       if (canvas === null || shape !== nextShape || box !== nextBox) {
         box = nextBox;
         canvas?.dispose();
-        canvas = createHeightfieldCanvas(surface, { width: value.width, height: value.height, values: value.values });
+        canvas = createHeightfieldCanvas(surface, {
+          width: value.width,
+          height: value.height,
+          values: value.values,
+          navigable: navigating,
+        });
+        // The canvas replaces the surface's children, so the control has to be
+        // put back rather than assumed to have survived.
+        surface.append(navigate);
         shape = nextShape;
       } else {
         canvas.update(value.values);
       }
     };
     apply(context);
+    paintNavigate();
+
+    // The button itself must never reach the surface below, or clicking it
+    // would also select or start dragging the node.
+    navigate.addEventListener("pointerdown", (event) => event.stopPropagation());
+    navigate.addEventListener("click", (event) => {
+      event.stopPropagation();
+      navigating = !navigating;
+      canvas?.setNavigable(navigating);
+      paintNavigate();
+    });
 
     // Growing the node has to grow the render, or enlarging a viewport to see
     // it better would leave the same small picture in a bigger frame. Rebuilds
