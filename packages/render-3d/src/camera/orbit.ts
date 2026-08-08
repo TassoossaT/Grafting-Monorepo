@@ -1,26 +1,23 @@
 /**
- * Dragging to orbit a lab trial's camera.
+ * Dragging to orbit a view's camera.
  *
- * Every 3D trial so far shipped with a fixed camera, which quietly limits what
- * a trial can tell you: a generated surface seen from one angle hides exactly
- * the defects -- coincident faces, gaps at a seam, a module facing the wrong
- * way -- that a trial exists to expose. You cannot judge geometry you cannot
+ * A fixed camera quietly limits what a rendered result can tell you: a
+ * generated surface seen from one angle hides exactly the defects --
+ * coincident faces, a gap at a seam, a piece facing the wrong way -- that
+ * looking at it was supposed to expose. You cannot judge geometry you cannot
  * turn.
  *
- * Written against `render-3d`'s `setCamera` and plain numbers rather than
- * pulled in as a controls library, because the renderer's whole shape is that
- * no backend type crosses its boundary; a controls package from the Three.js
- * ecosystem would reintroduce one in the consumer. The arithmetic is small
- * enough that the seam is worth more than the saved lines, and it is tested
- * separately from the DOM.
+ * Lives here rather than in a consumer because it is camera behaviour for this
+ * engine, and because both consumers that needed it would otherwise have kept
+ * their own copy. It is written against this package's own `setCamera` and
+ * plain numbers rather than pulled in as a controls library: the engine's
+ * whole shape is that no backend type crosses its boundary, and a controls
+ * package from the Three.js ecosystem would reintroduce one *in the consumer*.
+ * The arithmetic is small enough that the seam is worth more than the saved
+ * lines, and it is tested separately from the DOM.
  */
 
-/** A point in world space, matching `render-3d`'s own `Vec3`. */
-export interface Vec3 {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
+import type { Vec3 } from "../contracts/space.js";
 
 /** Where the camera sits, in spherical coordinates about a target. */
 export interface OrbitState {
@@ -108,7 +105,7 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
   };
 }
 
-/** The minimum of `render-3d`'s `View` this needs. Keeps the helper testable. */
+/** The minimum of {@link View} this needs. Keeps the helper testable. */
 export interface OrbitableView {
   setCamera(camera: {
     projection: "perspective";

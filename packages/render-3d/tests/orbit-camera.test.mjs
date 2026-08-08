@@ -9,7 +9,7 @@ import {
   orbitFromCamera,
   orbitPosition,
   orbitZoom,
-} from "../src/lab-orbit-camera.ts";
+} from "../dist/index.js";
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
 const near = (a, b, tolerance = 1e-9) => Math.abs(a - b) < tolerance;

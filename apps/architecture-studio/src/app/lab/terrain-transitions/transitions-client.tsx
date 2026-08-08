@@ -2,11 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Text } from "@grafting/ui";
-import { createEngine, createVisualRegistry, type RenderEngine, type View } from "@grafting/render-3d";
+import {
+  attachOrbit,
+  createEngine,
+  createVisualRegistry,
+  orbitFromCamera,
+  type RenderEngine,
+  type View,
+} from "@grafting/render-3d";
 import { buildIrregularQuadGrid } from "../../../vtt/irregular-grid.ts";
 import { buildStackedTerrain, cellCentres } from "../../../vtt/stacked-terrain.ts";
 import { buildTransitionTerrain } from "../../../vtt/transition-shapes.ts";
-import { attachOrbit, orbitFromCamera } from "../../../lab-orbit-camera.ts";
+
 import { writePreviewImage } from "../../../lab-preview-storage.ts";
 import type {
   TerrainWorkerRequest,

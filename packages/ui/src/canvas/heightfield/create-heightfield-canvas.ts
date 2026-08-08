@@ -1,5 +1,7 @@
 import {
+  attachOrbit,
   createEngine,
+  orbitFromCamera,
   createVisualRegistry,
   heightfieldVisual,
   type HeightfieldParams,
@@ -57,34 +59,87 @@ export function createHeightfieldCanvasAdapter(
     "engine",
   );
 
+  const CAMERA = {
+    projection: "perspective" as const,
+    fov: 45,
+    position: { x: 0, y: 16, z: 20 },
+    target: { x: 0, y: 0, z: 0 },
+    far: 100,
+  };
+
   const view = engine.createView({
     target: container,
     background: resolved.backgroundColor,
-    camera: {
-      projection: "perspective",
-      fov: 45,
-      position: { x: 0, y: 16, z: 20 },
-      target: { x: 0, y: 0, z: 0 },
-      far: 100,
-    },
+    camera: CAMERA,
   });
 
-  if (resolved.autoRotate) {
-    // Expressed as a looping track rather than as a per-frame rotation so it
-    // stops when the engine's clock is paused, like everything else.
-    engine.animator.play({
-      id: "auto-rotate",
-      durationMs: 24_000,
-      loop: true,
-      apply(progress, scene) {
-        scene.setTransform(
-          "terrain",
-          { rotation: { x: 0, y: progress * Math.PI * 2, z: 0 } },
-          "engine",
-        );
-      },
+  let autoRotating = false;
+  const setAutoRotate = (on: boolean) => {
+    if (on === autoRotating) return;
+    autoRotating = on;
+    if (on) {
+      // Expressed as a looping track rather than as a per-frame rotation so it
+      // stops when the engine's clock is paused, like everything else.
+      engine.animator.play({
+        id: "auto-rotate",
+        durationMs: 24_000,
+        loop: true,
+        apply(progress, scene) {
+          scene.setTransform(
+            "terrain",
+            { rotation: { x: 0, y: progress * Math.PI * 2, z: 0 } },
+            "engine",
+          );
+        },
+      });
+      return;
+    }
+    engine.animator.stop("auto-rotate");
+    // Left mid-lap the mesh would sit at whatever angle the track had reached,
+    // so the camera the user then aims is aiming at an arbitrary orientation.
+    engine.scene.setTransform("terrain", { rotation: { x: 0, y: 0, z: 0 } }, "engine");
+  };
+
+  let detachOrbit: (() => void) | null = null;
+  let stopSwallowing: (() => void) | null = null;
+
+  const setNavigable = (navigable: boolean) => {
+    if (navigable === (detachOrbit !== null)) return;
+    if (!navigable) {
+      detachOrbit?.();
+      stopSwallowing?.();
+      detachOrbit = null;
+      stopSwallowing = null;
+      setAutoRotate(resolved.autoRotate);
+      return;
+    }
+
+    // A camera the user is aiming and a mesh that keeps turning under it fight
+    // each other, and the result reads as the controls being broken.
+    setAutoRotate(false);
+
+    // Capture phase, so the gesture never reaches a surface that pans or
+    // zooms around this canvas -- a graph node, a scrolling page. Stopping
+    // propagation rather than immediate propagation is deliberate: listeners
+    // on this same element, which is where the orbit lives, still run.
+    const swallow = (event: Event) => event.stopPropagation();
+    for (const type of ["pointerdown", "pointermove", "pointerup", "wheel"]) {
+      container.addEventListener(type, swallow, { capture: true });
+    }
+    stopSwallowing = () => {
+      for (const type of ["pointerdown", "pointermove", "pointerup", "wheel"]) {
+        container.removeEventListener(type, swallow, { capture: true });
+      }
+    };
+
+    detachOrbit = attachOrbit(container, view, orbitFromCamera(CAMERA.position, CAMERA.target), {
+      fov: CAMERA.fov,
+      far: CAMERA.far,
     });
-  }
+  };
+
+  setAutoRotate(resolved.autoRotate);
+  setNavigable(resolved.navigable);
 
   const handleResize = () => {
     view.resize(container.clientWidth, container.clientHeight);
@@ -100,7 +155,12 @@ export function createHeightfieldCanvasAdapter(
     captureImage() {
       return view.capture("image/png");
     },
+    setNavigable,
+    resetCamera() {
+      view.setCamera(CAMERA);
+    },
     dispose() {
+      setNavigable(false);
       window.removeEventListener("resize", handleResize);
       engine.dispose();
       container.replaceChildren();

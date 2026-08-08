@@ -90,3 +90,14 @@ export { createInvalidationTracker } from "./invalidation/create-invalidation.js
 
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export { heightfieldVisual } from "./visual/heightfield-visual.js";
+
+export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
+export {
+  DISTANCE_RANGE,
+  PITCH_LIMIT,
+  attachOrbit,
+  orbitDrag,
+  orbitFromCamera,
+  orbitPosition,
+  orbitZoom,
+} from "./camera/orbit.js";

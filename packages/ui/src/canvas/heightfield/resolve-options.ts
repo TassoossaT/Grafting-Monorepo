@@ -10,6 +10,7 @@ export interface ResolvedHeightfieldOptions {
   readonly backgroundColor: number;
   readonly meshColor: number;
   readonly autoRotate: boolean;
+  readonly navigable: boolean;
 }
 
 /** Pure defaulting logic, kept separate from the real Wasm/GPU adapter so it is testable in Node without a WebGL context. */
@@ -23,5 +24,6 @@ export function resolveHeightfieldOptions(options: HeightfieldCanvasOptions): Re
     backgroundColor: options.backgroundColor ?? 0xf7f9fc,
     meshColor: options.meshColor ?? 0x5b8a63,
     autoRotate: options.autoRotate ?? true,
+    navigable: options.navigable ?? false,
   };
 }
