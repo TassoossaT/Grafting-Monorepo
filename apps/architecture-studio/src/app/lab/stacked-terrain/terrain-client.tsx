@@ -5,6 +5,7 @@ import { Card, Text } from "@grafting/ui";
 import { createEngine, createVisualRegistry, type RenderEngine, type View } from "@grafting/render-3d";
 import { buildIrregularQuadGrid } from "../../../vtt/irregular-grid.ts";
 import { buildStackedTerrain, cellCentres } from "../../../vtt/stacked-terrain.ts";
+import { attachOrbit, orbitFromCamera } from "../../../lab-orbit-camera.ts";
 import { writePreviewImage } from "../../../lab-preview-storage.ts";
 import type { TerrainWorkerRequest, TerrainWorkerResponse } from "./terrain.worker.ts";
 
@@ -14,6 +15,15 @@ const CANDIDATE = "stacked-terrain";
 const TOP_LAYER = "tops";
 const WALL_LAYER = "walls";
 const FIELD_SIZE = 64;
+
+/** Starting framing. Orbiting recovers its yaw, pitch and distance from this. */
+const CAMERA = {
+  projection: "perspective",
+  fov: 40,
+  position: { x: 4.5, y: 4.5, z: 5.5 },
+  target: { x: 0, y: 0.3, z: 0 },
+  far: 100,
+} as const;
 
 interface Controls {
   readonly seed: number;
@@ -121,17 +131,19 @@ export default function StackedTerrainClient() {
     const view = engine.createView({
       target: container,
       background: 0xeef2f7,
-      camera: {
-        projection: "perspective",
-        fov: 40,
-        position: { x: 4.5, y: 4.5, z: 5.5 },
-        target: { x: 0, y: 0.3, z: 0 },
-        far: 100,
-      },
+      camera: CAMERA,
     });
 
     engineRef.current = engine;
     viewRef.current = view;
+
+    // A generated surface seen from one angle hides exactly the defects a
+    // trial exists to expose, so the camera is drivable rather than fixed.
+    const detachOrbit = attachOrbit(container, view, orbitFromCamera(CAMERA.position, CAMERA.target), {
+      fov: CAMERA.fov,
+      far: CAMERA.far,
+      onChange: () => engine.frame(performance.now()),
+    });
 
     const handleResize = () => view.resize(container.clientWidth, container.clientHeight);
     window.addEventListener("resize", handleResize);
@@ -139,6 +151,7 @@ export default function StackedTerrainClient() {
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      detachOrbit();
       engine.dispose();
       engineRef.current = null;
       viewRef.current = null;
