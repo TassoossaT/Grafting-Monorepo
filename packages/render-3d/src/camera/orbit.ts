@@ -124,6 +124,18 @@ export interface OrbitOptions {
   readonly far?: number;
   /** Called after every change, so the caller can redraw. */
   readonly onChange?: (state: OrbitState) => void;
+  /**
+   * Whether these gestures belong to this view alone.
+   *
+   * When set, the handlers stop the events propagating any further, so a
+   * surface that pans or zooms around this view -- a graph node, a scrolling
+   * page -- never sees them. Done from inside the handlers deliberately: a
+   * separate capture-phase listener on the same element cannot do this job,
+   * because stopping an event during capture at an ancestor prevents it from
+   * ever reaching the real target below and bubbling back, which silences the
+   * orbit itself. That mistake shipped once.
+   */
+  readonly exclusive?: boolean;
 }
 
 /**
@@ -156,7 +168,12 @@ export function attachOrbit(
     options.onChange?.(state);
   };
 
+  const claim = (event: Event) => {
+    if (options.exclusive === true) event.stopPropagation();
+  };
+
   const onPointerDown = (event: PointerEvent) => {
+    claim(event);
     if (dragging !== null) return;
     dragging = event.pointerId;
     lastX = event.clientX;
@@ -166,6 +183,7 @@ export function attachOrbit(
 
   const onPointerMove = (event: PointerEvent) => {
     if (dragging !== event.pointerId) return;
+    claim(event);
     state = orbitDrag(state, event.clientX - lastX, event.clientY - lastY);
     lastX = event.clientX;
     lastY = event.clientY;
@@ -174,6 +192,7 @@ export function attachOrbit(
 
   const onPointerUp = (event: PointerEvent) => {
     if (dragging !== event.pointerId) return;
+    claim(event);
     dragging = null;
     if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
   };
@@ -181,6 +200,7 @@ export function attachOrbit(
   // Not passive: the page must not scroll while the pointer is over the view.
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
+    claim(event);
     state = orbitZoom(state, event.deltaY);
     apply();
   };

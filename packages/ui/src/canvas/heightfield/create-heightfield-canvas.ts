@@ -104,15 +104,12 @@ export function createHeightfieldCanvasAdapter(
   };
 
   let detachOrbit: (() => void) | null = null;
-  let stopSwallowing: (() => void) | null = null;
 
   const setNavigable = (navigable: boolean) => {
     if (navigable === (detachOrbit !== null)) return;
     if (!navigable) {
       detachOrbit?.();
-      stopSwallowing?.();
       detachOrbit = null;
-      stopSwallowing = null;
       setAutoRotate(resolved.autoRotate);
       return;
     }
@@ -121,23 +118,12 @@ export function createHeightfieldCanvasAdapter(
     // each other, and the result reads as the controls being broken.
     setAutoRotate(false);
 
-    // Capture phase, so the gesture never reaches a surface that pans or
-    // zooms around this canvas -- a graph node, a scrolling page. Stopping
-    // propagation rather than immediate propagation is deliberate: listeners
-    // on this same element, which is where the orbit lives, still run.
-    const swallow = (event: Event) => event.stopPropagation();
-    for (const type of ["pointerdown", "pointermove", "pointerup", "wheel"]) {
-      container.addEventListener(type, swallow, { capture: true });
-    }
-    stopSwallowing = () => {
-      for (const type of ["pointerdown", "pointermove", "pointerup", "wheel"]) {
-        container.removeEventListener(type, swallow, { capture: true });
-      }
-    };
-
     detachOrbit = attachOrbit(container, view, orbitFromCamera(CAMERA.position, CAMERA.target), {
       fov: CAMERA.fov,
       far: CAMERA.far,
+      // These gestures belong to this canvas while navigating, so the graph
+      // surface underneath never sees them and the node stays put.
+      exclusive: true,
       // The frame loop is driven by the host's animation frames, and turning
       // auto-rotation off leaves nothing asking for one. Without this the
       // camera moves and the picture does not, which reads exactly like the
