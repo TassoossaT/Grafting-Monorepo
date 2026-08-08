@@ -1,4 +1,12 @@
-import { createHeightfieldCanvas, mountEntitySummary, type EntitySummaryProps, type HeightfieldCanvas } from "@grafting/ui";
+import type { EvaluationPreview } from "./evaluation-client.ts";
+import {
+  createGeometryCanvas,
+  createHeightfieldCanvas,
+  mountEntitySummary,
+  type EntitySummaryProps,
+  type GeometryCanvas,
+  type HeightfieldCanvas,
+} from "@grafting/ui";
 import type {
   CanvasEdge,
   CanvasEdgePresentation,
@@ -209,7 +217,7 @@ export interface BenchNodeExtras {
   /** What the last evaluation pass did with the node. */
   readonly status?: BenchNodeStatus;
   /** Result to render, for a node whose view draws one. */
-  readonly preview?: { readonly width: number; readonly height: number; readonly values: Float32Array } | null;
+  readonly preview?: EvaluationPreview | null;
   /** Receives an edited value, for a node whose view is itself a control. */
   readonly onParamChange?: (paramId: string, raw: BenchParamValue) => void;
   /** Parameter ports currently fed by a connection, whose typed value is overridden. */
@@ -353,7 +361,7 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
   defaultHeight: 176,
   mount: (host: HTMLElement, initial: CanvasNodeRenderContext) => {
     let context = initial;
-    const data = context.node.data as { readonly title: string; readonly preview: { width: number; height: number; values: Float32Array } | null };
+    const data = context.node.data as { readonly title: string; readonly preview: EvaluationPreview | null };
     const { root, body } = shell(data.title);
     const surface = document.createElement("div");
     surface.style.cssText = "flex:1;min-height:0;border-radius:6px;overflow:hidden;background:#0f172a";
@@ -383,12 +391,16 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
     surface.append(navigate);
     host.append(root);
 
-    let canvas: HeightfieldCanvas | null = null;
+    // One of the two, never both: the form the preview declares decides which
+    // renderer is mounted, and this view never learns what a heightmap or a
+    // grid is. A new value kind that projects to an existing form needs no
+    // change here at all.
+    let canvas: HeightfieldCanvas | GeometryCanvas | null = null;
     let shape = "";
-    let latest: { width: number; height: number; values: Float32Array } | null = null;
+    let latest: EvaluationPreview | null = null;
     let box = "";
     const apply = (next: CanvasNodeRenderContext) => {
-      const value = (next.node.data as { readonly preview: { width: number; height: number; values: Float32Array } | null }).preview;
+      const value = (next.node.data as { readonly preview: EvaluationPreview | null }).preview;
       if (value === null) {
         canvas?.dispose();
         canvas = null;
@@ -399,26 +411,36 @@ export const BENCH_VIEWPORT_NODE_VIEW: CanvasNodeViewDefinition = Object.freeze(
       empty.textContent = "";
       if (value === latest && canvas !== null) return;
       latest = value;
-      const nextShape = `${value.width}x${value.height}`;
-      // The heightfield fixes both its grid and its pixel size when created, so
-      // a changed grid *or* a resized node justifies rebuilding it; anything
-      // else would restart the camera on every parameter tweak.
+      // The heightfield fixes both its grid and its pixel size when created,
+      // so a changed grid *or* a resized node justifies rebuilding it; the
+      // form is in the key too, since switching form means switching renderer.
+      const nextShape =
+        value.form === "raster" ? `raster:${value.width}x${value.height}` : "geometry";
       const nextBox = `${Math.round(surface.clientWidth)}x${Math.round(surface.clientHeight)}`;
       if (canvas === null || shape !== nextShape || box !== nextBox) {
         box = nextBox;
         canvas?.dispose();
-        canvas = createHeightfieldCanvas(surface, {
-          width: value.width,
-          height: value.height,
-          values: value.values,
-          navigable: navigating,
-        });
+        canvas =
+          value.form === "raster"
+            ? createHeightfieldCanvas(surface, {
+                width: value.width,
+                height: value.height,
+                values: value.values,
+                navigable: navigating,
+              })
+            : createGeometryCanvas(surface, {
+                positions: value.positions,
+                indices: value.indices,
+                navigable: navigating,
+              });
         // The canvas replaces the surface's children, so the control has to be
         // put back rather than assumed to have survived.
         surface.append(navigate);
         shape = nextShape;
+      } else if (value.form === "raster") {
+        (canvas as HeightfieldCanvas).update(value.values);
       } else {
-        canvas.update(value.values);
+        (canvas as GeometryCanvas).update(value.positions, value.indices);
       }
     };
     apply(context);

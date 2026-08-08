@@ -14,7 +14,7 @@ import type {
   EvaluationWorkerResponse,
 } from "./evaluation-client.ts";
 import { createBenchEvaluators, type BenchValue } from "./evaluators.ts";
-import { toEvaluationPreview } from "./preview.ts";
+import { previewTransferables, toEvaluationPreview } from "./preview.ts";
 
 interface WorkerScope {
   onmessage: ((event: MessageEvent<EvaluationWorkerRequest>) => void) | null;
@@ -89,7 +89,7 @@ workerScope.onmessage = async (event) => {
       const preview = toEvaluationPreview(value);
       if (preview === null) continue;
       previews[nodeId] = preview;
-      transfer.push(preview.values.buffer);
+      transfer.push(...previewTransferables(preview));
     }
 
     // The plan names every result still reachable, so anything else is from a

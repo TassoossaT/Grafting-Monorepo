@@ -1,4 +1,6 @@
 import { createCanvasAdapter } from "./graph/create-canvas.js";
+import type { GeometryCanvas, GeometryCanvasOptions } from "./geometry/contracts.js";
+import { createGeometryCanvasAdapter } from "./geometry/create-geometry-canvas.js";
 import type {
   CanvasEdge,
   CanvasHandle,
@@ -82,4 +84,25 @@ export function createHeightfieldCanvas(
   options: HeightfieldCanvasOptions,
 ): HeightfieldCanvas {
   return createHeightfieldCanvasAdapter(container, options);
+}
+
+export type { GeometryCanvas, GeometryCanvasOptions } from "./geometry/contracts.js";
+
+/**
+ * Mounts a real-time preview of arbitrary triangle geometry, keeping the
+ * renderer private.
+ *
+ * Separate from {@link createHeightfieldCanvas} rather than a mode of it: a
+ * raster holds one height per point, and geometry off the lattice or with a
+ * vertical step has more than one.
+ *
+ * @param container - Browser element that owns the rendered preview.
+ * @param options - Geometry and replaceable presentation options.
+ * @returns A Grafting-owned update, capture, and disposal handle.
+ */
+export function createGeometryCanvas(
+  container: HTMLElement,
+  options: GeometryCanvasOptions,
+): GeometryCanvas {
+  return createGeometryCanvasAdapter(container, options);
 }

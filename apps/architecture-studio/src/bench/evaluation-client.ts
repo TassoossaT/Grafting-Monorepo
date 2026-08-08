@@ -5,17 +5,10 @@ import type { EvaluationPlan } from "./evaluation-plan.ts";
 // never cross to the main thread at all. Only the previews the surface asked
 // for are transferred back.
 
-/** A node's result, flattened into something the heightfield renderer accepts. */
-export interface EvaluationPreview {
-  /** Cells along the horizontal axis. */
-  readonly width: number;
-  /** Cells along the vertical axis. */
-  readonly height: number;
-  /** Normalized to zero-to-one so any value kind renders on the same scale. */
-  readonly values: Float32Array;
-  /** The value kind this preview was flattened from. */
-  readonly dataType: string;
-}
+// The preview's shape belongs to the value kinds that declare it, not to this
+// boundary, which only carries it. Re-exported so consumers keep one import.
+import type { EvaluationPreview } from "./preview.ts";
+export type { EvaluationPreview } from "./preview.ts";
 
 /** One evaluation pass and the previews the surface wants back. */
 export interface EvaluationRequest {

@@ -28,7 +28,10 @@ export {
 
 export {
   createCanvas,
+  createGeometryCanvas,
   createHeightfieldCanvas,
+  type GeometryCanvas,
+  type GeometryCanvasOptions,
   type CanvasConnectionDecision,
   type CanvasConnectionEndpoint,
   type CanvasConnectionRequest,
