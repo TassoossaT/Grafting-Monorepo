@@ -5,6 +5,8 @@
 //! and compatibility is a relation between connectors. Adding a mesh means
 //! declaring its sockets, not relating it to every existing mesh.
 
+use crate::rotation::{ModuleOrigin, Rotation};
+
 /// Index of a module within a [`Tileset`].
 pub type ModuleId = usize;
 
@@ -30,6 +32,7 @@ pub struct Tileset {
     modules: Vec<Module>,
     faces_per_cell: usize,
     compatible: Vec<(SocketId, SocketId)>,
+    origins: Vec<ModuleOrigin>,
 }
 
 /// Why a tileset could not be built.
@@ -78,16 +81,45 @@ impl Tileset {
                 return Err(TilesetError::InvalidWeight { module: index });
             }
         }
+        let origins =
+            (0..modules.len()).map(|source| ModuleOrigin { source, turns: 0 }).collect();
         Ok(Self {
             modules,
             faces_per_cell: expected,
             compatible: compatible.into_iter().collect(),
+            origins,
         })
+    }
+
+    /// Builds a tileset from modules authored in one orientation, generating
+    /// the others.
+    ///
+    /// See [`crate::rotation`] for what a rotation means here and why symmetric
+    /// modules do not produce duplicates. Validation happens after expansion,
+    /// so a face count is checked against the modules that will actually be
+    /// solved with.
+    pub fn rotated(
+        modules: Vec<Module>,
+        compatible: impl IntoIterator<Item = (SocketId, SocketId)>,
+        rotation: &Rotation,
+    ) -> Result<Self, TilesetError> {
+        let (expanded, origins) = crate::rotation::expand(&modules, rotation);
+        let mut tileset = Self::new(expanded, compatible)?;
+        tileset.origins = origins;
+        Ok(tileset)
     }
 
     /// The modules, in the order given.
     pub fn modules(&self) -> &[Module] {
         &self.modules
+    }
+
+    /// Which authored module a [`ModuleId`] came from, and how far it turned.
+    ///
+    /// A caller that generated orientations needs this to map a result back to
+    /// its asset: the mesh comes from `source`, spun by `turns`.
+    pub fn origin(&self, module: ModuleId) -> Option<ModuleOrigin> {
+        self.origins.get(module).copied()
     }
 
     /// How many faces each module declares.

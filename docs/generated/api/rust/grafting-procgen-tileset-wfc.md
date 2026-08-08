@@ -1,5 +1,18 @@
 # grafting-procgen-tileset-wfc
 
+### `pub const grafting_procgen_tileset_wfc::wasm::COMPATIBLE_STRIDE: usize`
+
+Numbers per entry in the flat `compatible` array: the two socket ids.
+
+### `pub const grafting_procgen_tileset_wfc::wasm::LINK_STRIDE: usize`
+
+Numbers per link in the flat `links` array: from, from_face, to, to_face.
+
+### `pub const grafting_procgen_tileset_wfc::wasm::PINNED_STRIDE: usize`
+
+Numbers per entry in the flat `pinned` array: the cell, then one module it
+is still permitted to take.
+
 ### `pub enum grafting_procgen_tileset_wfc::GraphError`
 
 Why a graph could not be built.
@@ -13,6 +26,10 @@ constraint problem unsatisfiable can take arbitrarily long, and a backend
 given a contradictory problem may search rather than fail. Catching the
 cheap cases here turns a hang into an error naming the cell or link at
 fault. It does not catch every unsatisfiable problem -- nothing cheap does.
+
+### `pub enum grafting_procgen_tileset_wfc::RotationError`
+
+Why a rotation could not be built.
 
 ### `pub enum grafting_procgen_tileset_wfc::SolveError`
 
@@ -39,6 +56,10 @@ constraint problem unsatisfiable can take arbitrarily long, and a backend
 given a contradictory problem may search rather than fail. Catching the
 cheap cases here turns a hang into an error naming the cell or link at
 fault. It does not catch every unsatisfiable problem -- nothing cheap does.
+
+### `pub enum grafting_procgen_tileset_wfc::rotation::RotationError`
+
+Why a rotation could not be built.
 
 ### `pub enum grafting_procgen_tileset_wfc::solver::SolveError`
 
@@ -103,9 +124,56 @@ How many modules exist.
 
 Caller-facing module names, by [`ModuleId`].
 
+### `pub fn grafting_procgen_tileset_wfc::problem::Problem::origins(&self) -> &[grafting_procgen_tileset_wfc::rotation::ModuleOrigin]`
+
+Which authored module each [`ModuleId`] came from, and how far it
+turned. Carried through the compile so a caller on the far side of a
+language boundary can map a result back to its asset without holding
+the tileset.
+
 ### `pub fn grafting_procgen_tileset_wfc::problem::Problem::weights(&self) -> &[f32]`
 
 Relative likelihood of each module.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::Rotation::apply(&self, sockets: &[grafting_procgen_tileset_wfc::tileset::SocketId], turns: usize) -> core::option::Option<alloc::vec::Vec<grafting_procgen_tileset_wfc::tileset::SocketId>>`
+
+Applies `turns` turns to a socket list.
+
+Returns `None` if a face in the cycle is outside `sockets`, rather than
+silently producing a module with the wrong sockets.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::Rotation::cycle(faces: impl core::iter::traits::collect::IntoIterator<Item = grafting_procgen_tileset_wfc::graph::FaceId>) -> core::result::Result<Self, grafting_procgen_tileset_wfc::rotation::RotationError>`
+
+A rotation that carries the socket on each listed face to the next
+listed face, wrapping at the end. Faces not listed are left alone.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::Rotation::faces(&self) -> &[grafting_procgen_tileset_wfc::graph::FaceId]`
+
+The faces taking part, in cycle order.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::Rotation::none() -> Self`
+
+The identity: every module keeps exactly the orientation it was given.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::Rotation::order(&self) -> usize`
+
+How many turns bring a module back to itself. `1` for the identity.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::expand(modules: &[grafting_procgen_tileset_wfc::tileset::Module], rotation: &grafting_procgen_tileset_wfc::rotation::Rotation) -> (alloc::vec::Vec<grafting_procgen_tileset_wfc::tileset::Module>, alloc::vec::Vec<grafting_procgen_tileset_wfc::rotation::ModuleOrigin>)`
+
+Expands each module into its distinct orientations.
+
+The returned modules are in a stable order -- source module by source
+module, turns ascending -- so a given input always yields the same
+[`ModuleId`]s, which is what lets a seed reproduce a map.
+
+Names are suffixed with `@<turns>` only for variants past the first, so an
+unrotated or symmetric module keeps the name the caller gave it.
+
+### `pub fn grafting_procgen_tileset_wfc::rotation::origin_of(origins: &[grafting_procgen_tileset_wfc::rotation::ModuleOrigin], module: grafting_procgen_tileset_wfc::tileset::ModuleId) -> core::option::Option<grafting_procgen_tileset_wfc::rotation::ModuleOrigin>`
+
+Where a generated module came from, or `None` for a tileset built without
+rotation.
 
 ### `pub fn grafting_procgen_tileset_wfc::solve_verified<S: grafting_procgen_tileset_wfc::solver::ConstraintSolver>(solver: &S, problem: &grafting_procgen_tileset_wfc::problem::Problem, seed: u64) -> core::result::Result<grafting_procgen_tileset_wfc::solver::Assignment, grafting_procgen_tileset_wfc::solver::SolveError>`
 
@@ -160,9 +228,97 @@ Whether `left` on `left_face` may sit against `right` on `right_face`.
 Builds a tileset. Socket compatibility is symmetric: listing `(a, b)`
 also permits `(b, a)`, since a shared face is one face.
 
+### `pub fn grafting_procgen_tileset_wfc::tileset::Tileset::origin(&self, module: grafting_procgen_tileset_wfc::tileset::ModuleId) -> core::option::Option<grafting_procgen_tileset_wfc::rotation::ModuleOrigin>`
+
+Which authored module a [`ModuleId`] came from, and how far it turned.
+
+A caller that generated orientations needs this to map a result back to
+its asset: the mesh comes from `source`, spun by `turns`.
+
+### `pub fn grafting_procgen_tileset_wfc::tileset::Tileset::rotated(modules: alloc::vec::Vec<grafting_procgen_tileset_wfc::tileset::Module>, compatible: impl core::iter::traits::collect::IntoIterator<Item = (grafting_procgen_tileset_wfc::tileset::SocketId, grafting_procgen_tileset_wfc::tileset::SocketId)>, rotation: &grafting_procgen_tileset_wfc::rotation::Rotation) -> core::result::Result<Self, grafting_procgen_tileset_wfc::tileset::TilesetError>`
+
+Builds a tileset from modules authored in one orientation, generating
+the others.
+
+See [`crate::rotation`] for what a rotation means here and why symmetric
+modules do not produce duplicates. Validation happens after expansion,
+so a face count is checked against the modules that will actually be
+solved with.
+
 ### `pub fn grafting_procgen_tileset_wfc::tileset::Tileset::sockets_meet(&self, left: grafting_procgen_tileset_wfc::tileset::SocketId, right: grafting_procgen_tileset_wfc::tileset::SocketId) -> bool`
 
 Whether two sockets may meet, in either order.
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::describe()`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::describe_vector()`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::into_abi(self) -> Self::Abi`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::is_none(abi: &Self::Abi) -> bool`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::modules(&self) -> alloc::vec::Vec<u32>`
+
+The chosen variant per cell, indexing the expanded tileset.
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::none() -> Self::Abi`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::sources(&self) -> alloc::vec::Vec<u32>`
+
+The authored module per cell, indexing the array the caller supplied.
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::try_from_js_value_ref(value: &wasm_bindgen::JsValue) -> core::option::Option<Self>`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::turns(&self) -> alloc::vec::Vec<u32>`
+
+How many turns to apply to that module's mesh, per cell.
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::variant_count(&self) -> u32`
+
+How many variants the authored modules expanded into. Useful for
+telling "my tileset is too small" apart from "my constraints are wrong".
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::WfcSolution::vector_into_abi(vector: alloc::boxed::Box<[grafting_procgen_tileset_wfc::wasm::WfcSolution]>) -> Self::Abi`
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::solve_inner(cell_count: u32, faces_per_cell: u32, links: &[u32], module_sockets: &[u32], module_weights: &[f32], compatible: &[u32], rotation_cycle: &[u32], pinned: &[u32], seed: u32) -> core::result::Result<grafting_procgen_tileset_wfc::wasm::WfcSolution, alloc::string::String>`
+
+The boundary's body, as a plain `Result<_, String>`.
+
+Split out so it is reachable from a native test. A bridge that can only be
+exercised in a browser is a bridge nobody tests.
+
+### `pub fn grafting_procgen_tileset_wfc::wasm::solve_tileset(cell_count: u32, faces_per_cell: u32, links: &[u32], module_sockets: &[u32], module_weights: &[f32], compatible: &[u32], rotation_cycle: &[u32], pinned: &[u32], seed: u32) -> core::result::Result<grafting_procgen_tileset_wfc::wasm::WfcSolution, wasm_bindgen::JsValue>`
+
+Solves a tile assignment over an arbitrary cell graph.
+
+* `cell_count`, `faces_per_cell` -- the graph's shape. A face index is
+  local to its cell; see [`crate::graph`] for why that is the whole point.
+* `links` -- adjacency, `LINK_STRIDE` numbers each, each undirected
+  adjacency listed once.
+* `module_sockets` -- `faces_per_cell` socket ids per authored module,
+  concatenated; its length divided by `faces_per_cell` is the module count.
+* `module_weights` -- one positive weight per authored module. A module's
+  weight is shared across the orientations it expands into, so making a
+  piece asymmetric does not make it more common.
+* `compatible` -- socket pairs that may meet, `COMPATIBLE_STRIDE` each.
+  Symmetric: listing `(a, b)` also permits `(b, a)`.
+* `rotation_cycle` -- face indices that rotate among themselves, in order.
+  Empty means modules are used exactly as authored. For a stacked quad grid
+  this is the four lateral faces, leaving up and down alone.
+* `pinned` -- `(cell, module)` pairs restricting a cell to the authored
+  modules listed for it. A cell absent here may take anything. This is how
+  an earlier pipeline stage imposes what it already decided.
+* `seed` -- the same seed and the same inputs give the same map.
+
+# Errors
+
+Throws with a message naming the offending cell, link or module. Known-
+impossible problems are rejected during compilation rather than handed to
+the solver, which would otherwise search for an unbounded time.
+
+### `pub fn wasm_bindgen::JsValue::from(value: grafting_procgen_tileset_wfc::wasm::WfcSolution) -> Self`
 
 ### `pub grafting_procgen_tileset_wfc::GraphError::DuplicateFace`
 
@@ -235,6 +391,14 @@ faces are.
 
 Relative likelihood. Must be positive; higher is more frequent.
 
+### `pub grafting_procgen_tileset_wfc::ModuleOrigin::source: usize`
+
+Index of the module as the caller supplied it.
+
+### `pub grafting_procgen_tileset_wfc::ModuleOrigin::turns: usize`
+
+How many turns were applied. `0` is the module as authored.
+
 ### `pub grafting_procgen_tileset_wfc::ProblemError::FaceCountMismatch`
 
 The graph and the tileset disagree about how many faces a cell has.
@@ -264,6 +428,12 @@ A pre-placed module is not in the tileset.
 ### `pub grafting_procgen_tileset_wfc::ProblemError::UnknownFixedModule::cell: grafting_procgen_tileset_wfc::graph::CellId`
 
 ### `pub grafting_procgen_tileset_wfc::ProblemError::UnknownFixedModule::module: grafting_procgen_tileset_wfc::tileset::ModuleId`
+
+### `pub grafting_procgen_tileset_wfc::RotationError::RepeatedFace`
+
+The same face appeared twice in the cycle, which is not a permutation.
+
+### `pub grafting_procgen_tileset_wfc::RotationError::RepeatedFace::face: grafting_procgen_tileset_wfc::graph::FaceId`
 
 ### `pub grafting_procgen_tileset_wfc::SolveError::Contradiction`
 
@@ -416,6 +586,20 @@ A pre-placed module is not in the tileset.
 ### `pub grafting_procgen_tileset_wfc::problem::ProblemError::UnknownFixedModule::cell: grafting_procgen_tileset_wfc::graph::CellId`
 
 ### `pub grafting_procgen_tileset_wfc::problem::ProblemError::UnknownFixedModule::module: grafting_procgen_tileset_wfc::tileset::ModuleId`
+
+### `pub grafting_procgen_tileset_wfc::rotation::ModuleOrigin::source: usize`
+
+Index of the module as the caller supplied it.
+
+### `pub grafting_procgen_tileset_wfc::rotation::ModuleOrigin::turns: usize`
+
+How many turns were applied. `0` is the module as authored.
+
+### `pub grafting_procgen_tileset_wfc::rotation::RotationError::RepeatedFace`
+
+The same face appeared twice in the cycle, which is not a permutation.
+
+### `pub grafting_procgen_tileset_wfc::rotation::RotationError::RepeatedFace::face: grafting_procgen_tileset_wfc::graph::FaceId`
 
 ### `pub grafting_procgen_tileset_wfc::solver::SolveError::Contradiction`
 
@@ -573,6 +757,34 @@ the modules still permitted; per link, the module pairs permitted across
 it. Sockets are expanded away here, once, rather than each backend having
 to understand them.
 
+### `pub mod grafting_procgen_tileset_wfc::rotation`
+
+Turning one authored module into the set of its distinct orientations.
+
+Without this a tileset has to spell out every orientation by hand: an
+asymmetric piece becomes four near-identical entries whose sockets must stay
+in step, and the authoring cost is what makes people reach for a smaller,
+worse tileset. Generating the orientations removes that cost and removes the
+class of bug where one hand-written variant has a socket wrong.
+
+# What a rotation is here
+
+Not a transform of geometry -- this crate never sees geometry. A rotation is
+a permutation of *face indices*, given as a cycle. Rotating a module by one
+turn moves the socket on `cycle[i]` to `cycle[i + 1]`; faces outside the
+cycle keep their socket. That is what makes it usable on an irregular grid,
+where a cell's lateral faces are local slots that rotate among themselves
+while its up and down faces do not rotate at all.
+
+# Symmetry is detected, not declared
+
+A module whose sockets are unchanged by a turn produces the same variant
+twice, and the duplicate is dropped. So flat ground yields one variant and a
+corner piece yields four, without either being annotated. The caller's
+`weight` is the weight of the *module*, and is divided across the variants
+it produced, so making a piece asymmetric does not silently make it four
+times as common.
+
 ### `pub mod grafting_procgen_tileset_wfc::solver`
 
 The capability, stated as a trait, and the result it produces.
@@ -588,6 +800,27 @@ The socket idea is what keeps the tileset from becoming a rule per pair of
 meshes: a module declares which connector it exposes on each face, once,
 and compatibility is a relation between connectors. Adding a mesh means
 declaring its sockets, not relating it to every existing mesh.
+
+### `pub mod grafting_procgen_tileset_wfc::wasm`
+
+The Web boundary: a flat, typed-array ABI over the solver-agnostic model.
+
+Everything crossing this boundary is a number. There is no socket type, no
+module struct and -- most importantly -- no third-party solver type, which
+is what lets the engine be replaced without any JavaScript changing. The
+caller describes a graph and a tileset as integers and gets integers back.
+
+# Why the shape is what it is
+
+Variable-length structures are expressed as a flat array plus a stride,
+rather than as objects, because crossing the boundary once with a
+`Uint32Array` costs a memory copy while crossing it per module costs a call
+per module. The grids this serves have thousands of cells.
+
+Panics are not catchable on `wasm32-unknown-unknown`, so every argument is
+validated here and reported as a thrown `Error` -- the same discipline the
+sibling procgen bridges document. An invalid input must reject, not abort
+the caller's worker.
 
 ### `pub struct grafting_procgen_tileset_wfc::Assignment`
 
@@ -610,9 +843,17 @@ Allowed module pairs across one adjacency.
 One placeable thing: a mesh, a tile, a marker. This crate never looks
 inside it; `name` exists so callers can map a result back to their asset.
 
+### `pub struct grafting_procgen_tileset_wfc::ModuleOrigin`
+
+Which authored module a generated variant came from, and how far it turned.
+
 ### `pub struct grafting_procgen_tileset_wfc::Problem`
 
 A fully compiled problem: candidates per cell, constraints per link.
+
+### `pub struct grafting_procgen_tileset_wfc::Rotation`
+
+A cyclic permutation of face indices.
 
 ### `pub struct grafting_procgen_tileset_wfc::Tileset`
 
@@ -642,6 +883,14 @@ Allowed module pairs across one adjacency.
 
 A fully compiled problem: candidates per cell, constraints per link.
 
+### `pub struct grafting_procgen_tileset_wfc::rotation::ModuleOrigin`
+
+Which authored module a generated variant came from, and how far it turned.
+
+### `pub struct grafting_procgen_tileset_wfc::rotation::Rotation`
+
+A cyclic permutation of face indices.
+
 ### `pub struct grafting_procgen_tileset_wfc::solver::Assignment`
 
 One module chosen per cell, indexed by [`CellId`].
@@ -654,6 +903,15 @@ inside it; `name` exists so callers can map a result back to their asset.
 ### `pub struct grafting_procgen_tileset_wfc::tileset::Tileset`
 
 The modules available, plus which sockets may meet.
+
+### `pub struct grafting_procgen_tileset_wfc::wasm::WfcSolution`
+
+One solved map, as parallel arrays indexed by cell.
+
+`source` and `turns` are the answer a renderer actually needs: which
+authored module's mesh to draw, and how far to spin it. They are returned
+rather than the caller re-deriving them, because the expansion that
+produced the variants happened on this side of the boundary.
 
 ### `pub trait grafting_procgen_tileset_wfc::ConstraintSolver`
 
@@ -712,3 +970,23 @@ Index of a module within a [`Tileset`].
 ### `pub type grafting_procgen_tileset_wfc::tileset::SocketId = usize`
 
 Index of a socket -- a connector shape two faces must share to meet.
+
+### `pub type grafting_procgen_tileset_wfc::wasm::WfcSolution::Abi = <alloc::boxed::Box<[wasm_bindgen::JsValue]> as wasm_bindgen::convert::traits::FromWasmAbi>::Abi`
+
+### `pub type grafting_procgen_tileset_wfc::wasm::WfcSolution::Abi = <alloc::boxed::Box<[wasm_bindgen::JsValue]> as wasm_bindgen::convert::traits::IntoWasmAbi>::Abi`
+
+### `pub type grafting_procgen_tileset_wfc::wasm::WfcSolution::Abi = wasm_bindgen::__rt::WasmPtr<wasm_bindgen::__rt::WasmRefCell<grafting_procgen_tileset_wfc::wasm::WfcSolution>>`
+
+### `pub type grafting_procgen_tileset_wfc::wasm::WfcSolution::Anchor = wasm_bindgen::__rt::RcRef<grafting_procgen_tileset_wfc::wasm::WfcSolution>`
+
+### `pub type grafting_procgen_tileset_wfc::wasm::WfcSolution::Anchor = wasm_bindgen::__rt::RcRefMut<grafting_procgen_tileset_wfc::wasm::WfcSolution>`
+
+### `pub unsafe fn grafting_procgen_tileset_wfc::wasm::WfcSolution::from_abi(js: Self::Abi) -> Self`
+
+### `pub unsafe fn grafting_procgen_tileset_wfc::wasm::WfcSolution::long_ref_from_abi(js: Self::Abi) -> Self::Anchor`
+
+### `pub unsafe fn grafting_procgen_tileset_wfc::wasm::WfcSolution::ref_from_abi(js: Self::Abi) -> Self::Anchor`
+
+### `pub unsafe fn grafting_procgen_tileset_wfc::wasm::WfcSolution::ref_mut_from_abi(js: Self::Abi) -> Self::Anchor`
+
+### `pub unsafe fn grafting_procgen_tileset_wfc::wasm::WfcSolution::vector_from_abi(js: Self::Abi) -> alloc::boxed::Box<[grafting_procgen_tileset_wfc::wasm::WfcSolution]>`

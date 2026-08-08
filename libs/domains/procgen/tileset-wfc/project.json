@@ -11,6 +11,13 @@
     }
   },
   "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "wasm-pack build --target web --out-dir pkg", "cwd": "libs/domains/procgen/tileset-wfc" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{projectRoot}/package.json", "^default", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"],
+      "outputs": ["{projectRoot}/pkg"]
+    },
     "check": {
       "executor": "nx:run-commands",
       "options": { "command": "cargo check -p grafting-procgen-tileset-wfc" },
@@ -31,7 +38,7 @@
     },
     "test-no-backend": {
       "executor": "nx:run-commands",
-      "options": { "command": "cargo test -p grafting-procgen-tileset-wfc --no-default-features --test model" },
+      "options": { "command": "cargo test -p grafting-procgen-tileset-wfc --no-default-features --test model --test rotation" },
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
     },
