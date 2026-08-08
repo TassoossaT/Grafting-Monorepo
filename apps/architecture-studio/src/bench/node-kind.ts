@@ -131,6 +131,35 @@ export function paramIdFromPort(portId: string): string | null {
 }
 
 /**
+ * The inputs a node instance actually shows.
+ *
+ * Every parameter *can* be driven by a connection, but showing all of them at
+ * once is what makes a node with a dozen settings unreadable: the ports that
+ * carry the element's real work get lost among a column of settings nobody
+ * is wiring. So an element's declared inputs are always visible -- they are
+ * how it is used at all -- and a parameter port appears only once someone asks
+ * for it.
+ *
+ * @param kind - Element declaration.
+ * @param exposed - Parameters this instance has promoted to ports.
+ * @returns Declared inputs first, then the promoted parameters, in the
+ * element's own parameter order so the column does not reshuffle as ports are
+ * added and removed.
+ */
+export function visibleInputPorts(
+  kind: BenchNodeKind,
+  exposed: readonly string[],
+): readonly BenchPortSpec[] {
+  const wanted = new Set(exposed);
+  return Object.freeze(
+    allInputPorts(kind).filter((port) => {
+      const paramId = paramIdFromPort(port.id);
+      return paramId === null || wanted.has(paramId);
+    }),
+  );
+}
+
+/**
  * Every input an element accepts, including one port per parameter.
  *
  * Exposing parameters as ports is what lets one element drive another's

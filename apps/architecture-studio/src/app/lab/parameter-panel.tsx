@@ -14,6 +14,12 @@ export interface ParameterPanelProps {
   readonly values: BenchParamValues;
   /** Receives an edited value; coercion happens in the graph layer. */
   readonly onChange: (paramId: string, raw: BenchParamValue) => void;
+  /** Parameters the selected node has promoted to input ports. */
+  readonly exposedParams: readonly string[];
+  /** Receives a request to promote a parameter to a port, or withdraw it. */
+  readonly onExposedChange: (paramId: string, exposed: boolean) => void;
+  /** Parameters currently driven by a connection, whose control is inert. */
+  readonly drivenParams?: readonly string[];
 }
 
 function control(
@@ -84,21 +90,53 @@ function control(
  * The panel reads only the specs, never a per-element layout, which is what
  * lets a new laboratory element arrive without touching bench UI (ADR-0019).
  */
-export default function ParameterPanel({ specs, values, onChange }: ParameterPanelProps): ReactElement {
+export default function ParameterPanel({
+  specs,
+  values,
+  onChange,
+  exposedParams,
+  onExposedChange,
+  drivenParams = [],
+}: ParameterPanelProps): ReactElement {
   if (specs.length === 0) return <Text content="This element has no parameters." tone="muted" />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {specs.map((spec) => (
-        <div key={spec.id} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <label htmlFor={`param-${spec.id}`} style={{ fontSize: 12, fontWeight: 600 }}>
-            {spec.label}
-          </label>
-          {control(spec, values[spec.id], onChange)}
-          {spec.description === undefined ? null : (
-            <Text content={spec.description} tone="muted" />
-          )}
-        </div>
-      ))}
+      {specs.map((spec) => {
+        const exposed = exposedParams.includes(spec.id);
+        const driven = drivenParams.includes(spec.id);
+        return (
+          <div key={spec.id} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <label htmlFor={`param-${spec.id}`} style={{ fontSize: 12, fontWeight: 600 }}>
+                {spec.label}
+              </label>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#475569" }}
+                title={
+                  driven
+                    ? "Something is connected to this port. Disconnect it, or withdrawing the port will remove that connection."
+                    : "Give this parameter an input port so another element can drive it."
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={exposed}
+                  onChange={(event) => onExposedChange(spec.id, event.target.checked)}
+                  aria-label={`Show ${spec.label} as an input port`}
+                />
+                as input
+              </label>
+            </div>
+            {control(spec, values[spec.id], onChange)}
+            {driven ? (
+              <Text content="Driven by a connection; this control is ignored." tone="muted" />
+            ) : null}
+            {spec.description === undefined ? null : (
+              <Text content={spec.description} tone="muted" />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
