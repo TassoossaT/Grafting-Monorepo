@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { appendPullRequestSection, deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "./git-client.ts";
+import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
 import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
@@ -483,6 +483,35 @@ test("task done refuses a base that differs from the task's recorded parent", as
     /parent task branch task\/BASE-PARENT is not published/,
   );
 });
+test("a stacked task retargets the default branch once its parent has landed", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "LANDED-PARENT", base: "main" });
+  await taskNew(root, { taskId: "LANDED-CHILD", parent: "LANDED-PARENT" });
+  // Publishing the parent at main is what a merged parent looks like from the
+  // commit graph: it carries nothing main does not already have.
+  execFileSync("git", ["push", "origin", "task/LANDED-PARENT"], { cwd: root });
+  execFileSync("git", ["fetch", "origin"], { cwd: root });
+
+  const client = new GitClient(root);
+  // Otherwise the child's PR merges into a branch that is no longer going
+  // anywhere, and its work never reaches main while the PR reads as merged.
+  assert.equal(await client.resolveTaskBase("LANDED-CHILD"), "main");
+  assert.equal(await client.resolveTaskBase("LANDED-CHILD", "main"), "main");
+});
+
+test("a stacked task still targets its parent while the parent is unmerged", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "OPEN-PARENT", base: "main" });
+  await writeFile(join(root, ".worktrees", "OPEN-PARENT", "parent.txt"), "ahead\n", "utf8");
+  await taskCommit(root, { taskId: "OPEN-PARENT", message: "parent work" });
+  await taskNew(root, { taskId: "OPEN-CHILD", parent: "OPEN-PARENT" });
+  execFileSync("git", ["push", "origin", "task/OPEN-PARENT"], { cwd: root });
+  execFileSync("git", ["fetch", "origin"], { cwd: root });
+
+  const client = new GitClient(root);
+  assert.equal(await client.resolveTaskBase("OPEN-CHILD"), "task/OPEN-PARENT");
+});
+
 test("dependency overlays resolve workspace packages from the task worktree", async () => {
   const root = await makeRepoWithBareRemote();
   await mkdir(join(root, "node_modules"), { recursive: true });
