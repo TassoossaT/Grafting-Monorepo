@@ -92,6 +92,8 @@ importers:
 
   libs/domains/procgen/tileset-wfc: {}
 
+  libs/domains/procgen/tileset-wfc/pkg: {}
+
   libs/isekai/wasm-bridge: {}
 
   libs/isekai/wasm-bridge/pkg: {}
