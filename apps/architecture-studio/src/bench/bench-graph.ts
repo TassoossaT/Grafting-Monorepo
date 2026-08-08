@@ -1,5 +1,6 @@
 import {
-  allInputPorts,
+  paramPortId,
+  visibleInputPorts,
   coerceParamValue,
   defaultParamValues,
   type BenchNodeKind,
@@ -25,6 +26,13 @@ export interface BenchNode {
   readonly y: number;
   /** This instance's own parameter values. */
   readonly params: BenchParamValues;
+  /**
+   * Parameters this instance has promoted to input ports.
+   *
+   * Empty for a freshly placed node: a parameter is edited in the panel until
+   * someone decides it should be driven by another element instead.
+   */
+  readonly exposedParams: readonly string[];
   /** Rendered width, when the instance overrides its element's default. */
   readonly width?: number;
   /** Rendered height, when the instance overrides its element's default. */
@@ -85,6 +93,7 @@ export function addBenchNode(
     x: position.x,
     y: position.y,
     params: defaultParamValues(kind),
+    exposedParams: Object.freeze([]),
   });
   return {
     graph: Object.freeze({
@@ -122,6 +131,9 @@ export function duplicateBenchNode(
     x: source.x + offset.x,
     y: source.y + offset.y,
     params: source.params,
+    // Copied with the values: a variant compared side by side should present
+    // the same surface, or the two are not comparable.
+    exposedParams: source.exposedParams,
   });
   return {
     graph: Object.freeze({
@@ -214,7 +226,13 @@ export function checkBenchConnection(
   const sourceKind: BenchNodeKind = findNodeKind(findNode(graph, source.nodeId).kindId);
   const targetKind: BenchNodeKind = findNodeKind(findNode(graph, target.nodeId).kindId);
   const output = sourceKind.outputs.find((port) => port.id === source.portId);
-  const input = allInputPorts(targetKind).find((port) => port.id === target.portId);
+  const targetNode = findNode(graph, target.nodeId);
+  // Visible rather than all: a parameter that has not been promoted to a port
+  // is not connectable, and refusing here keeps that true even if a stale
+  // canvas still draws it.
+  const input = visibleInputPorts(targetKind, targetNode.exposedParams).find(
+    (port) => port.id === target.portId,
+  );
   if (output === undefined || input === undefined) return "unknown-port";
   // An input may declare that it takes anything, which is how a viewport shows
   // whatever it is pointed at. An output never may: something downstream has to
@@ -257,6 +275,63 @@ export function addBenchEdge(
       sequence: graph.sequence + 1,
     }),
     edge,
+  };
+}
+
+/**
+ * Promotes a parameter to an input port, or withdraws it.
+ *
+ * Withdrawing removes any connection feeding that port, and returns them, so
+ * the caller can say what was disconnected. Leaving the edge in place would be
+ * worse than either alternative: it would keep driving a parameter through a
+ * port nobody can see, and the panel would show a value the graph ignores.
+ *
+ * @param graph - Current graph.
+ * @param nodeId - Node whose surface changes.
+ * @param paramId - Parameter to promote or withdraw.
+ * @param exposed - Whether the parameter should have a port.
+ * @returns The next graph and the connections withdrawing it removed.
+ * @throws When the element declares no such parameter, since a silent no-op
+ * would leave the panel and the graph disagreeing about what exists.
+ */
+export function setParamExposed(
+  graph: BenchGraph,
+  nodeId: string,
+  paramId: string,
+  exposed: boolean,
+): { readonly graph: BenchGraph; readonly removedEdges: readonly BenchEdge[] } {
+  const node = findNode(graph, nodeId);
+  const kind = findNodeKind(node.kindId);
+  if (!kind.params.some((spec) => spec.id === paramId)) {
+    throw new Error(`Bench element ${kind.id} declares no parameter ${paramId}`);
+  }
+
+  const already = node.exposedParams.includes(paramId);
+  if (already === exposed) return { graph, removedEdges: [] };
+
+  const portId = paramPortId(paramId);
+  const removedEdges = exposed
+    ? []
+    : graph.edges.filter((edge) => edge.target.nodeId === nodeId && edge.target.portId === portId);
+
+  const next: readonly string[] = exposed
+    ? Object.freeze([...node.exposedParams, paramId])
+    : Object.freeze(node.exposedParams.filter((candidate) => candidate !== paramId));
+
+  return {
+    graph: Object.freeze({
+      nodes: Object.freeze(
+        graph.nodes.map((candidate) =>
+          candidate.id === nodeId ? Object.freeze({ ...candidate, exposedParams: next }) : candidate,
+        ),
+      ),
+      edges:
+        removedEdges.length === 0
+          ? graph.edges
+          : Object.freeze(graph.edges.filter((edge) => !removedEdges.includes(edge))),
+      sequence: graph.sequence,
+    }),
+    removedEdges: Object.freeze(removedEdges),
   };
 }
 

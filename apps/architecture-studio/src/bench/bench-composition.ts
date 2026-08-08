@@ -10,7 +10,7 @@ import type {
 } from "@grafting/ui";
 import type { BenchEdge, BenchGraph, BenchNode } from "./bench-graph.ts";
 import {
-  allInputPorts,
+  visibleInputPorts,
   portCapacity,
   type BenchNodeKind,
   type BenchParamSpec,
@@ -126,7 +126,10 @@ const portPosition = (index: number, total: number, side: "left" | "right") =>
  * @param kind - Element declaration.
  * @returns Inputs on the left edge and outputs on the right, evenly spread.
  */
-export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[] {
+export function benchPorts(
+  kind: BenchNodeKind,
+  exposedParams: readonly string[] = [],
+): readonly CanvasPortDefinition[] {
   const build = (
     ports: readonly BenchNodeKind["inputs"][number][],
     side: "input" | "output",
@@ -153,21 +156,33 @@ export function benchPorts(kind: BenchNodeKind): readonly CanvasPortDefinition[]
         }),
       }),
     );
-  return Object.freeze([...build([...allInputPorts(kind)], "input"), ...build([...kind.outputs], "output")]);
+  return Object.freeze([
+    ...build([...visibleInputPorts(kind, exposedParams)], "input"),
+    ...build([...kind.outputs], "output"),
+  ]);
 }
 
 /**
  * Sizes a node so every port has room.
  *
- * Ports are spread evenly down a side, so a node with many parameters needs
- * more height or they collide. The width is fixed: it is the label column that
- * has to stay readable, not the port column.
+ * Ports are spread evenly down a side, so a node with many ports needs more
+ * height or they collide. The width is fixed: it is the label column that has
+ * to stay readable, not the port column.
+ *
+ * Sized from the ports actually shown, not from every parameter the element
+ * declares. Sizing by the latter would make an element with a dozen settings
+ * permanently tall even while none of them are wired, which is most of what
+ * made those elements unusable in the first place.
  *
  * @param kind - Element declaration.
+ * @param exposedParams - Parameters promoted to ports on this instance.
  * @returns Rendered width and height in CSS pixels.
  */
-export function benchNodeSize(kind: BenchNodeKind): { readonly width: number; readonly height: number } {
-  const sides = Math.max(allInputPorts(kind).length, kind.outputs.length);
+export function benchNodeSize(
+  kind: BenchNodeKind,
+  exposedParams: readonly string[] = [],
+): { readonly width: number; readonly height: number } {
+  const sides = Math.max(visibleInputPorts(kind, exposedParams).length, kind.outputs.length);
   const isViewport = kind.outputs.length === 0 && kind.inputs.length > 0;
   const base = isViewport ? 176 : BENCH_NODE_SIZE.height;
   return Object.freeze({
@@ -203,7 +218,7 @@ export interface BenchNodeExtras {
 
 export function toCanvasNode(node: BenchNode, extras: BenchNodeExtras = {}): CanvasNode {
   const kind = findNodeKind(node.kindId);
-  const natural = benchNodeSize(kind);
+  const natural = benchNodeSize(kind, node.exposedParams);
   const size = { width: node.width ?? natural.width, height: node.height ?? natural.height };
   return Object.freeze({
     id: node.id,
@@ -212,7 +227,7 @@ export function toCanvasNode(node: BenchNode, extras: BenchNodeExtras = {}): Can
     y: node.y,
     width: size.width,
     height: size.height,
-    ports: benchPorts(kind),
+    ports: benchPorts(kind, node.exposedParams),
     data: Object.freeze({
       title: kind.title,
       summary: kind.category,

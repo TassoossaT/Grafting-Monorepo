@@ -40,6 +40,7 @@ import {
   removeBenchNode,
   resizeBenchNode,
   setBenchParam,
+  setParamExposed,
   type BenchGraph,
 } from "../../bench/bench-graph.ts";
 import {
@@ -369,6 +370,40 @@ export default function BenchClient() {
     [removeSelected],
   );
 
+  /**
+   * Promotes a parameter to an input port, or withdraws it.
+   *
+   * Withdrawing can remove a connection, so the canvas has to be told about
+   * the edges that went with it -- leaving them drawn would show a wire into a
+   * port that no longer exists.
+   */
+  const changeParamExposed = useCallback(
+    (paramId: string, exposed: boolean) => {
+      const selected = selectionRef.current;
+      if (selected?.kind !== "node") return;
+      const { graph: next, removedEdges } = setParamExposed(
+        graphRef.current,
+        selected.id,
+        paramId,
+        exposed,
+      );
+      commit(next);
+      for (const edge of removedEdges) handleRef.current?.removeEdge(edge.id);
+      const node = next.nodes.find((candidate) => candidate.id === selected.id);
+      if (node !== undefined) {
+        handleRef.current?.updateNode(toCanvasNode(node, nodeExtras(selected.id)));
+      }
+      if (removedEdges.length > 0) {
+        setNotice(
+          removedEdges.length === 1
+            ? "Withdrawing that port removed the connection feeding it."
+            : `Withdrawing that port removed ${removedEdges.length} connections feeding it.`,
+        );
+      }
+    },
+    [commit, nodeExtras],
+  );
+
   const changeParam = useCallback(
     (paramId: string, raw: BenchParamValue) => {
       const selected = selectionRef.current;
@@ -476,7 +511,7 @@ export default function BenchClient() {
                     min={140}
                     max={720}
                     step={20}
-                    value={selectedNode.width ?? benchNodeSize(selectedKind).width}
+                    value={selectedNode.width ?? benchNodeSize(selectedKind, selectedNode.exposedParams).width}
                     onChange={(event) => resizeSelected(Number(event.target.value), null)}
                     style={{ width: 68 }}
                   />
@@ -486,7 +521,7 @@ export default function BenchClient() {
                     min={90}
                     max={720}
                     step={20}
-                    value={selectedNode.height ?? benchNodeSize(selectedKind).height}
+                    value={selectedNode.height ?? benchNodeSize(selectedKind, selectedNode.exposedParams).height}
                     onChange={(event) => resizeSelected(null, Number(event.target.value))}
                     style={{ width: 68 }}
                   />
@@ -495,6 +530,12 @@ export default function BenchClient() {
                   specs={selectedKind.params}
                   values={selectedNode.params}
                   onChange={changeParam}
+                  exposedParams={selectedNode.exposedParams}
+                  onExposedChange={changeParamExposed}
+                  drivenParams={graph.edges
+                    .filter((edge) => edge.target.nodeId === selectedNode.id)
+                    .map((edge) => paramIdFromPort(edge.target.portId))
+                    .filter((paramId): paramId is string => paramId !== null)}
                 />
                 <div>
                   <Text content="Ports" strong />
