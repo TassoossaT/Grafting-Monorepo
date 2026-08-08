@@ -136,11 +136,17 @@ export const PREVIEW_KINDS: readonly PreviewKind[] = Object.freeze([
     dataType: "mesh",
     project(value: BenchValue) {
       if (value.dataType !== "mesh") return null;
+      // Copied, not passed through. A preview's buffers are *transferred* to
+      // the main thread, which detaches them -- and the value they came from
+      // stays in the worker's result cache. Handing over the value's own
+      // arrays detaches the cache, and the next pass that reuses it fails with
+      // "ArrayBuffer is already detached". Every projection must return
+      // buffers the preview owns.
       return {
         form: "geometry" as const,
         dataType: value.dataType,
-        positions: value.positions,
-        indices: value.indices,
+        positions: value.positions.slice(),
+        indices: value.indices.slice(),
       };
     },
   }),
