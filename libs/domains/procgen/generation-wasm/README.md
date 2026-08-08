@@ -9,7 +9,8 @@ one consumer. Not the full Townscaper-style generation pipeline.
 ## Status
 
 Exposes one real function, `generate_heightmap(width, height, seed, scale) ->
-Vec<f32>`, sampling `noise`'s `Perlin` on a grid. This is pipeline step 1 only
+Result<Vec<f32>, JsValue>`, sampling `noise`'s `Perlin` on a grid. This is
+pipeline step 1 only
 (the continuous heightmap seed) from
 `docs/research/vtt-map-and-terrain-construction-options.md`'s end-to-end
 pipeline section -- that document designed this capability for the VTT
@@ -20,6 +21,26 @@ items, not this crate.
 
 Compiles to `wasm32-unknown-unknown`, verified via the same pattern already
 proven by `docs/benchmarks/vtt-wasm-compile-spike-2026-08-01.md`.
+
+## The `scale` range is enforced, not merely suggested
+
+`scale` is the distance between samples in the noise's own space, so **smaller
+values give smoother, larger-scale features**. Perlin's gradient lattice has
+period 1.0, which makes 0.5 the Nyquist limit: at or above it the grid is
+aliased rather than coarse. A **whole-number** `scale` is the degenerate case —
+gradient noise is exactly zero at every integer lattice point, so every sample
+lands on one and the whole grid comes back as zeros, a perfectly flat map from
+a call that looks like it succeeded.
+
+That is not hypothetical: it shipped into two Architecture Studio trials whose
+sliders offered only whole and half steps, and it read as "the terrain only
+changes at .5 values". `generate_heightmap` now rejects anything at or above
+`MAX_SCALE`, along with non-finite, zero, and negative values, and grids above
+`MAX_CELLS`. Useful values sit around 0.05 to 0.2.
+
+Validation is at the boundary because panics are not catchable on
+`wasm32-unknown-unknown` (see this crate's `AGENTS.md`), so the error surfaces
+as a thrown JavaScript exception the calling worker can report.
 
 ## Targets
 
