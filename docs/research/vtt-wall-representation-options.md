@@ -1,11 +1,12 @@
 # VTT wall representation: cell, edge, or free geometry
 
 - Research date: 2026-08-08
-- Status: **evidence for an open question**. Nothing here closes anything.
-  `docs/research/vtt-world-model-and-grid-layers.md` records "cell or edge?"
-  as open and expensive to reverse; this document gathers what is checkable
-  about it, and deliberately ends without a recommendation the owner has not
-  made
+- Status: **the evidence behind a decision that has since been made.** The
+  owner chose option B; it is recorded in
+  `docs/adr/ADR-0022-wall-representation-free-geometry.md` (DEC-060), which is
+  the binding statement. This document keeps the comparison, including the
+  arguments *against* the option chosen, because an ADR that only records the
+  winning side is not reviewable
 - Decision authority: none, same as every document in `docs/research/`
 - Why now: the interior tileset is the next content work, and it is the first
   thing whose shape depends on the answer. Deciding after authoring a tileset
@@ -94,6 +95,40 @@ a free-geometry wall is that claim.
 Worth stating plainly: this was not the shape of the question when it was
 written down, and the reframing is the main thing this document contributes.
 
+## Finding 4: an owner constraint that is not a criterion
+
+Stated by the owner while this document was being reviewed, and recorded here
+because it changes the weighting rather than adding to it: **the mesh must stay
+editable — remodelling, removing edges, re-partitioning — because procedural
+generation is one of the four construction tiers, not the fixed one.**
+
+A grid address survives vertex movement (the world model's "geometry deforms,
+choices stay") but not re-partitioning. And the failure mode is worse than an
+invalidated id: dissolve the edge a wall lived on, and where the wall went has
+no correct answer — only a rule someone picks.
+
+A is not thereby impossible. Its price is nameable: persistent per-element
+identity instead of positional indices, plus a propagation rule for every
+topological operation — subdivide, merge, dissolve. That is Blender's
+custom-data-layer machinery, and it is infrastructure existing to support the
+storage choice rather than anything the product ships.
+
+This does not delete A's one real advantage, which stands: `Problem::compile`
+takes `pinned` indexed by cell, so under A the semantic store and the generator
+share an address space and pinning is direct. Under B that becomes a conversion
+step with its own edge cases. That cost is real and is accepted rather than
+argued away.
+
+### A corollary that applies whichever option is chosen
+
+`CellId` is an index into one solve, not an identity.
+`apps/architecture-studio/src/vtt/shell-cell-graph.ts` numbers cells
+positionally over materialised cells, so `withCell` shifts every id after the
+one inserted. A semantic store keyed on `CellId` would be corrupted by a single
+construction click, and the corruption would look random. Any grid-shaped
+identity has to be `(quad, layer, face)`, which is stable under occupancy edits
+though not under topological ones.
+
 ## Criteria that would settle it
 
 Objective, checkable, in rough order of weight:
@@ -129,6 +164,12 @@ wall record has to be maintained explicitly rather than being identity.
 
 ## What was not established
 
+- **Both references are 2D, and this document's "two projects agree" argument
+  is weaker than it first reads.** In Foundry and PlanarAlly a wall is a
+  segment in a plane. This world is 3D with discrete layers, where a wall is a
+  surface needing explicit vertical extent. Neither reference did that
+  generalisation, so its cost is unmeasured and uncopyable. This is the most
+  serious gap in the evidence above and is carried into ADR-0022's risks.
 - Whether PlanarAlly's stored wall shape is a polyline or a closed polygon
   internally. The user-facing documentation says "shapes"; the source was not
   read in this pass.

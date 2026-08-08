@@ -95,10 +95,14 @@ as baked world-space vertices. Baking breaks point editing.
   freezing generation. The alternatives are refusing the build, or unfreezing
   neighbours (which breaks "fixed"). This changes the API shape: if local
   failure is allowed, the solve returns a partial result rather than an error.
-- **Cell or edge?** Is a wall *between* two cells (edge) or does it *occupy* a
-  cell? A door almost certainly wants to be an edge — it is the passage between
-  two spaces. Choosing cells makes diagonal doors and thin walls awkward, and
-  this is expensive to change later.
+- ~~**Cell or edge?**~~ **Answered, and the question turned out to be the wrong
+  one.** Neither: a wall is stored as free geometry in world coordinates, with
+  the grid as an authoring aid and a query accelerator but never the address.
+  The deciding constraint was this repository's own requirement that the mesh
+  stay topologically editable — a grid address survives moving a vertex but not
+  dissolving an edge, and "where did the wall go" then has no correct answer.
+  See `docs/adr/ADR-0022-wall-representation-free-geometry.md` (DEC-060) and
+  `docs/research/vtt-wall-representation-options.md`.
 - **"a 4×4×4×4 mesh"** from the session is not understood well enough to record
   faithfully, and is deliberately left unrecorded rather than guessed at.
 
