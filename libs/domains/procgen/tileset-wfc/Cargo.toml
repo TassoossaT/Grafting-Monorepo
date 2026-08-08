@@ -1,0 +1,30 @@
+[package]
+name = "grafting-procgen-tileset-wfc"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Solver-agnostic constraint model for tile assignment over an arbitrary cell graph, with a swappable solver backend. Not tied to terrain, to a grid shape, or to any one third-party solver."
+
+[lib]
+# `rlib` only, deliberately. The sibling procgen crates are `cdylib` because
+# they expose a `wasm_bindgen` boundary; this one has no exported function yet,
+# and declaring a `cdylib` with nothing in it would create a build target that
+# produces an empty artifact. The boundary arrives with its first consumer.
+crate-type = ["rlib"]
+
+[features]
+# The domain model compiles and is testable with no solver at all; a backend is
+# an addition, never a prerequisite. Swapping backends is a feature change here
+# plus one adapter module -- no consumer edits.
+default = ["solver-wfc"]
+solver-wfc = ["dep:wave-function-collapse", "dep:uuid"]
+
+[dependencies]
+wave-function-collapse = { version = "0.3", optional = true }
+
+# `uuid` reaches this crate only through `wave-function-collapse`, and refuses
+# to build for `wasm32-unknown-unknown` without an explicit randomness source.
+# Declared here purely so Cargo's feature unification supplies one; nothing in
+# this crate imports it.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", features = ["js", "v4"], optional = true }
