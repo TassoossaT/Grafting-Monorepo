@@ -17,6 +17,7 @@
     "@grafting/ui": "workspace:*",
     "@grafting/procgen-generation-wasm": "workspace:*",
     "@grafting/procgen-discretize": "workspace:*",
+    "@grafting/procgen-tileset-wfc": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "next": "^16.2.12",
     "react": "19.2.8",

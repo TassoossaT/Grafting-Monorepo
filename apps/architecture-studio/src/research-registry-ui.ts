@@ -17,6 +17,7 @@ export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "irregular-quad-grid": "/lab/irregular-grid",
   "stacked-terrain": "/lab/stacked-terrain",
   "terrain-transitions": "/lab/terrain-transitions",
+  "terrain-tileset": "/lab/terrain-tileset",
 };
 
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {
