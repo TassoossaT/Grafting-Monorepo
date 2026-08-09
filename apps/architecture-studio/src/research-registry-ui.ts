@@ -18,7 +18,9 @@ export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "stacked-terrain": "/lab/stacked-terrain",
   "terrain-transitions": "/lab/terrain-transitions",
   "terrain-tileset": "/lab/terrain-tileset",
+  "mesh-procedural": "/lab/mesh-procedural",
 };
+
 
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {
   adopted: "success",

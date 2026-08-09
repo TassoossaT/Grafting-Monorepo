@@ -133,6 +133,133 @@ export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, Benc
     return { dataType: "mesh" as const, positions: terrain.positions, indices };
   });
 
+  evaluators.set("mesh.procedural", (inputs, params) => {
+    const quadmeshInput = inputs.grid?.dataType === "quadmesh" ? inputs.grid.mesh : undefined;
+    const field = inputs.heightmap?.dataType === "heightmap" ? inputs.heightmap : undefined;
+    const deformationXY = asNumber(params.deformationXY);
+    const deformationZ = asNumber(params.deformationZ);
+    const vertexShiftX = asNumber(params.vertexShiftX);
+    const vertexShiftY = asNumber(params.vertexShiftY);
+    const vertexShiftZ = asNumber(params.vertexShiftZ);
+
+    if (quadmeshInput) {
+      // Connects with irregular-quad-grid (grid.irregular)!
+      const { vertices, quads } = quadmeshInput;
+      const vertCount = vertices.length;
+      const positions = new Float32Array(vertCount * 3);
+
+      for (let i = 0; i < vertCount; i++) {
+        const v = vertices[i]!;
+        let gx = v.x;
+        let gy = v.y;
+        let gz = 0;
+
+        if (deformationXY > 0) {
+          gx += Math.sin(gx * 1.3 + gy * 0.7) * 0.2 * deformationXY;
+          gy += Math.cos(gx * 0.9 - gy * 1.1) * 0.2 * deformationXY;
+        }
+
+        if (field) {
+          const sampleX = Math.min(field.width - 1, Math.max(0, Math.floor(((gx + 2) / 4) * field.width)));
+          const sampleY = Math.min(field.height - 1, Math.max(0, Math.floor(((gy + 2) / 4) * field.height)));
+          gz += field.values[sampleY * field.width + sampleX]! * 1.5;
+        } else if (deformationZ > 0) {
+          gz += (Math.sin(gx * 0.8) + Math.cos(gy * 0.8)) * 0.8 * deformationZ;
+        }
+
+        // Apply vertex shifts
+        if (i === vertCount - 1) {
+          gx += vertexShiftX;
+          gy += vertexShiftY;
+          gz += vertexShiftZ;
+        }
+
+        positions[i * 3] = gx;
+        positions[i * 3 + 1] = gz;
+        positions[i * 3 + 2] = gy;
+      }
+
+      const indicesList: number[] = [];
+      for (const quad of quads) {
+        const [a, b, c, d] = quad;
+        indicesList.push(a, c, b, a, d, c);
+      }
+
+
+
+      return {
+        dataType: "mesh" as const,
+        positions,
+        indices: new Uint32Array(indicesList),
+      };
+    }
+
+
+    const width = field ? field.width : 4;
+    const height = field ? field.height : 4;
+
+    const vertCols = width + 1;
+    const vertRows = height + 1;
+    const layerVertCount = vertCols * vertRows;
+    const positions = new Float32Array(layerVertCount * 2 * 3);
+
+    for (let l = 0; l <= 1; l++) {
+      const zBase = l * 1.5;
+      for (let y = 0; y <= height; y++) {
+        for (let x = 0; x <= width; x++) {
+          const idx = (l * layerVertCount + y * vertCols + x) * 3;
+          let gx = (x - width / 2) * 1.2;
+          let gy = (y - height / 2) * 1.2;
+          let gz = zBase;
+
+          const cornerFactorX = x / width;
+          const cornerFactorY = y / height;
+          gx += cornerFactorX * cornerFactorY * vertexShiftX;
+          gy += cornerFactorX * cornerFactorY * vertexShiftY;
+          if (l > 0) gz += cornerFactorX * cornerFactorY * vertexShiftZ;
+
+          if (deformationXY > 0 && x > 0 && x < width && y > 0 && y < height) {
+            gx += Math.sin(x * 1.3 + y * 0.7) * 0.4 * deformationXY;
+            gy += Math.cos(x * 0.9 - y * 1.1) * 0.4 * deformationXY;
+          }
+
+          if (field) {
+            const fieldIdx = y * width + x;
+            if (fieldIdx < field.values.length) {
+              gz += field.values[fieldIdx]! * 1.5;
+            }
+          } else if (deformationZ > 0) {
+            gz += (Math.sin(x * 0.8) + Math.cos(y * 0.8)) * 0.8 * deformationZ;
+          }
+
+          positions[idx] = gx;
+          positions[idx + 1] = gz;
+          positions[idx + 2] = gy;
+        }
+      }
+    }
+
+    const indicesList: number[] = [];
+    const nlOffset = layerVertCount;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const v4 = nlOffset + y * vertCols + x;
+        const v5 = nlOffset + y * vertCols + (x + 1);
+        const v6 = nlOffset + (y + 1) * vertCols + (x + 1);
+        const v7 = nlOffset + (y + 1) * vertCols + x;
+        indicesList.push(v4, v6, v5, v4, v7, v6);
+      }
+    }
+
+    return {
+      dataType: "mesh" as const,
+      positions,
+      indices: new Uint32Array(indicesList),
+    };
+  });
+
+
+
   evaluators.set("heightmap.perlin", (_inputs, params) => {
     const width = asNumber(params.width);
     const height = asNumber(params.height);
