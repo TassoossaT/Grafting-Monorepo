@@ -9,7 +9,7 @@ import {
   type View,
 } from "@grafting/render-3d";
 
-const CANDIDATE = "mesh-procedural";
+const MESH_LAYER = "mesh-layer";
 
 interface MeshControls {
   readonly width: number;
@@ -117,47 +117,52 @@ export default function MeshProceduralClient() {
     const registry = createVisualRegistry();
     registry.register({
       kind: "prism-surface",
-      describe: (params: { positions: Float32Array; indices: Uint32Array; wireframe: boolean }) => ({
+      describe: (params: { positions: Float32Array; indices: Uint32Array }) => ({
         geometry: { shape: "mesh", data: { positions: params.positions, indices: params.indices } },
         material: {
           surface: "lit",
           color: 0x4a7c59,
           doubleSided: true,
           flatShading: true,
-          wireframe: params.wireframe,
         },
       }),
     });
 
-    const engine = createEngine({ registry });
-    const view = engine.attachView(container, {
-      camera: {
-        type: "perspective",
-        fov: 45,
-        near: 0.1,
-        far: 100,
-        position: [0, -10, 8],
-        target: [0, 0, 1],
-      },
+    const engine = createEngine({
+      registry,
+      autoplay: false,
+      lights: [
+        { light: "ambient", intensity: 0.85 },
+        { light: "directional", intensity: 0.6, direction: { x: 2, y: 6, z: 3 } },
+      ],
     });
 
-    const scene = engine.scene();
-    scene.addLayer("mesh-layer");
+    engine.scene.defineLayer({ id: MESH_LAYER, order: 0 }, "engine");
+
+    const view = engine.createView({
+      target: container,
+      background: 0x111827,
+      camera: {
+        projection: "perspective",
+        fov: 45,
+        position: { x: 0, y: -10, z: 8 },
+        target: { x: 0, y: 0, z: 1 },
+      },
+    });
 
     engineRef.current = engine;
     viewRef.current = view;
 
     const handleResize = () => {
       if (containerRef.current) {
-        const { clientWidth, clientHeight } = containerRef.current;
-        view.resize(clientWidth, clientHeight);
+        view.resize(containerRef.current.clientWidth, containerRef.current.clientHeight);
       }
     };
     window.addEventListener("resize", handleResize);
+    handleResize();
 
     return () => {
       window.removeEventListener("resize", handleResize);
-      engine.detachView(view.id);
       engine.dispose();
       engineRef.current = null;
       viewRef.current = null;
@@ -168,13 +173,17 @@ export default function MeshProceduralClient() {
     const engine = engineRef.current;
     if (engine === null) return;
 
-    const scene = engine.scene();
-    scene.setItem("mesh-01", "mesh-layer", "prism-surface", {
-      positions: meshData.positions,
-      indices: meshData.indices,
-      wireframe: controls.wireframe,
-    });
-  }, [meshData, controls.wireframe]);
+    engine.scene.setItem(
+      "mesh-01",
+      MESH_LAYER,
+      "prism-surface",
+      {
+        positions: meshData.positions,
+        indices: meshData.indices,
+      },
+      "engine",
+    );
+  }, [meshData]);
 
   return (
     <div style={{ display: "flex", gap: "16px", padding: "16px", minHeight: "80vh" }}>
@@ -220,15 +229,6 @@ export default function MeshProceduralClient() {
                 <option value={1}>Boundary (1)</option>
                 <option value={2}>Surface (2)</option>
               </select>
-            </label>
-
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={controls.wireframe}
-                onChange={(e) => setControls((prev) => ({ ...prev, wireframe: e.target.checked }))}
-              />
-              <span style={{ fontSize: "14px" }}>Modo Wireframe (Arame)</span>
             </label>
 
             <div style={{ padding: "8px", background: "rgba(0,0,0,0.05)", borderRadius: "4px", marginTop: "8px" }}>
