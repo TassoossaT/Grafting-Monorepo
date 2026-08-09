@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { GitClient } from "./git-client.ts";
 
 export interface CliError {
@@ -255,3 +258,59 @@ export async function taskSweep(repoRoot: string) {
   const { cleaned, skipped, remoteBranches } = await client.sweepMergedWorktrees();
   return { ok: true as const, cleaned, skipped, remoteBranches };
 }
+
+export interface TaskContextInput {
+  query?: string;
+  scope?: string;
+  map?: boolean;
+}
+
+export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
+  const indexPath = join(repoRoot, ".ai", "INDEX.md");
+  const signaturesPath = join(repoRoot, "docs", "generated", "signatures", "signatures-map.md");
+
+  let content = "";
+  if (input.scope) {
+    if (existsSync(signaturesPath)) {
+      const sigs = await readFile(signaturesPath, "utf8");
+      const sections = sigs.split("### ");
+      const matched = sections.filter((s) => s.toLowerCase().includes(input.scope!.toLowerCase()));
+      if (matched.length > 0) {
+        content = matched.map((m) => "### " + m).join("\n").slice(0, 4000);
+      }
+    }
+    if (!content && existsSync(indexPath)) {
+      const index = await readFile(indexPath, "utf8");
+      const lines = index.split("\n").filter((l) => l.toLowerCase().includes(input.scope!.toLowerCase()));
+      content = lines.join("\n");
+    }
+  } else if (input.query) {
+    const results: string[] = [];
+    if (existsSync(indexPath)) {
+      const index = await readFile(indexPath, "utf8");
+      for (const line of index.split("\n")) {
+        if (line.toLowerCase().includes(input.query.toLowerCase())) results.push(`[.ai/INDEX.md] ${line.trim()}`);
+      }
+    }
+    if (existsSync(signaturesPath)) {
+      const sigs = await readFile(signaturesPath, "utf8");
+      for (const line of sigs.split("\n")) {
+        if (line.toLowerCase().includes(input.query.toLowerCase())) {
+          results.push(`[signatures-map.md] ${line.trim()}`);
+          if (results.length >= 30) break;
+        }
+      }
+    }
+    content = results.slice(0, 30).join("\n");
+  } else {
+    if (existsSync(indexPath)) {
+      content = await readFile(indexPath, "utf8");
+    }
+  }
+
+  return {
+    ok: true as const,
+    summary: content || "No context found matching criteria.",
+  };
+}
+

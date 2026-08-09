@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runGuardCheck } from "./guard-command.ts";
-import { taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -88,6 +88,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
+  if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
   return undefined;
 }
 function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
@@ -111,6 +112,11 @@ async function main(argv: string[]): Promise<void> {
       printAndExit(await runGuardCheck(root, input));
     }
 
+    if (group === "context") {
+      const input = readInputFlag(argv) ?? { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") } ?? (await readStdin());
+      printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
+    }
+
     if (group === "task") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
       if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
@@ -126,11 +132,12 @@ async function main(argv: string[]): Promise<void> {
       if (subcommand === "checkout") printAndExit(await taskCheckout(root, input as Parameters<typeof taskCheckout>[1]));
       if (subcommand === "graph") printAndExit(await taskGraph(root));
       if (subcommand === "sweep") printAndExit(await taskSweep(root));
+      if (subcommand === "context") printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
     }
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep> (flags, --input JSON, or JSON stdin)`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context>`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
