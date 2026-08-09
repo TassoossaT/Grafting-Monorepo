@@ -1,0 +1,26 @@
+# Grafting Monorepo — LLM Entrypoint
+
+> Unified Context Index & Router for AI Agents (Claude, Codex, Gemini).
+> Primary context map lives at [.ai/INDEX.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/.ai/INDEX.md).
+
+## Core Rules & Precedence
+
+1. Master Source: [GRAFTING_MASTER_SOURCE.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/GRAFTING_MASTER_SOURCE.md)
+2. Agent Operational Contract: [AGENTS.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/AGENTS.md)
+3. Task Coordination Protocol: [.ai/coordination/PROTOCOL.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/.ai/coordination/PROTOCOL.md)
+4. AI Context Index: [.ai/INDEX.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/.ai/INDEX.md)
+
+## Key Subsystems
+
+- Rust Core (`grafting-graph-core`): [libs/graph/core](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/libs/graph/core)
+- Architecture Studio App: [apps/architecture-studio](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/apps/architecture-studio)
+- UI Package: [packages/ui](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/packages/ui)
+- Render 3D Package: [packages/render-3d](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/packages/render-3d)
+- Isekai C-ABI Bridge: [libs/isekai/capi-bridge](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/libs/isekai/capi-bridge)
+- Task Lifecycle CLI (`ia-graft`): [tools/ia-graft](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/tools/ia-graft)
+
+## Generated API Documentation & Baselines
+
+- Repository Map: [docs/generated/repo-map.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/generated/repo-map.md)
+- TypeScript API docs: [docs/generated/api/ts](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/generated/api/ts)
+- Rust API docs: [docs/generated/api/rust](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/generated/api/rust)
