@@ -91,7 +91,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
   return undefined;
 }
-function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
+function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(result.ok && result.passed !== false ? 0 : 1);
 }
@@ -113,9 +113,10 @@ async function main(argv: string[]): Promise<void> {
     }
 
     if (group === "context") {
-      const input = readInputFlag(argv) ?? { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") } ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput("context", argv) ?? (await readStdin());
       printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
     }
+
 
     if (group === "task") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
