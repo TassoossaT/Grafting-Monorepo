@@ -12,4 +12,8 @@ mod layout;
 mod model;
 
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
-pub use model::{Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId};
+pub use model::{
+    Edge, EdgeId, FormationInputs, Graph, GraphError, GraphPrimitive, GraphSnapshot,
+    IdentifierError, Node, NodeId, PrismGridMesh,
+};
+

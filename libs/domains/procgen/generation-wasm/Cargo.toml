@@ -12,3 +12,5 @@ crate-type = ["cdylib", "rlib"]
 wasm-bindgen = "0.2"
 noise = "0.9"
 getrandom = { version = "0.2", features = ["js"] }
+grafting-graph-core = { path = "../../../graph/core" }
+
