@@ -1491,6 +1491,11 @@ export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
   }
+export interface TaskContextInput {
+  query?: string;
+  scope?: string;
+  map?: boolean;
+  }
 ```
 
 ### `isekai-web-client` (`packages/isekai-web-client`)
