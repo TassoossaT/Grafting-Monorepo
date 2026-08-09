@@ -534,4 +534,175 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn prism_grid_mesh_builds_and_verifies_six_slots() {
+        let inputs = FormationInputs {
+            primitive: GraphPrimitive::Surface,
+            deformation_xy: 0.5,
+            deformation_z: 0.2,
+        };
+        let mesh = PrismGridMesh::new(2, 2, 1, inputs);
+        assert_eq!(mesh.cell_count(), 4);
+        assert_eq!(mesh.cell_neighbors.len(), 4 * 6);
+        assert_eq!(mesh.positions.len(), 9 * 2); // (2+1)*(2+1) per layer * 2 layers
+    }
 }
+
+/// Generic domain-agnostic primitive role for graph formation.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GraphPrimitive {
+    /// Open passage / empty cell space.
+    Passage = 0,
+    /// Vertical separating structure / boundary.
+    Boundary = 1,
+    /// Horizontal ground or surface support.
+    Surface = 2,
+}
+
+/// Generic formation inputs for mesh deformation and top-down layout.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FormationInputs {
+    /// The primitive topological role.
+    pub primitive: GraphPrimitive,
+    /// Planar XY alignment deformation factor (0.0 = regular quad lattice, 1.0 = organic quad mesh).
+    pub deformation_xy: f32,
+    /// Vertical Z height variation factor (0.0 = flat plane, 1.0 = chaotic terrain desnivel).
+    pub deformation_z: f32,
+}
+
+impl Default for FormationInputs {
+    fn default() -> Self {
+        Self {
+            primitive: GraphPrimitive::Surface,
+            deformation_xy: 0.0,
+            deformation_z: 0.0,
+        }
+    }
+}
+
+/// A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
+/// (4 lateral, 1 bottom, 1 top), positions, and deformation inputs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrismGridMesh {
+    /// Flat list of 3D vertex positions [x, y, z] for corners across all layers.
+    pub positions: Vec<[f32; 3]>,
+    /// 8 corner vertex indices per cell [V0..V7].
+    pub cell_corners: Vec<[u32; 8]>,
+    /// Contiguous list of 6 neighbor cell IDs per cell [North, East, South, West, Bottom, Top].
+    /// u32::MAX indicates a boundary edge (no neighbor).
+    pub cell_neighbors: Vec<u32>,
+    /// Formation inputs per cell.
+    pub inputs: Vec<FormationInputs>,
+    /// Width of the grid in cells.
+    pub width: u32,
+    /// Height of the grid in cells.
+    pub height: u32,
+    /// Number of vertical layers in the grid.
+    pub layers: u32,
+}
+
+impl PrismGridMesh {
+    /// Constructs a grid of width x height x layers cells with 6-slot connectivity.
+    pub fn new(width: u32, height: u32, layers: u32, inputs: FormationInputs) -> Self {
+        let cell_count = (width * height * layers) as usize;
+        let vert_cols = (width + 1) * (height + 1);
+        let vert_count = (vert_cols * (layers + 1)) as usize;
+
+        let mut positions = Vec::with_capacity(vert_count);
+        for l in 0..=layers {
+            let z_base = l as f32;
+            for y in 0..=height {
+                for x in 0..=width {
+                    let mut px = x as f32;
+                    let mut py = y as f32;
+                    let mut pz = z_base;
+
+                    if inputs.deformation_xy > 0.0 && x > 0 && x < width && y > 0 && y < height {
+                        let shift_x = (x as f32 * 1.3 + y as f32 * 0.7).sin() * 0.25 * inputs.deformation_xy;
+                        let shift_y = (x as f32 * 0.9 - y as f32 * 1.1).cos() * 0.25 * inputs.deformation_xy;
+                        px += shift_x;
+                        py += shift_y;
+                    }
+
+                    if inputs.deformation_z > 0.0 {
+                        let shift_z = (x as f32 * 0.8 + y as f32 * 1.2 + l as f32 * 0.5).sin() * 0.5 * inputs.deformation_z;
+                        pz += shift_z;
+                    }
+
+                    positions.push([px, py, pz]);
+                }
+            }
+        }
+
+        let mut cell_corners = Vec::with_capacity(cell_count);
+        let mut cell_neighbors = vec![u32::MAX; cell_count * 6];
+        let cell_inputs = vec![inputs; cell_count];
+
+
+        for l in 0..layers {
+            for y in 0..height {
+                for x in 0..width {
+                    let cell_idx = (l * width * height + y * width + x) as usize;
+
+                    let stride_xy = width + 1;
+                    let layer_offset = l * vert_cols;
+                    let next_layer_offset = (l + 1) * vert_cols;
+
+                    let v0 = layer_offset + y * stride_xy + x;
+                    let v1 = layer_offset + y * stride_xy + (x + 1);
+                    let v2 = layer_offset + (y + 1) * stride_xy + (x + 1);
+                    let v3 = layer_offset + (y + 1) * stride_xy + x;
+
+                    let v4 = next_layer_offset + y * stride_xy + x;
+                    let v5 = next_layer_offset + y * stride_xy + (x + 1);
+                    let v6 = next_layer_offset + (y + 1) * stride_xy + (x + 1);
+                    let v7 = next_layer_offset + (y + 1) * stride_xy + x;
+
+                    cell_corners.push([
+                        v0 as u32, v1 as u32, v2 as u32, v3 as u32,
+                        v4 as u32, v5 as u32, v6 as u32, v7 as u32,
+                    ]);
+
+                    // Neighbors: [North(0), East(1), South(2), West(3), Bottom(4), Top(5)]
+                    let base_n = cell_idx * 6;
+                    if y > 0 {
+                        cell_neighbors[base_n] = (l * width * height + (y - 1) * width + x) as u32;
+                    }
+                    if x + 1 < width {
+                        cell_neighbors[base_n + 1] = (l * width * height + y * width + (x + 1)) as u32;
+                    }
+                    if y + 1 < height {
+                        cell_neighbors[base_n + 2] = (l * width * height + (y + 1) * width + x) as u32;
+                    }
+                    if x > 0 {
+                        cell_neighbors[base_n + 3] = (l * width * height + y * width + (x - 1)) as u32;
+                    }
+                    if l > 0 {
+                        cell_neighbors[base_n + 4] = ((l - 1) * width * height + y * width + x) as u32;
+                    }
+                    if l + 1 < layers {
+                        cell_neighbors[base_n + 5] = ((l + 1) * width * height + y * width + x) as u32;
+                    }
+                }
+            }
+        }
+
+        Self {
+            positions,
+            cell_corners,
+            cell_neighbors,
+            inputs: cell_inputs,
+            width,
+            height,
+            layers,
+        }
+    }
+
+    /// Total number of cells in the mesh.
+    pub fn cell_count(&self) -> usize {
+        (self.width * self.height * self.layers) as usize
+    }
+}
+
