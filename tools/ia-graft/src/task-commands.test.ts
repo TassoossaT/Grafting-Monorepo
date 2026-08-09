@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
-import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -701,3 +701,18 @@ test("taskSync reports conflicts, protects taskCommit, and aborts only the unfin
   assert.equal((await readFile(join(worktree, "shared.txt"), "utf8")).trim(), "task version");
   assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: worktree }).toString().trim(), "");
 });
+
+test("taskContext resolves context sitemap and queries cleanly", async () => {
+  const root = await makeRoot();
+  await mkdir(join(root, ".ai"), { recursive: true });
+  await writeFile(join(root, ".ai", "INDEX.md"), "# AI Context Index\n## Package Overview\n- UI: Component library");
+
+  const full = await taskContext(root);
+  assert.equal(full.ok, true);
+  assert.match(full.summary, /# AI Context Index/);
+
+  const queryMatch = await taskContext(root, { query: "Component" });
+  assert.equal(queryMatch.ok, true);
+  assert.match(queryMatch.summary, /UI: Component library/);
+});
+
