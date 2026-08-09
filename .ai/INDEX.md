@@ -33,6 +33,8 @@ Fetch **only** the section needed for your task:
 | **Toolchains & Native Build** | [toolchains.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/toolchains.md) | Cargo, pnpm, uv, dotnet tooling standards |
 | **Testing Strategy** | [testing.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/testing.md) | Unit, integration, ABI, contract test requirements |
 | **Backlog & Phases** | [backlog.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/backlog.md) & [phases.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/phases.md) | Implementation roadmap |
+| **External Skills Catalog** | [EXTERNAL_SKILLS_CATALOG.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/.ai/registry/EXTERNAL_SKILLS_CATALOG.md) | Catalog of cloned mattpocock/skills & stitch-skills |
+
 
 ---
 
