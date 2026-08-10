@@ -255,6 +255,12 @@ export default function VttBrushClient() {
     prevDimsRef.current = { width, height, levels };
   }, [width, height, levels]);
 
+  // Auto-clamp activeLevel and clipLevel when levels setting decreases
+  useEffect(() => {
+    if (activeLevel > levels) setActiveLevel(levels);
+    if (clipLevel > levels) setClipLevel(levels);
+  }, [levels, activeLevel, clipLevel]);
+
   // Handle terrain floor painting with stroke batching and no updater side-effects
   const handleCellClick = useCallback((cx: number, cy: number) => {
     if (toolMode !== "floor") return;
@@ -751,30 +757,73 @@ export default function VttBrushClient() {
             </div>
 
             <Text content="4. Floor Level Navigation & Clip Plane Shader" strong />
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 60 }}>Edit Lvl:</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={levels}
-                  value={activeLevel}
-                  onChange={(e) => setActiveLevel(Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontWeight: "bold", width: 30 }}>L{activeLevel}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 13 }}>
+              {/* Edit Level Selector */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Edit Active Level: <strong>L{activeLevel}</strong></span>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>Level 1..{levels}</span>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {Array.from({ length: levels }).map((_, idx) => {
+                    const lvl = idx + 1;
+                    const isActive = activeLevel === lvl;
+                    return (
+                      <button
+                        key={`edit-lvl-${lvl}`}
+                        onClick={() => setActiveLevel(lvl)}
+                        style={{
+                          flex: 1,
+                          minWidth: 36,
+                          padding: "6px 4px",
+                          borderRadius: 6,
+                          border: isActive ? "2px solid #3b82f6" : "1px solid #334155",
+                          backgroundColor: isActive ? "#1e293b" : "#0f172a",
+                          color: isActive ? "#60a5fa" : "#94a3b8",
+                          fontWeight: isActive ? "bold" : "normal",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        L{lvl}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 60 }}>3D Clip:</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={levels}
-                  value={clipLevel}
-                  onChange={(e) => setClipLevel(Number(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <span style={{ fontWeight: "bold", width: 30 }}>Y&le;{clipLevel}</span>
+
+              {/* 3D Clip Selector */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>3D Clip Shader Cutaway: <strong>Y &le; {clipLevel}</strong></span>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>Vis: L1..L{clipLevel}</span>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {Array.from({ length: levels }).map((_, idx) => {
+                    const lvl = idx + 1;
+                    const isActive = clipLevel === lvl;
+                    return (
+                      <button
+                        key={`clip-lvl-${lvl}`}
+                        onClick={() => setClipLevel(lvl)}
+                        style={{
+                          flex: 1,
+                          minWidth: 36,
+                          padding: "6px 4px",
+                          borderRadius: 6,
+                          border: isActive ? "2px solid #10b981" : "1px solid #334155",
+                          backgroundColor: isActive ? "#064e3b" : "#0f172a",
+                          color: isActive ? "#6ee7b7" : "#94a3b8",
+                          fontWeight: isActive ? "bold" : "normal",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        Y &le; {lvl}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
