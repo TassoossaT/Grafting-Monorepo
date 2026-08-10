@@ -1,6 +1,6 @@
 # ADR-0022: a wall is free geometry, not a grid address
 
-- Status: Proposed
+- Status: Accepted
 - Decision owner: repository-owner
 - Decision date: 2026-08-08
 - Record: DEC-060
