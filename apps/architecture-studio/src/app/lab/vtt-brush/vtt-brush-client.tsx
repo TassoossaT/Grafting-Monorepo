@@ -23,6 +23,12 @@ const CAMERA = {
   far: 100,
 };
 
+// Centralized helper for 3D cell index calculation (Finding 5)
+export function cellIndex(x: number, y: number, level: number, width: number, height: number): number {
+  const lvlIdx = Math.max(0, level - 1);
+  return lvlIdx * (width * height) + y * width + x;
+}
+
 // DEC-060 & ADR-0022: Per-cell terrain floor module surface assignment
 export enum TerrainSurfaceKind {
   StoneFloor = 0,
@@ -52,14 +58,19 @@ export interface BoundarySegment {
   readonly blocksVision: boolean;
 }
 
-// Terrain per-cell patch (terrain module assignment per cell)
-export interface TerrainPatch {
-  readonly type: "terrain";
+// Terrain cell patch for individual cell edits
+export interface TerrainCellPatch {
   readonly x: number;
   readonly y: number;
   readonly level: number;
   readonly previousSurface: TerrainSurfaceKind;
   readonly newSurface: TerrainSurfaceKind;
+}
+
+// Terrain stroke patch grouping full brush stroke (Finding 2)
+export interface TerrainStrokePatch {
+  readonly type: "terrain-stroke";
+  readonly patches: readonly TerrainCellPatch[];
   readonly timestamp: number;
 }
 
@@ -72,9 +83,28 @@ export interface BoundaryPatch {
   readonly timestamp: number;
 }
 
-export type HistoryAction = TerrainPatch | BoundaryPatch;
+export type HistoryAction = TerrainStrokePatch | BoundaryPatch;
 
 export type ToolMode = "wall" | "door" | "window" | "opening" | "floor" | "erase";
+
+// Registered 3D visual kinds mapping (Finding 1)
+const VISUAL_KINDS: Record<string, { kind: string; color: number }> = {
+  "stone-floor": { kind: "vtt-stone-floor", color: 0x3b82f6 },
+  "wood-deck": { kind: "vtt-wood-deck", color: 0x854d0e },
+  "dirt-ground": { kind: "vtt-dirt-ground", color: 0x78350f },
+  "grass-tile": { kind: "vtt-grass-tile", color: 0x15803d },
+  wall: { kind: "vtt-boundary-wall", color: 0xdc2626 },
+  door: { kind: "vtt-boundary-door", color: 0xf59e0b },
+  window: { kind: "vtt-boundary-window", color: 0x06b6d4 },
+  opening: { kind: "vtt-boundary-opening", color: 0x64748b },
+};
+
+const SURFACE_KIND_KEYS: Record<TerrainSurfaceKind, string> = {
+  [TerrainSurfaceKind.StoneFloor]: "stone-floor",
+  [TerrainSurfaceKind.WoodDeck]: "wood-deck",
+  [TerrainSurfaceKind.DirtGround]: "dirt-ground",
+  [TerrainSurfaceKind.GrassTile]: "grass-tile",
+};
 
 const SURFACE_COLORS: Record<TerrainSurfaceKind, number> = {
   [TerrainSurfaceKind.StoneFloor]: 0x3b82f6, // Blue Stone
@@ -104,10 +134,11 @@ export default function VttBrushClient() {
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [clipLevel, setClipLevel] = useState<number>(3);
   const [toolMode, setToolMode] = useState<ToolMode>("wall");
+  const [brushSize, setBrushSize] = useState<1 | 3>(1);
   const [activeSurface, setActiveSurface] = useState<TerrainSurfaceKind>(TerrainSurfaceKind.StoneFloor);
   const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
 
-  // Per-cell terrain floor grid: index = (level - 1) * (width * height) + y * width + x
+  // Per-cell terrain floor grid: indexed via cellIndex(x, y, level, width, height)
   const [terrainGrid, setTerrainGrid] = useState<Uint8Array>(() => {
     const cells = new Uint8Array(8 * 8 * 3);
     cells.fill(TerrainSurfaceKind.StoneFloor);
@@ -116,7 +147,6 @@ export default function VttBrushClient() {
 
   // Free-geometry boundary segments stored in world space with stable IDs (ADR-0022)
   const [boundaries, setBoundaries] = useState<readonly BoundarySegment[]>(() => {
-    // Initial sample free-geometry boundary segments on level 1
     const initialSegments: BoundarySegment[] = [
       {
         id: "b-outer-north",
@@ -165,7 +195,7 @@ export default function VttBrushClient() {
   // Drawing state for free-geometry boundary placement
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
 
-  // Unified Undo/Redo stack for both terrain patches and boundary patches
+  // Unified Undo/Redo stack for both terrain stroke patches and boundary patches
   const [undoStack, setUndoStack] = useState<readonly HistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<readonly HistoryAction[]>([]);
 
@@ -173,18 +203,18 @@ export default function VttBrushClient() {
   const engineRef = useRef<RenderEngine | null>(null);
   const viewRef = useRef<View | null>(null);
 
-  // Resize terrain grid buffer when width, height, or levels change
+  // Resize terrain grid buffer when width, height, or levels change (Finding 6)
   useEffect(() => {
     setTerrainGrid((prev) => {
       const newSize = width * height * levels;
       if (prev.length === newSize) return prev;
       const next = new Uint8Array(newSize);
       next.fill(TerrainSurfaceKind.StoneFloor);
-      for (let l = 0; l < Math.min(levels, 3); l++) {
+      for (let l = 1; l <= Math.min(levels, 3); l++) {
         for (let y = 0; y < Math.min(height, 8); y++) {
           for (let x = 0; x < Math.min(width, 8); x++) {
-            const oldIdx = l * 64 + y * 8 + x;
-            const newIdx = l * (width * height) + y * width + x;
+            const oldIdx = (l - 1) * 64 + y * 8 + x;
+            const newIdx = cellIndex(x, y, l, width, height);
             if (oldIdx < prev.length) {
               next[newIdx] = prev[oldIdx];
             }
@@ -195,33 +225,48 @@ export default function VttBrushClient() {
     });
   }, [width, height, levels]);
 
-  // Handle terrain floor painting per cell
+  // Handle terrain floor painting with stroke batching and no updater side-effects (Finding 2 & 3)
   const handleCellClick = useCallback((cx: number, cy: number) => {
-    if (toolMode === "floor") {
-      setTerrainGrid((prev) => {
-        const idx = (activeLevel - 1) * (width * height) + cy * width + cx;
-        const prevKind = prev[idx] as TerrainSurfaceKind;
-        if (prevKind === activeSurface) return prev;
+    if (toolMode !== "floor") return;
 
-        const next = new Uint8Array(prev);
-        next[idx] = activeSurface;
+    const minX = brushSize === 3 ? Math.max(0, cx - 1) : cx;
+    const maxX = brushSize === 3 ? Math.min(width - 1, cx + 1) : cx;
+    const minY = brushSize === 3 ? Math.max(0, cy - 1) : cy;
+    const maxY = brushSize === 3 ? Math.min(height - 1, cy + 1) : cy;
 
-        const patch: TerrainPatch = {
-          type: "terrain",
-          x: cx,
-          y: cy,
-          level: activeLevel,
-          previousSurface: prevKind,
-          newSurface: activeSurface,
-          timestamp: Date.now(),
-        };
+    const cellPatches: TerrainCellPatch[] = [];
+    const nextGrid = new Uint8Array(terrainGrid);
 
-        setUndoStack((u) => [...u, patch]);
-        setRedoStack([]);
-        return next;
-      });
+    for (let py = minY; py <= maxY; py++) {
+      for (let px = minX; px <= maxX; px++) {
+        const idx = cellIndex(px, py, activeLevel, width, height);
+        const prevKind = nextGrid[idx] as TerrainSurfaceKind;
+        if (prevKind !== activeSurface) {
+          nextGrid[idx] = activeSurface;
+          cellPatches.push({
+            x: px,
+            y: py,
+            level: activeLevel,
+            previousSurface: prevKind,
+            newSurface: activeSurface,
+          });
+        }
+      }
     }
-  }, [activeLevel, activeSurface, height, toolMode, width]);
+
+    if (cellPatches.length > 0) {
+      const strokePatch: TerrainStrokePatch = {
+        type: "terrain-stroke",
+        patches: cellPatches,
+        timestamp: Date.now(),
+      };
+
+      // State updates executed outside functional updaters (Finding 3)
+      setTerrainGrid(nextGrid);
+      setUndoStack((u) => [...u, strokePatch]);
+      setRedoStack([]);
+    }
+  }, [activeLevel, activeSurface, brushSize, height, terrainGrid, toolMode, width]);
 
   // Handle free-geometry boundary drawing (wall / door / window / opening)
   const handleNodeClick = useCallback((nx: number, ny: number) => {
@@ -231,7 +276,6 @@ export default function VttBrushClient() {
       setDrawStart({ x: nx, y: ny });
     } else {
       if (drawStart.x !== nx || drawStart.y !== ny) {
-        // Compute world coordinates for boundary segment start and end
         const cellSize = 1.0;
         const halfW = (width * cellSize) / 2;
         const halfH = (height * cellSize) / 2;
@@ -257,16 +301,13 @@ export default function VttBrushClient() {
         };
 
         if (toolMode === "erase") {
-          // Erase boundary segment near clicked point
-          setBoundaries((prev) => {
-            const match = prev.find(
-              (b) =>
-                b.level === activeLevel &&
-                Math.abs(b.start.x - worldStartX) < 0.5 &&
-                Math.abs(b.start.z - worldStartZ) < 0.5
-            );
-            if (!match) return prev;
-
+          const match = boundaries.find(
+            (b) =>
+              b.level === activeLevel &&
+              Math.abs(b.start.x - worldStartX) < 0.5 &&
+              Math.abs(b.start.z - worldStartZ) < 0.5
+          );
+          if (match) {
             const patch: BoundaryPatch = {
               type: "boundary",
               id: match.id,
@@ -274,14 +315,11 @@ export default function VttBrushClient() {
               segment: match,
               timestamp: Date.now(),
             };
+            setBoundaries((prev) => prev.filter((b) => b.id !== match.id));
             setUndoStack((u) => [...u, patch]);
             setRedoStack([]);
-            return prev.filter((b) => b.id !== match.id);
-          });
+          }
         } else {
-          // Add new free-geometry boundary segment
-          setBoundaries((prev) => [...prev, newSegment]);
-
           const patch: BoundaryPatch = {
             type: "boundary",
             id: newSegment.id,
@@ -289,28 +327,29 @@ export default function VttBrushClient() {
             segment: newSegment,
             timestamp: Date.now(),
           };
+          setBoundaries((prev) => [...prev, newSegment]);
           setUndoStack((u) => [...u, patch]);
           setRedoStack([]);
         }
       }
       setDrawStart(null);
     }
-  }, [activeLevel, drawStart, height, snapToGrid, toolMode, width]);
+  }, [activeLevel, boundaries, drawStart, height, snapToGrid, toolMode, width]);
 
-  // Undo action
+  // Undo action: reverts entire stroke or boundary patch at once (Finding 2)
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((u) => u.slice(0, -1));
     setRedoStack((r) => [...r, lastAction]);
 
-    if (lastAction.type === "terrain") {
-      setTerrainGrid((prev) => {
-        const next = new Uint8Array(prev);
-        const idx = (lastAction.level - 1) * (width * height) + lastAction.y * width + lastAction.x;
-        next[idx] = lastAction.previousSurface;
-        return next;
-      });
+    if (lastAction.type === "terrain-stroke") {
+      const next = new Uint8Array(terrainGrid);
+      for (const patch of lastAction.patches) {
+        const idx = cellIndex(patch.x, patch.y, patch.level, width, height);
+        next[idx] = patch.previousSurface;
+      }
+      setTerrainGrid(next);
     } else {
       if (lastAction.action === "add") {
         setBoundaries((prev) => prev.filter((b) => b.id !== lastAction.id));
@@ -318,7 +357,7 @@ export default function VttBrushClient() {
         setBoundaries((prev) => [...prev, lastAction.segment]);
       }
     }
-  }, [height, undoStack, width]);
+  }, [height, terrainGrid, undoStack, width]);
 
   // Redo action
   const handleRedo = useCallback(() => {
@@ -327,13 +366,13 @@ export default function VttBrushClient() {
     setRedoStack((r) => r.slice(0, -1));
     setUndoStack((u) => [...u, actionToRedo]);
 
-    if (actionToRedo.type === "terrain") {
-      setTerrainGrid((prev) => {
-        const next = new Uint8Array(prev);
-        const idx = (actionToRedo.level - 1) * (width * height) + actionToRedo.y * width + actionToRedo.x;
-        next[idx] = actionToRedo.newSurface;
-        return next;
-      });
+    if (actionToRedo.type === "terrain-stroke") {
+      const next = new Uint8Array(terrainGrid);
+      for (const patch of actionToRedo.patches) {
+        const idx = cellIndex(patch.x, patch.y, patch.level, width, height);
+        next[idx] = patch.newSurface;
+      }
+      setTerrainGrid(next);
     } else {
       if (actionToRedo.action === "add") {
         setBoundaries((prev) => [...prev, actionToRedo.segment]);
@@ -341,7 +380,7 @@ export default function VttBrushClient() {
         setBoundaries((prev) => prev.filter((b) => b.id !== actionToRedo.id));
       }
     }
-  }, [height, redoStack, width]);
+  }, [height, redoStack, terrainGrid, width]);
 
   // Reset map
   const handleResetMap = useCallback(() => {
@@ -352,49 +391,50 @@ export default function VttBrushClient() {
     setDrawStart(null);
   }, [width, height, levels]);
 
-  // Build 3D mesh data for WebGL scene (Terrain Quads + Extruded Boundary Segment Boxes)
-  const meshData = useMemo(() => {
+  // Build 3D mesh data partitioned by visual kind for distinct WebGL material colors (Finding 1)
+  const meshDataByKind = useMemo(() => {
     const visibleLevels = Math.min(clipLevel, levels);
-    const positionsList: number[] = [];
-    const indicesList: number[] = [];
-    let vertCount = 0;
-
     const cellSize = 1.0;
     const halfW = (width * cellSize) / 2;
     const halfH = (height * cellSize) / 2;
 
-    // 1. Build terrain surface quads
-    for (let l = 0; l < visibleLevels; l++) {
-      const yBase = l * 1.2;
+    const map: Record<string, { positions: number[]; indices: number[] }> = {};
+    for (const key of Object.keys(VISUAL_KINDS)) {
+      map[key] = { positions: [], indices: [] };
+    }
+
+    // 1. Terrain floor surface quads grouped by surface material kind
+    for (let l = 1; l <= visibleLevels; l++) {
+      const yBase = (l - 1) * 1.2;
 
       for (let cy = 0; cy < height; cy++) {
         for (let cx = 0; cx < width; cx++) {
-          const idx = l * (width * height) + cy * width + cx;
+          const idx = cellIndex(cx, cy, l, width, height);
           const surfaceKind = (terrainGrid[idx] ?? TerrainSurfaceKind.StoneFloor) as TerrainSurfaceKind;
+          const key = SURFACE_KIND_KEYS[surfaceKind] ?? "stone-floor";
+          const group = map[key];
 
           const minX = cx * cellSize - halfW;
           const maxX = (cx + 1) * cellSize - halfW;
           const minZ = cy * cellSize - halfH;
           const maxZ = (cy + 1) * cellSize - halfH;
 
-          // Top quad face for terrain surface
-          positionsList.push(
+          const base = group.positions.length / 3;
+          group.positions.push(
             minX, yBase, minZ,
             maxX, yBase, minZ,
             maxX, yBase, maxZ,
             minX, yBase, maxZ
           );
-
-          const base = vertCount;
-          indicesList.push(base, base + 2, base + 1, base, base + 3, base + 2);
-          vertCount += 4;
+          group.indices.push(base, base + 2, base + 1, base, base + 3, base + 2);
         }
       }
     }
 
-    // 2. Build free-geometry boundary segment boxes (ADR-0022)
+    // 2. Free-geometry boundary segment boxes grouped by boundary kind
     const visibleBoundaries = boundaries.filter((b) => b.level <= visibleLevels);
     for (const seg of visibleBoundaries) {
+      const group = map[seg.kind] ?? map["wall"];
       const { start, end, height: wallH } = seg;
       const thickness = 0.15;
 
@@ -409,7 +449,6 @@ export default function VttBrushClient() {
       const y0 = start.y;
       const y1 = start.y + wallH;
 
-      // 8 extruded box vertices in world space
       const p0 = [start.x + nx, y0, start.z + nz];
       const p1 = [start.x - nx, y0, start.z - nz];
       const p2 = [end.x - nx, y0, end.z - nz];
@@ -420,41 +459,41 @@ export default function VttBrushClient() {
       const p6 = [end.x - nx, y1, end.z - nz];
       const p7 = [end.x + nx, y1, end.z + nz];
 
-      const boxVerts = [...p0, ...p1, ...p2, ...p3, ...p4, ...p5, ...p6, ...p7];
-      for (const val of boxVerts) {
-        positionsList.push(val);
-      }
+      const base = group.positions.length / 3;
+      group.positions.push(...p0, ...p1, ...p2, ...p3, ...p4, ...p5, ...p6, ...p7);
 
-      const base = vertCount;
-      // Top, Bottom, Sides
-      indicesList.push(base + 4, base + 6, base + 5, base + 4, base + 7, base + 6);
-      indicesList.push(base + 0, base + 1, base + 5, base + 0, base + 5, base + 4);
-      indicesList.push(base + 1, base + 2, base + 6, base + 1, base + 6, base + 5);
-      indicesList.push(base + 2, base + 3, base + 7, base + 2, base + 7, base + 6);
-      indicesList.push(base + 3, base + 0, base + 4, base + 3, base + 4, base + 7);
-
-      vertCount += 8;
+      group.indices.push(base + 4, base + 6, base + 5, base + 4, base + 7, base + 6);
+      group.indices.push(base + 0, base + 1, base + 5, base + 0, base + 5, base + 4);
+      group.indices.push(base + 1, base + 2, base + 6, base + 1, base + 6, base + 5);
+      group.indices.push(base + 2, base + 3, base + 7, base + 2, base + 7, base + 6);
+      group.indices.push(base + 3, base + 0, base + 4, base + 3, base + 4, base + 7);
     }
 
-    return {
-      positions: new Float32Array(positionsList),
-      indices: new Uint32Array(indicesList),
-    };
-  }, [width, height, levels, clipLevel, terrainGrid, boundaries]);
+    const result: Record<string, { positions: Float32Array; indices: Uint32Array }> = {};
+    for (const [k, v] of Object.entries(map)) {
+      result[k] = {
+        positions: new Float32Array(v.positions),
+        indices: new Uint32Array(v.indices),
+      };
+    }
+    return result;
+  }, [boundaries, clipLevel, height, levels, terrainGrid, width]);
 
-  // Setup WebGL rendering engine
+  // Setup WebGL rendering engine with all registered visual kinds (Finding 1)
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
 
     const registry = createVisualRegistry();
-    registry.register({
-      kind: "vtt-map-mesh",
-      describe: (params: { positions: Float32Array; indices: Uint32Array }) => ({
-        geometry: { shape: "mesh" as const, data: { positions: params.positions, indices: params.indices } },
-        material: { surface: "lit" as const, color: 0x3b82f6, doubleSided: true, flatShading: true },
-      }),
-    });
+    for (const info of Object.values(VISUAL_KINDS)) {
+      registry.register({
+        kind: info.kind,
+        describe: (params: { positions: Float32Array; indices: Uint32Array }) => ({
+          geometry: { shape: "mesh" as const, data: { positions: params.positions, indices: params.indices } },
+          material: { surface: "lit" as const, color: info.color, doubleSided: true, flatShading: true },
+        }),
+      });
+    }
 
     const engine = createEngine({
       registry,
@@ -500,37 +539,44 @@ export default function VttBrushClient() {
     };
   }, []);
 
-  // Update render engine mesh when meshData updates
+  // Update WebGL scene items per visual kind when meshDataByKind updates (Finding 1)
   useEffect(() => {
     const engine = engineRef.current;
     const view = viewRef.current;
     if (engine === null || view === null) return;
 
-    engine.scene.put(
-      {
-        id: "vtt-map-mesh-01",
-        layer: MAP_LAYER,
-        visual: {
-          kind: "vtt-map-mesh",
-          params: {
-            positions: meshData.positions,
-            indices: meshData.indices,
-          },
-        },
-      },
-      "engine"
-    );
-    engine.frame(performance.now());
-  }, [meshData]);
+    for (const [key, data] of Object.entries(meshDataByKind)) {
+      const info = VISUAL_KINDS[key];
+      if (!info) continue;
 
-  // Capture canvas preview for trials registry
-  const handleCapturePreview = useCallback(() => {
-    if (containerRef.current) {
-      const canvas = containerRef.current.querySelector("canvas");
-      if (canvas) {
-        const dataUrl = canvas.toDataURL("image/png");
-        writePreviewImage(CANDIDATE, dataUrl);
+      if (data.positions.length > 0) {
+        engine.scene.put(
+          {
+            id: `vtt-mesh-${key}`,
+            layer: MAP_LAYER,
+            visual: {
+              kind: info.kind,
+              params: {
+                positions: data.positions,
+                indices: data.indices,
+              },
+            },
+          },
+          "engine"
+        );
+      } else {
+        engine.scene.remove(`vtt-mesh-${key}`, "engine");
       }
+    }
+    engine.frame(performance.now());
+  }, [meshDataByKind]);
+
+  // Capture canvas preview using view.capture() API (Finding 4)
+  const handleCapturePreview = useCallback(() => {
+    const view = viewRef.current;
+    if (view) {
+      const dataUrl = view.capture();
+      writePreviewImage(CANDIDATE, dataUrl);
     }
   }, []);
 
@@ -583,7 +629,7 @@ export default function VttBrushClient() {
 
             {toolMode === "floor" && (
               <>
-                <Text content="2. Terrain Floor Material" strong />
+                <Text content="2. Terrain Floor Material & Brush Size" strong />
                 <select
                   value={activeSurface}
                   onChange={(e) => setActiveSurface(Number(e.target.value) as TerrainSurfaceKind)}
@@ -600,6 +646,26 @@ export default function VttBrushClient() {
                   <option value={TerrainSurfaceKind.DirtGround}>🟤 Dirt Ground</option>
                   <option value={TerrainSurfaceKind.GrassTile}>🟩 Grass Surface</option>
                 </select>
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  {([1, 3] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      onClick={() => setBrushSize(sz)}
+                      style={{
+                        flex: 1,
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        border: brushSize === sz ? "2px solid #3b82f6" : "1px solid #334155",
+                        backgroundColor: brushSize === sz ? "#1e293b" : "#0f172a",
+                        color: brushSize === sz ? "#60a5fa" : "#94a3b8",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      {sz}x{sz} Brush
+                    </button>
+                  ))}
+                </div>
               </>
             )}
 
@@ -777,7 +843,7 @@ export default function VttBrushClient() {
                   {drawStart !== null
                     ? `Click end point (Start: ${drawStart.x}, ${drawStart.y})`
                     : toolMode === "floor"
-                    ? "Click cell to paint terrain"
+                    ? `Click cell to paint terrain (${brushSize}x${brushSize})`
                     : "Click start point to draw boundary"}
                 </span>
               </div>
@@ -851,7 +917,7 @@ export default function VttBrushClient() {
                 >
                   {Array.from({ length: height }).map((_, gy) =>
                     Array.from({ length: width }).map((_, gx) => {
-                      const idx = (activeLevel - 1) * (width * height) + gy * width + gx;
+                      const idx = cellIndex(gx, gy, activeLevel, width, height);
                       const surface = (terrainGrid[idx] ?? TerrainSurfaceKind.StoneFloor) as TerrainSurfaceKind;
                       const hex = SURFACE_COLORS[surface] ?? 0x3b82f6;
                       const bgCss = `#${hex.toString(16).padStart(6, "0")}33`; // Semi-transparent terrain floor
@@ -959,8 +1025,8 @@ export default function VttBrushClient() {
                 [...undoStack].reverse().slice(0, 10).map((a, i) => (
                   <div key={`${a.timestamp}-${i}`} style={{ color: "#94a3b8" }}>
                     #{undoStack.length - i}:{" "}
-                    {a.type === "terrain"
-                      ? `Terrain L${a.level} (${a.x},${a.y})`
+                    {a.type === "terrain-stroke"
+                      ? `Terrain Stroke (${a.patches.length} cells)`
                       : `Boundary ${a.action.toUpperCase()} ${a.segment.kind}`}
                   </div>
                 ))
