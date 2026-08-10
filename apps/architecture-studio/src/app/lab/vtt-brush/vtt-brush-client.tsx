@@ -10,12 +10,6 @@ import {
   type RenderEngine,
   type View,
 } from "@grafting/render-3d";
-export enum CellRole {
-  Surface = 0,
-  Boundary = 1,
-  Passage = 2,
-  Opening = 3,
-}
 import { writePreviewImage } from "../../../lab-preview-storage.ts";
 
 const CANDIDATE = "vtt-brush";
@@ -29,44 +23,78 @@ const CAMERA = {
   far: 100,
 };
 
-export interface CellPatch {
+// DEC-060 & ADR-0022: Per-cell terrain floor module surface assignment
+export enum TerrainSurfaceKind {
+  StoneFloor = 0,
+  WoodDeck = 1,
+  DirtGround = 2,
+  GrassTile = 3,
+}
+
+// DEC-060 & ADR-0022: Free-geometry boundary kind carrying behavioral flags
+export type BoundaryKind = "wall" | "door" | "window" | "opening";
+
+export interface Vec3World {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+// DEC-060 & ADR-0022: BoundarySegment stored as free geometry in world coordinates with a stable id
+export interface BoundarySegment {
+  readonly id: string; // Stable UUID/string id, NEVER a CellId or grid index
+  readonly level: number;
+  readonly start: Vec3World; // World coordinate start position
+  readonly end: Vec3World;   // World coordinate end position
+  readonly height: number;  // Vertical extent in world units
+  readonly kind: BoundaryKind;
+  readonly blocksMovement: boolean;
+  readonly blocksVision: boolean;
+}
+
+// Terrain per-cell patch (terrain module assignment per cell)
+export interface TerrainPatch {
+  readonly type: "terrain";
   readonly x: number;
   readonly y: number;
   readonly level: number;
-  readonly previousRole: CellRole;
-  readonly newRole: CellRole;
+  readonly previousSurface: TerrainSurfaceKind;
+  readonly newSurface: TerrainSurfaceKind;
   readonly timestamp: number;
 }
 
-export type BrushMode = "wall" | "floor" | "passage" | "opening" | "erase";
-
-interface GridState {
-  readonly width: number;
-  readonly height: number;
-  readonly levels: number;
-  // 3D cell roles grid: index = level * (width * height) + y * width + x
-  readonly cells: Uint8Array;
+// Free-geometry boundary patch for walls/doors (keyed by stable segment ID)
+export interface BoundaryPatch {
+  readonly type: "boundary";
+  readonly id: string; // Segment ID
+  readonly action: "add" | "remove";
+  readonly segment: BoundarySegment;
+  readonly timestamp: number;
 }
 
-const BRUSH_ROLE_MAP: Record<Exclude<BrushMode, "erase">, CellRole> = {
-  wall: CellRole.Boundary,
-  floor: CellRole.Surface,
-  passage: CellRole.Passage,
-  opening: CellRole.Opening,
+export type HistoryAction = TerrainPatch | BoundaryPatch;
+
+export type ToolMode = "wall" | "door" | "window" | "opening" | "floor" | "erase";
+
+const SURFACE_COLORS: Record<TerrainSurfaceKind, number> = {
+  [TerrainSurfaceKind.StoneFloor]: 0x3b82f6, // Blue Stone
+  [TerrainSurfaceKind.WoodDeck]: 0x854d0e,   // Brown Wood
+  [TerrainSurfaceKind.DirtGround]: 0x78350f, // Dark Dirt
+  [TerrainSurfaceKind.GrassTile]: 0x15803d,  // Green Grass
 };
 
-const ROLE_COLORS: Record<CellRole, number> = {
-  [CellRole.Surface]: 0x3b82f6,  // Blue Stone Floor
-  [CellRole.Boundary]: 0xef4444, // Red Solid Wall
-  [CellRole.Passage]: 0x10b981,  // Emerald Walkable Corridor
-  [CellRole.Opening]: 0xf59e0b,  // Amber Doorway/Opening
+const BOUNDARY_COLORS: Record<BoundaryKind, number> = {
+  wall: 0xdc2626,    // Crimson Wall
+  door: 0xf59e0b,    // Amber Door
+  window: 0x06b6d4,  // Cyan Window
+  opening: 0x64748b, // Archway Gray
 };
 
-const ROLE_NAMES: Record<CellRole, string> = {
-  [CellRole.Surface]: "Surface (Floor)",
-  [CellRole.Boundary]: "Boundary (Wall)",
-  [CellRole.Passage]: "Passage (Corridor)",
-  [CellRole.Opening]: "Opening (Door/Arch)",
+const BOUNDARY_HEIGHTS: Record<BoundaryKind, number> = {
+  wall: 1.2,
+  door: 1.0,
+  window: 0.8,
+  opening: 1.2,
 };
 
 export default function VttBrushClient() {
@@ -75,212 +103,346 @@ export default function VttBrushClient() {
   const [levels, setLevels] = useState<number>(3);
   const [activeLevel, setActiveLevel] = useState<number>(1);
   const [clipLevel, setClipLevel] = useState<number>(3);
-  const [brushMode, setBrushMode] = useState<BrushMode>("wall");
-  const [brushSize, setBrushSize] = useState<1 | 3>(1);
+  const [toolMode, setToolMode] = useState<ToolMode>("wall");
+  const [activeSurface, setActiveSurface] = useState<TerrainSurfaceKind>(TerrainSurfaceKind.StoneFloor);
+  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
 
-  // Map state grid
-  const [grid, setGrid] = useState<GridState>(() => {
-    const size = 8 * 8 * 3;
-    const cells = new Uint8Array(size);
-    // Initialize ground level (level 0) as Surface floor
-    for (let y = 0; y < 8; y++) {
-      for (let x = 0; x < 8; x++) {
-        cells[y * 8 + x] = CellRole.Surface;
-      }
-    }
-    // Add outer boundary walls on level 0
-    for (let x = 0; x < 8; x++) {
-      cells[0 * 8 + x] = CellRole.Boundary;
-      cells[7 * 8 + x] = CellRole.Boundary;
-    }
-    for (let y = 0; y < 8; y++) {
-      cells[y * 8 + 0] = CellRole.Boundary;
-      cells[y * 8 + 7] = CellRole.Boundary;
-    }
-    // Add an opening door
-    cells[3 * 8 + 0] = CellRole.Opening;
-    return { width: 8, height: 8, levels: 3, cells };
+  // Per-cell terrain floor grid: index = (level - 1) * (width * height) + y * width + x
+  const [terrainGrid, setTerrainGrid] = useState<Uint8Array>(() => {
+    const cells = new Uint8Array(8 * 8 * 3);
+    cells.fill(TerrainSurfaceKind.StoneFloor);
+    return cells;
   });
 
-  // Undo / Redo patch stacks
-  const [undoStack, setUndoStack] = useState<readonly CellPatch[]>([]);
-  const [redoStack, setRedoStack] = useState<readonly CellPatch[]>([]);
+  // Free-geometry boundary segments stored in world space with stable IDs (ADR-0022)
+  const [boundaries, setBoundaries] = useState<readonly BoundarySegment[]>(() => {
+    // Initial sample free-geometry boundary segments on level 1
+    const initialSegments: BoundarySegment[] = [
+      {
+        id: "b-outer-north",
+        level: 1,
+        start: { x: -4, y: 0, z: -4 },
+        end: { x: 4, y: 0, z: -4 },
+        height: 1.2,
+        kind: "wall",
+        blocksMovement: true,
+        blocksVision: true,
+      },
+      {
+        id: "b-outer-west",
+        level: 1,
+        start: { x: -4, y: 0, z: -4 },
+        end: { x: -4, y: 0, z: 4 },
+        height: 1.2,
+        kind: "wall",
+        blocksMovement: true,
+        blocksVision: true,
+      },
+      {
+        id: "b-door-south",
+        level: 1,
+        start: { x: -1, y: 0, z: 4 },
+        end: { x: 1, y: 0, z: 4 },
+        height: 1.0,
+        kind: "door",
+        blocksMovement: true,
+        blocksVision: false,
+      },
+      {
+        id: "b-window-east",
+        level: 1,
+        start: { x: 4, y: 0, z: -2 },
+        end: { x: 4, y: 0, z: 2 },
+        height: 0.8,
+        kind: "window",
+        blocksMovement: true,
+        blocksVision: false,
+      },
+    ];
+    return initialSegments;
+  });
+
+  // Drawing state for free-geometry boundary placement
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+
+  // Unified Undo/Redo stack for both terrain patches and boundary patches
+  const [undoStack, setUndoStack] = useState<readonly HistoryAction[]>([]);
+  const [redoStack, setRedoStack] = useState<readonly HistoryAction[]>([]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<RenderEngine | null>(null);
   const viewRef = useRef<View | null>(null);
 
-  // Apply a brush paint stroke at (x, y) on active level
-  const applyPaintStroke = useCallback((targetX: number, targetY: number) => {
-    setGrid((prev) => {
-      const { width: w, height: h, levels: l, cells: prevCells } = prev;
-      if (targetX < 0 || targetX >= w || targetY < 0 || targetY >= h) return prev;
-
-      const targetRole = brushMode === "erase" ? CellRole.Surface : BRUSH_ROLE_MAP[brushMode];
-      const nextCells = new Uint8Array(prevCells);
-      const patches: CellPatch[] = [];
-
-      const minX = brushSize === 3 ? Math.max(0, targetX - 1) : targetX;
-      const maxX = brushSize === 3 ? Math.min(w - 1, targetX + 1) : targetX;
-      const minY = brushSize === 3 ? Math.max(0, targetY - 1) : targetY;
-      const maxY = brushSize === 3 ? Math.min(h - 1, targetY + 1) : targetY;
-
-      for (let cy = minY; cy <= maxY; cy++) {
-        for (let cx = minX; cx <= maxX; cx++) {
-          const idx = (activeLevel - 1) * (w * h) + cy * w + cx;
-          const prevRole = nextCells[idx] as CellRole;
-          if (prevRole !== targetRole) {
-            nextCells[idx] = targetRole;
-            patches.push({
-              x: cx,
-              y: cy,
-              level: activeLevel,
-              previousRole: prevRole,
-              newRole: targetRole,
-              timestamp: Date.now(),
-            });
+  // Resize terrain grid buffer when width, height, or levels change
+  useEffect(() => {
+    setTerrainGrid((prev) => {
+      const newSize = width * height * levels;
+      if (prev.length === newSize) return prev;
+      const next = new Uint8Array(newSize);
+      next.fill(TerrainSurfaceKind.StoneFloor);
+      for (let l = 0; l < Math.min(levels, 3); l++) {
+        for (let y = 0; y < Math.min(height, 8); y++) {
+          for (let x = 0; x < Math.min(width, 8); x++) {
+            const oldIdx = l * 64 + y * 8 + x;
+            const newIdx = l * (width * height) + y * width + x;
+            if (oldIdx < prev.length) {
+              next[newIdx] = prev[oldIdx];
+            }
           }
         }
       }
-
-      if (patches.length > 0) {
-        setUndoStack((u) => [...u, ...patches]);
-        setRedoStack([]);
-      }
-
-      return { width: w, height: h, levels: l, cells: nextCells };
+      return next;
     });
-  }, [activeLevel, brushMode, brushSize]);
-
-  // Undo last patch
-  const handleUndo = useCallback(() => {
-    if (undoStack.length === 0) return;
-    const lastPatch = undoStack[undoStack.length - 1];
-    setUndoStack((u) => u.slice(0, -1));
-    setRedoStack((r) => [...r, lastPatch]);
-
-    setGrid((prev) => {
-      const nextCells = new Uint8Array(prev.cells);
-      const idx = (lastPatch.level - 1) * (prev.width * prev.height) + lastPatch.y * prev.width + lastPatch.x;
-      nextCells[idx] = lastPatch.previousRole;
-      return { ...prev, cells: nextCells };
-    });
-  }, [undoStack]);
-
-  // Redo last undone patch
-  const handleRedo = useCallback(() => {
-    if (redoStack.length === 0) return;
-    const patchToRedo = redoStack[redoStack.length - 1];
-    setRedoStack((r) => r.slice(0, -1));
-    setUndoStack((u) => [...u, patchToRedo]);
-
-    setGrid((prev) => {
-      const nextCells = new Uint8Array(prev.cells);
-      const idx = (patchToRedo.level - 1) * (prev.width * prev.height) + patchToRedo.y * prev.width + patchToRedo.x;
-      nextCells[idx] = patchToRedo.newRole;
-      return { ...prev, cells: nextCells };
-    });
-  }, [redoStack]);
-
-  // Reset grid
-  const handleClearMap = useCallback(() => {
-    const size = width * height * levels;
-    const cells = new Uint8Array(size);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        cells[y * width + x] = CellRole.Surface;
-      }
-    }
-    setGrid({ width, height, levels, cells });
-    setUndoStack([]);
-    setRedoStack([]);
   }, [width, height, levels]);
 
-  // Generate 3D geometry from current grid state with clip plane filtering (level <= clipLevel)
-  const meshData = useMemo(() => {
-    const { width: w, height: h, cells } = grid;
-    const visibleLevels = Math.min(clipLevel, grid.levels);
+  // Handle terrain floor painting per cell
+  const handleCellClick = useCallback((cx: number, cy: number) => {
+    if (toolMode === "floor") {
+      setTerrainGrid((prev) => {
+        const idx = (activeLevel - 1) * (width * height) + cy * width + cx;
+        const prevKind = prev[idx] as TerrainSurfaceKind;
+        if (prevKind === activeSurface) return prev;
 
+        const next = new Uint8Array(prev);
+        next[idx] = activeSurface;
+
+        const patch: TerrainPatch = {
+          type: "terrain",
+          x: cx,
+          y: cy,
+          level: activeLevel,
+          previousSurface: prevKind,
+          newSurface: activeSurface,
+          timestamp: Date.now(),
+        };
+
+        setUndoStack((u) => [...u, patch]);
+        setRedoStack([]);
+        return next;
+      });
+    }
+  }, [activeLevel, activeSurface, height, toolMode, width]);
+
+  // Handle free-geometry boundary drawing (wall / door / window / opening)
+  const handleNodeClick = useCallback((nx: number, ny: number) => {
+    if (toolMode === "floor") return;
+
+    if (drawStart === null) {
+      setDrawStart({ x: nx, y: ny });
+    } else {
+      if (drawStart.x !== nx || drawStart.y !== ny) {
+        // Compute world coordinates for boundary segment start and end
+        const cellSize = 1.0;
+        const halfW = (width * cellSize) / 2;
+        const halfH = (height * cellSize) / 2;
+
+        const worldStartX = snapToGrid ? drawStart.x * cellSize - halfW : drawStart.x;
+        const worldStartZ = snapToGrid ? drawStart.y * cellSize - halfH : drawStart.y;
+        const worldEndX = snapToGrid ? nx * cellSize - halfW : nx;
+        const worldEndZ = snapToGrid ? ny * cellSize - halfH : ny;
+
+        const levelY = (activeLevel - 1) * 1.2;
+        const kind = toolMode === "erase" ? "wall" : toolMode;
+        const segId = `b-seg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        const newSegment: BoundarySegment = {
+          id: segId,
+          level: activeLevel,
+          start: { x: worldStartX, y: levelY, z: worldStartZ },
+          end: { x: worldEndX, y: levelY, z: worldEndZ },
+          height: BOUNDARY_HEIGHTS[kind] ?? 1.2,
+          kind,
+          blocksMovement: kind === "wall" || kind === "door" || kind === "window",
+          blocksVision: kind === "wall",
+        };
+
+        if (toolMode === "erase") {
+          // Erase boundary segment near clicked point
+          setBoundaries((prev) => {
+            const match = prev.find(
+              (b) =>
+                b.level === activeLevel &&
+                Math.abs(b.start.x - worldStartX) < 0.5 &&
+                Math.abs(b.start.z - worldStartZ) < 0.5
+            );
+            if (!match) return prev;
+
+            const patch: BoundaryPatch = {
+              type: "boundary",
+              id: match.id,
+              action: "remove",
+              segment: match,
+              timestamp: Date.now(),
+            };
+            setUndoStack((u) => [...u, patch]);
+            setRedoStack([]);
+            return prev.filter((b) => b.id !== match.id);
+          });
+        } else {
+          // Add new free-geometry boundary segment
+          setBoundaries((prev) => [...prev, newSegment]);
+
+          const patch: BoundaryPatch = {
+            type: "boundary",
+            id: newSegment.id,
+            action: "add",
+            segment: newSegment,
+            timestamp: Date.now(),
+          };
+          setUndoStack((u) => [...u, patch]);
+          setRedoStack([]);
+        }
+      }
+      setDrawStart(null);
+    }
+  }, [activeLevel, drawStart, height, snapToGrid, toolMode, width]);
+
+  // Undo action
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const lastAction = undoStack[undoStack.length - 1];
+    setUndoStack((u) => u.slice(0, -1));
+    setRedoStack((r) => [...r, lastAction]);
+
+    if (lastAction.type === "terrain") {
+      setTerrainGrid((prev) => {
+        const next = new Uint8Array(prev);
+        const idx = (lastAction.level - 1) * (width * height) + lastAction.y * width + lastAction.x;
+        next[idx] = lastAction.previousSurface;
+        return next;
+      });
+    } else {
+      if (lastAction.action === "add") {
+        setBoundaries((prev) => prev.filter((b) => b.id !== lastAction.id));
+      } else {
+        setBoundaries((prev) => [...prev, lastAction.segment]);
+      }
+    }
+  }, [height, undoStack, width]);
+
+  // Redo action
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const actionToRedo = redoStack[redoStack.length - 1];
+    setRedoStack((r) => r.slice(0, -1));
+    setUndoStack((u) => [...u, actionToRedo]);
+
+    if (actionToRedo.type === "terrain") {
+      setTerrainGrid((prev) => {
+        const next = new Uint8Array(prev);
+        const idx = (actionToRedo.level - 1) * (width * height) + actionToRedo.y * width + actionToRedo.x;
+        next[idx] = actionToRedo.newSurface;
+        return next;
+      });
+    } else {
+      if (actionToRedo.action === "add") {
+        setBoundaries((prev) => [...prev, actionToRedo.segment]);
+      } else {
+        setBoundaries((prev) => prev.filter((b) => b.id !== actionToRedo.id));
+      }
+    }
+  }, [height, redoStack, width]);
+
+  // Reset map
+  const handleResetMap = useCallback(() => {
+    setTerrainGrid(new Uint8Array(width * height * levels));
+    setBoundaries([]);
+    setUndoStack([]);
+    setRedoStack([]);
+    setDrawStart(null);
+  }, [width, height, levels]);
+
+  // Build 3D mesh data for WebGL scene (Terrain Quads + Extruded Boundary Segment Boxes)
+  const meshData = useMemo(() => {
+    const visibleLevels = Math.min(clipLevel, levels);
     const positionsList: number[] = [];
     const indicesList: number[] = [];
-    const colorsList: number[] = [];
     let vertCount = 0;
 
     const cellSize = 1.0;
-    const halfW = (w * cellSize) / 2;
-    const halfH = (h * cellSize) / 2;
+    const halfW = (width * cellSize) / 2;
+    const halfH = (height * cellSize) / 2;
 
+    // 1. Build terrain surface quads
     for (let l = 0; l < visibleLevels; l++) {
-      const yLevelBase = l * 1.2;
+      const yBase = l * 1.2;
 
-      for (let cy = 0; cy < h; cy++) {
-        for (let cx = 0; cx < w; cx++) {
-          const idx = l * (w * h) + cy * w + cx;
-          const role = cells[idx] as CellRole;
-          const hexColor = ROLE_COLORS[role] ?? 0x3b82f6;
-
-          // Convert hex color to RGB floats [0, 1]
-          const r = ((hexColor >> 16) & 0xff) / 255;
-          const g = ((hexColor >> 8) & 0xff) / 255;
-          const b = (hexColor & 0xff) / 255;
+      for (let cy = 0; cy < height; cy++) {
+        for (let cx = 0; cx < width; cx++) {
+          const idx = l * (width * height) + cy * width + cx;
+          const surfaceKind = (terrainGrid[idx] ?? TerrainSurfaceKind.StoneFloor) as TerrainSurfaceKind;
 
           const minX = cx * cellSize - halfW;
           const maxX = (cx + 1) * cellSize - halfW;
           const minZ = cy * cellSize - halfH;
           const maxZ = (cy + 1) * cellSize - halfH;
 
-          let minY = yLevelBase;
-          let maxY = yLevelBase + (role === CellRole.Boundary ? 1.0 : role === CellRole.Opening ? 0.6 : 0.15);
-
-          // 8 box vertices
-          // 0: minX, minY, minZ
-          // 1: maxX, minY, minZ
-          // 2: maxX, minY, maxZ
-          // 3: minX, minY, maxZ
-          // 4: minX, maxY, minZ
-          // 5: maxX, maxY, minZ
-          // 6: maxX, maxY, maxZ
-          // 7: minX, maxY, maxZ
-          const v = [
-            minX, minY, minZ,
-            maxX, minY, minZ,
-            maxX, minY, maxZ,
-            minX, minY, maxZ,
-            minX, maxY, minZ,
-            maxX, maxY, minZ,
-            maxX, maxY, maxZ,
-            minX, maxY, maxZ,
-          ];
-
-          for (let i = 0; i < 8; i++) {
-            positionsList.push(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]);
-            colorsList.push(r, g, b);
-          }
+          // Top quad face for terrain surface
+          positionsList.push(
+            minX, yBase, minZ,
+            maxX, yBase, minZ,
+            maxX, yBase, maxZ,
+            minX, yBase, maxZ
+          );
 
           const base = vertCount;
-          // Quads: Top face (4,6,5, 4,7,6)
-          indicesList.push(base + 4, base + 6, base + 5, base + 4, base + 7, base + 6);
-          // Front, Back, Left, Right faces if solid block
-          if (role === CellRole.Boundary || role === CellRole.Opening) {
-            indicesList.push(base + 0, base + 1, base + 5, base + 0, base + 5, base + 4);
-            indicesList.push(base + 1, base + 2, base + 6, base + 1, base + 6, base + 5);
-            indicesList.push(base + 2, base + 3, base + 7, base + 2, base + 7, base + 6);
-            indicesList.push(base + 3, base + 0, base + 4, base + 3, base + 4, base + 7);
-          }
-
-          vertCount += 8;
+          indicesList.push(base, base + 2, base + 1, base, base + 3, base + 2);
+          vertCount += 4;
         }
       }
+    }
+
+    // 2. Build free-geometry boundary segment boxes (ADR-0022)
+    const visibleBoundaries = boundaries.filter((b) => b.level <= visibleLevels);
+    for (const seg of visibleBoundaries) {
+      const { start, end, height: wallH } = seg;
+      const thickness = 0.15;
+
+      const dx = end.x - start.x;
+      const dz = end.z - start.z;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.001) continue;
+
+      const nx = (-dz / len) * (thickness / 2);
+      const nz = (dx / len) * (thickness / 2);
+
+      const y0 = start.y;
+      const y1 = start.y + wallH;
+
+      // 8 extruded box vertices in world space
+      const p0 = [start.x + nx, y0, start.z + nz];
+      const p1 = [start.x - nx, y0, start.z - nz];
+      const p2 = [end.x - nx, y0, end.z - nz];
+      const p3 = [end.x + nx, y0, end.z + nz];
+
+      const p4 = [start.x + nx, y1, start.z + nz];
+      const p5 = [start.x - nx, y1, start.z - nz];
+      const p6 = [end.x - nx, y1, end.z - nz];
+      const p7 = [end.x + nx, y1, end.z + nz];
+
+      const boxVerts = [...p0, ...p1, ...p2, ...p3, ...p4, ...p5, ...p6, ...p7];
+      for (const val of boxVerts) {
+        positionsList.push(val);
+      }
+
+      const base = vertCount;
+      // Top, Bottom, Sides
+      indicesList.push(base + 4, base + 6, base + 5, base + 4, base + 7, base + 6);
+      indicesList.push(base + 0, base + 1, base + 5, base + 0, base + 5, base + 4);
+      indicesList.push(base + 1, base + 2, base + 6, base + 1, base + 6, base + 5);
+      indicesList.push(base + 2, base + 3, base + 7, base + 2, base + 7, base + 6);
+      indicesList.push(base + 3, base + 0, base + 4, base + 3, base + 4, base + 7);
+
+      vertCount += 8;
     }
 
     return {
       positions: new Float32Array(positionsList),
       indices: new Uint32Array(indicesList),
-      colors: new Float32Array(colorsList),
     };
-  }, [grid, clipLevel]);
+  }, [width, height, levels, clipLevel, terrainGrid, boundaries]);
 
-  // Setup WebGL engine
+  // Setup WebGL rendering engine
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
@@ -299,7 +461,7 @@ export default function VttBrushClient() {
       autoplay: false,
       lights: [
         { light: "ambient", intensity: 0.9 },
-        { light: "directional", intensity: 0.8, direction: { x: 5, y: 10, z: 6 } },
+        { light: "directional", intensity: 0.85, direction: { x: 5, y: 10, z: 6 } },
       ],
     });
 
@@ -361,7 +523,7 @@ export default function VttBrushClient() {
     engine.frame(performance.now());
   }, [meshData]);
 
-  // Capture canvas preview
+  // Capture canvas preview for trials registry
   const handleCapturePreview = useCallback(() => {
     if (containerRef.current) {
       const canvas = containerRef.current.querySelector("canvas");
@@ -372,118 +534,167 @@ export default function VttBrushClient() {
     }
   }, []);
 
-  // Role counters
-  const roleCounts = useMemo(() => {
-    const counts = { [CellRole.Surface]: 0, [CellRole.Boundary]: 0, [CellRole.Passage]: 0, [CellRole.Opening]: 0 };
-    for (let i = 0; i < grid.cells.length; i++) {
-      const r = grid.cells[i] as CellRole;
-      counts[r] = (counts[r] || 0) + 1;
-    }
-    return counts;
-  }, [grid]);
-
   return (
     <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16, color: "#f8fafc" }}>
       <div>
-        <Text content="VTT Interactive 3D Map Construction Brush (/lab/vtt-brush)" strong />
+        <Text content="VTT Free-Geometry Boundary & Construction Studio (/lab/vtt-brush)" strong />
         <br />
         <Text
-          content="Phase 4 implementation: Interactive 3D Brush tools (Wall, Floor, Corridor, Doorway, Erase), reactive CellStatePatch Undo/Redo, and Y-clip floor cutaway navigation."
+          content="ADR-0022 & DEC-060 Compliant: Free-geometry boundary segments (walls/doors/windows) in world coordinates with grid snapping, per-cell terrain modules, and reactive Undo/Redo."
           tone="muted"
         />
       </div>
 
-      {/* Main split view: Left Control Panels, Center 3D Viewport & Interactive Grid */}
+      {/* Main layout: Controls Toolbar (Left), 3D Viewport & 2D Vector Canvas (Center), Metrics & Log (Right) */}
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr 280px", gap: 16 }}>
-        {/* Left Toolbar Panel */}
-        <Card ariaLabel="Brush Control Toolbar">
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 12 }}>
-            <Text content="1. Brush Tool Selection" strong />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {(["wall", "floor", "passage", "opening", "erase"] as const).map((mode) => (
+        {/* Left Toolbar */}
+        <Card ariaLabel="Construction Toolbar">
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: 12 }}>
+            <Text content="1. Tool Selection" strong />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {(["wall", "door", "window", "opening", "floor", "erase"] as const).map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setBrushMode(mode)}
+                  onClick={() => {
+                    setToolMode(mode);
+                    setDrawStart(null);
+                  }}
                   style={{
-                    padding: "8px 12px",
+                    padding: "8px 10px",
                     borderRadius: 6,
-                    border: brushMode === mode ? "2px solid #3b82f6" : "1px solid #334155",
-                    backgroundColor: brushMode === mode ? "#1e293b" : "#0f172a",
-                    color: brushMode === mode ? "#60a5fa" : "#94a3b8",
-                    fontWeight: brushMode === mode ? "bold" : "normal",
+                    border: toolMode === mode ? "2px solid #3b82f6" : "1px solid #334155",
+                    backgroundColor: toolMode === mode ? "#1e293b" : "#0f172a",
+                    color: toolMode === mode ? "#60a5fa" : "#94a3b8",
+                    fontWeight: toolMode === mode ? "bold" : "normal",
                     cursor: "pointer",
                     textTransform: "capitalize",
+                    fontSize: 13,
                   }}
                 >
                   {mode === "wall" && "🧱 Wall"}
+                  {mode === "door" && "🚪 Door"}
+                  {mode === "window" && "🪟 Window"}
+                  {mode === "opening" && "🏛️ Archway"}
                   {mode === "floor" && "🟨 Floor"}
-                  {mode === "passage" && "🟩 Corridor"}
-                  {mode === "opening" && "🚪 Door"}
                   {mode === "erase" && "🧹 Erase"}
                 </button>
               ))}
             </div>
 
-            <Text content="2. Brush Size" strong />
-            <div style={{ display: "flex", gap: 8 }}>
-              {([1, 3] as const).map((sz) => (
-                <button
-                  key={sz}
-                  onClick={() => setBrushSize(sz)}
+            {toolMode === "floor" && (
+              <>
+                <Text content="2. Terrain Floor Material" strong />
+                <select
+                  value={activeSurface}
+                  onChange={(e) => setActiveSurface(Number(e.target.value) as TerrainSurfaceKind)}
                   style={{
-                    flex: 1,
-                    padding: "6px 12px",
+                    padding: "6px 10px",
                     borderRadius: 6,
-                    border: brushSize === sz ? "2px solid #3b82f6" : "1px solid #334155",
-                    backgroundColor: brushSize === sz ? "#1e293b" : "#0f172a",
-                    color: brushSize === sz ? "#60a5fa" : "#94a3b8",
-                    cursor: "pointer",
+                    backgroundColor: "#0f172a",
+                    color: "#f8fafc",
+                    border: "1px solid #334155",
                   }}
                 >
-                  {sz}x{sz} Brush
-                </button>
-              ))}
+                  <option value={TerrainSurfaceKind.StoneFloor}>🟦 Stone Floor</option>
+                  <option value={TerrainSurfaceKind.WoodDeck}>🪵 Wood Deck</option>
+                  <option value={TerrainSurfaceKind.DirtGround}>🟤 Dirt Ground</option>
+                  <option value={TerrainSurfaceKind.GrassTile}>🟩 Grass Surface</option>
+                </select>
+              </>
+            )}
+
+            <Text content="3. Map Grid Dimensions (Interactive)" strong />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 60 }}>Width:</span>
+                <input
+                  type="range"
+                  min={4}
+                  max={16}
+                  value={width}
+                  onChange={(e) => setWidth(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontWeight: "bold", width: 30 }}>{width}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 60 }}>Height:</span>
+                <input
+                  type="range"
+                  min={4}
+                  max={16}
+                  value={height}
+                  onChange={(e) => setHeight(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontWeight: "bold", width: 30 }}>{height}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 60 }}>Levels:</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={5}
+                  value={levels}
+                  onChange={(e) => setLevels(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontWeight: "bold", width: 30 }}>{levels}</span>
+              </div>
             </div>
 
-            <Text content="3. Active Floor Level (Editing)" strong />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Text content="4. Floor Level Navigation & Clip Plane Shader" strong />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 60 }}>Edit Lvl:</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={levels}
+                  value={activeLevel}
+                  onChange={(e) => setActiveLevel(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontWeight: "bold", width: 30 }}>L{activeLevel}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 60 }}>3D Clip:</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={levels}
+                  value={clipLevel}
+                  onChange={(e) => setClipLevel(Number(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ fontWeight: "bold", width: 30 }}>Y&le;{clipLevel}</span>
+              </div>
+            </div>
+
+            <Text content="5. Authoring Snapping (DEC-060)" strong />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input
-                type="range"
-                min={1}
-                max={grid.levels}
-                value={activeLevel}
-                onChange={(e) => setActiveLevel(Number(e.target.value))}
-                style={{ flex: 1 }}
+                type="checkbox"
+                checked={snapToGrid}
+                onChange={(e) => setSnapToGrid(e.target.checked)}
               />
-              <span style={{ fontWeight: "bold", width: 60 }}>Lvl {activeLevel}</span>
-            </div>
+              Snap Boundary Endpoints to Sub-Grid
+            </label>
 
-            <Text content="4. WebGL Floor Cutaway Shader (Clip Y <= Limit)" strong />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="range"
-                min={1}
-                max={grid.levels}
-                value={clipLevel}
-                onChange={(e) => setClipLevel(Number(e.target.value))}
-                style={{ flex: 1 }}
-              />
-              <span style={{ fontWeight: "bold", width: 60 }}>Clip: {clipLevel}</span>
-            </div>
-
-            <Text content="5. History & Reactive Mutation Ledger" strong />
+            <Text content="6. Reactive History Ledger (Undo/Redo)" strong />
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={handleUndo}
                 disabled={undoStack.length === 0}
                 style={{
                   flex: 1,
-                  padding: "8px 12px",
+                  padding: "8px",
                   borderRadius: 6,
                   border: "1px solid #334155",
                   backgroundColor: undoStack.length > 0 ? "#3b82f6" : "#1e293b",
                   color: undoStack.length > 0 ? "#ffffff" : "#64748b",
                   cursor: undoStack.length > 0 ? "pointer" : "not-allowed",
+                  fontSize: 13,
                 }}
               >
                 ↰ Undo ({undoStack.length})
@@ -493,29 +704,31 @@ export default function VttBrushClient() {
                 disabled={redoStack.length === 0}
                 style={{
                   flex: 1,
-                  padding: "8px 12px",
+                  padding: "8px",
                   borderRadius: 6,
                   border: "1px solid #334155",
                   backgroundColor: redoStack.length > 0 ? "#3b82f6" : "#1e293b",
                   color: redoStack.length > 0 ? "#ffffff" : "#64748b",
                   cursor: redoStack.length > 0 ? "pointer" : "not-allowed",
+                  fontSize: 13,
                 }}
               >
                 ↱ Redo ({redoStack.length})
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <button
-                onClick={handleClearMap}
+                onClick={handleResetMap}
                 style={{
                   flex: 1,
-                  padding: "6px 12px",
+                  padding: "6px",
                   borderRadius: 6,
                   border: "1px solid #dc2626",
                   backgroundColor: "#450a0a",
                   color: "#fca5a5",
                   cursor: "pointer",
+                  fontSize: 12,
                 }}
               >
                 Reset Map
@@ -524,12 +737,13 @@ export default function VttBrushClient() {
                 onClick={handleCapturePreview}
                 style={{
                   flex: 1,
-                  padding: "6px 12px",
+                  padding: "6px",
                   borderRadius: 6,
                   border: "1px solid #059669",
                   backgroundColor: "#064e3b",
                   color: "#6ee7b7",
                   cursor: "pointer",
+                  fontSize: 12,
                 }}
               >
                 Capture Preview
@@ -538,14 +752,14 @@ export default function VttBrushClient() {
           </div>
         </Card>
 
-        {/* Center Canvas & Interactive 2D Grid Painting Canvas */}
+        {/* Center: 3D Viewport & 2D Free-Geometry Vector Canvas */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {/* 3D WebGL Viewport */}
           <div
             ref={containerRef}
             style={{
               width: "100%",
-              height: "400px",
+              height: "380px",
               borderRadius: 8,
               overflow: "hidden",
               border: "1px solid #334155",
@@ -554,101 +768,200 @@ export default function VttBrushClient() {
             }}
           />
 
-          {/* Interactive 2D Painter Grid for Active Level */}
-          <Card ariaLabel="2D Grid Brush Painter">
+          {/* 2D Free Geometry Authoring Canvas */}
+          <Card ariaLabel="2D Vector Boundary Authoring Canvas">
             <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Text content={`Interactive Paint Grid (Level ${activeLevel}) — Click cells to paint`} strong />
-                <span style={{ fontSize: 12, color: "#94a3b8" }}>Mode: {brushMode.toUpperCase()} ({brushSize}x{brushSize})</span>
+                <Text content={`Free-Geometry Canvas (Level ${activeLevel}) — ${toolMode.toUpperCase()} Tool`} strong />
+                <span style={{ fontSize: 12, color: "#94a3b8" }}>
+                  {drawStart !== null
+                    ? `Click end point (Start: ${drawStart.x}, ${drawStart.y})`
+                    : toolMode === "floor"
+                    ? "Click cell to paint terrain"
+                    : "Click start point to draw boundary"}
+                </span>
               </div>
 
+              {/* Grid Canvas with Snap Nodes and Vector Boundary Segments */}
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${grid.width}, 1fr)`,
-                  gap: 2,
-                  backgroundColor: "#1e293b",
-                  padding: 4,
+                  position: "relative",
+                  width: "100%",
+                  height: "260px",
+                  backgroundColor: "#0f172a",
                   borderRadius: 6,
                   border: "1px solid #334155",
-                  maxWidth: 500,
-                  margin: "0 auto",
+                  overflow: "hidden",
                 }}
               >
-                {Array.from({ length: grid.height }).map((_, gy) =>
-                  Array.from({ length: grid.width }).map((_, gx) => {
-                    const idx = (activeLevel - 1) * (grid.width * grid.height) + gy * grid.width + gx;
-                    const role = grid.cells[idx] as CellRole;
-                    const hex = ROLE_COLORS[role] ?? 0x3b82f6;
-                    const colorCss = `#${hex.toString(16).padStart(6, "0")}`;
+                {/* SVG Overlay for Free-Geometry Boundary Vectors */}
+                <svg
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {boundaries
+                    .filter((b) => b.level === activeLevel)
+                    .map((b) => {
+                      const cellSize = 1.0;
+                      const halfW = (width * cellSize) / 2;
+                      const halfH = (height * cellSize) / 2;
 
-                    return (
-                      <button
-                        key={`${gx}-${gy}`}
-                        onClick={() => applyPaintStroke(gx, gy)}
-                        style={{
-                          aspectRatio: "1",
-                          backgroundColor: colorCss,
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: 2,
-                          cursor: "pointer",
-                          transition: "transform 0.1s, filter 0.1s",
-                        }}
-                        title={`Cell (${gx}, ${gy}) Lvl ${activeLevel}: ${ROLE_NAMES[role]}`}
-                      />
-                    );
-                  })
-                )}
+                      const svgX1 = ((b.start.x + halfW) / (width * cellSize)) * 100;
+                      const svgY1 = ((b.start.z + halfH) / (height * cellSize)) * 100;
+                      const svgX2 = ((b.end.x + halfW) / (width * cellSize)) * 100;
+                      const svgY2 = ((b.end.z + halfH) / (height * cellSize)) * 100;
+
+                      const hex = BOUNDARY_COLORS[b.kind] ?? 0xdc2626;
+                      const strokeColor = `#${hex.toString(16).padStart(6, "0")}`;
+
+                      return (
+                        <g key={b.id}>
+                          <line
+                            x1={`${svgX1}%`}
+                            y1={`${svgY1}%`}
+                            x2={`${svgX2}%`}
+                            y2={`${svgY2}%`}
+                            stroke={strokeColor}
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                          />
+                          <circle cx={`${svgX1}%`} cy={`${svgY1}%`} r="4" fill={strokeColor} />
+                          <circle cx={`${svgX2}%`} cy={`${svgY2}%`} r="4" fill={strokeColor} />
+                        </g>
+                      );
+                    })}
+                </svg>
+
+                {/* 2D Interactive Node Grid for Painting & Vector Snapping */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${width}, 1fr)`,
+                    gap: 2,
+                    padding: 4,
+                    height: "100%",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  {Array.from({ length: height }).map((_, gy) =>
+                    Array.from({ length: width }).map((_, gx) => {
+                      const idx = (activeLevel - 1) * (width * height) + gy * width + gx;
+                      const surface = (terrainGrid[idx] ?? TerrainSurfaceKind.StoneFloor) as TerrainSurfaceKind;
+                      const hex = SURFACE_COLORS[surface] ?? 0x3b82f6;
+                      const bgCss = `#${hex.toString(16).padStart(6, "0")}33`; // Semi-transparent terrain floor
+
+                      const isSelectedStart = drawStart?.x === gx && drawStart?.y === gy;
+
+                      return (
+                        <button
+                          key={`${gx}-${gy}`}
+                          onClick={() => {
+                            if (toolMode === "floor") {
+                              handleCellClick(gx, gy);
+                            } else {
+                              handleNodeClick(gx, gy);
+                            }
+                          }}
+                          style={{
+                            backgroundColor: isSelectedStart ? "#3b82f6" : bgCss,
+                            border: isSelectedStart ? "2px solid #60a5fa" : "1px dashed rgba(255,255,255,0.1)",
+                            borderRadius: 3,
+                            cursor: "pointer",
+                            position: "relative",
+                          }}
+                          title={`Cell (${gx}, ${gy}) Lvl ${activeLevel}`}
+                        />
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           </Card>
         </div>
 
-        {/* Right Stats & Patch Log Panel */}
-        <Card ariaLabel="Patch Log and Metrics">
+        {/* Right Stats & Log Panel */}
+        <Card ariaLabel="Boundary & Patch Log">
           <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 12 }}>
-            <Text content="6. Cell Role Breakdown" strong />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13 }}>
+            <Text content="7. Active Free-Geometry Boundaries" strong />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#60a5fa" }}>🟦 Surface (Floor):</span>
-                <span>{roleCounts[CellRole.Surface]}</span>
+                <span style={{ color: "#f87171" }}>🧱 Walls:</span>
+                <span>{boundaries.filter((b) => b.kind === "wall").length}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#f87171" }}>🟥 Boundary (Wall):</span>
-                <span>{roleCounts[CellRole.Boundary]}</span>
+                <span style={{ color: "#fbbf24" }}>🚪 Doors:</span>
+                <span>{boundaries.filter((b) => b.kind === "door").length}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#34d399" }}>🟩 Passage (Corridor):</span>
-                <span>{roleCounts[CellRole.Passage]}</span>
+                <span style={{ color: "#38bdf8" }}>🪟 Windows:</span>
+                <span>{boundaries.filter((b) => b.kind === "window").length}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#fbbf24" }}>🟨 Opening (Door):</span>
-                <span>{roleCounts[CellRole.Opening]}</span>
+                <span style={{ color: "#94a3b8" }}>🏛️ Openings:</span>
+                <span>{boundaries.filter((b) => b.kind === "opening").length}</span>
               </div>
             </div>
 
-            <Text content="7. Live Mutation Ledger Log" strong />
+            <Text content="8. Boundary Segments (ADR-0022)" strong />
             <div
               style={{
-                maxHeight: 280,
+                maxHeight: 180,
                 overflowY: "auto",
                 display: "flex",
                 flexDirection: "column",
                 gap: 4,
                 fontFamily: "monospace",
-                fontSize: 11,
+                fontSize: 10,
                 backgroundColor: "#0f172a",
-                padding: 8,
+                padding: 6,
+                borderRadius: 6,
+                border: "1px solid #1e293b",
+              }}
+            >
+              {boundaries.length === 0 ? (
+                <span style={{ color: "#64748b" }}>No boundary segments drawn.</span>
+              ) : (
+                boundaries.map((b) => (
+                  <div key={b.id} style={{ color: "#cbd5e1" }}>
+                    [{b.kind.toUpperCase()}] L{b.level}: ({b.start.x.toFixed(1)},{b.start.z.toFixed(1)})&rarr;(
+                    {b.end.x.toFixed(1)},{b.end.z.toFixed(1)})
+                  </div>
+                ))
+              )}
+            </div>
+
+            <Text content="9. Live Mutation History Log" strong />
+            <div
+              style={{
+                maxHeight: 160,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                fontFamily: "monospace",
+                fontSize: 10,
+                backgroundColor: "#0f172a",
+                padding: 6,
                 borderRadius: 6,
                 border: "1px solid #1e293b",
               }}
             >
               {undoStack.length === 0 ? (
-                <span style={{ color: "#64748b" }}>No patches applied yet. Click grid to paint walls/doors.</span>
+                <span style={{ color: "#64748b" }}>No actions recorded.</span>
               ) : (
-                [...undoStack].reverse().slice(0, 15).map((p, i) => (
-                  <div key={`${p.timestamp}-${i}`} style={{ color: "#cbd5e1" }}>
-                    Patch #{undoStack.length - i}: L{p.level} ({p.x},{p.y}) &rarr; {ROLE_NAMES[p.newRole].split(" ")[0]}
+                [...undoStack].reverse().slice(0, 10).map((a, i) => (
+                  <div key={`${a.timestamp}-${i}`} style={{ color: "#94a3b8" }}>
+                    #{undoStack.length - i}:{" "}
+                    {a.type === "terrain"
+                      ? `Terrain L${a.level} (${a.x},${a.y})`
+                      : `Boundary ${a.action.toUpperCase()} ${a.segment.kind}`}
                   </div>
                 ))
               )}
