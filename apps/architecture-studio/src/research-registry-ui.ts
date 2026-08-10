@@ -19,6 +19,7 @@ export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "terrain-transitions": "/lab/terrain-transitions",
   "terrain-tileset": "/lab/terrain-tileset",
   "mesh-procedural": "/lab/mesh-procedural",
+  "vtt-brush": "/lab/vtt-brush",
 };
 
 
