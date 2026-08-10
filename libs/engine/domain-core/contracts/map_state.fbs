@@ -1,38 +1,69 @@
-// FlatBuffers schema for VTT Map State & Procedural Prism Grid Mesh (DEC-049, DEC-060)
-// Defines binary zero-copy wire representation for authoritative state, cell roles,
-// freeform vertex displacement offsets, and discrete cell mutation patches.
+// Wire schema for VTT map state: per-cell terrain/module assignment plus
+// free-geometry construction boundaries (DEC-049, DEC-060).
+//
+// Boundaries are NOT grid-addressed: DEC-060/ADR-0022
+// (`docs/adr/ADR-0022-wall-representation-free-geometry.md`) requires a
+// wall, door, window or other construction-layer boundary to be geometry in
+// world coordinates carrying behavioural flags, never a cell or
+// `(cell, face)` pair, and forbids any persisted record from holding a
+// `CellId` -- it is a positional index into one solve, not a stable
+// identity (see that ADR's corollary). Only `PrismCellAssignment` is
+// cell-indexed here, and only because that is the solver's own
+// snapshot-scoped output vocabulary (DEC-060: "this governs the
+// authoritative semantic store only").
 
 namespace Grafting.Contracts;
 
-enum CellRole : byte {
-  Surface = 0,
-  Boundary = 1,
-  Passage = 2,
-  Opening = 3
-}
-
-table Vec3Offset {
+table Vec3 {
   x: float (id: 0);
   y: float (id: 1);
   z: float (id: 2);
 }
 
-table PrismCellData {
-  id: uint32 (id: 0);
+// Terrain/structure per-cell module assignment. `cell_index` is positional
+// within this snapshot's solve only -- never referenced by any other
+// persisted record (DEC-060 corollary).
+table PrismCellAssignment {
+  cell_index: uint32 (id: 0);
   layer: uint8 (id: 1);
   x: int32 (id: 2);
   y: int32 (id: 3);
-  role: CellRole (id: 4);
-  vertex_shift: Vec3Offset (id: 5);
-  // Adjacency pointers for 6 slots: [North, East, South, West, Down, Up]
-  neighbors: [int32] (id: 6);
+  module_id: uint32 (id: 4);
+  rotation: uint8 (id: 5);
+  vertex_shift: Vec3 (id: 6);
 }
 
-table CellStatePatch {
-  cell_id: uint32 (id: 0);
-  new_role: CellRole (id: 1);
-  vertex_shift: Vec3Offset (id: 2);
-  sequence: uint64 (id: 3);
+enum BoundaryKind : byte {
+  Wall = 0,
+  Door = 1,
+  Window = 2,
+  Opening = 3
+}
+
+// A construction-layer boundary as free geometry in world coordinates
+// (DEC-060/ADR-0022). `id` is a stable geometry identity assigned when the
+// segment is authored or derived from a generated module's face -- never a
+// `CellId`.
+table BoundarySegment {
+  id: uint64 (id: 0);
+  start: Vec3 (id: 1);
+  end: Vec3 (id: 2);
+  height: float (id: 3);
+  kind: BoundaryKind (id: 4);
+  blocks_movement: bool (id: 5);
+  blocks_vision: bool (id: 6);
+}
+
+// Undo/Redo delta for a boundary edit, keyed by `BoundarySegment.id`. Never
+// carries a cell reference.
+table BoundaryPatch {
+  segment_id: uint64 (id: 0);
+  new_kind: BoundaryKind (id: 1);
+  new_start: Vec3 (id: 2);
+  new_end: Vec3 (id: 3);
+  new_height: float (id: 4);
+  removed: bool (id: 5);
+  sequence: uint64 (id: 6);
 }
 
 table MapStateMessage {
@@ -42,10 +73,11 @@ table MapStateMessage {
   seed: uint32 (id: 3);
   deformation_xy: float (id: 4);
   deformation_z: float (id: 5);
-  cells: [PrismCellData] (id: 6);
-  patches: [CellStatePatch] (id: 7);
-  sequence: uint64 (id: 8);
-  version: string (id: 9);
+  cells: [PrismCellAssignment] (id: 6);
+  boundaries: [BoundarySegment] (id: 7);
+  boundary_patches: [BoundaryPatch] (id: 8);
+  sequence: uint64 (id: 9);
+  version: string (id: 10);
 }
 
 root_type MapStateMessage;
