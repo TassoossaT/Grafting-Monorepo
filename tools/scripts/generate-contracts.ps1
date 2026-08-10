@@ -19,8 +19,10 @@ Set-Location $RepoRoot
 $schemas = @(
     "libs/engine/domain-core/contracts/command.fbs",
     "libs/engine/domain-core/contracts/domain_event.fbs",
-    "libs/engine/domain-core/contracts/snapshot.fbs"
+    "libs/engine/domain-core/contracts/snapshot.fbs",
+    "libs/engine/domain-core/contracts/map_state.fbs"
 )
+
 
 Write-Host "==> flatc --rust" -ForegroundColor Cyan
 flatc --rust -o libs/engine/domain-core/src/generated @schemas

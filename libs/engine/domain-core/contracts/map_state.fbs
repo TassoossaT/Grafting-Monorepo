@@ -1,0 +1,51 @@
+// FlatBuffers schema for VTT Map State & Procedural Prism Grid Mesh (DEC-049, DEC-060)
+// Defines binary zero-copy wire representation for authoritative state, cell roles,
+// freeform vertex displacement offsets, and discrete cell mutation patches.
+
+namespace Grafting.Contracts;
+
+enum CellRole : byte {
+  Surface = 0,
+  Boundary = 1,
+  Passage = 2,
+  Opening = 3
+}
+
+table Vec3Offset {
+  x: float (id: 0);
+  y: float (id: 1);
+  z: float (id: 2);
+}
+
+table PrismCellData {
+  id: uint32 (id: 0);
+  layer: uint8 (id: 1);
+  x: int32 (id: 2);
+  y: int32 (id: 3);
+  role: CellRole (id: 4);
+  vertex_shift: Vec3Offset (id: 5);
+  // Adjacency pointers for 6 slots: [North, East, South, West, Down, Up]
+  neighbors: [int32] (id: 6);
+}
+
+table CellStatePatch {
+  cell_id: uint32 (id: 0);
+  new_role: CellRole (id: 1);
+  vertex_shift: Vec3Offset (id: 2);
+  sequence: uint64 (id: 3);
+}
+
+table MapStateMessage {
+  width: uint32 (id: 0);
+  height: uint32 (id: 1);
+  layers: uint32 (id: 2);
+  seed: uint32 (id: 3);
+  deformation_xy: float (id: 4);
+  deformation_z: float (id: 5);
+  cells: [PrismCellData] (id: 6);
+  patches: [CellStatePatch] (id: 7);
+  sequence: uint64 (id: 8);
+  version: string (id: 9);
+}
+
+root_type MapStateMessage;
