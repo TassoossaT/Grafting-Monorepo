@@ -77,6 +77,29 @@ test("delegateEdit reports a file the agent created inside scope, without revert
   assert.deepEqual(r.revertedOutOfScope, []);
 });
 
+test("delegateEdit keeps a file created inside a brand-new subdirectory, in scope, without deleting the whole directory", async () => {
+  // Regression test: found live when a delegated research call wrote
+  // docs/research/node-lts.md into a not-yet-existing docs/ directory.
+  // `git status --porcelain` (without --untracked-files=all) collapses a
+  // wholly-new directory into a single `?? docs/` entry; that collapsed
+  // path didn't match the file-level scope, got treated as out of scope,
+  // and `git clean`ed the entire directory away -- including the file
+  // that was actually supposed to survive.
+  const root = await makeRepoWithTask("DEMO-EDIT-15");
+  const worktree = join(root, ".worktrees", "DEMO-EDIT-15");
+  const exec = (async (_cmd: string, _args: string[], options: { cwd: string }) => {
+    await mkdir(join(options.cwd, "docs", "research"), { recursive: true });
+    await writeFile(join(options.cwd, "docs", "research", "node-lts.md"), "# Node LTS\n", "utf8");
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  const result = await delegateEdit(root, { taskId: "DEMO-EDIT-15", prompt: "research", scope: ["docs/research/node-lts.md"] }, { exec });
+  assert.equal(result.ok, true);
+  const r = result as unknown as DelegateEditOk;
+  assert.deepEqual(r.changedFiles.map((f) => f.path), ["docs/research/node-lts.md"]);
+  assert.deepEqual(r.revertedOutOfScope, []);
+  assert.equal(existsSync(join(worktree, "docs", "research", "node-lts.md")), true);
+});
+
 test("delegateEdit deletes a new (untracked) file the agent created outside scope", async () => {
   const root = await makeRepoWithTask("DEMO-EDIT-3");
   const worktree = join(root, ".worktrees", "DEMO-EDIT-3");

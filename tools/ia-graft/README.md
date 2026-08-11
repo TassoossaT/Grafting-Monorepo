@@ -63,3 +63,31 @@ counts) and `contentStats.possibleContentLoss` -- a cheap, mechanical
 word-count signal, not a correctness proof. Known gap: it does not verify
 that specific expected files were actually produced, only that whatever
 did change didn't shrink suspiciously.
+
+## `delegate research` -- web research, written straight to a `.md` file
+
+```
+ia-graft delegate research --id <TASK-ID> --topic "<t>" --output-file <path.md> [--effort low|medium|high]
+```
+
+A narrow wrapper over `delegate edit` for the "go research X and save a
+doc" case specifically, evidence-tested against real `agy` calls (see
+`reference_gemini_web_research_findings` in project memory). Differs from
+just calling `delegate edit`/`delegate run` by hand in three ways:
+
+- The prompt is a fixed, tested template (search over guessing, decompose
+  broad topics into targeted searches per sub-topic, fixed Markdown shape
+  with a `## Sources` section) -- not composed per call.
+- `.ai/INDEX.md` auto-grounding is skipped (`groundInRepoContext: false`)
+  -- this repo's context map is irrelevant to an external topic, so there
+  is no reason to pay for it. Deliberately less context than `delegate
+  edit` gets by default.
+- `scope` is pinned automatically to `outputFile` alone. Gemini writes the
+  `.md` file directly, so there's no separate text-to-file conversion step
+  on the caller's side, and nothing else in the worktree can be touched.
+
+`--output-file` must end in `.md`. As with `delegate edit`, this never
+commits on its own -- run the normal task flow afterward, and a
+research-only `.md` file with nothing else touched may qualify for the
+documentation-only direct-to-`master` path in `AGENTS.md`, at the caller's
+judgment.

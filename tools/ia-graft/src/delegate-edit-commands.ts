@@ -30,6 +30,13 @@ export interface DelegateEditInput {
    * whole point of delegating work to a cheaper model in the first place.
    */
   context?: string;
+  /**
+   * Set false to skip the automatic `.ai/INDEX.md` grounding entirely.
+   * Default true. This repo's own context map is irrelevant overhead for
+   * a task that isn't about this repo -- e.g. delegated web research --
+   * and skipping it keeps the prompt smaller and cheaper for no loss.
+   */
+  groundInRepoContext?: boolean;
 }
 
 /**
@@ -57,7 +64,16 @@ interface PorcelainEntry {
   path: string;
 }
 
-/** `git status --porcelain` lines are `XY path` or `XY old -> new` for renames. */
+/**
+ * `git status --porcelain` lines are `XY path` or `XY old -> new` for
+ * renames. Every call site passes `--untracked-files=all`: without it, git
+ * collapses a WHOLE new untracked directory into one `?? dir/` entry
+ * instead of listing the files inside -- found live when a delegated edit
+ * created a file inside a not-yet-existing subdirectory (`docs/research/`)
+ * and the collapsed `docs/` entry didn't match the file-level scope, so it
+ * was wrongly treated as out-of-scope and `git clean`ed away, taking the
+ * actually-wanted file down with the whole directory.
+ */
 function parsePorcelain(porcelain: string): PorcelainEntry[] {
   return porcelain
     .split(/\r?\n/)
@@ -82,7 +98,7 @@ function parsePorcelain(porcelain: string): PorcelainEntry[] {
  * of what an untracked file looked like before the call).
  */
 async function snapshotWorktree(worktreePath: string): Promise<{ before: Map<string, string>; beforeContent: Map<string, string>; baseline: string }> {
-  const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: worktreePath });
+  const { stdout } = await execFileAsync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: worktreePath });
   const statusEntries = parsePorcelain(stdout);
   const before = new Map(statusEntries.map((entry) => [entry.path, entry.status]));
   const beforeContent = new Map<string, string>();
@@ -165,7 +181,8 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
   }
 
   const { before, beforeContent, baseline } = await snapshotWorktree(worktreePath);
-  const groundingParts = [await autoGroundingContext(repoRoot), input.context].filter((part): part is string => Boolean(part));
+  const autoContext = input.groundInRepoContext === false ? undefined : await autoGroundingContext(repoRoot);
+  const groundingParts = [autoContext, input.context].filter((part): part is string => Boolean(part));
   const fullPrompt = groundingParts.length > 0 ? `${groundingParts.join("\n\n---\n\n")}\n\n---\n\n${input.prompt}` : input.prompt;
 
   let response: { status?: string; response?: string };
@@ -176,7 +193,7 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
     return fail(`delegate edit failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  const { stdout: porcelain } = await execFileAsync("git", ["status", "--porcelain"], { cwd: worktreePath });
+  const { stdout: porcelain } = await execFileAsync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: worktreePath });
   const entries = parsePorcelain(porcelain);
 
   const revertedOutOfScope: string[] = [];
