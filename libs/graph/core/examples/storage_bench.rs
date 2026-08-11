@@ -5,10 +5,13 @@
 //! feeds `docs/benchmarks/graph-storage-2026-08-11.md`. Run with:
 //!   cargo run --release --example storage_bench -p grafting-graph-core
 
+use std::collections::HashMap;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use grafting_graph_core::{Edge, EdgeId, Graph, Node, NodeId};
+use petgraph::csr::Csr;
+use petgraph::stable_graph::{NodeIndex as PetNodeIndex, StableDiGraph};
 
 /// Deterministic xorshift PRNG so repeated runs are comparable without a
 /// `rand` dependency.
@@ -108,9 +111,12 @@ fn unflatten(spec: &GridSpec, index: usize) -> (u32, u32, u32) {
     (x, y, l)
 }
 
-/// Dense baseline: `usize` indices only, no `NodeId`/`String` allocation,
-/// no `BTreeMap` -- the floor cost E1.2 would buy by adding a second
-/// backend, per the roadmap's stated comparison.
+/// Theoretical-floor baseline: `usize` indices only, no `NodeId`/`String`
+/// allocation, no identity resolution at all, because the grid's own index
+/// math (`x, y, l -> usize`) is used directly. **Not achievable by a real
+/// `try_from_parts`-shaped constructor**, which must resolve arbitrary
+/// `String` node ids to dense indices -- kept only as a lower bound, not a
+/// candidate design.
 struct DenseGrid {
     neighbors: Vec<[u32; 6]>,
 }
@@ -128,6 +134,79 @@ fn build_dense(spec: &GridSpec) -> (DenseGrid, Duration) {
     }
     let elapsed = start.elapsed();
     (DenseGrid { neighbors }, elapsed)
+}
+
+/// Same node/edge shape `build_existing` uses, materialized as plain
+/// `String` node ids and `(source, target)` string-pair edges, so every
+/// realistic-backend candidate below is timed on identical resolvable
+/// input -- not the topology-index shortcut `build_dense` takes.
+fn grid_string_edges(spec: &GridSpec) -> (Vec<String>, Vec<(String, String)>) {
+    let mut ids = Vec::with_capacity(spec.cell_count());
+    for l in 0..spec.layers {
+        for y in 0..spec.height {
+            for x in 0..spec.width {
+                ids.push(spec.id_string(x, y, l));
+            }
+        }
+    }
+
+    let mut pairs = Vec::with_capacity(spec.cell_count() * 3);
+    for l in 0..spec.layers {
+        for y in 0..spec.height {
+            for x in 0..spec.width {
+                for neighbor in spec.neighbors(x, y, l).into_iter().flatten() {
+                    let (nx, ny, nl) = unflatten(spec, neighbor);
+                    pairs.push((spec.id_string(x, y, l), spec.id_string(nx, ny, nl)));
+                }
+            }
+        }
+    }
+    (ids, pairs)
+}
+
+/// Realistic candidate A: keep `petgraph`'s existing `StableDiGraph` engine
+/// (no engine change), swap only the identity map from `BTreeMap<String, _>`
+/// to `std::collections::HashMap<String, _>`. Isolates whether the
+/// *ordered-map* choice, not the graph engine, is the dominant cost.
+fn build_hashmap_stablegraph(ids: &[String], pairs: &[(String, String)]) -> Duration {
+    let start = Instant::now();
+    let mut graph: StableDiGraph<(), ()> = StableDiGraph::with_capacity(ids.len(), pairs.len());
+    let mut index: HashMap<&str, PetNodeIndex> = HashMap::with_capacity(ids.len());
+    for id in ids {
+        index.insert(id.as_str(), graph.add_node(()));
+    }
+    for (source, target) in pairs {
+        let a = index[source.as_str()];
+        let b = index[target.as_str()];
+        graph.add_edge(a, b, ());
+    }
+    let elapsed = start.elapsed();
+    black_box(&graph);
+    elapsed
+}
+
+/// Realistic candidate B: `petgraph::csr::Csr` (the compressed-sparse-row
+/// representation the roadmap names as `petgraph`'s own dense-read type),
+/// built via its bulk `from_sorted_edges` path -- not one `add_edge` call
+/// per edge, which the type's own docs say costs `O(|V|*|E|)` for the whole
+/// graph and would be the wrong comparison to make.
+fn build_hashmap_csr(ids: &[String], pairs: &[(String, String)]) -> Duration {
+    let start = Instant::now();
+    let mut index: HashMap<&str, u32> = HashMap::with_capacity(ids.len());
+    for (i, id) in ids.iter().enumerate() {
+        index.insert(id.as_str(), i as u32);
+    }
+    let mut resolved: Vec<(u32, u32)> = pairs
+        .iter()
+        .map(|(source, target)| (index[source.as_str()], index[target.as_str()]))
+        .collect();
+    resolved.sort_unstable();
+    resolved.dedup();
+    let csr: Csr<(), ()> =
+        Csr::from_sorted_edges(&resolved).expect("edges sorted ascending by construction");
+    let elapsed = start.elapsed();
+    black_box(&csr);
+    elapsed
 }
 
 fn bench_point_lookup_existing(graph: &Graph<(), ()>, spec: &GridSpec, rng: &mut Rng, iterations: usize) -> Duration {
@@ -206,15 +285,52 @@ fn bench_neighbor_query_dense(
     (start.elapsed(), touched)
 }
 
+/// Dispersed (non-clustered) neighbor query: `iterations` uniformly random
+/// individual cells across the whole grid, not one brush-shaped cluster.
+/// Checks whether locality (all E1.1's other numbers use a clustered
+/// stroke) was doing the existing path any favors.
+fn bench_neighbor_query_existing_dispersed(
+    graph: &Graph<(), ()>,
+    spec: &GridSpec,
+    rng: &mut Rng,
+    iterations: usize,
+) -> Duration {
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let idx = rng.next_usize(spec.cell_count());
+        let (x, y, l) = unflatten(spec, idx);
+        let id = NodeId::new(spec.id_string(x, y, l)).unwrap();
+        black_box(graph.successors(&id).unwrap());
+        black_box(graph.predecessors(&id).unwrap());
+    }
+    start.elapsed()
+}
+
+fn bench_neighbor_query_dense_dispersed(dense: &DenseGrid, rng: &mut Rng, iterations: usize) -> Duration {
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let idx = rng.next_usize(dense.neighbors.len());
+        black_box(dense.neighbors[idx]);
+    }
+    start.elapsed()
+}
+
 fn run_preset(name: &str, spec: GridSpec) {
     println!("\n=== {name}: {}x{}x{} = {} cells ===", spec.width, spec.height, spec.layers, spec.cell_count());
 
     let (graph, existing_build) = build_existing(&spec);
     let (dense, dense_build) = build_dense(&spec);
+    let (ids, pairs) = grid_string_edges(&spec);
+    let hashmap_stablegraph_build = build_hashmap_stablegraph(&ids, &pairs);
+    let hashmap_csr_build = build_hashmap_csr(&ids, &pairs);
     println!(
-        "bulk insertion   existing={:>10.3?}  dense={:>10.3?}  ratio={:.1}x",
-        existing_build,
-        dense_build,
+        "bulk insertion   existing={:>10.3?}  hashmap+stablegraph={:>10.3?}  hashmap+csr={:>10.3?}  floor(dense)={:>10.3?}",
+        existing_build, hashmap_stablegraph_build, hashmap_csr_build, dense_build,
+    );
+    println!(
+        "  speedup vs. existing: hashmap+stablegraph={:.1}x  hashmap+csr={:.1}x  floor(dense)={:.1}x",
+        existing_build.as_secs_f64() / hashmap_stablegraph_build.as_secs_f64().max(1e-12),
+        existing_build.as_secs_f64() / hashmap_csr_build.as_secs_f64().max(1e-12),
         existing_build.as_secs_f64() / dense_build.as_secs_f64().max(1e-12)
     );
 
@@ -241,10 +357,22 @@ fn run_preset(name: &str, spec: GridSpec) {
         existing_neighbor.as_secs_f64() / dense_neighbor.as_secs_f64().max(1e-12),
         existing_neighbor.as_secs_f64() * 1_000_000.0 / strokes as f64
     );
+
+    let dispersed_iterations = 20_000;
+    let existing_dispersed = bench_neighbor_query_existing_dispersed(&graph, &spec, &mut rng, dispersed_iterations);
+    let dense_dispersed = bench_neighbor_query_dense_dispersed(&dense, &mut rng, dispersed_iterations);
+    println!(
+        "dispersed query x{dispersed_iterations}  existing={:>10.3?}  dense={:>10.3?}  ratio={:.1}x  (existing/op={:.0}ns)",
+        existing_dispersed,
+        dense_dispersed,
+        existing_dispersed.as_secs_f64() / dense_dispersed.as_secs_f64().max(1e-12),
+        existing_dispersed.as_nanos() as f64 / dispersed_iterations as f64
+    );
 }
 
 fn main() {
     run_preset("small (~1k)", GridSpec { width: 18, height: 18, layers: 3 });
     run_preset("medium (~10k)", GridSpec { width: 58, height: 58, layers: 3 });
     run_preset("large (~100k)", GridSpec { width: 183, height: 183, layers: 3 });
+    run_preset("huge (~1M)", GridSpec { width: 577, height: 577, layers: 3 });
 }
