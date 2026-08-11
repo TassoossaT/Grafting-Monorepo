@@ -70,8 +70,8 @@ VTT-specific work builds on top of it. Nothing here is VTT product work.
 
 | # | Task | Status | Dificuldade | Impacto |
 | --- | --- | --- | --- | --- |
-| E1.1 | **Determinism-scope decision + measurement spike.** Full breakdown below | Open | Média | Alto — blocks E1.2 and E3.3 |
-| E1.2 | **Reconcile `CellGraph` and `grafting-graph-core::Graph` behind one trait-based operations layer.** Full breakdown below | Open, depends on E1.1 | Alta | Alto — foundational for all future graph work |
+| E1.1 | **Determinism-scope decision + measurement spike.** Full breakdown below | **Done** — see `docs/benchmarks/graph-storage-2026-08-11.md`: existing `BTreeMap`-backed path clears the frame-budget threshold with wide margin at 1k/10k/100k cells; no second storage backend needed | Média | Alto — unblocks E1.2 and E3.3 |
+| E1.2 | **Reconcile `CellGraph` and `grafting-graph-core::Graph` behind one trait-based operations layer.** Full breakdown below | Open — unblocked by E1.1; scope is now trait extraction only (deliverable 3, the second dense backend, is not justified by the measurement) | Alta | Alto — foundational for all future graph work |
 | E1.3 | Consolidate `/lab`: migrate standalone trials into node kinds on the bench registry (several already have equivalents — `heightmap.perlin`, `terrain.discretize`, `grid.irregular`, `terrain.stack`); delete `/lab/trials` once confirmed. `vtt-brush` is flagged as a likely exception (interactive editor, not a data-transform node) — full send-ready prompt below, including that `vtt-brush`'s wall model is now stale a second time | Ready — full prompt preserved below | Média | Médio — tooling hygiene, not blocking; `vtt-brush`'s own redesign is what's actually higher-stakes |
 | E1.4 | Fix `/lab/vtt-brush`'s wall mesh: currently extrudes a solid box (`thickness` offset + 5 faces) instead of a flat double-sided plane; material is already `doubleSided: true`, so the fix is dropping the box extrusion, not adding anything | Ready | Baixa | Baixo — cosmetic, isolated to one lab trial |
 | E1.5 | **Relocate *and* redesign `map_state.fbs`.** Relocation: out of `libs/engine/domain-core/contracts/`, scoped by master source §10.1 (DEC-013, `LOCKED`) specifically to the replication pipeline's own contracts (`Command`/`DomainEvent`/`ReplicationDelta`/`Snapshot`), and replication/replay is now explicitly deferred (see the note below) — `MapState` was never a replication contract to begin with. Default: relocate under `libs/graph/core` or a procgen-owned contracts directory once `E1.2` settles where graph operations live. **Redesign** (new scope, added after `ADR-0022`'s 2026-08-10 revision): the merged PR #73 schema (`BoundarySegment`/`BoundaryPatch`, free geometry) implements the now-superseded design. It needs replacing with `GraphNode`/`GraphEdge`/`ConstructionSurface` tables per the revised `ADR-0022` and `vtt-map-construction-roadmap.md`'s Phase 1 detail — this is real schema work, not a file move | Open, depends on E1.2 for destination and on the revised `ADR-0022` for shape | Média | Alto — the currently-merged contract is actively wrong relative to the accepted decision |
@@ -89,6 +89,10 @@ keeps the door open for a deterministic backend later, without either task
 having to build or benchmark one now.
 
 ### E1.1 detail — measurement spec
+
+**Executed 2026-08-11 — see `docs/benchmarks/graph-storage-2026-08-11.md`
+for the full report.** The spec below is preserved as the methodology that
+produced it, not a still-open task.
 
 **Current implementation, as read from `libs/graph/core/src/model.rs`:**
 
