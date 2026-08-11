@@ -33,7 +33,8 @@ Fetch **only** the section needed for your task:
 | **Toolchains & Native Build** | [toolchains.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/toolchains.md) | Cargo, pnpm, uv, dotnet tooling standards |
 | **Testing Strategy** | [testing.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/testing.md) | Unit, integration, ABI, contract test requirements |
 | **Backlog & Phases** | [backlog.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/backlog.md) & [phases.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/phases.md) | Implementation roadmap |
-| **VTT Map Roadmap** | [vtt-map-construction-roadmap.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/vtt-map-construction-roadmap.md) | VTT Map construction architecture & 4-phase backlog |
+| **VTT Product Roadmap** | [vtt-roadmap.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/vtt-roadmap.md) | VTT epics 1-6: Studio health, VTT architecture, map, assets, tokens, rules |
+| **VTT Map Roadmap** | [vtt-map-construction-roadmap.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/docs/architecture/vtt-map-construction-roadmap.md) | VTT Map construction architecture & 4-phase backlog (Epic 3 detail) |
 | **External Skills Catalog** | [EXTERNAL_SKILLS_CATALOG.md](file:///C:/Users/PICHAU/Desktop/Grafting%20Monorepo/.ai/registry/EXTERNAL_SKILLS_CATALOG.md) | Catalog of cloned mattpocock/skills & stitch-skills |
 
 
