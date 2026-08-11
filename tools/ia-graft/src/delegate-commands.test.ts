@@ -72,7 +72,7 @@ test("delegateRun embeds a repo file's content into the prompt sent to the CLI",
     calledArgs = args;
     return { stdout: "ok", stderr: "" };
   }) as never;
-  const result = await delegateRun(root, { prompt: "summarize this", file: "notes.md" }, { exec });
+  const result = await delegateRun(root, { prompt: "summarize this", files: ["notes.md"] }, { exec });
   assert.equal(result.ok, true);
   const sentPrompt = calledArgs[calledArgs.indexOf("-p") + 1]!;
   assert.match(sentPrompt, /summarize this/);
@@ -80,16 +80,43 @@ test("delegateRun embeds a repo file's content into the prompt sent to the CLI",
   assert.match(sentPrompt, /the file content/);
 });
 
+test("delegateRun embeds multiple files, each clearly delimited, in a single prompt", async () => {
+  const root = await makeRoot();
+  await writeFile(join(root, "a.md"), "content of a", "utf8");
+  await writeFile(join(root, "b.md"), "content of b", "utf8");
+  let calledArgs: string[] = [];
+  const exec = (async (_cmd: string, args: string[]) => {
+    calledArgs = args;
+    return { stdout: "ok", stderr: "" };
+  }) as never;
+  const result = await delegateRun(root, { prompt: "compare these", files: ["a.md", "b.md"] }, { exec });
+  assert.equal(result.ok, true);
+  const sentPrompt = calledArgs[calledArgs.indexOf("-p") + 1]!;
+  assert.match(sentPrompt, /a\.md/);
+  assert.match(sentPrompt, /content of a/);
+  assert.match(sentPrompt, /b\.md/);
+  assert.match(sentPrompt, /content of b/);
+});
+
+test("delegateRun rejects when combined --file content exceeds the size budget", async () => {
+  const root = await makeRoot();
+  await writeFile(join(root, "big-a.md"), "x".repeat(15_000), "utf8");
+  await writeFile(join(root, "big-b.md"), "x".repeat(15_000), "utf8");
+  const result = await delegateRun(root, { prompt: "hi", files: ["big-a.md", "big-b.md"] });
+  assert.equal(result.ok, false);
+  assert.match((result as { error: string }).error, /over the .*-char limit/);
+});
+
 test("delegateRun rejects a file path that escapes the repo root", async () => {
   const root = await makeRoot();
-  const result = await delegateRun(root, { prompt: "hi", file: "../outside.md" });
+  const result = await delegateRun(root, { prompt: "hi", files: ["../outside.md"] });
   assert.equal(result.ok, false);
   assert.match((result as { error: string }).error, /must be inside the repo/);
 });
 
 test("delegateRun rejects a missing file", async () => {
   const root = await makeRoot();
-  const result = await delegateRun(root, { prompt: "hi", file: "does-not-exist.md" });
+  const result = await delegateRun(root, { prompt: "hi", files: ["does-not-exist.md"] });
   assert.equal(result.ok, false);
   assert.match((result as { error: string }).error, /could not read file/);
 });
