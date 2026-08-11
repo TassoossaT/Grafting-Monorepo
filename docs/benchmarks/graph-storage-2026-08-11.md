@@ -1,12 +1,15 @@
 # Graph storage benchmark — E1.1 measurement spike — 2026-08-11
 
-Status: **complete (revised after a first pass under-scoped bulk insertion
-and only tested one alternative graph engine).** Query/traversal path:
-existing `BTreeMap`-backed `Graph<N, E>` is fast enough at every scale
-tested, up to ~1M cells — no new backend needed there. Bulk insertion (map
-generation/load) is a real, measured problem at that same scale — but the
-fix is a targeted identity-map swap inside the existing type, not the
-second dense storage backend/trait the roadmap's E1.2 detail assumed.
+Status: **complete (revised twice after follow-up questions: first widened
+scope to ~1M cells and real backend candidates, then added an indexed,
+no-`String` query comparison).** Query/traversal path: existing
+`BTreeMap`-backed `Graph<N, E>` is fast enough at every scale tested, up to
+~1M cells — no new backend needed there; an optional, non-blocking further
+win exists by skipping the `String` round-trip for purely-internal callers
+(3-10x faster, see below). Bulk insertion (map generation/load) is a real,
+measured problem at that same scale — but the fix is a targeted
+identity-map swap inside the existing type, not the second dense storage
+backend/trait the roadmap's E1.2 detail assumed.
 
 Scope: `docs/architecture/vtt-roadmap.md` E1.1. Measures whether
 `Graph<N, E>`'s existing `BTreeMap<NodeId, NodeIndex>` translation layer
@@ -106,6 +109,22 @@ suite.
 | Large | 100,467 | 513-738 ns | 76.4-83.4 µs | 2632-3504 ns |
 | **Huge** | **998,787** | **1137-1337 ns** | **95.1-104.9 µs** | **4315-4578 ns** |
 
+### Indexed (no-`String`) query, vs. the existing `String`-returning path
+
+`successors()`/`predecessors()` clone every result back to a `String`
+`NodeId` (per E1.1's own spec text: "a string clone, per neighbor"). This
+variant reuses the `hashmap+stablegraph` graph from the bulk-insertion
+comparison and calls `petgraph`'s `neighbors_directed` directly, returning
+raw `NodeIndex` — isolating that translation cost specifically, not a
+different graph engine or identity map.
+
+| Scale | Cells | Clustered speedup vs. existing | Dispersed speedup vs. existing | Dispersed ns/op |
+| --- | --- | --- | --- | --- |
+| Small | 972 | 3.3x | 5.7x | 187 |
+| Medium | 10,092 | 10.4x | 9.4x | 244 |
+| Large | 100,467 | 6.5x | 4.7x | 804 |
+| **Huge** | **998,787** | **6.1x** | **3.8x** | **1173** |
+
 ### Bulk insertion, four candidates
 
 | Scale | Cells | existing | hashmap+stablegraph | hashmap+csr | dense floor |
@@ -130,6 +149,18 @@ negligible in absolute per-frame terms — clustering was not doing the
 existing path a hidden favor large enough to matter. **This axis needs no
 new backend, confirmed now across four orders of magnitude, not just up to
 100k.**
+
+**A real, separate optimization exists on this axis too, though not a
+blocking one.** Skipping the `String` `NodeId` round-trip and returning raw
+`NodeIndex` instead is 3.3-10.4x faster (clustered) and 3.8-9.4x faster
+(dispersed) than the existing path, consistently across all four scales —
+a genuine, low-risk win for a purely-internal hot-path caller (e.g. E3.3's
+`apply_cell_patch` K-step recompute) that only needs `NodeId` at the
+boundary where it hands results back to a caller outside the graph. Because
+the existing `String`-returning path already clears the frame-budget
+threshold with wide margin (above), this is a "nice to have," not a
+requirement — worth an index-returning query variant if/when E1.2's trait
+work touches this API surface, not worth a rushed change on its own.
 
 **Bulk insertion: a real problem at real scale, and the roadmap's assumed
 fix (a second dense backend/trait) is not the most effective one measured.**

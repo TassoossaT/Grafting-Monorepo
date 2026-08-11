@@ -10,6 +10,7 @@ use std::hint::black_box;
 use std::time::{Duration, Instant};
 
 use grafting_graph_core::{Edge, EdgeId, Graph, Node, NodeId};
+use petgraph::Direction::{Incoming, Outgoing};
 use petgraph::csr::Csr;
 use petgraph::stable_graph::{NodeIndex as PetNodeIndex, StableDiGraph};
 
@@ -168,7 +169,7 @@ fn grid_string_edges(spec: &GridSpec) -> (Vec<String>, Vec<(String, String)>) {
 /// (no engine change), swap only the identity map from `BTreeMap<String, _>`
 /// to `std::collections::HashMap<String, _>`. Isolates whether the
 /// *ordered-map* choice, not the graph engine, is the dominant cost.
-fn build_hashmap_stablegraph(ids: &[String], pairs: &[(String, String)]) -> Duration {
+fn build_hashmap_stablegraph(ids: &[String], pairs: &[(String, String)]) -> (StableDiGraph<(), ()>, Duration) {
     let start = Instant::now();
     let mut graph: StableDiGraph<(), ()> = StableDiGraph::with_capacity(ids.len(), pairs.len());
     let mut index: HashMap<&str, PetNodeIndex> = HashMap::with_capacity(ids.len());
@@ -181,8 +182,7 @@ fn build_hashmap_stablegraph(ids: &[String], pairs: &[(String, String)]) -> Dura
         graph.add_edge(a, b, ());
     }
     let elapsed = start.elapsed();
-    black_box(&graph);
-    elapsed
+    (graph, elapsed)
 }
 
 /// Realistic candidate B: `petgraph::csr::Csr` (the compressed-sparse-row
@@ -315,13 +315,71 @@ fn bench_neighbor_query_dense_dispersed(dense: &DenseGrid, rng: &mut Rng, iterat
     start.elapsed()
 }
 
+/// Isolates the `String` `NodeId` round-trip cost `successors()`/
+/// `predecessors()` pay on every call (a clone per neighbor, per E1.1's own
+/// spec text). Same `StableDiGraph` engine, same clustered-stroke access
+/// pattern, but returns raw `petgraph::NodeIndex` -- no `String` touched at
+/// all. Sort+dedup is kept (cheap on integers) so the isolated variable is
+/// only the String translation, not the ordering guarantee.
+fn bench_neighbor_query_indexed_clustered(
+    graph: &StableDiGraph<(), ()>,
+    spec: &GridSpec,
+    rng: &mut Rng,
+    strokes: usize,
+    radius: u32,
+) -> Duration {
+    let start = Instant::now();
+    for _ in 0..strokes {
+        let l = rng.next_usize(spec.layers as usize) as u32;
+        let cx = rng.next_usize(spec.width as usize) as u32;
+        let cy = rng.next_usize(spec.height as usize) as u32;
+        for dy in 0..radius {
+            for dx in 0..radius {
+                let x = (cx + dx).min(spec.width - 1);
+                let y = (cy + dy).min(spec.height - 1);
+                let idx = PetNodeIndex::new(spec.index(x, y, l));
+                let mut succ: Vec<PetNodeIndex> = graph.neighbors_directed(idx, Outgoing).collect();
+                succ.sort_unstable();
+                succ.dedup();
+                black_box(&succ);
+                let mut pred: Vec<PetNodeIndex> = graph.neighbors_directed(idx, Incoming).collect();
+                pred.sort_unstable();
+                pred.dedup();
+                black_box(&pred);
+            }
+        }
+    }
+    start.elapsed()
+}
+
+fn bench_neighbor_query_indexed_dispersed(
+    graph: &StableDiGraph<(), ()>,
+    spec: &GridSpec,
+    rng: &mut Rng,
+    iterations: usize,
+) -> Duration {
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let idx = PetNodeIndex::new(rng.next_usize(spec.cell_count()));
+        let mut succ: Vec<PetNodeIndex> = graph.neighbors_directed(idx, Outgoing).collect();
+        succ.sort_unstable();
+        succ.dedup();
+        black_box(&succ);
+        let mut pred: Vec<PetNodeIndex> = graph.neighbors_directed(idx, Incoming).collect();
+        pred.sort_unstable();
+        pred.dedup();
+        black_box(&pred);
+    }
+    start.elapsed()
+}
+
 fn run_preset(name: &str, spec: GridSpec) {
     println!("\n=== {name}: {}x{}x{} = {} cells ===", spec.width, spec.height, spec.layers, spec.cell_count());
 
     let (graph, existing_build) = build_existing(&spec);
     let (dense, dense_build) = build_dense(&spec);
     let (ids, pairs) = grid_string_edges(&spec);
-    let hashmap_stablegraph_build = build_hashmap_stablegraph(&ids, &pairs);
+    let (indexed_graph, hashmap_stablegraph_build) = build_hashmap_stablegraph(&ids, &pairs);
     let hashmap_csr_build = build_hashmap_csr(&ids, &pairs);
     println!(
         "bulk insertion   existing={:>10.3?}  hashmap+stablegraph={:>10.3?}  hashmap+csr={:>10.3?}  floor(dense)={:>10.3?}",
@@ -367,6 +425,17 @@ fn run_preset(name: &str, spec: GridSpec) {
         dense_dispersed,
         existing_dispersed.as_secs_f64() / dense_dispersed.as_secs_f64().max(1e-12),
         existing_dispersed.as_nanos() as f64 / dispersed_iterations as f64
+    );
+
+    let indexed_clustered = bench_neighbor_query_indexed_clustered(&indexed_graph, &spec, &mut rng, strokes, radius);
+    let indexed_dispersed = bench_neighbor_query_indexed_dispersed(&indexed_graph, &spec, &mut rng, dispersed_iterations);
+    println!(
+        "indexed (no String) clustered={:>10.3?} ({:.1}x vs existing/stroke)  dispersed={:>10.3?} ({:.1}x vs existing/op, {:.0}ns/op)",
+        indexed_clustered,
+        existing_neighbor.as_secs_f64() / indexed_clustered.as_secs_f64().max(1e-12),
+        indexed_dispersed,
+        existing_dispersed.as_secs_f64() / indexed_dispersed.as_secs_f64().max(1e-12),
+        indexed_dispersed.as_nanos() as f64 / dispersed_iterations as f64
     );
 }
 

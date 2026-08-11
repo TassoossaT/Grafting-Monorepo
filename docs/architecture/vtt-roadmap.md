@@ -189,7 +189,14 @@ Concrete deliverables:
    `apply_cell_patch`'s K-step neighborhood recompute, later E3.4's
    path-constraint reachability check for interior generation — is written
    once against the trait, inside `grafting-graph-core`, and used by
-   whichever backend applies.
+   whichever backend applies. **Optional, non-blocking finding from E1.1:**
+   `successors`/`predecessors` clone every result to a `String` `NodeId`;
+   an index-returning variant for purely-internal callers (never crossing
+   the crate's own boundary) measured 3.3-10.4x faster at every scale up to
+   ~1M cells. Not required — the existing `String`-returning path already
+   clears the frame-budget threshold with wide margin — but worth adding
+   alongside the trait if `apply_cell_patch`'s K-step recompute turns out to
+   want it.
 5. Domain-specific payload (face ids, sockets, `CellRole`, later `Surface`'s
    `type`/`physical` per the revised `ADR-0022`) stays outside the backend(s), carried as the generic
    `N`/`E` type parameter already supported today — the backend never needs
