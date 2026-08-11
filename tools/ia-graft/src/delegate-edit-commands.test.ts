@@ -8,6 +8,20 @@ import test from "node:test";
 import { delegateEdit } from "./delegate-edit-commands.ts";
 import { taskNew } from "./task-commands.ts";
 
+interface ChangedFileStat {
+  path: string;
+  status: "added" | "modified";
+  linesBefore: number;
+  linesAfter: number;
+  wordsBefore: number;
+  wordsAfter: number;
+}
+interface DelegateEditOk {
+  changedFiles: ChangedFileStat[];
+  revertedOutOfScope: string[];
+  contentStats: { totalWordsBefore: number; totalWordsAfter: number; retentionRatio: number | null; possibleContentLoss: boolean };
+}
+
 const roots: string[] = [];
 test.after(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
@@ -58,8 +72,9 @@ test("delegateEdit reports a file the agent created inside scope, without revert
   }) as never;
   const result = await delegateEdit(root, { taskId: "DEMO-EDIT-2", prompt: "split the doc", scope: ["docs-notes.md"] }, { exec });
   assert.equal(result.ok, true);
-  assert.deepEqual((result as { changedFiles: string[] }).changedFiles, ["docs-notes.md"]);
-  assert.deepEqual((result as { revertedOutOfScope: string[] }).revertedOutOfScope, []);
+  const r = result as unknown as DelegateEditOk;
+  assert.deepEqual(r.changedFiles, [{ path: "docs-notes.md", status: "added", linesBefore: 0, linesAfter: 1, wordsBefore: 0, wordsAfter: 2 }]);
+  assert.deepEqual(r.revertedOutOfScope, []);
 });
 
 test("delegateEdit deletes a new (untracked) file the agent created outside scope", async () => {
@@ -71,8 +86,9 @@ test("delegateEdit deletes a new (untracked) file the agent created outside scop
   }) as never;
   const result = await delegateEdit(root, { taskId: "DEMO-EDIT-3", prompt: "edit docs only", scope: ["docs/"] }, { exec });
   assert.equal(result.ok, true);
-  assert.deepEqual((result as { changedFiles: string[] }).changedFiles, []);
-  assert.deepEqual((result as { revertedOutOfScope: string[] }).revertedOutOfScope, ["unrelated.ts"]);
+  const r = result as unknown as DelegateEditOk;
+  assert.deepEqual(r.changedFiles, []);
+  assert.deepEqual(r.revertedOutOfScope, ["unrelated.ts"]);
   assert.equal(existsSync(join(worktree, "unrelated.ts")), false, "the out-of-scope untracked file must actually be gone, not just reported as reverted");
 });
 
@@ -143,6 +159,83 @@ test("delegateEdit pins the CLI's workspace to the worktree via --add-dir, not j
   }) as never;
   await delegateEdit(root, { taskId: "DEMO-EDIT-8", prompt: "hi" }, { exec });
   assert.equal(calledArgs[calledArgs.indexOf("--add-dir") + 1], worktree);
+});
+
+test("delegateEdit reports per-file word/line stats and flags a sharp word-count drop as possible content loss", async () => {
+  const root = await makeRepoWithTask("DEMO-EDIT-9");
+  const worktree = join(root, ".worktrees", "DEMO-EDIT-9");
+  await writeFile(join(worktree, "notes.md"), "one two three four five six seven eight nine ten\n", "utf8");
+  execFileSync("git", ["add", "notes.md"], { cwd: worktree });
+  execFileSync("git", ["commit", "-m", "seed notes"], { cwd: worktree });
+
+  const exec = (async (_cmd: string, _args: string[], options: { cwd: string }) => {
+    await writeFile(join(options.cwd, "notes.md"), "one two\n", "utf8");
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "trimmed" }), stderr: "" };
+  }) as never;
+  const result = await delegateEdit(root, { taskId: "DEMO-EDIT-9", prompt: "trim this", scope: ["notes.md"] }, { exec });
+  assert.equal(result.ok, true);
+  const r = result as unknown as DelegateEditOk;
+  assert.equal(r.changedFiles.length, 1);
+  assert.deepEqual(r.changedFiles[0], { path: "notes.md", status: "modified", linesBefore: 1, linesAfter: 1, wordsBefore: 10, wordsAfter: 2 });
+  assert.equal(r.contentStats.retentionRatio, 0.2);
+  assert.equal(r.contentStats.possibleContentLoss, true);
+});
+
+test("delegateEdit uses a pre-existing untracked file's real prior content as the stats baseline, not zero", async () => {
+  // Regression test: found live when a scratch file that existed on disk
+  // but had never been `git add`ed was treated as if it had no prior
+  // content at all (wordsBefore: 0), masking a real drop from four
+  // expected split files down to just one rewritten file.
+  const root = await makeRepoWithTask("DEMO-EDIT-12");
+  const worktree = join(root, ".worktrees", "DEMO-EDIT-12");
+  await writeFile(join(worktree, "scratch.md"), "one two three four five six seven eight\n", "utf8"); // untracked, never committed
+
+  const exec = (async (_cmd: string, _args: string[], options: { cwd: string }) => {
+    await writeFile(join(options.cwd, "scratch.md"), "one two\n", "utf8");
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  const result = await delegateEdit(root, { taskId: "DEMO-EDIT-12", prompt: "trim this", scope: ["scratch.md"] }, { exec });
+  assert.equal(result.ok, true);
+  const r = result as unknown as DelegateEditOk;
+  assert.equal(r.changedFiles[0]!.status, "modified");
+  assert.equal(r.changedFiles[0]!.wordsBefore, 8);
+  assert.equal(r.contentStats.retentionRatio, 0.25);
+  assert.equal(r.contentStats.possibleContentLoss, true);
+});
+
+test("delegateEdit does not flag content loss when a split preserves total word count across the new files", async () => {
+  const root = await makeRepoWithTask("DEMO-EDIT-10");
+  const worktree = join(root, ".worktrees", "DEMO-EDIT-10");
+  await writeFile(join(worktree, "big.md"), "alpha beta gamma delta epsilon zeta\n", "utf8");
+  execFileSync("git", ["add", "big.md"], { cwd: worktree });
+  execFileSync("git", ["commit", "-m", "seed big"], { cwd: worktree });
+
+  const exec = (async (_cmd: string, _args: string[], options: { cwd: string }) => {
+    await writeFile(join(options.cwd, "big.md"), "alpha beta gamma\n", "utf8");
+    await writeFile(join(options.cwd, "part.md"), "delta epsilon zeta\n", "utf8");
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "split" }), stderr: "" };
+  }) as never;
+  const result = await delegateEdit(root, { taskId: "DEMO-EDIT-10", prompt: "split", scope: ["big.md", "part.md"] }, { exec });
+  assert.equal(result.ok, true);
+  const r = result as unknown as DelegateEditOk;
+  assert.equal(r.contentStats.totalWordsBefore, 6);
+  assert.equal(r.contentStats.totalWordsAfter, 6);
+  assert.equal(r.contentStats.retentionRatio, 1);
+  assert.equal(r.contentStats.possibleContentLoss, false);
+});
+
+test("delegateEdit prepends caller-supplied context ahead of the prompt sent to the CLI", async () => {
+  const root = await makeRepoWithTask("DEMO-EDIT-11");
+  let calledArgs: string[] = [];
+  const exec = (async (_cmd: string, args: string[]) => {
+    calledArgs = args;
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  await delegateEdit(root, { taskId: "DEMO-EDIT-11", prompt: "do the thing", context: "Repo convention: keep files under 200 lines." }, { exec });
+  const sentPrompt = calledArgs[calledArgs.indexOf("-p") + 1]!;
+  assert.match(sentPrompt, /Repo convention: keep files under 200 lines\./);
+  assert.match(sentPrompt, /do the thing/);
+  assert.ok(sentPrompt.indexOf("Repo convention") < sentPrompt.indexOf("do the thing"), "context must come before the prompt, not after");
 });
 
 test("delegateEdit surfaces a failure when the CLI itself fails", async () => {

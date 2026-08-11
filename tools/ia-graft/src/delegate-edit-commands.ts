@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./delegate-profiles.ts";
 import { GitClient } from "./git-client.ts";
@@ -9,12 +11,24 @@ type ExecFile = typeof execFileAsync;
 
 const fail = (error: string): CliError => ({ ok: false, error });
 
+/** Below this fraction of pre-call word count surviving, flag possible content loss instead of staying silent about it. */
+const CONTENT_LOSS_THRESHOLD = 0.7;
+
 export interface DelegateEditInput {
   taskId: string;
   prompt: string;
   effort?: Effort;
   /** Path prefixes the edit is allowed to touch (e.g. ["docs/"]). Any changed file outside this is reverted, not silently kept. */
   scope?: string[];
+  /**
+   * Repo-specific grounding (conventions, style notes, relevant excerpts
+   * from `ia-graft context` or AGENTS.md) prepended to the prompt. Not
+   * fetched automatically -- `agy` runs as an independent process with no
+   * knowledge of this repo's hooks, CLAUDE.md/AGENTS.md, or `ia-graft
+   * context`; the caller decides what grounding is relevant and supplies
+   * it explicitly.
+   */
+  context?: string;
 }
 
 function inScope(path: string, scope?: string[]): boolean {
@@ -44,30 +58,77 @@ function parsePorcelain(porcelain: string): PorcelainEntry[] {
  * failure this snapshot exists to prevent. `git stash create` builds a
  * commit object of the current index+worktree diff without touching the
  * worktree itself; an empty result means the tree was already clean, so
- * HEAD is an accurate baseline for tracked files in that case.
+ * HEAD is an accurate baseline for tracked files in that case. The same
+ * baseline also serves as the "before" text for the content-preservation
+ * check below -- including for already-untracked files, whose actual
+ * pre-call disk content is captured here too (`git stash create` does not
+ * cover untracked files, so `beforeContent` is this function's only record
+ * of what an untracked file looked like before the call).
  */
-async function snapshotWorktree(worktreePath: string): Promise<{ before: Map<string, string>; baseline: string }> {
+async function snapshotWorktree(worktreePath: string): Promise<{ before: Map<string, string>; beforeContent: Map<string, string>; baseline: string }> {
   const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: worktreePath });
-  const before = new Map(parsePorcelain(stdout).map((entry) => [entry.path, entry.status]));
+  const statusEntries = parsePorcelain(stdout);
+  const before = new Map(statusEntries.map((entry) => [entry.path, entry.status]));
+  const beforeContent = new Map<string, string>();
+  for (const entry of statusEntries) {
+    if (entry.status !== "??") continue;
+    beforeContent.set(entry.path, await readFile(join(worktreePath, entry.path), "utf8").catch(() => ""));
+  }
   const { stdout: stashOut } = await execFileAsync("git", ["stash", "create"], { cwd: worktreePath });
-  return { before, baseline: stashOut.trim() || "HEAD" };
+  return { before, beforeContent, baseline: stashOut.trim() || "HEAD" };
+}
+
+async function readBaselineContent(worktreePath: string, baseline: string, path: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["show", `${baseline}:${path}`], { cwd: worktreePath });
+    return stdout;
+  } catch {
+    return "";
+  }
+}
+
+const countWords = (text: string): number => text.split(/\s+/).filter(Boolean).length;
+/** A single trailing newline (the common case for text files) must not count as an extra line. */
+const countLines = (text: string): number => {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  return normalized.length === 0 ? 0 : normalized.split("\n").length;
+};
+
+interface ChangedFileStat {
+  path: string;
+  status: "added" | "modified";
+  linesBefore: number;
+  linesAfter: number;
+  wordsBefore: number;
+  wordsAfter: number;
 }
 
 /**
  * Gives a delegated model real write access, but only inside an
  * already-isolated `ia-graft` task worktree -- never the main checkout --
- * and never auto-commits. The caller reviews `changedFiles` and still runs
- * the normal `task test`/`task commit`/`task done` flow, same as any other
- * edit. `scope`, when given, is enforced after the fact against a pre-call
- * snapshot: any changed file outside it is restored to what it looked like
- * right before this call (not silently kept, and not blindly reset to
- * HEAD -- see `snapshotWorktree`).
+ * and never auto-commits. `scope`, when given, is enforced after the fact
+ * against a pre-call snapshot: any changed file outside it is restored to
+ * what it looked like right before this call (not silently kept, and not
+ * blindly reset to HEAD -- see `snapshotWorktree`).
  *
- * Known limitation: a file that was ALREADY untracked before this call
- * (not created by it) is left alone if it ends up out of scope, but its
- * content is not protected if the delegated edit modifies it in place --
- * `git stash create` does not snapshot untracked files. Avoid leaving
- * untracked scratch content lying around in a worktree before running this.
+ * The caller is not expected to re-read every changed file to gain
+ * confidence: `changedFiles` carries per-file line/word before/after
+ * counts, and `contentStats.possibleContentLoss` is a cheap, mechanical
+ * (not LLM-judged) signal -- total post-call word count across every kept
+ * file, divided by total pre-call word count of the ones that already
+ * existed, flagged when it drops sharply. It catches gross content loss
+ * (the failure mode actually observed in testing: the agent reporting
+ * success while doing nothing, or trimming far more than asked) but not
+ * subtle inaccuracy -- it is a signal to weigh, not a correctness proof.
+ *
+ * Known limitation: an already-untracked file that ends up OUT of scope is
+ * left alone (not deleted) rather than restored, and its content is not
+ * protected if the delegated edit modified it in place before the revert
+ * decision -- `git stash create` does not snapshot untracked files, so
+ * there is nothing to restore it FROM. In-scope untracked files don't have
+ * this gap: their pre-call content is captured separately in
+ * `snapshotWorktree`'s `beforeContent`, specifically so `contentStats`
+ * stays accurate for them too, not just for already-tracked files.
  */
 export async function delegateEdit(repoRoot: string, input: DelegateEditInput, { exec = execFileAsync }: { exec?: ExecFile } = {}) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
@@ -84,11 +145,12 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
     return fail(error instanceof Error ? error.message : String(error));
   }
 
-  const { before, baseline } = await snapshotWorktree(worktreePath);
+  const { before, beforeContent, baseline } = await snapshotWorktree(worktreePath);
+  const fullPrompt = input.context ? `${input.context}\n\n---\n\n${input.prompt}` : input.prompt;
 
   let response: { status?: string; response?: string };
   try {
-    const { stdout } = await exec(profile.cli, profile.buildEditArgs(input.prompt, worktreePath), { cwd: worktreePath });
+    const { stdout } = await exec(profile.cli, profile.buildEditArgs(fullPrompt, worktreePath), { cwd: worktreePath });
     response = JSON.parse(stdout);
   } catch (error) {
     return fail(`delegate edit failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -108,7 +170,33 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
     }
     revertedOutOfScope.push(entry.path);
   }
-  const changedFiles = entries.map((entry) => entry.path).filter((path) => !revertedOutOfScope.includes(path));
+
+  const kept = entries.filter((entry) => !revertedOutOfScope.includes(entry.path));
+  const changedFiles: ChangedFileStat[] = [];
+  for (const entry of kept) {
+    // A currently-tracked path (post-call status isn't "??") necessarily
+    // existed at `baseline` -- read it from there unconditionally. A
+    // currently-untracked path either pre-existed untracked (captured in
+    // `beforeContent`) or is genuinely new to this call; the pre-call
+    // `before` status map (not the post-call one) is what tells them apart.
+    const preExistedUntracked = before.get(entry.path) === "??";
+    const status: "added" | "modified" = entry.status === "??" && !preExistedUntracked ? "added" : "modified";
+    const beforeText =
+      entry.status !== "??" ? await readBaselineContent(worktreePath, baseline, entry.path) : preExistedUntracked ? (beforeContent.get(entry.path) ?? "") : "";
+    const afterText = await readFile(join(worktreePath, entry.path), "utf8").catch(() => "");
+    changedFiles.push({
+      path: entry.path,
+      status,
+      linesBefore: countLines(beforeText),
+      linesAfter: countLines(afterText),
+      wordsBefore: countWords(beforeText),
+      wordsAfter: countWords(afterText),
+    });
+  }
+
+  const totalWordsBefore = changedFiles.reduce((sum, file) => sum + file.wordsBefore, 0);
+  const totalWordsAfter = changedFiles.reduce((sum, file) => sum + file.wordsAfter, 0);
+  const retentionRatio = totalWordsBefore === 0 ? null : Number((totalWordsAfter / totalWordsBefore).toFixed(2));
 
   return {
     ok: true as const,
@@ -120,5 +208,11 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
     summary: (response.response ?? "").trim(),
     changedFiles,
     revertedOutOfScope,
+    contentStats: {
+      totalWordsBefore,
+      totalWordsAfter,
+      retentionRatio,
+      possibleContentLoss: retentionRatio !== null && retentionRatio < CONTENT_LOSS_THRESHOLD,
+    },
   };
 }

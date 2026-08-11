@@ -102,7 +102,13 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   }
   if (subcommand === "edit") {
     const scope = readValues(argv, "--scope");
-    return { taskId, prompt: readValue(argv, "--prompt"), effort: readValue(argv, "--effort"), scope: scope.length > 0 ? scope : undefined };
+    return {
+      taskId,
+      prompt: readValue(argv, "--prompt"),
+      effort: readValue(argv, "--effort"),
+      scope: scope.length > 0 ? scope : undefined,
+      context: readValue(argv, "--context"),
+    };
   }
   return undefined;
 }
@@ -159,7 +165,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>] [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]...`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>] [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>]`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
