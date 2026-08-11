@@ -111,12 +111,20 @@ suite.
 
 ### Indexed (no-`String`) query, vs. the existing `String`-returning path
 
-`successors()`/`predecessors()` clone every result back to a `String`
-`NodeId` (per E1.1's own spec text: "a string clone, per neighbor"). This
-variant reuses the `hashmap+stablegraph` graph from the bulk-insertion
-comparison and calls `petgraph`'s `neighbors_directed` directly, returning
-raw `NodeIndex` — isolating that translation cost specifically, not a
-different graph engine or identity map.
+`successors()`/`predecessors()` pay `String` cost at three points per call:
+(1) one map lookup resolving the input `NodeId` to its internal index, (2)
+one `String::clone()` per neighbor found in the result, (3) sorting the
+result `Vec<NodeId>` by string comparison instead of integer comparison.
+This variant reuses the `hashmap+stablegraph` graph from the bulk-insertion
+comparison and calls `petgraph`'s `neighbors_directed` directly with an
+already-known `NodeIndex`, returning raw `NodeIndex` results (sorted as
+integers) — skipping all three points at once, not isolating one of them.
+It therefore measures "full `String`-based query API" vs. "full
+index-based query API" for a caller that never touches `NodeId` at all
+during the call, not a single micro-isolated cost. Representative of a
+caller that stays entirely in index space for one operation (e.g. a
+K-step neighborhood recompute) and converts to `NodeId` only once, at the
+boundary, if at all.
 
 | Scale | Cells | Clustered speedup vs. existing | Dispersed speedup vs. existing | Dispersed ns/op |
 | --- | --- | --- | --- | --- |
