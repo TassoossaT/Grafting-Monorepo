@@ -130,6 +130,21 @@ test("delegateEdit leaves a pre-existing untracked out-of-scope file alone inste
   assert.equal(existsSync(join(worktree, "scratch.txt")), true);
 });
 
+test("delegateEdit pins the CLI's workspace to the worktree via --add-dir, not just cwd", async () => {
+  // Regression test: `agy` was found to ignore the spawned process's cwd on
+  // its own and write into its own default workspace instead; --add-dir is
+  // what actually pins it to the intended directory.
+  const root = await makeRepoWithTask("DEMO-EDIT-8");
+  const worktree = join(root, ".worktrees", "DEMO-EDIT-8");
+  let calledArgs: string[] = [];
+  const exec = (async (_cmd: string, args: string[]) => {
+    calledArgs = args;
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  await delegateEdit(root, { taskId: "DEMO-EDIT-8", prompt: "hi" }, { exec });
+  assert.equal(calledArgs[calledArgs.indexOf("--add-dir") + 1], worktree);
+});
+
 test("delegateEdit surfaces a failure when the CLI itself fails", async () => {
   const root = await makeRepoWithTask("DEMO-EDIT-7");
   const exec = (async () => {

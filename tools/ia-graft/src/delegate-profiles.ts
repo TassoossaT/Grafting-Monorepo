@@ -26,12 +26,18 @@ export interface DelegateProfile {
    * Builds argv for a file-editing agent session (`delegate edit`). Only
    * edit tools are auto-approved (`--mode accept-edits`); everything else
    * (shell, browser, ...) still requires interactive approval and is
-   * auto-denied in headless mode. This is not a substitute for the
-   * caller always pinning `cwd` to an isolated task worktree and
-   * post-hoc scope enforcement -- live testing showed the agent can still
-   * wander into touching files outside the intended scope.
+   * auto-denied in headless mode. `worktreePath` MUST also be passed via
+   * `--add-dir` -- `agy` does not reliably treat the spawned process's
+   * `cwd` as its workspace on its own; without `--add-dir` it silently
+   * writes into its own default workspace directory instead (confirmed
+   * by testing: writes landed in `~/.gemini/antigravity-cli/scratch`
+   * with `cwd` alone, and only landed in the intended directory once
+   * `--add-dir` was added). This is not a substitute for post-hoc scope
+   * enforcement -- live testing also showed the agent can still wander
+   * into touching files outside the intended scope even with the right
+   * workspace pinned.
    */
-  buildEditArgs: (prompt: string) => string[];
+  buildEditArgs: (prompt: string, worktreePath: string) => string[];
 }
 
 /** All current profiles share one CLI (`agy`) and only differ by model id. */
@@ -44,7 +50,7 @@ function agyProfile(model: string): DelegateProfile {
       if (jsonSchema) args.push("--json-schema", jsonSchema);
       return args;
     },
-    buildEditArgs: (prompt) => ["-p", prompt, "--model", model, "--mode", "accept-edits", "--sandbox", "--output-format", "json"],
+    buildEditArgs: (prompt, worktreePath) => ["-p", prompt, "--model", model, "--mode", "accept-edits", "--sandbox", "--add-dir", worktreePath, "--output-format", "json"],
   };
 }
 

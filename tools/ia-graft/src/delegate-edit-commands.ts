@@ -88,7 +88,7 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
 
   let response: { status?: string; response?: string };
   try {
-    const { stdout } = await exec(profile.cli, profile.buildEditArgs(input.prompt), { cwd: worktreePath });
+    const { stdout } = await exec(profile.cli, profile.buildEditArgs(input.prompt, worktreePath), { cwd: worktreePath });
     response = JSON.parse(stdout);
   } catch (error) {
     return fail(`delegate edit failed: ${error instanceof Error ? error.message : String(error)}`);
