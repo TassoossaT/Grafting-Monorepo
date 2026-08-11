@@ -90,7 +90,15 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
   if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
-  if (subcommand === "run") return { prompt: readValue(argv, "--prompt"), effort: readValue(argv, "--effort") };
+  if (subcommand === "run") {
+    const jsonSchemaRaw = readValue(argv, "--json-schema");
+    return {
+      prompt: readValue(argv, "--prompt"),
+      effort: readValue(argv, "--effort"),
+      file: readValue(argv, "--file"),
+      jsonSchema: jsonSchemaRaw === undefined ? undefined : JSON.parse(jsonSchemaRaw),
+    };
+  }
   return undefined;
 }
 function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
@@ -145,7 +153,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high]`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>] [--json-schema <json>]`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

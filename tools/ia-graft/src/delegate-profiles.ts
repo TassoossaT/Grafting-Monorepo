@@ -9,31 +9,38 @@
 
 export type Effort = "low" | "medium" | "high";
 
+export interface DelegateCallOptions {
+  outputFormat: "text" | "json";
+  /** Pre-stringified JSON schema, when structured output was requested. */
+  jsonSchema?: string;
+}
+
 export interface DelegateProfile {
   /** Human-readable identity of the backing model, surfaced in results/errors. */
   label: string;
   /** Binary invoked via execFile -- args are always passed as an array, never shell-interpolated. */
   cli: string;
   /** Builds argv for a single headless prompt call. */
-  buildArgs: (prompt: string) => string[];
+  buildArgs: (prompt: string, options: DelegateCallOptions) => string[];
+}
+
+/** All current profiles share one CLI (`agy`) and only differ by model id. */
+function agyProfile(model: string): DelegateProfile {
+  return {
+    label: model,
+    cli: "agy",
+    buildArgs: (prompt, { outputFormat, jsonSchema }) => {
+      const args = ["-p", prompt, "--model", model, "--output-format", outputFormat];
+      if (jsonSchema) args.push("--json-schema", jsonSchema);
+      return args;
+    },
+  };
 }
 
 export const DELEGATE_PROFILES: Record<Effort, DelegateProfile> = {
-  low: {
-    label: "gemini-3.6-flash-low",
-    cli: "agy",
-    buildArgs: (prompt) => ["-p", prompt, "--model", "gemini-3.6-flash-low", "--output-format", "text"],
-  },
-  medium: {
-    label: "gemini-3.6-flash-medium",
-    cli: "agy",
-    buildArgs: (prompt) => ["-p", prompt, "--model", "gemini-3.6-flash-medium", "--output-format", "text"],
-  },
-  high: {
-    label: "gemini-3.6-flash-high",
-    cli: "agy",
-    buildArgs: (prompt) => ["-p", prompt, "--model", "gemini-3.6-flash-high", "--output-format", "text"],
-  },
+  low: agyProfile("gemini-3.6-flash-low"),
+  medium: agyProfile("gemini-3.6-flash-medium"),
+  high: agyProfile("gemini-3.6-flash-high"),
 };
 
 export const EFFORTS = Object.keys(DELEGATE_PROFILES) as Effort[];
