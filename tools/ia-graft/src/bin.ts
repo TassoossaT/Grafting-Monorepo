@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { aiRun } from "./ai-commands.ts";
+import { delegateRun } from "./delegate-commands.ts";
 import { runGuardCheck } from "./guard-command.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
@@ -90,7 +90,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
   if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
-  if (subcommand === "run") return { prompt: readValue(argv, "--prompt"), tier: readValue(argv, "--tier") };
+  if (subcommand === "run") return { prompt: readValue(argv, "--prompt"), effort: readValue(argv, "--effort") };
   return undefined;
 }
 function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
@@ -120,9 +120,9 @@ async function main(argv: string[]): Promise<void> {
     }
 
 
-    if (group === "gemini") {
+    if (group === "delegate") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
-      if (subcommand === "run") printAndExit(await aiRun(root, input as Parameters<typeof aiRun>[1]));
+      if (subcommand === "run") printAndExit(await delegateRun(root, input as Parameters<typeof delegateRun>[1]));
     }
 
     if (group === "task") {
@@ -145,7 +145,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft gemini run --prompt <p> [--tier low|medium|high]`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high]`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
