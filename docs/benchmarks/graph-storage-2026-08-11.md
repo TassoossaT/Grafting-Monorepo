@@ -1,102 +1,50 @@
 # Graph storage benchmark — E1.1 measurement spike — 2026-08-11
 
-Status: **complete (revised twice after follow-up questions: first widened
-scope to ~1M cells and real backend candidates, then added an indexed,
-no-`String` query comparison).** Query/traversal path: existing
-`BTreeMap`-backed `Graph<N, E>` is fast enough at every scale tested, up to
-~1M cells — no new backend needed there; an optional, non-blocking further
-win exists by skipping the `String` round-trip for purely-internal callers
-(3-10x faster, see below). Bulk insertion (map generation/load) is a real,
-measured problem at that same scale — but the fix is a targeted
-identity-map swap inside the existing type, not the second dense storage
-backend/trait the roadmap's E1.2 detail assumed.
+Status: **complete (revised twice after follow-up questions: first widened scope to ~1M cells and real backend candidates, then added an indexed, no-`String` query comparison).**
+- **Query/traversal path verdict:** Existing `BTreeMap`-backed `Graph<N, E>` is fast enough at every scale tested up to ~1M cells; no new storage backend needed. Optional non-blocking win: skip `String` round-trip for purely-internal callers (3-10x faster).
+- **Bulk-insertion path verdict:** Real, measured problem at ~1M cells. Fix is a targeted identity-map swap inside existing type (`BTreeMap` -> `HashMap`), not the second dense storage backend/trait assumed in E1.2.
 
-Scope: `docs/architecture/vtt-roadmap.md` E1.1. Measures whether
-`Graph<N, E>`'s existing `BTreeMap<NodeId, NodeIndex>` translation layer
-(`libs/graph/core/src/model.rs`) is fast enough for construction's real
-workload, before E1.2 decides whether to add a second, dense-index-only
-storage backend behind a shared trait. Not a determinism question — replay
-is explicitly out of scope for this roadmap (see the roadmap's own note).
+Scope: `docs/architecture/vtt-roadmap.md` E1.1.
+- **Goal:** Measure if `Graph<N, E>`'s existing `BTreeMap<NodeId, NodeIndex>` translation layer (`libs/graph/core/src/model.rs`) is fast enough for construction's real workload before E1.2 decides whether to add a second, dense-index-only storage backend behind a shared trait.
+- **Non-goal:** Not a determinism question — replay is explicitly out of scope for this roadmap (see the roadmap's own note).
 
 ## Revision note
 
-The first pass of this spec (measured up to 100k cells, brush-stroke-shaped
-neighbor queries only, one hand-rolled "dense" comparison with no identity
-resolution at all) concluded no new backend was needed anywhere, full stop.
-Follow-up questions from the roadmap owner — was querying tested beyond
-brush strokes, and does a half-second build at 100k cells hold up when a
-real map has millions of nodes — were correct to push on both points and
-changed the conclusion on the construction axis specifically. This version:
-extends every preset to ~1M cells, adds a dispersed (non-clustered) query
-benchmark, and replaces the single naive "dense array" comparison with two
-realistic candidates built from the same resolvable `String`-id input the
-real constructor receives (see Method).
+- **First pass finding:** Measured up to 100k cells, brush-stroke-shaped neighbor queries only, hand-rolled "dense" comparison with no identity resolution; concluded no new backend needed anywhere.
+- **Trigger for revision:** Roadmap owner follow-up questions (querying beyond brush strokes; half-second build at 100k cells scaling to millions of nodes) pushed on both axes and changed the conclusion on construction.
+- **Revision changes:**
+  - Extended all presets to ~1M cells.
+  - Added dispersed (non-clustered) query benchmark.
+  - Replaced naive "dense array" comparison with two realistic candidates built from identical resolvable `String`-id input passed to the real constructor.
 
 ## Threshold, stated before running
 
-Per-frame cost (neighbor-query recompute for one brush stroke) must stay
-well under the frame budget, leaving headroom for rendering, the WASM
-boundary crossing, and mesh rebuild in the same frame. At 60 fps the budget
-is 16.67 ms/frame; this spec treats **10% of that budget (~1.67 ms) as the
-generous ceiling** for the existing path's per-stroke neighbor-query cost.
-Bulk insertion (one-time, at map generation/load, not per-frame) has no
-frame-budget threshold — evaluated instead against plain user-perceptible
-load-time cost, since that is what the roadmap owner's question was really
-asking.
+- **Per-frame neighbor-query threshold:** **10% of 60 fps frame budget (~1.67 ms ceiling out of 16.67 ms/frame)** for neighbor-query recompute per brush stroke, leaving headroom for rendering, WASM boundary crossing, and mesh rebuild.
+- **Bulk insertion threshold:** No fixed per-frame budget (one-time operation at map generation/load); evaluated against user-perceptible load-time cost.
 
 ## Method
 
-`libs/graph/core/examples/storage_bench.rs` (not shipped/public-API code —
-an `example`, run on demand, feeding this report). Builds the same 6-slot
-prism-grid topology `PrismGridMesh` already uses (N/E/S/W/Bottom/Top) at
-four scales (~1k/10k/100k/1M cells: `18x18x3`, `58x58x3`, `183x183x3`,
-`577x577x3`), then measures several storage/construction paths on
-identical topology.
+- **Harness & Workload:** `libs/graph/core/examples/storage_bench.rs` (non-shipped `example`, run on demand). Builds 6-slot prism-grid topology (`PrismGridMesh`: N/E/S/W/Bottom/Top) across four scales:
+  - Small: ~1k cells (`18x18x3` = 972 cells)
+  - Medium: ~10k cells (`58x58x3` = 10,092 cells)
+  - Large: ~100k cells (`183x183x3` = 100,467 cells)
+  - Huge: ~1M cells (`577x577x3` = 998,787 cells)
+- **Execution Command:** `cargo run --release --example storage_bench -p grafting-graph-core` (wall-clock, single machine, 2 full runs to verify variance; bulk ratios move ~20-30% run-to-run; treat numbers as order-of-magnitude evidence, not continuous regression suite).
 
-**Query/traversal paths** (unchanged approach from the first pass):
+**Query/traversal candidates:**
+- **existing:** `Graph<(), ()>::try_from_parts`, `.node()`, `.successors()`/`.predecessors()` (production path).
+- **dense floor:** Plain `Vec<[u32; 6]>` adjacency array addressed by `x, y, l -> usize` index math; no `String`, no map. Lower bound only (lacks identity stability, removal, compaction).
 
-- **existing** — `Graph<(), ()>::try_from_parts`, `.node()`,
-  `.successors()`/`.predecessors()` (the real production path).
-- **dense floor** — a plain `Vec<[u32; 6]>` adjacency array addressed by
-  the grid's own `x, y, l -> usize` index math, no `String`, no map at all.
-  Not a buildable candidate on its own (no identity stability, no
-  removal/compaction story) — a lower bound only.
+**Operations tested:**
+- Bulk insertion (1 graph build).
+- Point lookup by id (20,000 random lookups).
+- Clustered neighbor query (200 brush strokes; 7x7=49 cells/cluster on 1 random layer; `successors` & `predecessors` called per cell).
+- Dispersed neighbor query (20,000 random individual cells across full grid; checks whether locality flattens existing path).
 
-Operations: bulk insertion (one graph build), point lookup by id (20,000
-random lookups), clustered neighbor query (200 simulated brush strokes,
-each a 7x7 = 49-cell cluster on one random layer, `successors` and
-`predecessors` both called per cell), and **new this revision**: dispersed
-neighbor query (20,000 individual random cells across the whole grid, not
-one cluster — checks whether the brush-stroke locality was flattering the
-existing path).
-
-**Bulk-insertion paths, new this revision** — all three built from
-identical `Vec<String>` node ids and `Vec<(String, String)>` edge pairs
-(the same shape a real caller passes to `try_from_parts`, unlike the dense
-floor's index shortcut):
-
-- **existing** — `BTreeMap<String, NodeIndex>` + `petgraph::StableDiGraph`
-  (current production code).
-- **hashmap+stablegraph** — same `StableDiGraph` engine, only the identity
-  map changes to `std::collections::HashMap`. Isolates whether the
-  *ordered-map* choice or the *graph engine* is the dominant cost.
-- **hashmap+csr** — `std::collections::HashMap` for identity resolution,
-  then `petgraph::csr::Csr::from_sorted_edges` (`petgraph`'s
-  compressed-sparse-row type, the concrete alternative the roadmap's E1.2
-  detail names by name as an existing multi-backend precedent). Uses the
-  bulk `from_sorted_edges` constructor (`O(|V|+|E|)`), not one `add_edge`
-  call per edge — `Csr::add_edge`'s own doc comment states that costs
-  `O(|V|*|E|)` for the whole graph, which would make it the wrong
-  comparison to run.
-
-Run: `cargo run --release --example storage_bench -p grafting-graph-core`.
-Wall-clock, single machine, two full runs to sanity-check variance.
-Bulk-insertion ratios move by ~20-30% run to run and the two realistic
-candidates (`hashmap+stablegraph` vs `hashmap+csr`) swap which is faster
-between runs — read them as "same order of magnitude, no reliable winner
-between the two," not as a precise ranking. Treat all numbers as
-order-of-magnitude evidence for this spec's questions, not a regression
-suite.
+**Bulk-insertion candidates (all built from `Vec<String>` node ids & `Vec<(String, String)>` edge pairs):**
+- **existing:** `BTreeMap<String, NodeIndex>` + `petgraph::StableDiGraph` (current production code).
+- **hashmap+stablegraph:** `std::collections::HashMap` identity resolution + `petgraph::StableDiGraph` engine (isolates map choice vs engine choice).
+- **hashmap+csr:** `std::collections::HashMap` identity resolution + `petgraph::csr::Csr::from_sorted_edges` (`O(|V|+|E|)` bulk constructor; avoids `Csr::add_edge` `O(|V|*|E|)` cost).
 
 ## Results (representative run)
 
@@ -111,20 +59,11 @@ suite.
 
 ### Indexed (no-`String`) query, vs. the existing `String`-returning path
 
-`successors()`/`predecessors()` pay `String` cost at three points per call:
-(1) one map lookup resolving the input `NodeId` to its internal index, (2)
-one `String::clone()` per neighbor found in the result, (3) sorting the
-result `Vec<NodeId>` by string comparison instead of integer comparison.
-This variant reuses the `hashmap+stablegraph` graph from the bulk-insertion
-comparison and calls `petgraph`'s `neighbors_directed` directly with an
-already-known `NodeIndex`, returning raw `NodeIndex` results (sorted as
-integers) — skipping all three points at once, not isolating one of them.
-It therefore measures "full `String`-based query API" vs. "full
-index-based query API" for a caller that never touches `NodeId` at all
-during the call, not a single micro-isolated cost. Representative of a
-caller that stays entirely in index space for one operation (e.g. a
-K-step neighborhood recompute) and converts to `NodeId` only once, at the
-boundary, if at all.
+- **Overhead Sources in Existing `successors()`/`predecessors()`:**
+  1. Map lookup resolving `NodeId` to internal index.
+  2. `String::clone()` per neighbor in result.
+  3. Sorting result `Vec<NodeId>` by string comparison instead of integer comparison.
+- **Indexed Variant Mechanism:** Reuses `hashmap+stablegraph`; calls `petgraph`'s `neighbors_directed` directly with `NodeIndex`, returning raw `NodeIndex` results sorted as integers. Skips all 3 overhead points simultaneously (measures full index-based API vs full `String`-based API for callers staying in index space, e.g. K-step neighborhood recompute).
 
 | Scale | Cells | Clustered speedup vs. existing | Dispersed speedup vs. existing | Dispersed ns/op |
 | --- | --- | --- | --- | --- |
@@ -142,112 +81,47 @@ boundary, if at all.
 | Large | 100,467 | 421-488 ms | 68-98 ms (5.0-6.2x) | 65-84 ms (5.8-6.4x) | 0.84-0.95 ms |
 | **Huge** | **998,787** | **5.0-6.9 s** | **1.1-1.4 s (4.6-4.8x)** | **1.1-1.4 s (3.5-6.2x)** | **8-10 ms** |
 
-(Ranges are the two independent runs; "Nx" is speedup vs. `existing` in
-that same run.)
+(Ranges are the two independent runs; "Nx" is speedup vs. `existing` in that same run.)
 
 ## Interpretation against the stated threshold
 
-**Query/traversal path: still well under threshold at every scale,
-including dispersed access.** Worst case (huge, ~1M cells, clustered
-stroke) is 95-105 µs per brush stroke — **~0.6% of the 16.67 ms frame
-budget**, ~16x under the generous 1.67 ms (10%) ceiling. Dispersed
-(non-clustered) queries are costlier per-op than clustered ones (up to
-~4.6 µs at 1M cells vs. ~2 µs implied per clustered call) but still
-negligible in absolute per-frame terms — clustering was not doing the
-existing path a hidden favor large enough to matter. **This axis needs no
-new backend, confirmed now across four orders of magnitude, not just up to
-100k.**
+- **Query/traversal path:**
+  - **Verdict:** Well under threshold at every scale up to ~1M cells; no new backend needed across four orders of magnitude.
+  - **Clustered data:** Worst case (huge, ~1M cells) is 95-105 µs/stroke = **~0.6% of 16.67 ms frame budget** (~16x under 1.67 ms ceiling).
+  - **Dispersed data:** Costlier per-op (up to ~4.6 µs at 1M cells vs ~2 µs implied per clustered call) but negligible in per-frame terms; locality was not distorting results.
 
-**A real, separate optimization exists on this axis too, though not a
-blocking one.** Skipping the `String` `NodeId` round-trip and returning raw
-`NodeIndex` instead is 3.3-10.4x faster (clustered) and 3.8-9.4x faster
-(dispersed) than the existing path, consistently across all four scales —
-a genuine, low-risk win for a purely-internal hot-path caller (e.g. E3.3's
-`apply_cell_patch` K-step recompute) that only needs `NodeId` at the
-boundary where it hands results back to a caller outside the graph. Because
-the existing `String`-returning path already clears the frame-budget
-threshold with wide margin (above), this is a "nice to have," not a
-requirement — worth an index-returning query variant if/when E1.2's trait
-work touches this API surface, not worth a rushed change on its own.
+- **Indexed (no-`String`) query path:**
+  - **Verdict:** Optional, non-blocking optimization.
+  - **Data:** Skipping `String` `NodeId` round-trip returning raw `NodeIndex` is 3.3-10.4x faster (clustered) and 3.8-9.4x faster (dispersed) across all scales.
+  - **Application:** Low-risk win for purely-internal hot-path callers (e.g. E3.3 `apply_cell_patch` K-step recompute) resolving `NodeId` only at graph boundary. Nice-to-have for E1.2 trait work.
 
-**Bulk insertion: a real problem at real scale, and the roadmap's assumed
-fix (a second dense backend/trait) is not the most effective one measured.**
-At ~1M cells the existing path takes 5-7 seconds — genuinely
-user-perceptible, and the owner's instinct that "millions of nodes" makes
-this worse, not better, is correct: growth is faster than linear (~n^1.1
-across the four scales, consistent with `BTreeMap`'s `O(log n)`-with-string-
-comparison insert cost). But the ~5-8x speedup available from just swapping
-the identity map (`BTreeMap` -> `HashMap`) inside the *existing*
-`StableDiGraph` engine matches or beats swapping the graph engine itself
-(`Csr`) — the two realistic candidates are statistically indistinguishable
-from each other across repeated runs, both consistently beating `existing`
-by roughly the same margin. **The dominant cost is the ordered map, not the
-graph engine.**
+- **Bulk insertion path:**
+  - **Verdict:** Real problem at ~1M cells (5-7 s build time, user-perceptible load-time cost; super-linear ~n^1.1 growth due to `BTreeMap` `O(log n)` string-comparison inserts).
+  - **Root Cause:** Dominant cost is the ordered map (`BTreeMap`), not the graph engine (`StableDiGraph` vs `Csr`).
+  - **Solution:** Identity map swap (`BTreeMap` -> `HashMap`) inside `StableDiGraph` yields ~5-8x speedup, matching or beating engine swap to `Csr` (candidates are statistically indistinguishable).
 
 ## A real tradeoff the map swap introduces: determinism
 
-`Graph<N, E>`'s current `BTreeMap`-backed maps are not just an
-implementation detail — `GraphSnapshot`'s doc comment states nodes/edges
-are "sorted by stable node identity," and `snapshot()` currently gets that
-ordering for free by iterating `node_indices.values()`/
-`edge_indices.values()` in `BTreeMap`'s natural key order.
-`topological_order()` similarly uses a `BTreeSet` as its ready-queue for
-deterministic tie-breaking. A plain swap to `HashMap` breaks that guarantee
-silently (`HashMap` iteration order is unspecified and varies per process)
-unless `snapshot()` (and any other caller-visible ordering) explicitly sorts
-at the point of observation instead of relying on map iteration order. That
-sort is cheap relative to construction (`O(n log n)` once, only when
-`snapshot()` is actually called, not on every insert/lookup) but it is a
-real code change, not a drop-in type substitution, and any other caller
-currently relying on `BTreeMap`'s incidental ordering (grep before
-changing) needs the same treatment.
+- **Finding:** Swapping `BTreeMap` to `HashMap` breaks implicit iteration order and deterministic snapshot guarantees.
+- **Affected Components:**
+  - `GraphSnapshot`: Doc comment specifies nodes/edges are "sorted by stable node identity"; currently relies on `BTreeMap` key iteration order in `node_indices.values()` / `edge_indices.values()`.
+  - `topological_order()`: Uses `BTreeSet` ready-queue for deterministic tie-breaking.
+- **Mitigation:** Explicitly sort at observation points (`snapshot()`, etc.) instead of relying on map order.
+- **Cost:** `O(n log n)` once when `snapshot()` is called (not on every insert/lookup); cheap relative to construction, but requires audit (grep) of callers relying on `BTreeMap` incidental ordering.
 
 ## Disposition
 
-**Query/traversal path: E1.2 needs no new backend for this axis.**
-Confirmed at 1k through ~1M cells, clustered and dispersed access alike.
-
-**Bulk-insertion path: real, measured problem at map-generation scale, but
-the fix this evidence points to is narrower than E1.2's originally-assumed
-second storage backend.** Recommend re-scoping that part of E1.2 (or
-splitting it into its own small task) to: replace `Graph<N, E>`'s internal
-`BTreeMap<NodeId, NodeIndex>`/`BTreeMap<EdgeId, EdgeIndex>` with
-`HashMap`s, and explicitly re-sort at the point(s) that currently rely on
-`BTreeMap`'s incidental ordering (`snapshot()` at minimum; grep for other
-callers before changing). This is a same-engine, same-trait-surface change
-— it does not require `E1.2`'s deliverable 3 (a second, `Csr`-or-similar
-storage type implementing the trait), because that alternative engine did
-not reliably outperform the simpler map swap in this measurement. The
-trait-extraction deliverables (1, 2, 4, 5, 6) are unaffected either way and
-should proceed as already scoped.
-
-**Still open, and explicitly a product/UX call, not a storage-architecture
-one:** even with the ~5-8x map-swap speedup, ~1M cells still costs roughly
-1-1.5 seconds to construct. A map with several million cells (plausible at
-finer tile resolution) would still be multiple seconds. Whether that is
-acceptable synchronous load time, or needs async/background construction,
-or needs a coarser default cell resolution, is outside this spec's
-storage-architecture scope and is the real remaining question for whoever
-owns map-generation UX — flagging it rather than deciding it, per this
-project's planning-phase discipline of not closing this kind of question
-silently.
+- **Query/traversal path:** No new backend required for E1.2 (confirmed from 1k to ~1M cells across clustered & dispersed access).
+- **Bulk-insertion path:**
+  - **Re-scope recommendation:** Re-scope E1.2 (or split into small task) to swap `Graph<N, E>`'s internal `BTreeMap<NodeId, NodeIndex>` / `BTreeMap<EdgeId, EdgeIndex>` to `HashMap`, adding explicit re-sorting where incidental key order is relied upon (`snapshot()` at minimum; grep for other callers).
+  - **E1.2 Deliverables impact:** E1.2 deliverable 3 (second `Csr`-or-similar storage type implementing trait) is unneeded as `Csr` did not outperform the simple map swap. Trait-extraction deliverables (1, 2, 4, 5, 6) proceed as scoped.
+- **Open Product/UX Question:**
+  - **Observation:** Even with ~5-8x map swap speedup, ~1M cells costs 1-1.5 seconds to construct (multi-second for several million cells at finer tile resolution).
+  - **Status:** Open UX decision — whether load time is acceptable synchronously, requires async/background construction, or requires coarser default cell resolution.
 
 ## Gaps / caveats
 
-- Single-machine, `Instant`-based wall-clock timing, not a
-  statistically-averaged `criterion` harness (no new dependency was added
-  for a one-off measurement spike) — adequate for this spec's
-  order-of-magnitude questions, not for ongoing regression tracking. If
-  per-frame or per-load graph cost ever needs continuous regression
-  tracking, that is a separate follow-up.
-- Topology is a synthetic regular grid (matches `PrismGridMesh`'s existing
-  6-slot connectivity), not a real authored map.
-- The `hashmap+csr` candidate resolves identities with a plain
-  `std::collections::HashMap` (SipHash) for a fair one-variable-at-a-time
-  comparison against `hashmap+stablegraph`; a faster hasher (e.g.
-  `rustc-hash`/`FxHashMap`) was not tried and could move both realistic
-  candidates further, uniformly — not expected to change which one wins,
-  since both would gain roughly the same relative amount.
-- `libs/graph/core/examples/storage_bench.rs` is kept in the repo for
-  reproducibility but is explicitly not public API and not part of any
-  build/CI gate.
+- **Timing Harness:** Uses single-machine `Instant`-based wall-clock timing instead of `criterion` (adequate for order-of-magnitude evaluation, not continuous regression tracking).
+- **Topology:** Synthetic regular grid matching `PrismGridMesh` 6-slot connectivity, not an authored map.
+- **Hasher Choice:** `hashmap+csr` used standard `std::collections::HashMap` (SipHash) for 1-variable comparison against `hashmap+stablegraph`. Faster hashers (`rustc-hash`/`FxHashMap`) were untried and would shift both realistic candidates uniformly without changing winner.
+- **Artifact Role:** `libs/graph/core/examples/storage_bench.rs` preserved for reproducibility; not public API and not in build/CI gate.
