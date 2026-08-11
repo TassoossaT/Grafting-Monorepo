@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { delegateRun } from "./delegate-commands.ts";
+import { delegateEdit } from "./delegate-edit-commands.ts";
 import { runGuardCheck } from "./guard-command.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
@@ -99,6 +100,10 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
       jsonSchema: jsonSchemaRaw === undefined ? undefined : JSON.parse(jsonSchemaRaw),
     };
   }
+  if (subcommand === "edit") {
+    const scope = readValues(argv, "--scope");
+    return { taskId, prompt: readValue(argv, "--prompt"), effort: readValue(argv, "--effort"), scope: scope.length > 0 ? scope : undefined };
+  }
   return undefined;
 }
 function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
@@ -131,6 +136,7 @@ async function main(argv: string[]): Promise<void> {
     if (group === "delegate") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
       if (subcommand === "run") printAndExit(await delegateRun(root, input as Parameters<typeof delegateRun>[1]));
+      if (subcommand === "edit") printAndExit(await delegateEdit(root, input as Parameters<typeof delegateEdit>[1]));
     }
 
     if (group === "task") {
@@ -153,7 +159,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>] [--json-schema <json>]`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>] [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]...`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

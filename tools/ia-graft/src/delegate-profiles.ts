@@ -20,8 +20,18 @@ export interface DelegateProfile {
   label: string;
   /** Binary invoked via execFile -- args are always passed as an array, never shell-interpolated. */
   cli: string;
-  /** Builds argv for a single headless prompt call. */
+  /** Builds argv for a single headless prompt call (`delegate run`, text/JSON out, no filesystem writes). */
   buildArgs: (prompt: string, options: DelegateCallOptions) => string[];
+  /**
+   * Builds argv for a file-editing agent session (`delegate edit`). Only
+   * edit tools are auto-approved (`--mode accept-edits`); everything else
+   * (shell, browser, ...) still requires interactive approval and is
+   * auto-denied in headless mode. This is not a substitute for the
+   * caller always pinning `cwd` to an isolated task worktree and
+   * post-hoc scope enforcement -- live testing showed the agent can still
+   * wander into touching files outside the intended scope.
+   */
+  buildEditArgs: (prompt: string) => string[];
 }
 
 /** All current profiles share one CLI (`agy`) and only differ by model id. */
@@ -34,6 +44,7 @@ function agyProfile(model: string): DelegateProfile {
       if (jsonSchema) args.push("--json-schema", jsonSchema);
       return args;
     },
+    buildEditArgs: (prompt) => ["-p", prompt, "--model", model, "--mode", "accept-edits", "--sandbox", "--output-format", "json"],
   };
 }
 
