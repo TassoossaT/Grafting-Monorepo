@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -222,6 +222,33 @@ test("delegateEdit does not flag content loss when a split preserves total word 
   assert.equal(r.contentStats.totalWordsAfter, 6);
   assert.equal(r.contentStats.retentionRatio, 1);
   assert.equal(r.contentStats.possibleContentLoss, false);
+});
+
+test("delegateEdit automatically grounds the prompt with .ai/INDEX.md when present, at no extra caller cost", async () => {
+  const root = await makeRepoWithTask("DEMO-EDIT-13");
+  await mkdir(join(root, ".ai"), { recursive: true });
+  await writeFile(join(root, ".ai", "INDEX.md"), "# Repo Index\n\nDocs live under docs/, split by topic.\n", "utf8");
+  let calledArgs: string[] = [];
+  const exec = (async (_cmd: string, args: string[]) => {
+    calledArgs = args;
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  await delegateEdit(root, { taskId: "DEMO-EDIT-13", prompt: "do the thing" }, { exec });
+  const sentPrompt = calledArgs[calledArgs.indexOf("-p") + 1]!;
+  assert.match(sentPrompt, /Docs live under docs\/, split by topic\./);
+  assert.match(sentPrompt, /do the thing/);
+  assert.ok(sentPrompt.indexOf("Repo Index") < sentPrompt.indexOf("do the thing"), "auto grounding must come before the prompt, not after");
+});
+
+test("delegateEdit sends the prompt as-is when there is no .ai/INDEX.md and no explicit context", async () => {
+  const root = await makeRepoWithTask("DEMO-EDIT-14");
+  let calledArgs: string[] = [];
+  const exec = (async (_cmd: string, args: string[]) => {
+    calledArgs = args;
+    return { stdout: JSON.stringify({ status: "SUCCESS", response: "done" }), stderr: "" };
+  }) as never;
+  await delegateEdit(root, { taskId: "DEMO-EDIT-14", prompt: "do the thing" }, { exec });
+  assert.equal(calledArgs[calledArgs.indexOf("-p") + 1], "do the thing");
 });
 
 test("delegateEdit prepends caller-supplied context ahead of the prompt sent to the CLI", async () => {

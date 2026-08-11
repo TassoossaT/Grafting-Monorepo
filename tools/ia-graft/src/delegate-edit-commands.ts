@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./delegate-profiles.ts";
 import { GitClient } from "./git-client.ts";
-import { isValidTaskId, type CliError } from "./task-commands.ts";
+import { isValidTaskId, taskContext, type CliError } from "./task-commands.ts";
 
 const execFileAsync = promisify(execFile);
 type ExecFile = typeof execFileAsync;
@@ -13,6 +13,8 @@ const fail = (error: string): CliError => ({ ok: false, error });
 
 /** Below this fraction of pre-call word count surviving, flag possible content loss instead of staying silent about it. */
 const CONTENT_LOSS_THRESHOLD = 0.7;
+/** Caps the auto-grounding prompt overhead, independent of how large .ai/INDEX.md grows. */
+const MAX_AUTO_CONTEXT_CHARS = 6000;
 
 export interface DelegateEditInput {
   taskId: string;
@@ -21,14 +23,28 @@ export interface DelegateEditInput {
   /** Path prefixes the edit is allowed to touch (e.g. ["docs/"]). Any changed file outside this is reverted, not silently kept. */
   scope?: string[];
   /**
-   * Repo-specific grounding (conventions, style notes, relevant excerpts
-   * from `ia-graft context` or AGENTS.md) prepended to the prompt. Not
-   * fetched automatically -- `agy` runs as an independent process with no
-   * knowledge of this repo's hooks, CLAUDE.md/AGENTS.md, or `ia-graft
-   * context`; the caller decides what grounding is relevant and supplies
-   * it explicitly.
+   * Extra grounding prepended ON TOP OF the automatic `.ai/INDEX.md`
+   * grounding below -- for something INDEX.md wouldn't cover. Usually
+   * leave this unset: composing it costs the CALLER's own tokens (e.g.
+   * Claude's, when Claude is the one invoking this), which undercuts the
+   * whole point of delegating work to a cheaper model in the first place.
    */
   context?: string;
+}
+
+/**
+ * Grounds the prompt in this repo's own `.ai/INDEX.md` -- an index file
+ * literally written to be "the LLM context map & router" for this repo --
+ * automatically and at zero cost to the caller: a plain file read, no LLM
+ * involved. `agy` runs as an independent process with no built-in
+ * awareness of Claude Code's hooks, AGENTS.md/PROTOCOL.md, or `ia-graft
+ * context`; without this, it would have no repo grounding at all unless
+ * the caller composed some by hand every time.
+ */
+async function autoGroundingContext(repoRoot: string): Promise<string | undefined> {
+  const { summary } = await taskContext(repoRoot, {});
+  if (!summary || summary.startsWith("No context found")) return undefined;
+  return summary.slice(0, MAX_AUTO_CONTEXT_CHARS);
 }
 
 function inScope(path: string, scope?: string[]): boolean {
@@ -106,7 +122,10 @@ interface ChangedFileStat {
 /**
  * Gives a delegated model real write access, but only inside an
  * already-isolated `ia-graft` task worktree -- never the main checkout --
- * and never auto-commits. `scope`, when given, is enforced after the fact
+ * and never auto-commits. Every prompt is automatically grounded in this
+ * repo's `.ai/INDEX.md` (see `autoGroundingContext`) at zero cost to the
+ * caller -- no need to hand-compose repo context before every call.
+ * `scope`, when given, is enforced after the fact
  * against a pre-call snapshot: any changed file outside it is restored to
  * what it looked like right before this call (not silently kept, and not
  * blindly reset to HEAD -- see `snapshotWorktree`).
@@ -146,7 +165,8 @@ export async function delegateEdit(repoRoot: string, input: DelegateEditInput, {
   }
 
   const { before, beforeContent, baseline } = await snapshotWorktree(worktreePath);
-  const fullPrompt = input.context ? `${input.context}\n\n---\n\n${input.prompt}` : input.prompt;
+  const groundingParts = [await autoGroundingContext(repoRoot), input.context].filter((part): part is string => Boolean(part));
+  const fullPrompt = groundingParts.length > 0 ? `${groundingParts.join("\n\n---\n\n")}\n\n---\n\n${input.prompt}` : input.prompt;
 
   let response: { status?: string; response?: string };
   try {
