@@ -13,7 +13,10 @@ mod layout;
 mod model;
 mod surface;
 
-pub use construction::{ConstructionError, DeleteOutcome, delete_node, move_node};
+pub use construction::{
+    ConstructionError, DeleteOutcome, SurfaceSpec, delete_node, merge_surfaces, move_node,
+    split_surface,
+};
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,

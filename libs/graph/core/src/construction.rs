@@ -1,9 +1,10 @@
 //! Domain operations combining [`Graph`] mutation with [`SurfaceRegistry`]
-//! bookkeeping, per `ADR-0022`: `Move` and `Delete` (with the general
-//! cycle-repair algorithm). `Merge`/`Split`/`Duplicate` are deferred to a
-//! follow-up -- each needs the caller to supply a new cycle (only the
-//! domain knows how to split or join geometry), a different shape of
-//! problem than these two.
+//! bookkeeping, per `ADR-0022`: `Move`, `Delete` (with the general
+//! cycle-repair algorithm), `Merge`, and `Split`. `Duplicate` is deferred
+//! to a follow-up: unlike `Merge`/`Split`, it needs the caller to also
+//! supply new edges (`Surface` does not track which edges form its
+//! boundary, so there is nothing to duplicate automatically), a genuinely
+//! different shape of problem from the other four.
 
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
@@ -19,6 +20,12 @@ pub enum ConstructionError {
     Graph(GraphError),
     /// The underlying surface registry mutation failed.
     Surface(SurfaceError),
+    /// [`merge_surfaces`] or [`split_surface`] was asked to treat the same
+    /// node-set identity as two distinct operands.
+    SameSurface {
+        /// The identity that was supplied twice.
+        key: SurfaceKey,
+    },
 }
 
 impl fmt::Display for ConstructionError {
@@ -26,6 +33,9 @@ impl fmt::Display for ConstructionError {
         match self {
             Self::Graph(error) => write!(formatter, "{error}"),
             Self::Surface(error) => write!(formatter, "{error}"),
+            Self::SameSurface { key } => {
+                write!(formatter, "expected two distinct surfaces, both were {key:?}")
+            }
         }
     }
 }
@@ -214,6 +224,112 @@ fn simple_cycle_order(induced: &HashMap<NodeId, BTreeSet<NodeId>>, component: &B
         "a connected, all-degree-2 component is always exactly one simple cycle"
     );
     Some(ordered)
+}
+
+/// A surface's non-identity attributes, for operations that register a new
+/// surface as one step of a larger operation ([`merge_surfaces`],
+/// [`split_surface`]) rather than standalone via
+/// [`SurfaceRegistry::add_surface`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceSpec {
+    /// Nodes forming the new surface's cycle, in mesh-derivation order.
+    pub cycle: Vec<NodeId>,
+    /// The new surface's open, extensible type identifier.
+    pub surface_type: SurfaceType,
+    /// Whether the new surface blocks movement or acts as ground.
+    pub physical: bool,
+}
+
+/// Validates a candidate new surface without registering it: non-empty
+/// cycle, every node exists, and its node-set identity does not collide
+/// with an already-registered surface -- except a key listed in `exclude`,
+/// which the caller is about to remove as part of the same operation, so a
+/// resulting identity match against it is expected, not a collision.
+fn validate_new_surface<N, E>(
+    graph: &Graph<N, E>,
+    surfaces: &SurfaceRegistry,
+    spec: &SurfaceSpec,
+    exclude: &[&SurfaceKey],
+) -> Result<SurfaceKey, SurfaceError> {
+    if spec.cycle.is_empty() {
+        return Err(SurfaceError::EmptyCycle);
+    }
+    for id in &spec.cycle {
+        if graph.node(id).is_none() {
+            return Err(SurfaceError::UnknownNode { id: id.clone() });
+        }
+    }
+    let key = SurfaceKey::from_cycle(&spec.cycle);
+    if !exclude.contains(&&key) && surfaces.surface(&key).is_some() {
+        return Err(SurfaceError::DuplicateSurface { key });
+    }
+    Ok(key)
+}
+
+/// Unites two existing surfaces into one new surface, per `ADR-0022`'s
+/// `Merge` ("a door's nodes and an adjoining wall's nodes becoming one
+/// thing"). `merged` is the caller-supplied result -- only the domain
+/// knows the correct combined boundary, this crate does not compute
+/// geometry. Both `a` and `b` must already be registered and distinct;
+/// `merged` is validated (existing nodes, non-empty, no collision with an
+/// unrelated third surface) *before* `a` and `b` are removed, so a failure
+/// never leaves either original surface gone without its replacement.
+pub fn merge_surfaces<N, E>(
+    graph: &Graph<N, E>,
+    surfaces: &mut SurfaceRegistry,
+    a: &SurfaceKey,
+    b: &SurfaceKey,
+    merged: SurfaceSpec,
+) -> Result<SurfaceKey, ConstructionError> {
+    if a == b {
+        return Err(ConstructionError::SameSurface { key: a.clone() });
+    }
+    if surfaces.surface(a).is_none() {
+        return Err(SurfaceError::UnknownSurface { key: a.clone() }.into());
+    }
+    if surfaces.surface(b).is_none() {
+        return Err(SurfaceError::UnknownSurface { key: b.clone() }.into());
+    }
+    validate_new_surface(graph, surfaces, &merged, &[a, b])?;
+
+    surfaces.remove_surface(a).expect("checked above");
+    surfaces.remove_surface(b).expect("checked above");
+    Ok(surfaces
+        .add_surface(graph, merged.cycle, merged.surface_type, merged.physical)
+        .expect("pre-validated by validate_new_surface"))
+}
+
+/// Divides one existing surface into two new surfaces, per `ADR-0022`'s
+/// `Split` ("cutting a wall into two"). `first` and `second` are the
+/// caller-supplied halves -- only the domain knows how to cut the
+/// geometry, this crate does not compute it. `key` must already be
+/// registered; both halves are validated, and checked not to collide with
+/// *each other*, before `key` is removed -- a failure never leaves the
+/// original surface gone with only one (or neither) half registered.
+pub fn split_surface<N, E>(
+    graph: &Graph<N, E>,
+    surfaces: &mut SurfaceRegistry,
+    key: &SurfaceKey,
+    first: SurfaceSpec,
+    second: SurfaceSpec,
+) -> Result<(SurfaceKey, SurfaceKey), ConstructionError> {
+    if surfaces.surface(key).is_none() {
+        return Err(SurfaceError::UnknownSurface { key: key.clone() }.into());
+    }
+    let first_key = validate_new_surface(graph, surfaces, &first, &[key])?;
+    let second_key = validate_new_surface(graph, surfaces, &second, &[key])?;
+    if first_key == second_key {
+        return Err(ConstructionError::SameSurface { key: first_key });
+    }
+
+    surfaces.remove_surface(key).expect("checked above");
+    let first_registered = surfaces
+        .add_surface(graph, first.cycle, first.surface_type, first.physical)
+        .expect("pre-validated by validate_new_surface");
+    let second_registered = surfaces
+        .add_surface(graph, second.cycle, second.surface_type, second.physical)
+        .expect("pre-validated by validate_new_surface");
+    Ok((first_registered, second_registered))
 }
 
 #[cfg(test)]
@@ -423,5 +539,136 @@ mod tests {
         assert!(graph.node(&nid("tip")).is_some());
         assert!(surfaces.surface(&unrelated).is_some());
         assert!(surfaces.surface(&side).is_some());
+    }
+
+    fn spec(nodes: &[&str], surface_type: &str, physical: bool) -> SurfaceSpec {
+        SurfaceSpec {
+            cycle: nodes.iter().map(|name| nid(name)).collect(),
+            surface_type: SurfaceType::new(surface_type),
+            physical,
+        }
+    }
+
+    #[test]
+    fn merge_surfaces_unites_two_into_one() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let side_ab = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side_bc = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
+
+        let merged_key = merge_surfaces(&graph, &mut surfaces, &side_ab, &side_bc, spec(&["tip", "a", "b", "c"], "merged-wall", true)).unwrap();
+
+        assert!(surfaces.surface(&side_ab).is_none());
+        assert!(surfaces.surface(&side_bc).is_none());
+        let merged = surfaces.surface(&merged_key).unwrap();
+        assert_eq!(merged.surface_type(), &SurfaceType::new("merged-wall"));
+        assert_eq!(SurfaceKey::from_cycle(merged.cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b"), nid("c")]));
+    }
+
+    #[test]
+    fn merge_surfaces_rejects_the_same_surface_twice() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+
+        let error = merge_surfaces(&graph, &mut surfaces, &side, &side, spec(&["tip", "a", "b", "c"], "merged", true)).unwrap_err();
+        assert_eq!(error, ConstructionError::SameSurface { key: side.clone() });
+        assert!(surfaces.surface(&side).is_some());
+    }
+
+    #[test]
+    fn merge_surfaces_rejects_unknown_operand_without_mutating_anything() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let missing = SurfaceKey::from_cycle(&[nid("tip"), nid("c"), nid("d")]);
+
+        let error = merge_surfaces(&graph, &mut surfaces, &side, &missing, spec(&["tip", "a", "b", "c"], "merged", true)).unwrap_err();
+        assert_eq!(error, ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing }));
+        assert!(surfaces.surface(&side).is_some());
+    }
+
+    #[test]
+    fn merge_surfaces_rejects_a_result_colliding_with_a_third_surface_without_mutating_anything() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let side_ab = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side_bc = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
+        let unrelated = surfaces.add_surface(&graph, vec![nid("a"), nid("b"), nid("c"), nid("d")], SurfaceType::new("floor"), true).unwrap();
+
+        let error = merge_surfaces(&graph, &mut surfaces, &side_ab, &side_bc, spec(&["a", "b", "c", "d"], "merged", true)).unwrap_err();
+        assert_eq!(error, ConstructionError::Surface(SurfaceError::DuplicateSurface { key: unrelated.clone() }));
+        assert!(surfaces.surface(&side_ab).is_some());
+        assert!(surfaces.surface(&side_bc).is_some());
+        assert!(surfaces.surface(&unrelated).is_some());
+    }
+
+    #[test]
+    fn split_surface_divides_one_into_two() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
+
+        let (first, second) = split_surface(
+            &graph,
+            &mut surfaces,
+            &merged,
+            spec(&["tip", "a", "b"], "wall", true),
+            spec(&["tip", "b", "c"], "wall", true),
+        )
+        .unwrap();
+
+        assert!(surfaces.surface(&merged).is_none());
+        assert_eq!(SurfaceKey::from_cycle(surfaces.surface(&first).unwrap().cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")]));
+        assert_eq!(SurfaceKey::from_cycle(surfaces.surface(&second).unwrap().cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("b"), nid("c")]));
+    }
+
+    #[test]
+    fn split_surface_rejects_unknown_surface() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let missing = SurfaceKey::from_cycle(&[nid("tip"), nid("a")]);
+
+        let error = split_surface(&graph, &mut surfaces, &missing, spec(&["tip", "a"], "wall", true), spec(&["b", "c"], "wall", true)).unwrap_err();
+        assert_eq!(error, ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing }));
+    }
+
+    #[test]
+    fn split_surface_rejects_two_halves_with_the_same_identity() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
+
+        let error = split_surface(
+            &graph,
+            &mut surfaces,
+            &merged,
+            spec(&["tip", "a", "b"], "wall", true),
+            spec(&["b", "a", "tip"], "wall", true),
+        )
+        .unwrap_err();
+        assert_eq!(error, ConstructionError::SameSurface { key: SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")]) });
+        // Nothing committed: the original surface is still there.
+        assert!(surfaces.surface(&merged).is_some());
+    }
+
+    #[test]
+    fn split_surface_rejects_a_half_colliding_with_a_third_surface_without_mutating_anything() {
+        let graph = pyramid();
+        let mut surfaces = SurfaceRegistry::new();
+        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
+        let unrelated = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
+
+        let error = split_surface(
+            &graph,
+            &mut surfaces,
+            &merged,
+            spec(&["tip", "a", "b"], "wall", true),
+            spec(&["tip", "b", "c"], "wall", true),
+        )
+        .unwrap_err();
+        assert_eq!(error, ConstructionError::Surface(SurfaceError::DuplicateSurface { key: unrelated.clone() }));
+        assert!(surfaces.surface(&merged).is_some());
+        assert!(surfaces.surface(&unrelated).is_some());
     }
 }
