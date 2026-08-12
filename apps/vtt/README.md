@@ -6,8 +6,8 @@ concepts.
 
 The accepted architecture is recorded in
 `docs/adr/ADR-0023-vtt-application-architecture.md`. Implementation agents must
-follow `docs/architecture/vtt-application-architecture.md` and this directory's
-`AGENTS.md`.
+follow `docs/architecture/vtt-application-architecture.md`,
+`docs/architecture/vtt-product-model.md`, and this directory's `AGENTS.md`.
 
 ## Current executable slice
 

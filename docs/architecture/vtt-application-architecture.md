@@ -23,6 +23,10 @@ This specification governs application-specific composition. It does not
 authorize VTT-specific APIs in reusable packages and does not authorize an
 empty future-tree scaffold.
 
+`docs/architecture/vtt-product-model.md` (`VTT-PRODUCT-001`) is the normative
+refinement for VTT-owned nouns, identity, operations, confirmed projections,
+and app-local capability seams. Implementations MUST satisfy both.
+
 ## 2. Non-goals
 
 This specification does not:
