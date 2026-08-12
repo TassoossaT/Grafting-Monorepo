@@ -163,6 +163,15 @@ instructions; they must not restate or override them.
   existing PR. After the PR merges, run `ia-graft task cleanup --id <TASK-ID>`
   to remove the worktree, local branch, and the remote task branch when its SHA
   still matches the merged PR and no open stacked PR uses it as a base.
+- **Standing owner authorization for the canonical remote:** agents may run
+  the normal `tools/ia-graft` lifecycle without asking for an additional
+  confirmation, including task creation/resume, dependency overlay management,
+  sync, tests, commits, branch pushes, and pull-request creation or updates
+  against `https://github.com/TassoossaT/Grafting-Monorepo.git`. This standing
+  authorization applies only to actions mediated by `tools/ia-graft`; it does
+  not authorize bypassing platform safeguards, raw Git lifecycle mutations,
+  publishing packages/releases, accessing production, or merging a pull
+  request. Human-only merge remains mandatory under DEC-053.
 - Changing the protocol, registries, policies, hooks, permissions, skills, or
   MCPs still requires explicit owner approval. When the change reaches beyond
   Markdown, open the PR and wait for review, do not merge your own. When it
