@@ -1,75 +1,100 @@
 # Grafting Monorepo
 
-Grafting is a planned polyglot monorepo bringing together:
+> **Polyglot high-performance virtual tabletop, procedural generation engine, and AI control plane.**
 
-- a Web Virtual Tabletop in TypeScript and Three.js;
-- a desktop game in C#/.NET;
-- a single Rust core for domain, math, AI, pathfinding, and solver logic;
-- Python tooling managed by uv;
-- Rust/Wasm/TypeScript and Rust/C ABI/C# interop through the Isekai subsystem;
-- GPU compute with wgpu/WGSL and a CPU fallback;
-- a Knowledge & Automation Plane;
-- the Grafting Graph IR;
-- an AI Control Plane shared between Claude and GPT/Codex.
+Grafting is a modular monorepo unifying domain simulation, GPU/CPU acceleration, web interfaces, and desktop hosts around a canonical Rust engine core.
 
-## Current state
+---
 
-The repository is still in the planning phase. There is no implementation,
-workspace, or prior Git history beyond planning documents.
+## 🏛️ System Architecture
 
-The next milestone is closing the Decision Gates and running the Phase 0
-spikes before the definitive scaffold.
+```mermaid
+graph TD
+    subgraph Applications [Apps Layer]
+        VTT["apps/vtt (Web VTT - TS / Three.js)"]
+        Studio["apps/architecture-studio (Lab & Spikes)"]
+        Desktop["dotnet/ (C# / .NET Desktop Host)"]
+    end
 
-See:
+    subgraph Interop [Isekai Interop Layer]
+        Wasm["Rust / Wasm Bindings"]
+        CABI["Rust / C ABI Interop"]
+    end
 
-- [`GRAFTING_MASTER_SOURCE.md`](GRAFTING_MASTER_SOURCE.md) — canonical
-  architecture, decisions, backlog, and plan (itself a router — see its
-  §0.4 table for where each section's full body actually lives);
-- [`AGENTS.md`](AGENTS.md) — operational contract for agents;
-- [`docs/adr/`](docs/adr/) — architectural decision records;
-- [`docs/decisions/GATES.md`](docs/decisions/GATES.md) — live Decision Gate
-  status;
-- [`.ai/README.md`](.ai/README.md) — current scope of the AI Control Plane;
-- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — record of external
-  open-source code copied or adapted into this repository, with attribution
-  and license.
+    subgraph CoreEngine [Engine & Math Core]
+        GraphCore["libs/graph/core (Rust Graph IR & Solvers)"]
+        Compute["libs/engine/compute (wgpu GPU / CPU Fallback)"]
+        Polymath["libs/polymath (Platform Abstraction)"]
+    end
 
-Historical build log (what was done, when, and why, epic by epic) is
-archived at [`docs/history/PLANNING_LOG.md`](docs/history/PLANNING_LOG.md) —
-optional reading, not part of the required chain above.
+    subgraph ControlPlane [AI & Task Governance]
+        IAGraft["tools/ia-graft (Task Worktree & Delegation CLI)"]
+        MasterSource["GRAFTING_MASTER_SOURCE.md (Architecture Router)"]
+    end
 
-## Documentation authority
-
-The order of authority is:
-
-1. `GRAFTING_MASTER_SOURCE.md`;
-2. approved ADRs;
-3. versioned contracts and schemas;
-4. code, manifests, and pipelines;
-5. root and local `AGENTS.md` files;
-6. `.ai/`;
-7. vendor adapters;
-8. generated documentation.
-
-Summary documents do not override the master source.
-
-## Build order
-
-```text
-decisions
-→ ADRs
-→ spikes
-→ minimal workspace
-→ CPU core
-→ Isekai bindings
-→ GPU compute
-→ hosts
-→ multiplayer
-→ solver
-→ advanced AI Control Plane
+    VTT --> Wasm
+    Desktop --> CABI
+    Studio --> Wasm
+    Wasm --> GraphCore
+    CABI --> GraphCore
+    GraphCore --> Compute
+    GraphCore --> Polymath
 ```
 
-## Core rule
+---
 
-Do not build all layers at once. First reduce uncertainty, measure the
-critical boundaries, and close the decisions that change the structure.
+## 🚀 Key Subsystems
+
+| Subsystem | Stack | Purpose |
+| :--- | :--- | :--- |
+| **Rust Graph Core** (`libs/graph/core`) | Rust | Single source of truth for domain logic, pathfinding, graph IR, and algorithms. |
+| **Web VTT** (`apps/vtt`) | TS / Vite / Vanilla CSS | 3D interactive Virtual Tabletop built with modular UI and dynamic layout math. |
+| **Architecture Studio** (`apps/architecture-studio`) | TS / Web | Laboratory surface (`/lab`) for benchmarking, spikes, and visual trials. |
+| **Isekai Interop** (`dotnet/` & Rust) | Rust C-ABI / Wasm | Zero-overhead bindings connecting Rust core to .NET and Browser hosts. |
+| **Polymath** (`libs/polymath`) | Polyglot | Centralized platform, GPU (`wgpu`), OS, and runtime capability abstraction. |
+| **AI Control Plane** (`tools/ia-graft`) | Node / TS | CLI orchestrating isolated Git worktrees, tests, PRs, and multi-agent delegation. |
+
+---
+
+## 🛠️ Human Developer Quickstart
+
+### Prerequisites
+- **Node.js**: `v22+` (with `pnpm`)
+- **Rust**: `1.80+` (with `cargo` and `wasm-pack`)
+- **.NET SDK**: `8.0+`
+- **Python**: `3.11+` (managed via `uv`)
+
+### Running Locally
+
+1. **Install JavaScript dependencies:**
+   ```bash
+   pnpm install
+   ```
+
+2. **Run Web VTT in development mode:**
+   ```bash
+   pnpm --filter @grafting/vtt dev
+   ```
+
+3. **Run AI Task CLI checks:**
+   ```bash
+   node --experimental-strip-types tools/ia-graft/src/bin.ts doc-check
+   ```
+
+---
+
+## 📚 Documentation Map
+
+- [`GRAFTING_MASTER_SOURCE.md`](GRAFTING_MASTER_SOURCE.md) — Canonical architectural blueprint & Section Router (§0.4).
+- [`AGENTS.md`](AGENTS.md) — Machine-first operational contract for AI coding assistants.
+- [`docs/adr/`](docs/adr/) — Architectural Decision Records.
+- [`docs/decisions/GATES.md`](docs/decisions/GATES.md) — Decision Gate tracker.
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — Third-party license attributions.
+
+---
+
+## ⚙️ Core Philosophy
+
+- **Single Engine Source:** Heavy computations and graph math strictly belong in Rust (`grafting-graph-core`). Presentation layers consume, never duplicate.
+- **Isolated Worktree Tasks:** Every code change is developed in an isolated Git worktree managed via `ia-graft`.
+- **Less, but better:** Function-driven, high-performance, token-efficient architecture.
