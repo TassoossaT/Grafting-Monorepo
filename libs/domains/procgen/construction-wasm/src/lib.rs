@@ -9,3 +9,4 @@
 mod dto;
 mod editing;
 mod terrain;
+mod wall;
