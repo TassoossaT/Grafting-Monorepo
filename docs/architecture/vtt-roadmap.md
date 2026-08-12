@@ -76,6 +76,13 @@ VTT-specific work builds on top of it. Nothing here is VTT product work.
 | E1.4 | Fix `/lab/vtt-brush`'s wall mesh: currently extrudes a solid box (`thickness` offset + 5 faces) instead of a flat double-sided plane; material is already `doubleSided: true`, so the fix is dropping the box extrusion, not adding anything | Ready | Baixa | Baixo — cosmetic, isolated to one lab trial |
 | E1.5 | **Relocate *and* redesign `map_state.fbs`.** Relocation: out of `libs/engine/domain-core/contracts/`, scoped by master source §10.1 (DEC-013, `LOCKED`) specifically to the replication pipeline's own contracts (`Command`/`DomainEvent`/`ReplicationDelta`/`Snapshot`), and replication/replay is now explicitly deferred (see the note below) — `MapState` was never a replication contract to begin with. Default: relocate under `libs/graph/core` or a procgen-owned contracts directory — `E1.2` (done) confirmed graph operations stay in `libs/graph/core` with no relocation, so that part of the destination question is settled; the procgen-owned-directory alternative is still open. **Redesign** (new scope, added after `ADR-0022`'s 2026-08-10 revision): the merged PR #73 schema (`BoundarySegment`/`BoundaryPatch`, free geometry) implements the now-superseded design. It needs replacing with `GraphNode`/`GraphEdge`/`ConstructionSurface` tables per the revised `ADR-0022` and `vtt-map-construction-roadmap.md`'s Phase 1 detail — this is real schema work, not a file move | Open, unblocked on destination by E1.2 (done); still depends on the revised `ADR-0022` for shape | Média | Alto — the currently-merged contract is actively wrong relative to the accepted decision |
 
+**E1.5 measurement follow-up (2026-08-12):**
+`docs/benchmarks/vtt-surface-mesh-recomputation-2026-08-12.md` closes the
+previously-unmeasured mesh-derivation question through 1M surfaces. The schema
+does not need a mesh cache. E1.5 remains open only on contract ownership and
+the resulting split/relocation; this note does not choose that structural
+destination silently.
+
 ### Out of scope for E1.1/E1.2: replay determinism
 
 Multiplayer replay is explicitly deferred — the owner's own framing: "essas

@@ -199,6 +199,20 @@ pub fn generate_prism_mesh(
 ```rust
 // tests/snapshots/public-api.txt
 pub mod grafting_graph_core
+pub enum grafting_graph_core::ConstructionError
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize
+pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
+pub grafting_graph_core::ConstructionError::SameSurface
+pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey
+pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
+pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
+pub fn grafting_graph_core::ConstructionError::eq(&self, other: &grafting_graph_core::ConstructionError) -> bool
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
+pub fn grafting_graph_core::ConstructionError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::ConstructionError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::GraphError
 pub grafting_graph_core::GraphError::CycleDetected
 pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>
@@ -212,27 +226,13 @@ pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core:
 pub grafting_graph_core::GraphError::MissingTarget
 pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::UnknownEdge
+pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::UnknownNode
 pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId
 pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::GraphError
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
-pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub grafting_graph_core::GraphPrimitive::Boundary = 1
-pub grafting_graph_core::GraphPrimitive::Passage = 0
-pub grafting_graph_core::GraphPrimitive::Surface = 2
-pub fn grafting_graph_core::GraphPrimitive::clone(&self) -> grafting_graph_core::GraphPrimitive
-pub fn grafting_graph_core::GraphPrimitive::eq(&self, other: &grafting_graph_core::GraphPrimitive) -> bool
-pub fn grafting_graph_core::GraphPrimitive::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphPrimitive::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
-pub enum grafting_graph_core::IdentifierError
-pub grafting_graph_core::IdentifierError::EmptyEdgeId
-pub grafting_graph_core::IdentifierError::EmptyNodeId
-pub fn grafting_graph_core::IdentifierError::clone(&self) -> grafting_graph_core::IdentifierError
-pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_core::IdentifierError) -> bool
-pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::LayoutError
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -2738,66 +2738,6 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
-// .next/dev/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/dev/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;

@@ -215,17 +215,15 @@ generation code, are the implementation.
 
 ## What this decision does not resolve — recorded honestly, not glossed over
 
-- **Recomputation cost.** A surface's shape is derived from its nodes'
-  current positions on demand, not stored as a pre-baked segment. This
-  reintroduces, deliberately, the specific cost the original research
-  (`vtt-wall-representation-options.md`) named against the grid-bound
-  option: "segments are derived from cell faces every time the geometry
-  changes," instead of the free-geometry option's "already the stored
-  form." Whether that cost is acceptable at real interaction scale (a
-  brush stroke recalculating several surfaces, at VTT map scale, inside a
-  frame budget) is exactly what `vtt-roadmap.md` Epic 1's `E1.1` benchmark
-  needs to measure. This decision does not settle that question — it makes
-  the answer load-bearing rather than optional.
+- ~~**Recomputation cost was unmeasured.**~~ **Resolved 2026-08-12.**
+  `docs/benchmarks/vtt-surface-mesh-recomputation-2026-08-12.md` measures the
+  complete node move → reverse-index invalidation → polygon materialization
+  path at 1k through 1M surfaces. The 1M preset takes about 0.241 ms per
+  representative 7×7-node brush stroke against the predeclared 1.67 ms
+  ceiling. `ConstructionSurface` therefore keeps no mesh cache: shape remains
+  derived from its ordered node cycle. The separate 6.567 s construction time
+  at 1M surfaces remains a load-time/UX concern, not a reason to persist a
+  second authoritative geometry copy.
 - **Tier 2 import (UVTT).** A wall imported from an external tool was never
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
@@ -278,14 +276,10 @@ positional one.
   only a rectangle — strictly more expressive than the flat
   `BoundarySegment` (start/end/height) shape it replaces.
 - **Cost:** every surface query re-derives geometry from current node
-  positions rather than reading a stored segment — a real, named,
-  unmeasured cost (see above).
-- **Cost:** Tier 2 import and the general deletion-repair algorithm both
-  need design work this document does not do.
-- **Risk — reopening this again.** This document was already reopened once
-  in two days. If `E1.1`'s measurement shows the recomputation cost is not
-  acceptable, this decision is the one that would need reopening a third
-  time — recorded here so that is an expected possibility, not a surprise.
+  positions rather than reading a stored segment. The 2026-08-12 follow-up
+  benchmark measured this path within budget through 1M surfaces; future
+  consumers still need to remeasure unusually complex polygons.
+- **Cost:** Tier 2 import needs design work this document does not do.
 
 ## Evidence
 
