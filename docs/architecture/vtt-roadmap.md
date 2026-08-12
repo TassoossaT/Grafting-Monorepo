@@ -52,15 +52,19 @@ Epic 1 (Studio/graph-core health)
    -> Epic 2 (VTT app architecture)
         -> Epic 3 (map/construction engine)
              -> Epic 3.5 (VTT map integration & edit-mode validation)
-                  -> Epic 4 (mesh/procedural assets) -- feeds Epic 3's tilesets too
-             -> Epic 5 (tokens)
-                  -> Epic 6 (rules: world, physics, movement, actions)
+                  -> Epic 4 (asset foundation and procedural surfacing)
+                       -> Epic 7 (construction editing and reactive composition)
+                            -> Epic 8 (placeables and interior composition)
+                  -> Epic 5 (tokens)
+                       -> Epic 6 (rules: world, physics, movement, actions)
 ```
 
 Epic 1 blocks Epic 3's C4 task specifically (the mutation engine cannot be
 written correctly until the graph-core question is settled). Epics 4 and 5
 can start once Epic 2's domain model exists, without waiting for all of
-Epic 3. **Epic 3.5 is new (2026-08-12):** Epic 3's engine (`E3.1`-`E3.4`)
+Epic 3. Epic 7 requires Epic 4's first asset/surfacing vertical slice, while
+Epic 8 requires placeable and room semantics from Epic 7. **Epic 3.5 is new
+(2026-08-12):** Epic 3's engine (`E3.1`-`E3.4`)
 closed with zero consumers wired anywhere in `apps/vtt` — Epic 3.5 exists
 specifically to prove that engine end-to-end inside the real app (render it,
 edit it) before more content-authoring work (Epic 4) pours more input into
@@ -355,14 +359,21 @@ finishing something partial.
 | E3.6 | Map product model inside `apps/vtt`: `entities/map` (or `construction`) app-local intents/projections/ports per `ADR-0023`/`VTT-PRODUCT-001`, wired to `grafting-procgen-construction-wasm`'s `ConstructionSession`. Likely behind a Worker boundary, per `VTT-RENDER-001`'s existing buffer-reuse/origin-tagged-state-change decisions | **Done — task `VTT-MAP-PRODUCT-MODEL`.** Closed the mesh-derivation gap first (new crate `grafting-procgen-surface-mesh`, `earcut`-based, plus two new `ConstructionSession` Wasm methods), then built `entities/map`, `ConstructionSessionPort` + its Wasm adapter (no Worker yet — see `apps/vtt/notes/0004-map-product-model.md`), and composition-root wiring that seeds a generated terrain cell + wall-with-door by default. Browser-verified the pipeline actually reaches the renderer; also surfaced two real, unfixed gaps in `E3.5`'s own render adapter (no lights configured, so every `"lit"` map chunk currently renders solid black; and a likely `PrismGridMesh`-vs-render-space axis mismatch for terrain specifically) — recorded in note `0004`, not yet assigned to a task | Alta | Alto — the only bridge between the WASM engine and the app |
 | E3.7 | Edit-mode interaction layer in `apps/vtt`: pointer capture, tool/brush selection state, drag-to-move a node, trigger generate-terrain-cell/generate-wall actions, undo/redo. `apps/architecture-studio/src/app/lab/vtt-brush` (1132 lines) is a real interactive reference for the UX, but its data model (`BoundarySegment`/`TerrainSurfaceKind`/`CellId`) predates `ADR-0022`'s node-graph revision — reuse the interaction patterns, rewrite the data model against `Surface`/`NodeId`, do not port directly | Open — not started | Alta | Alto — this is "edit mode" as the owner asked for it |
 | E3.8 | End-to-end validation slice: inside `apps/vtt`, generate a terrain cell and a wall with a door, see both rendered, drag a node in edit mode, see the change propagate live. This is the epic's own acceptance criterion, not a separate feature | Open — depends on E3.5-E3.7 | Média | Alto — this is the actual "posso ver e mexer no mapa" answer |
+| E3.9 | Render-correctness follow-up: configure lighting for map surfaces and resolve the measured terrain PrismGridMesh/render-space axis mismatch; repeat browser verification with terrain and wall fixtures before calling Epic 3 complete | Open - surfaced by VTT-MAP-PRODUCT-MODEL; depends on E3.6 | Medium | High - a correct edit pipeline is not useful if map geometry renders black or on the wrong axes |
 
-## Epic 4 — Mesh and procedural texture/asset generation
+## Epic 4 - Asset foundation and procedural surfacing
 
-| # | Task | Status | Dificuldade | Impacto |
+| # | Task | Status | Difficulty | Impact |
 | --- | --- | --- | --- | --- |
-| E4.1 | Research procedural texture generation — genuinely untouched by any existing research document; needs a first pass before anything else here | Not discussed | Média | Médio |
-| E4.2 | Tileset/asset authoring pipeline (tagging CC0 meshes with socket/adjacency metadata — real content-creation work, not automatable) | Open | Média | Alto — blocks E3.1/E3.2 content |
-| E4.3 | Custom asset import (3D models, textures for props/buildings) | Not discussed | Baixa-Média | Baixo — not urgent, unscoped |
+| E4.1 | Decide the first asset and material boundary: normalized AssetRef/definition metadata, provenance, accepted source formats, CC0 content policy, PBR map set, unit axes/pivot/bounds, and lifecycle. Audit Aedifex only as a behavioral reference; no third-party code becomes a dependency without a separate evaluation | Research complete; decision record open. See docs/research/vtt-asset-placeable-and-assembly-architecture.md and docs/research/vtt-tiny-glade-open-source-ecosystem.md | Medium | High - establishes safe reusable content |
+| E4.2 | App-owned asset catalog and one in-memory fixture pack: a normalized brick unit, mortar/plaster backing material, stone, wood, and floor material with recorded source/license/revision | Open - depends on E4.1 | Medium | High - feeds construction surfaces and future placeables |
+| E4.3 | Generic instance-set rendering in @grafting/render-3d: Grafting-owned prototype/transform/variant/bounds contract, Three backend instancing/batching, chunk invalidation, culling, picking policy, and deterministic disposal | Open - depends on E4.1 | High | High - required to render unit assets without duplicating meshes |
+| E4.4 | Rust planar surface-dressing capability: stable local pattern frame, deterministic unit lattice/bonds, polygon coverage, shared coplanar domains, joints, variants, boundary/trim policy, and derived instance plans | Open - depends on E3.6 and E4.1 | High | High - turns surfaces into repeated bricks, tiles, boards, or shingles |
+| E4.5 | VTT SurfacePatternBinding feature: select an asset/style for one or more canonical surfaces without duplicating graph geometry; expose the smallest typed operations and projection revisions | Open - depends on E4.2-E4.4 | Medium | High - product boundary between construction and visual dressing |
+| E4.6 | First vertical slice: a planar wall-with-door uses a shared running-bond frame across sibling surfaces, full unit instances, trim variants, and a visible mortar/backing surface; move a node and rebuild only affected chunks | Open - depends on E3.7 and E4.2-E4.5 | High | High - first Tiny Glade-like visual proof |
+| E4.7 | Measured hybrid LOD: near unit geometry, mid simplified units, and far material output driven by the same pattern/seed; compare merged meshes against chunked instance batches | Open - depends on E4.6 | Medium | Medium - prevents detail from becoming a scene-scale cost |
+| E4.8 | Tileset/module authoring metadata: sockets, adjacency, allowed surface classes, unit dimensions, variants, and authored trim/corner pieces. This supplies E3.1/E3.2 content without hardcoding it in graph-core | Open - depends on E4.1-E4.2 | Medium | High - content foundation for generators |
+| E4.9 | Custom external asset import: validate and normalize one GLB/PBR bundle behind an adapter, generate previews/thumbnails from normalized geometry, and dispose all decoded CPU/GPU resources | Open - depends on E4.1-E4.2 | Medium | Medium - expands content without weakening provenance |
 
 ## Epic 5 — Tokens
 
@@ -383,6 +394,37 @@ finishing something partial.
 | E6.4 | Dice rolling (`ndm` crate + `domain-core`'s existing `DeterministicRng`) | Standby | Baixa | Baixo |
 | E6.5 | Flexible character/entity data modeling (ECS candidates `hecs`/`specs` vs. plain enum domain model) | Standby | Média | Médio |
 | E6.6 | Rule automation (attack rolls, damage, saves) via a generic `Command → dice roll → modifier → outcome` flow, unifying combat and persistent status effects | Standby | Alta | Médio |
+
+## Epic 7 - Construction editing and reactive composition
+
+Goal: evolve the technical map edit mode into a deliberate construction workspace. Tools emit typed semantic intent, preview derived consequences, and commit exactly one operation; they do not directly edit renderer objects or duplicate graph geometry.
+
+| # | Task | Status | Difficulty | Impact |
+| --- | --- | --- | --- | --- |
+| E7.1 | Construction-editor foundation: toolbar/tool state, hover and selection model, property inspector, preview/cancel lifecycle, keyboard shortcuts, and a typed tool-to-operation boundary over E3.7 | Open - depends on E3.8 | High | High - establishes safe authoring ergonomics |
+| E7.2 | Wall, terrain, and node authoring tools: create/select/move/delete construction intent with guides, snapping previews, clear no-op/cancel behavior, and targeted invalidation | Open - depends on E7.1 | High | High - makes the map practical to build |
+| E7.3 | Relationship composition: recognize shared edges and intersections, preview and confirm wall corners/miters, and retain canonical graph/surface authority | Open - depends on E7.1-E7.2 | High | High - first reactive construction chemistry |
+| E7.4 | Opening tools: place, resize, move, and remove doors/windows; a path crossing a wall may propose an opening preview, but confirmation remains explicit and produces canonical sibling surfaces | Open - depends on E7.3 | High | High - turns simple walls into usable structures |
+| E7.5 | Surface-pattern editor: choose a covering, edit frame anchor, bond/layout, joint, seed, variants, and boundary policy through SurfacePatternBinding operations | Open - depends on E4.5-E4.6 and E7.1 | Medium | High - makes procedural visual detail controllable |
+| E7.6 | Room and enclosure composition: derive/select room boundaries, floor and ceiling surfaces, and inspect relationships without introducing parallel free geometry | Open - depends on E7.2-E7.4 | High | High - required before interior generation |
+| E7.7 | Roof research decision and first footprint-to-roof surface generator, with a separate license/algorithm evaluation before any straight-skeleton dependency is introduced | Open - depends on E7.6 | High | Medium - extends construction above walls |
+| E7.8 | Stairs, platforms, and railings: preview attachment to construction surfaces and commit semantic operations; collision/physics claims remain deferred to Epic 6 | Open - depends on E7.2 and E7.6 | High | Medium |
+| E7.9 | Rule-driven visual dressing: beams, trim, shingles, ivy, clutter, and other derived decoration with dependency-scoped invalidation and no individual-entity explosion | Open - depends on E4.6 and E7.3-E7.6 | Medium | Medium |
+
+## Epic 8 - Placeables and interior composition
+
+Goal: give movable props and generated interiors their own placement authority, separate from canonical construction surfaces and from tokens.
+
+| # | Task | Status | Difficulty | Impact |
+| --- | --- | --- | --- | --- |
+| E8.1 | Decide placeable identity, local/world transform authority, token relationship, hierarchy, lifecycle, and the boundary between a rigid prop and an editable movable assembly | Research complete; owner decision open. See docs/research/vtt-asset-placeable-and-assembly-architecture.md | Medium | High |
+| E8.2 | Placeable definition/catalog and scene placement projection with one primitive/fixture asset; no renderer object or graph topology is stored in the placement | Open - depends on E4.1-E4.2 and accepted E8.1 | Medium | High |
+| E8.3 | Select/place/move/rotate/delete tools with preview-then-one-commit behavior, grounded in the construction-editor interaction model | Open - depends on E7.1 and E8.2 | High | High |
+| E8.4 | Snapping and grounding preview using asset anchors, sockets, and construction/map queries; authoritative collision remains deferred | Open - depends on E8.2-E8.3 | Medium | Medium |
+| E8.5 | Interior-layout proposal contract: rooms, openings, circulation, furnishing intents, style bindings, and seed. A proposal is previewed and translated into Grafting operations rather than accepted as an opaque mesh | Open - depends on E7.6 and E8.2 | High | High |
+| E8.6 | Evaluate one offline interior generator, beginning with Infinigen Indoors and ProcTHOR as reference/proposal producers. Audit code, asset, model, and dataset licenses separately; do not make either a runtime authority | Open - depends on E8.5 | Medium | Medium |
+| E8.7 | Deterministic furnishing and clutter rules using the VTT asset catalog, room constraints, and placement queries; provide seedable variants and explicit user refinement | Open - depends on E8.3-E8.5 | High | Medium |
+| E8.8 | Decide whether editable movable assemblies are a real product requirement. If accepted, build a local-space assembly definition plus world-space placement slice; otherwise keep movable structures as rigid placeables | Open - owner gate; depends on E8.1 | High | Medium |
 
 ---
 
