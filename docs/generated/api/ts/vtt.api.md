@@ -1,12 +1,65 @@
 # vtt
 
+### `reference vtt.rendering.chunkKeyFor`
+
+### `reference vtt.rendering.clipPlaneForCameraHeight`
+
+### `reference vtt.rendering.colorForSurfaceType`
+
 ### `reference vtt.rendering.createRender3dSceneAdapter`
+
+### `reference vtt.rendering.MAP_LAYER_ID`
+
+### `reference vtt.rendering.MAP_SURFACE_VISUAL_KIND`
+
+### `reference vtt.rendering.mapChunkSceneItem`
+
+### `reference vtt.rendering.MapChunkVisualParams`
+
+### `function vtt.map-chunk-key.chunkKeyFor(centroid: Vec3, chunkSize: number): string`
+
+Buckets a world-space centroid into a fixed-size XZ grid cell, identified
+by its own cell coordinates. Pure arithmetic, not a graph algorithm, so it
+stays app-owned rather than reproducing a `libs/*` capability by hand.
+
+Vertical position never affects the bucket: chunking exists to bound how
+much geometry one buffer holds on the ground plane, not to slice by floor
+(floor cutting is the clip plane's job, see clipPlaneForCameraHeight).
+
+### `function vtt.map-chunk-key.clipPlaneForCameraHeight(cameraY: number, offset: number): ClipPlaneDescriptor`
+
+Converts a camera height into the clip plane that hides geometry above it,
+so a viewer above a floor can see into it instead of only its roof.
+
+Continuous world-space Y, not a discrete floor index -- the roadmap's own
+requirement for this task. Not called from this task's own wiring (no live
+camera exists in `apps/vtt` yet); it is the ready integration point `E3.7`
+calls once pointer/camera control exists.
+
+### `interface vtt.map-chunk-scene-item.MapChunkVisualParams`
+
+### `property vtt.map-chunk-scene-item.MapChunkVisualParams.color: number`
+
+### `property vtt.map-chunk-scene-item.MapChunkVisualParams.mesh: RenderMeshData`
+
+### `variable vtt.map-chunk-scene-item.MAP_LAYER_ID: "map"`
+
+### `variable vtt.map-chunk-scene-item.MAP_SURFACE_VISUAL_KIND: "vtt-map-surface"`
+
+### `function vtt.map-chunk-scene-item.colorForSurfaceType(surfaceType: string, physical: boolean): number`
+
+Flat classification color, no texture -- matches `@grafting/render-3d`'s
+own `heightfieldVisual` default. A real material/asset pipeline is `E4.2`;
+this exists only so generated geometry is visually distinguishable while
+nothing else renders it.
+
+### `function vtt.map-chunk-scene-item.mapChunkSceneItem(chunk: RenderMapChunk): SceneItem<MapChunkVisualParams>`
 
 ### `class vtt.render-3d-scene-adapter.Render3dSceneAdapter`
 
 ### `constructor vtt.render-3d-scene-adapter.Render3dSceneAdapter.constructor(): Render3dSceneAdapter`
 
-### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.applyConfirmed(change: ConfirmedTokenRenderChange): void`
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.applyConfirmed(change: ConfirmedRenderChange): void`
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.attachView(target: HTMLElement): string`
 
@@ -17,6 +70,10 @@
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.getMetrics(): SceneRenderMetrics`
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.resizeView(viewId: string, width: number, height: number): void`
+
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setFloorClipHeight(height: number | undefined): void`
+
+Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.start(runtimeGeneration: number): Promise<void>`
 
@@ -292,9 +349,19 @@
 
 ### `reference vtt.ports.ChangeOrigin`
 
+### `reference vtt.ports.ConfirmedMapChunkRenderChange`
+
+### `reference vtt.ports.ConfirmedRenderChange`
+
 ### `reference vtt.ports.ConfirmedTokenRenderChange`
 
 ### `reference vtt.ports.RenderDependencyRevision`
+
+### `reference vtt.ports.RenderLayerKey`
+
+### `reference vtt.ports.RenderMapChunk`
+
+### `reference vtt.ports.RenderMeshData`
 
 ### `reference vtt.ports.RenderToken`
 
@@ -306,11 +373,39 @@
 
 ### `interface vtt.scene-render-port.RenderDependencyRevision`
 
-### `property vtt.scene-render-port.RenderDependencyRevision.layer: "tokens"`
+### `property vtt.scene-render-port.RenderDependencyRevision.layer: RenderLayerKey`
 
 ### `property vtt.scene-render-port.RenderDependencyRevision.revision: number`
 
 ### `property vtt.scene-render-port.RenderDependencyRevision.scopeId: string`
+
+### `interface vtt.scene-render-port.RenderMapChunk`
+
+One spatially-bucketed unit of map geometry. `surfaceType`/`physical` echo
+`grafting-procgen-construction-wasm`'s `Surface` fields directly -- this
+port does not invent its own classification vocabulary.
+
+### `property vtt.scene-render-port.RenderMapChunk.chunkId: string`
+
+### `property vtt.scene-render-port.RenderMapChunk.mesh: RenderMeshData`
+
+### `property vtt.scene-render-port.RenderMapChunk.physical: boolean`
+
+### `property vtt.scene-render-port.RenderMapChunk.surfaceType: string`
+
+### `interface vtt.scene-render-port.RenderMeshData`
+
+Packed vertex data for one piece of map geometry. Defined locally rather
+than imported from `@grafting/render-3d`, matching how RenderToken
+already keeps this port renderer-agnostic.
+
+### `property vtt.scene-render-port.RenderMeshData.indices?: Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike>`
+
+### `property vtt.scene-render-port.RenderMeshData.normals?: Float32Array<ArrayBufferLike>`
+
+### `property vtt.scene-render-port.RenderMeshData.positions: Float32Array`
+
+### `property vtt.scene-render-port.RenderMeshData.uvs?: Float32Array<ArrayBufferLike>`
 
 ### `interface vtt.scene-render-port.RenderToken`
 
@@ -334,7 +429,7 @@
 
 ### `interface vtt.scene-render-port.SceneRenderPort`
 
-### `method vtt.scene-render-port.SceneRenderPort.applyConfirmed(change: ConfirmedTokenRenderChange): void`
+### `method vtt.scene-render-port.SceneRenderPort.applyConfirmed(change: ConfirmedRenderChange): void`
 
 ### `method vtt.scene-render-port.SceneRenderPort.attachView(target: HTMLElement): string`
 
@@ -346,10 +441,20 @@
 
 ### `method vtt.scene-render-port.SceneRenderPort.resizeView(viewId: string, width: number, height: number): void`
 
+### `method vtt.scene-render-port.SceneRenderPort.setFloorClipHeight(height: number | undefined): void`
+
+Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
+
 ### `method vtt.scene-render-port.SceneRenderPort.start(runtimeGeneration: number): Promise<void>`
 
 ### `type vtt.scene-render-port.ChangeOrigin = "local" | "network" | "programmatic"`
 
+### `type vtt.scene-render-port.ConfirmedMapChunkRenderChange = { causeId: string; chunk: RenderMapChunk; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; type: "map-chunk-upserted" } | { causeId: string; chunkId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; type: "map-chunk-removed" }`
+
+### `type vtt.scene-render-port.ConfirmedRenderChange = ConfirmedTokenRenderChange | ConfirmedMapChunkRenderChange`
+
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
+
+### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain"`
 
 ### `type vtt.scene-render-port.RenderViewId = string`
