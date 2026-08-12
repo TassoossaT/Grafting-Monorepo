@@ -176,7 +176,10 @@ function findTaskRecordPath(root, taskId) {
   return null;
 }
 
-/** Resolves the full context digest for a task ID or an explicit path list -- the shared core for both the manual CLI and the PostToolUse hook. */
+/**
+ * Resolves the full context digest for a task ID or an explicit path list -- the shared core for both the manual CLI and the PostToolUse hook.
+ * @param {{ root: string, taskId?: string | null, paths?: string[] | null, exec?: typeof execFileSync }} input
+ */
 export function resolveContext({ root, taskId = null, paths = null, exec = execFileSync }) {
   let affectedPathsInput = paths ?? [];
   let taskText = "";
