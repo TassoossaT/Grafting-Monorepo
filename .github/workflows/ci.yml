@@ -28,6 +28,13 @@ jobs:
         # stable Rust toolchain and installation remains a CI setup effect.
         run: rustup toolchain install "$(cat tools/rust-public-api-toolchain.txt)" --profile minimal
 
+      - name: Cache flatc binary
+        id: cache-flatc
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/flatc
+          key: flatc-${{ runner.os }}-${{ hashFiles('tools/flatc-version.txt') }}
+
       - name: Install pinned flatc (C-005, master source S10.3)
         # Rust/TS use this primary pin (tools/flatc-version.txt); C#
         # uses a second, older, separately-pinned flatc instead (see
@@ -41,10 +48,12 @@ jobs:
         # `pnpm install` isn't an `nx run` invocation.
         run: |
           FLATC_VERSION=$(cat tools/flatc-version.txt)
-          curl -fsSL -o /tmp/flatc.zip "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.g++-13.zip"
-          unzip -o /tmp/flatc.zip -d /tmp/flatc
-          chmod +x /tmp/flatc/flatc
-          sudo mv /tmp/flatc/flatc /usr/local/bin/flatc
+          if ! command -v flatc &> /dev/null || [ "$(flatc --version | awk '{print $3}')" != "${FLATC_VERSION}" ]; then
+            curl --retry 5 --retry-all-errors --retry-delay 3 -fsSL -o /tmp/flatc.zip "https://github.com/google/flatbuffers/releases/download/v${FLATC_VERSION}/Linux.flatc.binary.g++-13.zip"
+            unzip -o /tmp/flatc.zip -d /tmp/flatc
+            chmod +x /tmp/flatc/flatc
+            sudo mv /tmp/flatc/flatc /usr/local/bin/flatc
+          fi
           flatc --version
 
       - name: Generate FlatBuffers Rust code (C-005/C-006)
