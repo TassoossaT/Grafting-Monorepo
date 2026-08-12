@@ -7,15 +7,20 @@ import {
   type TokenProjectionDelta,
 } from "../../entities/token/index.ts";
 import {
+  applyMapProjectionDelta,
   createMapProjection,
   createSurfaceProjection,
   surfaceRefFromNodeSet,
   type MapProjection,
 } from "../../entities/map/index.ts";
 import type {
+  AffectedSurfaces,
   ChangeOrigin,
   ConfirmedTokenRenderChange,
+  ConstructionNodeId,
+  ConstructionPosition,
   ConstructionSessionPort,
+  RenderMapChunk,
   RenderViewId,
   SceneRenderMetrics,
   SceneRenderPort,
@@ -44,6 +49,12 @@ export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
+  moveNode(
+    nodeId: ConstructionNodeId,
+    position: ConstructionPosition,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): AffectedSurfaces;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
   resizeView(viewId: RenderViewId, width: number, height: number): void;
@@ -106,6 +117,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #tableId: string;
   readonly #render: SceneRenderPort;
   readonly #construction: ConstructionSessionPort;
+  /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
+  readonly #chunkRevisions = new Map<string, number>();
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
@@ -183,16 +196,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     const meshes = this.#construction.getAllSurfaceMeshes();
     const causeId = `table-load:${this.#tableId}`;
-    for (const chunk of chunkSurfaceMeshes(meshes)) {
-      this.#render.applyConfirmed({
-        type: "map-chunk-upserted",
-        origin: "programmatic",
-        causeId,
-        runtimeGeneration: generation,
-        dependency: { layer: "terrain", scopeId: chunk.chunkId, revision: 1 },
-        chunk,
-      });
-    }
+    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
+
+    const nodePositions = this.#construction.getNodePositions();
 
     return createMapProjection(
       meshes.map((mesh) =>
@@ -204,7 +210,113 @@ export class AppTabletopRuntime implements TabletopRuntime {
           revision: 1,
         }),
       ),
+      nodePositions.map((node) => ({ nodeRef: node.id, position: node.position, revision: 1 })),
     );
+  }
+
+  /**
+   * Uploads every currently-chunked piece of map geometry and removes any
+   * previously-uploaded chunk id that no longer appears -- required because
+   * `chunkSurfaceMeshes` merges every surface landing in one spatial bucket
+   * into a single buffer per {@link SceneRenderPort.applyConfirmed} call, so
+   * a stale bucket cannot be corrected by re-uploading only the surface that
+   * moved out of it. Re-deriving and re-chunking every surface on each edit
+   * (rather than patching just the affected ones) is deliberately simple:
+   * nothing in this map's current scale needs finer-grained chunk diffing
+   * yet (`E1.1` found query/traversal cheap well past this map's size).
+   */
+  #uploadMapChunks(
+    chunks: readonly RenderMapChunk[],
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): void {
+    const nextChunkIds = new Set<string>();
+    for (const chunk of chunks) {
+      nextChunkIds.add(chunk.chunkId);
+      const revision = (this.#chunkRevisions.get(chunk.chunkId) ?? 0) + 1;
+      this.#chunkRevisions.set(chunk.chunkId, revision);
+      this.#render.applyConfirmed({
+        type: "map-chunk-upserted",
+        origin,
+        causeId,
+        runtimeGeneration: generation,
+        dependency: { layer: "terrain", scopeId: chunk.chunkId, revision },
+        chunk,
+      });
+    }
+
+    for (const [chunkId, revision] of [...this.#chunkRevisions]) {
+      if (nextChunkIds.has(chunkId)) continue;
+      this.#render.applyConfirmed({
+        type: "map-chunk-removed",
+        origin,
+        causeId,
+        runtimeGeneration: generation,
+        dependency: { layer: "terrain", scopeId: chunkId, revision: revision + 1 },
+        chunkId,
+      });
+      this.#chunkRevisions.delete(chunkId);
+    }
+  }
+
+  /**
+   * Moves an existing construction node to an absolute position through the
+   * real engine, then re-derives and re-uploads every chunk (see
+   * {@link AppTabletopRuntime.#uploadMapChunks}) and folds the affected
+   * surfaces plus the moved node's own new position into the cached
+   * `MapProjection`. Returns the engine's own `AffectedSurfaces` so a caller
+   * (e.g. an undo/redo stack) can see what else changed.
+   */
+  moveNode(
+    nodeId: ConstructionNodeId,
+    position: ConstructionPosition,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): AffectedSurfaces {
+    if (this.#snapshot.status !== "ready") {
+      throw new Error("moving a node requires a ready tabletop runtime");
+    }
+
+    const affected = this.#construction.moveNode(nodeId, position);
+    const meshes = this.#construction.getAllSurfaceMeshes();
+    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+
+    let map = this.#snapshot.map;
+    for (const surfaceKey of affected.affectedSurfaceKeys) {
+      const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
+      const mesh = meshes.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === surfaceRef);
+      if (mesh === undefined) continue;
+      const previous = map.byId.get(surfaceRef);
+      map = applyMapProjectionDelta(map, {
+        type: "surface-upserted",
+        surface: createSurfaceProjection({
+          surfaceRef,
+          orderedNodeRefs: mesh.surfaceKey,
+          type: mesh.surfaceType,
+          physical: mesh.physical,
+          revision: (previous?.revision ?? 0) + 1,
+        }),
+      });
+    }
+
+    const previousNode = map.nodePositions.get(nodeId);
+    map = applyMapProjectionDelta(map, {
+      type: "node-moved",
+      nodeRef: nodeId,
+      position,
+      revision: (previousNode?.revision ?? 0) + 1,
+    });
+
+    this.#snapshot = snapshot(
+      this.#tableId,
+      this.#snapshot.status,
+      this.#snapshot.revision + 1,
+      this.#snapshot.tokens,
+      map,
+    );
+    this.#notify();
+    return affected;
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {

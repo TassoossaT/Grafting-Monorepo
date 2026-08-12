@@ -1,4 +1,9 @@
-import type { GenerateTerrainCellRequest, GenerateWallRequest } from "@/ports";
+import type {
+  ConstructionNodeId,
+  ConstructionPosition,
+  GenerateTerrainCellRequest,
+  GenerateWallRequest,
+} from "@/ports";
 
 export type OperationId = string;
 export type ParticipantId = string;
@@ -32,7 +37,21 @@ export interface GenerateWallOperation {
   readonly payload: GenerateWallRequest;
 }
 
-export type ConstructionOperation = GenerateTerrainCellOperation | GenerateWallOperation;
+export interface MoveNodePayload {
+  readonly nodeId: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+}
+
+export interface MoveNodeOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "construction.move-node@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: MoveNodePayload;
+}
+
+export type ConstructionOperation = GenerateTerrainCellOperation | GenerateWallOperation | MoveNodeOperation;
 
 function required(value: string, field: string): string {
   const normalized = value.trim();
@@ -76,6 +95,28 @@ export function createGenerateWallOperation(
     ...normalized,
     kind: "construction.generate-wall@1",
     expected: Object.freeze([]),
+    payload,
+  });
+}
+
+/**
+ * `construction.move-node@1`: moves an existing node to an absolute
+ * position. `expected` defaults to no precondition -- this task's own scope
+ * is single-user local editing, not multiplayer conflict resolution (see
+ * `docs/architecture/vtt-roadmap.md`'s "replay determinism is deliberately
+ * out of scope" note) -- but the parameter stays available for a later
+ * caller that does track a node's own revision.
+ */
+export function createMoveNodeOperation(
+  payload: MoveNodePayload,
+  context: ConstructionOperationContext,
+  expected: readonly RevisionPrecondition[] = [],
+): MoveNodeOperation {
+  const normalized = operationContext(context);
+  return Object.freeze({
+    ...normalized,
+    kind: "construction.move-node@1",
+    expected: Object.freeze([...expected]),
     payload,
   });
 }

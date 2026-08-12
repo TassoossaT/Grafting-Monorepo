@@ -91,6 +91,11 @@ export interface SurfaceMeshResult {
   readonly mesh: RenderMeshData;
 }
 
+export interface ConstructionNodeSnapshot {
+  readonly id: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+}
+
 /**
  * Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
  * (Rust panics are uncatchable on `wasm32-unknown-unknown`, so an adapter
@@ -154,6 +159,16 @@ export interface ConstructionSessionPort {
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
+
+  /**
+   * Every node currently in the session with its live position -- what an
+   * edit-mode caller needs to seed hit-testing/handle placement without
+   * re-deriving positions from triangulated mesh data. Backed by the Wasm
+   * session's own `snapshot_json`, which already carries node positions;
+   * this method exposes only that slice (edges/surfaces are unused by any
+   * caller so far).
+   */
+  getNodePositions(): readonly ConstructionNodeSnapshot[];
 
   dispose(): Promise<void>;
 }

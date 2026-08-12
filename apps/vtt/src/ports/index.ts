@@ -16,6 +16,7 @@ export type {
   AffectedSurfaces,
   ConstructionEdgeId,
   ConstructionNodeId,
+  ConstructionNodeSnapshot,
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,

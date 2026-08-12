@@ -10,14 +10,40 @@ export interface SurfaceProjection {
   readonly revision: number;
 }
 
+export interface NodePosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+export interface NodePositionEntry {
+  readonly nodeRef: NodeRef;
+  readonly position: NodePosition;
+  readonly revision: number;
+}
+
 export interface MapProjection {
   readonly byId: ReadonlyMap<SurfaceRef, SurfaceProjection>;
+  /**
+   * Live node positions, keyed by {@link NodeRef} -- what edit-mode picking
+   * and drag-to-move need and `SurfaceProjection` alone cannot give (its
+   * `orderedNodeRefs` are bare ids, not positions). Populated from
+   * `ConstructionSessionPort.getNodePositions()` at map load, then kept
+   * current by `node-moved` deltas.
+   */
+  readonly nodePositions: ReadonlyMap<NodeRef, NodePositionEntry>;
   readonly revision: number;
 }
 
 export type MapProjectionDelta =
   | { readonly type: "surface-upserted"; readonly surface: SurfaceProjection }
-  | { readonly type: "surface-removed"; readonly surfaceRef: SurfaceRef; readonly revision: number };
+  | { readonly type: "surface-removed"; readonly surfaceRef: SurfaceRef; readonly revision: number }
+  | {
+      readonly type: "node-moved";
+      readonly nodeRef: NodeRef;
+      readonly position: NodePosition;
+      readonly revision: number;
+    };
 
 /**
  * Derives a stable {@link SurfaceRef} from a surface's canonical node-set
@@ -57,7 +83,30 @@ export function createSurfaceProjection(input: SurfaceProjection): SurfaceProjec
   });
 }
 
-export function createMapProjection(surfaces: readonly SurfaceProjection[] = []): MapProjection {
+function finite(value: number, field: string): number {
+  if (!Number.isFinite(value)) throw new Error(`${field} must be finite`);
+  return value;
+}
+
+function createNodePositionEntry(input: NodePositionEntry): NodePositionEntry {
+  if (!Number.isInteger(input.revision) || input.revision < 0) {
+    throw new Error("revision must be a non-negative integer");
+  }
+  return Object.freeze({
+    nodeRef: nonEmpty(input.nodeRef, "nodeRef"),
+    position: Object.freeze({
+      x: finite(input.position.x, "position.x"),
+      y: finite(input.position.y, "position.y"),
+      z: finite(input.position.z, "position.z"),
+    }),
+    revision: input.revision,
+  });
+}
+
+export function createMapProjection(
+  surfaces: readonly SurfaceProjection[] = [],
+  nodePositions: readonly NodePositionEntry[] = [],
+): MapProjection {
   const byId = new Map<SurfaceRef, SurfaceProjection>();
   for (const candidate of surfaces) {
     const surface = createSurfaceProjection(candidate);
@@ -66,7 +115,17 @@ export function createMapProjection(surfaces: readonly SurfaceProjection[] = [])
     }
     byId.set(surface.surfaceRef, surface);
   }
-  return Object.freeze({ byId, revision: 0 });
+
+  const nodePositionsById = new Map<NodeRef, NodePositionEntry>();
+  for (const candidate of nodePositions) {
+    const entry = createNodePositionEntry(candidate);
+    if (nodePositionsById.has(entry.nodeRef)) {
+      throw new Error(`duplicate nodeRef "${entry.nodeRef}"`);
+    }
+    nodePositionsById.set(entry.nodeRef, entry);
+  }
+
+  return Object.freeze({ byId, nodePositions: nodePositionsById, revision: 0 });
 }
 
 function sameSurface(left: SurfaceProjection, right: SurfaceProjection): boolean {
@@ -84,6 +143,30 @@ export function applyMapProjectionDelta(
   current: MapProjection,
   delta: MapProjectionDelta,
 ): MapProjection {
+  if (delta.type === "node-moved") {
+    const entry = createNodePositionEntry({
+      nodeRef: delta.nodeRef,
+      position: delta.position,
+      revision: delta.revision,
+    });
+    const previous = current.nodePositions.get(entry.nodeRef);
+    if (previous !== undefined && entry.revision <= previous.revision) {
+      throw new Error(`node "${entry.nodeRef}" move revision must increase`);
+    }
+    if (
+      previous !== undefined &&
+      previous.revision === entry.revision &&
+      previous.position.x === entry.position.x &&
+      previous.position.y === entry.position.y &&
+      previous.position.z === entry.position.z
+    ) {
+      return current;
+    }
+    const nodePositions = new Map(current.nodePositions);
+    nodePositions.set(entry.nodeRef, entry);
+    return Object.freeze({ byId: current.byId, nodePositions, revision: current.revision + 1 });
+  }
+
   if (delta.type === "surface-removed") {
     const previous = current.byId.get(delta.surfaceRef);
     if (previous === undefined) return current;
@@ -92,7 +175,7 @@ export function applyMapProjectionDelta(
     }
     const byId = new Map(current.byId);
     byId.delete(delta.surfaceRef);
-    return Object.freeze({ byId, revision: current.revision + 1 });
+    return Object.freeze({ byId, nodePositions: current.nodePositions, revision: current.revision + 1 });
   }
 
   const surface = createSurfaceProjection(delta.surface);
@@ -104,5 +187,5 @@ export function applyMapProjectionDelta(
 
   const byId = new Map(current.byId);
   byId.set(surface.surfaceRef, surface);
-  return Object.freeze({ byId, revision: current.revision + 1 });
+  return Object.freeze({ byId, nodePositions: current.nodePositions, revision: current.revision + 1 });
 }
