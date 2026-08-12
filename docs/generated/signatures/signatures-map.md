@@ -82,23 +82,6 @@ pub const ENUM_MAX: u8 = 4;
 pub const ENUM_VALUES: &'static [Self] = &[
 pub fn variant_name(self) -> Option<&'static str>
 
-// src/generated/map_state_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_BOUNDARY_KIND: i8 = 0;
-pub const ENUM_MAX_BOUNDARY_KIND: i8 = 3;
-pub const ENUM_VALUES_BOUNDARY_KIND: [BoundaryKind; 4] = [
-pub struct BoundaryKind(pub i8);
-pub const Wall: Self = Self(0);
-pub const Door: Self = Self(1);
-pub const Window: Self = Self(2);
-pub const Opening: Self = Self(3);
-pub const ENUM_MIN: i8 = 0;
-pub const ENUM_MAX: i8 = 3;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
-pub enum Vec3Offset
-
 // src/generated/snapshot_generated.rs
 pub mod grafting
 pub mod contracts
@@ -199,6 +182,20 @@ pub fn generate_prism_mesh(
 ```rust
 // tests/snapshots/public-api.txt
 pub mod grafting_graph_core
+pub enum grafting_graph_core::ConstructionError
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize
+pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
+pub grafting_graph_core::ConstructionError::SameSurface
+pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey
+pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
+pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
+pub fn grafting_graph_core::ConstructionError::eq(&self, other: &grafting_graph_core::ConstructionError) -> bool
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
+pub fn grafting_graph_core::ConstructionError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::ConstructionError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::GraphError
 pub grafting_graph_core::GraphError::CycleDetected
 pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>
@@ -212,27 +209,13 @@ pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core:
 pub grafting_graph_core::GraphError::MissingTarget
 pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::UnknownEdge
+pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::UnknownNode
 pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId
 pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::GraphError
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
-pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub grafting_graph_core::GraphPrimitive::Boundary = 1
-pub grafting_graph_core::GraphPrimitive::Passage = 0
-pub grafting_graph_core::GraphPrimitive::Surface = 2
-pub fn grafting_graph_core::GraphPrimitive::clone(&self) -> grafting_graph_core::GraphPrimitive
-pub fn grafting_graph_core::GraphPrimitive::eq(&self, other: &grafting_graph_core::GraphPrimitive) -> bool
-pub fn grafting_graph_core::GraphPrimitive::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphPrimitive::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
-pub enum grafting_graph_core::IdentifierError
-pub grafting_graph_core::IdentifierError::EmptyEdgeId
-pub grafting_graph_core::IdentifierError::EmptyNodeId
-pub fn grafting_graph_core::IdentifierError::clone(&self) -> grafting_graph_core::IdentifierError
-pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_core::IdentifierError) -> bool
-pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::LayoutError
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -1722,34 +1705,6 @@ export interface TaskContextInput {
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
-// src/generated/grafting/contracts/boundary-kind.ts
-export enum BoundaryKind {
-  Wall = 0,
-  Door = 1,
-  Window = 2,
-  Opening = 3
-  }
-
-// src/generated/grafting/contracts/boundary-patch.ts
-export class BoundaryPatch {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):BoundaryPatch {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/boundary-segment.ts
-export class BoundarySegment {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):BoundarySegment {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
 // src/generated/grafting/contracts/command-message.ts
 export class CommandMessage {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -1860,26 +1815,6 @@ export class Incremented {
   return this;
   }
 
-// src/generated/grafting/contracts/map-state-message.ts
-export class MapStateMessage {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):MapStateMessage {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/prism-cell-assignment.ts
-export class PrismCellAssignment {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellAssignment {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
 // src/generated/grafting/contracts/reset.ts
 export class Reset {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -1925,16 +1860,6 @@ export class StateTable {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
   __init(i:number, bb:flatbuffers.ByteBuffer):StateTable {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/vec3.ts
-export class Vec3 {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3 {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -2738,66 +2663,6 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
-// .next/dev/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/dev/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
@@ -3109,41 +2974,6 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
 ```csharp
-// Generated/Grafting/Contracts/BoundaryKind.cs
-public enum BoundaryKind : sbyte
-
-// Generated/Grafting/Contracts/BoundaryPatch.cs
-public struct BoundaryPatch : IFlatbufferObject
-public static void ValidateVersion()
-public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb)
-public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb, BoundaryPatch obj)
-public static Offset<Grafting.Contracts.BoundaryPatch> CreateBoundaryPatch(FlatBufferBuilder builder,
-public static void StartBoundaryPatch(FlatBufferBuilder builder)
-public static void AddSegmentId(FlatBufferBuilder builder, ulong segmentId)
-public static void AddNewKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind newKind)
-public static void AddNewStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newStartOffset)
-public static void AddNewEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newEndOffset)
-public static void AddNewHeight(FlatBufferBuilder builder, float newHeight)
-public static void AddRemoved(FlatBufferBuilder builder, bool removed)
-public static void AddSequence(FlatBufferBuilder builder, ulong sequence)
-public static Offset<Grafting.Contracts.BoundaryPatch> EndBoundaryPatch(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/BoundarySegment.cs
-public struct BoundarySegment : IFlatbufferObject
-public static void ValidateVersion()
-public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb)
-public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb, BoundarySegment obj)
-public static Offset<Grafting.Contracts.BoundarySegment> CreateBoundarySegment(FlatBufferBuilder builder,
-public static void StartBoundarySegment(FlatBufferBuilder builder)
-public static void AddId(FlatBufferBuilder builder, ulong id)
-public static void AddStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> startOffset)
-public static void AddEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> endOffset)
-public static void AddHeight(FlatBufferBuilder builder, float height)
-public static void AddKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind kind)
-public static void AddBlocksMovement(FlatBufferBuilder builder, bool blocksMovement)
-public static void AddBlocksVision(FlatBufferBuilder builder, bool blocksVision)
-public static Offset<Grafting.Contracts.BoundarySegment> EndBoundarySegment(FlatBufferBuilder builder)
-
 // Generated/Grafting/Contracts/CommandMessage.cs
 public struct CommandMessage : IFlatbufferObject
 public static void ValidateVersion()
@@ -3221,39 +3051,6 @@ public static void AddAmount(FlatBufferBuilder builder, long amount)
 public static void AddNewValue(FlatBufferBuilder builder, long newValue)
 public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
 
-// Generated/Grafting/Contracts/MapStateMessage.cs
-public struct MapStateMessage : IFlatbufferObject
-public static void ValidateVersion()
-public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb)
-public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb, MapStateMessage obj)
-public static bool VerifyMapStateMessage(ByteBuffer _bb)
-public static Offset<Grafting.Contracts.MapStateMessage> CreateMapStateMessage(FlatBufferBuilder builder,
-public static void StartMapStateMessage(FlatBufferBuilder builder)
-public static void AddWidth(FlatBufferBuilder builder, uint width)
-public static void AddHeight(FlatBufferBuilder builder, uint height)
-public static void AddLayers(FlatBufferBuilder builder, uint layers)
-public static void AddSeed(FlatBufferBuilder builder, uint seed)
-public static void AddDeformationXy(FlatBufferBuilder builder, float deformationXy)
-public static void AddDeformationZ(FlatBufferBuilder builder, float deformationZ)
-public static void AddCells(FlatBufferBuilder builder, VectorOffset cellsOffset)
-public static VectorOffset CreateCellsVector(FlatBufferBuilder builder, Offset<Grafting.Contracts.PrismCellAssignment>[] data)
-
-// Generated/Grafting/Contracts/PrismCellAssignment.cs
-public struct PrismCellAssignment : IFlatbufferObject
-public static void ValidateVersion()
-public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb)
-public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb, PrismCellAssignment obj)
-public static Offset<Grafting.Contracts.PrismCellAssignment> CreatePrismCellAssignment(FlatBufferBuilder builder,
-public static void StartPrismCellAssignment(FlatBufferBuilder builder)
-public static void AddCellIndex(FlatBufferBuilder builder, uint cellIndex)
-public static void AddLayer(FlatBufferBuilder builder, byte layer)
-public static void AddX(FlatBufferBuilder builder, int x)
-public static void AddY(FlatBufferBuilder builder, int y)
-public static void AddModuleId(FlatBufferBuilder builder, uint moduleId)
-public static void AddRotation(FlatBufferBuilder builder, byte rotation)
-public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> vertexShiftOffset)
-public static Offset<Grafting.Contracts.PrismCellAssignment> EndPrismCellAssignment(FlatBufferBuilder builder)
-
 // Generated/Grafting/Contracts/Reset.cs
 public struct Reset : IFlatbufferObject
 public static void ValidateVersion()
@@ -3310,18 +3107,6 @@ public static Offset<Grafting.Contracts.StateTable> CreateStateTable(FlatBufferB
 public static void StartStateTable(FlatBufferBuilder builder)
 public static void AddValue(FlatBufferBuilder builder, long value)
 public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/Vec3.cs
-public struct Vec3 : IFlatbufferObject
-public static void ValidateVersion()
-public static Vec3 GetRootAsVec3(ByteBuffer _bb)
-public static Vec3 GetRootAsVec3(ByteBuffer _bb, Vec3 obj)
-public static Offset<Grafting.Contracts.Vec3> CreateVec3(FlatBufferBuilder builder,
-public static void StartVec3(FlatBufferBuilder builder)
-public static void AddX(FlatBufferBuilder builder, float x)
-public static void AddY(FlatBufferBuilder builder, float y)
-public static void AddZ(FlatBufferBuilder builder, float z)
-public static Offset<Grafting.Contracts.Vec3> EndVec3(FlatBufferBuilder builder)
 
 // Generated/Grafting/Contracts/WasReset.cs
 public struct WasReset : IFlatbufferObject
