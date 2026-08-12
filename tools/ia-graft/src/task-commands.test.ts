@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
-import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
