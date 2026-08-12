@@ -77,7 +77,15 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
     const pr = readValue(argv, "--pr");
     return { taskId, pr: pr === undefined ? undefined : Number(pr) };
   }
-  if (subcommand === "commit") return { taskId, message: readValue(argv, "--message"), files: readValues(argv, "--file") };
+  if (subcommand === "commit") {
+    return {
+      taskId,
+      message: readValue(argv, "--message"),
+      files: readValues(argv, "--file"),
+      coAuthors: readValues(argv, "--co-author"),
+      agent: readValue(argv, "--agent"),
+    };
+  }
   if (subcommand === "test") {
     const commands = readValues(argv, "--command");
     return commands.length <= 1

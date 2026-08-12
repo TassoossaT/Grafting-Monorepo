@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
-import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -189,6 +189,44 @@ test("taskCommit stages and commits inside the task's own worktree", async () =>
   assert.match(log, /add note/);
   const status = execFileSync("git", ["status", "--short"], { cwd: worktree }).toString();
   assert.equal(status.trim(), "");
+});
+
+test("resolveCoAuthor resolves known presets and custom author strings", () => {
+  assert.equal(resolveCoAuthor("gemini"), "Gemini <gemini@google.com>");
+  assert.equal(resolveCoAuthor("CLAUDE"), "Claude <claude@anthropic.com>");
+  assert.equal(resolveCoAuthor("codex"), "Codex <codex@openai.com>");
+  assert.equal(resolveCoAuthor("Custom <custom@example.com>"), "Custom <custom@example.com>");
+  assert.equal(resolveCoAuthor("Agent X"), "Agent X <agent.x@ai.grafting.dev>");
+});
+
+test("formatCommitMessageWithCoAuthors appends Co-authored-by trailers correctly", () => {
+  const formatted = formatCommitMessageWithCoAuthors("feat: add awesome feature", ["gemini", "claude"]);
+  assert.equal(formatted, "feat: add awesome feature\n\nCo-authored-by: Gemini <gemini@google.com>\nCo-authored-by: Claude <claude@anthropic.com>\n");
+
+  const existing = "feat: feature\n\nCo-authored-by: Gemini <gemini@google.com>\n";
+  const updated = formatCommitMessageWithCoAuthors(existing, ["gemini", "codex"]);
+  assert.equal(updated, "feat: feature\n\nCo-authored-by: Gemini <gemini@google.com>\nCo-authored-by: Codex <codex@openai.com>\n");
+});
+
+test("taskCommit appends Co-authored-by trailers when coAuthors or agent is specified", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "COAUTHOR-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "COAUTHOR-TASK");
+  await writeFile(join(worktree, "ai.txt"), "built by AI\n", "utf8");
+
+  const result = await taskCommit(root, {
+    taskId: "COAUTHOR-TASK",
+    message: "feat: AI contribution",
+    agent: "gemini",
+    coAuthors: ["claude", "codex"],
+  });
+  assert.equal(result.ok, true);
+
+  const fullLog = execFileSync("git", ["log", "-1"], { cwd: worktree }).toString();
+  assert.match(fullLog, /feat: AI contribution/);
+  assert.match(fullLog, /Co-authored-by: Gemini <gemini@google\.com>/);
+  assert.match(fullLog, /Co-authored-by: Claude <claude@anthropic\.com>/);
+  assert.match(fullLog, /Co-authored-by: Codex <codex@openai\.com>/);
 });
 
 test("taskSweep reports empty results when there is no .worktrees directory yet", async () => {
