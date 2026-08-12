@@ -3,10 +3,10 @@
 //! one stateful `ConstructionSession` for the Web host. Pure wiring only --
 //! see this crate's `AGENTS.md` for the boundary this crate must not cross.
 //!
-//! Modules land incrementally as each piece is implemented; this crate is
-//! not yet functional.
-
 mod dto;
 mod editing;
+mod session;
 mod terrain;
 mod wall;
+
+pub use session::ConstructionSession;

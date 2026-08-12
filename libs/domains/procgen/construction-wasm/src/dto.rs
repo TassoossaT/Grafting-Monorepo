@@ -52,8 +52,13 @@ pub const ALL_WALL_NODE_ROLES: [WallNodeRole; 8] = [
 ];
 
 /// Parses a wire name back into a [`WallNodeRole`]. The inverse of
-/// [`wall_node_role_wire_name`]; kept for round-trip testing and for
-/// validating a request's own keys.
+/// [`wall_node_role_wire_name`]. Not called from production code today --
+/// `wall.rs` only ever looks up a wire name it already computed from a real
+/// [`WallNodeRole`], never the reverse -- kept because it is what proves
+/// [`wall_node_role_wire_name`]'s mapping is bijective (see this module's
+/// round-trip test), the same "tested infrastructure, not dead code"
+/// reasoning `grafting-procgen-terrain-generation::bilinear_point` documents
+/// for itself.
 pub fn wall_node_role_from_wire(name: &str) -> Result<WallNodeRole, String> {
     ALL_WALL_NODE_ROLES
         .into_iter()
