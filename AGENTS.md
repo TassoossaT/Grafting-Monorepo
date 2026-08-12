@@ -48,16 +48,14 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)
 
-- **Token Economy & Discovery:**
-  - Use pattern search (`grep`, `glob`) instead of full directory listing.
-  - Read targeted line ranges (`view_file`), never full files unnecessarily.
-  - Rely on `ia-graft context` or `GRAFTING_MASTER_SOURCE.md` (§0.4 router) for on-demand domain specs.
-  - Run `ia-graft doc-check` to verify AI instruction size limits (`AGENTS.md` ≤ 100 lines).
+- **Mandatory Context Packing & Recovery:**
+  - Agents MUST run `ia-graft context --pack` or `ia-graft task resume` when starting/resuming tasks to load scoped context and avoid token waste.
+  - Agents MUST use pattern search (`grep`, `glob`) and targeted line ranges (`view_file`), never reading full files unnecessarily.
 
-- **Sub-Agent Delegation (`ia-graft delegate`):**
-  - **Fact Lookup & Text Generation:** Use `ia-graft delegate run --prompt "<p>" [--file <path>]... [--effort low|medium|high]` to offload web searches or schema extraction without consuming caller context.
-  - **Sandboxed Code Editing:** Use `ia-graft delegate edit --id <TASK-ID> --prompt "<p>" [--scope <prefix>]...` to delegate repetitive code edits inside a task worktree.
-  - **Markdown Doc Research:** Use `ia-graft delegate research --id <TASK-ID> --topic "<t>" --output-file <path.md>` to research and write `.md` documents directly to disk.
+- **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
+  - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
+  - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
+  - **Stdio MCP Integration:** When running as an MCP client, agents MUST prefer native `graft_context_pack`, `graft_task_resume`, and `graft_task_status` MCP tools.
 
 ## 4. STOP CONDITIONS
 
