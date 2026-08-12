@@ -420,6 +420,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-procgen-structure-generation"
+version = "0.0.0"
+dependencies = [
+ "grafting-graph-core",
+]
+
+[[package]]
+name = "grafting-procgen-terrain-generation"
+version = "0.0.0"
+dependencies = [
+ "grafting-graph-core",
+ "grafting-procgen-tileset-wfc",
+]
+
+[[package]]
 name = "grafting-procgen-tileset-wfc"
 version = "0.0.0"
 dependencies = [
