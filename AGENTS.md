@@ -42,11 +42,18 @@ All non-prose changes MUST execute exclusively through `tools/ia-graft`.
   5. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "<body>"`
   6. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
 
-## 3. TOKEN ECONOMY & DISCOVERY
+## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)
 
-- Use pattern search (`grep`, `glob`) instead of full directory listing.
-- Read targeted line ranges (`view_file`), never full files unnecessarily.
-- Rely on `ia-graft context` or `GRAFTING_MASTER_SOURCE.md` (§0.4 router) for on-demand domain specs.
+- **Token Economy & Discovery:**
+  - Use pattern search (`grep`, `glob`) instead of full directory listing.
+  - Read targeted line ranges (`view_file`), never full files unnecessarily.
+  - Rely on `ia-graft context` or `GRAFTING_MASTER_SOURCE.md` (§0.4 router) for on-demand domain specs.
+  - Run `ia-graft doc-check` to verify AI instruction size limits (`AGENTS.md` ≤ 100 lines).
+
+- **Sub-Agent Delegation (`ia-graft delegate`):**
+  - **Fact Lookup & Text Generation:** Use `ia-graft delegate run --prompt "<p>" [--file <path>]... [--effort low|medium|high]` to offload web searches or schema extraction without consuming caller context.
+  - **Sandboxed Code Editing:** Use `ia-graft delegate edit --id <TASK-ID> --prompt "<p>" [--scope <prefix>]...` to delegate repetitive code edits inside a task worktree.
+  - **Markdown Doc Research:** Use `ia-graft delegate research --id <TASK-ID> --topic "<t>" --output-file <path.md>` to research and write `.md` documents directly to disk.
 
 ## 4. STOP CONDITIONS
 
