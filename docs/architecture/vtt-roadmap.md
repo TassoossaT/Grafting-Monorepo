@@ -70,8 +70,8 @@ VTT-specific work builds on top of it. Nothing here is VTT product work.
 
 | # | Task | Status | Dificuldade | Impacto |
 | --- | --- | --- | --- | --- |
-| E1.1 | **Determinism-scope decision + measurement spike.** Full breakdown below | Open | Média | Alto — blocks E1.2 and E3.3 |
-| E1.2 | **Reconcile `CellGraph` and `grafting-graph-core::Graph` behind one trait-based operations layer.** Full breakdown below | Open, depends on E1.1 | Alta | Alto — foundational for all future graph work |
+| E1.1 | **Determinism-scope decision + measurement spike.** Full breakdown below | **Done** — see `docs/benchmarks/graph-storage-2026-08-11.md` (revised after follow-up questions widened the scope). Query/traversal: existing `BTreeMap`-backed path clears the frame-budget threshold with wide margin at 1k/10k/100k/**1M** cells, dispersed access included — no new backend needed there. Bulk insertion: real, measured problem at ~1M cells (5-7s), but the fix the numbers point to is a `BTreeMap`→`HashMap` identity-map swap inside the *existing* type, not the second `Csr`-like backend E1.2 assumed — that alternative engine did not reliably beat the simpler map swap | Média | Alto — unblocks E1.2 and E3.3 |
+| E1.2 | **Reconcile `CellGraph` and `grafting-graph-core::Graph` behind one trait-based operations layer.** Full breakdown below | Open — unblocked by E1.1. Deliverables 1/2/4/5/6 (trait extraction) proceed as scoped. Deliverable 3 (a second, `Csr`-or-similar storage type) is **not** what E1.1's numbers justify; re-scope that part to a narrower `HashMap` identity-map swap inside `Graph<N, E>` itself, with explicit re-sort at `snapshot()` (and any other caller currently relying on `BTreeMap`'s incidental ordering) to keep `GraphSnapshot`'s "sorted by stable identity" contract — see the benchmark report's determinism section | Alta | Alto — foundational for all future graph work |
 | E1.3 | Consolidate `/lab`: migrate standalone trials into node kinds on the bench registry (several already have equivalents — `heightmap.perlin`, `terrain.discretize`, `grid.irregular`, `terrain.stack`); delete `/lab/trials` once confirmed. `vtt-brush` is flagged as a likely exception (interactive editor, not a data-transform node) — full send-ready prompt below, including that `vtt-brush`'s wall model is now stale a second time | Ready — full prompt preserved below | Média | Médio — tooling hygiene, not blocking; `vtt-brush`'s own redesign is what's actually higher-stakes |
 | E1.4 | Fix `/lab/vtt-brush`'s wall mesh: currently extrudes a solid box (`thickness` offset + 5 faces) instead of a flat double-sided plane; material is already `doubleSided: true`, so the fix is dropping the box extrusion, not adding anything | Ready | Baixa | Baixo — cosmetic, isolated to one lab trial |
 | E1.5 | **Relocate *and* redesign `map_state.fbs`.** Relocation: out of `libs/engine/domain-core/contracts/`, scoped by master source §10.1 (DEC-013, `LOCKED`) specifically to the replication pipeline's own contracts (`Command`/`DomainEvent`/`ReplicationDelta`/`Snapshot`), and replication/replay is now explicitly deferred (see the note below) — `MapState` was never a replication contract to begin with. Default: relocate under `libs/graph/core` or a procgen-owned contracts directory once `E1.2` settles where graph operations live. **Redesign** (new scope, added after `ADR-0022`'s 2026-08-10 revision): the merged PR #73 schema (`BoundarySegment`/`BoundaryPatch`, free geometry) implements the now-superseded design. It needs replacing with `GraphNode`/`GraphEdge`/`ConstructionSurface` tables per the revised `ADR-0022` and `vtt-map-construction-roadmap.md`'s Phase 1 detail — this is real schema work, not a file move | Open, depends on E1.2 for destination and on the revised `ADR-0022` for shape | Média | Alto — the currently-merged contract is actively wrong relative to the accepted decision |
@@ -89,6 +89,13 @@ keeps the door open for a deterministic backend later, without either task
 having to build or benchmark one now.
 
 ### E1.1 detail — measurement spec
+
+**Executed 2026-08-11 — see `docs/benchmarks/graph-storage-2026-08-11.md`
+for the full report (revised in place the same day after follow-up
+questions: was query cost checked beyond brush-stroke-shaped access, and
+does the bulk-insertion number hold up at millions of cells, not just
+100k).** The spec below is preserved as the methodology that produced it,
+not a still-open task.
 
 **Current implementation, as read from `libs/graph/core/src/model.rs`:**
 
@@ -134,6 +141,14 @@ before running anything):**
   E1.2 needs no new storage type at all, only the trait extraction below. If
   it is not, E1.2's second backend (dense, no string translation) is what
   the numbers justify building.
+- **What actually happened does not fit either branch cleanly.** The
+  query/traversal axis is fast enough (first branch). Bulk insertion is not
+  fast enough at real scale (second branch) — but the numbers point at a
+  `HashMap` swap inside the *existing* type, not a second storage type
+  implementing the trait, because a real `Csr`-based candidate was measured
+  and did not reliably beat the simpler map swap. See the report's "A real
+  tradeoff the map swap introduces: determinism" section before making this
+  change — it is not a type-signature-only substitution.
 
 ### E1.2 detail — reconcile behind a trait, not a single winning struct
 
@@ -158,17 +173,30 @@ Concrete deliverables:
    a node, its neighbors" — separating read/traversal capability from
    mutation capability if that split turns out to matter.
 2. The existing `Graph<N, E>` implements this trait unchanged in behavior.
-3. If (and only if) E1.1 shows the existing path is not fast enough: a
-   second, deliberately narrow storage type over dense integer indices with
-   no string translation in its hot path, implementing the same trait. It
-   does not need `Graph`'s full feature set (no `topological_order`, no
-   `GraphSnapshot`) — only what construction needs. Not built speculatively;
-   only if E1.1's numbers justify it.
+3. **Superseded by E1.1's actual findings.** The bulk-insertion axis is not
+   fast enough at real scale, but the fix the numbers justify is narrower
+   than a second storage type: swap `Graph<N, E>`'s internal
+   `BTreeMap<NodeId, NodeIndex>`/`BTreeMap<EdgeId, EdgeIndex>` for
+   `HashMap`, and add an explicit sort at `snapshot()` (and any other
+   caller relying on `BTreeMap`'s incidental ordering) to preserve
+   `GraphSnapshot`'s "sorted by stable identity" contract. A real
+   `Csr`-based second backend was measured against this and did not
+   reliably win — see
+   `docs/benchmarks/graph-storage-2026-08-11.md`. Do not build a second
+   storage type for this reason unless a future measurement shows the map
+   swap insufficient.
 4. Every graph *operation* — today's `successors`/`predecessors`, soon
    `apply_cell_patch`'s K-step neighborhood recompute, later E3.4's
    path-constraint reachability check for interior generation — is written
    once against the trait, inside `grafting-graph-core`, and used by
-   whichever backend applies.
+   whichever backend applies. **Optional, non-blocking finding from E1.1:**
+   `successors`/`predecessors` clone every result to a `String` `NodeId`;
+   an index-returning variant for purely-internal callers (never crossing
+   the crate's own boundary) measured 3.3-10.4x faster at every scale up to
+   ~1M cells. Not required — the existing `String`-returning path already
+   clears the frame-budget threshold with wide margin — but worth adding
+   alongside the trait if `apply_cell_patch`'s K-step recompute turns out to
+   want it.
 5. Domain-specific payload (face ids, sockets, `CellRole`, later `Surface`'s
    `type`/`physical` per the revised `ADR-0022`) stays outside the backend(s), carried as the generic
    `N`/`E` type parameter already supported today — the backend never needs
