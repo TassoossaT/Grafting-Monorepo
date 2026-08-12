@@ -4,11 +4,13 @@ Task-lifecycle CLI (`task new`/`commit`/`test`/`done`/`doc-check`/...) plus a `d
 command family for offloading peripheral work to Gemini 3.6 Flash through
 the locally installed `agy` CLI cheaply, without going through Claude.
 
-Invoke as:
+From the repository root on Windows, every `ia-graft` command is invoked with `.\ia-graft.cmd` followed by command and flags, and no global installation is required:
 
-```bash
-node --experimental-strip-types tools/ia-graft/src/bin.ts <command> [--flags]
+```cmd
+.\ia-graft.cmd <command> [--flags]
 ```
+
+This stable opaque launcher forwards every current and future command group; agents must not invoke `src/bin.ts` directly; Codex trusts the entire launcher using `.codex/rules/ia-graft.rules` instead of individual subcommands or broad Node or PowerShell access. Installed package consumers may continue using the `ia-graft` binary.
 
 ---
 

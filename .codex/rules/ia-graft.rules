@@ -1,0 +1,5 @@
+prefix_rule(
+    pattern = [[".\\ia-graft.cmd", "./ia-graft.cmd", "ia-graft.cmd"]],
+    decision = "allow",
+    justification = "The task CLI launcher (ia-graft.cmd) is fully trusted for all repo operations.",
+)
