@@ -10,10 +10,12 @@
 
 mod layout;
 mod model;
+mod surface;
 
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
     IdentifierError, Node, NodeId, PrismGridMesh,
 };
+pub use surface::{Surface, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
 
