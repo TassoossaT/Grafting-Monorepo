@@ -1,9 +1,10 @@
+import { createConstructionSessionAdapter } from "../../adapters/construction/index.ts";
 import { createRender3dSceneAdapter } from "../../adapters/rendering/index.ts";
 import {
   createTokenProjection,
   type TokenProjection,
 } from "../../entities/token/index.ts";
-import type { SceneRenderPort } from "@/ports";
+import type { ConstructionSessionPort, SceneRenderPort } from "@/ports";
 
 import { AppTabletopRuntime, type TabletopRuntime } from "./tabletop-runtime.ts";
 
@@ -11,6 +12,7 @@ export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
   readonly initialTokens?: readonly TokenProjection[];
   readonly renderPort?: SceneRenderPort;
+  readonly constructionPort?: ConstructionSessionPort;
 }
 
 export function createTabletopRuntime(
@@ -35,6 +37,7 @@ export function createTabletopRuntime(
   return new AppTabletopRuntime(
     tableId,
     input.renderPort ?? createRender3dSceneAdapter(),
+    input.constructionPort ?? createConstructionSessionAdapter(),
     initialTokens,
   );
 }

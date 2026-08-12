@@ -210,6 +210,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "earcut"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f03dd5350900133e14471c90d513eb5ba264004cd833adecab7dfa5fb5a2974"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -409,6 +418,7 @@ dependencies = [
  "console_error_panic_hook",
  "grafting-graph-core",
  "grafting-procgen-structure-generation",
+ "grafting-procgen-surface-mesh",
  "grafting-procgen-terrain-generation",
  "serde",
  "serde_json",
@@ -438,6 +448,13 @@ name = "grafting-procgen-structure-generation"
 version = "0.0.0"
 dependencies = [
  "grafting-graph-core",
+]
+
+[[package]]
+name = "grafting-procgen-surface-mesh"
+version = "0.0.0"
+dependencies = [
+ "earcut",
 ]
 
 [[package]]

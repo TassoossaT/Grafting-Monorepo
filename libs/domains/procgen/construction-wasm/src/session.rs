@@ -15,6 +15,7 @@ use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh,
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
+use crate::mesh;
 use crate::terrain;
 use crate::wall;
 
@@ -211,6 +212,25 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    // ---- Mesh derivation ----
+
+    /// Every currently-known surface's triangulated mesh, in stable key
+    /// order -- the one bootstrap call a renderer uses to draw everything
+    /// already in the session. See `mesh::all_surface_meshes`.
+    pub fn all_surface_meshes_json(&self) -> Result<String, JsValue> {
+        let meshes = mesh::all_surface_meshes(&self.graph, &self.surfaces, &self.known_surfaces);
+        serialize(&meshes)
+    }
+
+    /// One surface's triangulated mesh, by key -- what a caller re-fetches
+    /// for each entry in an operation's `affectedSurfaceKeys` after a
+    /// mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
+    pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let dto = mesh::surface_mesh(&self.graph, &self.surfaces, request).map_err(to_js_error)?;
+        serialize(&dto)
+    }
+
     // ---- Introspection ----
 
     /// The session's current nodes, edges, and surfaces, for a caller to
@@ -280,7 +300,34 @@ struct SnapshotResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    use serde_json::json;
     use wasm_bindgen_test::wasm_bindgen_test;
+
+    fn all_role_node_ids_json() -> serde_json::Value {
+        let map: HashMap<String, String> = crate::dto::ALL_WALL_NODE_ROLES
+            .into_iter()
+            .map(|role| {
+                let wire = crate::dto::wall_node_role_wire_name(role);
+                (wire.to_string(), format!("{wire}-id"))
+            })
+            .collect();
+        serde_json::to_value(map).unwrap()
+    }
+
+    fn all_role_edge_ids_json() -> serde_json::Value {
+        let mut map: HashMap<String, String> = HashMap::new();
+        for &a in &crate::dto::ALL_WALL_NODE_ROLES {
+            for &b in &crate::dto::ALL_WALL_NODE_ROLES {
+                if a != b {
+                    let wire = crate::dto::wall_edge_role_pair_wire_name(a, b);
+                    map.insert(wire.clone(), format!("{wire}-edge"));
+                }
+            }
+        }
+        serde_json::to_value(map).unwrap()
+    }
 
     #[wasm_bindgen_test]
     fn a_full_session_sequence_generates_moves_and_merges() {
@@ -360,5 +407,80 @@ mod tests {
         let snapshot = session.snapshot_json().unwrap();
         assert!(snapshot.contains("\"floor\""));
         assert!(!snapshot.contains("\"wall\""), "merged-away surfaces must not remain in the snapshot");
+    }
+
+    #[wasm_bindgen_test]
+    fn generating_a_terrain_cell_exposes_its_mesh() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
+            )
+            .expect("cell 0 generates");
+
+        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 1);
+        assert_eq!(meshes[0]["positions"].as_array().unwrap().len(), 12, "4 vertices * 3 components");
+        assert_eq!(meshes[0]["indices"].as_array().unwrap().len(), 6, "2 triangles * 3 indices");
+    }
+
+    #[wasm_bindgen_test]
+    fn generating_a_door_wall_exposes_three_sibling_meshes() {
+        let mut session = ConstructionSession::new();
+        let request = json!({
+            "wall": {"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "height": 3.0},
+            "door": {"opensAt": 0.25, "closesAt": 0.75},
+            "wallType": "wall",
+            "doorType": "door",
+            "nodeIds": all_role_node_ids_json(),
+            "edgeIds": all_role_edge_ids_json(),
+        })
+        .to_string();
+
+        session.generate_and_apply_wall_json(&request).expect("wall with door generates");
+
+        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 3, "left remainder, door, right remainder = three sibling surfaces");
+        for entry in &meshes {
+            assert_eq!(entry["indices"].as_array().unwrap().len(), 6, "each piece is a quad: two triangles");
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn moving_a_node_changes_its_surfaces_refetched_mesh() {
+        let mut session = ConstructionSession::new();
+        session.add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#).unwrap();
+        session.add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#).unwrap();
+        session.add_node_json(r#"{"id":"c","position":[0.0,1.0,0.0]}"#).unwrap();
+        session.add_edge_json(r#"{"id":"ab","source":"a","target":"b"}"#).unwrap();
+        session.add_edge_json(r#"{"id":"bc","source":"b","target":"c"}"#).unwrap();
+        session.add_edge_json(r#"{"id":"ca","source":"c","target":"a"}"#).unwrap();
+        session
+            .add_surface_json(r#"{"cycle":["a","b","c"],"surfaceType":"wall","physical":true}"#)
+            .unwrap();
+
+        let before = session
+            .surface_mesh_json(r#"{"surfaceKey":["a","b","c"]}"#)
+            .expect("mesh exists before move");
+
+        session
+            .move_node_json(r#"{"nodeId":"a","position":[5.0,5.0,5.0]}"#)
+            .expect("move succeeds");
+
+        let after = session
+            .surface_mesh_json(r#"{"surfaceKey":["a","b","c"]}"#)
+            .expect("mesh exists after move");
+
+        assert_ne!(before, after, "moving a node must change its surface's refetched mesh");
+    }
+
+    #[wasm_bindgen_test]
+    fn surface_mesh_json_rejects_an_unregistered_key() {
+        let session = ConstructionSession::new();
+        let error = session.surface_mesh_json(r#"{"surfaceKey":["missing"]}"#).unwrap_err();
+        assert!(error.as_string().unwrap().contains("no mesh derivable"));
     }
 }

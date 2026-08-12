@@ -12,3 +12,21 @@ export type {
   SceneRenderMetrics,
   SceneRenderPort,
 } from "./scene-render-port.ts";
+export type {
+  AffectedSurfaces,
+  ConstructionEdgeId,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionSessionPort,
+  ConstructionSurfaceKey,
+  ConstructionSurfaceSpec,
+  CornerHeightModule,
+  DeleteNodeOutcome,
+  DoorOpening,
+  GenerateTerrainCellRequest,
+  GenerateWallRequest,
+  SplitSurfaceOutcome,
+  SurfaceMeshResult,
+  WallPiece,
+  WallSegment,
+} from "./construction-session-port.ts";
