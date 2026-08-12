@@ -1930,7 +1930,8 @@ export interface BuiltVisual {
   dispose(): void;
   }
 export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
-  const geometry = buildGeometry(descriptor.geometry);
+  const geometry =
+  descriptor.geometry.shape === "sprite" ? undefined : buildGeometry(descriptor.geometry);
 export function applyTransform(object: THREE.Object3D, transform: Transform | undefined): void {
   const position = transform?.position;
   object.position.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0);
@@ -1978,21 +1979,21 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
   DISTANCE_RANGE.max,
   ),
 export interface OrbitableView {
+  /** Replaces the camera description driven by the orbit helper. */
   setCamera(camera: {
   projection: "perspective";
   fov?: number;
   position: Vec3;
   target: Vec3;
   near?: number;
-  far?: number;
 export interface OrbitOptions {
+  /** Perspective field of view in degrees. */
   readonly fov?: number;
+  /** Near clipping distance in world units. */
   readonly near?: number;
+  /** Far clipping distance in world units. */
   readonly far?: number;
   /** Called after every change, so the caller can redraw. */
-  readonly onChange?: (state: OrbitState) => void;
-  /**
-  * Whether these gestures belong to this view alone.
 export function attachOrbit(
   element: HTMLElement,
   view: OrbitableView,
@@ -2663,18 +2664,107 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
+// .next/dev/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/dev/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// .next/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// src/adapters/rendering/render-3d-scene-adapter.ts
+export class Render3dSceneAdapter implements SceneRenderPort {
+  readonly #views = new Map<RenderViewId, AttachedView>();
+export function createRender3dSceneAdapter(): SceneRenderPort {
+  return new Render3dSceneAdapter();
+
+// src/adapters/rendering/token-scene-item.ts
+export const TOKEN_LAYER_ID = "tokens";
+export const TOKEN_VISUAL_KIND = "vtt-token-billboard";
+export interface TokenVisualParams {
+  readonly color: number;
+  }
+export function tokenTransform(token: RenderToken): Transform {
+  return {
+  position: token.position,
+  scale: token.appearance.size,
+  };
+export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams> {
+  return {
+  id: `token:${token.id}`,
+  layer: TOKEN_LAYER_ID,
+  visual: {
+  kind: TOKEN_VISUAL_KIND,
+  params: { color: token.appearance.color },
+  },
+
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
+  readonly initialTokens?: readonly TokenProjection[];
+  readonly renderPort?: SceneRenderPort;
   }
 export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
-  return new AppTabletopRuntime(input.tableId);
+  const tableId = input.tableId.trim();
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
 export type {
+  ConfirmedTokenDeltaEnvelope,
   TabletopRuntime,
   TabletopRuntimeListener,
   TabletopRuntimeStatus,
@@ -2688,16 +2778,175 @@ export interface TabletopSnapshot {
   readonly revision: number;
   readonly status: TabletopRuntimeStatus;
   readonly tableId: string;
+  readonly tokens: TokenCollectionProjection;
+  }
+export interface ConfirmedTokenDeltaEnvelope {
+  readonly origin: ChangeOrigin;
+  readonly causeId: string;
+  readonly delta: TokenProjectionDelta;
   }
 export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
+  applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
+  attachView(target: HTMLElement): RenderViewId;
+  detachView(viewId: RenderViewId): void;
+  resizeView(viewId: RenderViewId, width: number, height: number): void;
+  getRenderMetrics(): SceneRenderMetrics;
   getSnapshot(): TabletopSnapshot;
-  subscribe(listener: TabletopRuntimeListener): () => void;
-  dispose(): Promise<void>;
-  }
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
+
+// src/entities/token/index.ts
+export type {
+  SceneId,
+  SubjectRef,
+  TokenAppearance,
+  TokenCollectionProjection,
+  TokenId,
+  TokenPosition,
+  TokenProjection,
+
+// src/entities/token/token-projection.ts
+export type TokenId = string;
+export type SceneId = string;
+export type SubjectRef = string;
+export interface TokenPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export interface TokenAppearance {
+  readonly label: string;
+  readonly color: number;
+  readonly size: number;
+  }
+export interface TokenProjection {
+  readonly id: TokenId;
+  readonly sceneId: SceneId;
+  readonly position: TokenPosition;
+  readonly subjectRef?: SubjectRef;
+  readonly appearance: TokenAppearance;
+  readonly revision: number;
+  }
+export interface TokenCollectionProjection {
+  readonly byId: ReadonlyMap<TokenId, TokenProjection>;
+  readonly revision: number;
+  }
+export type TokenProjectionDelta =
+export function createTokenProjection(input: TokenProjection): TokenProjection {
+  const size = finite(input.appearance.size, "appearance.size");
+export function createTokenCollection(
+  tokens: readonly TokenProjection[] = [],
+  ): TokenCollectionProjection {
+  const byId = new Map<TokenId, TokenProjection>();
+export function applyTokenProjectionDelta(
+  current: TokenCollectionProjection,
+  delta: TokenProjectionDelta,
+  ): TokenCollectionProjection {
+  if (delta.type === "token-removed") {
+  const previous = current.byId.get(delta.tokenId);
+
+// src/features/place-token/index.ts
+export type {
+  BindTokenSubjectIntent,
+  BindTokenSubjectOperation,
+  OperationId,
+  ParticipantId,
+  PlaceTokenIntent,
+  PlaceTokenOperation,
+  RevisionPrecondition,
+
+// src/features/place-token/token-operations.ts
+export type OperationId = string;
+export type ParticipantId = string;
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+  }
+export interface TokenOperationContext {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  }
+export interface PlaceTokenIntent {
+  readonly tokenId: TokenId;
+  readonly sceneId: SceneId;
+  readonly position: TokenPosition;
+  readonly appearance: TokenAppearance;
+  readonly subjectRef?: SubjectRef;
+  }
+export interface PlaceTokenOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly sceneId: SceneId;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "token.place@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: PlaceTokenIntent;
+export interface BindTokenSubjectIntent {
+  readonly tokenId: TokenId;
+  readonly subjectRef: SubjectRef | null;
+  readonly expectedTokenRevision: number;
+  }
+export interface BindTokenSubjectOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "token.bind-subject@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: {
+  readonly tokenId: TokenId;
+export type TokenOperation = PlaceTokenOperation | BindTokenSubjectOperation;
+export function createPlaceTokenOperation(
+  intent: PlaceTokenIntent,
+  context: TokenOperationContext,
+  ): PlaceTokenOperation {
+  const normalized = operationContext(context);
+export function createBindTokenSubjectOperation(
+  intent: BindTokenSubjectIntent,
+  context: TokenOperationContext,
+  ): BindTokenSubjectOperation {
+  if (!Number.isInteger(intent.expectedTokenRevision) || intent.expectedTokenRevision < 0) {
+  throw new Error("expectedTokenRevision must be a non-negative integer");
+
+// src/ports/index.ts
+export type {
+  ChangeOrigin,
+  ConfirmedTokenRenderChange,
+  RenderDependencyRevision,
+  RenderToken,
+  RenderViewId,
+  SceneRenderMetrics,
+  SceneRenderPort,
+
+// src/ports/scene-render-port.ts
+export type ChangeOrigin = "local" | "network" | "programmatic";
+export type RenderViewId = string;
+export interface RenderDependencyRevision {
+  readonly layer: "tokens";
+  readonly scopeId: string;
+  readonly revision: number;
+  }
+export interface RenderToken {
+  readonly id: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+export type ConfirmedTokenRenderChange =
+export interface SceneRenderMetrics {
+  readonly rendererCreates: number;
+  readonly rendererDisposes: number;
+  readonly attachedViews: number;
+  readonly confirmedTokenChanges: number;
+  readonly terrainUploads: number;
+  }
+export interface SceneRenderPort {
+  start(runtimeGeneration: number): Promise<void>;
+  attachView(target: HTMLElement): RenderViewId;
+  detachView(viewId: RenderViewId): void;
+  resizeView(viewId: RenderViewId, width: number, height: number): void;
+  applyConfirmed(change: ConfirmedTokenRenderChange): void;
+  getMetrics(): SceneRenderMetrics;
+  dispose(): Promise<void>;
 ```
 
 ### `x6-canvas` (`packages/x6-canvas`)

@@ -2,7 +2,6 @@ import * as THREE from "three";
 import type {
   GeometryDescriptor,
   HeightfieldData,
-  MaterialDescriptor,
   VisualDescriptor,
 } from "../../contracts/visual.js";
 import type { Transform, Vec3 } from "../../contracts/space.js";
@@ -22,8 +21,9 @@ export interface BuiltVisual {
 }
 
 export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
-  const geometry = buildGeometry(descriptor.geometry);
-  const material = buildMaterial(descriptor.material);
+  const geometry =
+    descriptor.geometry.shape === "sprite" ? undefined : buildGeometry(descriptor.geometry);
+  const material = buildMaterial(descriptor);
 
   const object = buildObject(descriptor, geometry, material);
 
@@ -34,7 +34,7 @@ export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
   return {
     object,
     dispose() {
-      geometry.dispose();
+      geometry?.dispose();
       // A wireframe wraps the source geometry in a second one, which the line
       // above does not reach. Segments reuse the source geometry directly, so
       // there is no wrapper and nothing extra to release.
@@ -49,9 +49,16 @@ export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
 
 function buildObject(
   descriptor: VisualDescriptor,
-  geometry: THREE.BufferGeometry,
+  geometry: THREE.BufferGeometry | undefined,
   material: THREE.Material,
 ): THREE.Object3D {
+  if (descriptor.geometry.shape === "sprite") {
+    return new THREE.Sprite(material as THREE.SpriteMaterial);
+  }
+
+  if (geometry === undefined) {
+    throw new Error("Non-sprite visuals require geometry");
+  }
   switch (descriptor.material.surface) {
     case "line":
       // Segments are already the edges the caller wants; deriving a wireframe
@@ -74,6 +81,8 @@ function buildObject(
 
 function buildGeometry(descriptor: GeometryDescriptor): THREE.BufferGeometry {
   switch (descriptor.shape) {
+    case "sprite":
+      throw new Error("Sprite visuals do not build buffer geometry");
     case "plane": {
       const segments = descriptor.segments ?? 1;
       const geometry = new THREE.PlaneGeometry(
@@ -154,44 +163,59 @@ function buildHeightfieldGeometry(field: HeightfieldData): THREE.PlaneGeometry {
   return geometry;
 }
 
-function buildMaterial(descriptor: MaterialDescriptor): THREE.Material {
+function buildMaterial(descriptor: VisualDescriptor): THREE.Material {
+  const material = descriptor.material;
   const texture =
-    "texture" in descriptor && descriptor.texture ? new THREE.Texture(descriptor.texture) : null;
+    "texture" in material && material.texture ? new THREE.Texture(material.texture) : null;
   if (texture) texture.needsUpdate = true;
 
-  switch (descriptor.surface) {
+  if (descriptor.geometry.shape === "sprite") {
+    if (material.surface !== "unlit") {
+      texture?.dispose();
+      throw new Error('Sprite geometry requires an "unlit" material');
+    }
+    return new THREE.SpriteMaterial({
+      color: material.color ?? 0xffffff,
+      opacity: material.opacity ?? 1,
+      transparent: texture !== null || (material.opacity ?? 1) < 1,
+      map: texture,
+      alphaTest: texture ? 0.01 : 0,
+    });
+  }
+
+  switch (material.surface) {
     case "lit":
       return new THREE.MeshStandardMaterial({
-        color: descriptor.color ?? 0xffffff,
-        opacity: descriptor.opacity ?? 1,
-        transparent: (descriptor.opacity ?? 1) < 1,
-        metalness: descriptor.metalness ?? 0,
-        roughness: descriptor.roughness ?? 1,
-        flatShading: descriptor.flatShading ?? false,
-        side: descriptor.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
+        color: material.color ?? 0xffffff,
+        opacity: material.opacity ?? 1,
+        transparent: (material.opacity ?? 1) < 1,
+        metalness: material.metalness ?? 0,
+        roughness: material.roughness ?? 1,
+        flatShading: material.flatShading ?? false,
+        side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
       });
     case "unlit":
       return new THREE.MeshBasicMaterial({
-        color: descriptor.color ?? 0xffffff,
-        opacity: descriptor.opacity ?? 1,
-        transparent: (descriptor.opacity ?? 1) < 1,
-        side: descriptor.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
+        color: material.color ?? 0xffffff,
+        opacity: material.opacity ?? 1,
+        transparent: (material.opacity ?? 1) < 1,
+        side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
       });
     case "line":
       return new THREE.LineBasicMaterial({
-        color: descriptor.color ?? 0xffffff,
-        opacity: descriptor.opacity ?? 1,
-        transparent: (descriptor.opacity ?? 1) < 1,
+        color: material.color ?? 0xffffff,
+        opacity: material.opacity ?? 1,
+        transparent: (material.opacity ?? 1) < 1,
       });
     case "points":
       return new THREE.PointsMaterial({
-        color: descriptor.color ?? 0xffffff,
-        opacity: descriptor.opacity ?? 1,
-        transparent: (descriptor.opacity ?? 1) < 1,
-        size: descriptor.size ?? 1,
-        sizeAttenuation: descriptor.sizeAttenuation ?? true,
+        color: material.color ?? 0xffffff,
+        opacity: material.opacity ?? 1,
+        transparent: (material.opacity ?? 1) < 1,
+        size: material.size ?? 1,
+        sizeAttenuation: material.sizeAttenuation ?? true,
         map: texture,
         // A sprite's transparent border must cut the point out rather than
         // being drawn as opaque black, which is what makes soft or shaped

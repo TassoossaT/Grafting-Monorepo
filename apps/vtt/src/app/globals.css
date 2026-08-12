@@ -90,9 +90,10 @@ h1 {
 }
 
 .tabletop-stage {
+  position: relative;
   display: grid;
   min-height: 65vh;
-  place-content: center;
+  overflow: hidden;
   border: 1px solid #243a32;
   border-radius: 1.5rem;
   background:
@@ -103,13 +104,30 @@ h1 {
   text-align: center;
 }
 
-.tabletop-stage p {
-  margin: 0 0 0.4rem;
-  font-size: 1.1rem;
+.tabletop-viewport {
+  position: absolute;
+  inset: 0;
 }
 
-.tabletop-stage small {
-  color: #789087;
+.tabletop-stage__caption {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(114, 214, 158, 0.3);
+  border-radius: 0.8rem;
+  background: rgba(7, 16, 15, 0.82);
+  color: #a8bdb2;
+  font-size: 0.75rem;
+  text-align: left;
+  backdrop-filter: blur(8px);
+}
+
+.tabletop-stage__caption strong {
+  color: #ecf7f0;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 40rem) {

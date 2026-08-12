@@ -12,6 +12,7 @@ export interface TabletopEntryProps {
 }
 
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<TabletopRuntime | null>(null);
   if (runtimeRef.current === null) {
     runtimeRef.current = createTabletopRuntime({ tableId });
@@ -25,8 +26,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   );
 
   useEffect(() => {
-    void runtime.start();
-    return () => void runtime.dispose();
+    let active = true;
+    let viewId: string | undefined;
+    void runtime.start().then(() => {
+      if (!active || viewportRef.current === null) return;
+      viewId = runtime.attachView(viewportRef.current);
+    });
+    return () => {
+      active = false;
+      if (viewId !== undefined) runtime.detachView(viewId);
+      void runtime.dispose();
+    };
   }, [runtime]);
 
   return (
@@ -41,9 +51,12 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </span>
       </header>
 
-      <section className="tabletop-stage" aria-label="Tabletop viewport placeholder">
-        <p>The composition boundary is active.</p>
-        <small>Rendering and session adapters enter in later slices.</small>
+      <section className="tabletop-stage" aria-label="3D tabletop viewport">
+        <div className="tabletop-viewport" ref={viewportRef} />
+        <div className="tabletop-stage__caption">
+          <strong>{current.tokens.byId.size} token</strong>
+          <span>Billboard 2.5D em um mundo 3D</span>
+        </div>
       </section>
     </main>
   );

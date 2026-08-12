@@ -107,6 +107,7 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
 
 /** The minimum of {@link View} this needs. Keeps the helper testable. */
 export interface OrbitableView {
+  /** Replaces the camera description driven by the orbit helper. */
   setCamera(camera: {
     projection: "perspective";
     fov?: number;
@@ -119,8 +120,11 @@ export interface OrbitableView {
 
 /** What {@link attachOrbit} needs to know about the camera it is driving. */
 export interface OrbitOptions {
+  /** Perspective field of view in degrees. */
   readonly fov?: number;
+  /** Near clipping distance in world units. */
   readonly near?: number;
+  /** Far clipping distance in world units. */
   readonly far?: number;
   /** Called after every change, so the caller can redraw. */
   readonly onChange?: (state: OrbitState) => void;
