@@ -5,3 +5,5 @@
 //!
 //! Modules land incrementally as each piece is implemented; this crate is
 //! not yet functional.
+
+mod dto;
