@@ -1,9 +1,11 @@
 import {
   createGenerateTerrainCellOperation,
   createGenerateWallOperation,
+  type ConstructionOperationContext,
   type GenerateTerrainCellOperation,
   type GenerateWallOperation,
 } from "../../features/edit-construction/index.ts";
+import type { CornerHeightModule, DoorOpening, GenerateWallRequest, WallSegment } from "@/ports";
 
 /**
  * Every `WallNodeRole` wire name `grafting-procgen-construction-wasm`'s
@@ -24,21 +26,83 @@ const WALL_NODE_ROLES = [
   "doorEndTop",
 ] as const;
 
-function seededWallNodeIds(tableId: string): Record<string, string> {
+function wallNodeIds(tableId: string, salt: string): Record<string, string> {
   const ids: Record<string, string> = {};
-  for (const role of WALL_NODE_ROLES) ids[role] = `${tableId}:seed:wall:${role}`;
+  for (const role of WALL_NODE_ROLES) ids[role] = `${tableId}:${salt}:wall:${role}`;
   return ids;
 }
 
-function seededWallEdgeIds(tableId: string): Record<string, string> {
+function wallEdgeIds(tableId: string, salt: string): Record<string, string> {
   const ids: Record<string, string> = {};
   for (const a of WALL_NODE_ROLES) {
     for (const b of WALL_NODE_ROLES) {
       if (a === b) continue;
-      ids[`${a}->${b}`] = `${tableId}:seed:wall:${a}-${b}`;
+      ids[`${a}->${b}`] = `${tableId}:${salt}:wall:${a}-${b}`;
     }
   }
   return ids;
+}
+
+/**
+ * Builds (but does not apply) a `construction.generate-wall@1` operation
+ * with ids namespaced by `salt`, so two calls for the same table never
+ * collide -- shared by {@link defaultMapSeed}'s one-time bootstrap wall and
+ * the edit-mode UI's "generate wall" trigger, which needs a fresh id
+ * namespace per click.
+ */
+export function buildGenerateWallOperation(
+  tableId: string,
+  salt: string,
+  context: ConstructionOperationContext,
+  wall: WallSegment,
+  door: DoorOpening | undefined,
+  wallType: string,
+  doorType: string,
+): GenerateWallOperation {
+  const payload: GenerateWallRequest = {
+    wall,
+    door,
+    wallType,
+    doorType,
+    nodeIds: wallNodeIds(tableId, salt),
+    edgeIds: wallEdgeIds(tableId, salt),
+  };
+  return createGenerateWallOperation(payload, context);
+}
+
+/**
+ * Builds (but does not apply) a `construction.generate-terrain-cell@1`
+ * operation with ids namespaced by `salt`, mirroring
+ * {@link buildGenerateWallOperation}.
+ */
+export function buildGenerateTerrainCellOperation(
+  tableId: string,
+  salt: string,
+  context: ConstructionOperationContext,
+  cell: number,
+  module: CornerHeightModule,
+  surfaceType: string,
+): GenerateTerrainCellOperation {
+  return createGenerateTerrainCellOperation(
+    {
+      cell,
+      module,
+      surfaceType,
+      nodeIds: [
+        `${tableId}:${salt}:terrain:n0`,
+        `${tableId}:${salt}:terrain:n1`,
+        `${tableId}:${salt}:terrain:n2`,
+        `${tableId}:${salt}:terrain:n3`,
+      ],
+      edgeIds: [
+        `${tableId}:${salt}:terrain:e0`,
+        `${tableId}:${salt}:terrain:e1`,
+        `${tableId}:${salt}:terrain:e2`,
+        `${tableId}:${salt}:terrain:e3`,
+      ],
+    },
+    context,
+  );
 }
 
 export interface DefaultMapSeed {
@@ -54,37 +118,23 @@ export interface DefaultMapSeed {
  * `tableId` so two tables never collide inside one `ConstructionSession`.
  */
 export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMapSeed {
-  const terrainCell = createGenerateTerrainCellOperation(
-    {
-      cell: 0,
-      module: { name: "flat", cornerHeights: [1, 1, 1, 1] },
-      surfaceType: "terrain",
-      nodeIds: [
-        `${tableId}:seed:terrain:n0`,
-        `${tableId}:seed:terrain:n1`,
-        `${tableId}:seed:terrain:n2`,
-        `${tableId}:seed:terrain:n3`,
-      ],
-      edgeIds: [
-        `${tableId}:seed:terrain:e0`,
-        `${tableId}:seed:terrain:e1`,
-        `${tableId}:seed:terrain:e2`,
-        `${tableId}:seed:terrain:e3`,
-      ],
-    },
+  const terrainCell = buildGenerateTerrainCellOperation(
+    tableId,
+    "seed",
     { operationId: `${tableId}:seed:terrain-cell`, tableId, initiatedBy },
+    0,
+    { name: "flat", cornerHeights: [1, 1, 1, 1] },
+    "terrain",
   );
 
-  const wall = createGenerateWallOperation(
-    {
-      wall: { start: { x: 2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 4 }, height: 3 },
-      door: { opensAt: 0.25, closesAt: 0.75 },
-      wallType: "wall",
-      doorType: "door",
-      nodeIds: seededWallNodeIds(tableId),
-      edgeIds: seededWallEdgeIds(tableId),
-    },
+  const wall = buildGenerateWallOperation(
+    tableId,
+    "seed",
     { operationId: `${tableId}:seed:wall`, tableId, initiatedBy },
+    { start: { x: 2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 4 }, height: 3 },
+    { opensAt: 0.25, closesAt: 0.75 },
+    "wall",
+    "door",
   );
 
   return { terrainCell, wall };
