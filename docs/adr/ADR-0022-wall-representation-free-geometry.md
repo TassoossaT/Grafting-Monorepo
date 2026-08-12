@@ -3,7 +3,8 @@
 - Status: Accepted
 - Decision owner: repository-owner
 - Original decision date: 2026-08-08 (free-geometry model — superseded below)
-- Revision date: 2026-08-10; general deletion-repair algorithm added 2026-08-12
+- Revision date: 2026-08-10; general deletion-repair algorithm added
+  2026-08-12; terrain/structure seam resolved 2026-08-12
 - Record: DEC-060
 - Supersedes: this document's own 2026-08-08 decision, in place, at the
   owner's explicit direction ("não tem problema em reescrever ela
@@ -42,8 +43,8 @@ or any other generated or player-placed structural element — is **defined
 by a set of graph nodes** (a cycle) in `grafting-graph-core`, referenced by
 their stable `NodeId`. This applies uniformly to every construction domain
 (structure and terrain alike); nothing here reintroduces a terrain/structure
-split, that question is separate and still open
-(`docs/research/vtt-construction-layering-graph-mesh-asset.md`).
+split — **that question was open at revision time and is resolved as of
+2026-08-12, see "Terrain/structure seam: resolved" below.**
 
 This is a **reversal** of the free-geometry rule this document previously
 stated. It is scoped precisely: only `grafting-graph-core::NodeId`
@@ -140,6 +141,78 @@ case: one node (`N`), four neighbors (the base), one cycle among them (step
   single node alone carries no usable information and cannot be duplicated
   on its own.
 
+## Terrain/structure seam: resolved
+
+Added 2026-08-12, closing the gap this document left open at revision time
+("nothing here reintroduces a terrain/structure split, that question is
+separate and still open"). Confirmed directly with the repository owner
+while scoping `vtt-roadmap.md` E3.3: **there is no terrain/structure split
+at the graph/mesh/surface layer.** A terrain cell is a `Surface` like any
+other — `{ type, physical: true, mesh }`, its `mesh` derived from a cycle
+of graph nodes (its corners) exactly like a wall's. There is no separate,
+parallel "terrain mesh" data structure living outside the graph.
+
+**What still legitimately differs between domains is generation, not
+storage.** `PrismCellAssignment` (`module_id, rotation, layer, x, y,
+vertex_shift`, per `vtt-map-construction-roadmap.md` Phase 1) remains the
+solver's own scratch vocabulary — which module and rotation were chosen at
+a grid position — but it is **generation input, never a second persisted
+structure**. It feeds terrain-specific generation code that derives a
+target set of node positions/cycles, the same way a chosen module's face
+already derives wall geometry today (see "Context kept from the original
+decision" below: "a wall can be *derived* from a chosen module's face,
+never *decided* as a link"). Terrain is not an exception to that rule; it
+is the same rule.
+
+**Generation must stay isolated per domain — this is a hard requirement,
+not a style preference.** Each domain's generation code (terrain, walls,
+doors, whatever comes later) is the *only* code that understands its own
+parameters (module choice, rotation, socket compatibility, or whatever a
+future domain needs). It produces exactly one thing for the shared layer
+to consume: a target node/cycle description. Reaching that target from
+whatever the graph currently looks like is done entirely with the generic
+node operations already defined above (Move/Add/Delete/Merge/Split) — no
+domain-specific operation is added to the graph layer for this. Two
+consequences that follow directly:
+
+- The node-operations layer never knows which domain produced the nodes it
+  is operating on — it already didn't ("the backend never needs to know
+  what a 'face' or a 'wall' is," `vtt-roadmap.md` E1.2), this extends the
+  same rule to generation.
+- Changing how one domain generates its surfaces (e.g. a new terrain
+  algorithm) only ever touches that domain's own generation code. Every
+  other domain's generation code, and the shared graph/mesh/surface/asset
+  layers, do not need to change and do not need to know a change happened.
+
+**"Rotation" is a generation parameter, not a graph primitive.** There is
+no `rotate` node operation. Changing a cell's module or rotation means
+re-running that domain's generation with the new parameter to get a new
+target node/cycle description, then applying whatever `Add`/`Delete`/`Move`
+diff reaches it from the current graph state — the same generic operations
+every other edit uses, not a special case.
+
+**`Surface` attribute edits are independent of node/graph operations.**
+Changing a surface's `type` or `physical` flag edits the `Surface` record
+directly and touches no node, no cycle, and no mesh recompute — `type`/
+`physical` are not derived from node positions, only `mesh` is (see "The
+layered model" above). A surface can be redesignated (e.g. wall → window)
+without moving anything in space.
+
+**Practical effect on `vtt-roadmap.md` E3.3 / `apply_cell_patch`:** the
+"6-slot neighborhood recompute" language in the master roadmap and
+`vtt-map-construction-roadmap.md` describes `PrismGridMesh`'s old,
+pre-unification `cell_neighbors` field (a fixed North/East/South/West/
+Bottom/Top adjacency list specific to one hexahedral grid layout) — not a
+rule of the graph operation itself. Under this resolution, editing a
+terrain cell's elevation is a `Move` on its corner node(s); how many other
+surfaces recompute their mesh as a result is whatever the graph's adjacency
+says it is for that node, not a hardcoded six. A regular grid layout will
+tend to produce a handful of affected surfaces per move, but that is an
+emergent property of the topology, not a constraint the algorithm encodes.
+There is no separate `apply_cell_patch` algorithm to design — the
+generic `Move`/`Add` node operations, plus terrain's own isolated
+generation code, are the implementation.
+
 ## What this decision does not resolve — recorded honestly, not glossed over
 
 - **Recomputation cost.** A surface's shape is derived from its nodes'
@@ -161,9 +234,12 @@ case: one node (`N`), four neighbors (the base), one cycle among them (step
   general algorithm.**~~ **Resolved 2026-08-12** — see "Delete: the general
   cycle-repair algorithm" above. Kept here, struck through, so the record of
   what was once open is not lost.
-- **The terrain/structure seam**
+- ~~**The terrain/structure seam**
   (`docs/research/vtt-construction-layering-graph-mesh-asset.md`'s
-  Problem 2) is untouched by this decision either way and remains open.
+  Problem 2) is untouched by this decision either way and remains open.~~
+  **Resolved 2026-08-12** — see "Terrain/structure seam: resolved" above.
+  Kept here, struck through, so the record of what was once open is not
+  lost.
 - **`libs/engine/domain-core/contracts/map_state.fbs`** (merged via PR #73)
   implements the free-geometry `BoundarySegment`/`BoundaryPatch` design
   this decision reverses. That contract is now stale and needs its own
