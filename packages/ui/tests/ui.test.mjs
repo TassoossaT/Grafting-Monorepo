@@ -19,6 +19,7 @@ test("exports only the deliberate Grafting component surface", async () => {
     "StatusBadge",
     "Text",
     "createCanvas",
+    "createGeometryCanvas",
     "createHeightfieldCanvas",
     "mountEntitySummary",
   ]);

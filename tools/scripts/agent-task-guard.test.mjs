@@ -120,6 +120,15 @@ test("allows agents to commit forward and invoke controlled task sync", () => {
   assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK").allowed, true);
 });
 
+test("rejects direct package manager installation commands", () => {
+  const installs = ["pnpm install", "npm install", "pnpm add lodash", "uv add pytest"];
+  for (const command of installs) {
+    const decision = evaluateAgentGitCommand(command);
+    assert.equal(decision.allowed, false, command);
+    assert.match(decision.reason, /direct package-manager installation is forbidden/);
+  }
+});
+
 test("rejects history-rewriting and merge operations", () => {
   const commands = [
     "git merge feature",

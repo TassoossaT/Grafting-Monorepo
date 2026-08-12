@@ -10,16 +10,19 @@
   },
   "targetDefaults": {
     "check": {
-      "cache": true
+      "cache": true,
+      "dependsOn": ["^build"]
     },
     "build": {
-      "cache": true
+      "cache": true,
+      "dependsOn": ["^build"]
     },
     "lint": {
       "cache": true
     },
     "test": {
-      "cache": true
+      "cache": true,
+      "dependsOn": ["^build"]
     }
   },
   "analytics": true

@@ -418,6 +418,152 @@ pub fn solve_inner(
 ### `architecture-studio` (`apps/architecture-studio`)
 
 ```ts
+// .next/dev/static/media/generation.worker.3nmcexm9svubh.ts
+export interface HeightmapWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  }
+export type HeightmapWorkerResponse =
+
+// .next/dev/static/media/quantization.worker.321j-bb9_iwkc.ts
+export interface QuantizationWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+  }
+export type QuantizationWorkerResponse =
+
+// .next/dev/static/media/terrain.worker.40o6ffhb52bgi.ts
+export interface TerrainWorkerRequest {
+  readonly type: "elevate";
+  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
+  readonly centres: Float32Array;
+  readonly fieldSize: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+export type TerrainWorkerResponse =
+
+// .next/dev/static/media/tileset.worker.31gjgj61bfyvo.ts
+export interface TilesetWorkerRequest {
+  readonly type: "solve";
+  readonly cellCount: number;
+  readonly facesPerCell: number;
+  readonly links: Uint32Array;
+  readonly sockets: Uint32Array;
+  readonly weights: Float32Array;
+  readonly compatible: Uint32Array;
+export type TilesetWorkerResponse =
+
+// .next/dev/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/dev/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// .next/static/media/generation.worker.3nmcexm9svubh.ts
+export interface HeightmapWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  }
+export type HeightmapWorkerResponse =
+
+// .next/static/media/quantization.worker.321j-bb9_iwkc.ts
+export interface QuantizationWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+  }
+export type QuantizationWorkerResponse =
+
+// .next/static/media/terrain.worker.40o6ffhb52bgi.ts
+export interface TerrainWorkerRequest {
+  readonly type: "elevate";
+  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
+  readonly centres: Float32Array;
+  readonly fieldSize: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+export type TerrainWorkerResponse =
+
+// .next/static/media/tileset.worker.31gjgj61bfyvo.ts
+export interface TilesetWorkerRequest {
+  readonly type: "solve";
+  readonly cellCount: number;
+  readonly facesPerCell: number;
+  readonly links: Uint32Array;
+  readonly sockets: Uint32Array;
+  readonly weights: Float32Array;
+  readonly compatible: Uint32Array;
+export type TilesetWorkerResponse =
+
+// .next/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
 // src/app/api/mcp/route.ts
 export const runtime = "nodejs";
 
@@ -1705,6 +1851,24 @@ export interface TaskContextInput {
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
+// src/generated/grafting/contracts/cell-role.ts
+export enum CellRole {
+  Surface = 0,
+  Boundary = 1,
+  Passage = 2,
+  Opening = 3
+  }
+
+// src/generated/grafting/contracts/cell-state-patch.ts
+export class CellStatePatch {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):CellStatePatch {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
 // src/generated/grafting/contracts/command-message.ts
 export class CommandMessage {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -1815,6 +1979,16 @@ export class Incremented {
   return this;
   }
 
+// src/generated/grafting/contracts/prism-cell-data.ts
+export class PrismCellData {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellData {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
 // src/generated/grafting/contracts/reset.ts
 export class Reset {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -1860,6 +2034,16 @@ export class StateTable {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
   __init(i:number, bb:flatbuffers.ByteBuffer):StateTable {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/vec3-offset.ts
+export class Vec3Offset {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3Offset {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -2664,66 +2848,6 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
-// .next/dev/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/dev/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
 // src/adapters/rendering/render-3d-scene-adapter.ts
 export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
@@ -3223,6 +3347,22 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
 ```csharp
+// Generated/Grafting/Contracts/CellRole.cs
+public enum CellRole : sbyte
+
+// Generated/Grafting/Contracts/CellStatePatch.cs
+public struct CellStatePatch : IFlatbufferObject
+public static void ValidateVersion()
+public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb)
+public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb, CellStatePatch obj)
+public static Offset<Grafting.Contracts.CellStatePatch> CreateCellStatePatch(FlatBufferBuilder builder,
+public static void StartCellStatePatch(FlatBufferBuilder builder)
+public static void AddCellId(FlatBufferBuilder builder, uint cellId)
+public static void AddNewRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole newRole)
+public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
+public static void AddSequence(FlatBufferBuilder builder, ulong sequence)
+public static Offset<Grafting.Contracts.CellStatePatch> EndCellStatePatch(FlatBufferBuilder builder)
+
 // Generated/Grafting/Contracts/CommandMessage.cs
 public struct CommandMessage : IFlatbufferObject
 public static void ValidateVersion()
@@ -3300,6 +3440,23 @@ public static void AddAmount(FlatBufferBuilder builder, long amount)
 public static void AddNewValue(FlatBufferBuilder builder, long newValue)
 public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
 
+// Generated/Grafting/Contracts/PrismCellData.cs
+public struct PrismCellData : IFlatbufferObject
+public static void ValidateVersion()
+public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb)
+public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb, PrismCellData obj)
+public static Offset<Grafting.Contracts.PrismCellData> CreatePrismCellData(FlatBufferBuilder builder,
+public static void StartPrismCellData(FlatBufferBuilder builder)
+public static void AddId(FlatBufferBuilder builder, uint id)
+public static void AddLayer(FlatBufferBuilder builder, byte layer)
+public static void AddX(FlatBufferBuilder builder, int x)
+public static void AddY(FlatBufferBuilder builder, int y)
+public static void AddRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole role)
+public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
+public static void AddNeighbors(FlatBufferBuilder builder, VectorOffset neighborsOffset)
+public static VectorOffset CreateNeighborsVector(FlatBufferBuilder builder, int[] data)
+public static VectorOffset CreateNeighborsVectorBlock(FlatBufferBuilder builder, int[] data)
+
 // Generated/Grafting/Contracts/Reset.cs
 public struct Reset : IFlatbufferObject
 public static void ValidateVersion()
@@ -3356,6 +3513,18 @@ public static Offset<Grafting.Contracts.StateTable> CreateStateTable(FlatBufferB
 public static void StartStateTable(FlatBufferBuilder builder)
 public static void AddValue(FlatBufferBuilder builder, long value)
 public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/Vec3Offset.cs
+public struct Vec3Offset : IFlatbufferObject
+public static void ValidateVersion()
+public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb)
+public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb, Vec3Offset obj)
+public static Offset<Grafting.Contracts.Vec3Offset> CreateVec3Offset(FlatBufferBuilder builder,
+public static void StartVec3Offset(FlatBufferBuilder builder)
+public static void AddX(FlatBufferBuilder builder, float x)
+public static void AddY(FlatBufferBuilder builder, float y)
+public static void AddZ(FlatBufferBuilder builder, float z)
+public static Offset<Grafting.Contracts.Vec3Offset> EndVec3Offset(FlatBufferBuilder builder)
 
 // Generated/Grafting/Contracts/WasReset.cs
 public struct WasReset : IFlatbufferObject

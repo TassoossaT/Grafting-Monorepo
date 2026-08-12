@@ -116,6 +116,14 @@ doesn't cross the failure reason to JS (mirrors the native side).
 
 ### `pub fn grafting_isekai_wasm::engine::WasmEngine::vector_into_abi(vector: alloc::boxed::Box<[grafting_isekai_wasm::engine::WasmEngine]>) -> Self::Abi`
 
+### `pub fn grafting_isekai_wasm::evaluation_order_json(request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Calculates one deterministic evaluation order from a batched JSON request.
+
+JSON is an adapter-owned ABI representation. Callers should use a typed
+Grafting client and must not treat this serialization shape as graph logic.
+Ordering and cycle detection stay authoritative in `grafting-graph-core`.
+
 ### `pub fn grafting_isekai_wasm::handle::HandleTable<T>::default() -> Self`
 
 ### `pub fn grafting_isekai_wasm::handle::HandleTable<T>::get(&self, raw: u64) -> core::option::Option<&T>`
