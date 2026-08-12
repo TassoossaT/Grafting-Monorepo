@@ -1,7 +1,7 @@
 # AGENTS.md — Grafting Monorepo Agent Operational Contract
 
 Canonical, machine-first operational rules for AI agents (Claude, Gemini, Codex) in Grafting Monorepo.
-All non-prose changes MUST execute exclusively through `tools/ia-graft`.
+All non-prose changes MUST execute exclusively through the root `ia-graft` launcher (`.\ia-graft.cmd` on Windows).
 
 ## 1. MANDATORY CONSTRAINTS (MUST NOT)
 
@@ -29,6 +29,10 @@ All non-prose changes MUST execute exclusively through `tools/ia-graft`.
   - MUST NOT commit directly on `master`/`main` for any change touching non-Markdown files.
 
 ## 2. TASK LIFECYCLE (`tools/ia-graft`)
+
+- `ia-graft` is the opaque repository-owned boundary for every command it exposes; agents must not invoke its Node entry point directly or inspect, reproduce, or separately operate its internal Git or hosting mechanics.
+- Any request authorizing in-scope code, config, contract, or script work also authorizes every necessary `ia-graft` invocation through `task done`, including configured submission side effects, without separate confirmation; merging remains human-only.
+- On Windows invoke `.\ia-graft.cmd` followed by the command; the project rule at `.codex/rules/ia-graft.rules` intentionally authorizes the entire launcher, including future subcommands.
 
 - **Documentation-Only Edits (100% Markdown prose):**
   - Commit directly to `master`/`main` (no task branch, no PR needed).
