@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createTabletopRuntime } from "../src/composition/tabletop/index.ts";
 import { createTokenProjection } from "../src/entities/token/index.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 
 function createFakeRenderPort() {
   const changes = [];
@@ -30,6 +31,10 @@ function createFakeRenderPort() {
     applyConfirmed(change) {
       changes.push(change);
     },
+    pick() {
+      return undefined;
+    },
+    setFloorClipHeight() {},
     getMetrics() {
       return {
         rendererCreates: creates,
@@ -48,9 +53,11 @@ function createFakeRenderPort() {
   };
 }
 
+const FAKE_TERRAIN_SURFACE_KEY = ["fake:terrain:n0", "fake:terrain:n1", "fake:terrain:n2", "fake:terrain:n3"];
+const FAKE_WALL_SURFACE_KEY = ["fake:wall:a", "fake:wall:b", "fake:wall:c"];
+
 function createFakeConstructionPort() {
   let started = false;
-  let sequence = 0;
 
   function requireStarted() {
     if (!started) throw new Error("construction session is not started");
@@ -96,13 +103,11 @@ function createFakeConstructionPort() {
     },
     generateTerrainCell() {
       requireStarted();
-      sequence += 1;
-      return [`fake:terrain-${sequence}:n0`, `fake:terrain-${sequence}:n1`, `fake:terrain-${sequence}:n2`];
+      return FAKE_TERRAIN_SURFACE_KEY;
     },
     generateWall() {
       requireStarted();
-      sequence += 1;
-      return [{ surfaceKey: [`fake:wall-${sequence}:a`, `fake:wall-${sequence}:b`, `fake:wall-${sequence}:c`], surfaceType: "wall" }];
+      return [{ surfaceKey: FAKE_WALL_SURFACE_KEY, surfaceType: "wall" }];
     },
     getSurfaceMesh() {
       requireStarted();
@@ -117,7 +122,7 @@ function createFakeConstructionPort() {
       requireStarted();
       return [
         {
-          surfaceKey: ["fake:terrain:n0", "fake:terrain:n1", "fake:terrain:n2", "fake:terrain:n3"],
+          surfaceKey: FAKE_TERRAIN_SURFACE_KEY,
           surfaceType: "terrain",
           physical: true,
           mesh: {
@@ -126,6 +131,28 @@ function createFakeConstructionPort() {
             indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
           },
         },
+        {
+          surfaceKey: FAKE_WALL_SURFACE_KEY,
+          surfaceType: "wall",
+          physical: true,
+          mesh: {
+            positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1]),
+            normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
+            indices: new Uint32Array([0, 1, 2]),
+          },
+        },
+      ];
+    },
+    getNodePositions() {
+      requireStarted();
+      return [
+        { id: "fake:terrain:n0", position: { x: 0, y: 0, z: 0 } },
+        { id: "fake:terrain:n1", position: { x: 1, y: 0, z: 0 } },
+        { id: "fake:terrain:n2", position: { x: 1, y: 0, z: 1 } },
+        { id: "fake:terrain:n3", position: { x: 0, y: 0, z: 1 } },
+        { id: "fake:wall:a", position: { x: 2, y: 0, z: 0 } },
+        { id: "fake:wall:b", position: { x: 2, y: 0, z: 4 } },
+        { id: "fake:wall:c", position: { x: 2, y: 3, z: 0 } },
       ];
     },
     async dispose() {
@@ -170,15 +197,184 @@ test("starting a table seeds a generated terrain cell and wall through the const
   await runtime.start();
 
   const snapshot = runtime.getSnapshot();
-  assert.equal(snapshot.map.byId.size, 1, "the fake's one returned surface becomes one map entry");
-  const [surface] = [...snapshot.map.byId.values()];
-  assert.equal(surface.type, "terrain");
-  assert.equal(surface.physical, true);
+  assert.equal(snapshot.map.byId.size, 2, "the fake's terrain cell and wall piece each become one map entry");
+  const terrain = snapshot.map.byId.get(surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY));
+  assert.equal(terrain.type, "terrain");
+  assert.equal(terrain.physical, true);
+  const wall = snapshot.map.byId.get(surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY));
+  assert.equal(wall.type, "wall");
 
   const mapChanges = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
-  assert.equal(mapChanges.length, 1);
+  assert.ok(mapChanges.length > 0);
   assert.equal(mapChanges[0].dependency.layer, "terrain");
   assert.ok(mapChanges[0].chunk.mesh.positions.length > 0, "the seeded chunk carries real mesh data");
+});
+
+test("starting a table also seeds every node's position from the construction port", async () => {
+  const runtime = createTabletopRuntime({
+    tableId: "table-nodes",
+    renderPort: createFakeRenderPort(),
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  await runtime.start();
+
+  const { nodePositions } = runtime.getSnapshot().map;
+  assert.equal(nodePositions.size, 7);
+  assert.deepEqual(nodePositions.get("fake:terrain:n0").position, { x: 0, y: 0, z: 0 });
+  assert.equal(nodePositions.get("fake:terrain:n0").revision, 1);
+  assert.deepEqual(nodePositions.get("fake:wall:a").position, { x: 2, y: 0, z: 0 });
+});
+
+test("moving a node updates its position and re-uploads the map chunk it belongs to", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-move-node",
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+  await runtime.start();
+  const before = runtime.getSnapshot();
+  const uploadsBefore = renderPort.changes.filter((change) => change.type === "map-chunk-upserted").length;
+
+  const affected = runtime.moveNode("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-1");
+
+  assert.deepEqual(affected, { affectedSurfaceKeys: [] });
+  const after = runtime.getSnapshot();
+  assert.notEqual(after, before);
+  const moved = after.map.nodePositions.get("fake:terrain:n0");
+  assert.deepEqual(moved.position, { x: 9, y: 9, z: 9 });
+  assert.equal(moved.revision, 2);
+
+  const uploadsAfter = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
+  assert.ok(uploadsAfter.length > uploadsBefore, "moving a node re-uploads its chunk");
+  assert.equal(uploadsAfter.at(-1).origin, "local");
+  assert.equal(uploadsAfter.at(-1).causeId, "drag-1");
+});
+
+test("moving a node bumps the revision of every surface the engine reports as affected", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-affected-surfaces",
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+
+  const surfaceKey = ["fake:terrain:n0", "fake:terrain:n1", "fake:terrain:n2", "fake:terrain:n3"];
+  const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
+  assert.equal(runtime.getSnapshot().map.byId.get(surfaceRef).revision, 1);
+
+  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [surfaceKey] });
+  runtime.moveNode("fake:terrain:n0", { x: 2, y: 0, z: 0 }, "local", "drag-2");
+
+  assert.equal(runtime.getSnapshot().map.byId.get(surfaceRef).revision, 2);
+});
+
+test("moving a node removes a chunk that no longer has any surface in it", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-chunk-removal",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+  const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
+
+  constructionPort.getAllSurfaceMeshes = () => [];
+  runtime.moveNode("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
+
+  const removal = renderPort.changes.find(
+    (change) => change.type === "map-chunk-removed" && change.chunkId === seededChunkId,
+  );
+  assert.ok(removal, "the vacated chunk must be removed, not left stale");
+});
+
+test("generateTerrainCell folds the new surface and its nodes into the map", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-generate-terrain",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  const extraKey = ["fake:terrain2:n0", "fake:terrain2:n1"];
+  constructionPort.generateTerrainCell = () => extraKey;
+  constructionPort.getAllSurfaceMeshes = () => [
+    {
+      surfaceKey: extraKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
+    },
+  ];
+  constructionPort.getNodePositions = () => [
+    { id: "fake:terrain2:n0", position: { x: 5, y: 0, z: 5 } },
+    { id: "fake:terrain2:n1", position: { x: 6, y: 0, z: 5 } },
+  ];
+
+  const returned = runtime.generateTerrainCell({}, "local", "generate-1");
+  assert.deepEqual(returned, extraKey);
+
+  const map = runtime.getSnapshot().map;
+  const surfaceRef = surfaceRefFromNodeSet(extraKey);
+  assert.equal(map.byId.get(surfaceRef).type, "terrain");
+  assert.deepEqual(map.nodePositions.get("fake:terrain2:n0").position, { x: 5, y: 0, z: 5 });
+});
+
+test("generateWall folds every returned piece into the map", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-generate-wall",
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+
+  const pieceKey = ["fake:wall2:a", "fake:wall2:b"];
+  constructionPort.generateWall = () => [{ surfaceKey: pieceKey, surfaceType: "door" }];
+  constructionPort.getAllSurfaceMeshes = () => [
+    {
+      surfaceKey: pieceKey,
+      surfaceType: "door",
+      physical: false,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
+    },
+  ];
+  constructionPort.getNodePositions = () => [
+    { id: "fake:wall2:a", position: { x: 8, y: 0, z: 0 } },
+    { id: "fake:wall2:b", position: { x: 8, y: 3, z: 0 } },
+  ];
+
+  const pieces = runtime.generateWall({}, "local", "generate-2");
+  assert.deepEqual(pieces, [{ surfaceKey: pieceKey, surfaceType: "door" }]);
+
+  const map = runtime.getSnapshot().map;
+  const surfaceRef = surfaceRefFromNodeSet(pieceKey);
+  assert.equal(map.byId.get(surfaceRef).type, "door");
+  assert.equal(map.byId.get(surfaceRef).physical, false);
+});
+
+test("generating construction requires a ready tabletop runtime", async () => {
+  const runtime = createTabletopRuntime({
+    tableId: "table-generate-not-ready",
+    renderPort: createFakeRenderPort(),
+    constructionPort: createFakeConstructionPort(),
+  });
+  assert.throws(() => runtime.generateTerrainCell({}, "local", "c"), /ready/);
+  assert.throws(() => runtime.generateWall({}, "local", "c"), /ready/);
+});
+
+test("moving a node requires a ready tabletop runtime", async () => {
+  const runtime = createTabletopRuntime({
+    tableId: "table-not-ready",
+    renderPort: createFakeRenderPort(),
+    constructionPort: createFakeConstructionPort(),
+  });
+  assert.throws(() => runtime.moveNode("n0", { x: 0, y: 0, z: 0 }, "local", "c"), /ready/);
 });
 
 test("a confirmed token move invalidates only that token and preserves no-op identity", async () => {

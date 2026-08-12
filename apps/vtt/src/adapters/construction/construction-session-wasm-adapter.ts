@@ -10,6 +10,7 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
+  ConstructionNodeSnapshot,
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
@@ -24,6 +25,15 @@ type WirePosition = readonly [number, number, number];
 
 function toWirePosition(position: ConstructionPosition): WirePosition {
   return [position.x, position.y, position.z];
+}
+
+function fromWirePosition(position: WirePosition): ConstructionPosition {
+  const [x, y, z] = position;
+  return { x, y, z };
+}
+
+interface SnapshotWire {
+  readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
 }
 
 function toWireSpec(spec: ConstructionSurfaceSpec): { cycle: readonly string[]; surfaceType: string; physical: boolean } {
@@ -183,6 +193,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[] {
     const wire = JSON.parse(this.#require().all_surface_meshes_json()) as readonly SurfaceMeshWire[];
     return wire.map(toMeshResult);
+  }
+
+  getNodePositions(): readonly ConstructionNodeSnapshot[] {
+    const wire = JSON.parse(this.#require().snapshot_json()) as SnapshotWire;
+    return wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) }));
   }
 
   async dispose(): Promise<void> {
