@@ -326,8 +326,8 @@ explicit request to push all physics/water/effects to the future.
 
 | # | Task | Status | Dificuldade | Impacto |
 | --- | --- | --- | --- | --- |
-| E5.1 | Token rendering as a billboard/sprite (`THREE.Sprite`) inside the full-3D world | Decided (technique), not implemented | Baixa | Médio |
-| E5.2 | Token product model and operations inside `apps/vtt`, using app-local intents/projections/ports over generic capabilities, per E2.3 and ADR-0023 | Not discussed | Média | Médio |
+| E5.1 | Token rendering as a billboard/sprite (`THREE.Sprite`) inside the full-3D world | **Done — `VTT-TOKEN-BILLBOARD-SLICE`: a generic sprite descriptor is realized privately as `THREE.Sprite`; the VTT-owned visual kind, color, size, layer, projection, and renderer adapter remain inside `apps/vtt`** | Baixa | Médio |
+| E5.2 | Token product model and operations inside `apps/vtt`, using app-local intents/projections/ports over generic capabilities, per E2.3 and ADR-0023 | **Done — `VTT-TOKEN-BILLBOARD-SLICE`: immutable normalized placements, stable token identity, optional opaque `SubjectRef`, typed `token.place@1` and `token.bind-subject@1` operations, confirmed token deltas, dependency-scoped render changes, and runtime lifecycle; physics, visibility, rules payloads, and session transport remain in their owning later tasks** | Média | Médio |
 | E5.3 | Per-token vision/light radius and sense-capability inputs under `VTT-VISIBILITY-001` | Contract decided, not implemented; exact token/rules payload belongs to the first consumer | Média | Baixo — visibility architecture no longer blocks it |
 | E5.4 | Token movement/collision/snapping | Not discussed, depends on E6.1 (physics) | Média | Baixo — blocked on Epic 6 |
 

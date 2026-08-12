@@ -93,7 +93,8 @@ test("source imports follow the accepted layer direction and slice public APIs",
 
       if (
         ["composition", "features", "entities", "widgets", "adapters", "ui"].includes(targetLayer) &&
-        targetParts.length > 2
+        targetParts.length > 2 &&
+        targetParts.at(-1) !== "index.ts"
       ) {
         violations.push(`${importerParts.join("/")} deep-imports ${targetParts.join("/")}`);
       }

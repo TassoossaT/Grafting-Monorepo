@@ -41,6 +41,13 @@ export interface HeightfieldData {
 
 /** The shape half of a visual. */
 export type GeometryDescriptor =
+  | {
+      /**
+       * A camera-facing unit square. Its world size comes from the item's
+       * transform scale, and an optional unlit texture supplies its shape.
+       */
+      readonly shape: "sprite";
+    }
   | { readonly shape: "plane"; readonly width: number; readonly depth: number; readonly segments?: number }
   | { readonly shape: "box"; readonly width: number; readonly height: number; readonly depth: number }
   | { readonly shape: "sphere"; readonly radius: number; readonly segments?: number }

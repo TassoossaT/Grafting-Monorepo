@@ -66,3 +66,18 @@ test("the heightfield default compares sample data by reference", () => {
     "a new array is the caller's signal that the data changed",
   );
 });
+
+test("a caller can describe a camera-facing sprite without a renderer type", () => {
+  const registry = createVisualRegistry();
+  registry.register({
+    kind: "camera-facing-marker",
+    describe: () => ({
+      geometry: { shape: "sprite" },
+      material: { surface: "unlit", color: 0x44cc88 },
+    }),
+  });
+
+  const descriptor = registry.get("camera-facing-marker").describe({});
+  assert.deepEqual(descriptor.geometry, { shape: "sprite" });
+  assert.equal(descriptor.material.surface, "unlit");
+});
