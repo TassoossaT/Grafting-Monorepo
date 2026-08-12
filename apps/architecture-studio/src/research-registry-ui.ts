@@ -12,13 +12,6 @@ import type { RegistryRow, RegistrySection, StatusId } from "./research-registry
  * registry itself -- only one candidate has a real trial today.
  */
 export const DEMO_LINKS: Readonly<Record<string, string>> = {
-  "noise-rs": "/lab/heightmap",
-  "terrain-quantization": "/lab/terrain-quantization",
-  "irregular-quad-grid": "/lab/irregular-grid",
-  "stacked-terrain": "/lab/stacked-terrain",
-  "terrain-transitions": "/lab/terrain-transitions",
-  "terrain-tileset": "/lab/terrain-tileset",
-  "mesh-procedural": "/lab/mesh-procedural",
   "vtt-brush": "/lab/vtt-brush",
 };
 

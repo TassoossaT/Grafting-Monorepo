@@ -478,42 +478,29 @@ export default function VttBrushClient() {
       }
     }
 
-    // 2. Free-geometry boundary segment boxes grouped by boundary kind
+    // 2. Free-geometry boundary segments as flat double-sided planes grouped by boundary kind
     const visibleBoundaries = boundaries.filter((b) => b.level <= visibleLevels);
     for (const seg of visibleBoundaries) {
       const group = map[seg.kind] ?? map["wall"];
       const { start, end, height: wallH } = seg;
-      const thickness = 0.15;
 
       const dx = end.x - start.x;
       const dz = end.z - start.z;
       const len = Math.hypot(dx, dz);
       if (len < 0.001) continue;
 
-      const nx = (-dz / len) * (thickness / 2);
-      const nz = (dx / len) * (thickness / 2);
-
       const y0 = start.y;
       const y1 = start.y + wallH;
 
-      const p0 = [start.x + nx, y0, start.z + nz];
-      const p1 = [start.x - nx, y0, start.z - nz];
-      const p2 = [end.x - nx, y0, end.z - nz];
-      const p3 = [end.x + nx, y0, end.z + nz];
-
-      const p4 = [start.x + nx, y1, start.z + nz];
-      const p5 = [start.x - nx, y1, start.z - nz];
-      const p6 = [end.x - nx, y1, end.z - nz];
-      const p7 = [end.x + nx, y1, end.z + nz];
+      const p0 = [start.x, y0, start.z];
+      const p1 = [end.x, y0, end.z];
+      const p2 = [end.x, y1, end.z];
+      const p3 = [start.x, y1, start.z];
 
       const base = group.positions.length / 3;
-      group.positions.push(...p0, ...p1, ...p2, ...p3, ...p4, ...p5, ...p6, ...p7);
+      group.positions.push(...p0, ...p1, ...p2, ...p3);
 
-      group.indices.push(base + 4, base + 6, base + 5, base + 4, base + 7, base + 6);
-      group.indices.push(base + 0, base + 1, base + 5, base + 0, base + 5, base + 4);
-      group.indices.push(base + 1, base + 2, base + 6, base + 1, base + 6, base + 5);
-      group.indices.push(base + 2, base + 3, base + 7, base + 2, base + 7, base + 6);
-      group.indices.push(base + 3, base + 0, base + 4, base + 3, base + 4, base + 7);
+      group.indices.push(base + 0, base + 1, base + 2, base + 0, base + 2, base + 3);
     }
 
     const result: Record<string, { positions: Float32Array; indices: Uint32Array }> = {};

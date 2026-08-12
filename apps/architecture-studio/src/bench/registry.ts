@@ -391,6 +391,52 @@ const MESH_PROCEDURAL: BenchNodeKind = Object.freeze({
   ]),
 });
 
+const TRANSITION_TERRAIN: BenchNodeKind = Object.freeze({
+  id: "terrain.transitions",
+  title: "Transition terrain",
+  category: "Terrain",
+  description:
+    "Gives the grid relief with continuous sloped transition surfaces between discrete levels.",
+  inputs: Object.freeze([
+    Object.freeze({ id: "grid", label: "grid", dataType: BENCH_DATA_TYPES.quadmesh }),
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+  outputs: Object.freeze([
+    Object.freeze({ id: "mesh", label: "mesh", dataType: BENCH_DATA_TYPES.mesh }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "integer" as const,
+      id: "levels",
+      label: "Discrete levels",
+      defaultValue: 5,
+      min: 2,
+      max: 12,
+      description: "How many steps the terrain may take.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "levelHeight",
+      label: "Level height",
+      defaultValue: 0.22,
+      min: 0.02,
+      max: 1,
+      step: 0.02,
+      description: "World height of one step.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "baseHeight",
+      label: "Base height",
+      defaultValue: -0.6,
+      min: -4,
+      max: 4,
+      step: 0.1,
+      description: "World height of the lowest level's floor.",
+    }),
+  ]),
+});
+
 /** Every element the bench offers, in menu order. */
 export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   PERLIN_HEIGHTMAP,
@@ -401,6 +447,7 @@ export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   IRREGULAR_GRID,
   DISCRETIZE,
   STACK_TERRAIN,
+  TRANSITION_TERRAIN,
   MESH_PROCEDURAL,
   VIEWPORT,
 ]);

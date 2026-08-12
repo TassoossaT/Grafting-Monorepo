@@ -2,6 +2,7 @@ import { BENCH_DATA_TYPES, BENCH_NODE_KINDS } from "./registry.ts";
 import { paramIdFromPort, type BenchParamValue, type BenchParamValues } from "./node-kind.ts";
 import { buildIrregularQuadGrid, type QuadMesh } from "../vtt/irregular-grid.ts";
 import { buildStackedTerrain, sampleCellValues } from "../vtt/stacked-terrain.ts";
+import { buildTransitionTerrain } from "../vtt/transition-shapes.ts";
 
 // What an element *does*, kept apart from what it *is* (`registry.ts`). The
 // Wasm entry points arrive by injection rather than by import so this module
@@ -130,6 +131,27 @@ export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, Benc
     const indices = new Uint32Array(terrain.topIndices.length + terrain.wallIndices.length);
     indices.set(terrain.topIndices, 0);
     indices.set(terrain.wallIndices, terrain.topIndices.length);
+    return { dataType: "mesh" as const, positions: terrain.positions, indices };
+  });
+
+  evaluators.set("terrain.transitions", (inputs, params) => {
+    const grid = expectQuadMesh(inputs.grid, "grid").mesh;
+    const field = expectHeightmap(inputs.heightmap, "heightmap");
+
+    const sampled = sampleCellValues(grid, field);
+    const levels = wasm.discretize(sampled, asNumber(params.levels));
+
+    const terrain = buildTransitionTerrain(grid, levels, {
+      levelHeight: asNumber(params.levelHeight),
+      baseHeight: asNumber(params.baseHeight),
+    });
+
+    const indices = new Uint32Array(
+      terrain.topIndices.length + terrain.sideIndices.length + terrain.skirtIndices.length,
+    );
+    indices.set(terrain.topIndices, 0);
+    indices.set(terrain.sideIndices, terrain.topIndices.length);
+    indices.set(terrain.skirtIndices, terrain.topIndices.length + terrain.sideIndices.length);
     return { dataType: "mesh" as const, positions: terrain.positions, indices };
   });
 

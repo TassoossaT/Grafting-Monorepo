@@ -5,7 +5,7 @@ export default function VttBrushPage() {
   return (
     <div>
       <div style={{ padding: "8px 12px" }}>
-        <Link href="/lab/trials">&larr; Back to trials</Link>
+        <Link href="/lab">&larr; Back to bench</Link>
       </div>
       <VttBrushClient />
     </div>
