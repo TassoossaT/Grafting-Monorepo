@@ -22,10 +22,14 @@ is invisible to the task graph, the repo map, and the Graph IR extractor until
 there is something to build. Adding one now would put an app with no targets
 into every listing and every report.
 
-## When this becomes a real app
+## Accepted architecture and implementation gate
 
-It needs an ADR first: `docs/adr/ADR-0016` scoped Architecture Studio's three
-surfaces, and DEC-045 fixed how products are distributed. A VTT app is a
-product decision, not a directory decision. At that point it gains a
-`project.json`, a scope-local `AGENTS.md` with its own rules, and the notes here
-become either resolved decisions or explicit accepted risks.
+`docs/adr/ADR-0023-vtt-application-architecture.md` and DEC-061 define the
+accepted application architecture. Its normative, agent-oriented implementation
+contract is `docs/architecture/vtt-application-architecture.md`.
+
+The physical implementation is tracked by `docs/architecture/vtt-roadmap.md`
+task E2.6. Until E2.6 lands, this directory remains notes-only and
+intentionally has no `project.json`. That task must create the Nx project,
+scope-local `AGENTS.md`, Graph IR metadata, and first real executable slice
+atomically; it must not materialize the complete conceptual tree empty.

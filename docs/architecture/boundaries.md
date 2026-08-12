@@ -197,6 +197,13 @@ product requires a map.
 > Active graph canvases use private Rete.js integration through the same
 > vendor-neutral package. `@grafting/x6-canvas` is retired and dormant.
 
+> **Clarification (2026-08-11, DEC-061/ADR-0023):** `apps/vtt` is the Next.js
+> host for the VTT product. The interactive tabletop is a client-only route
+> inside that host, so DEC-041's route boundary and DEC-045's distinct-app
+> product boundary both hold. VTT concepts and policies remain inside the app;
+> it reaches generic capabilities through app-owned ports and adapters. See
+> `docs/architecture/vtt-application-architecture.md`.
+
 DEC-049 strengthens this boundary: reusable capabilities expose Grafting-owned
 interfaces and isolate third-party runtime APIs inside the smallest useful
 owning module/project boundary. It does not require one package per dependency.

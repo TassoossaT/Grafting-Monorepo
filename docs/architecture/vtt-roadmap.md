@@ -289,11 +289,12 @@ directory.
 
 | # | Task | Status | Dificuldade | Impacto |
 | --- | --- | --- | --- | --- |
-| E2.1 | ADR: promote `apps/vtt` from a notes-only directory to a real app (`project.json`, scope-local `AGENTS.md`), per its own README's stated precondition (`ADR-0016`, `DEC-045`) | Open | Baixa | Alto — unlocks everything downstream |
+| E2.1 | **Decide and record the VTT application architecture.** Define the Next.js product-host boundary, app-owned product composition, vertical-slice/module boundaries, dependency direction, runtime/state ownership, ports/adapters, and interaction commit semantics. This is a decision task; it does not create the app scaffold | **Decided — ADR-0023 accepted (DEC-061, 2026-08-11)** | Média | Alto — governs every downstream VTT task |
 | E2.2 | Close `apps/vtt/notes/0001` (rendering/propagation debt carried from the bench): explicit per-renderer dependency model (a token's position must not invalidate terrain), origin-tagged state changes (local vs. network vs. programmatic — three sources, not two), one renderer with many views instead of one WebGL context per element, a resizable renderer contract from day one, buffer reuse across the worker boundary, uncommitted-until-release drag gestures | Open, must close before real rendering starts | Alta | Alto — six real, previously-measured defects to prevent from recurring at VTT scale |
-| E2.3 | Design the VTT's own domain entities (map/cell, token, rules) as real `Command`/`DomainEvent` types in `domain-core`, with the same discipline its placeholder domain already has — the "suggested next step" `vtt-product-scope-map.md` itself names as the real remaining gap | Open | Alta | Alto — foundational for Epics 3, 5, 6 |
+| E2.3 | Design the VTT product model and app-local intents, projections, and ports inside `apps/vtt`. Compose generic capabilities from `libs/*` and `packages/*`; reusable packages MUST NOT gain a `vtt` namespace or app-exclusive methods | Open | Alta | Alto — foundational for Epics 3, 5, and 6 |
 | E2.4 | Decide `apps/vtt/notes/0002`'s open questions (fog of war): is it grid-tied, what resolution is remembered state stored at, does sound produce the same remembered state as sight, who is authoritative. Deliberately deciding only — implementation is out of this epic's scope, per the note's own framing ("algo que eu devo fazer bem para o futuro") | Open | Média | Médio — shapes the engine contract now even though implementation is deferred |
-| E2.5 | Domain/folder organization research for the app itself (where map/token/rules domains live inside `apps/vtt`, how they reference `libs/domains/*`) — scoped once E2.1's ADR exists | Open, depends on E2.1 | Média | Médio |
+| E2.5 | Domain/folder organization research for the VTT application | **Decided — absorbed into E2.1 and recorded by ADR-0023; no separate implementation task** | Média | Médio |
+| E2.6 | Implement the accepted VTT app scaffold. Materialize only the first executable slice required by ADR-0023, including `project.json`, scope-local `AGENTS.md`, the host/client route boundary, one composition root, and architecture-boundary checks | Ready, depends on E2.1; use `ia-graft task new` because it touches non-Markdown files | Média | Alto |
 
 ## Epic 3 — Map & construction
 
@@ -322,7 +323,7 @@ explicit request to push all physics/water/effects to the future.
 | # | Task | Status | Dificuldade | Impacto |
 | --- | --- | --- | --- | --- |
 | E5.1 | Token rendering as a billboard/sprite (`THREE.Sprite`) inside the full-3D world | Decided (technique), not implemented | Baixa | Médio |
-| E5.2 | Token domain model as `Command`/`DomainEvent`, per E2.3's discipline | Not discussed | Média | Médio |
+| E5.2 | Token product model and operations inside `apps/vtt`, using app-local intents/projections/ports over generic capabilities, per E2.3 and ADR-0023 | Not discussed | Média | Médio |
 | E5.3 | Per-token vision/light radius | Not discussed, connects to E2.4 (fog of war) | Média | Baixo — depends on deferred fog of war |
 | E5.4 | Token movement/collision/snapping | Not discussed, depends on E6.1 (physics) | Média | Baixo — blocked on Epic 6 |
 
