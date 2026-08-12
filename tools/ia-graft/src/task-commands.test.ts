@@ -763,10 +763,11 @@ test("taskContext resolves pack mode using context-resolver", async () => {
 });
 
 test("taskResume resolves state recovery context", async () => {
-  const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
-  const result = await taskResume(repoRoot, { taskId: "G-TOOLING-CONTEXT-PACK" });
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "RECOVERY-CONTEXT", base: "main" });
+  const result = await taskResume(root, { taskId: "RECOVERY-CONTEXT" });
   assert.equal(result.ok, true);
-  assert.equal(result.taskId, "G-TOOLING-CONTEXT-PACK");
+  assert.equal(result.taskId, "RECOVERY-CONTEXT");
   assert.equal(result.resumed, true);
   assert.ok(Array.isArray(result.recentCommits));
   assert.ok(Array.isArray(result.dirtyFiles));
