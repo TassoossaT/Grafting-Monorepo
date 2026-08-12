@@ -22,6 +22,7 @@ import type {
   ConstructionSessionPort,
   RenderMapChunk,
   RenderViewId,
+  ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "@/ports";
@@ -55,6 +56,7 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): AffectedSurfaces;
+  pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
   resizeView(viewId: RenderViewId, width: number, height: number): void;
@@ -119,6 +121,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #construction: ConstructionSessionPort;
   /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
   readonly #chunkRevisions = new Map<string, number>();
+  /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
+  readonly #nodeHandleRevisions = new Map<string, number>();
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
@@ -199,6 +203,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
 
     const nodePositions = this.#construction.getNodePositions();
+    for (const node of nodePositions) {
+      this.#uploadNodeHandle(node.id, node.position, "programmatic", causeId, generation);
+    }
 
     return createMapProjection(
       meshes.map((mesh) =>
@@ -260,6 +267,26 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
   }
 
+  /** Uploads one node's pickable handle at its current position, mirroring `#uploadMapChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
+  #uploadNodeHandle(
+    nodeId: ConstructionNodeId,
+    position: ConstructionPosition,
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): void {
+    const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
+    this.#nodeHandleRevisions.set(nodeId, revision);
+    this.#render.applyConfirmed({
+      type: "node-handle-upserted",
+      origin,
+      causeId,
+      runtimeGeneration: generation,
+      dependency: { layer: "handles", scopeId: nodeId, revision },
+      handle: { nodeId, position },
+    });
+  }
+
   /**
    * Moves an existing construction node to an absolute position through the
    * real engine, then re-derives and re-uploads every chunk (see
@@ -281,6 +308,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const affected = this.#construction.moveNode(nodeId, position);
     const meshes = this.#construction.getAllSurfaceMeshes();
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+    this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
 
     let map = this.#snapshot.map;
     for (const surfaceKey of affected.affectedSurfaceKeys) {
@@ -335,6 +363,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.map,
     );
     this.#notify();
+  }
+
+  pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {
+    return this.#render.pick(viewId, x, y);
   }
 
   attachView(target: HTMLElement): RenderViewId {

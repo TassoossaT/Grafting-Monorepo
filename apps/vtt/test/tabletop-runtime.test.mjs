@@ -31,6 +31,10 @@ function createFakeRenderPort() {
     applyConfirmed(change) {
       changes.push(change);
     },
+    pick() {
+      return undefined;
+    },
+    setFloorClipHeight() {},
     getMetrics() {
       return {
         rendererCreates: creates,

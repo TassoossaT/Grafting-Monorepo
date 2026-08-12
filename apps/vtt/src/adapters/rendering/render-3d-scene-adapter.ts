@@ -12,6 +12,7 @@ import type {
   ConfirmedRenderChange,
   RenderToken,
   RenderViewId,
+  ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "@/ports";
@@ -23,6 +24,14 @@ import {
   type MapChunkVisualParams,
 } from "./map-chunk-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
+import {
+  NODE_HANDLE_LAYER_ID,
+  NODE_HANDLE_VISUAL_KIND,
+  nodeHandleSceneItem,
+  nodeHandleSceneItemId,
+  nodeHandleTransform,
+  type NodeHandlePickData,
+} from "./node-handle-scene-item.ts";
 import {
   TOKEN_LAYER_ID,
   TOKEN_VISUAL_KIND,
@@ -69,9 +78,29 @@ function createMarkerTexture(): HTMLCanvasElement {
   return canvas;
 }
 
+/** A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token. */
+function createNodeHandleTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("node handle texture needs a 2D canvas context");
+
+  context.clearRect(0, 0, 64, 64);
+  context.strokeStyle = "#0b1a17";
+  context.lineWidth = 4;
+  context.fillStyle = "#f2c94c";
+  context.beginPath();
+  context.arc(32, 32, 22, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  return canvas;
+}
+
 export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
   readonly #tokens = new Map<string, RenderToken>();
+  readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
   // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
   // and a token id can never collide, even though both are caller-chosen
   // strings that share no coordination.
@@ -88,6 +117,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     if (this.#engine !== undefined) throw new Error("scene renderer is already started");
 
     const texture = createMarkerTexture();
+    const handleTexture = createNodeHandleTexture();
     const registry = createVisualRegistry();
     registry.register<TokenVisualParams>({
       kind: TOKEN_VISUAL_KIND,
@@ -100,6 +130,14 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         },
       }),
       equals: (left, right) => left.color === right.color,
+    });
+    registry.register<Record<string, never>>({
+      kind: NODE_HANDLE_VISUAL_KIND,
+      describe: () => ({
+        geometry: { shape: "sprite" },
+        material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
+      }),
+      equals: () => true,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -114,9 +152,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     });
 
     const engine = createEngine({ registry, autoplay: true });
-    // Map geometry draws below tokens (order 10 vs. 20), so a token placed on
-    // a surface is never occluded by that surface's own triangles.
+    // Map geometry draws below node handles below tokens (10 / 15 / 20), so
+    // nothing occludes the thing a pointer is more likely trying to hit.
     engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
+    engine.scene.defineLayer({ id: NODE_HANDLE_LAYER_ID, order: 15 }, "engine");
     engine.scene.defineLayer({ id: TOKEN_LAYER_ID, order: 20 }, "engine");
     engine.start();
 
@@ -139,7 +178,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         near: 0.1,
         far: 200,
       },
-      layers: [MAP_LAYER_ID, TOKEN_LAYER_ID],
+      layers: [MAP_LAYER_ID, NODE_HANDLE_LAYER_ID, TOKEN_LAYER_ID],
       background: 0x07100f,
     });
 
@@ -216,6 +255,25 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       }
       this.#tokens.set(change.token.id, change.token);
       this.#confirmedTokenChanges += 1;
+    } else if (change.type === "node-handle-removed") {
+      engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
+      this.#nodeHandles.delete(change.nodeId);
+    } else if (change.type === "node-handle-upserted") {
+      const previous = this.#nodeHandles.get(change.handle.nodeId);
+      if (previous === undefined) {
+        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+      } else if (
+        previous.x !== change.handle.position.x ||
+        previous.y !== change.handle.position.y ||
+        previous.z !== change.handle.position.z
+      ) {
+        engine.scene.setTransform(
+          nodeHandleSceneItemId(change.handle.nodeId),
+          nodeHandleTransform(change.handle.position),
+          origin,
+        );
+      }
+      this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
     } else if (change.type === "map-chunk-removed") {
       engine.scene.remove(`map-chunk:${change.chunkId}`, origin);
     } else {
@@ -228,6 +286,21 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     }
 
     this.#consumedRevisions.set(revisionKey, change.dependency.revision);
+  }
+
+  pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {
+    const attached = this.#views.get(viewId);
+    if (attached === undefined) throw new Error(`unknown render view "${viewId}"`);
+
+    const result = attached.view.pick(x, y);
+    if (result === undefined) return undefined;
+
+    const data = result.data as Partial<NodeHandlePickData> | undefined;
+    const nodeId =
+      data?.entity === "construction-node-handle" && typeof data.nodeId === "string"
+        ? data.nodeId
+        : undefined;
+    return { point: result.point, nodeId };
   }
 
   setFloorClipHeight(height: number | undefined): void {
@@ -254,6 +327,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     this.#engine = undefined;
     this.#runtimeGeneration = 0;
     this.#tokens.clear();
+    this.#nodeHandles.clear();
     this.#consumedRevisions.clear();
     this.#rendererDisposes += 1;
   }

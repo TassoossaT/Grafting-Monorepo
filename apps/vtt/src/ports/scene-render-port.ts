@@ -1,6 +1,6 @@
 export type ChangeOrigin = "local" | "network" | "programmatic";
 export type RenderViewId = string;
-export type RenderLayerKey = "tokens" | "terrain";
+export type RenderLayerKey = "tokens" | "terrain" | "handles";
 
 export interface RenderDependencyRevision {
   readonly layer: RenderLayerKey;
@@ -78,7 +78,45 @@ export type ConfirmedMapChunkRenderChange =
       readonly chunkId: string;
     };
 
-export type ConfirmedRenderChange = ConfirmedTokenRenderChange | ConfirmedMapChunkRenderChange;
+/** A construction node's live world position, rendered as a small pickable handle -- what edit-mode picking/drag-to-move hit-tests against. */
+export interface RenderNodeHandle {
+  readonly nodeId: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+}
+
+export type ConfirmedNodeHandleRenderChange =
+  | {
+      readonly type: "node-handle-upserted";
+      readonly origin: ChangeOrigin;
+      readonly causeId: string;
+      readonly runtimeGeneration: number;
+      readonly dependency: RenderDependencyRevision;
+      readonly handle: RenderNodeHandle;
+    }
+  | {
+      readonly type: "node-handle-removed";
+      readonly origin: ChangeOrigin;
+      readonly causeId: string;
+      readonly runtimeGeneration: number;
+      readonly dependency: RenderDependencyRevision;
+      readonly nodeId: string;
+    };
+
+export type ConfirmedRenderChange =
+  | ConfirmedTokenRenderChange
+  | ConfirmedMapChunkRenderChange
+  | ConfirmedNodeHandleRenderChange;
+
+/**
+ * What a pointer position resolved to. `nodeId` is present only when the
+ * pointer actually hit a node handle -- otherwise `point` alone (e.g. a hit
+ * against map geometry) is still useful for continuing an in-progress drag
+ * across the ground.
+ */
+export interface ScenePickResult {
+  readonly point: { readonly x: number; readonly y: number; readonly z: number };
+  readonly nodeId?: string;
+}
 
 export interface SceneRenderMetrics {
   readonly rendererCreates: number;
@@ -96,6 +134,8 @@ export interface SceneRenderPort {
   applyConfirmed(change: ConfirmedRenderChange): void;
   /** Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway. */
   setFloorClipHeight(height: number | undefined): void;
+  /** Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undefined` if it hit nothing. */
+  pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   getMetrics(): SceneRenderMetrics;
   dispose(): Promise<void>;
 }

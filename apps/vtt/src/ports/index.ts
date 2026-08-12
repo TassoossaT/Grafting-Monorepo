@@ -1,14 +1,17 @@
 export type {
   ChangeOrigin,
   ConfirmedMapChunkRenderChange,
+  ConfirmedNodeHandleRenderChange,
   ConfirmedRenderChange,
   ConfirmedTokenRenderChange,
   RenderDependencyRevision,
   RenderLayerKey,
   RenderMapChunk,
   RenderMeshData,
+  RenderNodeHandle,
   RenderToken,
   RenderViewId,
+  ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "./scene-render-port.ts";
