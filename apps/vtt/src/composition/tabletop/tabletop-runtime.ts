@@ -20,11 +20,16 @@ import type {
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionSessionPort,
+  ConstructionSurfaceKey,
+  GenerateTerrainCellRequest,
+  GenerateWallRequest,
   RenderMapChunk,
   RenderViewId,
   ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
+  SurfaceMeshResult,
+  WallPiece,
 } from "@/ports";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
@@ -56,6 +61,12 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): AffectedSurfaces;
+  generateTerrainCell(
+    request: GenerateTerrainCellRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionSurfaceKey;
+  generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[];
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
@@ -195,30 +206,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #seedDefaultMap(generation: number): MapProjection {
     const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
     this.#construction.setTerrainMesh(2, 2, 1, "surface", 0, 0);
-    this.#construction.generateTerrainCell(terrainCell.payload);
-    this.#construction.generateWall(wall.payload);
+    const terrainKey = this.#construction.generateTerrainCell(terrainCell.payload);
+    const wallPieces = this.#construction.generateWall(wall.payload);
 
     const meshes = this.#construction.getAllSurfaceMeshes();
     const causeId = `table-load:${this.#tableId}`;
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
 
-    const nodePositions = this.#construction.getNodePositions();
-    for (const node of nodePositions) {
-      this.#uploadNodeHandle(node.id, node.position, "programmatic", causeId, generation);
-    }
-
-    return createMapProjection(
-      meshes.map((mesh) =>
-        createSurfaceProjection({
-          surfaceRef: surfaceRefFromNodeSet(mesh.surfaceKey),
-          orderedNodeRefs: mesh.surfaceKey,
-          type: mesh.surfaceType,
-          physical: mesh.physical,
-          revision: 1,
-        }),
-      ),
-      nodePositions.map((node) => ({ nodeRef: node.id, position: node.position, revision: 1 })),
-    );
+    const surfaceKeys = [terrainKey, ...wallPieces.map((piece) => piece.surfaceKey)];
+    let map = this.#foldAffectedSurfaces(createMapProjection(), surfaceKeys, meshes);
+    map = this.#foldDiscoveredNodePositions(map, "programmatic", causeId, generation);
+    return map;
   }
 
   /**
@@ -287,6 +285,69 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
+  /** Upserts every surface key that just changed (or is brand new) into `map`, using its freshly re-derived mesh for shape/type/physical. Shared by every mutation that reports which surfaces it touched. */
+  #foldAffectedSurfaces(
+    map: MapProjection,
+    surfaceKeys: readonly ConstructionSurfaceKey[],
+    meshes: readonly SurfaceMeshResult[],
+  ): MapProjection {
+    let next = map;
+    for (const surfaceKey of surfaceKeys) {
+      const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
+      const mesh = meshes.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === surfaceRef);
+      if (mesh === undefined) continue;
+      const previous = next.byId.get(surfaceRef);
+      next = applyMapProjectionDelta(next, {
+        type: "surface-upserted",
+        surface: createSurfaceProjection({
+          surfaceRef,
+          orderedNodeRefs: mesh.surfaceKey,
+          type: mesh.surfaceType,
+          physical: mesh.physical,
+          revision: (previous?.revision ?? 0) + 1,
+        }),
+      });
+    }
+    return next;
+  }
+
+  /**
+   * Diffs a full `getNodePositions()` against `map`'s cached positions and
+   * folds in (and uploads a handle for) anything that changed -- the only
+   * way to discover a newly-generated cell/wall's node positions, since the
+   * Rust engine computes those internally from cell-index/wall-geometry
+   * rather than the caller supplying them. Not used by {@link moveNode},
+   * which already knows its target position directly and would rather not
+   * pay for a full re-scan to rediscover it.
+   */
+  #foldDiscoveredNodePositions(
+    map: MapProjection,
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): MapProjection {
+    let next = map;
+    for (const node of this.#construction.getNodePositions()) {
+      const previous = next.nodePositions.get(node.id);
+      if (
+        previous !== undefined &&
+        previous.position.x === node.position.x &&
+        previous.position.y === node.position.y &&
+        previous.position.z === node.position.z
+      ) {
+        continue;
+      }
+      next = applyMapProjectionDelta(next, {
+        type: "node-moved",
+        nodeRef: node.id,
+        position: node.position,
+        revision: (previous?.revision ?? 0) + 1,
+      });
+      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
+    }
+    return next;
+  }
+
   /**
    * Moves an existing construction node to an absolute position through the
    * real engine, then re-derives and re-uploads every chunk (see
@@ -308,26 +369,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const affected = this.#construction.moveNode(nodeId, position);
     const meshes = this.#construction.getAllSurfaceMeshes();
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
-    this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
 
-    let map = this.#snapshot.map;
-    for (const surfaceKey of affected.affectedSurfaceKeys) {
-      const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
-      const mesh = meshes.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === surfaceRef);
-      if (mesh === undefined) continue;
-      const previous = map.byId.get(surfaceRef);
-      map = applyMapProjectionDelta(map, {
-        type: "surface-upserted",
-        surface: createSurfaceProjection({
-          surfaceRef,
-          orderedNodeRefs: mesh.surfaceKey,
-          type: mesh.surfaceType,
-          physical: mesh.physical,
-          revision: (previous?.revision ?? 0) + 1,
-        }),
-      });
-    }
-
+    let map = this.#foldAffectedSurfaces(this.#snapshot.map, affected.affectedSurfaceKeys, meshes);
     const previousNode = map.nodePositions.get(nodeId);
     map = applyMapProjectionDelta(map, {
       type: "node-moved",
@@ -335,6 +378,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       position,
       revision: (previousNode?.revision ?? 0) + 1,
     });
+    this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
 
     this.#snapshot = snapshot(
       this.#tableId,
@@ -345,6 +389,67 @@ export class AppTabletopRuntime implements TabletopRuntime {
     );
     this.#notify();
     return affected;
+  }
+
+  /**
+   * Generates one more terrain cell through the real engine and folds it
+   * into the running map -- the edit-mode UI's "add terrain" trigger,
+   * distinct from {@link AppTabletopRuntime.#seedDefaultMap}'s one-time
+   * bootstrap call.
+   */
+  generateTerrainCell(
+    request: GenerateTerrainCellRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionSurfaceKey {
+    if (this.#snapshot.status !== "ready") {
+      throw new Error("generating terrain requires a ready tabletop runtime");
+    }
+
+    const surfaceKey = this.#construction.generateTerrainCell(request);
+    const meshes = this.#construction.getAllSurfaceMeshes();
+    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+
+    let map = this.#foldAffectedSurfaces(this.#snapshot.map, [surfaceKey], meshes);
+    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
+
+    this.#snapshot = snapshot(
+      this.#tableId,
+      this.#snapshot.status,
+      this.#snapshot.revision + 1,
+      this.#snapshot.tokens,
+      map,
+    );
+    this.#notify();
+    return surfaceKey;
+  }
+
+  /** Generates one more wall (and its door) through the real engine and folds every piece into the running map. */
+  generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[] {
+    if (this.#snapshot.status !== "ready") {
+      throw new Error("generating a wall requires a ready tabletop runtime");
+    }
+
+    const pieces = this.#construction.generateWall(request);
+    const meshes = this.#construction.getAllSurfaceMeshes();
+    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+
+    let map = this.#foldAffectedSurfaces(
+      this.#snapshot.map,
+      pieces.map((piece) => piece.surfaceKey),
+      meshes,
+    );
+    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
+
+    this.#snapshot = snapshot(
+      this.#tableId,
+      this.#snapshot.status,
+      this.#snapshot.revision + 1,
+      this.#snapshot.tokens,
+      map,
+    );
+    this.#notify();
+    return pieces;
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {
