@@ -3,6 +3,7 @@ import type { BackendSurface, RenderBackend } from "../backend/contract.js";
 import { createThreeBackend } from "../backend/three/create-backend.js";
 import { createClock } from "../clock/create-clock.js";
 import type {
+  ClipPlaneDescriptor,
   EngineOptions,
   FrameObserver,
   FrameReport,
@@ -374,6 +375,12 @@ export function createEngine(options: EngineOptions = {}): RenderEngine {
       currentLights = lights;
       backend.setLights(lights);
       // Lighting is global, so every view drawing anything lit is stale.
+      for (const state of views) state.dirty = true;
+    },
+
+    setClipPlane(plane: ClipPlaneDescriptor | undefined) {
+      backend.setClipPlane(plane);
+      // Global, like lighting: every view drawing a clippable material is stale.
       for (const state of views) state.dirty = true;
     },
 

@@ -1,7 +1,12 @@
 export type {
   ChangeOrigin,
+  ConfirmedMapChunkRenderChange,
+  ConfirmedRenderChange,
   ConfirmedTokenRenderChange,
   RenderDependencyRevision,
+  RenderLayerKey,
+  RenderMapChunk,
+  RenderMeshData,
   RenderToken,
   RenderViewId,
   SceneRenderMetrics,

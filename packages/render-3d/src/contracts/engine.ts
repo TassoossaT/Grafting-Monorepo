@@ -22,6 +22,21 @@ export type LightDescriptor =
       readonly distance?: number;
     };
 
+/**
+ * A single cutting plane, as data. Points where `dot(normal, point) +
+ * constant >= 0` is false are cut away.
+ *
+ * Engine-global: the active plane cuts every item whose material opted in
+ * via `MaterialDescriptor.clippable`, across every view. Independent
+ * per-view clip heights are not supported by this contract.
+ */
+export interface ClipPlaneDescriptor {
+  /** Unit normal of the cutting plane. */
+  readonly normal: Vec3;
+  /** Signed offset in the plane equation `dot(normal, point) + constant >= 0`. */
+  readonly constant: number;
+}
+
 /** What the engine did during one frame. Reported for measurement, not for control flow. */
 export interface FrameReport {
   /** The clock reading this frame ran at. */
@@ -80,6 +95,9 @@ export interface RenderEngine {
 
   /** Replaces the lighting. Marks every lit view dirty. */
   setLights(lights: readonly LightDescriptor[]): void;
+
+  /** Replaces the active clip plane. `undefined` disables clipping. Marks every view dirty. */
+  setClipPlane(plane: ClipPlaneDescriptor | undefined): void;
 
   /** Opens a view. Every view shares this engine's single graphics context. */
   createView(options: ViewOptions): View;

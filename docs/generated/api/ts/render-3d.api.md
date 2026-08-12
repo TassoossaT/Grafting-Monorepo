@@ -69,6 +69,23 @@ Every track in flight.
 
 Stops a track. `settle` applies its final value first. Returns whether it was running.
 
+### `interface render-3d.ClipPlaneDescriptor`
+
+A single cutting plane, as data. Points where `dot(normal, point) +
+constant >= 0` is false are cut away.
+
+Engine-global: the active plane cuts every item whose material opted in
+via `MaterialDescriptor.clippable`, across every view. Independent
+per-view clip heights are not supported by this contract.
+
+### `property render-3d.ClipPlaneDescriptor.constant: number`
+
+Signed offset in the plane equation `dot(normal, point) + constant >= 0`.
+
+### `property render-3d.ClipPlaneDescriptor.normal: Vec3`
+
+Unit normal of the cutting plane.
+
 ### `interface render-3d.Clock`
 
 Time source shared by animation, simulation, and any caller-owned stepping.
@@ -504,6 +521,10 @@ than however often the browser felt like scheduling one.
 
 Subscribes to frame reports. Returns an unsubscribe function.
 
+### `method render-3d.RenderEngine.setClipPlane(plane: ClipPlaneDescriptor | undefined): void`
+
+Replaces the active clip plane. `undefined` disables clipping. Marks every view dirty.
+
 ### `method render-3d.RenderEngine.setLights(lights: readonly LightDescriptor[]): void`
 
 Replaces the lighting. Marks every lit view dirty.
@@ -861,7 +882,7 @@ Caller-chosen identity for a draw group.
 
 Scene lighting, as data. The engine ships no default lighting rig of its own.
 
-### `type render-3d.MaterialDescriptor = { color?: number; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { color?: number; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; opacity?: number; surface: "line" } | { color?: number; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
+### `type render-3d.MaterialDescriptor = { clippable?: boolean; color?: number; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { clippable?: boolean; color?: number; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; opacity?: number; surface: "line" } | { color?: number; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
 
 The appearance half of a visual.
 
@@ -986,6 +1007,23 @@ A registry is the whole integration surface for anything this package does
 not know about. It is created by the caller and may be shared across engines,
 so a separate package can populate one — defining what its own concepts look
 like — and hand it over without either package importing the other.
+
+### `function render-3d.mergeMeshChunks(pieces: readonly MeshData[]): MeshData`
+
+Concatenates several meshes into one buffer, offsetting each piece's
+indices past everything already appended.
+
+Pure array arithmetic, useful to any caller batching many small meshes
+into one draw call — not something specific to any one product's idea of
+a "chunk". A caller that groups geometry into spatial buckets (a chunked
+terrain, a merged prop cluster, anything else that wants one buffer per
+bucket) calls this once per bucket.
+
+A piece without its own `indices` is a flat triangle list (`GeometryDescriptor`'s
+own "positions read sequentially when omitted" rule) — merged as an
+implicit `0..n-1` index run, never by dropping indices from every *other*
+piece just because one piece lacks them; that would silently discard the
+shared-vertex structure indexed pieces depend on.
 
 ### `function render-3d.orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel: number): OrbitState`
 

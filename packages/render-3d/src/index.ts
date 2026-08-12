@@ -77,6 +77,7 @@ export { easings } from "./animation/easing.js";
 export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
 
 export type {
+  ClipPlaneDescriptor,
   EngineOptions,
   FrameObserver,
   FrameReport,
@@ -90,6 +91,7 @@ export { createInvalidationTracker } from "./invalidation/create-invalidation.js
 
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export { heightfieldVisual } from "./visual/heightfield-visual.js";
+export { mergeMeshChunks } from "./visual/merge-mesh-chunks.js";
 
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
 export {

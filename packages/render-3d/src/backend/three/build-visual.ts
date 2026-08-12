@@ -20,10 +20,10 @@ export interface BuiltVisual {
   dispose(): void;
 }
 
-export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
+export function buildVisual(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): BuiltVisual {
   const geometry =
     descriptor.geometry.shape === "sprite" ? undefined : buildGeometry(descriptor.geometry);
-  const material = buildMaterial(descriptor);
+  const material = buildMaterial(descriptor, clipPlane);
 
   const object = buildObject(descriptor, geometry, material);
 
@@ -163,7 +163,7 @@ function buildHeightfieldGeometry(field: HeightfieldData): THREE.PlaneGeometry {
   return geometry;
 }
 
-function buildMaterial(descriptor: VisualDescriptor): THREE.Material {
+function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): THREE.Material {
   const material = descriptor.material;
   const texture =
     "texture" in material && material.texture ? new THREE.Texture(material.texture) : null;
@@ -194,6 +194,7 @@ function buildMaterial(descriptor: VisualDescriptor): THREE.Material {
         flatShading: material.flatShading ?? false,
         side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
+        clippingPlanes: material.clippable === true && clipPlane ? [clipPlane] : null,
       });
     case "unlit":
       return new THREE.MeshBasicMaterial({
@@ -202,6 +203,7 @@ function buildMaterial(descriptor: VisualDescriptor): THREE.Material {
         transparent: (material.opacity ?? 1) < 1,
         side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
+        clippingPlanes: material.clippable === true && clipPlane ? [clipPlane] : null,
       });
     case "line":
       return new THREE.LineBasicMaterial({

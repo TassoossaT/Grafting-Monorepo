@@ -2,19 +2,27 @@ import {
   createEngine,
   createVisualRegistry,
   type ChangeOrigin as EngineChangeOrigin,
+  type ClipPlaneDescriptor,
   type RenderEngine,
   type View,
 } from "@grafting/render-3d";
 
 import type {
   ChangeOrigin,
-  ConfirmedTokenRenderChange,
+  ConfirmedRenderChange,
   RenderToken,
   RenderViewId,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "@/ports";
 
+import {
+  MAP_LAYER_ID,
+  MAP_SURFACE_VISUAL_KIND,
+  mapChunkSceneItem,
+  type MapChunkVisualParams,
+} from "./map-chunk-scene-item.ts";
+import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
 import {
   TOKEN_LAYER_ID,
   TOKEN_VISUAL_KIND,
@@ -64,6 +72,9 @@ function createMarkerTexture(): HTMLCanvasElement {
 export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
   readonly #tokens = new Map<string, RenderToken>();
+  // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
+  // and a token id can never collide, even though both are caller-chosen
+  // strings that share no coordination.
   readonly #consumedRevisions = new Map<string, number>();
   #engine?: RenderEngine;
   #runtimeGeneration = 0;
@@ -71,6 +82,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   #rendererCreates = 0;
   #rendererDisposes = 0;
   #confirmedTokenChanges = 0;
+  #terrainUploads = 0;
 
   async start(runtimeGeneration: number): Promise<void> {
     if (this.#engine !== undefined) throw new Error("scene renderer is already started");
@@ -89,8 +101,22 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       }),
       equals: (left, right) => left.color === right.color,
     });
+    registry.register<MapChunkVisualParams>({
+      kind: MAP_SURFACE_VISUAL_KIND,
+      describe: (params) => ({
+        geometry: { shape: "mesh", data: params.mesh },
+        material: { surface: "lit", color: params.color, clippable: true, doubleSided: true },
+      }),
+      // Reference-equality on the mesh buffers, like render-3d's own
+      // `heightfieldVisual` -- an unchanged chunk costs nothing per frame,
+      // and a new buffer is the caller's signal that the geometry changed.
+      equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
+    });
 
     const engine = createEngine({ registry, autoplay: true });
+    // Map geometry draws below tokens (order 10 vs. 20), so a token placed on
+    // a surface is never occluded by that surface's own triangles.
+    engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
     engine.scene.defineLayer({ id: TOKEN_LAYER_ID, order: 20 }, "engine");
     engine.start();
 
@@ -113,7 +139,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         near: 0.1,
         far: 200,
       },
-      layers: [TOKEN_LAYER_ID],
+      layers: [MAP_LAYER_ID, TOKEN_LAYER_ID],
       background: 0x07100f,
     });
 
@@ -151,17 +177,19 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     attached.view.setActive(true);
   }
 
-  applyConfirmed(change: ConfirmedTokenRenderChange): void {
+  applyConfirmed(change: ConfirmedRenderChange): void {
     if (change.runtimeGeneration !== this.#runtimeGeneration) return;
-    const previousRevision = this.#consumedRevisions.get(change.dependency.scopeId);
+    const revisionKey = `${change.dependency.layer}:${change.dependency.scopeId}`;
+    const previousRevision = this.#consumedRevisions.get(revisionKey);
     if (previousRevision !== undefined && change.dependency.revision <= previousRevision) return;
 
     const engine = this.#requireEngine();
     const origin = engineOrigin(change.origin);
+
     if (change.type === "token-removed") {
       engine.scene.remove(`token:${change.tokenId}`, origin);
       this.#tokens.delete(change.tokenId);
-    } else {
+    } else if (change.type === "token-upserted") {
       const previous = this.#tokens.get(change.token.id);
       if (previous === undefined) {
         engine.scene.put(tokenSceneItem(change.token), origin);
@@ -187,10 +215,26 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         }
       }
       this.#tokens.set(change.token.id, change.token);
+      this.#confirmedTokenChanges += 1;
+    } else if (change.type === "map-chunk-removed") {
+      engine.scene.remove(`map-chunk:${change.chunkId}`, origin);
+    } else {
+      // `put` on an existing id is a full replace, but the visual kind's own
+      // `equals` (registered in `start`) still gates whether the backend
+      // actually rebuilds anything -- an unchanged chunk's mesh reference
+      // means this is a no-op cost-wise, same as an unchanged token.
+      engine.scene.put(mapChunkSceneItem(change.chunk), origin);
+      this.#terrainUploads += 1;
     }
 
-    this.#consumedRevisions.set(change.dependency.scopeId, change.dependency.revision);
-    this.#confirmedTokenChanges += 1;
+    this.#consumedRevisions.set(revisionKey, change.dependency.revision);
+  }
+
+  setFloorClipHeight(height: number | undefined): void {
+    const engine = this.#requireEngine();
+    const plane: ClipPlaneDescriptor | undefined =
+      height === undefined ? undefined : clipPlaneForCameraHeight(height);
+    engine.setClipPlane(plane);
   }
 
   getMetrics(): SceneRenderMetrics {
@@ -199,7 +243,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       rendererDisposes: this.#rendererDisposes,
       attachedViews: this.#views.size,
       confirmedTokenChanges: this.#confirmedTokenChanges,
-      terrainUploads: 0,
+      terrainUploads: this.#terrainUploads,
     });
   }
 
