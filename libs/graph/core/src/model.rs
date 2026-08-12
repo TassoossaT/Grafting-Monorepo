@@ -97,6 +97,12 @@ impl<N> Node<N> {
         &self.data
     }
 
+    /// Returns mutable access to the caller-owned payload -- identity and
+    /// graph membership are unaffected, only the payload changes.
+    pub fn data_mut(&mut self) -> &mut N {
+        &mut self.data
+    }
+
     /// Consumes the node and returns its identity and payload.
     pub fn into_parts(self) -> (NodeId, N) {
         (self.id, self.data)
@@ -205,6 +211,11 @@ pub enum GraphError {
         /// Identity that could not be resolved.
         id: NodeId,
     },
+    /// A query refers to an edge that is not present.
+    UnknownEdge {
+        /// Identity that could not be resolved.
+        id: EdgeId,
+    },
     /// Topological ordering cannot consume every node because a cycle exists.
     CycleDetected {
         /// Deterministically sorted nodes left blocked by one or more cycles.
@@ -224,6 +235,7 @@ impl fmt::Display for GraphError {
                 write!(formatter, "edge {edge} references missing target {target}")
             }
             Self::UnknownNode { id } => write!(formatter, "unknown node ID {id}"),
+            Self::UnknownEdge { id } => write!(formatter, "unknown edge ID {id}"),
             Self::CycleDetected { remaining } => {
                 write!(formatter, "cycle prevents ordering of")?;
                 for node in remaining {
@@ -287,6 +299,101 @@ impl<N, E> Graph<N, E> {
             node_indices,
             edge_indices,
         })
+    }
+
+    /// Inserts a new node. Errors if its identity is already used.
+    pub fn add_node(&mut self, node: Node<N>) -> Result<(), GraphError> {
+        let id = node.id().clone();
+        if self.node_indices.contains_key(&id) {
+            return Err(GraphError::DuplicateNode { id });
+        }
+        let index = self.storage.add_node(node);
+        self.node_indices.insert(id, index);
+        Ok(())
+    }
+
+    /// Inserts a new edge. Errors if its identity is already used or an
+    /// endpoint is not a node already present in the graph.
+    pub fn add_edge(&mut self, edge: Edge<E>) -> Result<(), GraphError> {
+        let id = edge.id().clone();
+        if self.edge_indices.contains_key(&id) {
+            return Err(GraphError::DuplicateEdge { id });
+        }
+        let source = self
+            .node_indices
+            .get(edge.source())
+            .copied()
+            .ok_or_else(|| GraphError::MissingSource {
+                edge: id.clone(),
+                source: edge.source().clone(),
+            })?;
+        let target = self
+            .node_indices
+            .get(edge.target())
+            .copied()
+            .ok_or_else(|| GraphError::MissingTarget {
+                edge: id.clone(),
+                target: edge.target().clone(),
+            })?;
+        let index = self.storage.add_edge(source, target, edge);
+        self.edge_indices.insert(id, index);
+        Ok(())
+    }
+
+    /// Removes an edge by its stable identity, returning its payload.
+    pub fn remove_edge(&mut self, id: &EdgeId) -> Result<Edge<E>, GraphError> {
+        let index = self
+            .edge_indices
+            .remove(id)
+            .ok_or_else(|| GraphError::UnknownEdge { id: id.clone() })?;
+        Ok(self
+            .storage
+            .remove_edge(index)
+            .expect("edge_indices and storage stay in sync"))
+    }
+
+    /// Removes a node and every edge incident to it, returning the node's
+    /// payload. Callers needing the deletion-repair cycle rule
+    /// (`ADR-0022`) implement it on top of this and [`successors`]/
+    /// [`predecessors`], called *before* removal, to know which nodes were
+    /// the deleted node's neighbors.
+    ///
+    /// [`successors`]: Self::successors
+    /// [`predecessors`]: Self::predecessors
+    pub fn remove_node(&mut self, id: &NodeId) -> Result<Node<N>, GraphError> {
+        let index = self
+            .node_indices
+            .get(id)
+            .copied()
+            .ok_or_else(|| GraphError::UnknownNode { id: id.clone() })?;
+
+        let mut incident_edge_ids = self
+            .storage
+            .edges_directed(index, Outgoing)
+            .chain(self.storage.edges_directed(index, Incoming))
+            .map(|edge_ref| edge_ref.weight().id().clone())
+            .collect::<Vec<_>>();
+        incident_edge_ids.sort();
+        incident_edge_ids.dedup();
+        for edge_id in incident_edge_ids {
+            self.edge_indices.remove(&edge_id);
+        }
+
+        self.node_indices.remove(id);
+        // `remove_node` cascades removal of every edge still incident to
+        // `index` inside `storage` itself (petgraph's own behavior) -- the
+        // loop above only keeps this crate's separate `edge_indices` id map
+        // in sync with that cascade, it does not duplicate the removal.
+        Ok(self
+            .storage
+            .remove_node(index)
+            .expect("node_indices and storage stay in sync"))
+    }
+
+    /// Mutable access to a node's payload by stable identity.
+    pub fn node_mut(&mut self, id: &NodeId) -> Option<&mut Node<N>> {
+        let index = self.node_indices.get(id).copied()?;
+        self.storage.node_weight_mut(index)
     }
 
     /// Number of nodes in the graph.
@@ -436,10 +543,11 @@ impl<N, E> Graph<N, E> {
 /// scoping (`docs/architecture/vtt-roadmap.md` E1.2) -- not a general graph
 /// interface. [`Graph::topological_order`] and [`Graph::snapshot`] stay
 /// inherent-only, since a construction-focused backend was explicitly
-/// scoped to not need them. Mutation capability is deliberately not part of
-/// this trait: [`Graph`] has none today, and splitting read/traversal from
-/// mutation only matters once a mutating operation (e.g. a future
-/// `apply_cell_patch`) actually exists to split against.
+/// scoped to not need them. Mutation (`add_node`/`remove_node`/`add_edge`/
+/// `remove_edge`/`node_mut`) stays inherent-only too, deliberately: there is
+/// still exactly one backend, so splitting it into its own trait has no
+/// second implementor to justify it yet -- add that split when (not before)
+/// a second backend actually needs it.
 ///
 /// Exists so a future storage backend (e.g. a deterministic backend, if
 /// multiplayer replay becomes a real requirement) is an additional
@@ -534,6 +642,110 @@ mod tests {
                 source: NodeId::new("missing").unwrap(),
             }
         );
+    }
+
+    #[test]
+    fn add_node_and_add_edge_reject_duplicates_and_missing_endpoints() {
+        let mut graph = Graph::<(), ()>::try_from_parts(vec![node("a")], vec![]).unwrap();
+
+        assert_eq!(
+            graph.add_node(node("a")).unwrap_err(),
+            GraphError::DuplicateNode {
+                id: NodeId::new("a").unwrap()
+            }
+        );
+        graph.add_node(node("b")).unwrap();
+        assert_eq!(graph.node_count(), 2);
+
+        assert_eq!(
+            graph.add_edge(edge("e", "a", "missing")).unwrap_err(),
+            GraphError::MissingTarget {
+                edge: EdgeId::new("e").unwrap(),
+                target: NodeId::new("missing").unwrap(),
+            }
+        );
+
+        graph.add_edge(edge("ab", "a", "b")).unwrap();
+        assert_eq!(
+            graph.add_edge(edge("ab", "a", "b")).unwrap_err(),
+            GraphError::DuplicateEdge {
+                id: EdgeId::new("ab").unwrap()
+            }
+        );
+        assert_eq!(
+            graph.successors(&NodeId::new("a").unwrap()).unwrap(),
+            vec![NodeId::new("b").unwrap()]
+        );
+    }
+
+    #[test]
+    fn remove_edge_rejects_unknown_id_and_forgets_the_edge() {
+        let mut graph =
+            Graph::<(), ()>::try_from_parts(vec![node("a"), node("b")], vec![edge("ab", "a", "b")])
+                .unwrap();
+
+        assert_eq!(
+            graph.remove_edge(&EdgeId::new("missing").unwrap()).unwrap_err(),
+            GraphError::UnknownEdge {
+                id: EdgeId::new("missing").unwrap()
+            }
+        );
+
+        graph.remove_edge(&EdgeId::new("ab").unwrap()).unwrap();
+        assert_eq!(graph.edge_count(), 0);
+        assert_eq!(
+            graph.successors(&NodeId::new("a").unwrap()).unwrap(),
+            Vec::new()
+        );
+        // The freed id is genuinely gone, not left as a dangling reservation.
+        graph.add_edge(edge("ab", "a", "b")).unwrap();
+    }
+
+    #[test]
+    fn remove_node_cascades_incident_edges_out_of_edge_indices() {
+        let mut graph = Graph::<(), ()>::try_from_parts(
+            vec![node("a"), node("b"), node("c")],
+            vec![edge("ab", "a", "b"), edge("cb", "c", "b")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            graph.remove_node(&NodeId::new("missing").unwrap()).unwrap_err(),
+            GraphError::UnknownNode {
+                id: NodeId::new("missing").unwrap()
+            }
+        );
+
+        graph.remove_node(&NodeId::new("b").unwrap()).unwrap();
+        assert_eq!(graph.node_count(), 2);
+        // Both edges were incident to "b" and must be gone, not just the node.
+        assert_eq!(graph.edge_count(), 0);
+        assert!(graph.node(&NodeId::new("b").unwrap()).is_none());
+
+        // The freed node and edge ids are genuinely gone, not dangling
+        // reservations left over from the cascade -- this is exactly the
+        // bug this test exists to catch: `storage.remove_node` cascades
+        // edge removal internally, and `edge_indices` must be kept in sync
+        // by hand or these two calls would incorrectly fail as duplicates.
+        graph.add_node(node("b")).unwrap();
+        graph.add_edge(edge("ab", "a", "b")).unwrap();
+    }
+
+    #[test]
+    fn node_mut_allows_updating_payload_by_stable_identity() {
+        let mut graph =
+            Graph::<u32, ()>::try_from_parts(vec![Node::new(NodeId::new("a").unwrap(), 1)], vec![])
+                .unwrap();
+
+        assert!(
+            graph
+                .node_mut(&NodeId::new("missing").unwrap())
+                .is_none()
+        );
+
+        let payload = graph.node_mut(&NodeId::new("a").unwrap()).unwrap().data_mut();
+        *payload = 42;
+        assert_eq!(*graph.node(&NodeId::new("a").unwrap()).unwrap().data(), 42);
     }
 
     #[test]

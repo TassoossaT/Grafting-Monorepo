@@ -57,6 +57,15 @@ Returns the stable identifier text.
 Creates a non-empty identifier without applying product-specific
 normalization rules.
 
+### `pub fn grafting_graph_core::Graph<N, E>::add_edge(&mut self, edge: grafting_graph_core::Edge<E>) -> core::result::Result<(), grafting_graph_core::GraphError>`
+
+Inserts a new edge. Errors if its identity is already used or an
+endpoint is not a node already present in the graph.
+
+### `pub fn grafting_graph_core::Graph<N, E>::add_node(&mut self, node: grafting_graph_core::Node<N>) -> core::result::Result<(), grafting_graph_core::GraphError>`
+
+Inserts a new node. Errors if its identity is already used.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>`
 
 Looks up an edge without exposing the storage engine's index type.
@@ -84,9 +93,28 @@ Looks up a node without exposing the storage engine's index type.
 
 Number of nodes in the graph.
 
+### `pub fn grafting_graph_core::Graph<N, E>::node_mut(&mut self, id: &grafting_graph_core::NodeId) -> core::option::Option<&mut grafting_graph_core::Node<N>>`
+
+Mutable access to a node's payload by stable identity.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
 
 Returns unique predecessor IDs in deterministic identity order.
+
+### `pub fn grafting_graph_core::Graph<N, E>::remove_edge(&mut self, id: &grafting_graph_core::EdgeId) -> core::result::Result<grafting_graph_core::Edge<E>, grafting_graph_core::GraphError>`
+
+Removes an edge by its stable identity, returning its payload.
+
+### `pub fn grafting_graph_core::Graph<N, E>::remove_node(&mut self, id: &grafting_graph_core::NodeId) -> core::result::Result<grafting_graph_core::Node<N>, grafting_graph_core::GraphError>`
+
+Removes a node and every edge incident to it, returning the node's
+payload. Callers needing the deletion-repair cycle rule
+(`ADR-0022`) implement it on top of this and [`successors`]/
+[`predecessors`], called *before* removal, to know which nodes were
+the deleted node's neighbors.
+
+[`successors`]: Self::successors
+[`predecessors`]: Self::predecessors
 
 ### `pub fn grafting_graph_core::Graph<N, E>::snapshot(&self) -> grafting_graph_core::GraphSnapshot<N, E> where N: core::clone::Clone, E: core::clone::Clone`
 
@@ -180,6 +208,11 @@ Width required to contain every position and the configured padding.
 ### `pub fn grafting_graph_core::Node<N>::data(&self) -> &N`
 
 Returns the caller-owned payload.
+
+### `pub fn grafting_graph_core::Node<N>::data_mut(&mut self) -> &mut N`
+
+Returns mutable access to the caller-owned payload -- identity and
+graph membership are unaffected, only the payload changes.
 
 ### `pub fn grafting_graph_core::Node<N>::eq(&self, other: &grafting_graph_core::Node<N>) -> bool`
 
@@ -275,6 +308,14 @@ Edge containing the invalid endpoint.
 ### `pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId`
 
 Target identity that could not be resolved.
+
+### `pub grafting_graph_core::GraphError::UnknownEdge`
+
+A query refers to an edge that is not present.
+
+### `pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId`
+
+Identity that could not be resolved.
 
 ### `pub grafting_graph_core::GraphError::UnknownNode`
 
@@ -440,10 +481,11 @@ Deliberately narrow: "given a node, its neighbors," per this crate's own
 scoping (`docs/architecture/vtt-roadmap.md` E1.2) -- not a general graph
 interface. [`Graph::topological_order`] and [`Graph::snapshot`] stay
 inherent-only, since a construction-focused backend was explicitly
-scoped to not need them. Mutation capability is deliberately not part of
-this trait: [`Graph`] has none today, and splitting read/traversal from
-mutation only matters once a mutating operation (e.g. a future
-`apply_cell_patch`) actually exists to split against.
+scoped to not need them. Mutation (`add_node`/`remove_node`/`add_edge`/
+`remove_edge`/`node_mut`) stays inherent-only too, deliberately: there is
+still exactly one backend, so splitting it into its own trait has no
+second implementor to justify it yet -- add that split when (not before)
+a second backend actually needs it.
 
 Exists so a future storage backend (e.g. a deterministic backend, if
 multiplayer replay becomes a real requirement) is an additional
