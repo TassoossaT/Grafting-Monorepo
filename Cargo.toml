@@ -10,5 +10,7 @@ members = [
     "libs/domains/procgen/generation-wasm",
     "libs/domains/procgen/discretize",
     "libs/domains/procgen/tileset-wfc",
+    "libs/domains/procgen/terrain-generation",
+    "libs/domains/procgen/structure-generation",
     "tools/rust-api-docgen",
 ]
