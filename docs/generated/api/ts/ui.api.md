@@ -244,6 +244,17 @@ regardless, since those are the caller acting on its own data.
 
 Whether users may draw new connections between ports.
 
+### `property ui.CanvasEditingOptions.magneticRadius?: number`
+
+How far from a port a released connection still snaps to it, in CSS pixels.
+
+Enlarging the drop area is what makes connecting bearable when a port is
+small or the surface is zoomed out: the user aims at a region instead of a
+dot. Only ports that would have accepted the connection anyway are
+considered, so this never turns a refused connection into an allowed one.
+
+Omit, or use zero, to require releasing directly on the port.
+
 ### `property ui.CanvasEditingOptions.onConnected?: (edge: CanvasEdge) => void`
 
 Receives the accepted edge once it has been added to the surface.
@@ -265,9 +276,20 @@ Receives the identity of a connection removed by a user.
 
 Receives a node's new coordinates after a user finishes moving it.
 
+### `property ui.CanvasEditingOptions.onNodeResized?: (nodeId: string, width: number, height: number) => void`
+
+Receives a node's new size while a user drags its corner.
+
 ### `property ui.CanvasEditingOptions.removableEdges?: boolean`
 
 Whether users may remove an existing connection by activating it with the removal gesture.
+
+### `property ui.CanvasEditingOptions.resizableNodes?: boolean`
+
+Whether users may resize a node by dragging its corner.
+
+The node keeps the proportions its view was designed for; the drag only
+chooses how large it is.
 
 ### `interface ui.CanvasEntityReference`
 
@@ -893,6 +915,58 @@ Optional short caller-owned labels rendered as compact badges below the identity
 
 Primary human-readable entity name.
 
+### `interface ui.GeometryCanvas`
+
+Lifecycle handle returned by createGeometryCanvas.
+
+### `method ui.GeometryCanvas.captureImage(): string`
+
+Captures the current frame as a PNG data URL.
+
+### `method ui.GeometryCanvas.dispose(): void`
+
+Stops rendering and releases all GPU/DOM resources.
+
+### `method ui.GeometryCanvas.resetCamera(): void`
+
+Frames the geometry, whatever the user has done to the camera.
+
+### `method ui.GeometryCanvas.setNavigable(navigable: boolean): void`
+
+Turns camera navigation on or off after construction.
+
+### `method ui.GeometryCanvas.update(positions: Float32Array, indices: Uint32Array): void`
+
+Replaces the rendered geometry, keeping the camera where the user left it.
+
+### `interface ui.GeometryCanvasOptions`
+
+Configuration for createGeometryCanvas. Colors are plain numeric hex values (e.g. `0x5b8a63`).
+
+### `property ui.GeometryCanvasOptions.backgroundColor?: number`
+
+Scene background color. Defaults to `0x0f172a`.
+
+### `property ui.GeometryCanvasOptions.indices: Uint32Array`
+
+Triangles indexing them.
+
+### `property ui.GeometryCanvasOptions.meshColor?: number`
+
+Surface color. Defaults to `0x7fa86a`.
+
+### `property ui.GeometryCanvasOptions.navigable?: boolean`
+
+Whether dragging and scrolling drive the camera. Defaults to `false`.
+
+Off by default for the same reason the heightfield canvas leaves it off:
+this is usually embedded in a surface that pans and zooms itself, and a
+canvas that silently swallowed those gestures would break it.
+
+### `property ui.GeometryCanvasOptions.positions: Float32Array`
+
+Flat `xyz` triples.
+
 ### `interface ui.GridLayoutProps`
 
 Public inputs for the reusable Grafting dashboard grid layout.
@@ -1001,6 +1075,18 @@ Captures the current frame as a PNG data URL, for use as a `PreviewCard` cover i
 
 Stops rendering and releases all GPU/DOM resources.
 
+### `method ui.HeightfieldCanvas.resetCamera(): void`
+
+Returns the camera to the framing the canvas was created with.
+
+### `method ui.HeightfieldCanvas.setNavigable(navigable: boolean): void`
+
+Turns camera navigation on or off after construction.
+
+Auto-rotation stops while navigation is on: a camera the user is aiming
+and a mesh that keeps turning under it fight each other, and the result
+reads as the controls being broken.
+
 ### `method ui.HeightfieldCanvas.update(values: Float32Array): void`
 
 Replaces the rendered terrain with new height values, keeping the same grid size and camera.
@@ -1028,6 +1114,16 @@ Vertical displacement multiplier applied to each height value. Defaults to `6`.
 ### `property ui.HeightfieldCanvasOptions.meshColor?: number`
 
 Terrain mesh color. Defaults to `0x5b8a63`.
+
+### `property ui.HeightfieldCanvasOptions.navigable?: boolean`
+
+Whether dragging and scrolling drive the camera. Defaults to `false`.
+
+Off by default because this canvas is often embedded in a surface that
+pans and zooms itself -- a graph node, a scrolling page -- and a canvas
+that silently swallowed those gestures would break the surface around it.
+A host that wants navigation asks for it, and gets exclusive use of the
+pointer while it is on.
 
 ### `property ui.HeightfieldCanvasOptions.planeSize?: number`
 
@@ -1232,6 +1328,15 @@ Creates a graph canvas from caller-owned presentation data.
 The UI boundary preserves identifiers and coordinates, mounts
 consumer-supplied views, and keeps its rendering engine private. Graph
 layout remains an explicit upstream computation.
+
+### `function ui.createGeometryCanvas(container: HTMLElement, options: GeometryCanvasOptions): GeometryCanvas`
+
+Mounts a real-time preview of arbitrary triangle geometry, keeping the
+renderer private.
+
+Separate from createHeightfieldCanvas rather than a mode of it: a
+raster holds one height per point, and geometry off the lattice or with a
+vertical step has more than one.
 
 ### `function ui.createHeightfieldCanvas(container: HTMLElement, options: HeightfieldCanvasOptions): HeightfieldCanvas`
 

@@ -33,7 +33,7 @@ def audit_repository(root: Path, *, check_graph: bool = True) -> dict[str, Any]:
     statuses = Counter(task["status"] for task in task_records)
 
     adapter_hashes: dict[str, str] = {}
-    for name in ("CLAUDE.md", "GEMINI.md"):
+    for name in ("CLAUDE.md", "GEMINI.md", "CODEX.md"):
         path = root / name
         text = path.read_text(encoding="utf-8")
         for required in ("AGENTS.md", "GRAFTING_MASTER_SOURCE.md", ".ai/coordination/PROTOCOL.md"):

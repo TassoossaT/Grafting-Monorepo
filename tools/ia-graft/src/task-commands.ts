@@ -263,9 +263,26 @@ export interface TaskContextInput {
   query?: string;
   scope?: string;
   map?: boolean;
+  pack?: boolean;
+  taskId?: string;
+  paths?: string[];
 }
 
 export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
+  if (input.pack || input.taskId || (input.paths && input.paths.length > 0)) {
+    // @ts-ignore - dynamic import of context-resolver.mjs script
+    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    const packSummary = resolveContext({
+      root: repoRoot,
+      taskId: input.taskId ?? null,
+      paths: input.paths ?? null,
+    });
+    return {
+      ok: true as const,
+      pack: packSummary,
+    };
+  }
+
   const indexPath = join(repoRoot, ".ai", "INDEX.md");
   const signaturesPath = join(repoRoot, "docs", "generated", "signatures", "signatures-map.md");
 

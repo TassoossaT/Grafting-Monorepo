@@ -14,7 +14,7 @@ jobs:
     # actionable but remains a separate task.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install pinned Rust toolchain
         # rust-toolchain.toml pins channel/components/targets; running any
@@ -64,11 +64,11 @@ jobs:
         # locked to one source of truth.
         run: cargo install wasm-pack --version "$(cat tools/wasm-pack-version.txt)" --locked
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.17.0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -107,7 +107,7 @@ jobs:
       - name: Nx check
         run: pnpm exec nx run engine-domain-core:check
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.32"
 

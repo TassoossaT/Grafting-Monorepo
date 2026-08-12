@@ -1,4 +1,4 @@
-# CLAUDE.md — Claude Agent Adapter
+# CODEX.md — Codex Agent Adapter
 
 Read and follow in precedence order:
 1. [`AGENTS.md`](AGENTS.md) — Single canonical source for all agent rules and mandatory constraints.

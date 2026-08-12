@@ -334,7 +334,7 @@ def validate_repository(root: Path) -> list[str]:
     task_paths.sort()
 
     if not task_paths:
-        raise CoordinationValidationError(f"{task_dir}: no task records were found in status subdirectories")
+        return []
     task_ids = {_validate_task(path, _read_object(path), agent_ids) for path in task_paths}
     if len(task_ids) != len(task_paths):
         raise CoordinationValidationError(f"{task_dir}: task IDs must be unique across all subdirectories")

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
 import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
@@ -714,5 +715,12 @@ test("taskContext resolves context sitemap and queries cleanly", async () => {
   const queryMatch = await taskContext(root, { query: "Component" });
   assert.equal(queryMatch.ok, true);
   assert.match(queryMatch.summary, /UI: Component library/);
+});
+
+test("taskContext resolves pack mode using context-resolver", async () => {
+  const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+  const pack = await taskContext(repoRoot, { pack: true, paths: ["packages/ui/src/index.ts"] });
+  assert.equal(pack.ok, true);
+  assert.match(pack.pack, /Context resolution/);
 });
 
