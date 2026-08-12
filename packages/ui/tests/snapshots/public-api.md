@@ -4,7 +4,7 @@ Package: `@grafting/ui`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`, `rete`, `rete-area-plugin`, `rete-connection-plugin`, `rete-react-plugin`, `rete-render-utils`, `styled-components`, `three`
+Forbidden public modules: `antd`, `react-dom`, `react-grid-layout`, `rete`, `rete-area-plugin`, `rete-connection-plugin`, `rete-react-plugin`, `rete-render-utils`, `styled-components`
 
 ## Declaration entry point
 
@@ -553,6 +553,7 @@ export interface GridLayoutProps {
  */
 export declare function GridLayout(props: GridLayoutProps): ReactElement;
 
+import type { GeometryCanvas, GeometryCanvasOptions } from "./geometry/contracts.js";
 import type { CanvasEdge, CanvasHandle, CanvasNode, CanvasOptions } from "./graph/contracts.js";
 import type { HeightfieldCanvas, HeightfieldCanvasOptions } from "./heightfield/contracts.js";
 export type { CanvasConnectionDecision, CanvasConnectionEndpoint, CanvasConnectionRequest, CanvasEdge, CanvasEdgeConnector, CanvasEdgeLabelPresentation, CanvasEdgeLinePresentation, CanvasEdgeMarkerPresentation, CanvasEdgePresentation, CanvasEdgeRenderContext, CanvasEdgeTerminal, CanvasEdgeViewDefinition, CanvasEditingOptions, CanvasEntityReference, CanvasGridPresentation, CanvasHandle, CanvasInteractionModifier, CanvasInteractionOptions, CanvasNode, CanvasNodeRenderContext, CanvasNodeRenderHandle, CanvasNodeViewDefinition, CanvasOptions, CanvasPortDefinition, CanvasPortDirection, CanvasPortPosition, CanvasPortPresentation, CanvasSurfacePresentation, CanvasViewportOptions, CanvasZoomOptions, } from "./graph/contracts.js";
@@ -579,4 +580,18 @@ export declare function createCanvas(container: HTMLElement, nodes: readonly Can
  * @returns A Grafting-owned update, capture, and disposal handle.
  */
 export declare function createHeightfieldCanvas(container: HTMLElement, options: HeightfieldCanvasOptions): HeightfieldCanvas;
+export type { GeometryCanvas, GeometryCanvasOptions } from "./geometry/contracts.js";
+/**
+ * Mounts a real-time preview of arbitrary triangle geometry, keeping the
+ * renderer private.
+ *
+ * Separate from {@link createHeightfieldCanvas} rather than a mode of it: a
+ * raster holds one height per point, and geometry off the lattice or with a
+ * vertical step has more than one.
+ *
+ * @param container - Browser element that owns the rendered preview.
+ * @param options - Geometry and replaceable presentation options.
+ * @returns A Grafting-owned update, capture, and disposal handle.
+ */
+export declare function createGeometryCanvas(container: HTMLElement, options: GeometryCanvasOptions): GeometryCanvas;
 ```

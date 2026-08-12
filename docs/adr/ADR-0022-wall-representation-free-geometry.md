@@ -215,17 +215,18 @@ generation code, are the implementation.
 
 ## What this decision does not resolve — recorded honestly, not glossed over
 
-- **Recomputation cost.** A surface's shape is derived from its nodes'
-  current positions on demand, not stored as a pre-baked segment. This
-  reintroduces, deliberately, the specific cost the original research
-  (`vtt-wall-representation-options.md`) named against the grid-bound
-  option: "segments are derived from cell faces every time the geometry
-  changes," instead of the free-geometry option's "already the stored
-  form." Whether that cost is acceptable at real interaction scale (a
-  brush stroke recalculating several surfaces, at VTT map scale, inside a
-  frame budget) is exactly what `vtt-roadmap.md` Epic 1's `E1.1` benchmark
-  needs to measure. This decision does not settle that question — it makes
-  the answer load-bearing rather than optional.
+- ~~**Recomputation cost was unmeasured.**~~ **Resolved 2026-08-12.**
+  `docs/benchmarks/vtt-surface-mesh-recomputation-2026-08-12.md` measures the
+  complete node move → reverse-index invalidation → polygon materialization
+  path for the currently implemented quad generators at 1k through 1M
+  surfaces. The 1M preset takes about 0.241 ms per representative 7×7-node
+  brush stroke against the predeclared 1.67 ms ceiling. No mesh cache is
+  justified for that implemented scope: shape remains derived from its ordered
+  node cycle. Arbitrary authored meshes, complex polygons, Wasm/Worker
+  adaptation, chunk rebuilding, and GPU upload remain consumer-level
+  measurements. The separate 6.567 s construction time at 1M surfaces remains
+  a load-time/UX concern, not a reason to persist a second authoritative
+  geometry copy.
 - **Tier 2 import (UVTT).** A wall imported from an external tool was never
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
@@ -240,10 +241,12 @@ generation code, are the implementation.
   **Resolved 2026-08-12** — see "Terrain/structure seam: resolved" above.
   Kept here, struck through, so the record of what was once open is not
   lost.
-- **`libs/engine/domain-core/contracts/map_state.fbs`** (merged via PR #73)
-  implements the free-geometry `BoundarySegment`/`BoundaryPatch` design
-  this decision reverses. That contract is now stale and needs its own
-  follow-up task — not done as part of writing this document.
+- ~~**The stale `map_state.fbs` contract needed a follow-up.**~~ **Resolved by
+  E1.5.** The schema was never wired into `domain-core`'s Rust contracts,
+  conversions, round trips, or any TypeScript/C# consumer. It was removed from
+  `domain-core` and global codegen without a speculative replacement. The first
+  executable persistence, Worker, or transport consumer owns its future wire
+  contract under the normal domain-location rule.
 
 ## Context kept from the original decision, condensed
 
@@ -278,14 +281,11 @@ positional one.
   only a rectangle — strictly more expressive than the flat
   `BoundarySegment` (start/end/height) shape it replaces.
 - **Cost:** every surface query re-derives geometry from current node
-  positions rather than reading a stored segment — a real, named,
-  unmeasured cost (see above).
-- **Cost:** Tier 2 import and the general deletion-repair algorithm both
-  need design work this document does not do.
-- **Risk — reopening this again.** This document was already reopened once
-  in two days. If `E1.1`'s measurement shows the recomputation cost is not
-  acceptable, this decision is the one that would need reopening a third
-  time — recorded here so that is an expected possibility, not a surprise.
+  positions rather than reading a stored segment. The 2026-08-12 follow-up
+  benchmark measured the current quad path within budget through 1M surfaces;
+  future consumers still need to measure arbitrary meshes, unusually complex
+  polygons, Wasm/Worker adaptation, chunk rebuilding, and GPU upload.
+- **Cost:** Tier 2 import needs design work this document does not do.
 
 ## Evidence
 
@@ -306,11 +306,12 @@ positional one.
 
 ## Migration or rollback
 
-`libs/engine/domain-core/contracts/map_state.fbs` (merged, PR #73) and any
-code generated from it implement the superseded free-geometry design and
-are now stale. Redesigning that contract around node-set references is a
-separate, non-Markdown follow-up task (touches `.fbs`, needs `ia-graft task
-new` + PR) — not performed as part of this document.
+E1.5 removed `libs/engine/domain-core/contracts/map_state.fbs` and its stale
+generated bindings. No executable code consumed the schema, and neither
+`domain-core` nor generic `graph-core` owns a VTT-specific positional payload
+or persistence boundary. A future map wire contract is created only with its
+first executable persistence, Worker, or transport consumer and lives in that
+consumer's owning domain.
 
 Rollback direction if `E1.1`'s measurement makes this decision look wrong:
 freezing a surface's derived mesh into stored, static geometry at the

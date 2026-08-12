@@ -68,6 +68,13 @@ const gitSubcommandPattern = (subcommands) =>
 export function evaluateAgentGitCommand(command) {
   if (typeof command !== "string" || command.trim().length === 0) return allowed();
 
+  const packageInstall = /\b(?:pnpm|npm|yarn|bun|uv|pip)\s+(?:install|add|i)\b/i;
+  if (packageInstall.test(command)) {
+    return denied(
+      "direct package-manager installation is forbidden; use 'ia-graft task deps --install' instead to prevent lockfile drift and context noise",
+    );
+  }
+
   const historyRewriting = gitSubcommandPattern([
     "commit-tree",
     "merge",

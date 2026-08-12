@@ -221,6 +221,12 @@ export interface HeightfieldData {
 }
 /** The shape half of a visual. */
 export type GeometryDescriptor = {
+    /**
+     * A camera-facing unit square. Its world size comes from the item's
+     * transform scale, and an optional unlit texture supplies its shape.
+     */
+    readonly shape: "sprite";
+} | {
     readonly shape: "plane";
     readonly width: number;
     readonly depth: number;
@@ -272,6 +278,8 @@ export type MaterialDescriptor = {
     readonly flatShading?: boolean;
     readonly doubleSided?: boolean;
     readonly texture?: TextureSource;
+    /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+    readonly clippable?: boolean;
 } | {
     /** Ignores scene lighting. The right choice for overlays, grids, and markers. */
     readonly surface: "unlit";
@@ -279,6 +287,8 @@ export type MaterialDescriptor = {
     readonly opacity?: number;
     readonly doubleSided?: boolean;
     readonly texture?: TextureSource;
+    /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+    readonly clippable?: boolean;
 } | {
     /** Draws edges rather than faces. */
     readonly surface: "line";
@@ -718,6 +728,20 @@ export type LightDescriptor = {
     readonly position: Vec3;
     readonly distance?: number;
 };
+/**
+ * A single cutting plane, as data. Points where `dot(normal, point) +
+ * constant >= 0` is false are cut away.
+ *
+ * Engine-global: the active plane cuts every item whose material opted in
+ * via `MaterialDescriptor.clippable`, across every view. Independent
+ * per-view clip heights are not supported by this contract.
+ */
+export interface ClipPlaneDescriptor {
+    /** Unit normal of the cutting plane. */
+    readonly normal: Vec3;
+    /** Signed offset in the plane equation `dot(normal, point) + constant >= 0`. */
+    readonly constant: number;
+}
 /** What the engine did during one frame. Reported for measurement, not for control flow. */
 export interface FrameReport {
     /** The clock reading this frame ran at. */
@@ -772,6 +796,8 @@ export interface RenderEngine {
     readonly contextLost: boolean;
     /** Replaces the lighting. Marks every lit view dirty. */
     setLights(lights: readonly LightDescriptor[]): void;
+    /** Replaces the active clip plane. `undefined` disables clipping. Marks every view dirty. */
+    setClipPlane(plane: ClipPlaneDescriptor | undefined): void;
     /** Opens a view. Every view shares this engine's single graphics context. */
     createView(options: ViewOptions): View;
     /** Every open view, in creation order. */
@@ -943,4 +969,235 @@ export interface HeightfieldParams {
  * and this one costs it nothing.
  */
 export declare const heightfieldVisual: VisualDefinition<HeightfieldParams>;
+
+import type { MeshData } from "../contracts/visual.js";
+/**
+ * Concatenates several meshes into one buffer, offsetting each piece's
+ * indices past everything already appended.
+ *
+ * Pure array arithmetic, useful to any caller batching many small meshes
+ * into one draw call — not something specific to any one product's idea of
+ * a "chunk". A caller that groups geometry into spatial buckets (a chunked
+ * terrain, a merged prop cluster, anything else that wants one buffer per
+ * bucket) calls this once per bucket.
+ *
+ * A piece without its own `indices` is a flat triangle list (`GeometryDescriptor`'s
+ * own "positions read sequentially when omitted" rule) — merged as an
+ * implicit `0..n-1` index run, never by dropping indices from every *other*
+ * piece just because one piece lacks them; that would silently discard the
+ * shared-vertex structure indexed pieces depend on.
+ */
+export declare function mergeMeshChunks(pieces: readonly MeshData[]): MeshData;
+
+/**
+ * Dragging to orbit a view's camera.
+ *
+ * A fixed camera quietly limits what a rendered result can tell you: a
+ * generated surface seen from one angle hides exactly the defects --
+ * coincident faces, a gap at a seam, a piece facing the wrong way -- that
+ * looking at it was supposed to expose. You cannot judge geometry you cannot
+ * turn.
+ *
+ * Lives here rather than in a consumer because it is camera behaviour for this
+ * engine, and because both consumers that needed it would otherwise have kept
+ * their own copy. It is written against this package's own `setCamera` and
+ * plain numbers rather than pulled in as a controls library: the engine's
+ * whole shape is that no backend type crosses its boundary, and a controls
+ * package from the Three.js ecosystem would reintroduce one *in the consumer*.
+ * The arithmetic is small enough that the seam is worth more than the saved
+ * lines, and it is tested separately from the DOM.
+ */
+import type { Vec3 } from "../contracts/space.js";
+/** Where the camera sits, in spherical coordinates about a target. */
+export interface OrbitState {
+    /** Rotation about the vertical axis, in radians. */
+    readonly yaw: number;
+    /** Elevation above the horizon, in radians. */
+    readonly pitch: number;
+    /** Distance from the target, in world units. */
+    readonly distance: number;
+    /** The point orbited. */
+    readonly target: Vec3;
+}
+/**
+ * How close to straight up or down the camera may get.
+ *
+ * Not a matter of taste: at exactly the pole the view direction is parallel to
+ * the up vector and the camera's orientation stops being defined, which shows
+ * up as the view flipping. Stopping just short of it costs nothing.
+ */
+export declare const PITCH_LIMIT: number;
+/** The closest and furthest the camera may be pulled. */
+export declare const DISTANCE_RANGE: {
+    readonly min: 0.5;
+    readonly max: 60;
+};
+/** Where the camera sits for a given orbit. */
+export declare function orbitPosition(state: OrbitState): Vec3;
+/**
+ * Recovers an orbit from a camera already pointed somewhere.
+ *
+ * Lets a trial keep the framing it was authored with instead of snapping to a
+ * default the moment orbiting is switched on.
+ */
+export declare function orbitFromCamera(position: Vec3, target: Vec3): OrbitState;
+/** Applies a drag, in pixels, to an orbit. */
+export declare function orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel?: number): OrbitState;
+/**
+ * Applies a wheel notch to an orbit.
+ *
+ * Multiplicative rather than additive, so a notch moves the same *proportion*
+ * of the way in at every scale. Additive zoom crawls when far out and slams
+ * into the target when close.
+ */
+export declare function orbitZoom(state: OrbitState, delta: number, factorPerNotch?: number): OrbitState;
+/** The minimum of {@link View} this needs. Keeps the helper testable. */
+export interface OrbitableView {
+    /** Replaces the camera description driven by the orbit helper. */
+    setCamera(camera: {
+        projection: "perspective";
+        fov?: number;
+        position: Vec3;
+        target: Vec3;
+        near?: number;
+        far?: number;
+    }): void;
+}
+/** What {@link attachOrbit} needs to know about the camera it is driving. */
+export interface OrbitOptions {
+    /** Perspective field of view in degrees. */
+    readonly fov?: number;
+    /** Near clipping distance in world units. */
+    readonly near?: number;
+    /** Far clipping distance in world units. */
+    readonly far?: number;
+    /** Called after every change, so the caller can redraw. */
+    readonly onChange?: (state: OrbitState) => void;
+    /**
+     * Whether these gestures belong to this view alone.
+     *
+     * When set, the handlers stop the events propagating any further, so a
+     * surface that pans or zooms around this view -- a graph node, a scrolling
+     * page -- never sees them. Done from inside the handlers deliberately: a
+     * separate capture-phase listener on the same element cannot do this job,
+     * because stopping an event during capture at an ancestor prevents it from
+     * ever reaching the real target below and bubbling back, which silences the
+     * orbit itself. That mistake shipped once.
+     */
+    readonly exclusive?: boolean;
+}
+/**
+ * Makes `element` drive `view`'s camera by dragging and scrolling.
+ *
+ * Returns a function that detaches every listener. Callers must call it on
+ * unmount; a trial that re-mounts its engine would otherwise accumulate
+ * listeners driving a disposed view.
+ */
+export declare function attachOrbit(element: HTMLElement, view: OrbitableView, initial: OrbitState, options?: OrbitOptions): () => void;
+
+/**
+ * Dragging to orbit a view's camera.
+ *
+ * A fixed camera quietly limits what a rendered result can tell you: a
+ * generated surface seen from one angle hides exactly the defects --
+ * coincident faces, a gap at a seam, a piece facing the wrong way -- that
+ * looking at it was supposed to expose. You cannot judge geometry you cannot
+ * turn.
+ *
+ * Lives here rather than in a consumer because it is camera behaviour for this
+ * engine, and because both consumers that needed it would otherwise have kept
+ * their own copy. It is written against this package's own `setCamera` and
+ * plain numbers rather than pulled in as a controls library: the engine's
+ * whole shape is that no backend type crosses its boundary, and a controls
+ * package from the Three.js ecosystem would reintroduce one *in the consumer*.
+ * The arithmetic is small enough that the seam is worth more than the saved
+ * lines, and it is tested separately from the DOM.
+ */
+import type { Vec3 } from "../contracts/space.js";
+/** Where the camera sits, in spherical coordinates about a target. */
+export interface OrbitState {
+    /** Rotation about the vertical axis, in radians. */
+    readonly yaw: number;
+    /** Elevation above the horizon, in radians. */
+    readonly pitch: number;
+    /** Distance from the target, in world units. */
+    readonly distance: number;
+    /** The point orbited. */
+    readonly target: Vec3;
+}
+/**
+ * How close to straight up or down the camera may get.
+ *
+ * Not a matter of taste: at exactly the pole the view direction is parallel to
+ * the up vector and the camera's orientation stops being defined, which shows
+ * up as the view flipping. Stopping just short of it costs nothing.
+ */
+export declare const PITCH_LIMIT: number;
+/** The closest and furthest the camera may be pulled. */
+export declare const DISTANCE_RANGE: {
+    readonly min: 0.5;
+    readonly max: 60;
+};
+/** Where the camera sits for a given orbit. */
+export declare function orbitPosition(state: OrbitState): Vec3;
+/**
+ * Recovers an orbit from a camera already pointed somewhere.
+ *
+ * Lets a trial keep the framing it was authored with instead of snapping to a
+ * default the moment orbiting is switched on.
+ */
+export declare function orbitFromCamera(position: Vec3, target: Vec3): OrbitState;
+/** Applies a drag, in pixels, to an orbit. */
+export declare function orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel?: number): OrbitState;
+/**
+ * Applies a wheel notch to an orbit.
+ *
+ * Multiplicative rather than additive, so a notch moves the same *proportion*
+ * of the way in at every scale. Additive zoom crawls when far out and slams
+ * into the target when close.
+ */
+export declare function orbitZoom(state: OrbitState, delta: number, factorPerNotch?: number): OrbitState;
+/** The minimum of {@link View} this needs. Keeps the helper testable. */
+export interface OrbitableView {
+    /** Replaces the camera description driven by the orbit helper. */
+    setCamera(camera: {
+        projection: "perspective";
+        fov?: number;
+        position: Vec3;
+        target: Vec3;
+        near?: number;
+        far?: number;
+    }): void;
+}
+/** What {@link attachOrbit} needs to know about the camera it is driving. */
+export interface OrbitOptions {
+    /** Perspective field of view in degrees. */
+    readonly fov?: number;
+    /** Near clipping distance in world units. */
+    readonly near?: number;
+    /** Far clipping distance in world units. */
+    readonly far?: number;
+    /** Called after every change, so the caller can redraw. */
+    readonly onChange?: (state: OrbitState) => void;
+    /**
+     * Whether these gestures belong to this view alone.
+     *
+     * When set, the handlers stop the events propagating any further, so a
+     * surface that pans or zooms around this view -- a graph node, a scrolling
+     * page -- never sees them. Done from inside the handlers deliberately: a
+     * separate capture-phase listener on the same element cannot do this job,
+     * because stopping an event during capture at an ancestor prevents it from
+     * ever reaching the real target below and bubbling back, which silences the
+     * orbit itself. That mistake shipped once.
+     */
+    readonly exclusive?: boolean;
+}
+/**
+ * Makes `element` drive `view`'s camera by dragging and scrolling.
+ *
+ * Returns a function that detaches every listener. Callers must call it on
+ * unmount; a trial that re-mounts its engine would otherwise accumulate
+ * listeners driving a disposed view.
+ */
+export declare function attachOrbit(element: HTMLElement, view: OrbitableView, initial: OrbitState, options?: OrbitOptions): () => void;
 ```

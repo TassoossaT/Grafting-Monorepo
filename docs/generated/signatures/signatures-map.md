@@ -82,23 +82,6 @@ pub const ENUM_MAX: u8 = 4;
 pub const ENUM_VALUES: &'static [Self] = &[
 pub fn variant_name(self) -> Option<&'static str>
 
-// src/generated/map_state_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_BOUNDARY_KIND: i8 = 0;
-pub const ENUM_MAX_BOUNDARY_KIND: i8 = 3;
-pub const ENUM_VALUES_BOUNDARY_KIND: [BoundaryKind; 4] = [
-pub struct BoundaryKind(pub i8);
-pub const Wall: Self = Self(0);
-pub const Door: Self = Self(1);
-pub const Window: Self = Self(2);
-pub const Opening: Self = Self(3);
-pub const ENUM_MIN: i8 = 0;
-pub const ENUM_MAX: i8 = 3;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
-pub enum Vec3Offset
-
 // src/generated/snapshot_generated.rs
 pub mod grafting
 pub mod contracts
@@ -199,6 +182,20 @@ pub fn generate_prism_mesh(
 ```rust
 // tests/snapshots/public-api.txt
 pub mod grafting_graph_core
+pub enum grafting_graph_core::ConstructionError
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
+pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize
+pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
+pub grafting_graph_core::ConstructionError::SameSurface
+pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey
+pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
+pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
+pub fn grafting_graph_core::ConstructionError::eq(&self, other: &grafting_graph_core::ConstructionError) -> bool
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
+pub fn grafting_graph_core::ConstructionError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::ConstructionError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::GraphError
 pub grafting_graph_core::GraphError::CycleDetected
 pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>
@@ -212,27 +209,13 @@ pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core:
 pub grafting_graph_core::GraphError::MissingTarget
 pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId
+pub grafting_graph_core::GraphError::UnknownEdge
+pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId
 pub grafting_graph_core::GraphError::UnknownNode
 pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId
 pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::GraphError
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
-pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub grafting_graph_core::GraphPrimitive::Boundary = 1
-pub grafting_graph_core::GraphPrimitive::Passage = 0
-pub grafting_graph_core::GraphPrimitive::Surface = 2
-pub fn grafting_graph_core::GraphPrimitive::clone(&self) -> grafting_graph_core::GraphPrimitive
-pub fn grafting_graph_core::GraphPrimitive::eq(&self, other: &grafting_graph_core::GraphPrimitive) -> bool
-pub fn grafting_graph_core::GraphPrimitive::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::GraphPrimitive::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
-pub enum grafting_graph_core::IdentifierError
-pub grafting_graph_core::IdentifierError::EmptyEdgeId
-pub grafting_graph_core::IdentifierError::EmptyNodeId
-pub fn grafting_graph_core::IdentifierError::clone(&self) -> grafting_graph_core::IdentifierError
-pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_core::IdentifierError) -> bool
-pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::LayoutError
+pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -435,6 +418,152 @@ pub fn solve_inner(
 ### `architecture-studio` (`apps/architecture-studio`)
 
 ```ts
+// .next/dev/static/media/generation.worker.3nmcexm9svubh.ts
+export interface HeightmapWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  }
+export type HeightmapWorkerResponse =
+
+// .next/dev/static/media/quantization.worker.321j-bb9_iwkc.ts
+export interface QuantizationWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+  }
+export type QuantizationWorkerResponse =
+
+// .next/dev/static/media/terrain.worker.40o6ffhb52bgi.ts
+export interface TerrainWorkerRequest {
+  readonly type: "elevate";
+  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
+  readonly centres: Float32Array;
+  readonly fieldSize: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+export type TerrainWorkerResponse =
+
+// .next/dev/static/media/tileset.worker.31gjgj61bfyvo.ts
+export interface TilesetWorkerRequest {
+  readonly type: "solve";
+  readonly cellCount: number;
+  readonly facesPerCell: number;
+  readonly links: Uint32Array;
+  readonly sockets: Uint32Array;
+  readonly weights: Float32Array;
+  readonly compatible: Uint32Array;
+export type TilesetWorkerResponse =
+
+// .next/dev/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/dev/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// .next/static/media/generation.worker.3nmcexm9svubh.ts
+export interface HeightmapWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  }
+export type HeightmapWorkerResponse =
+
+// .next/static/media/quantization.worker.321j-bb9_iwkc.ts
+export interface QuantizationWorkerRequest {
+  readonly type: "generate";
+  readonly width: number;
+  readonly height: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+  }
+export type QuantizationWorkerResponse =
+
+// .next/static/media/terrain.worker.40o6ffhb52bgi.ts
+export interface TerrainWorkerRequest {
+  readonly type: "elevate";
+  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
+  readonly centres: Float32Array;
+  readonly fieldSize: number;
+  readonly seed: number;
+  readonly scale: number;
+  readonly levels: number;
+export type TerrainWorkerResponse =
+
+// .next/static/media/tileset.worker.31gjgj61bfyvo.ts
+export interface TilesetWorkerRequest {
+  readonly type: "solve";
+  readonly cellCount: number;
+  readonly facesPerCell: number;
+  readonly links: Uint32Array;
+  readonly sockets: Uint32Array;
+  readonly weights: Float32Array;
+  readonly compatible: Uint32Array;
+export type TilesetWorkerResponse =
+
+// .next/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
 // src/app/api/mcp/route.ts
 export const runtime = "nodejs";
 
@@ -1712,39 +1841,36 @@ export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
   }
+export interface TaskResumeInput {
+  taskId?: string;
+  pr?: number;
+  }
 export interface TaskContextInput {
   query?: string;
   scope?: string;
   map?: boolean;
+  pack?: boolean;
+  taskId?: string;
+  paths?: string[];
   }
 ```
 
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
-// src/generated/grafting/contracts/boundary-kind.ts
-export enum BoundaryKind {
-  Wall = 0,
-  Door = 1,
-  Window = 2,
+// src/generated/grafting/contracts/cell-role.ts
+export enum CellRole {
+  Surface = 0,
+  Boundary = 1,
+  Passage = 2,
   Opening = 3
   }
 
-// src/generated/grafting/contracts/boundary-patch.ts
-export class BoundaryPatch {
+// src/generated/grafting/contracts/cell-state-patch.ts
+export class CellStatePatch {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):BoundaryPatch {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/boundary-segment.ts
-export class BoundarySegment {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):BoundarySegment {
+  __init(i:number, bb:flatbuffers.ByteBuffer):CellStatePatch {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -1860,21 +1986,11 @@ export class Incremented {
   return this;
   }
 
-// src/generated/grafting/contracts/map-state-message.ts
-export class MapStateMessage {
+// src/generated/grafting/contracts/prism-cell-data.ts
+export class PrismCellData {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):MapStateMessage {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/prism-cell-assignment.ts
-export class PrismCellAssignment {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellAssignment {
+  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellData {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -1930,11 +2046,11 @@ export class StateTable {
   return this;
   }
 
-// src/generated/grafting/contracts/vec3.ts
-export class Vec3 {
+// src/generated/grafting/contracts/vec3-offset.ts
+export class Vec3Offset {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3 {
+  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3Offset {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -2005,7 +2121,8 @@ export interface BuiltVisual {
   dispose(): void;
   }
 export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
-  const geometry = buildGeometry(descriptor.geometry);
+  const geometry =
+  descriptor.geometry.shape === "sprite" ? undefined : buildGeometry(descriptor.geometry);
 export function applyTransform(object: THREE.Object3D, transform: Transform | undefined): void {
   const position = transform?.position;
   object.position.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0);
@@ -2053,21 +2170,21 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
   DISTANCE_RANGE.max,
   ),
 export interface OrbitableView {
+  /** Replaces the camera description driven by the orbit helper. */
   setCamera(camera: {
   projection: "perspective";
   fov?: number;
   position: Vec3;
   target: Vec3;
   near?: number;
-  far?: number;
 export interface OrbitOptions {
+  /** Perspective field of view in degrees. */
   readonly fov?: number;
+  /** Near clipping distance in world units. */
   readonly near?: number;
+  /** Far clipping distance in world units. */
   readonly far?: number;
   /** Called after every change, so the caller can redraw. */
-  readonly onChange?: (state: OrbitState) => void;
-  /**
-  * Whether these gestures belong to this view alone.
 export function attachOrbit(
   element: HTMLElement,
   view: OrbitableView,
@@ -2768,48 +2885,47 @@ export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes
   * ```tsx
   * export default function Page(props: PageProps<'/blog/[slug]'>) {
 
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
+// src/adapters/rendering/render-3d-scene-adapter.ts
+export class Render3dSceneAdapter implements SceneRenderPort {
+  readonly #views = new Map<RenderViewId, AttachedView>();
+export function createRender3dSceneAdapter(): SceneRenderPort {
+  return new Render3dSceneAdapter();
 
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+// src/adapters/rendering/token-scene-item.ts
+export const TOKEN_LAYER_ID = "tokens";
+export const TOKEN_VISUAL_KIND = "vtt-token-billboard";
+export interface TokenVisualParams {
+  readonly color: number;
+  }
+export function tokenTransform(token: RenderToken): Transform {
+  return {
+  position: token.position,
+  scale: token.appearance.size,
+  };
+export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams> {
+  return {
+  id: `token:${token.id}`,
+  layer: TOKEN_LAYER_ID,
+  visual: {
+  kind: TOKEN_VISUAL_KIND,
+  params: { color: token.appearance.color },
+  },
 
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
+  readonly initialTokens?: readonly TokenProjection[];
+  readonly renderPort?: SceneRenderPort;
   }
 export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
-  return new AppTabletopRuntime(input.tableId);
+  const tableId = input.tableId.trim();
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
 export type {
+  ConfirmedTokenDeltaEnvelope,
   TabletopRuntime,
   TabletopRuntimeListener,
   TabletopRuntimeStatus,
@@ -2823,16 +2939,175 @@ export interface TabletopSnapshot {
   readonly revision: number;
   readonly status: TabletopRuntimeStatus;
   readonly tableId: string;
+  readonly tokens: TokenCollectionProjection;
+  }
+export interface ConfirmedTokenDeltaEnvelope {
+  readonly origin: ChangeOrigin;
+  readonly causeId: string;
+  readonly delta: TokenProjectionDelta;
   }
 export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
+  applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
+  attachView(target: HTMLElement): RenderViewId;
+  detachView(viewId: RenderViewId): void;
+  resizeView(viewId: RenderViewId, width: number, height: number): void;
+  getRenderMetrics(): SceneRenderMetrics;
   getSnapshot(): TabletopSnapshot;
-  subscribe(listener: TabletopRuntimeListener): () => void;
-  dispose(): Promise<void>;
-  }
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
+
+// src/entities/token/index.ts
+export type {
+  SceneId,
+  SubjectRef,
+  TokenAppearance,
+  TokenCollectionProjection,
+  TokenId,
+  TokenPosition,
+  TokenProjection,
+
+// src/entities/token/token-projection.ts
+export type TokenId = string;
+export type SceneId = string;
+export type SubjectRef = string;
+export interface TokenPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export interface TokenAppearance {
+  readonly label: string;
+  readonly color: number;
+  readonly size: number;
+  }
+export interface TokenProjection {
+  readonly id: TokenId;
+  readonly sceneId: SceneId;
+  readonly position: TokenPosition;
+  readonly subjectRef?: SubjectRef;
+  readonly appearance: TokenAppearance;
+  readonly revision: number;
+  }
+export interface TokenCollectionProjection {
+  readonly byId: ReadonlyMap<TokenId, TokenProjection>;
+  readonly revision: number;
+  }
+export type TokenProjectionDelta =
+export function createTokenProjection(input: TokenProjection): TokenProjection {
+  const size = finite(input.appearance.size, "appearance.size");
+export function createTokenCollection(
+  tokens: readonly TokenProjection[] = [],
+  ): TokenCollectionProjection {
+  const byId = new Map<TokenId, TokenProjection>();
+export function applyTokenProjectionDelta(
+  current: TokenCollectionProjection,
+  delta: TokenProjectionDelta,
+  ): TokenCollectionProjection {
+  if (delta.type === "token-removed") {
+  const previous = current.byId.get(delta.tokenId);
+
+// src/features/place-token/index.ts
+export type {
+  BindTokenSubjectIntent,
+  BindTokenSubjectOperation,
+  OperationId,
+  ParticipantId,
+  PlaceTokenIntent,
+  PlaceTokenOperation,
+  RevisionPrecondition,
+
+// src/features/place-token/token-operations.ts
+export type OperationId = string;
+export type ParticipantId = string;
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+  }
+export interface TokenOperationContext {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  }
+export interface PlaceTokenIntent {
+  readonly tokenId: TokenId;
+  readonly sceneId: SceneId;
+  readonly position: TokenPosition;
+  readonly appearance: TokenAppearance;
+  readonly subjectRef?: SubjectRef;
+  }
+export interface PlaceTokenOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly sceneId: SceneId;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "token.place@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: PlaceTokenIntent;
+export interface BindTokenSubjectIntent {
+  readonly tokenId: TokenId;
+  readonly subjectRef: SubjectRef | null;
+  readonly expectedTokenRevision: number;
+  }
+export interface BindTokenSubjectOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "token.bind-subject@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: {
+  readonly tokenId: TokenId;
+export type TokenOperation = PlaceTokenOperation | BindTokenSubjectOperation;
+export function createPlaceTokenOperation(
+  intent: PlaceTokenIntent,
+  context: TokenOperationContext,
+  ): PlaceTokenOperation {
+  const normalized = operationContext(context);
+export function createBindTokenSubjectOperation(
+  intent: BindTokenSubjectIntent,
+  context: TokenOperationContext,
+  ): BindTokenSubjectOperation {
+  if (!Number.isInteger(intent.expectedTokenRevision) || intent.expectedTokenRevision < 0) {
+  throw new Error("expectedTokenRevision must be a non-negative integer");
+
+// src/ports/index.ts
+export type {
+  ChangeOrigin,
+  ConfirmedTokenRenderChange,
+  RenderDependencyRevision,
+  RenderToken,
+  RenderViewId,
+  SceneRenderMetrics,
+  SceneRenderPort,
+
+// src/ports/scene-render-port.ts
+export type ChangeOrigin = "local" | "network" | "programmatic";
+export type RenderViewId = string;
+export interface RenderDependencyRevision {
+  readonly layer: "tokens";
+  readonly scopeId: string;
+  readonly revision: number;
+  }
+export interface RenderToken {
+  readonly id: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+export type ConfirmedTokenRenderChange =
+export interface SceneRenderMetrics {
+  readonly rendererCreates: number;
+  readonly rendererDisposes: number;
+  readonly attachedViews: number;
+  readonly confirmedTokenChanges: number;
+  readonly terrainUploads: number;
+  }
+export interface SceneRenderPort {
+  start(runtimeGeneration: number): Promise<void>;
+  attachView(target: HTMLElement): RenderViewId;
+  detachView(viewId: RenderViewId): void;
+  resizeView(viewId: RenderViewId, width: number, height: number): void;
+  applyConfirmed(change: ConfirmedTokenRenderChange): void;
+  getMetrics(): SceneRenderMetrics;
+  dispose(): Promise<void>;
 ```
 
 ### `x6-canvas` (`packages/x6-canvas`)
@@ -3109,40 +3384,21 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
 ```csharp
-// Generated/Grafting/Contracts/BoundaryKind.cs
-public enum BoundaryKind : sbyte
+// Generated/Grafting/Contracts/CellRole.cs
+public enum CellRole : sbyte
 
-// Generated/Grafting/Contracts/BoundaryPatch.cs
-public struct BoundaryPatch : IFlatbufferObject
+// Generated/Grafting/Contracts/CellStatePatch.cs
+public struct CellStatePatch : IFlatbufferObject
 public static void ValidateVersion()
-public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb)
-public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb, BoundaryPatch obj)
-public static Offset<Grafting.Contracts.BoundaryPatch> CreateBoundaryPatch(FlatBufferBuilder builder,
-public static void StartBoundaryPatch(FlatBufferBuilder builder)
-public static void AddSegmentId(FlatBufferBuilder builder, ulong segmentId)
-public static void AddNewKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind newKind)
-public static void AddNewStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newStartOffset)
-public static void AddNewEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newEndOffset)
-public static void AddNewHeight(FlatBufferBuilder builder, float newHeight)
-public static void AddRemoved(FlatBufferBuilder builder, bool removed)
+public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb)
+public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb, CellStatePatch obj)
+public static Offset<Grafting.Contracts.CellStatePatch> CreateCellStatePatch(FlatBufferBuilder builder,
+public static void StartCellStatePatch(FlatBufferBuilder builder)
+public static void AddCellId(FlatBufferBuilder builder, uint cellId)
+public static void AddNewRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole newRole)
+public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
 public static void AddSequence(FlatBufferBuilder builder, ulong sequence)
-public static Offset<Grafting.Contracts.BoundaryPatch> EndBoundaryPatch(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/BoundarySegment.cs
-public struct BoundarySegment : IFlatbufferObject
-public static void ValidateVersion()
-public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb)
-public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb, BoundarySegment obj)
-public static Offset<Grafting.Contracts.BoundarySegment> CreateBoundarySegment(FlatBufferBuilder builder,
-public static void StartBoundarySegment(FlatBufferBuilder builder)
-public static void AddId(FlatBufferBuilder builder, ulong id)
-public static void AddStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> startOffset)
-public static void AddEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> endOffset)
-public static void AddHeight(FlatBufferBuilder builder, float height)
-public static void AddKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind kind)
-public static void AddBlocksMovement(FlatBufferBuilder builder, bool blocksMovement)
-public static void AddBlocksVision(FlatBufferBuilder builder, bool blocksVision)
-public static Offset<Grafting.Contracts.BoundarySegment> EndBoundarySegment(FlatBufferBuilder builder)
+public static Offset<Grafting.Contracts.CellStatePatch> EndCellStatePatch(FlatBufferBuilder builder)
 
 // Generated/Grafting/Contracts/CommandMessage.cs
 public struct CommandMessage : IFlatbufferObject
@@ -3221,38 +3477,22 @@ public static void AddAmount(FlatBufferBuilder builder, long amount)
 public static void AddNewValue(FlatBufferBuilder builder, long newValue)
 public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
 
-// Generated/Grafting/Contracts/MapStateMessage.cs
-public struct MapStateMessage : IFlatbufferObject
+// Generated/Grafting/Contracts/PrismCellData.cs
+public struct PrismCellData : IFlatbufferObject
 public static void ValidateVersion()
-public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb)
-public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb, MapStateMessage obj)
-public static bool VerifyMapStateMessage(ByteBuffer _bb)
-public static Offset<Grafting.Contracts.MapStateMessage> CreateMapStateMessage(FlatBufferBuilder builder,
-public static void StartMapStateMessage(FlatBufferBuilder builder)
-public static void AddWidth(FlatBufferBuilder builder, uint width)
-public static void AddHeight(FlatBufferBuilder builder, uint height)
-public static void AddLayers(FlatBufferBuilder builder, uint layers)
-public static void AddSeed(FlatBufferBuilder builder, uint seed)
-public static void AddDeformationXy(FlatBufferBuilder builder, float deformationXy)
-public static void AddDeformationZ(FlatBufferBuilder builder, float deformationZ)
-public static void AddCells(FlatBufferBuilder builder, VectorOffset cellsOffset)
-public static VectorOffset CreateCellsVector(FlatBufferBuilder builder, Offset<Grafting.Contracts.PrismCellAssignment>[] data)
-
-// Generated/Grafting/Contracts/PrismCellAssignment.cs
-public struct PrismCellAssignment : IFlatbufferObject
-public static void ValidateVersion()
-public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb)
-public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb, PrismCellAssignment obj)
-public static Offset<Grafting.Contracts.PrismCellAssignment> CreatePrismCellAssignment(FlatBufferBuilder builder,
-public static void StartPrismCellAssignment(FlatBufferBuilder builder)
-public static void AddCellIndex(FlatBufferBuilder builder, uint cellIndex)
+public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb)
+public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb, PrismCellData obj)
+public static Offset<Grafting.Contracts.PrismCellData> CreatePrismCellData(FlatBufferBuilder builder,
+public static void StartPrismCellData(FlatBufferBuilder builder)
+public static void AddId(FlatBufferBuilder builder, uint id)
 public static void AddLayer(FlatBufferBuilder builder, byte layer)
 public static void AddX(FlatBufferBuilder builder, int x)
 public static void AddY(FlatBufferBuilder builder, int y)
-public static void AddModuleId(FlatBufferBuilder builder, uint moduleId)
-public static void AddRotation(FlatBufferBuilder builder, byte rotation)
-public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> vertexShiftOffset)
-public static Offset<Grafting.Contracts.PrismCellAssignment> EndPrismCellAssignment(FlatBufferBuilder builder)
+public static void AddRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole role)
+public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
+public static void AddNeighbors(FlatBufferBuilder builder, VectorOffset neighborsOffset)
+public static VectorOffset CreateNeighborsVector(FlatBufferBuilder builder, int[] data)
+public static VectorOffset CreateNeighborsVectorBlock(FlatBufferBuilder builder, int[] data)
 
 // Generated/Grafting/Contracts/Reset.cs
 public struct Reset : IFlatbufferObject
@@ -3311,17 +3551,17 @@ public static void StartStateTable(FlatBufferBuilder builder)
 public static void AddValue(FlatBufferBuilder builder, long value)
 public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
 
-// Generated/Grafting/Contracts/Vec3.cs
-public struct Vec3 : IFlatbufferObject
+// Generated/Grafting/Contracts/Vec3Offset.cs
+public struct Vec3Offset : IFlatbufferObject
 public static void ValidateVersion()
-public static Vec3 GetRootAsVec3(ByteBuffer _bb)
-public static Vec3 GetRootAsVec3(ByteBuffer _bb, Vec3 obj)
-public static Offset<Grafting.Contracts.Vec3> CreateVec3(FlatBufferBuilder builder,
-public static void StartVec3(FlatBufferBuilder builder)
+public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb)
+public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb, Vec3Offset obj)
+public static Offset<Grafting.Contracts.Vec3Offset> CreateVec3Offset(FlatBufferBuilder builder,
+public static void StartVec3Offset(FlatBufferBuilder builder)
 public static void AddX(FlatBufferBuilder builder, float x)
 public static void AddY(FlatBufferBuilder builder, float y)
 public static void AddZ(FlatBufferBuilder builder, float z)
-public static Offset<Grafting.Contracts.Vec3> EndVec3(FlatBufferBuilder builder)
+public static Offset<Grafting.Contracts.Vec3Offset> EndVec3Offset(FlatBufferBuilder builder)
 
 // Generated/Grafting/Contracts/WasReset.cs
 public struct WasReset : IFlatbufferObject

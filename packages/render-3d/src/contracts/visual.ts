@@ -41,6 +41,13 @@ export interface HeightfieldData {
 
 /** The shape half of a visual. */
 export type GeometryDescriptor =
+  | {
+      /**
+       * A camera-facing unit square. Its world size comes from the item's
+       * transform scale, and an optional unlit texture supplies its shape.
+       */
+      readonly shape: "sprite";
+    }
   | { readonly shape: "plane"; readonly width: number; readonly depth: number; readonly segments?: number }
   | { readonly shape: "box"; readonly width: number; readonly height: number; readonly depth: number }
   | { readonly shape: "sphere"; readonly radius: number; readonly segments?: number }
@@ -77,6 +84,8 @@ export type MaterialDescriptor =
       readonly flatShading?: boolean;
       readonly doubleSided?: boolean;
       readonly texture?: TextureSource;
+      /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+      readonly clippable?: boolean;
     }
   | {
       /** Ignores scene lighting. The right choice for overlays, grids, and markers. */
@@ -85,6 +94,8 @@ export type MaterialDescriptor =
       readonly opacity?: number;
       readonly doubleSided?: boolean;
       readonly texture?: TextureSource;
+      /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+      readonly clippable?: boolean;
     }
   | {
       /** Draws edges rather than faces. */

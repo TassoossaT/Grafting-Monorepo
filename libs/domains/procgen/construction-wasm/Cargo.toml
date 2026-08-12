@@ -1,0 +1,21 @@
+[package]
+name = "grafting-procgen-construction-wasm"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Wasm bridge exposing grafting-graph-core's construction operations (move/delete/merge/split/duplicate) and the terrain-generation/structure-generation crates' pure generators as one stateful ConstructionSession for the Web host. No new domain logic -- pure wrapping over already-merged, already-stable Rust APIs."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+grafting-graph-core = { path = "../../../graph/core" }
+grafting-procgen-terrain-generation = { path = "../terrain-generation" }
+grafting-procgen-structure-generation = { path = "../structure-generation" }
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

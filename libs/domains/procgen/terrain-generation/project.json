@@ -1,0 +1,44 @@
+{
+  "name": "terrain-generation",
+  "root": "libs/domains/procgen/terrain-generation",
+  "projectType": "library",
+  "tags": ["scope:procgen", "lang:rust", "platform:cross", "type:lib"],
+  "metadata": {
+    "graphIr": {
+      "id": "terrain-generation",
+      "kind": "lib",
+      "tags": ["scope:procgen", "lang:rust", "platform:cross"]
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo check -p grafting-procgen-terrain-generation" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo test -p grafting-procgen-terrain-generation" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-generation" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-generation --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+        "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-terrain-generation.md",
+        "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+        "{workspaceRoot}/tools/rust-api-docgen/src/main.rs", "sharedGlobals"
+      ]
+    }
+  }
+}

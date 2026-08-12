@@ -69,6 +69,23 @@ Every track in flight.
 
 Stops a track. `settle` applies its final value first. Returns whether it was running.
 
+### `interface render-3d.ClipPlaneDescriptor`
+
+A single cutting plane, as data. Points where `dot(normal, point) +
+constant >= 0` is false are cut away.
+
+Engine-global: the active plane cuts every item whose material opted in
+via `MaterialDescriptor.clippable`, across every view. Independent
+per-view clip heights are not supported by this contract.
+
+### `property render-3d.ClipPlaneDescriptor.constant: number`
+
+Signed offset in the plane equation `dot(normal, point) + constant >= 0`.
+
+### `property render-3d.ClipPlaneDescriptor.normal: Vec3`
+
+Unit normal of the cutting plane.
+
 ### `interface render-3d.Clock`
 
 Time source shared by animation, simulation, and any caller-owned stepping.
@@ -370,6 +387,66 @@ Flat `xyz` triples, three floats per vertex.
 
 Optional flat `uv` pairs, two floats per vertex.
 
+### `interface render-3d.OrbitableView`
+
+The minimum of View this needs. Keeps the helper testable.
+
+### `method render-3d.OrbitableView.setCamera(camera: { far?: number; fov?: number; near?: number; position: Vec3; projection: "perspective"; target: Vec3 }): void`
+
+Replaces the camera description driven by the orbit helper.
+
+### `interface render-3d.OrbitOptions`
+
+What attachOrbit needs to know about the camera it is driving.
+
+### `property render-3d.OrbitOptions.exclusive?: boolean`
+
+Whether these gestures belong to this view alone.
+
+When set, the handlers stop the events propagating any further, so a
+surface that pans or zooms around this view -- a graph node, a scrolling
+page -- never sees them. Done from inside the handlers deliberately: a
+separate capture-phase listener on the same element cannot do this job,
+because stopping an event during capture at an ancestor prevents it from
+ever reaching the real target below and bubbling back, which silences the
+orbit itself. That mistake shipped once.
+
+### `property render-3d.OrbitOptions.far?: number`
+
+Far clipping distance in world units.
+
+### `property render-3d.OrbitOptions.fov?: number`
+
+Perspective field of view in degrees.
+
+### `property render-3d.OrbitOptions.near?: number`
+
+Near clipping distance in world units.
+
+### `property render-3d.OrbitOptions.onChange?: (state: OrbitState) => void`
+
+Called after every change, so the caller can redraw.
+
+### `interface render-3d.OrbitState`
+
+Where the camera sits, in spherical coordinates about a target.
+
+### `property render-3d.OrbitState.distance: number`
+
+Distance from the target, in world units.
+
+### `property render-3d.OrbitState.pitch: number`
+
+Elevation above the horizon, in radians.
+
+### `property render-3d.OrbitState.target: Vec3`
+
+The point orbited.
+
+### `property render-3d.OrbitState.yaw: number`
+
+Rotation about the vertical axis, in radians.
+
 ### `interface render-3d.PickResult`
 
 What a pointer hit.
@@ -443,6 +520,10 @@ than however often the browser felt like scheduling one.
 ### `method render-3d.RenderEngine.observeFrames(observer: FrameObserver): () => void`
 
 Subscribes to frame reports. Returns an unsubscribe function.
+
+### `method render-3d.RenderEngine.setClipPlane(plane: ClipPlaneDescriptor | undefined): void`
+
+Replaces the active clip plane. `undefined` disables clipping. Marks every view dirty.
 
 ### `method render-3d.RenderEngine.setLights(lights: readonly LightDescriptor[]): void`
 
@@ -785,7 +866,7 @@ Maps linear progress to eased progress. Both in `0..1`.
 
 Called after every frame the engine runs.
 
-### `type render-3d.GeometryDescriptor = { depth: number; segments?: number; shape: "plane"; width: number } | { depth: number; height: number; shape: "box"; width: number } | { radius: number; segments?: number; shape: "sphere" } | { height: number; radius: number; segments?: number; shape: "cylinder" } | { field: HeightfieldData; shape: "heightfield" } | { data: MeshData; shape: "mesh" } | { positions: Float32Array; shape: "segments" }`
+### `type render-3d.GeometryDescriptor = { shape: "sprite" } | { depth: number; segments?: number; shape: "plane"; width: number } | { depth: number; height: number; shape: "box"; width: number } | { radius: number; segments?: number; shape: "sphere" } | { height: number; radius: number; segments?: number; shape: "cylinder" } | { field: HeightfieldData; shape: "heightfield" } | { data: MeshData; shape: "mesh" } | { positions: Float32Array; shape: "segments" }`
 
 The shape half of a visual.
 
@@ -801,7 +882,7 @@ Caller-chosen identity for a draw group.
 
 Scene lighting, as data. The engine ships no default lighting rig of its own.
 
-### `type render-3d.MaterialDescriptor = { color?: number; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { color?: number; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; opacity?: number; surface: "line" } | { color?: number; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
+### `type render-3d.MaterialDescriptor = { clippable?: boolean; color?: number; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { clippable?: boolean; color?: number; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; opacity?: number; surface: "line" } | { color?: number; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
 
 The appearance half of a visual.
 
@@ -831,6 +912,10 @@ Clock.advance resolving an entire turn at once.
 
 Caller-chosen identity for a view.
 
+### `variable render-3d.DISTANCE_RANGE: { max: 60; min: 0.5 }`
+
+The closest and furthest the camera may be pulled.
+
 ### `variable render-3d.easings: Readonly<Record<"linear" | "easeIn" | "easeOut" | "easeInOut", Easing>>`
 
 Replaceable easing defaults.
@@ -853,6 +938,22 @@ and this one costs it nothing.
 ### `variable render-3d.IDENTITY_TRANSFORM: Required<Pick<Transform, "position" | "rotation">> & { scale: number }`
 
 The origin-of-identity transform, used when an item supplies none.
+
+### `variable render-3d.PITCH_LIMIT: number`
+
+How close to straight up or down the camera may get.
+
+Not a matter of taste: at exactly the pole the view direction is parallel to
+the up vector and the camera's orientation stops being defined, which shows
+up as the view flipping. Stopping just short of it costs nothing.
+
+### `function render-3d.attachOrbit(element: HTMLElement, view: OrbitableView, initial: OrbitState, options: OrbitOptions): () => void`
+
+Makes `element` drive `view`'s camera by dragging and scrolling.
+
+Returns a function that detaches every listener. Callers must call it on
+unmount; a trial that re-mounts its engine would otherwise accumulate
+listeners driving a disposed view.
 
 ### `function render-3d.createAnimator(scene: Scene): Animator`
 
@@ -906,3 +1007,43 @@ A registry is the whole integration surface for anything this package does
 not know about. It is created by the caller and may be shared across engines,
 so a separate package can populate one — defining what its own concepts look
 like — and hand it over without either package importing the other.
+
+### `function render-3d.mergeMeshChunks(pieces: readonly MeshData[]): MeshData`
+
+Concatenates several meshes into one buffer, offsetting each piece's
+indices past everything already appended.
+
+Pure array arithmetic, useful to any caller batching many small meshes
+into one draw call — not something specific to any one product's idea of
+a "chunk". A caller that groups geometry into spatial buckets (a chunked
+terrain, a merged prop cluster, anything else that wants one buffer per
+bucket) calls this once per bucket.
+
+A piece without its own `indices` is a flat triangle list (`GeometryDescriptor`'s
+own "positions read sequentially when omitted" rule) — merged as an
+implicit `0..n-1` index run, never by dropping indices from every *other*
+piece just because one piece lacks them; that would silently discard the
+shared-vertex structure indexed pieces depend on.
+
+### `function render-3d.orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel: number): OrbitState`
+
+Applies a drag, in pixels, to an orbit.
+
+### `function render-3d.orbitFromCamera(position: Vec3, target: Vec3): OrbitState`
+
+Recovers an orbit from a camera already pointed somewhere.
+
+Lets a trial keep the framing it was authored with instead of snapping to a
+default the moment orbiting is switched on.
+
+### `function render-3d.orbitPosition(state: OrbitState): Vec3`
+
+Where the camera sits for a given orbit.
+
+### `function render-3d.orbitZoom(state: OrbitState, delta: number, factorPerNotch: number): OrbitState`
+
+Applies a wheel notch to an orbit.
+
+Multiplicative rather than additive, so a notch moves the same *proportion*
+of the way in at every scale. Additive zoom crawls when far out and slams
+into the target when close.

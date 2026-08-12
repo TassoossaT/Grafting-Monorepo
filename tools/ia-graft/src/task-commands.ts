@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -256,18 +257,80 @@ export async function taskSync(repoRoot: string, input: { taskId: string; fetch?
   return { ok: true as const, ...(await new GitClient(repoRoot).syncTask(input.taskId, { fetch: input.fetch, abort: input.abort })) };
 }
 
-export async function taskResume(repoRoot: string, input: { taskId?: string; pr?: number }) {
-  if (input?.pr !== undefined) {
-    if (!Number.isInteger(input.pr) || input.pr <= 0) return fail(`invalid PR number: ${input.pr}`);
-    const result = await new GitClient(repoRoot).resumeFromPullRequest(input.pr);
-    return { ok: true as const, taskId: result.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath, pr: result.pr, repaired: result.repaired };
+export interface TaskResumeInput {
+  taskId?: string;
+  pr?: number;
+}
+
+export async function taskResume(repoRoot: string, input: TaskResumeInput = {}) {
+  let taskId = input.taskId;
+  let prNumber = input.pr;
+  const client = new GitClient(repoRoot);
+
+  if (!taskId && prNumber !== undefined) {
+    if (!Number.isInteger(prNumber) || prNumber <= 0) return fail(`invalid PR number: ${prNumber}`);
+    const prResult = await client.resumeFromPullRequest(prNumber);
+    taskId = prResult.taskId;
   }
-  if (!input?.taskId || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
-  const result = await new GitClient(repoRoot).createOrResumeSession(input.taskId);
+
+  if (!taskId || !isValidTaskId(taskId)) {
+    return fail(`invalid or missing task id: ${taskId ?? "(none)"}`);
+  }
+
+  const result = await client.createOrResumeSession(taskId);
+  const worktreePath = result.session.worktreePath;
+  const base = result.base;
+
+  let recentCommits: string[] = [];
+  let dirtyFiles: string[] = [];
+  let affectedFiles: string[] = [];
+
+  if (worktreePath && existsSync(worktreePath)) {
+    try {
+      const output = execFileSync("git", ["log", "-n", "3", "--oneline"], { cwd: worktreePath, encoding: "utf8" });
+      recentCommits = output.split(/\r?\n/).filter(Boolean);
+    } catch { /* no commits yet */ }
+
+    try {
+      const output = execFileSync("git", ["status", "--porcelain"], { cwd: worktreePath, encoding: "utf8" });
+      dirtyFiles = output.split(/\r?\n/).filter(Boolean).map((line) => line.trim());
+    } catch { /* clean */ }
+
+    try {
+      const output = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: worktreePath, encoding: "utf8" });
+      affectedFiles = output.split(/\r?\n/).filter(Boolean);
+    } catch { /* no diff */ }
+  }
+
+  let contextPack: string | undefined;
+  try {
+    // @ts-ignore - dynamic import of context-resolver.mjs script
+    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    contextPack = resolveContext({
+      root: repoRoot,
+      taskId: taskId,
+      paths: affectedFiles.length > 0 ? affectedFiles : null,
+    });
+  } catch {
+    contextPack = undefined;
+  }
+
   return {
-    ok: true as const, taskId: input.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath,
-    resumed: result.resumed, repaired: result.repaired, base: result.base,
-    dependencyMode: result.dependencies.mode, dependencyOverlays: result.dependencies.overlays, workspaceLinks: result.dependencies.workspaceLinks,
+    ok: true as const,
+    taskId,
+    branch: result.session.branchName,
+    worktreePath: result.session.worktreePath,
+    resumed: result.resumed,
+    repaired: result.repaired,
+    base: result.base,
+    pr: prNumber,
+    recentCommits,
+    dirtyFiles,
+    affectedFiles,
+    contextPack,
+    dependencyMode: result.dependencies.mode,
+    dependencyOverlays: result.dependencies.overlays,
+    workspaceLinks: result.dependencies.workspaceLinks,
     dependenciesMaterialized: result.dependencies.materialized ?? false,
     dependencyLockfileHash: result.dependencies.lockfileHash,
     dependencyWorkspaceConfigHash: result.dependencies.workspaceConfigHash,
@@ -304,9 +367,26 @@ export interface TaskContextInput {
   query?: string;
   scope?: string;
   map?: boolean;
+  pack?: boolean;
+  taskId?: string;
+  paths?: string[];
 }
 
 export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
+  if (input.pack || input.taskId || (input.paths && input.paths.length > 0)) {
+    // @ts-ignore - dynamic import of context-resolver.mjs script
+    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    const packSummary = resolveContext({
+      root: repoRoot,
+      taskId: input.taskId ?? null,
+      paths: input.paths ?? null,
+    });
+    return {
+      ok: true as const,
+      pack: packSummary,
+    };
+  }
+
   const indexPath = join(repoRoot, ".ai", "INDEX.md");
   const signaturesPath = join(repoRoot, "docs", "generated", "signatures", "signatures-map.md");
 

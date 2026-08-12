@@ -403,6 +403,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-procgen-construction-wasm"
+version = "0.0.0"
+dependencies = [
+ "console_error_panic_hook",
+ "grafting-graph-core",
+ "grafting-procgen-structure-generation",
+ "grafting-procgen-terrain-generation",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "grafting-procgen-discretize"
 version = "0.0.0"
 dependencies = [
@@ -417,6 +431,21 @@ dependencies = [
  "grafting-graph-core",
  "noise",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "grafting-procgen-structure-generation"
+version = "0.0.0"
+dependencies = [
+ "grafting-graph-core",
+]
+
+[[package]]
+name = "grafting-procgen-terrain-generation"
+version = "0.0.0"
+dependencies = [
+ "grafting-graph-core",
+ "grafting-procgen-tileset-wfc",
 ]
 
 [[package]]

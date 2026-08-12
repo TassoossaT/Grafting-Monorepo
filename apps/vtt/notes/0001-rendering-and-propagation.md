@@ -1,9 +1,15 @@
 # Note 0001 — Rendering and propagation debt carried from the node bench
 
 - Recorded: 2026-08-06
-- Status: open, to be resolved before the VTT renders anything real
+- Status: resolved by `VTT-RENDER-001` on 2026-08-12; implementation remains
+  deferred until the first real rendering/Worker slice
 - Source: defects found and fixed while building `/lab` in `apps/architecture-studio`
   (DEC-057, PRs #33, #37, #39, #41, #43)
+
+Resolution: `docs/architecture/vtt-rendering-runtime-contract.md` converts all
+six observations into stable invariants, ownership/state machines, and browser
+acceptance criteria. This note remains the historical defect evidence and is
+not the normative implementation contract.
 
 The bench works, and every defect below is fixed *there*. They are recorded
 because each one came from a design choice that would reappear in the VTT, at a

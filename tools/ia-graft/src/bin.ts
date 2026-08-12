@@ -7,6 +7,7 @@ import { delegateEdit } from "./delegate-edit-commands.ts";
 import { delegateResearch } from "./delegate-research-commands.ts";
 import { runDocCheck } from "./doc-check.ts";
 import { runGuardCheck } from "./guard-command.ts";
+import { runMcpServer } from "./mcp-server.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
@@ -100,7 +101,17 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
-  if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
+  if (subcommand === "context") {
+    const rawPaths = readValue(argv, "--paths");
+    return {
+      query: readValue(argv, "--query"),
+      scope: readValue(argv, "--scope"),
+      map: argv.includes("--map"),
+      pack: argv.includes("--pack"),
+      taskId: readValue(argv, "--id") ?? readValue(argv, "--task"),
+      paths: rawPaths ? rawPaths.split(",").map((p) => p.trim()).filter(Boolean) : undefined,
+    };
+  }
   if (subcommand === "run") {
     const jsonSchemaRaw = readValue(argv, "--json-schema");
     const files = readValues(argv, "--file");
@@ -142,6 +153,11 @@ async function main(argv: string[]): Promise<void> {
   process.chdir(root);
 
   try {
+    if (group === "mcp") {
+      await runMcpServer(root);
+      return;
+    }
+
     if (group === "guard-check") {
       const input = (readInputFlag(argv) ?? (await readStdin())) as Parameters<typeof runGuardCheck>[1];
       printAndExit(await runGuardCheck(root, input));

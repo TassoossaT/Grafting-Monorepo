@@ -4,6 +4,11 @@
 
 Generic domain-agnostic primitive role for graph formation.
 
+### `pub enum grafting_graph_core::ConstructionError`
+
+Structural error from a domain-level construction operation -- either
+the graph mutation or the surface bookkeeping it coordinates can fail.
+
 ### `pub enum grafting_graph_core::GraphError`
 
 Structural or algorithm error returned through the Grafting graph contract.
@@ -15,6 +20,16 @@ Failure to construct a stable graph identifier.
 ### `pub enum grafting_graph_core::LayoutError`
 
 Invalid input or arithmetic failure from the grouped-grid heuristic.
+
+### `pub enum grafting_graph_core::SurfaceError`
+
+Structural error from surface registration or lookup.
+
+### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self`
+
+### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self`
+
+### `pub fn grafting_graph_core::DeleteOutcome<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::Edge<E>::clone(&self) -> grafting_graph_core::Edge<E>`
 
@@ -57,6 +72,15 @@ Returns the stable identifier text.
 Creates a non-empty identifier without applying product-specific
 normalization rules.
 
+### `pub fn grafting_graph_core::Graph<N, E>::add_edge(&mut self, edge: grafting_graph_core::Edge<E>) -> core::result::Result<(), grafting_graph_core::GraphError>`
+
+Inserts a new edge. Errors if its identity is already used or an
+endpoint is not a node already present in the graph.
+
+### `pub fn grafting_graph_core::Graph<N, E>::add_node(&mut self, node: grafting_graph_core::Node<N>) -> core::result::Result<(), grafting_graph_core::GraphError>`
+
+Inserts a new node. Errors if its identity is already used.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>`
 
 Looks up an edge without exposing the storage engine's index type.
@@ -84,9 +108,28 @@ Looks up a node without exposing the storage engine's index type.
 
 Number of nodes in the graph.
 
+### `pub fn grafting_graph_core::Graph<N, E>::node_mut(&mut self, id: &grafting_graph_core::NodeId) -> core::option::Option<&mut grafting_graph_core::Node<N>>`
+
+Mutable access to a node's payload by stable identity.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
 
 Returns unique predecessor IDs in deterministic identity order.
+
+### `pub fn grafting_graph_core::Graph<N, E>::remove_edge(&mut self, id: &grafting_graph_core::EdgeId) -> core::result::Result<grafting_graph_core::Edge<E>, grafting_graph_core::GraphError>`
+
+Removes an edge by its stable identity, returning its payload.
+
+### `pub fn grafting_graph_core::Graph<N, E>::remove_node(&mut self, id: &grafting_graph_core::NodeId) -> core::result::Result<grafting_graph_core::Node<N>, grafting_graph_core::GraphError>`
+
+Removes a node and every edge incident to it, returning the node's
+payload. Callers needing the deletion-repair cycle rule
+(`ADR-0022`) implement it on top of this and [`successors`]/
+[`predecessors`], called *before* removal, to know which nodes were
+the deleted node's neighbors.
+
+[`successors`]: Self::successors
+[`predecessors`]: Self::predecessors
 
 ### `pub fn grafting_graph_core::Graph<N, E>::snapshot(&self) -> grafting_graph_core::GraphSnapshot<N, E> where N: core::clone::Clone, E: core::clone::Clone`
 
@@ -181,6 +224,11 @@ Width required to contain every position and the configured padding.
 
 Returns the caller-owned payload.
 
+### `pub fn grafting_graph_core::Node<N>::data_mut(&mut self) -> &mut N`
+
+Returns mutable access to the caller-owned payload -- identity and
+graph membership are unaffected, only the payload changes.
+
 ### `pub fn grafting_graph_core::Node<N>::eq(&self, other: &grafting_graph_core::Node<N>) -> bool`
 
 ### `pub fn grafting_graph_core::Node<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
@@ -215,6 +263,213 @@ Total number of cells in the mesh.
 ### `pub fn grafting_graph_core::PrismGridMesh::new(width: u32, height: u32, layers: u32, inputs: grafting_graph_core::FormationInputs) -> Self`
 
 Constructs a grid of width x height x layers cells with 6-slot connectivity.
+
+### `pub fn grafting_graph_core::Surface::cycle(&self) -> &[grafting_graph_core::NodeId]`
+
+Nodes forming this surface's cycle, in mesh-derivation order.
+
+### `pub fn grafting_graph_core::Surface::physical(&self) -> bool`
+
+Whether this surface currently blocks movement or acts as ground --
+nothing about vision or rendering, that belongs to the asset layer
+(`ADR-0022`).
+
+### `pub fn grafting_graph_core::Surface::surface_type(&self) -> &grafting_graph_core::SurfaceType`
+
+This surface's open, extensible type identifier.
+
+### `pub fn grafting_graph_core::SurfaceKey::from_cycle(cycle: &[grafting_graph_core::NodeId]) -> Self`
+
+Derives the order-independent identity of a node cycle.
+
+### `pub fn grafting_graph_core::SurfaceKey::nodes(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>`
+
+Returns the node set this identity is derived from.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::add_surface<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, cycle: alloc::vec::Vec<grafting_graph_core::NodeId>, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceError>`
+
+Registers a new surface from a node cycle, validated against
+`graph`. Errors if the cycle is empty, references a node the graph
+does not have, or duplicates an already-registered node-set
+identity.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::new() -> Self`
+
+Creates an empty registry.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::remove_surface(&mut self, key: &grafting_graph_core::SurfaceKey) -> core::result::Result<grafting_graph_core::Surface, grafting_graph_core::SurfaceError>`
+
+Removes a surface by its node-set identity, returning it.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates a surface's `physical` flag. Touches no node and no cycle,
+for the same reason as [`set_type`](Self::set_type).
+
+### `pub fn grafting_graph_core::SurfaceRegistry::set_type(&mut self, key: &grafting_graph_core::SurfaceKey, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates a surface's type. Touches no node and no cycle -- per
+`ADR-0022`, `type` is not derived from node positions, so this never
+requires a mesh recompute.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::surface(&self, key: &grafting_graph_core::SurfaceKey) -> core::option::Option<&grafting_graph_core::Surface>`
+
+Looks up a surface by its node-set identity.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::surfaces_referencing(&self, node: &grafting_graph_core::NodeId) -> impl core::iter::traits::iterator::Iterator<Item = &grafting_graph_core::SurfaceKey>`
+
+Every surface referencing `node`, in deterministic identity order --
+the instant lookup `ADR-0022`'s `Move` operation needs to know which
+surfaces to recompute, without a full scan.
+
+### `pub fn grafting_graph_core::SurfaceType::as_ref(&self) -> &str`
+
+### `pub fn grafting_graph_core::SurfaceType::as_str(&self) -> &str`
+
+Returns the identifier text.
+
+### `pub fn grafting_graph_core::SurfaceType::new(value: impl core::convert::Into<alloc::string::String>) -> Self`
+
+Creates a surface-type identifier from caller-chosen text.
+
+### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
+
+Deletes a node and repairs the hole it leaves, per `ADR-0022`'s general
+cycle-repair algorithm:
+
+1. Every surface referencing the deleted node is removed.
+2. The node (and its edges) is removed from the graph.
+3. Each connected component of the induced subgraph on the deleted
+   node's former neighbors -- using only edges that already existed
+   directly between them, collapsing any multi-edge between the same
+   pair to one logical adjacency -- is checked: if every node in that
+   component has degree exactly 2 within it (a connected 2-regular
+   subgraph, which is always exactly one simple cycle), a new surface
+   is generated to cap it, via `cap_surface`. A component that is not a
+   clean cycle (a branch, an open path) is left as an accepted hole --
+   not an error, and not searched for a sub-cycle within it (confirmed
+   scope with the repository owner: no general cycle search inside an
+   irregular component).
+
+`cap_surface` receives each found cycle's nodes, in traversal order,
+and returns the `(SurfaceType, physical)` the new capping surface
+should have -- this crate does not decide domain semantics.
+
+Every candidate capping surface is checked against `surfaces` for a
+node-set collision with an already-registered, unrelated surface
+*before* anything is mutated, so a collision fails the whole operation
+atomically rather than leaving the node removed with only some of its
+capping surfaces registered.
+
+### `pub fn grafting_graph_core::duplicate_surface<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, duplicate: grafting_graph_core::DuplicateSpec<N, E>) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+
+Duplicates a surface, per `ADR-0022`'s `Duplicate` ("only a whole
+surface... can be duplicated. A single node alone carries no usable
+information"). This crate cannot invent new `NodeId`/`EdgeId` strings or
+domain payloads, so `duplicate` supplies the new nodes explicitly; the
+connecting edges are generated automatically as a closed ring over
+`duplicate.nodes` in order (matching `Surface`'s own cycle shape), from
+the `(EdgeId, E)` pairs `duplicate.ring_edges` supplies -- one entry per
+node, not an arbitrary edge list, since a cycle's natural connectivity
+is exactly its consecutive pairs.
+
+Every new node and edge id is checked against the graph (and against
+each other, to catch a caller accidentally repeating an id within the
+same call) before anything is added, so a validation failure never
+leaves a partial set of new nodes/edges behind.
+
+### `pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+
+Unites two existing surfaces into one new surface, per `ADR-0022`'s
+`Merge` ("a door's nodes and an adjoining wall's nodes becoming one
+thing"). `merged` is the caller-supplied result -- only the domain
+knows the correct combined boundary, this crate does not compute
+geometry. Both `a` and `b` must already be registered and distinct;
+`merged` is validated (existing nodes, non-empty, no collision with an
+unrelated third surface) *before* `a` and `b` are removed, so a failure
+never leaves either original surface gone without its replacement.
+
+### `pub fn grafting_graph_core::move_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::SurfaceKey>, grafting_graph_core::GraphError>`
+
+Moves a node by applying `update` to its payload, then reports every
+surface that referenced it and therefore needs its mesh recomputed --
+the reactive-redraw behavior `ADR-0022` describes for `Move`. Always
+safe: moving a node never changes graph topology or surface membership,
+so this cannot fail for any reason but the node not existing.
+
+### `pub fn grafting_graph_core::split_surface<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, first: grafting_graph_core::SurfaceSpec, second: grafting_graph_core::SurfaceSpec) -> core::result::Result<(grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceKey), grafting_graph_core::ConstructionError>`
+
+Divides one existing surface into two new surfaces, per `ADR-0022`'s
+`Split` ("cutting a wall into two"). `first` and `second` are the
+caller-supplied halves -- only the domain knows how to cut the
+geometry, this crate does not compute it. `key` must already be
+registered; both halves are validated, and checked not to collide with
+*each other*, before `key` is removed -- a failure never leaves the
+original surface gone with only one (or neither) half registered.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch`
+
+[`duplicate_surface`]'s supplied node or ring-edge count did not
+match what the original surface's cycle requires.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize`
+
+The count actually supplied.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize`
+
+The count the original surface's cycle requires.
+
+### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
+
+The underlying graph query or mutation failed.
+
+### `pub grafting_graph_core::ConstructionError::SameSurface`
+
+[`merge_surfaces`] or [`split_surface`] was asked to treat the same
+node-set identity as two distinct operands.
+
+### `pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey`
+
+The identity that was supplied twice.
+
+### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
+
+The underlying surface registry mutation failed.
+
+### `pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+New surfaces generated to cap a hole -- one per simple cycle found
+among the deleted node's former neighbors, per `ADR-0022`'s general
+cycle-repair algorithm.
+
+### `pub grafting_graph_core::DeleteOutcome::removed_node: grafting_graph_core::Node<N>`
+
+The deleted node's payload.
+
+### `pub grafting_graph_core::DeleteOutcome::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Surfaces removed because their cycle included the deleted node.
+
+### `pub grafting_graph_core::DuplicateSpec::nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+New nodes, one per node in the original surface's cycle, in the
+same order.
+
+### `pub grafting_graph_core::DuplicateSpec::physical: bool`
+
+Whether the new surface blocks movement or acts as ground.
+
+### `pub grafting_graph_core::DuplicateSpec::ring_edges: alloc::vec::Vec<(grafting_graph_core::EdgeId, E)>`
+
+New edge id + payload for each consecutive pair in `nodes`,
+including the wrap-around from the last node back to the first --
+one entry per node, closing `nodes` into a ring mirroring the
+original cycle's shape. Must be the same length as `nodes`.
+
+### `pub grafting_graph_core::DuplicateSpec::surface_type: grafting_graph_core::SurfaceType`
+
+The new surface's type identifier.
 
 ### `pub grafting_graph_core::FormationInputs::deformation_xy: f32`
 
@@ -275,6 +530,14 @@ Edge containing the invalid endpoint.
 ### `pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId`
 
 Target identity that could not be resolved.
+
+### `pub grafting_graph_core::GraphError::UnknownEdge`
+
+A query refers to an edge that is not present.
+
+### `pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId`
+
+Identity that could not be resolved.
 
 ### `pub grafting_graph_core::GraphError::UnknownNode`
 
@@ -377,6 +640,46 @@ Flat list of 3D vertex positions [x, y, z] for corners across all layers.
 
 Width of the grid in cells.
 
+### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
+
+Two surfaces cannot share the exact same node-set identity.
+
+### `pub grafting_graph_core::SurfaceError::DuplicateSurface::key: grafting_graph_core::SurfaceKey`
+
+Identity that already had a registered surface.
+
+### `pub grafting_graph_core::SurfaceError::EmptyCycle`
+
+A cycle must reference at least one node.
+
+### `pub grafting_graph_core::SurfaceError::UnknownNode`
+
+A cycle referenced a node that is not present in the graph.
+
+### `pub grafting_graph_core::SurfaceError::UnknownNode::id: grafting_graph_core::NodeId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::SurfaceError::UnknownSurface`
+
+A query or update referenced a surface that is not registered.
+
+### `pub grafting_graph_core::SurfaceError::UnknownSurface::key: grafting_graph_core::SurfaceKey`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>`
+
+Nodes forming the new surface's cycle, in mesh-derivation order.
+
+### `pub grafting_graph_core::SurfaceSpec::physical: bool`
+
+Whether the new surface blocks movement or acts as ground.
+
+### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
+
+The new surface's open, extensible type identifier.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -385,6 +688,14 @@ The public contract deliberately exposes only Grafting types. [`Graph`]
 currently uses `petgraph` privately, but consumers cannot depend on that
 implementation detail. Presentation data remains in callers; calculation
 inputs belong in node or edge payloads and cross explicit contracts.
+
+### `pub struct grafting_graph_core::DeleteOutcome<N>`
+
+Outcome of [`delete_node`].
+
+### `pub struct grafting_graph_core::DuplicateSpec<N, E>`
+
+New nodes and connecting edges for [`duplicate_surface`].
 
 ### `pub struct grafting_graph_core::Edge<E>`
 
@@ -431,6 +742,44 @@ Stable Grafting node identity.
 A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 (4 lateral, 1 bottom, 1 top), positions, and deformation inputs.
 
+### `pub struct grafting_graph_core::Surface`
+
+The semantic record `ADR-0022` defines: `{ type, physical, mesh }` minus
+`mesh`, which is derived on demand by the caller from [`cycle`](Self::cycle)
+and a [`Graph`]'s current node positions, not stored here.
+
+### `pub struct grafting_graph_core::SurfaceKey(_)`
+
+A surface's identity: the unordered set of nodes forming its cycle.
+
+`ADR-0022`: "referencing a surface by its node-set identity, never
+restating its geometry." Two surfaces cannot coexist on the exact same
+node set -- a real, named limitation of this v1, not an oversight; a
+second surface on the same footprint (e.g. a floor and a ceiling
+sharing one boundary) needs at least one differing node today.
+
+### `pub struct grafting_graph_core::SurfaceRegistry`
+
+Tracks every construction [`Surface`] and the reverse node -> surfaces
+index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
+which surfaces reference a given node, without a full scan.
+
+### `pub struct grafting_graph_core::SurfaceSpec`
+
+A surface's non-identity attributes, for operations that register a new
+surface as one step of a larger operation ([`merge_surfaces`],
+[`split_surface`]) rather than standalone via
+[`SurfaceRegistry::add_surface`].
+
+### `pub struct grafting_graph_core::SurfaceType(_)`
+
+Open, extensible surface-type identifier.
+
+Deliberately not a fixed/closed enum -- the same mistake already
+corrected for `map_state.fbs`'s `BoundaryKind` (`ADR-0022`,
+`DEC-052`/`ADR-0014`'s "no product concept hardcoded into
+infrastructure").
+
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
 Minimal read/traversal capability graph algorithms need, independent of
@@ -440,10 +789,11 @@ Deliberately narrow: "given a node, its neighbors," per this crate's own
 scoping (`docs/architecture/vtt-roadmap.md` E1.2) -- not a general graph
 interface. [`Graph::topological_order`] and [`Graph::snapshot`] stay
 inherent-only, since a construction-focused backend was explicitly
-scoped to not need them. Mutation capability is deliberately not part of
-this trait: [`Graph`] has none today, and splitting read/traversal from
-mutation only matters once a mutating operation (e.g. a future
-`apply_cell_patch`) actually exists to split against.
+scoped to not need them. Mutation (`add_node`/`remove_node`/`add_edge`/
+`remove_edge`/`node_mut`) stays inherent-only too, deliberately: there is
+still exactly one backend, so splitting it into its own trait has no
+second implementor to justify it yet -- add that split when (not before)
+a second backend actually needs it.
 
 Exists so a future storage backend (e.g. a deterministic backend, if
 multiplayer replay becomes a real requirement) is an additional
