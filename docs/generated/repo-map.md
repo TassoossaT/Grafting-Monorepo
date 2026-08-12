@@ -7,14 +7,15 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
-| `discretize` | library | `libs/domains/procgen/discretize` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `discretize` | library | `libs/domains/procgen/discretize` | `build`, `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `engine-compute-api` | library | `libs/engine/compute-api` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-compute-cpu` | library | `libs/engine/compute-cpu` | `check`, `docs-check`, `docs-generate`, `test` |
 | `engine-domain-core` | library | `libs/engine/domain-core` | `check`, `docs-check`, `docs-generate`, `generate`, `test` |
-| `generation-wasm` | library | `libs/domains/procgen/generation-wasm` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `generation-wasm` | library | `libs/domains/procgen/generation-wasm` | `build`, `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
 | `graph-core` | library | `libs/graph/core` | `api-check`, `check`, `docs-check`, `docs-generate`, `format`, `graph-ir-check`, `lint`, `test` |
 | `isekai-capi-bridge` | library | `libs/isekai/capi-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `test` |
-| `isekai-wasm-bridge` | library | `libs/isekai/wasm-bridge` | `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `isekai-wasm-bridge` | library | `libs/isekai/wasm-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
+| `tileset-wfc` | library | `libs/domains/procgen/tileset-wfc` | `build`, `check`, `check-no-backend`, `docs-check`, `docs-generate`, `postinstall`, `test`, `test-no-backend` |
 
 ## C# / .NET
 
@@ -30,13 +31,15 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | `architecture-studio` | application | `apps/architecture-studio` | `build`, `build-storybook`, `check`, `dev`, `docs-check`, `docs-generate`, `stories-check`, `stories-generate`, `storybook`, `test` |
 | `ia-graft` | application | `tools/ia-graft` | `ia-graft`, `test`, `typecheck` |
 | `isekai-web-client` | library | `packages/isekai-web-client` | `check`, `docs-check`, `docs-generate`, `test` |
+| `render-3d` | library | `packages/render-3d` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `test`, `watch` |
 | `ui` | library | `packages/ui` | `api-check`, `build`, `check`, `docs-check`, `docs-generate`, `docs-mesh-export`, `test`, `watch` |
+| `vtt` | application | `apps/vtt` | `build`, `check`, `dev`, `docs-check`, `docs-generate`, `test` |
 | `x6-canvas` | library | `packages/x6-canvas` | `build`, `check`, `test` |
 
 ## Other
 
 | Project | Type | Root | Targets |
 | --- | --- | --- | --- |
-| `grafting` | library | `.` | `ai-audit`, `ai-check`, `docs-api-rust-check`, `docs-api-rust-generate`, `docs-api-ts-check`, `docs-api-ts-generate`, `docs-check`, `graph-check`, `graph-extract`, `graph-extract-check`, `graph-generate`, `graph-manifest`, `graph-manifest-check`, `graph-map`, `graph-map-check`, `graph-v1-check`, `graph-v1-test`, `toolchains-check` |
+| `grafting` | library | `.` | `ai-audit`, `ai-check`, `build`, `docs-api-rust-check`, `docs-api-rust-generate`, `docs-api-ts-check`, `docs-api-ts-generate`, `docs-check`, `graph-check`, `graph-extract`, `graph-extract-check`, `graph-generate`, `graph-manifest`, `graph-manifest-check`, `graph-map`, `graph-map-check`, `graph-v1-check`, `graph-v1-test`, `install`, `toolchains-check`, `update` |
 
-_16 project(s) total._
+_19 project(s) total._

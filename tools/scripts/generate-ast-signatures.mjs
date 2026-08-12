@@ -60,7 +60,7 @@ function extractTsSignatures(content) {
       }
     } else if (inBlock) {
       if (currentBlock.length < 8) {
-        currentBlock.push("  " + trimmed);
+        currentBlock.push(trimmed.length > 0 ? "  " + trimmed : "");
       }
       if (trimmed === "}" || trimmed.endsWith("};") || trimmed.endsWith(");")) {
         signatures.push(currentBlock.join("\n"));

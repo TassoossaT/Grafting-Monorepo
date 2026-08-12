@@ -48,6 +48,74 @@ pub fn validate_structure(&self) -> Result<(), CommandError>
 // src/event.rs
 pub enum DomainEvent
 
+// src/generated/command_generated.rs
+pub mod grafting
+pub mod contracts
+pub const ENUM_MIN_COMMAND_PAYLOAD: u8 = 0;
+pub const ENUM_MAX_COMMAND_PAYLOAD: u8 = 4;
+pub const ENUM_VALUES_COMMAND_PAYLOAD: [CommandPayload; 5] = [
+pub struct CommandPayload(pub u8);
+pub const NONE: Self = Self(0);
+pub const Increment: Self = Self(1);
+pub const Decrement: Self = Self(2);
+pub const Reset: Self = Self(3);
+pub const RollAndAdd: Self = Self(4);
+pub const ENUM_MIN: u8 = 0;
+pub const ENUM_MAX: u8 = 4;
+pub const ENUM_VALUES: &'static [Self] = &[
+pub fn variant_name(self) -> Option<&'static str>
+
+// src/generated/domain_event_generated.rs
+pub mod grafting
+pub mod contracts
+pub const ENUM_MIN_DOMAIN_EVENT_PAYLOAD: u8 = 0;
+pub const ENUM_MAX_DOMAIN_EVENT_PAYLOAD: u8 = 4;
+pub const ENUM_VALUES_DOMAIN_EVENT_PAYLOAD: [DomainEventPayload; 5] = [
+pub struct DomainEventPayload(pub u8);
+pub const NONE: Self = Self(0);
+pub const Incremented: Self = Self(1);
+pub const Decremented: Self = Self(2);
+pub const WasReset: Self = Self(3);
+pub const RolledAndAdded: Self = Self(4);
+pub const ENUM_MIN: u8 = 0;
+pub const ENUM_MAX: u8 = 4;
+pub const ENUM_VALUES: &'static [Self] = &[
+pub fn variant_name(self) -> Option<&'static str>
+
+// src/generated/map_state_generated.rs
+pub mod grafting
+pub mod contracts
+pub const ENUM_MIN_BOUNDARY_KIND: i8 = 0;
+pub const ENUM_MAX_BOUNDARY_KIND: i8 = 3;
+pub const ENUM_VALUES_BOUNDARY_KIND: [BoundaryKind; 4] = [
+pub struct BoundaryKind(pub i8);
+pub const Wall: Self = Self(0);
+pub const Door: Self = Self(1);
+pub const Window: Self = Self(2);
+pub const Opening: Self = Self(3);
+pub const ENUM_MIN: i8 = 0;
+pub const ENUM_MAX: i8 = 3;
+pub const ENUM_VALUES: &'static [Self] = &[
+pub fn variant_name(self) -> Option<&'static str>
+pub enum Vec3Offset
+
+// src/generated/snapshot_generated.rs
+pub mod grafting
+pub mod contracts
+pub enum StateTableOffset
+pub struct StateTable<'a>
+pub const VT_VALUE: ::flatbuffers::VOffsetT = 4;
+pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+pub fn value(&self) -> i64
+pub struct StateTableArgs
+pub struct StateTableBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a>
+pub fn add_value(&mut self, value: i64)
+pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> StateTableBuilder<'a, 'b, A>
+pub fn finish(self) -> ::flatbuffers::WIPOffset<StateTable<'a>>
+pub enum SnapshotMessageOffset
+pub struct SnapshotMessage<'a>
+pub const VT_STATE: ::flatbuffers::VOffsetT = 4;
+
 // src/hash.rs
 pub struct StateHash(pub [u8; 32]);
 pub fn to_hex(&self) -> String
@@ -115,6 +183,15 @@ pub fn variant_name(self) -> Option<&'static str>
 pub const MAX_SCALE: f64 = 0.5;
 pub const MAX_CELLS: u64 = 4096 * 4096;
 pub fn generate_heightmap(
+pub struct WasmPrismMesh
+pub fn positions(&self) -> Vec<f32>
+pub fn cell_corners(&self) -> Vec<u32>
+pub fn cell_neighbors(&self) -> Vec<u32>
+pub fn cell_count(&self) -> u32
+pub fn width(&self) -> u32
+pub fn height(&self) -> u32
+pub fn layers(&self) -> u32
+pub fn generate_prism_mesh(
 ```
 
 ### `graph-core` (`libs/graph/core`)
@@ -141,6 +218,13 @@ pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::Gra
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
 pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub grafting_graph_core::GraphPrimitive::Boundary = 1
+pub grafting_graph_core::GraphPrimitive::Passage = 0
+pub grafting_graph_core::GraphPrimitive::Surface = 2
+pub fn grafting_graph_core::GraphPrimitive::clone(&self) -> grafting_graph_core::GraphPrimitive
+pub fn grafting_graph_core::GraphPrimitive::eq(&self, other: &grafting_graph_core::GraphPrimitive) -> bool
+pub fn grafting_graph_core::GraphPrimitive::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::GraphPrimitive::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
 pub enum grafting_graph_core::IdentifierError
 pub grafting_graph_core::IdentifierError::EmptyEdgeId
 pub grafting_graph_core::IdentifierError::EmptyNodeId
@@ -149,13 +233,6 @@ pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_co
 pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::LayoutError
-pub grafting_graph_core::LayoutError::DimensionsOverflow
-pub grafting_graph_core::LayoutError::InvalidOption
-pub grafting_graph_core::LayoutError::InvalidOption::name: &'static str
-pub grafting_graph_core::LayoutError::MultipleGroups
-pub grafting_graph_core::LayoutError::MultipleGroups::first: grafting_graph_core::NodeId
-pub grafting_graph_core::LayoutError::MultipleGroups::node: grafting_graph_core::NodeId
-pub grafting_graph_core::LayoutError::MultipleGroups::second: grafting_graph_core::NodeId
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -259,6 +336,98 @@ pub mod engine;
 pub mod handle;
 pub mod job;
 pub fn debug_memory() -> JsValue
+```
+
+### `tileset-wfc` (`libs/domains/procgen/tileset-wfc`)
+
+```rust
+// src/backend/mod.rs
+pub mod wfc;
+
+// src/backend/wfc.rs
+pub struct WaveFunctionCollapseSolver;
+
+// src/graph.rs
+pub type CellId = usize;
+pub type FaceId = usize;
+pub struct Link
+pub struct CellGraph
+pub enum GraphError
+pub fn new(
+pub fn cell_count(&self) -> usize
+pub fn faces_per_cell(&self) -> usize
+pub fn links(&self) -> &[Link]
+
+// src/lib.rs
+pub mod backend;
+pub mod graph;
+pub mod problem;
+pub mod rotation;
+pub mod solver;
+pub mod tileset;
+pub mod wasm;
+
+// src/problem.rs
+pub struct LinkConstraint
+pub struct Problem
+pub enum ProblemError
+pub fn compile(
+pub fn cell_count(&self) -> usize
+pub fn module_count(&self) -> usize
+pub fn candidates(&self, cell: CellId) -> &[ModuleId]
+pub fn weights(&self) -> &[f32]
+pub fn names(&self) -> &[String]
+pub fn origins(&self) -> &[ModuleOrigin]
+pub fn links(&self) -> &[LinkConstraint]
+
+// src/rotation.rs
+pub struct Rotation
+pub struct ModuleOrigin
+pub enum RotationError
+pub fn none() -> Self
+pub fn cycle(faces: impl IntoIterator<Item = FaceId>) -> Result<Self, RotationError>
+pub fn order(&self) -> usize
+pub fn faces(&self) -> &[FaceId]
+pub fn apply(&self, sockets: &[SocketId], turns: usize) -> Option<Vec<SocketId>>
+pub fn expand(modules: &[Module], rotation: &Rotation) -> (Vec<Module>, Vec<ModuleOrigin>)
+pub fn origin_of(origins: &[ModuleOrigin], module: ModuleId) -> Option<ModuleOrigin>
+
+// src/solver.rs
+pub struct Assignment
+pub fn new(modules: Vec<ModuleId>) -> Self
+pub fn module(&self, cell: CellId) -> Option<ModuleId>
+pub fn modules(&self) -> &[ModuleId]
+pub fn violations(&self, problem: &Problem) -> Vec<Violation>
+pub enum Violation
+pub enum SolveError
+pub trait ConstraintSolver
+pub fn solve_verified<S: ConstraintSolver>(
+
+// src/tileset.rs
+pub type ModuleId = usize;
+pub type SocketId = usize;
+pub struct Module
+pub struct Tileset
+pub enum TilesetError
+pub fn new(
+pub fn rotated(
+pub fn modules(&self) -> &[Module]
+pub fn origin(&self, module: ModuleId) -> Option<ModuleOrigin>
+pub fn faces_per_cell(&self) -> usize
+pub fn sockets_meet(&self, left: SocketId, right: SocketId) -> bool
+pub fn modules_meet(
+
+// src/wasm.rs
+pub const LINK_STRIDE: usize = 4;
+pub const COMPATIBLE_STRIDE: usize = 2;
+pub const PINNED_STRIDE: usize = 2;
+pub struct WfcSolution
+pub fn modules(&self) -> Vec<u32>
+pub fn sources(&self) -> Vec<u32>
+pub fn turns(&self) -> Vec<u32>
+pub fn variant_count(&self) -> u32
+pub fn solve_tileset(
+pub fn solve_inner(
 ```
 
 ## TypeScript Applications & Packages
@@ -639,7 +808,7 @@ export type BenchEvaluator = (
   inputs: Readonly<Record<string, BenchValue>>,
   params: BenchParamValues,
   ) => BenchValue;
-  
+
   const asNumber = (value: unknown): number => (typeof value === "number" ? value : Number(value));
 export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, BenchEvaluator> {
   const evaluators = new Map<string, BenchEvaluator>();
@@ -959,7 +1128,7 @@ export const DEMO_LINKS: Readonly<Record<string, string>> = {
   "stacked-terrain": "/lab/stacked-terrain",
   "terrain-transitions": "/lab/terrain-transitions",
   "terrain-tileset": "/lab/terrain-tileset",
-  };
+  "mesh-procedural": "/lab/mesh-procedural",
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {
   adopted: "success",
   decided: "success",
@@ -1130,7 +1299,7 @@ export function pairTriangles(mesh: FaceMesh, random: Random): FaceMesh {
 export function ortho(mesh: FaceMesh): QuadMesh {
   const vertices: Vec2[] = [...mesh.vertices];
   const quads: Quad[] = [];
-  
+
   for (const face of mesh.faces) {
   const points = face.map((vertex) => mesh.vertices[vertex]).filter(isVec2);
 export function weld(mesh: QuadMesh, epsilon = 1e-6): QuadMesh {
@@ -1234,7 +1403,7 @@ export interface Heightfield {
 export function sampleHeightfield(field: Heightfield, u: number, v: number): number {
   const { width, height, values } = field;
   if (width < 1 || height < 1) return 0;
-  
+
   const x = clamp(u, 0, 1) * (width - 1);
 export interface CellCentres {
   readonly centres: readonly Vec2[];
@@ -1246,7 +1415,7 @@ export function cellCentres(mesh: QuadMesh): CellCentres {
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  
+
   const centres = mesh.quads.map((quad) => {
   let x = 0;
 export function sampleCellValues(mesh: QuadMesh, field: Heightfield): Float32Array {
@@ -1274,7 +1443,7 @@ export function buildStackedTerrain(
   ): StackedTerrain {
   const levelHeight = options.levelHeight ?? 0.25;
   const baseHeight = options.baseHeight ?? 0;
-  
+
 export function edgeNeighbours(mesh: QuadMesh): Map<string, number[]> {
   const map = new Map<string, number[]>();
 
@@ -1396,11 +1565,63 @@ export function evaluateHook(args: {
   agent: string;
   hookInput: HookInput;
   }): Promise<GuardDecision>;
-  
+
 export function normalizeRepositoryPath(root: string, candidate: unknown): string | null;
 export function isHarnessManagedPath(candidate: unknown): boolean;
 export function isReadOnlyInspectionCommand(command: unknown): boolean;
 export function evaluateAgentGitCommand(command: unknown): GuardDecision;
+
+// src/delegate-commands.ts
+export interface DelegateRunInput {
+  prompt: string;
+  effort?: Effort;
+  /**
+  * One or more paths whose content is appended to the prompt, each
+  * relative to the MAIN checkout root (or absolute-but-inside-it) --
+  * `bin.ts` always resolves `repoRoot` to the main checkout, never a task
+  * worktree, even when this command runs from inside one. Combined
+
+// src/delegate-edit-commands.ts
+export interface DelegateEditInput {
+  taskId: string;
+  prompt: string;
+  effort?: Effort;
+  /** Path prefixes the edit is allowed to touch (e.g. ["docs/"]). Any changed file outside this is reverted, not silently kept. */
+  scope?: string[];
+  /**
+  * Extra grounding prepended ON TOP OF the automatic `.ai/INDEX.md`
+
+// src/delegate-profiles.ts
+export type Effort = "low" | "medium" | "high";
+export interface DelegateCallOptions {
+  outputFormat: "text" | "json";
+  /** Pre-stringified JSON schema, when structured output was requested. */
+  jsonSchema?: string;
+  }
+export interface DelegateProfile {
+  /** Human-readable identity of the backing model, surfaced in results/errors. */
+  label: string;
+  /** Binary invoked via execFile -- args are always passed as an array, never shell-interpolated. */
+  cli: string;
+  /** Builds argv for a single headless prompt call (`delegate run`, text/JSON out, no filesystem writes). */
+  buildArgs: (prompt: string, options: DelegateCallOptions) => string[];
+  /**
+export const DELEGATE_PROFILES: Record<Effort, DelegateProfile> = {
+  low: agyProfile("gemini-3.6-flash-low"),
+  medium: agyProfile("gemini-3.6-flash-medium"),
+  high: agyProfile("gemini-3.6-flash-high"),
+  };
+export const EFFORTS = Object.keys(DELEGATE_PROFILES) as Effort[];
+
+// src/delegate-research-commands.ts
+export interface DelegateResearchInput {
+  taskId: string;
+  /** What to research. Kept separate from a free-form `prompt` on purpose -- this command is deliberately narrower than `delegate edit`. */
+  topic: string;
+  /** Where to save the researched Markdown, e.g. "docs/research/foo.md". Must end in .md. */
+  outputFile: string;
+  effort?: Effort;
+  }
 
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
@@ -1437,7 +1658,7 @@ export class GitWorktreeSession {
   public readonly worktreePath: string;
   public readonly branchName: string;
   public readonly nodeModulesLinked: boolean;
-  
+
   private constructor(repoPath: string, worktreePath: string, branchName: string, nodeModulesLinked: boolean) {
   this.repoPath = repoPath;
 export class GitClient {
@@ -1445,7 +1666,7 @@ export class GitClient {
   * @param repoPath The absolute path to the root of the Git repository.
   */
   private readonly repoPath: string;
-  
+
   constructor(repoPath: string) {
   if (!path.isAbsolute(repoPath)) {
 
@@ -1501,6 +1722,234 @@ export interface TaskContextInput {
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
+// src/generated/grafting/contracts/boundary-kind.ts
+export enum BoundaryKind {
+  Wall = 0,
+  Door = 1,
+  Window = 2,
+  Opening = 3
+  }
+
+// src/generated/grafting/contracts/boundary-patch.ts
+export class BoundaryPatch {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):BoundaryPatch {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/boundary-segment.ts
+export class BoundarySegment {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):BoundarySegment {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/command-message.ts
+export class CommandMessage {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):CommandMessage {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/command-payload.ts
+export enum CommandPayload {
+  NONE = 0,
+  Increment = 1,
+  Decrement = 2,
+  Reset = 3,
+  RollAndAdd = 4
+  }
+export function unionToCommandPayload(
+  type: CommandPayload,
+  accessor: (obj:Decrement|Increment|Reset|RollAndAdd) => Decrement|Increment|Reset|RollAndAdd|null
+  ): Decrement|Increment|Reset|RollAndAdd|null {
+  switch(CommandPayload[type]) {
+  case 'NONE': return null;
+  case 'Increment': return accessor(new Increment())! as Increment;
+  case 'Decrement': return accessor(new Decrement())! as Decrement;
+export function unionListToCommandPayload(
+  type: CommandPayload,
+  accessor: (index: number, obj:Decrement|Increment|Reset|RollAndAdd) => Decrement|Increment|Reset|RollAndAdd|null,
+  index: number
+  ): Decrement|Increment|Reset|RollAndAdd|null {
+  switch(CommandPayload[type]) {
+  case 'NONE': return null;
+  case 'Increment': return accessor(index, new Increment())! as Increment;
+
+// src/generated/grafting/contracts/decrement.ts
+export class Decrement {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Decrement {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/decremented.ts
+export class Decremented {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Decremented {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/domain-event-message.ts
+export class DomainEventMessage {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):DomainEventMessage {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/domain-event-payload.ts
+export enum DomainEventPayload {
+  NONE = 0,
+  Incremented = 1,
+  Decremented = 2,
+  WasReset = 3,
+  RolledAndAdded = 4
+  }
+export function unionToDomainEventPayload(
+  type: DomainEventPayload,
+  accessor: (obj:Decremented|Incremented|RolledAndAdded|WasReset) => Decremented|Incremented|RolledAndAdded|WasReset|null
+  ): Decremented|Incremented|RolledAndAdded|WasReset|null {
+  switch(DomainEventPayload[type]) {
+  case 'NONE': return null;
+  case 'Incremented': return accessor(new Incremented())! as Incremented;
+  case 'Decremented': return accessor(new Decremented())! as Decremented;
+export function unionListToDomainEventPayload(
+  type: DomainEventPayload,
+  accessor: (index: number, obj:Decremented|Incremented|RolledAndAdded|WasReset) => Decremented|Incremented|RolledAndAdded|WasReset|null,
+  index: number
+  ): Decremented|Incremented|RolledAndAdded|WasReset|null {
+  switch(DomainEventPayload[type]) {
+  case 'NONE': return null;
+  case 'Incremented': return accessor(index, new Incremented())! as Incremented;
+
+// src/generated/grafting/contracts/increment.ts
+export class Increment {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Increment {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/incremented.ts
+export class Incremented {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Incremented {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/map-state-message.ts
+export class MapStateMessage {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):MapStateMessage {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/prism-cell-assignment.ts
+export class PrismCellAssignment {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellAssignment {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/reset.ts
+export class Reset {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Reset {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/roll-and-add.ts
+export class RollAndAdd {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):RollAndAdd {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/rolled-and-added.ts
+export class RolledAndAdded {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):RolledAndAdded {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/snapshot-message.ts
+export class SnapshotMessage {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):SnapshotMessage {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/state-table.ts
+export class StateTable {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):StateTable {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/vec3.ts
+export class Vec3 {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3 {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
+// src/generated/grafting/contracts/was-reset.ts
+export class WasReset {
+  bb: flatbuffers.ByteBuffer|null = null;
+  bb_pos = 0;
+  __init(i:number, bb:flatbuffers.ByteBuffer):WasReset {
+  this.bb_pos = i;
+  this.bb = bb;
+  return this;
+  }
+
 // src/index.ts
 export interface IncrementResult {
   newValue: bigint;
@@ -1520,6 +1969,435 @@ export class IsekaiEngine {
 // src/protocol.ts
 export type WorkerRequest =
 export type WorkerResponse =
+```
+
+### `render-3d` (`packages/render-3d`)
+
+```ts
+// src/animation/create-animator.ts
+export function createAnimator(scene: Scene): Animator {
+  const running = new Map<TrackId, TrackState>();
+
+// src/animation/easing.ts
+export const easings: Readonly<Record<"linear" | "easeIn" | "easeOut" | "easeInOut", Easing>> =
+
+// src/backend/contract.ts
+export interface BackendSurface {
+  /** Resizes the presentation target. Cheap; never rebuilds scene content. */
+  resize(width: number, height: number): void;
+  /** Encodes the last drawn content. */
+  toDataURL(mimeType: string): string;
+  /** Detaches the target from the document. */
+  destroy(): void;
+  }
+export interface RenderBackend {
+  /** Whether the graphics context is currently usable. */
+  readonly available: boolean;
+
+  /** Replaces scene lighting. */
+  setLights(lights: readonly LightDescriptor[]): void;
+
+  /** Declares or updates a draw group. */
+
+// src/backend/three/build-visual.ts
+export interface BuiltVisual {
+  readonly object: THREE.Object3D;
+  dispose(): void;
+  }
+export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
+  const geometry = buildGeometry(descriptor.geometry);
+export function applyTransform(object: THREE.Object3D, transform: Transform | undefined): void {
+  const position = transform?.position;
+  object.position.set(position?.x ?? 0, position?.y ?? 0, position?.z ?? 0);
+export function toVec3(vector: THREE.Vector3): Vec3 {
+  return { x: vector.x, y: vector.y, z: vector.z };
+
+// src/backend/three/create-backend.ts
+export interface ThreeBackendOptions {
+  readonly maxPixelRatio?: number;
+  }
+export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBackend {
+  const renderScene = new THREE.Scene();
+
+// src/camera/orbit.ts
+export interface OrbitState {
+  /** Rotation about the vertical axis, in radians. */
+  readonly yaw: number;
+  /** Elevation above the horizon, in radians. */
+  readonly pitch: number;
+  /** Distance from the target, in world units. */
+  readonly distance: number;
+  /** The point orbited. */
+export const PITCH_LIMIT = Math.PI / 2 - 0.05;
+export const DISTANCE_RANGE = { min: 0.5, max: 60 } as const;
+export function orbitPosition(state: OrbitState): Vec3 {
+  const pitch = clamp(state.pitch, -PITCH_LIMIT, PITCH_LIMIT);
+export function orbitFromCamera(position: Vec3, target: Vec3): OrbitState {
+  const dx = position.x - target.x;
+  const dy = position.y - target.y;
+  const dz = position.z - target.z;
+  const distance = Math.hypot(dx, dy, dz);
+export function orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel = 0.008): OrbitState {
+  return {
+  ...state,
+  yaw: state.yaw - dx * radiansPerPixel,
+  // Dragging up should tip the camera up, and screen y grows downward.
+  pitch: clamp(state.pitch + dy * radiansPerPixel, -PITCH_LIMIT, PITCH_LIMIT),
+  };
+export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0015): OrbitState {
+  return {
+  ...state,
+  distance: clamp(
+  state.distance * factorPerNotch ** delta,
+  DISTANCE_RANGE.min,
+  DISTANCE_RANGE.max,
+  ),
+export interface OrbitableView {
+  setCamera(camera: {
+  projection: "perspective";
+  fov?: number;
+  position: Vec3;
+  target: Vec3;
+  near?: number;
+  far?: number;
+export interface OrbitOptions {
+  readonly fov?: number;
+  readonly near?: number;
+  readonly far?: number;
+  /** Called after every change, so the caller can redraw. */
+  readonly onChange?: (state: OrbitState) => void;
+  /**
+  * Whether these gestures belong to this view alone.
+export function attachOrbit(
+  element: HTMLElement,
+  view: OrbitableView,
+  initial: OrbitState,
+  options: OrbitOptions = {},
+  ): () => void {
+  let state = initial;
+  let dragging: number | null = null;
+
+// src/clock/create-clock.ts
+export interface ClockOptions {
+  /** Whether simulation time starts advancing. Defaults to `true`. */
+  readonly autoplay?: boolean;
+  /** Initial simulation-time multiplier. Defaults to `1`. */
+  readonly rate?: number;
+  }
+export function createClock(options: ClockOptions = {}): Clock {
+  let mode: ClockMode = options.autoplay === false ? "paused" : "running";
+  let rate = normalizeRate(options.rate ?? 1);
+
+// src/contracts/animation.ts
+export type TrackId = string;
+export type Easing = (t: number) => number;
+export interface AnimationTrack {
+  /** Caller-chosen identity. Playing the same id again replaces the running track. */
+  readonly id: TrackId;
+  /** Simulated milliseconds from start to completion. Must be greater than zero. */
+  readonly durationMs: number;
+  /** Whether the track restarts on completion instead of finishing. Defaults to `false`. */
+  readonly loop?: boolean;
+  /** Applied to progress before {@link AnimationTrack.apply}. Linear when omitted. */
+export interface RunningTrack {
+  /** Which track this reports on. */
+  readonly id: TrackId;
+  /** Simulated milliseconds elapsed within the track. */
+  readonly elapsedMs: number;
+  /** Linear progress in `0..1`, before easing. */
+  readonly progress: number;
+  }
+export interface Animator {
+  /**
+  * Starts a track, replacing any running track with the same id.
+  *
+  * Replacement rather than stacking is deliberate: two tracks writing the
+  * same property is a bug that is very hard to see and trivial to cause.
+  */
+  play(track: AnimationTrack): void;
+
+// src/contracts/clock.ts
+export type ClockMode =
+export interface ClockTick {
+  /** Monotonic frame counter, incremented once per {@link Clock.sample}. */
+  readonly frame: number;
+  /** Wall-clock milliseconds since the clock was created. Advances while paused. */
+  readonly realElapsed: number;
+  /** Wall-clock milliseconds since the previous sample. Advances while paused. */
+  readonly realDelta: number;
+  /** Simulated milliseconds since the clock was created. Frozen while paused. */
+export interface Clock {
+  /** Current mode. */
+  readonly mode: ClockMode;
+  /** Simulation-time multiplier while running. `1` is real time; `0.25` is quarter speed. */
+  readonly rate: number;
+  /** The most recent tick, or the zero tick before the first sample. */
+  readonly last: ClockTick;
+
+
+// src/contracts/engine.ts
+export type LightDescriptor =
+export interface FrameReport {
+  /** The clock reading this frame ran at. */
+  readonly tick: ClockTick;
+  /** Views actually redrawn this frame. */
+  readonly viewsDrawn: number;
+  /** Views skipped because nothing they draw had changed. */
+  readonly viewsSkipped: number;
+  /** Item visuals rebuilt this frame. */
+export type FrameObserver = (report: FrameReport) => void;
+export interface EngineOptions {
+  /** Shared visual kinds. A private empty registry is created when omitted. */
+  readonly registry?: VisualRegistry;
+  /** Initial lighting. Unlit materials do not require any. */
+  readonly lights?: readonly LightDescriptor[];
+  /** Device pixel ratio ceiling. Defaults to `2`. */
+  readonly maxPixelRatio?: number;
+  /** Whether the clock starts running. Defaults to `true`; a turn-based caller passes `false`. */
+export interface RenderEngine {
+  /** The mutable world. */
+  readonly scene: Scene;
+  /** The time authority. */
+  readonly clock: Clock;
+  /** Time-driven writers into the scene. */
+  readonly animator: Animator;
+  /** Visual kinds available to this engine's items. */
+
+// src/contracts/scene.ts
+export type ItemId = string;
+export type LayerId = string;
+export type ChangeOrigin =
+export interface LayerDefinition {
+  /** Caller-chosen name, unique within a scene. */
+  readonly id: LayerId;
+  /** Draw order. Lower draws first, so higher values appear on top. */
+  readonly order: number;
+  /** Whether the layer is drawn at all. Defaults to `true`. */
+  readonly visible?: boolean;
+  /** Multiplies every item's opacity in this layer. Defaults to `1`. */
+export interface SceneItem<TParams = unknown> {
+  /** Caller-chosen identity, stable across updates to this item. */
+  readonly id: ItemId;
+  /** The registered visual kind and its parameters. */
+  readonly visual: VisualRef<TParams>;
+  /** Which draw group the item belongs to. */
+  readonly layer: LayerId;
+  /** Placement. Defaults to the identity transform. */
+export type SceneChange =
+export type SceneObserver = (changes: readonly SceneChange[]) => void;
+export interface Scene {
+  /** Declares or replaces a draw group. */
+  defineLayer(layer: LayerDefinition, origin?: ChangeOrigin): void;
+  /** Every declared layer, sorted by draw order. */
+  layers(): readonly LayerDefinition[];
+
+  /** Adds an item, or replaces one with the same id. */
+  put<TParams>(item: SceneItem<TParams>, origin?: ChangeOrigin): void;
+
+// src/contracts/space.ts
+export interface Vec3 {
+  /** Rightward axis. */
+  readonly x: number;
+  /** Upward axis. */
+  readonly y: number;
+  /** Depth axis, toward the viewer. */
+  readonly z: number;
+  }
+export interface Euler {
+  /** Pitch, in radians. */
+  readonly x: number;
+  /** Yaw, in radians. */
+  readonly y: number;
+  /** Roll, in radians. */
+  readonly z: number;
+  }
+export interface Transform {
+  /** Placement in engine space. Defaults to the origin. */
+  readonly position?: Vec3;
+  /** Orientation. Defaults to unrotated. */
+  readonly rotation?: Euler;
+  /** Uniform scale when a number, per-axis when a {@link Vec3}. Defaults to `1`. */
+  readonly scale?: number | Vec3;
+  }
+export const IDENTITY_TRANSFORM: Required<Pick<Transform, "position" | "rotation">> & {
+  readonly scale: number;
+  } = Object.freeze({
+  position: Object.freeze({ x: 0, y: 0, z: 0 }),
+  rotation: Object.freeze({ x: 0, y: 0, z: 0 }),
+  scale: 1,
+  });
+
+// src/contracts/view.ts
+export type ViewId = string;
+export type CameraDescriptor =
+export interface PickResult {
+  /** Which item was hit. */
+  readonly itemId: string;
+  /** The layer that item belongs to. */
+  readonly layer: LayerId;
+  /** World-space intersection point. */
+  readonly point: Vec3;
+  /** Distance from the camera, in world units. */
+export interface ViewOptions {
+  /** Caller-chosen identity. Generated when omitted. */
+  readonly id?: ViewId;
+  /** Element that receives the view's output surface. Its contents are replaced. */
+  readonly target: HTMLElement;
+  /** How this view projects the world. */
+  readonly camera: CameraDescriptor;
+  /**
+export interface View {
+  /** This view's identity, as supplied or generated. */
+  readonly id: ViewId;
+  /** Current width in CSS pixels. */
+  readonly width: number;
+  /** Current height in CSS pixels. */
+  readonly height: number;
+
+
+// src/contracts/visual.ts
+export interface MeshData {
+  /** Flat `xyz` triples, three floats per vertex. */
+  readonly positions: Float32Array;
+  /** Optional flat `xyz` normal triples. Computed from faces when omitted. */
+  readonly normals?: Float32Array;
+  /** Optional flat `uv` pairs, two floats per vertex. */
+  readonly uvs?: Float32Array;
+  /** Optional triangle indices. Positions are read sequentially when omitted. */
+export interface HeightfieldData {
+  /** Sample count along the X axis. */
+  readonly width: number;
+  /** Sample count along the Z axis. */
+  readonly depth: number;
+  /** Row-major elevation samples, `width * depth` of them. */
+  readonly values: Float32Array;
+  /** World-space span of the grid on both axes. Defaults to `width`/`depth`. */
+export type GeometryDescriptor =
+export type TextureSource = ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+export type MaterialDescriptor =
+export interface VisualDescriptor {
+  /** The shape drawn. */
+  readonly geometry: GeometryDescriptor;
+  /** How that shape is drawn. */
+  readonly material: MaterialDescriptor;
+  /**
+  * Whether the item should be considered for pointer picking. Defaults to
+  * `true`. Terrain under a fog layer, or a purely decorative overlay, sets
+export interface VisualDefinition<TParams = unknown> {
+  /** Stable name items reference. Must be unique within a registry. */
+  readonly kind: string;
+  /** Produces the drawable description for a set of parameters. */
+  describe(params: TParams): VisualDescriptor;
+  /**
+  * Optional cheap comparison used to skip rebuilding an unchanged item.
+  *
+export interface VisualRef<TParams = unknown> {
+  /** Name of the registered kind that describes this item. */
+  readonly kind: string;
+  /** Parameters handed to that kind's `describe`. */
+  readonly params: TParams;
+  }
+export interface VisualRegistry {
+  /** Registers a kind. Throws when the name is already taken. */
+  register<TParams>(definition: VisualDefinition<TParams>): void;
+  /** Returns the definition for a kind, or `undefined` when it was never registered. */
+  get(kind: string): VisualDefinition<never> | undefined;
+  /** Every registered kind name, in registration order. */
+  kinds(): readonly string[];
+  }
+
+// src/engine/create-engine.ts
+export function createEngine(options: EngineOptions = {}): RenderEngine {
+  const registry = options.registry ?? createVisualRegistry();
+
+// src/index.ts
+export type { Euler, Transform, Vec3 } from "./contracts/space.js";
+export type { Clock, ClockMode, ClockTick } from "./contracts/clock.js";
+export type { ClockOptions } from "./clock/create-clock.js";
+export type {
+  GeometryDescriptor,
+  HeightfieldData,
+  MaterialDescriptor,
+  MeshData,
+  TextureSource,
+  VisualDefinition,
+  VisualDescriptor,
+export type {
+  ChangeOrigin,
+  ItemId,
+  LayerDefinition,
+  LayerId,
+  Scene,
+  SceneChange,
+  SceneItem,
+export type {
+  AnimationTrack,
+  Animator,
+  Easing,
+  RunningTrack,
+  TrackId,
+  } from "./contracts/animation.js";
+  export { createAnimator } from "./animation/create-animator.js";
+export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
+export type {
+  EngineOptions,
+  FrameObserver,
+  FrameReport,
+  LightDescriptor,
+  RenderEngine,
+  } from "./contracts/engine.js";
+  export { createEngine } from "./engine/create-engine.js";
+export type { Invalidation, InvalidationTracker } from "./invalidation/create-invalidation.js";
+export type { HeightfieldParams } from "./visual/heightfield-visual.js";
+export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
+
+// src/invalidation/create-invalidation.ts
+export interface Invalidation {
+  /** Items whose visual must be rebuilt from its descriptor. */
+  readonly rebuild: ReadonlySet<ItemId>;
+  /** Items that only moved. Placement is reapplied; geometry is left alone. */
+  readonly reposition: ReadonlySet<ItemId>;
+  /** Items whose built visual must be released. */
+  readonly release: ReadonlySet<ItemId>;
+  /** Layers whose contents changed, and therefore the views that draw them. */
+export interface InvalidationTracker {
+  /** Folds a batch of scene changes in. */
+  record(changes: readonly SceneChange[]): void;
+  /** Marks every layer and item dirty. Used when lighting or the registry changes. */
+  invalidateAll(layers: Iterable<LayerId>, items: Iterable<ItemId>): void;
+  /** Returns what accumulated and resets, ready for the next frame. */
+  drain(): Invalidation;
+  /** Whether anything is currently pending. */
+export function createInvalidationTracker(): InvalidationTracker {
+  let rebuild = new Set<ItemId>();
+
+// src/scene/create-scene.ts
+export function createScene(): Scene {
+  const layers = new Map<LayerId, LayerDefinition>();
+
+// src/visual/create-registry.ts
+export function createVisualRegistry(
+  definitions: readonly VisualDefinition<never>[] = [],
+  ): VisualRegistry {
+  const byKind = new Map<string, VisualDefinition<never>>();
+
+// src/visual/heightfield-visual.ts
+export interface HeightfieldParams {
+  /** Sample count along the X axis. */
+  readonly width: number;
+  /** Sample count along the Z axis. */
+  readonly depth: number;
+  /** Row-major elevation samples, `width * depth` of them. */
+  readonly values: Float32Array;
+  /** World-space span of the grid on both axes. Defaults to `20` square. */
+export const heightfieldVisual: VisualDefinition<HeightfieldParams> = {
+  kind: "heightfield",
+
+  describe(params: HeightfieldParams): VisualDescriptor {
+  const size = params.size ?? 20;
+  return {
+  geometry: {
+  shape: "heightfield",
 ```
 
 ### `ui` (`packages/ui`)
@@ -1550,7 +2428,7 @@ export function createGeometryCanvasAdapter(
   ): GeometryCanvas {
   const background = options.backgroundColor ?? 0x0f172a;
   const color = options.meshColor ?? 0x7fa86a;
-  
+
   const registry = createVisualRegistry();
 
 // src/canvas/graph/connection-policy.ts
@@ -1820,7 +2698,7 @@ export type {
   HeightfieldCanvas,
   HeightfieldCanvasOptions,
   } from "./heightfield/contracts.js";
-  
+
   /**
   * Creates a graph canvas from caller-owned presentation data.
   *
@@ -1857,6 +2735,106 @@ export interface UiMountHandle<Props> {
   }
 ```
 
+### `vtt` (`apps/vtt`)
+
+```ts
+// .next/dev/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/dev/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// .next/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
+// src/composition/tabletop/create-tabletop-runtime.ts
+export interface CreateTabletopRuntimeInput {
+  readonly tableId: string;
+  }
+export function createTabletopRuntime(
+  input: CreateTabletopRuntimeInput,
+  ): TabletopRuntime {
+  return new AppTabletopRuntime(input.tableId);
+
+// src/composition/tabletop/index.ts
+export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
+export type {
+  TabletopRuntime,
+  TabletopRuntimeListener,
+  TabletopRuntimeStatus,
+  TabletopSnapshot,
+  } from "./tabletop-runtime.ts";
+
+
+// src/composition/tabletop/tabletop-runtime.ts
+export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
+export interface TabletopSnapshot {
+  readonly revision: number;
+  readonly status: TabletopRuntimeStatus;
+  readonly tableId: string;
+  }
+export type TabletopRuntimeListener = () => void;
+export interface TabletopRuntime {
+  start(): Promise<void>;
+  getSnapshot(): TabletopSnapshot;
+  subscribe(listener: TabletopRuntimeListener): () => void;
+  dispose(): Promise<void>;
+  }
+export class AppTabletopRuntime implements TabletopRuntime {
+  readonly #listeners = new Set<TabletopRuntimeListener>();
+```
+
 ### `x6-canvas` (`packages/x6-canvas`)
 
 ```ts
@@ -1866,7 +2844,7 @@ export function createCanvasController(
   viewport: CanvasViewportOptions = {},
   ): CanvasController {
   let selectedCellId: string | undefined;
-  
+
   const setCellSelection = (cellId: string, selected: boolean) => {
   const cell = graph.getCellById(cellId);
 
@@ -2130,5 +3108,229 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
-_No public signatures exported or discovered._
+```csharp
+// Generated/Grafting/Contracts/BoundaryKind.cs
+public enum BoundaryKind : sbyte
+
+// Generated/Grafting/Contracts/BoundaryPatch.cs
+public struct BoundaryPatch : IFlatbufferObject
+public static void ValidateVersion()
+public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb)
+public static BoundaryPatch GetRootAsBoundaryPatch(ByteBuffer _bb, BoundaryPatch obj)
+public static Offset<Grafting.Contracts.BoundaryPatch> CreateBoundaryPatch(FlatBufferBuilder builder,
+public static void StartBoundaryPatch(FlatBufferBuilder builder)
+public static void AddSegmentId(FlatBufferBuilder builder, ulong segmentId)
+public static void AddNewKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind newKind)
+public static void AddNewStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newStartOffset)
+public static void AddNewEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> newEndOffset)
+public static void AddNewHeight(FlatBufferBuilder builder, float newHeight)
+public static void AddRemoved(FlatBufferBuilder builder, bool removed)
+public static void AddSequence(FlatBufferBuilder builder, ulong sequence)
+public static Offset<Grafting.Contracts.BoundaryPatch> EndBoundaryPatch(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/BoundarySegment.cs
+public struct BoundarySegment : IFlatbufferObject
+public static void ValidateVersion()
+public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb)
+public static BoundarySegment GetRootAsBoundarySegment(ByteBuffer _bb, BoundarySegment obj)
+public static Offset<Grafting.Contracts.BoundarySegment> CreateBoundarySegment(FlatBufferBuilder builder,
+public static void StartBoundarySegment(FlatBufferBuilder builder)
+public static void AddId(FlatBufferBuilder builder, ulong id)
+public static void AddStart(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> startOffset)
+public static void AddEnd(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> endOffset)
+public static void AddHeight(FlatBufferBuilder builder, float height)
+public static void AddKind(FlatBufferBuilder builder, Grafting.Contracts.BoundaryKind kind)
+public static void AddBlocksMovement(FlatBufferBuilder builder, bool blocksMovement)
+public static void AddBlocksVision(FlatBufferBuilder builder, bool blocksVision)
+public static Offset<Grafting.Contracts.BoundarySegment> EndBoundarySegment(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/CommandMessage.cs
+public struct CommandMessage : IFlatbufferObject
+public static void ValidateVersion()
+public static CommandMessage GetRootAsCommandMessage(ByteBuffer _bb)
+public static CommandMessage GetRootAsCommandMessage(ByteBuffer _bb, CommandMessage obj)
+public static bool VerifyCommandMessage(ByteBuffer _bb)
+public static Offset<Grafting.Contracts.CommandMessage> CreateCommandMessage(FlatBufferBuilder builder,
+public static void StartCommandMessage(FlatBufferBuilder builder)
+public static void AddPayloadType(FlatBufferBuilder builder, Grafting.Contracts.CommandPayload payloadType)
+public static void AddPayload(FlatBufferBuilder builder, int payloadOffset)
+public static Offset<Grafting.Contracts.CommandMessage> EndCommandMessage(FlatBufferBuilder builder)
+public static void FinishCommandMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.CommandMessage> offset)
+public static void FinishSizePrefixedCommandMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.CommandMessage> offset)
+
+// Generated/Grafting/Contracts/CommandPayload.cs
+public enum CommandPayload : byte
+
+// Generated/Grafting/Contracts/Decrement.cs
+public struct Decrement : IFlatbufferObject
+public static void ValidateVersion()
+public static Decrement GetRootAsDecrement(ByteBuffer _bb)
+public static Decrement GetRootAsDecrement(ByteBuffer _bb, Decrement obj)
+public static Offset<Grafting.Contracts.Decrement> CreateDecrement(FlatBufferBuilder builder,
+public static void StartDecrement(FlatBufferBuilder builder)
+public static void AddAmount(FlatBufferBuilder builder, long amount)
+public static Offset<Grafting.Contracts.Decrement> EndDecrement(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/Decremented.cs
+public struct Decremented : IFlatbufferObject
+public static void ValidateVersion()
+public static Decremented GetRootAsDecremented(ByteBuffer _bb)
+public static Decremented GetRootAsDecremented(ByteBuffer _bb, Decremented obj)
+public static Offset<Grafting.Contracts.Decremented> CreateDecremented(FlatBufferBuilder builder,
+public static void StartDecremented(FlatBufferBuilder builder)
+public static void AddAmount(FlatBufferBuilder builder, long amount)
+public static void AddNewValue(FlatBufferBuilder builder, long newValue)
+public static Offset<Grafting.Contracts.Decremented> EndDecremented(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/DomainEventMessage.cs
+public struct DomainEventMessage : IFlatbufferObject
+public static void ValidateVersion()
+public static DomainEventMessage GetRootAsDomainEventMessage(ByteBuffer _bb)
+public static DomainEventMessage GetRootAsDomainEventMessage(ByteBuffer _bb, DomainEventMessage obj)
+public static bool VerifyDomainEventMessage(ByteBuffer _bb)
+public static Offset<Grafting.Contracts.DomainEventMessage> CreateDomainEventMessage(FlatBufferBuilder builder,
+public static void StartDomainEventMessage(FlatBufferBuilder builder)
+public static void AddPayloadType(FlatBufferBuilder builder, Grafting.Contracts.DomainEventPayload payloadType)
+public static void AddPayload(FlatBufferBuilder builder, int payloadOffset)
+public static Offset<Grafting.Contracts.DomainEventMessage> EndDomainEventMessage(FlatBufferBuilder builder)
+public static void FinishDomainEventMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.DomainEventMessage> offset)
+public static void FinishSizePrefixedDomainEventMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.DomainEventMessage> offset)
+
+// Generated/Grafting/Contracts/DomainEventPayload.cs
+public enum DomainEventPayload : byte
+
+// Generated/Grafting/Contracts/Increment.cs
+public struct Increment : IFlatbufferObject
+public static void ValidateVersion()
+public static Increment GetRootAsIncrement(ByteBuffer _bb)
+public static Increment GetRootAsIncrement(ByteBuffer _bb, Increment obj)
+public static Offset<Grafting.Contracts.Increment> CreateIncrement(FlatBufferBuilder builder,
+public static void StartIncrement(FlatBufferBuilder builder)
+public static void AddAmount(FlatBufferBuilder builder, long amount)
+public static void AddSequenceHint(FlatBufferBuilder builder, ulong sequenceHint)
+public static Offset<Grafting.Contracts.Increment> EndIncrement(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/Incremented.cs
+public struct Incremented : IFlatbufferObject
+public static void ValidateVersion()
+public static Incremented GetRootAsIncremented(ByteBuffer _bb)
+public static Incremented GetRootAsIncremented(ByteBuffer _bb, Incremented obj)
+public static Offset<Grafting.Contracts.Incremented> CreateIncremented(FlatBufferBuilder builder,
+public static void StartIncremented(FlatBufferBuilder builder)
+public static void AddAmount(FlatBufferBuilder builder, long amount)
+public static void AddNewValue(FlatBufferBuilder builder, long newValue)
+public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/MapStateMessage.cs
+public struct MapStateMessage : IFlatbufferObject
+public static void ValidateVersion()
+public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb)
+public static MapStateMessage GetRootAsMapStateMessage(ByteBuffer _bb, MapStateMessage obj)
+public static bool VerifyMapStateMessage(ByteBuffer _bb)
+public static Offset<Grafting.Contracts.MapStateMessage> CreateMapStateMessage(FlatBufferBuilder builder,
+public static void StartMapStateMessage(FlatBufferBuilder builder)
+public static void AddWidth(FlatBufferBuilder builder, uint width)
+public static void AddHeight(FlatBufferBuilder builder, uint height)
+public static void AddLayers(FlatBufferBuilder builder, uint layers)
+public static void AddSeed(FlatBufferBuilder builder, uint seed)
+public static void AddDeformationXy(FlatBufferBuilder builder, float deformationXy)
+public static void AddDeformationZ(FlatBufferBuilder builder, float deformationZ)
+public static void AddCells(FlatBufferBuilder builder, VectorOffset cellsOffset)
+public static VectorOffset CreateCellsVector(FlatBufferBuilder builder, Offset<Grafting.Contracts.PrismCellAssignment>[] data)
+
+// Generated/Grafting/Contracts/PrismCellAssignment.cs
+public struct PrismCellAssignment : IFlatbufferObject
+public static void ValidateVersion()
+public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb)
+public static PrismCellAssignment GetRootAsPrismCellAssignment(ByteBuffer _bb, PrismCellAssignment obj)
+public static Offset<Grafting.Contracts.PrismCellAssignment> CreatePrismCellAssignment(FlatBufferBuilder builder,
+public static void StartPrismCellAssignment(FlatBufferBuilder builder)
+public static void AddCellIndex(FlatBufferBuilder builder, uint cellIndex)
+public static void AddLayer(FlatBufferBuilder builder, byte layer)
+public static void AddX(FlatBufferBuilder builder, int x)
+public static void AddY(FlatBufferBuilder builder, int y)
+public static void AddModuleId(FlatBufferBuilder builder, uint moduleId)
+public static void AddRotation(FlatBufferBuilder builder, byte rotation)
+public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3> vertexShiftOffset)
+public static Offset<Grafting.Contracts.PrismCellAssignment> EndPrismCellAssignment(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/Reset.cs
+public struct Reset : IFlatbufferObject
+public static void ValidateVersion()
+public static Reset GetRootAsReset(ByteBuffer _bb)
+public static Reset GetRootAsReset(ByteBuffer _bb, Reset obj)
+public static void StartReset(FlatBufferBuilder builder)
+public static Offset<Grafting.Contracts.Reset> EndReset(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/RollAndAdd.cs
+public struct RollAndAdd : IFlatbufferObject
+public static void ValidateVersion()
+public static RollAndAdd GetRootAsRollAndAdd(ByteBuffer _bb)
+public static RollAndAdd GetRootAsRollAndAdd(ByteBuffer _bb, RollAndAdd obj)
+public static Offset<Grafting.Contracts.RollAndAdd> CreateRollAndAdd(FlatBufferBuilder builder,
+public static void StartRollAndAdd(FlatBufferBuilder builder)
+public static void AddMin(FlatBufferBuilder builder, long min)
+public static void AddMax(FlatBufferBuilder builder, long max)
+public static Offset<Grafting.Contracts.RollAndAdd> EndRollAndAdd(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/RolledAndAdded.cs
+public struct RolledAndAdded : IFlatbufferObject
+public static void ValidateVersion()
+public static RolledAndAdded GetRootAsRolledAndAdded(ByteBuffer _bb)
+public static RolledAndAdded GetRootAsRolledAndAdded(ByteBuffer _bb, RolledAndAdded obj)
+public static Offset<Grafting.Contracts.RolledAndAdded> CreateRolledAndAdded(FlatBufferBuilder builder,
+public static void StartRolledAndAdded(FlatBufferBuilder builder)
+public static void AddRolled(FlatBufferBuilder builder, long rolled)
+public static void AddNewValue(FlatBufferBuilder builder, long newValue)
+public static Offset<Grafting.Contracts.RolledAndAdded> EndRolledAndAdded(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/SnapshotMessage.cs
+public struct SnapshotMessage : IFlatbufferObject
+public static void ValidateVersion()
+public static SnapshotMessage GetRootAsSnapshotMessage(ByteBuffer _bb)
+public static SnapshotMessage GetRootAsSnapshotMessage(ByteBuffer _bb, SnapshotMessage obj)
+public static bool VerifySnapshotMessage(ByteBuffer _bb)
+public static Offset<Grafting.Contracts.SnapshotMessage> CreateSnapshotMessage(FlatBufferBuilder builder,
+public static void StartSnapshotMessage(FlatBufferBuilder builder)
+public static void AddState(FlatBufferBuilder builder, Offset<Grafting.Contracts.StateTable> stateOffset)
+public static void AddRngSeed(FlatBufferBuilder builder, VectorOffset rngSeedOffset)
+public static VectorOffset CreateRngSeedVector(FlatBufferBuilder builder, byte[] data)
+public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, byte[] data)
+public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, ArraySegment<byte> data)
+public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, IntPtr dataPtr, int sizeInBytes)
+public static void StartRngSeedVector(FlatBufferBuilder builder, int numElems)
+public static void AddRngWordPos(FlatBufferBuilder builder, ulong rngWordPos)
+
+// Generated/Grafting/Contracts/StateTable.cs
+public struct StateTable : IFlatbufferObject
+public static void ValidateVersion()
+public static StateTable GetRootAsStateTable(ByteBuffer _bb)
+public static StateTable GetRootAsStateTable(ByteBuffer _bb, StateTable obj)
+public static Offset<Grafting.Contracts.StateTable> CreateStateTable(FlatBufferBuilder builder,
+public static void StartStateTable(FlatBufferBuilder builder)
+public static void AddValue(FlatBufferBuilder builder, long value)
+public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/Vec3.cs
+public struct Vec3 : IFlatbufferObject
+public static void ValidateVersion()
+public static Vec3 GetRootAsVec3(ByteBuffer _bb)
+public static Vec3 GetRootAsVec3(ByteBuffer _bb, Vec3 obj)
+public static Offset<Grafting.Contracts.Vec3> CreateVec3(FlatBufferBuilder builder,
+public static void StartVec3(FlatBufferBuilder builder)
+public static void AddX(FlatBufferBuilder builder, float x)
+public static void AddY(FlatBufferBuilder builder, float y)
+public static void AddZ(FlatBufferBuilder builder, float z)
+public static Offset<Grafting.Contracts.Vec3> EndVec3(FlatBufferBuilder builder)
+
+// Generated/Grafting/Contracts/WasReset.cs
+public struct WasReset : IFlatbufferObject
+public static void ValidateVersion()
+public static WasReset GetRootAsWasReset(ByteBuffer _bb)
+public static WasReset GetRootAsWasReset(ByteBuffer _bb, WasReset obj)
+public static Offset<Grafting.Contracts.WasReset> CreateWasReset(FlatBufferBuilder builder,
+public static void StartWasReset(FlatBufferBuilder builder)
+public static void AddPreviousValue(FlatBufferBuilder builder, long previousValue)
+public static Offset<Grafting.Contracts.WasReset> EndWasReset(FlatBufferBuilder builder)
+```
 
