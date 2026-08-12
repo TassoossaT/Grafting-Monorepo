@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
-import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { isValidTaskId, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
 
@@ -722,5 +722,16 @@ test("taskContext resolves pack mode using context-resolver", async () => {
   const pack = await taskContext(repoRoot, { pack: true, paths: ["packages/ui/src/index.ts"] });
   assert.equal(pack.ok, true);
   assert.match(pack.pack, /Context resolution/);
+});
+
+test("taskResume resolves state recovery context", async () => {
+  const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+  const result = await taskResume(repoRoot, { taskId: "G-TOOLING-CONTEXT-PACK" });
+  assert.equal(result.ok, true);
+  assert.equal(result.taskId, "G-TOOLING-CONTEXT-PACK");
+  assert.equal(result.resumed, true);
+  assert.ok(Array.isArray(result.recentCommits));
+  assert.ok(Array.isArray(result.dirtyFiles));
+  assert.ok(Array.isArray(result.affectedFiles));
 });
 

@@ -6,6 +6,7 @@ import { delegateRun } from "./delegate-commands.ts";
 import { delegateEdit } from "./delegate-edit-commands.ts";
 import { delegateResearch } from "./delegate-research-commands.ts";
 import { runGuardCheck } from "./guard-command.ts";
+import { runMcpServer } from "./mcp-server.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
@@ -143,6 +144,11 @@ async function main(argv: string[]): Promise<void> {
   process.chdir(root);
 
   try {
+    if (group === "mcp") {
+      await runMcpServer(root);
+      return;
+    }
+
     if (group === "guard-check") {
       const input = (readInputFlag(argv) ?? (await readStdin())) as Parameters<typeof runGuardCheck>[1];
       printAndExit(await runGuardCheck(root, input));
