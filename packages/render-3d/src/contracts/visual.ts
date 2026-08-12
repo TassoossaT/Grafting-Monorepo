@@ -84,6 +84,8 @@ export type MaterialDescriptor =
       readonly flatShading?: boolean;
       readonly doubleSided?: boolean;
       readonly texture?: TextureSource;
+      /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+      readonly clippable?: boolean;
     }
   | {
       /** Ignores scene lighting. The right choice for overlays, grids, and markers. */
@@ -92,6 +94,8 @@ export type MaterialDescriptor =
       readonly opacity?: number;
       readonly doubleSided?: boolean;
       readonly texture?: TextureSource;
+      /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+      readonly clippable?: boolean;
     }
   | {
       /** Draws edges rather than faces. */

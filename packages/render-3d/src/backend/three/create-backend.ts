@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { LightDescriptor } from "../../contracts/engine.js";
+import type { ClipPlaneDescriptor, LightDescriptor } from "../../contracts/engine.js";
 import type { ItemId, LayerId } from "../../contracts/scene.js";
 import type { Transform } from "../../contracts/space.js";
 import type { CameraDescriptor, PickResult } from "../../contracts/view.js";
@@ -45,6 +45,10 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
   const lights: THREE.Object3D[] = [];
   const raycaster = new THREE.Raycaster();
   const surfaces = new Set<ThreeSurface>();
+  // Shared for the backend's lifetime: mutating it in place propagates to
+  // every already-built `clippable` material's `clippingPlanes` array without
+  // rebuilding a single one of them, since they all hold this same reference.
+  const clipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   // The shared drawing buffer only ever grows to the largest surface asked for.
   // Sizing it per draw would make every frame with differently-sized views
@@ -155,6 +159,16 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
       }
     },
 
+    setClipPlane(plane: ClipPlaneDescriptor | undefined) {
+      if (plane === undefined) {
+        renderer.localClippingEnabled = false;
+        return;
+      }
+      clipPlane.normal.set(plane.normal.x, plane.normal.y, plane.normal.z);
+      clipPlane.constant = plane.constant;
+      renderer.localClippingEnabled = true;
+    },
+
     ensureLayer(layer: LayerId, order: number) {
       let group = groups.get(layer);
       if (group === undefined) {
@@ -198,7 +212,7 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
     ) {
       backend.releaseItem(id);
 
-      const visual = buildVisual(descriptor);
+      const visual = buildVisual(descriptor, clipPlane);
       const object = visual.object;
       object.name = id;
       object.userData.itemId = id;

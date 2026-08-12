@@ -278,6 +278,8 @@ export type MaterialDescriptor = {
     readonly flatShading?: boolean;
     readonly doubleSided?: boolean;
     readonly texture?: TextureSource;
+    /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+    readonly clippable?: boolean;
 } | {
     /** Ignores scene lighting. The right choice for overlays, grids, and markers. */
     readonly surface: "unlit";
@@ -285,6 +287,8 @@ export type MaterialDescriptor = {
     readonly opacity?: number;
     readonly doubleSided?: boolean;
     readonly texture?: TextureSource;
+    /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
+    readonly clippable?: boolean;
 } | {
     /** Draws edges rather than faces. */
     readonly surface: "line";
@@ -724,6 +728,20 @@ export type LightDescriptor = {
     readonly position: Vec3;
     readonly distance?: number;
 };
+/**
+ * A single cutting plane, as data. Points where `dot(normal, point) +
+ * constant >= 0` is false are cut away.
+ *
+ * Engine-global: the active plane cuts every item whose material opted in
+ * via `MaterialDescriptor.clippable`, across every view. Independent
+ * per-view clip heights are not supported by this contract.
+ */
+export interface ClipPlaneDescriptor {
+    /** Unit normal of the cutting plane. */
+    readonly normal: Vec3;
+    /** Signed offset in the plane equation `dot(normal, point) + constant >= 0`. */
+    readonly constant: number;
+}
 /** What the engine did during one frame. Reported for measurement, not for control flow. */
 export interface FrameReport {
     /** The clock reading this frame ran at. */
@@ -778,6 +796,8 @@ export interface RenderEngine {
     readonly contextLost: boolean;
     /** Replaces the lighting. Marks every lit view dirty. */
     setLights(lights: readonly LightDescriptor[]): void;
+    /** Replaces the active clip plane. `undefined` disables clipping. Marks every view dirty. */
+    setClipPlane(plane: ClipPlaneDescriptor | undefined): void;
     /** Opens a view. Every view shares this engine's single graphics context. */
     createView(options: ViewOptions): View;
     /** Every open view, in creation order. */
@@ -949,6 +969,25 @@ export interface HeightfieldParams {
  * and this one costs it nothing.
  */
 export declare const heightfieldVisual: VisualDefinition<HeightfieldParams>;
+
+import type { MeshData } from "../contracts/visual.js";
+/**
+ * Concatenates several meshes into one buffer, offsetting each piece's
+ * indices past everything already appended.
+ *
+ * Pure array arithmetic, useful to any caller batching many small meshes
+ * into one draw call — not something specific to any one product's idea of
+ * a "chunk". A caller that groups geometry into spatial buckets (a chunked
+ * terrain, a merged prop cluster, anything else that wants one buffer per
+ * bucket) calls this once per bucket.
+ *
+ * A piece without its own `indices` is a flat triangle list (`GeometryDescriptor`'s
+ * own "positions read sequentially when omitted" rule) — merged as an
+ * implicit `0..n-1` index run, never by dropping indices from every *other*
+ * piece just because one piece lacks them; that would silently discard the
+ * shared-vertex structure indexed pieces depend on.
+ */
+export declare function mergeMeshChunks(pieces: readonly MeshData[]): MeshData;
 
 /**
  * Dragging to orbit a view's camera.
