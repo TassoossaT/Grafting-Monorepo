@@ -71,10 +71,50 @@ export async function taskNew(repoRoot: string, input: TaskNewInput) {
   };
 }
 
+export const KNOWN_AI_COAUTHORS: Record<string, string> = {
+  gemini: "Gemini <gemini@google.com>",
+  claude: "Claude <claude@anthropic.com>",
+  codex: "Codex <codex@openai.com>",
+  openai: "Codex <codex@openai.com>",
+  copilot: "GitHub Copilot <copilot@github.com>",
+};
+
+export function resolveCoAuthor(input: string): string {
+  const trimmed = input.trim();
+  const lower = trimmed.toLowerCase();
+  if (KNOWN_AI_COAUTHORS[lower]) return KNOWN_AI_COAUTHORS[lower];
+  if (trimmed.includes("<") && trimmed.includes(">")) return trimmed;
+  return `${trimmed} <${lower.replace(/\s+/g, ".")}@ai.grafting.dev>`;
+}
+
+export function formatCommitMessageWithCoAuthors(message: string, coAuthors?: string[], agent?: string): string {
+  const all = [
+    ...(agent ? [agent] : []),
+    ...(coAuthors ?? []),
+  ].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+
+  if (all.length === 0) return message;
+
+  const resolved = all.map(resolveCoAuthor);
+  const trailers = resolved
+    .map((author) => `Co-authored-by: ${author}`)
+    .filter((trailer) => !message.includes(trailer));
+
+  if (trailers.length === 0) return message;
+
+  const trimmed = message.trimEnd();
+  const hasExistingTrailers = /Co-authored-by:[^\n]+$/i.test(trimmed);
+  const separator = hasExistingTrailers ? "\n" : "\n\n";
+
+  return `${trimmed}${separator}${trailers.join("\n")}\n`;
+}
+
 export interface TaskCommitInput {
   taskId: string;
   message: string;
   files?: string[];
+  coAuthors?: string[];
+  agent?: string;
 }
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
@@ -89,7 +129,8 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   const remaining = await session.unmergedPaths();
   if (remaining.length > 0) return { ok: false as const, error: "unresolved merge conflicts remain", conflicts: remaining };
-  await session.commit(input.message);
+  const messageWithCoAuthors = formatCommitMessageWithCoAuthors(input.message, input.coAuthors, input.agent);
+  await session.commit(messageWithCoAuthors);
   return { ok: true as const };
 }
 

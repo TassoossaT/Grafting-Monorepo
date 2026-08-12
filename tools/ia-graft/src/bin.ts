@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { delegateRun } from "./delegate-commands.ts";
 import { delegateEdit } from "./delegate-edit-commands.ts";
 import { delegateResearch } from "./delegate-research-commands.ts";
+import { runDocCheck } from "./doc-check.ts";
 import { runGuardCheck } from "./guard-command.ts";
 import { runMcpServer } from "./mcp-server.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
@@ -78,7 +79,15 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
     const pr = readValue(argv, "--pr");
     return { taskId, pr: pr === undefined ? undefined : Number(pr) };
   }
-  if (subcommand === "commit") return { taskId, message: readValue(argv, "--message"), files: readValues(argv, "--file") };
+  if (subcommand === "commit") {
+    return {
+      taskId,
+      message: readValue(argv, "--message"),
+      files: readValues(argv, "--file"),
+      coAuthors: readValues(argv, "--co-author"),
+      agent: readValue(argv, "--agent"),
+    };
+  }
   if (subcommand === "test") {
     const commands = readValues(argv, "--command");
     return commands.length <= 1
@@ -152,6 +161,10 @@ async function main(argv: string[]): Promise<void> {
     if (group === "guard-check") {
       const input = (readInputFlag(argv) ?? (await readStdin())) as Parameters<typeof runGuardCheck>[1];
       printAndExit(await runGuardCheck(root, input));
+    }
+
+    if (group === "doc-check") {
+      printAndExit(await runDocCheck(root));
     }
 
     if (group === "context") {
