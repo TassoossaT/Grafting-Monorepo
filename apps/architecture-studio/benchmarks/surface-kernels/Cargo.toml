@@ -1,0 +1,19 @@
+# Throwaway benchmark crate. Deliberately outside the Cargo workspace (its own
+# empty [workspace] table) so it cannot drift into a real dependency, matching
+# how `spikes/vtt-wasm-crate-compile` opted out.
+[workspace]
+
+[package]
+name = "surface-kernels-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# No jit/gui/wgpu/rhai: this has to build for wasm32 as well as native, and the
+# comparison is about meshing, not about the GUI stack.
+fidget = { version = "0.5", default-features = false, features = ["mesh"] }
+# No io/text/image features; `f64` selects the float width and pulls the
+# parry/rapier pair csgrs uses for its own predicates.
+nalgebra = "0.35"
+rayon = "1"
