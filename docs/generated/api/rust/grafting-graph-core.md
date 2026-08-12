@@ -361,6 +361,17 @@ node-set collision with an already-registered, unrelated surface
 atomically rather than leaving the node removed with only some of its
 capping surfaces registered.
 
+### `pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+
+Unites two existing surfaces into one new surface, per `ADR-0022`'s
+`Merge` ("a door's nodes and an adjoining wall's nodes becoming one
+thing"). `merged` is the caller-supplied result -- only the domain
+knows the correct combined boundary, this crate does not compute
+geometry. Both `a` and `b` must already be registered and distinct;
+`merged` is validated (existing nodes, non-empty, no collision with an
+unrelated third surface) *before* `a` and `b` are removed, so a failure
+never leaves either original surface gone without its replacement.
+
 ### `pub fn grafting_graph_core::move_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::SurfaceKey>, grafting_graph_core::GraphError>`
 
 Moves a node by applying `update` to its payload, then reports every
@@ -369,9 +380,28 @@ the reactive-redraw behavior `ADR-0022` describes for `Move`. Always
 safe: moving a node never changes graph topology or surface membership,
 so this cannot fail for any reason but the node not existing.
 
+### `pub fn grafting_graph_core::split_surface<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, first: grafting_graph_core::SurfaceSpec, second: grafting_graph_core::SurfaceSpec) -> core::result::Result<(grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceKey), grafting_graph_core::ConstructionError>`
+
+Divides one existing surface into two new surfaces, per `ADR-0022`'s
+`Split` ("cutting a wall into two"). `first` and `second` are the
+caller-supplied halves -- only the domain knows how to cut the
+geometry, this crate does not compute it. `key` must already be
+registered; both halves are validated, and checked not to collide with
+*each other*, before `key` is removed -- a failure never leaves the
+original surface gone with only one (or neither) half registered.
+
 ### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
 
 The underlying graph query or mutation failed.
+
+### `pub grafting_graph_core::ConstructionError::SameSurface`
+
+[`merge_surfaces`] or [`split_surface`] was asked to treat the same
+node-set identity as two distinct operands.
+
+### `pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey`
+
+The identity that was supplied twice.
 
 ### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
 
@@ -588,6 +618,18 @@ A query or update referenced a surface that is not registered.
 
 Identity that could not be resolved.
 
+### `pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>`
+
+Nodes forming the new surface's cycle, in mesh-derivation order.
+
+### `pub grafting_graph_core::SurfaceSpec::physical: bool`
+
+Whether the new surface blocks movement or acts as ground.
+
+### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
+
+The new surface's open, extensible type identifier.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -667,6 +709,13 @@ sharing one boundary) needs at least one differing node today.
 Tracks every construction [`Surface`] and the reverse node -> surfaces
 index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
 which surfaces reference a given node, without a full scan.
+
+### `pub struct grafting_graph_core::SurfaceSpec`
+
+A surface's non-identity attributes, for operations that register a new
+surface as one step of a larger operation ([`merge_surfaces`],
+[`split_surface`]) rather than standalone via
+[`SurfaceRegistry::add_surface`].
 
 ### `pub struct grafting_graph_core::SurfaceType(_)`
 
