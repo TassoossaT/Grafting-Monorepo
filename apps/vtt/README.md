@@ -1,35 +1,42 @@
 # VTT
 
-The virtual tabletop product. **No implementation yet** — this directory
-currently holds the decisions and known problems that must be settled before it
-gets one.
+The Next.js host for the virtual tabletop product. The interactive tabletop is
+a client-only route inside this app; reusable packages remain unaware of VTT
+concepts.
 
-It exists ahead of its code deliberately, and narrowly: findings from
-`apps/architecture-studio`'s node bench need somewhere durable to live, and
-scattering them across ADRs that are about other things would lose them. The
-root `AGENTS.md` forbids creating the future tree empty; this is one directory
-with real content, not a scaffold.
+The accepted architecture is recorded in
+`docs/adr/ADR-0023-vtt-application-architecture.md`. Implementation agents must
+follow `docs/architecture/vtt-application-architecture.md` and this directory's
+`AGENTS.md`.
 
-## What is here
+## Current executable slice
 
-- `notes/` — problems found elsewhere that this product must not inherit, each
-  written to be actionable rather than a reminder that something was wrong.
+- `/` is a server-rendered product entry page.
+- `/table/[tableId]` is a Server Component route with a narrow client entry.
+- `src/composition/tabletop/` owns one app-local runtime for the open table.
+- `test/` verifies runtime lifecycle and source dependency boundaries.
+- `notes/` retains unresolved product decisions; a note is not an accepted
+  contract until its roadmap task or ADR closes it.
 
-## What is deliberately not here
+No renderer, Worker, network transport, persistence implementation, game rule,
+or authoritative host is selected by this slice.
 
-No `project.json`. Nx discovers projects by their manifest, so this directory
-is invisible to the task graph, the repo map, and the Graph IR extractor until
-there is something to build. Adding one now would put an app with no targets
-into every listing and every report.
+## Commands
 
-## Accepted architecture and implementation gate
+Run through Nx from the repository root:
 
-`docs/adr/ADR-0023-vtt-application-architecture.md` and DEC-061 define the
-accepted application architecture. Its normative, agent-oriented implementation
-contract is `docs/architecture/vtt-application-architecture.md`.
+```text
+pnpm nx run vtt:check
+pnpm nx run vtt:test
+pnpm nx run vtt:build
+pnpm nx run vtt:docs-check
+```
 
-The physical implementation is tracked by `docs/architecture/vtt-roadmap.md`
-task E2.6. Until E2.6 lands, this directory remains notes-only and
-intentionally has no `project.json`. That task must create the Nx project,
-scope-local `AGENTS.md`, Graph IR metadata, and first real executable slice
-atomically; it must not materialize the complete conceptual tree empty.
+Development runs on <http://127.0.0.1:4512> with `pnpm nx run vtt:dev`.
+
+## Growth rule
+
+Create only the directory required by the current executable slice. New VTT
+product concepts stay inside this app. Generic calculation or authoritative
+reusable behavior must enter through its canonical package contract and an
+app-owned adapter; it must not be reimplemented here.

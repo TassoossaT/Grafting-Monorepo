@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "graphId": "grafting.workspace",
-  "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+  "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
   "generator": {
     "id": "extractor:nx-graph-ir",
     "version": "1.0.0",
-    "inputHash": "9c40894bd69782031cf43c2519fd030cd39d9bce48b8ae847306dc6d2f6b2f37"
+    "inputHash": "fce6938431990bb5a7e7b7ba12187259957feb9c6cd81d6383be3eb8135b2716"
   },
   "nodes": [
     {
@@ -26,14 +26,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/name",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -56,14 +56,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/name",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -85,7 +85,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -114,7 +114,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -143,7 +143,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -173,14 +173,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/name",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -201,14 +201,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/name",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -230,7 +230,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -260,7 +260,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -289,7 +289,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -318,7 +318,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -347,7 +347,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -377,14 +377,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/name",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -407,14 +407,74 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/name",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:render-3d",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "render-3d",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:shared",
+        "type:render-engine"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/name",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:tileset-wfc",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "tileset-wfc",
+      "tags": [
+        "lang:rust",
+        "npm:private",
+        "platform:web",
+        "scope:procgen",
+        "type:lib"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/name",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
           }
         ]
       }
@@ -437,14 +497,44 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/name",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
+          }
+        ]
+      }
+    },
+    {
+      "id": "project:vtt",
+      "kind": "project",
+      "authorityClass": "canonical_authored_source",
+      "level": "L0",
+      "label": "vtt",
+      "tags": [
+        "lang:typescript",
+        "npm:private",
+        "platform:web",
+        "scope:vtt",
+        "type:app"
+      ],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/name",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
           }
         ]
       }
@@ -468,7 +558,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -491,14 +581,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -514,14 +604,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build-storybook",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -537,14 +627,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -560,14 +650,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/dev",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -583,14 +673,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -606,14 +696,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -629,14 +719,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -652,14 +742,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-generate",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -675,14 +765,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/storybook",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -698,14 +788,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/test",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:discretize/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/build",
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -721,14 +834,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/check",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -744,14 +857,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -767,14 +880,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -790,14 +903,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/discretize/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -813,14 +926,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/test",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -836,7 +949,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -859,7 +972,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -882,7 +995,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -905,7 +1018,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -928,7 +1041,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -951,7 +1064,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -974,7 +1087,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -997,7 +1110,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1020,7 +1133,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1043,7 +1156,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1066,7 +1179,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1089,7 +1202,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1112,7 +1225,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1120,6 +1233,29 @@
             "path": "libs/engine/domain-core/project.json",
             "pointer": "/targets/test",
             "sha256": "bc0be560b1df28e810f6d129c4d0281377a57ff497e353a978aafb7ba91c3596"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:generation-wasm/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
+            "pointer": "/targets/build",
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -1135,14 +1271,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -1158,14 +1294,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -1181,14 +1317,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -1204,14 +1340,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -1227,14 +1363,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -1250,14 +1386,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/ai-audit",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1273,14 +1409,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/ai-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:grafting/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/build",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1296,14 +1455,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-rust-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1319,14 +1478,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-rust-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1342,14 +1501,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-ts-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1365,14 +1524,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-ts-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1388,14 +1547,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1411,14 +1570,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1434,14 +1593,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-extract",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1457,14 +1616,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-extract-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1480,14 +1639,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1503,14 +1662,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-manifest",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1526,14 +1685,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-manifest-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1549,14 +1708,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-map",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1572,14 +1731,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-map-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1595,14 +1754,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-v1-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1618,14 +1777,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-v1-test",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:grafting/install",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "install",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/install",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1641,14 +1823,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/toolchains-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:grafting/update",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "update",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/update",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -1664,7 +1869,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1687,7 +1892,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1710,7 +1915,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1733,7 +1938,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1756,7 +1961,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1779,7 +1984,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1802,7 +2007,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1825,7 +2030,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1848,14 +2053,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -1871,7 +2076,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1894,14 +2099,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -1917,7 +2122,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1940,7 +2145,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1963,7 +2168,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -1986,7 +2191,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2009,7 +2214,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2032,7 +2237,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2055,7 +2260,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2078,7 +2283,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2086,6 +2291,29 @@
             "path": "dotnet/Grafting.Isekai.Protocol/project.json",
             "pointer": "/targets/build",
             "sha256": "f288189ea8f7c21c8ed9c965ed66d8f186f7f03e25c15470f8f6552350ce9942"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:isekai-wasm-bridge/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -2101,14 +2329,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/check",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -2124,14 +2352,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -2147,14 +2375,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -2170,14 +2398,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -2193,14 +2421,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/test",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -2216,14 +2444,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/check",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -2239,14 +2467,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -2262,14 +2490,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -2285,14 +2513,359 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/test",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/api-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "api-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/build",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/docs-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/docs-generate",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-generate",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/test",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:render-3d/watch",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "watch",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/watch",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/build",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/check",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/check-no-backend",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check-no-backend",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/check-no-backend",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/docs-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/docs-generate",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-generate",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/postinstall",
+      "kind": "target",
+      "authorityClass": "derived_evidence",
+      "label": "postinstall",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/tileset-wfc/data/targets/postinstall",
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/test",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:tileset-wfc/test-no-backend",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test-no-backend",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/test-no-backend",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
           }
         ]
       }
@@ -2308,14 +2881,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/api-check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2331,14 +2904,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/build",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2354,14 +2927,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2377,14 +2950,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2400,14 +2973,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2423,14 +2996,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-mesh-export",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2446,14 +3019,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/test",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -2469,14 +3042,152 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/watch",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/build",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "build",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/build",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/check",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/dev",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "dev",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/dev",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/docs-check",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-check",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/docs-generate",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "docs-generate",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "target:vtt/test",
+      "kind": "target",
+      "authorityClass": "canonical_authored_source",
+      "label": "test",
+      "tags": [],
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/test",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
           }
         ]
       }
@@ -2492,7 +3203,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2515,7 +3226,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2538,7 +3249,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -2563,14 +3274,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2586,14 +3297,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/build-storybook",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2609,14 +3320,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2632,14 +3343,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/dev",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2655,14 +3366,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2678,14 +3389,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2701,14 +3412,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-check",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2724,14 +3435,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/stories-generate",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2747,14 +3458,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/storybook",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2770,14 +3481,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/test",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2793,14 +3504,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2816,14 +3527,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
           }
         ]
       }
@@ -2839,14 +3550,60 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Arender-3d",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:render-3d",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/dependencies/architecture-studio",
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Atileset-wfc",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:tileset-wfc",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/dependencies/architecture-studio",
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -2862,14 +3619,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "apps/architecture-studio/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "8c084bb166024d81abdcd689762fd1f6e8ea035c41d2f019a5085c2d3e3bbbfa"
+            "sha256": "91c69a1635930fccba7c9a0fb5f776b42f9be5d3bd60164d0cd3e514fbeb557e"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Adiscretize--contains--target%3Adiscretize%2Fbuild",
+      "kind": "contains",
+      "source": "project:discretize",
+      "target": "target:discretize/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/discretize/project.json",
+            "pointer": "/targets/build",
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -2885,14 +3665,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/check",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -2908,14 +3688,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -2931,14 +3711,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -2954,14 +3734,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/discretize/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -2977,14 +3757,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/discretize/project.json",
             "pointer": "/targets/test",
-            "sha256": "c16979f16706eaed5b45402d88f3eeaa19ca9ac25b7be6a7db8f056f8b97883f"
+            "sha256": "386edca4dee9abab2502a56bfd300c19b58ddd5892526fb1e9720ab5edf7181f"
           }
         ]
       }
@@ -3000,7 +3780,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3023,7 +3803,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3046,7 +3826,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3069,7 +3849,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3092,7 +3872,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3115,7 +3895,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3138,7 +3918,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3161,7 +3941,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3184,7 +3964,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3207,7 +3987,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3230,7 +4010,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3253,7 +4033,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3276,7 +4056,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3299,7 +4079,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3307,6 +4087,29 @@
             "path": "libs/engine/domain-core/project.json",
             "pointer": "/targets/test",
             "sha256": "bc0be560b1df28e810f6d129c4d0281377a57ff497e353a978aafb7ba91c3596"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Ageneration-wasm--contains--target%3Ageneration-wasm%2Fbuild",
+      "kind": "contains",
+      "source": "project:generation-wasm",
+      "target": "target:generation-wasm/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/generation-wasm/project.json",
+            "pointer": "/targets/build",
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -3322,14 +4125,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -3345,14 +4148,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -3368,14 +4171,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -3391,14 +4194,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -3414,14 +4217,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/generation-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "3b9c1f3d548058e4b689263234f6386d5c6b132a8f671867885d2d4c0ca56739"
+            "sha256": "a849806b3a359b176d05100a437b7a384ad88f8ce573a733f18809ec4dd3deb8"
           }
         ]
       }
@@ -3437,14 +4240,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/ai-audit",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3460,14 +4263,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/ai-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agrafting--contains--target%3Agrafting%2Fbuild",
+      "kind": "contains",
+      "source": "project:grafting",
+      "target": "target:grafting/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/build",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3483,14 +4309,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-rust-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3506,14 +4332,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-rust-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3529,14 +4355,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-ts-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3552,14 +4378,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-api-ts-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3575,14 +4401,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3598,14 +4424,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3621,14 +4447,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-extract",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3644,14 +4470,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-extract-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3667,14 +4493,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-generate",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3690,14 +4516,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-manifest",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3713,14 +4539,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-manifest-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3736,14 +4562,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-map",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3759,14 +4585,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-map-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3782,14 +4608,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-v1-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3805,14 +4631,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/graph-v1-test",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agrafting--contains--target%3Agrafting%2Finstall",
+      "kind": "contains",
+      "source": "project:grafting",
+      "target": "target:grafting/install",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/install",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3828,14 +4677,37 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "project.json",
             "pointer": "/targets/toolchains-check",
-            "sha256": "465435ca81d5e0a0da63ad6ba0f02d346ac3109d540f28a8c6c67ee4620f1fc6"
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Agrafting--contains--target%3Agrafting%2Fupdate",
+      "kind": "contains",
+      "source": "project:grafting",
+      "target": "target:grafting/update",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "project.json",
+            "pointer": "/targets/update",
+            "sha256": "309965fa67cc12cf50cd43eb397849cd0cf61944283c81fe0bfacac5158a519a"
           }
         ]
       }
@@ -3851,7 +4723,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3874,7 +4746,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3897,7 +4769,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3920,7 +4792,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3943,7 +4815,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3966,7 +4838,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -3989,7 +4861,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4012,7 +4884,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4035,14 +4907,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -4058,7 +4930,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4081,14 +4953,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -4104,7 +4976,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4127,7 +4999,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4150,7 +5022,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4173,7 +5045,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4196,7 +5068,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4219,7 +5091,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4242,7 +5114,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4265,7 +5137,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4288,7 +5160,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4311,7 +5183,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4334,7 +5206,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4342,6 +5214,29 @@
             "path": "dotnet/Grafting.Isekai.Protocol/project.json",
             "pointer": "/implicitDependencies",
             "sha256": "f288189ea8f7c21c8ed9c965ed66d8f186f7f03e25c15470f8f6552350ce9942"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aisekai-wasm-bridge--contains--target%3Aisekai-wasm-bridge%2Fbuild",
+      "kind": "contains",
+      "source": "project:isekai-wasm-bridge",
+      "target": "target:isekai-wasm-bridge/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/isekai/wasm-bridge/project.json",
+            "pointer": "/targets/build",
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4357,14 +5252,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/check",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4380,14 +5275,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4403,14 +5298,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4426,14 +5321,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "2143dae7fe41f31a6097792e7df520b8c6bbf7927827c54f12f9d4734dba12a4"
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
           }
         ]
       }
@@ -4449,14 +5344,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/targets/test",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4472,14 +5367,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4495,14 +5390,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/isekai/wasm-bridge/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "3f9f85b5767e67bc14a4c745bce03fbf76d3d1d728eb13e3cd09b43df5d58f82"
+            "sha256": "9763837ec3df0f79b921d48bc18a56acf35c20222adbb9a2308e813809c1e7e9"
           }
         ]
       }
@@ -4518,14 +5413,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/check",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -4541,14 +5436,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -4564,14 +5459,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -4587,14 +5482,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/targets/test",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
           }
         ]
       }
@@ -4610,14 +5505,359 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/isekai-web-client/project.json",
             "pointer": "/implicitDependencies",
-            "sha256": "a96d1ab057c3499e9c061845a02f7b319154242b1cfe157837e5ad75c3ee49fb"
+            "sha256": "7fe87e321f196dd556aab3b82d4ea4582b9b1ab2d5cf7b24225e8fc5e5150128"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fapi-check",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/api-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/api-check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fbuild",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/build",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fcheck",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fdocs-check",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/docs-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fdocs-generate",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/docs-generate",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Ftest",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/test",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Arender-3d--contains--target%3Arender-3d%2Fwatch",
+      "kind": "contains",
+      "source": "project:render-3d",
+      "target": "target:render-3d/watch",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "packages/render-3d/project.json",
+            "pointer": "/targets/watch",
+            "sha256": "799a0a5cd84dcab62a6ed72687db73e57b31dcda19474f7d82365668b8bb4654"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fbuild",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/build",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fcheck",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/check",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fcheck-no-backend",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/check-no-backend",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/check-no-backend",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fdocs-check",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/docs-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fdocs-generate",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/docs-generate",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Fpostinstall",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/postinstall",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/nodes/tileset-wfc/data/targets/postinstall",
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Ftest",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/test",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Atileset-wfc--contains--target%3Atileset-wfc%2Ftest-no-backend",
+      "kind": "contains",
+      "source": "project:tileset-wfc",
+      "target": "target:tileset-wfc/test-no-backend",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "libs/domains/procgen/tileset-wfc/project.json",
+            "pointer": "/targets/test-no-backend",
+            "sha256": "dac6751ea80a76a5fed0510f1eecaded5864df3578d4f9973d57fc8e62a94ecd"
           }
         ]
       }
@@ -4633,14 +5873,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/api-check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4656,14 +5896,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/build",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4679,14 +5919,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4702,14 +5942,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4725,14 +5965,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4748,14 +5988,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/docs-mesh-export",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4771,14 +6011,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/test",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
           }
         ]
       }
@@ -4794,14 +6034,175 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "packages/ui/project.json",
             "pointer": "/targets/watch",
-            "sha256": "1f646ec8a26bd66323078e926daf05c840bd01923fc16c38800dd21f6b5f6596"
+            "sha256": "843251d147f03b735ef69455ae9c89a3b06ca4671ec9ef4d0f55b71a59711762"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aui--depends_on--project%3Arender-3d",
+      "kind": "depends_on",
+      "source": "project:ui",
+      "target": "project:render-3d",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/dependencies/ui",
+            "sha256": "f9ee60fd16cd09d934b9f17d51ccfff60ecdaf9536a073ab8b41b8179808ff78"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Fbuild",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/build",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/build",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Fcheck",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/check",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Fdev",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/dev",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/dev",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Fdocs-check",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/docs-check",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/docs-check",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Fdocs-generate",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/docs-generate",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/docs-generate",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Avtt--contains--target%3Avtt%2Ftest",
+      "kind": "contains",
+      "source": "project:vtt",
+      "target": "target:vtt/test",
+      "relationClass": "declared",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
+        "confidence": 1,
+        "evidence": [
+          {
+            "kind": "manifest",
+            "path": "apps/vtt/project.json",
+            "pointer": "/targets/test",
+            "sha256": "40c2123f355da9e57cf586cd2bb304cf873964fa71ffd30bab3bd877a5f90050"
           }
         ]
       }
@@ -4817,7 +6218,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4840,7 +6241,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {
@@ -4863,7 +6264,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:d66b367acbb8db11809b9df646b3b86eb44850745c3d60d009db4e781e99bbe7",
+        "sourceRevision": "workspace:sha256:006c1b8cd687178a7c6610804717d51161f743584cd2a1678db95db96275b0ae",
         "confidence": 1,
         "evidence": [
           {

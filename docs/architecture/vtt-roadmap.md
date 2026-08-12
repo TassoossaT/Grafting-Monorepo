@@ -294,7 +294,7 @@ directory.
 | E2.3 | Design the VTT product model and app-local intents, projections, and ports inside `apps/vtt`. Compose generic capabilities from `libs/*` and `packages/*`; reusable packages MUST NOT gain a `vtt` namespace or app-exclusive methods | Open | Alta | Alto — foundational for Epics 3, 5, and 6 |
 | E2.4 | Decide `apps/vtt/notes/0002`'s open questions (fog of war): is it grid-tied, what resolution is remembered state stored at, does sound produce the same remembered state as sight, who is authoritative. Deliberately deciding only — implementation is out of this epic's scope, per the note's own framing ("algo que eu devo fazer bem para o futuro") | Open | Média | Médio — shapes the engine contract now even though implementation is deferred |
 | E2.5 | Domain/folder organization research for the VTT application | **Decided — absorbed into E2.1 and recorded by ADR-0023; no separate implementation task** | Média | Médio |
-| E2.6 | Implement the accepted VTT app scaffold. Materialize only the first executable slice required by ADR-0023, including `project.json`, scope-local `AGENTS.md`, the host/client route boundary, one composition root, and architecture-boundary checks | Ready, depends on E2.1; use `ia-graft task new` because it touches non-Markdown files | Média | Alto |
+| E2.6 | Implement the accepted VTT app scaffold. Materialize only the first executable slice required by ADR-0023, including `project.json`, scope-local `AGENTS.md`, the host/client route boundary, one composition root, and architecture-boundary checks | **Implemented — task `VTT-APP-SCAFFOLD`; pending human merge** | Média | Alto |
 
 ## Epic 3 — Map & construction
 

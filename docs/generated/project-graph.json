@@ -22,6 +22,28 @@
               "configurations": {},
               "parallelism": true
             },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/package.json",
+                "^default",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{projectRoot}/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir pkg",
+                "cwd": "libs/domains/procgen/generation-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "test": {
               "cache": true,
               "executor": "nx:run-commands",
@@ -114,6 +136,171 @@
           "implicitDependencies": []
         }
       },
+      "tileset-wfc": {
+        "name": "tileset-wfc",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/tileset-wfc",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-tileset-wfc"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/package.json",
+                "^default",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{projectRoot}/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir pkg",
+                "cwd": "libs/domains/procgen/tileset-wfc"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-tileset-wfc"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "postinstall": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "wasm-pack build --target web --out-dir pkg",
+                "runCommand": "pnpm run postinstall"
+              },
+              "options": {
+                "script": "postinstall"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "check-no-backend": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-tileset-wfc --no-default-features"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test-no-backend": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-tileset-wfc --no-default-features --test model --test rotation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-tileset-wfc"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-tileset-wfc.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-tileset-wfc --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "tileset-wfc",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:procgen",
+            "lang:rust",
+            "platform:web",
+            "type:lib"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "postinstall"
+              ]
+            },
+            "description": "grafting-procgen-tileset-wfc compiled to Wasm via wasm-pack, co-located with its Rust source (DEC-055/ADR-0017). No domain logic here -- see src/ for the Rust source, and src/wasm.rs for the flat typed-array ABI. `pkg/` is generated by this package's own postinstall script and gitignored; consumers depend on this like any other workspace package (workspace:*).",
+            "js": {
+              "packageName": "@grafting/procgen-tileset-wfc",
+              "packageVersion": "0.0.0",
+              "packageMain": "./pkg/grafting_procgen_tileset_wfc.js",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "tileset-wfc",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:web",
+                "type:lib"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "discretize": {
         "name": "discretize",
         "type": "lib",
@@ -131,6 +318,28 @@
               ],
               "options": {
                 "command": "cargo check -p grafting-procgen-discretize"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/package.json",
+                "^default",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{projectRoot}/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir pkg",
+                "cwd": "libs/domains/procgen/discretize"
               },
               "configurations": {},
               "parallelism": true
@@ -353,6 +562,9 @@
             "check": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "isekai-wasm-bridge:build"
+              ],
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -367,6 +579,9 @@
             "test": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "isekai-wasm-bridge:build"
+              ],
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -446,6 +661,12 @@
             "check": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "generation-wasm:build",
+                "isekai-wasm-bridge:build",
+                "discretize:build",
+                "ui:build"
+              ],
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/docs/generated/grafting.graph.json",
@@ -461,6 +682,9 @@
               "cache": true,
               "executor": "nx:run-commands",
               "dependsOn": [
+                "generation-wasm:build",
+                "isekai-wasm-bridge:build",
+                "discretize:build",
                 "ui:build"
               ],
               "inputs": [
@@ -498,6 +722,9 @@
             "dev": {
               "executor": "nx:run-commands",
               "dependsOn": [
+                "generation-wasm:build",
+                "isekai-wasm-bridge:build",
+                "discretize:build",
                 "ui:watch"
               ],
               "cache": false,
@@ -1044,6 +1271,9 @@
             "check": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "engine-domain-core:generate"
+              ],
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1056,9 +1286,37 @@
               "configurations": {},
               "parallelism": true
             },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "dependsOn": [
+                "engine-domain-core:generate"
+              ],
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/package.json",
+                "^default",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{projectRoot}/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir pkg",
+                "cwd": "libs/isekai/wasm-bridge"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "test": {
               "cache": true,
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "engine-domain-core:generate"
+              ],
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1149,6 +1407,159 @@
               ]
             }
           }
+        }
+      },
+      "render-3d": {
+        "name": "render-3d",
+        "type": "lib",
+        "data": {
+          "root": "packages/render-3d",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/render-3d check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/render-3d build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/tests/**/*.test.mjs",
+                "{projectRoot}/package.json",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/render-3d test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "watch": {
+              "executor": "nx:run-commands",
+              "continuous": true,
+              "cache": false,
+              "options": {
+                "command": "pnpm --filter @grafting/render-3d watch"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "api-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/project.json",
+                "{projectRoot}/tsconfig.json",
+                "{projectRoot}/tests/snapshots/public-api.md",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/render-3d api-check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs render-3d"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/render-3d.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs render-3d --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "render-3d",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:shared",
+            "lang:typescript",
+            "platform:web",
+            "type:render-engine"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Generic 3D rendering engine: one graphics context, a caller-named scene, externally registered visual kinds, and simulated time that can be paused or stepped.",
+            "js": {
+              "packageName": "@grafting/render-3d",
+              "packageVersion": "0.0.0",
+              "packageExports": {
+                ".": {
+                  "types": "./dist/index.d.ts",
+                  "import": "./dist/index.js"
+                }
+              },
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "render-3d",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:typescript",
+                "platform:web",
+                "type:render-engine"
+              ]
+            },
+            "publicApi": {
+              "entryPoint": "src/index.ts",
+              "baseline": "tests/snapshots/public-api.md",
+              "forbiddenModules": [
+                "three"
+              ]
+            }
+          },
+          "implicitDependencies": []
         }
       },
       "x6-canvas": {
@@ -1647,10 +2058,124 @@
                 "react-grid-layout",
                 "rete",
                 "rete-area-plugin",
+                "rete-connection-plugin",
                 "rete-react-plugin",
                 "rete-render-utils",
-                "styled-components",
-                "three"
+                "styled-components"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "vtt": {
+        "name": "vtt",
+        "type": "app",
+        "data": {
+          "root": "apps/vtt",
+          "targets": {
+            "check": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/vtt check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/.next"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/vtt build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/test/**/*",
+                "{projectRoot}/package.json"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/vtt test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "dev": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm --filter @grafting/vtt dev"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs vtt"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/vtt.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs vtt --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "vtt",
+          "projectType": "application",
+          "tags": [
+            "npm:private",
+            "scope:vtt",
+            "lang:typescript",
+            "platform:web",
+            "type:app"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@grafting/vtt",
+              "packageVersion": "0.0.0",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "vtt",
+              "kind": "app",
+              "tags": [
+                "scope:vtt",
+                "lang:typescript",
+                "platform:web"
               ]
             }
           },
@@ -1662,24 +2187,34 @@
         "type": "lib",
         "data": {
           "root": ".",
-          "name": "grafting",
-          "includedScripts": [],
-          "projectType": "library",
-          "tags": [
-            "npm:private",
-            "scope:root",
-            "type:tooling"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
-            "js": {
-              "packageName": "grafting",
-              "packageVersion": "0.0.0",
-              "isInPackageManagerWorkspaces": true
-            }
-          },
           "targets": {
+            "build": {
+              "cache": false,
+              "executor": "nx:run-commands",
+              "options": {
+                "command": "pnpm run workspace:build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "install": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run workspace:install"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "update": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "pnpm run workspace:update"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
             "graph-generate": {
               "executor": "nx:run-commands",
               "cache": false,
@@ -1889,12 +2424,30 @@
               "parallelism": true
             }
           },
+          "name": "grafting",
+          "includedScripts": [],
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:root",
+            "type:tooling"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Grafting Monorepo -- workspace root. See GRAFTING_MASTER_SOURCE.md.",
+            "js": {
+              "packageName": "grafting",
+              "packageVersion": "0.0.0",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
           "implicitDependencies": []
         }
       }
     },
     "dependencies": {
       "generation-wasm": [],
+      "tileset-wfc": [],
       "discretize": [],
       "isekai-dotnet-protocol": [
         {
@@ -1950,6 +2503,11 @@
         },
         {
           "source": "architecture-studio",
+          "target": "render-3d",
+          "type": "static"
+        },
+        {
+          "source": "architecture-studio",
           "target": "ui",
           "type": "static"
         },
@@ -1961,6 +2519,11 @@
         {
           "source": "architecture-studio",
           "target": "discretize",
+          "type": "static"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "tileset-wfc",
           "type": "static"
         }
       ],
@@ -1992,10 +2555,18 @@
           "type": "implicit"
         }
       ],
+      "render-3d": [],
       "x6-canvas": [],
       "graph-core": [],
       "ia-graft": [],
-      "ui": [],
+      "ui": [
+        {
+          "source": "ui",
+          "target": "render-3d",
+          "type": "static"
+        }
+      ],
+      "vtt": [],
       "grafting": []
     }
   }
