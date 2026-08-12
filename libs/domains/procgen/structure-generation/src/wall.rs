@@ -130,8 +130,14 @@ fn position_at(wall: &WallSegment, fraction: f32, top: bool) -> [f32; 3] {
         wall.start[1] + (wall.end[1] - wall.start[1]) * fraction,
         wall.start[2] + (wall.end[2] - wall.start[2]) * fraction,
     ];
+    // Y is up (`docs/architecture/vtt-roadmap.md`'s floor-cutaway clip plane
+    // is expressed as Y < Y_limit) -- height must land on a fixed axis
+    // distinct from the centerline's own direction. Adding it to index 2
+    // instead collapses top/bottom onto the centerline whenever a wall runs
+    // along Z (as this app's default seed and "generate wall" trigger both
+    // do), producing a self-overlapping quad no triangulator can fill.
     if top {
-        position[2] += wall.height;
+        position[1] += wall.height;
     }
     position
 }
@@ -308,8 +314,24 @@ mod tests {
         assert_eq!(piece.surface.surface_type, wall_type());
         assert_eq!(*piece.nodes[0].data(), [0.0, 0.0, 0.0]);
         assert_eq!(*piece.nodes[1].data(), [4.0, 0.0, 0.0]);
-        assert_eq!(*piece.nodes[2].data(), [4.0, 0.0, 3.0]);
-        assert_eq!(*piece.nodes[3].data(), [0.0, 0.0, 3.0]);
+        assert_eq!(*piece.nodes[2].data(), [4.0, 3.0, 0.0]);
+        assert_eq!(*piece.nodes[3].data(), [0.0, 3.0, 0.0]);
+    }
+
+    /// A wall running along Z (this app's own default seed and its
+    /// "generate wall" edit-mode trigger both build walls this way) must
+    /// not collapse its top edge back onto its own centerline -- height has
+    /// to land on a different axis than the wall's length, regardless of
+    /// which horizontal direction that length runs in.
+    #[test]
+    fn a_wall_running_along_z_keeps_top_and_bottom_on_distinct_axes() {
+        let wall = WallSegment { start: [2.0, 0.0, 0.0], end: [2.0, 0.0, 4.0], height: 3.0 };
+        let generation = generate_wall(&wall, None, node_id, edge_id, wall_type(), door_type()).unwrap();
+        let piece = &generation.pieces[0];
+        assert_eq!(*piece.nodes[0].data(), [2.0, 0.0, 0.0]);
+        assert_eq!(*piece.nodes[1].data(), [2.0, 0.0, 4.0]);
+        assert_eq!(*piece.nodes[2].data(), [2.0, 3.0, 4.0]);
+        assert_eq!(*piece.nodes[3].data(), [2.0, 3.0, 0.0]);
     }
 
     #[test]

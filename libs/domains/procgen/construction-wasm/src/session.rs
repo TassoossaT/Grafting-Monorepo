@@ -361,6 +361,44 @@ mod tests {
         assert!(snapshot.contains("\"surfaces\""));
     }
 
+    /// Regression test for a real bug found during `E3.8`'s end-to-end
+    /// validation: a wall running along Z (this app's own default seed and
+    /// its "generate wall" edit-mode trigger both build walls this way) had
+    /// its top nodes collapse back onto the centerline
+    /// (`grafting-procgen-structure-generation`'s `position_at` added
+    /// `height` to the same axis as the wall's own length), so every
+    /// wall/door mesh silently failed to triangulate and never appeared in
+    /// `all_surface_meshes_json`. Plain `#[test]`, not `#[wasm_bindgen_test]`
+    /// -- this crate's `wasm_bindgen_test`s are not wired into any CI job
+    /// and do not run under a plain `cargo test`, which is exactly how this
+    /// bug went uncaught despite `generating_a_door_wall_exposes_three_sibling_meshes`
+    /// already asserting the right mesh count.
+    #[test]
+    fn generating_a_terrain_cell_then_a_z_running_wall_exposes_all_four_meshes() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["tn0","tn1","tn2","tn3"],"edgeIds":["te0","te1","te2","te3"]}"#,
+            )
+            .expect("terrain cell generates");
+
+        let request = json!({
+            "wall": {"start": [2.0, 0.0, 0.0], "end": [2.0, 0.0, 4.0], "height": 3.0},
+            "door": {"opensAt": 0.25, "closesAt": 0.75},
+            "wallType": "wall",
+            "doorType": "door",
+            "nodeIds": all_role_node_ids_json(),
+            "edgeIds": all_role_edge_ids_json(),
+        })
+        .to_string();
+        session.generate_and_apply_wall_json(&request).expect("wall generates");
+
+        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 4, "1 terrain + 3 wall/door pieces, every one triangulable");
+    }
+
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();
