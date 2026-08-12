@@ -460,7 +460,7 @@ export default function BenchClient() {
             <Button label="100%" onClick={() => handleRef.current?.resetZoom()} />
             <Button label="Fit" onClick={() => handleRef.current?.center()} />
             {selection === null ? null : <Button label="Delete selected" onClick={removeSelected} />}
-            <Link href="/lab/trials">Standalone trials &rarr;</Link>
+            <Link href="/lab/vtt-brush">VTT Brush &rarr;</Link>
           </span>
         </div>
         <Text
