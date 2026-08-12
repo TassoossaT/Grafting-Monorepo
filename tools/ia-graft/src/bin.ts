@@ -91,7 +91,17 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
-  if (subcommand === "context") return { query: readValue(argv, "--query"), scope: readValue(argv, "--scope"), map: argv.includes("--map") };
+  if (subcommand === "context") {
+    const rawPaths = readValue(argv, "--paths");
+    return {
+      query: readValue(argv, "--query"),
+      scope: readValue(argv, "--scope"),
+      map: argv.includes("--map"),
+      pack: argv.includes("--pack"),
+      taskId: readValue(argv, "--id") ?? readValue(argv, "--task"),
+      paths: rawPaths ? rawPaths.split(",").map((p) => p.trim()).filter(Boolean) : undefined,
+    };
+  }
   if (subcommand === "run") {
     const jsonSchemaRaw = readValue(argv, "--json-schema");
     const files = readValues(argv, "--file");
