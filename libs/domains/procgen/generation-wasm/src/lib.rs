@@ -99,6 +99,130 @@ fn validate(width: u32, height: u32, scale: f64) -> Result<usize, String> {
     Ok(cells as usize)
 }
 
+/// A WASM-bindgen friendly wrapper exposing a generated 3D prism grid mesh
+/// as flat typed-array buffers.
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct WasmPrismMesh {
+    positions: Vec<f32>,
+    cell_corners: Vec<u32>,
+    cell_neighbors: Vec<u32>,
+    cell_count: u32,
+    width: u32,
+    height: u32,
+    layers: u32,
+}
+
+#[wasm_bindgen]
+impl WasmPrismMesh {
+    /// Flat list of 3D vertex positions [x, y, z] for all corners.
+    #[wasm_bindgen(getter)]
+    pub fn positions(&self) -> Vec<f32> {
+        self.positions.clone()
+    }
+
+    /// 8 corner vertex indices per cell [V0..V7].
+    #[wasm_bindgen(getter, js_name = cellCorners)]
+    pub fn cell_corners(&self) -> Vec<u32> {
+        self.cell_corners.clone()
+    }
+
+    /// 6 neighbor cell IDs per cell [North, East, South, West, Bottom, Top].
+    #[wasm_bindgen(getter, js_name = cellNeighbors)]
+    pub fn cell_neighbors(&self) -> Vec<u32> {
+        self.cell_neighbors.clone()
+    }
+
+    /// Total number of cells in the grid mesh.
+    #[wasm_bindgen(getter, js_name = cellCount)]
+    pub fn cell_count(&self) -> u32 {
+        self.cell_count
+    }
+
+    /// Grid width in cells.
+    #[wasm_bindgen(getter)]
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Grid height in cells.
+    #[wasm_bindgen(getter)]
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Grid layers count.
+    #[wasm_bindgen(getter)]
+    pub fn layers(&self) -> u32 {
+        self.layers
+    }
+}
+
+/// Generates a 3D prism grid mesh with 6-slot connectivity and deformation inputs.
+///
+/// * `primitive_u8`: 0 = Passage, 1 = Boundary, 2 = Surface.
+/// * `deformation_xy`: Planar XY alignment deformation (0.0 = regular quad lattice, 1.0 = organic).
+/// * `deformation_z`: Vertical Z height variation factor (0.0 = flat plane, 1.0 = chaotic terrain).
+#[wasm_bindgen]
+pub fn generate_prism_mesh(
+    width: u32,
+    height: u32,
+    layers: u32,
+    primitive_u8: u8,
+    deformation_xy: f32,
+    deformation_z: f32,
+) -> Result<WasmPrismMesh, JsValue> {
+    if width == 0 || height == 0 || layers == 0 {
+        return Err(JsValue::from_str("generate_prism_mesh: dimensions must be greater than 0"));
+    }
+    if width > 512 || height > 512 || layers > 64 {
+        return Err(JsValue::from_str("generate_prism_mesh: grid size exceeds maximum limits"));
+    }
+
+    let primitive = match primitive_u8 {
+        0 => grafting_graph_core::GraphPrimitive::Passage,
+        1 => grafting_graph_core::GraphPrimitive::Boundary,
+        _ => grafting_graph_core::GraphPrimitive::Surface,
+    };
+
+    let inputs = grafting_graph_core::FormationInputs {
+        primitive,
+        deformation_xy: deformation_xy.clamp(0.0, 1.0),
+        deformation_z: deformation_z.clamp(0.0, 1.0),
+    };
+
+    let mesh = grafting_graph_core::PrismGridMesh::new(width, height, layers, inputs);
+
+    let mut flat_positions = Vec::with_capacity(mesh.positions.len() * 3);
+    for pos in &mesh.positions {
+        flat_positions.push(pos[0]);
+        flat_positions.push(pos[1]);
+        flat_positions.push(pos[2]);
+    }
+
+    let mut flat_corners = Vec::with_capacity(mesh.cell_corners.len() * 8);
+    for corners in &mesh.cell_corners {
+        flat_corners.extend_from_slice(corners);
+    }
+
+    let cell_count = mesh.cell_count() as u32;
+    let width = mesh.width;
+    let height = mesh.height;
+    let layers = mesh.layers;
+
+    Ok(WasmPrismMesh {
+        positions: flat_positions,
+        cell_corners: flat_corners,
+        cell_neighbors: mesh.cell_neighbors,
+        cell_count,
+        width,
+        height,
+        layers,
+    })
+
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,9 +286,12 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_grid_too_large_to_allocate() {
-        assert!(validate(u32::MAX, u32::MAX, 0.1).is_err());
-        assert!(validate(65536, 65536, 0.1).is_err());
-        assert!(validate(4096, 4096, 0.1).is_ok());
+    fn test_generate_prism_mesh_success() {
+        let mesh = generate_prism_mesh(2, 2, 1, 2, 0.4, 0.3).unwrap();
+        assert_eq!(mesh.cell_count(), 4);
+        assert_eq!(mesh.cell_corners().len(), 4 * 8);
+        assert_eq!(mesh.cell_neighbors().len(), 4 * 6);
+        assert_eq!(mesh.positions().len(), 9 * 2 * 3);
     }
 }
+

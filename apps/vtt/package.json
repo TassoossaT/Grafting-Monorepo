@@ -1,0 +1,23 @@
+{
+  "name": "@grafting/vtt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dev": "next dev --hostname 127.0.0.1 --port 4512",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@grafting/render-3d": "workspace:*",
+    "next": "^16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "typescript": "^5.9.3"
+  }
+}

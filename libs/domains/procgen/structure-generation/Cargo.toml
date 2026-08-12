@@ -1,0 +1,12 @@
+[package]
+name = "grafting-procgen-structure-generation"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Derives ADR-0022 construction-surface node cycles for walls and door openings from centerline generation parameters. Generation-only: produces Node/Edge/SurfaceSpec data, never mutates a graph or registry itself."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+grafting-graph-core = { path = "../../../graph/core" }

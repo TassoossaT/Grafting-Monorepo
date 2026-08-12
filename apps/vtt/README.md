@@ -1,31 +1,49 @@
 # VTT
 
-The virtual tabletop product. **No implementation yet** — this directory
-currently holds the decisions and known problems that must be settled before it
-gets one.
+The Next.js host for the virtual tabletop product. The interactive tabletop is
+a client-only route inside this app; reusable packages remain unaware of VTT
+concepts.
 
-It exists ahead of its code deliberately, and narrowly: findings from
-`apps/architecture-studio`'s node bench need somewhere durable to live, and
-scattering them across ADRs that are about other things would lose them. The
-root `AGENTS.md` forbids creating the future tree empty; this is one directory
-with real content, not a scaffold.
+The accepted architecture is recorded in
+`docs/adr/ADR-0023-vtt-application-architecture.md`. Implementation agents must
+follow `docs/architecture/vtt-application-architecture.md`,
+`docs/architecture/vtt-product-model.md`, and this directory's `AGENTS.md`.
 
-## What is here
+## Current executable slice
 
-- `notes/` — problems found elsewhere that this product must not inherit, each
-  written to be actionable rather than a reminder that something was wrong.
+- `/` is a server-rendered product entry page.
+- `/table/[tableId]` is a Server Component route with a narrow client entry.
+- `src/composition/tabletop/` owns one app-local runtime and one renderer for
+  the open table.
+- tokens are immutable scene placements with stable identity and an optional,
+  separate rules/content subject reference.
+- placement and subject binding are closed, versioned app operations.
+- the VTT adapter owns the token visual while `@grafting/render-3d` receives
+  only a generic camera-facing sprite descriptor.
+- `test/` verifies identity separation, operation shape, render invalidation,
+  runtime lifecycle, and source dependency boundaries.
+- `notes/` retains unresolved product decisions; a note is not an accepted
+  contract until its roadmap task or ADR closes it.
 
-## What is deliberately not here
+Collision, snapping, vision/light inputs, rules payloads, Worker use, network
+transport, persistence, and the authoritative host remain outside this slice.
 
-No `project.json`. Nx discovers projects by their manifest, so this directory
-is invisible to the task graph, the repo map, and the Graph IR extractor until
-there is something to build. Adding one now would put an app with no targets
-into every listing and every report.
+## Commands
 
-## When this becomes a real app
+Run through Nx from the repository root:
 
-It needs an ADR first: `docs/adr/ADR-0016` scoped Architecture Studio's three
-surfaces, and DEC-045 fixed how products are distributed. A VTT app is a
-product decision, not a directory decision. At that point it gains a
-`project.json`, a scope-local `AGENTS.md` with its own rules, and the notes here
-become either resolved decisions or explicit accepted risks.
+```text
+pnpm nx run vtt:check
+pnpm nx run vtt:test
+pnpm nx run vtt:build
+pnpm nx run vtt:docs-check
+```
+
+Development runs on <http://127.0.0.1:4512> with `pnpm nx run vtt:dev`.
+
+## Growth rule
+
+Create only the directory required by the current executable slice. New VTT
+product concepts stay inside this app. Generic calculation or authoritative
+reusable behavior must enter through its canonical package contract and an
+app-owned adapter; it must not be reimplemented here.

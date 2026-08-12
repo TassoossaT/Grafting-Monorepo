@@ -322,6 +322,75 @@ const STACK_TERRAIN: BenchNodeKind = Object.freeze({
   ]),
 });
 
+const MESH_PROCEDURAL: BenchNodeKind = Object.freeze({
+  id: "mesh.procedural",
+  title: "3D Mesh & Freeform Generator",
+  category: "Terrain",
+  description:
+    "Generates a 3D prism grid mesh with freeform vertex displacement (DEC-060 / ADR-0022).",
+  inputs: Object.freeze([
+    Object.freeze({ id: "grid", label: "grid", dataType: BENCH_DATA_TYPES.quadmesh }),
+    Object.freeze({ id: "heightmap", label: "heightmap", dataType: BENCH_DATA_TYPES.heightmap }),
+  ]),
+
+  outputs: Object.freeze([
+    Object.freeze({ id: "mesh", label: "mesh", dataType: BENCH_DATA_TYPES.mesh }),
+  ]),
+  params: Object.freeze([
+    Object.freeze({
+      kind: "number" as const,
+      id: "deformationXY",
+      label: "Deformação Planar XY",
+      defaultValue: 0.2,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      description: "Deformação no plano do solo (X, Y).",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "deformationZ",
+      label: "Deformação Vertical Z",
+      defaultValue: 0.4,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      description: "Deformação de elevação (Z).",
+    }),
+
+    Object.freeze({
+      kind: "number" as const,
+      id: "vertexShiftX",
+      label: "Deslocar Canto X (Trapézio)",
+      defaultValue: 0.0,
+      min: -2,
+      max: 2,
+      step: 0.1,
+      description: "Deslocamento de canto X (Trapézio).",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "vertexShiftY",
+      label: "Deslocar Canto Y (Enviesamento)",
+      defaultValue: 0.0,
+      min: -2,
+      max: 2,
+      step: 0.1,
+      description: "Deslocamento de canto Y.",
+    }),
+    Object.freeze({
+      kind: "number" as const,
+      id: "vertexShiftZ",
+      label: "Deslocar Canto Z (Rampa/Cunha)",
+      defaultValue: 0.0,
+      min: -3,
+      max: 3,
+      step: 0.1,
+      description: "Deslocamento de canto Z (Rampa/Cunha).",
+    }),
+  ]),
+});
+
 /** Every element the bench offers, in menu order. */
 export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   PERLIN_HEIGHTMAP,
@@ -332,8 +401,10 @@ export const BENCH_NODE_KINDS: readonly BenchNodeKind[] = Object.freeze([
   IRREGULAR_GRID,
   DISCRETIZE,
   STACK_TERRAIN,
+  MESH_PROCEDURAL,
   VIEWPORT,
 ]);
+
 
 const BY_ID: ReadonlyMap<string, BenchNodeKind> = new Map(
   BENCH_NODE_KINDS.map((kind) => [kind.id, kind]),

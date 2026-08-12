@@ -15,12 +15,13 @@
     "generate": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/scripts/generate-contracts.ps1"
+        "command": "node tools/scripts/generate-contracts.mjs"
       },
       "cache": true,
       "inputs": [
         "{projectRoot}/contracts/*.fbs",
         "{workspaceRoot}/tools/flatc-version.txt",
+        "{workspaceRoot}/tools/scripts/generate-contracts.mjs",
         "{workspaceRoot}/tools/scripts/generate-contracts.ps1",
         "{workspaceRoot}/tools/scripts/get-flatc-csharp.ps1"
       ],

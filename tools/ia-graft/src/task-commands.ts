@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { GitClient } from "./git-client.ts";
 
 export interface CliError {
@@ -67,10 +71,50 @@ export async function taskNew(repoRoot: string, input: TaskNewInput) {
   };
 }
 
+export const KNOWN_AI_COAUTHORS: Record<string, string> = {
+  gemini: "Gemini <gemini@google.com>",
+  claude: "Claude <claude@anthropic.com>",
+  codex: "Codex <codex@openai.com>",
+  openai: "Codex <codex@openai.com>",
+  copilot: "GitHub Copilot <copilot@github.com>",
+};
+
+export function resolveCoAuthor(input: string): string {
+  const trimmed = input.trim();
+  const lower = trimmed.toLowerCase();
+  if (KNOWN_AI_COAUTHORS[lower]) return KNOWN_AI_COAUTHORS[lower];
+  if (trimmed.includes("<") && trimmed.includes(">")) return trimmed;
+  return `${trimmed} <${lower.replace(/\s+/g, ".")}@ai.grafting.dev>`;
+}
+
+export function formatCommitMessageWithCoAuthors(message: string, coAuthors?: string[], agent?: string): string {
+  const all = [
+    ...(agent ? [agent] : []),
+    ...(coAuthors ?? []),
+  ].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+
+  if (all.length === 0) return message;
+
+  const resolved = all.map(resolveCoAuthor);
+  const trailers = resolved
+    .map((author) => `Co-authored-by: ${author}`)
+    .filter((trailer) => !message.includes(trailer));
+
+  if (trailers.length === 0) return message;
+
+  const trimmed = message.trimEnd();
+  const hasExistingTrailers = /Co-authored-by:[^\n]+$/i.test(trimmed);
+  const separator = hasExistingTrailers ? "\n" : "\n\n";
+
+  return `${trimmed}${separator}${trailers.join("\n")}\n`;
+}
+
 export interface TaskCommitInput {
   taskId: string;
   message: string;
   files?: string[];
+  coAuthors?: string[];
+  agent?: string;
 }
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
@@ -85,7 +129,8 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   const remaining = await session.unmergedPaths();
   if (remaining.length > 0) return { ok: false as const, error: "unresolved merge conflicts remain", conflicts: remaining };
-  await session.commit(input.message);
+  const messageWithCoAuthors = formatCommitMessageWithCoAuthors(input.message, input.coAuthors, input.agent);
+  await session.commit(messageWithCoAuthors);
   return { ok: true as const };
 }
 
@@ -212,18 +257,80 @@ export async function taskSync(repoRoot: string, input: { taskId: string; fetch?
   return { ok: true as const, ...(await new GitClient(repoRoot).syncTask(input.taskId, { fetch: input.fetch, abort: input.abort })) };
 }
 
-export async function taskResume(repoRoot: string, input: { taskId?: string; pr?: number }) {
-  if (input?.pr !== undefined) {
-    if (!Number.isInteger(input.pr) || input.pr <= 0) return fail(`invalid PR number: ${input.pr}`);
-    const result = await new GitClient(repoRoot).resumeFromPullRequest(input.pr);
-    return { ok: true as const, taskId: result.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath, pr: result.pr, repaired: result.repaired };
+export interface TaskResumeInput {
+  taskId?: string;
+  pr?: number;
+}
+
+export async function taskResume(repoRoot: string, input: TaskResumeInput = {}) {
+  let taskId = input.taskId;
+  let prNumber = input.pr;
+  const client = new GitClient(repoRoot);
+
+  if (!taskId && prNumber !== undefined) {
+    if (!Number.isInteger(prNumber) || prNumber <= 0) return fail(`invalid PR number: ${prNumber}`);
+    const prResult = await client.resumeFromPullRequest(prNumber);
+    taskId = prResult.taskId;
   }
-  if (!input?.taskId || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
-  const result = await new GitClient(repoRoot).createOrResumeSession(input.taskId);
+
+  if (!taskId || !isValidTaskId(taskId)) {
+    return fail(`invalid or missing task id: ${taskId ?? "(none)"}`);
+  }
+
+  const result = await client.createOrResumeSession(taskId);
+  const worktreePath = result.session.worktreePath;
+  const base = result.base;
+
+  let recentCommits: string[] = [];
+  let dirtyFiles: string[] = [];
+  let affectedFiles: string[] = [];
+
+  if (worktreePath && existsSync(worktreePath)) {
+    try {
+      const output = execFileSync("git", ["log", "-n", "3", "--oneline"], { cwd: worktreePath, encoding: "utf8" });
+      recentCommits = output.split(/\r?\n/).filter(Boolean);
+    } catch { /* no commits yet */ }
+
+    try {
+      const output = execFileSync("git", ["status", "--porcelain"], { cwd: worktreePath, encoding: "utf8" });
+      dirtyFiles = output.split(/\r?\n/).filter(Boolean).map((line) => line.trim());
+    } catch { /* clean */ }
+
+    try {
+      const output = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], { cwd: worktreePath, encoding: "utf8" });
+      affectedFiles = output.split(/\r?\n/).filter(Boolean);
+    } catch { /* no diff */ }
+  }
+
+  let contextPack: string | undefined;
+  try {
+    // @ts-ignore - dynamic import of context-resolver.mjs script
+    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    contextPack = resolveContext({
+      root: repoRoot,
+      taskId: taskId,
+      paths: affectedFiles.length > 0 ? affectedFiles : null,
+    });
+  } catch {
+    contextPack = undefined;
+  }
+
   return {
-    ok: true as const, taskId: input.taskId, branch: result.session.branchName, worktreePath: result.session.worktreePath,
-    resumed: result.resumed, repaired: result.repaired, base: result.base,
-    dependencyMode: result.dependencies.mode, dependencyOverlays: result.dependencies.overlays, workspaceLinks: result.dependencies.workspaceLinks,
+    ok: true as const,
+    taskId,
+    branch: result.session.branchName,
+    worktreePath: result.session.worktreePath,
+    resumed: result.resumed,
+    repaired: result.repaired,
+    base: result.base,
+    pr: prNumber,
+    recentCommits,
+    dirtyFiles,
+    affectedFiles,
+    contextPack,
+    dependencyMode: result.dependencies.mode,
+    dependencyOverlays: result.dependencies.overlays,
+    workspaceLinks: result.dependencies.workspaceLinks,
     dependenciesMaterialized: result.dependencies.materialized ?? false,
     dependencyLockfileHash: result.dependencies.lockfileHash,
     dependencyWorkspaceConfigHash: result.dependencies.workspaceConfigHash,
@@ -255,3 +362,76 @@ export async function taskSweep(repoRoot: string) {
   const { cleaned, skipped, remoteBranches } = await client.sweepMergedWorktrees();
   return { ok: true as const, cleaned, skipped, remoteBranches };
 }
+
+export interface TaskContextInput {
+  query?: string;
+  scope?: string;
+  map?: boolean;
+  pack?: boolean;
+  taskId?: string;
+  paths?: string[];
+}
+
+export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
+  if (input.pack || input.taskId || (input.paths && input.paths.length > 0)) {
+    // @ts-ignore - dynamic import of context-resolver.mjs script
+    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    const packSummary = resolveContext({
+      root: repoRoot,
+      taskId: input.taskId ?? null,
+      paths: input.paths ?? null,
+    });
+    return {
+      ok: true as const,
+      pack: packSummary,
+    };
+  }
+
+  const indexPath = join(repoRoot, ".ai", "INDEX.md");
+  const signaturesPath = join(repoRoot, "docs", "generated", "signatures", "signatures-map.md");
+
+  let content = "";
+  if (input.scope) {
+    if (existsSync(signaturesPath)) {
+      const sigs = await readFile(signaturesPath, "utf8");
+      const sections = sigs.split("### ");
+      const matched = sections.filter((s) => s.toLowerCase().includes(input.scope!.toLowerCase()));
+      if (matched.length > 0) {
+        content = matched.map((m) => "### " + m).join("\n").slice(0, 4000);
+      }
+    }
+    if (!content && existsSync(indexPath)) {
+      const index = await readFile(indexPath, "utf8");
+      const lines = index.split("\n").filter((l) => l.toLowerCase().includes(input.scope!.toLowerCase()));
+      content = lines.join("\n");
+    }
+  } else if (input.query) {
+    const results: string[] = [];
+    if (existsSync(indexPath)) {
+      const index = await readFile(indexPath, "utf8");
+      for (const line of index.split("\n")) {
+        if (line.toLowerCase().includes(input.query.toLowerCase())) results.push(`[.ai/INDEX.md] ${line.trim()}`);
+      }
+    }
+    if (existsSync(signaturesPath)) {
+      const sigs = await readFile(signaturesPath, "utf8");
+      for (const line of sigs.split("\n")) {
+        if (line.toLowerCase().includes(input.query.toLowerCase())) {
+          results.push(`[signatures-map.md] ${line.trim()}`);
+          if (results.length >= 30) break;
+        }
+      }
+    }
+    content = results.slice(0, 30).join("\n");
+  } else {
+    if (existsSync(indexPath)) {
+      content = await readFile(indexPath, "utf8");
+    }
+  }
+
+  return {
+    ok: true as const,
+    summary: content || "No context found matching criteria.",
+  };
+}
+

@@ -8,8 +8,19 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+mod construction;
 mod layout;
 mod model;
+mod surface;
 
+pub use construction::{
+    ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceSpec, delete_node, duplicate_surface,
+    merge_surfaces, move_node, split_surface,
+};
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
-pub use model::{Edge, EdgeId, Graph, GraphError, GraphSnapshot, IdentifierError, Node, NodeId};
+pub use model::{
+    Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
+    IdentifierError, Node, NodeId, PrismGridMesh,
+};
+pub use surface::{Surface, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
+

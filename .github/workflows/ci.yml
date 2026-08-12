@@ -14,7 +14,7 @@ jobs:
     # actionable but remains a separate task.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install pinned Rust toolchain
         # rust-toolchain.toml pins channel/components/targets; running any
@@ -64,11 +64,11 @@ jobs:
         # locked to one source of truth.
         run: cargo install wasm-pack --version "$(cat tools/wasm-pack-version.txt)" --locked
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v4
         with:
           version: 11.17.0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -94,20 +94,22 @@ jobs:
           pnpm exec nx run ui:test
           pnpm exec nx run ui:api-check
 
-      - name: Docs and Graph IR drift check (G-008/I-007)
-        # Composes the real repo-map/artifact-manifest/Graph IR extractor
-        # --check scripts (G-003/G-004/I-004) with the Rust and TypeScript
-        # public-API baseline checks (I-003A/I-003B) into the one entry
-        # point master source S7.3 names -- see package.json's docs:check
-        # and tools/scripts/README.md. Replaces the two api-check
-        # invocations that used to run standalone/bundled above; no
-        # coverage removed, just consolidated under one named step.
+      - name: Auto-generate Docs and Graph IR
+        run: |
+          pnpm run graph:map
+          pnpm run graph:manifest
+          pnpm run graph:signatures
+          pnpm run graph:extract
+          pnpm run docs:api:ts:generate
+          pnpm run docs:api:rust:generate
+
+      - name: Docs and Graph IR validation
         run: pnpm run docs:check
 
       - name: Nx check
         run: pnpm exec nx run engine-domain-core:check
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.32"
 

@@ -1,0 +1,396 @@
+# VTT product roadmap: epics and tasks
+
+- Status: planning breakdown, not a Decision Gate and not itself an ADR.
+  Where a task cites a `DEC-XXX`/ADR, that decision already governs; where a
+  task's own status is **Open**/**Standby**, the task is to *close* that
+  status, not an implementation ready to start
+- Scope: everything the owner named as "the main part" of the VTT — Studio
+  tooling health, the VTT app's own architecture, map/construction, mesh and
+  procedural asset generation, tokens, and rules (world/physics/movement/
+  actions). Multiplayer wire-up beyond what is already `Decided/Locked` at
+  the engine level, GM/player tools, deployment, Tier 2 import, and Tier 3 AI
+  authoring are deliberately **not** in this document — they stay tracked in
+  `docs/research/vtt-product-scope-map.md` as "something more," per the
+  owner's own framing
+- Detail for Epic 3 lives in `docs/architecture/vtt-map-construction-roadmap.md`;
+  this document sequences it against the other epics rather than repeating it
+- Dificuldade/Impacto columns are a rough Baixa/Média/Alta classification of
+  execution difficulty and of how much the task unblocks or governs the rest
+  of the roadmap — not an agent assignment; which provider (Claude, Codex,
+  Gemini) picks up a given task is decided per task, separately
+- **Replay determinism is deliberately out of scope everywhere in this
+  roadmap for now** — the owner's own framing: "essas coisas serão bem no
+  futuro mesmo, replay talvez nem entre ou se entrar será em outro momento."
+  No task below should design around `DEC-044`/multiplayer replay as a
+  present-day constraint; where a task still uses the `Command`/`DomainEvent`
+  vocabulary (E2.3, E5.2), that is about keeping state changes well-modeled,
+  not about building replication now
+- **`ADR-0022`/`DEC-060` was revised in place on 2026-08-10.** A construction
+  surface (wall, door, window, terrain patch) is now defined by a set of
+  `grafting-graph-core` graph nodes (a cycle), referenced by stable
+  `NodeId` — not free-form world-coordinate geometry, which was this
+  roadmap's original design and is now superseded. See the ADR itself for
+  the full reasoning, what changed, and what remains unresolved (query
+  recomputation cost, Tier 2 import bridging, the deletion-repair rule's
+  general form). `E1.5` and `E3.3` below already reflect this; any other
+  task that mentions `BoundarySegment`/`BoundaryPatch`/free geometry
+  predates the revision and should be read as superseded
+
+## Legend (matches `vtt-product-scope-map.md`)
+
+| Status | Meaning |
+| --- | --- |
+| **Decided** | A real decision exists; still needs ADR/task follow-through |
+| **Standby** | Researched, a direction leans one way, not committed |
+| **Open** | Identified as a real need; no research done yet |
+| **Not discussed** | Has not been raised in this planning process |
+
+## Dependency order between epics
+
+```text
+Epic 1 (Studio/graph-core health)
+   -> Epic 2 (VTT app architecture)
+        -> Epic 3 (map/construction engine)
+             -> Epic 3.5 (VTT map integration & edit-mode validation)
+                  -> Epic 4 (mesh/procedural assets) -- feeds Epic 3's tilesets too
+             -> Epic 5 (tokens)
+                  -> Epic 6 (rules: world, physics, movement, actions)
+```
+
+Epic 1 blocks Epic 3's C4 task specifically (the mutation engine cannot be
+written correctly until the graph-core question is settled). Epics 4 and 5
+can start once Epic 2's domain model exists, without waiting for all of
+Epic 3. **Epic 3.5 is new (2026-08-12):** Epic 3's engine (`E3.1`-`E3.4`)
+closed with zero consumers wired anywhere in `apps/vtt` — Epic 3.5 exists
+specifically to prove that engine end-to-end inside the real app (render it,
+edit it) before more content-authoring work (Epic 4) pours more input into
+an unvalidated pipeline.
+
+---
+
+## Epic 1 — Resolve Grafting Architecture Studio's own tooling debt
+
+Goal: the Studio's shared machinery (graph core, bench, lab) is sound before
+VTT-specific work builds on top of it. Nothing here is VTT product work.
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E1.1 | **Determinism-scope decision + measurement spike.** Full breakdown below | **Done** — see `docs/benchmarks/graph-storage-2026-08-11.md` (revised after follow-up questions widened the scope). Query/traversal: existing `BTreeMap`-backed path clears the frame-budget threshold with wide margin at 1k/10k/100k/**1M** cells, dispersed access included — no new backend needed there. Bulk insertion: real, measured problem at ~1M cells (5-7s), but the fix the numbers point to is a `BTreeMap`→`HashMap` identity-map swap inside the *existing* type, not the second `Csr`-like backend E1.2 assumed — that alternative engine did not reliably beat the simpler map swap | Média | Alto — unblocks E1.2 and E3.3 |
+| E1.2 | **Reconcile `CellGraph` and `grafting-graph-core::Graph` behind one trait-based operations layer.** Full breakdown below | **Done.** `GraphOps<N, E>` trait added (deliverables 1/2/4/6), `Graph<N, E>` implements it via thin delegation, behavior unchanged; proven generically usable by a real test, not just declared. Deliverable 3 re-scoped per E1.1's numbers: `Graph<N, E>`'s internal `BTreeMap`s swapped to `HashMap`, with `snapshot()` now explicitly sorting to keep `GraphSnapshot`'s "sorted by stable identity" contract (`topological_order()` was already self-contained, unaffected). No second storage backend built — a real `Csr` candidate did not reliably beat the map swap. Deliverable 5 (domain payload stays generic `N`/`E`, outside the backend) was already true, confirmed unchanged | Alta | Alto — unblocks E3.3; graph operations confirmed to stay in `libs/graph/core`, informing E1.5's destination question too |
+| E1.3 | Consolidate `/lab`: migrate standalone trials into node kinds on the bench registry (several already have equivalents — `heightmap.perlin`, `terrain.discretize`, `grid.irregular`, `terrain.stack`); delete `/lab/trials` once confirmed. `vtt-brush` is flagged as a likely exception (interactive editor, not a data-transform node) — full send-ready prompt below, including that `vtt-brush`'s wall model is now stale a second time | Ready — full prompt preserved below | Média | Médio — tooling hygiene, not blocking; `vtt-brush`'s own redesign is what's actually higher-stakes |
+| E1.4 | Fix `/lab/vtt-brush`'s wall mesh: currently extrudes a solid box (`thickness` offset + 5 faces) instead of a flat double-sided plane; material is already `doubleSided: true`, so the fix is dropping the box extrusion, not adding anything | Ready | Baixa | Baixo — cosmetic, isolated to one lab trial |
+| E1.5 | **Remove the stale `map_state.fbs` from `domain-core` and defer its replacement to a real consumer.** Code inspection confirmed the schema was generated but never wired into `domain-core`'s Rust contract module, conversions, round-trip tests, or any TypeScript/C# consumer. Its free-geometry `BoundarySegment`/`BoundaryPatch` shape was superseded by ADR-0022, while moving a replacement into generic `graph-core` would incorrectly make its opaque `Node<N>` payload mean `Vec3`. The source schema and stale generated bindings are removed from global codegen; no replacement is created until an executable persistence, Worker, or transport consumer owns the boundary | **Done — task `VTT-E1-CONTRACT-READINESS`** | Média | Alto — removes an actively misleading dead contract without speculating the future wire boundary |
+
+**E1.5 measurement follow-up (2026-08-12):**
+`docs/benchmarks/vtt-surface-mesh-recomputation-2026-08-12.md` validates the
+current quad generators' node-move → invalidation → polygon path through 1M
+surfaces without a mesh cache. Arbitrary meshes and the eventual
+Wasm/Worker/chunk/GPU pipeline remain measurements for their first executable
+consumers; E1.5 does not invent those contracts ahead of them.
+
+### Out of scope for E1.1/E1.2: replay determinism
+
+Multiplayer replay is explicitly deferred — the owner's own framing: "essas
+coisas serão bem no futuro mesmo, replay talvez nem entre ou se entrar será
+em outro momento." Neither task designs around `DEC-044`/replay for now.
+Practical effect: the existing `Graph<N, E>`'s `BTreeMap`-backed, ordered
+storage (`libs/graph/core/src/model.rs`) is not a constraint the VTT graph
+work has to preserve or work around today — there is no live replay/
+multiplayer path yet that depends on it. The trait-based design below still
+keeps the door open for a deterministic backend later, without either task
+having to build or benchmark one now.
+
+### E1.1 detail — measurement spec
+
+**Executed 2026-08-11 — see `docs/benchmarks/graph-storage-2026-08-11.md`
+for the full report (revised in place the same day after follow-up
+questions: was query cost checked beyond brush-stroke-shaped access, and
+does the bulk-insertion number hold up at millions of cells, not just
+100k).** The spec below is preserved as the methodology that produced it,
+not a still-open task.
+
+**Current implementation, as read from `libs/graph/core/src/model.rs`:**
+
+```rust
+pub struct Graph<N, E> {
+    storage: StableDiGraph<Node<N>, Edge<E>>,   // petgraph's dense storage
+    node_indices: BTreeMap<NodeId, NodeIndex>,   // string id -> dense position
+    edge_indices: BTreeMap<EdgeId, EdgeIndex>,
+}
+```
+
+`successors`/`predecessors` translate every neighbor found back into a
+cloned `NodeId` (`String`) before returning a `Vec<NodeId>`. Each call pays
+a `BTreeMap` lookup (string comparisons, `O(log n)`) plus a string clone,
+per neighbor. This is the cost to measure — not because determinism must be
+preserved (it does not need to be, for now), but because nobody has checked
+whether this existing path is simply fast enough as-is, before building
+anything new to replace it.
+
+**The benchmark spec (write the spec, including the failure threshold,
+before running anything):**
+
+- Scale: benchmark at multiple realistic map sizes, not one point — suggest
+  small/medium/large presets (order of magnitude: ~1k, ~10k, ~100k cells) to
+  see how cost scales, not just whether one size passes.
+- Operations to measure separately:
+  1. Bulk insertion (building the graph once from a generation pass).
+  2. Point lookup by id.
+  3. Neighbor query (`successors`/`predecessors`), repeated to simulate a
+     brush stroke's 6-slot neighborhood recompute across a realistic
+     affected-cell count.
+- Comparison baseline: the existing `BTreeMap`-backed path vs. a raw dense
+  `NodeIndex`/`usize` path with no string translation at all, so the
+  translation layer's isolated cost is a real number, not an impression.
+- State the acceptance threshold *before* running: what number counts as
+  "fine" vs. "too slow" (e.g., total neighbor-query cost for one typical
+  brush stroke must stay well under the frame budget, leaving headroom for
+  everything else happening that frame — rendering, WASM boundary crossing,
+  mesh rebuild).
+- Deliverable: a short written report with the numbers and the
+  interpretation against the stated threshold — not shipped code.
+- Outcome shapes E1.2 directly: if the existing path is already fast enough,
+  E1.2 needs no new storage type at all, only the trait extraction below. If
+  it is not, E1.2's second backend (dense, no string translation) is what
+  the numbers justify building.
+- **What actually happened does not fit either branch cleanly.** The
+  query/traversal axis is fast enough (first branch). Bulk insertion is not
+  fast enough at real scale (second branch) — but the numbers point at a
+  `HashMap` swap inside the *existing* type, not a second storage type
+  implementing the trait, because a real `Csr`-based candidate was measured
+  and did not reliably beat the simpler map swap. See the report's "A real
+  tradeoff the map swap introduces: determinism" section before making this
+  change — it is not a type-signature-only substitution.
+
+### E1.2 detail — reconcile behind a trait, not a single winning struct
+
+Whatever E1.1's numbers say, the fix is not "pick one storage type and make
+everyone use it." It is: **write every graph operation once, against an
+abstract interface, and let more than one storage backend implement that
+interface** — the same pattern `petgraph` itself already uses internally (it
+ships multiple concrete graph representations, e.g. its
+`Csr`/compressed-sparse-row type for fast dense read access, all sharing one
+algorithm layer through traits like `IntoNeighbors`/`Visitable`/
+`GraphBase`). This is not a new invention; it is extending a pattern the
+dependency already proves one level down, up to `grafting-graph-core`'s own
+public contract. Building two unrelated concrete graph structs with
+hand-written, separately-maintained traversal code in each would silently
+reintroduce the exact duplication this whole investigation exists to
+prevent.
+
+Concrete deliverables:
+
+1. A trait (or small set of traits) in `grafting-graph-core` stating the
+   minimal capability graph algorithms actually need — starting from "given
+   a node, its neighbors" — separating read/traversal capability from
+   mutation capability if that split turns out to matter.
+2. The existing `Graph<N, E>` implements this trait unchanged in behavior.
+3. **Superseded by E1.1's actual findings.** The bulk-insertion axis is not
+   fast enough at real scale, but the fix the numbers justify is narrower
+   than a second storage type: swap `Graph<N, E>`'s internal
+   `BTreeMap<NodeId, NodeIndex>`/`BTreeMap<EdgeId, EdgeIndex>` for
+   `HashMap`, and add an explicit sort at `snapshot()` (and any other
+   caller relying on `BTreeMap`'s incidental ordering) to preserve
+   `GraphSnapshot`'s "sorted by stable identity" contract. A real
+   `Csr`-based second backend was measured against this and did not
+   reliably win — see
+   `docs/benchmarks/graph-storage-2026-08-11.md`. Do not build a second
+   storage type for this reason unless a future measurement shows the map
+   swap insufficient.
+4. Every graph *operation* — today's `successors`/`predecessors`, soon
+   `apply_cell_patch`'s K-step neighborhood recompute, later E3.4's
+   path-constraint reachability check for interior generation — is written
+   once against the trait, inside `grafting-graph-core`, and used by
+   whichever backend applies. **Optional, non-blocking finding from E1.1:**
+   `successors`/`predecessors` clone every result to a `String` `NodeId`;
+   an index-returning variant for purely-internal callers (never crossing
+   the crate's own boundary) measured 3.3-10.4x faster at every scale up to
+   ~1M cells. Not required — the existing `String`-returning path already
+   clears the frame-budget threshold with wide margin — but worth adding
+   alongside the trait if `apply_cell_patch`'s K-step recompute turns out to
+   want it.
+5. Domain-specific payload (face ids, sockets, `CellRole`, later `Surface`'s
+   `type`/`physical` per the revised `ADR-0022`) stays outside the backend(s), carried as the generic
+   `N`/`E` type parameter already supported today — the backend never needs
+   to know what a "face" or a "wall" is, satisfying "métodos específicos
+   ficam de fora, reaproveitando das operações" from this epic's own
+   framing.
+6. Leave the trait's shape open enough that a future deterministic backend
+   (if/when multiplayer replay becomes a real epic) is an additional
+   implementation, not a rewrite of every algorithm — the point of doing
+   this as a trait now, even though nothing deterministic is being built
+   today.
+
+### E1.3 detail — the full consolidation prompt, preserved
+
+Written out in full here (not just summarized) because the original prompt
+text only ever existed in chat and would be lost on context compaction.
+This is the complete, ready-to-send instruction — send as-is, or update
+the vtt-brush note first if `E1.5`'s schema redesign has already landed.
+
+**Objective**: `/lab` is already the node bench (`BenchClient`, DEC-057) —
+a canvas of composable nodes registered in
+`apps/architecture-studio/src/bench/registry.ts`, with typed ports and
+incremental evaluation. `/lab/trials` is a separate index of standalone,
+one-page-per-trial demos. There should be only one generic experimentation
+surface, not two. Eliminate `/lab/trials`; migrate whatever still needs it
+into the bench as atomic node kinds, not ported whole pages.
+
+**Step 1 — audit before recreating.** Check
+`apps/architecture-studio/src/bench/registry.ts` in full before writing any
+new node. At least these already have a registered equivalent:
+`/lab/heightmap` → `heightmap.perlin` (Generation); `/lab/terrain-quantization`
+→ `terrain.discretize` (Terrain); `/lab/irregular-grid` → `grid.irregular`
+(Grid); `/lab/stacked-terrain` → `terrain.stack` (Terrain). For each,
+confirm the bench node genuinely covers the same capability the standalone
+page demonstrates (same input/output, same result) — if it does, the page
+is redundant, delete it, no new node needed.
+
+**Step 2 — the ones that may still be missing.** For `/lab/terrain-transitions`,
+`/lab/terrain-tileset`, and `/lab/mesh-procedural`, check for an existing
+node first (`mesh-procedural` may already have one — it was added in the
+same commit as its trial page, "add 3D mesh & freeform generator trial and
+bench node"). Where genuinely missing, add node kind(s) following the
+existing registry pattern (`id`, `category`, typed `inputs`/`outputs` via
+`BENCH_DATA_TYPES`, `params`) — one node per focused capability, not one
+monolithic node replicating the whole page.
+
+**Step 3 — `vtt-brush` is different, and now doubly stale, do not force it.**
+`/lab/vtt-brush` is an interactive editing tool (brush, undo/redo), not a
+data-transformation node — it probably does not fit the bench's
+one-node-computes-one-thing model. Do not force it into a node kind alone;
+document the situation and ask before deciding how (or if) it joins the
+bench. **In addition**, as of `ADR-0022`'s 2026-08-10 revision, `vtt-brush`'s
+underlying data model (`BoundarySegment`/free geometry, from PR #74's
+"align with ADR-0022" commit) is now itself superseded by the node-graph
+`Surface` model — this is the *second* time this trial's wall model has
+gone stale (`CellRole` → `BoundarySegment` → node-graph). Do not treat a
+UI-only relocation into the bench as sufficient; the wall-placement logic
+itself needs redesigning around node operations (move/add/delete/merge/split)
+once `E1.5`'s schema redesign lands, and that redesign should happen once,
+not be layered under whatever UI shell decision this task makes.
+
+**Step 4 — do not lose capture-and-compare.** `trials-client.tsx` states
+each standalone trial "still demonstrates its own capture-and-compare
+workflow, which the bench does not replace." Before deleting any trial,
+confirm the bench already has (or add) an equivalent per-node
+capture/preview flow — see `apps/architecture-studio/src/bench/preview.ts`
+and the existing `ParameterPanel`/preview panel in `/lab`. If that flow
+genuinely does not exist for the bench yet, it is a prerequisite, not
+something to skip.
+
+**Step 5 — cleanup**, only after each trial has a confirmed bench
+equivalent (or is confirmed redundant): delete the standalone route
+(`apps/architecture-studio/src/app/lab/<trial>/`); remove its entry from
+`DEMO_LINKS` in `research-registry-ui.ts`; delete
+`apps/architecture-studio/src/app/lab/trials/` entirely
+(`page.tsx`, `trials-client.tsx`); grep for any other reference to the
+deleted routes (e.g. `/lab/heightmap`) before removing them.
+
+**Process**: `ia-graft task new` (touches non-Markdown files, normal
+task+branch+PR). Run typecheck/build before `task done`. If `vtt-brush`
+blocks on a decision, stop that part and deliver the rest — it does not
+need to wait for the others to finish.
+
+## Epic 2 — Architect the VTT app itself
+
+Goal: `apps/vtt` stops being notes-only and becomes a structurally sound app
+*before* construction features (Epic 3) need a real surface to live in.
+`apps/vtt/README.md` is explicit that this needs an ADR first, not just a
+directory.
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E2.1 | **Decide and record the VTT application architecture.** Define the Next.js product-host boundary, app-owned product composition, vertical-slice/module boundaries, dependency direction, runtime/state ownership, ports/adapters, and interaction commit semantics. This is a decision task; it does not create the app scaffold | **Decided — ADR-0023 accepted (DEC-061, 2026-08-11)** | Média | Alto — governs every downstream VTT task |
+| E2.2 | Close `apps/vtt/notes/0001` (rendering/propagation debt carried from the bench): explicit per-renderer dependency model (a token's position must not invalidate terrain), origin-tagged state changes (local vs. network vs. programmatic — three sources, not two), one renderer with many views instead of one WebGL context per element, a resizable renderer contract from day one, buffer reuse across the worker boundary, uncommitted-until-release drag gestures | **Decided — note resolved by `VTT-RENDER-001` (2026-08-12); implementation acceptance deferred to the first real rendering/Worker slice** | Alta | Alto — six real, previously-measured defects to prevent from recurring at VTT scale |
+| E2.3 | Design the VTT product model and app-local intents, projections, and ports inside `apps/vtt`. Compose generic capabilities from `libs/*` and `packages/*`; reusable packages MUST NOT gain a `vtt` namespace or app-exclusive methods | **Decided — `VTT-PRODUCT-001` accepted (2026-08-12); exact payloads remain owned by executable Epic 3/5/6 slices** | Alta | Alto — foundational for Epics 3, 5, and 6 |
+| E2.4 | Decide `apps/vtt/notes/0002`'s open questions (fog of war): is it grid-tied, what resolution is remembered state stored at, does sound produce the same remembered state as sight, who is authoritative. Deliberately deciding only — implementation is out of this epic's scope, per the note's own framing ("algo que eu devo fazer bem para o futuro") | **Decided — `VTT-VISIBILITY-001` accepted (2026-08-12), based on `VTT-FOG-RESEARCH-001`; implementation remains deferred** | Média | Médio — shapes the engine contract now even though implementation is deferred |
+| E2.5 | Domain/folder organization research for the VTT application | **Decided — absorbed into E2.1 and recorded by ADR-0023; no separate implementation task** | Média | Médio |
+| E2.6 | Implement the accepted VTT app scaffold. Materialize only the first executable slice required by ADR-0023, including `project.json`, scope-local `AGENTS.md`, the host/client route boundary, one composition root, and architecture-boundary checks | **Implemented — task `VTT-APP-SCAFFOLD` merged by PR #79** | Média | Alto |
+
+Epic 2 is complete at the architecture/decision/scaffold level. Deferred
+feature implementations remain owned by their later epics and first executable
+consumers.
+
+## Epic 3 — Map & construction
+
+Full detail in `docs/architecture/vtt-map-construction-roadmap.md`. Water is
+deliberately excluded here and moved to Epic 6 (physics), per the owner's
+explicit request to push all physics/water/effects to the future.
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E3.1 | Terrain tileset authoring (slopes/cliffs/grass) — socket vocabulary, ~10-20 pieces from CC0 Kenney/KayKit packs | Standby | Alta | Alto |
+| E3.2 | Exterior (Townscaper-style) tileset — same engine as E3.1, its own socket vocabulary | Standby | Alta | Alto |
+| E3.3 | Unified brush/mutation engine: node operations (move/add/delete/merge/split, per the revised `ADR-0022`) for **every** construction domain — terrain and walls/doors/windows alike, as sets of `grafting-graph-core` graph nodes. **Revised 2026-08-12**: `apply_cell_patch` as a separate terrain-only algorithm does not exist — `ADR-0022`'s "Terrain/structure seam: resolved" section closes that split; terrain cells are `Surface`s like any other, and `PrismCellAssignment`/"rotation" are generation-time inputs, not a parallel structure or a graph primitive. The "6-slot neighborhood" language elsewhere in this doc and in `vtt-map-construction-roadmap.md` is retired — it described `PrismGridMesh`'s old fixed-grid adjacency, not a rule of the graph operation | **Done.** Node operations landed first: mutation primitives, `Surface`/`SurfaceRegistry`, and all five `ADR-0022` operations (`move_node`/`delete_node`/`merge_surfaces`/`split_surface`/`duplicate_surface`, `libs/graph/core/src/construction.rs`), all sharing the same validate-before-any-mutation discipline; `duplicate_surface` generates its connecting edges automatically as a closed ring over the caller-supplied new nodes (confirmed with the owner). **Generation code landed 2026-08-12 (PR #84)**, closing E3.3: two new isolated crates, `grafting-procgen-terrain-generation` (bilinear corner-height module → `PrismGridMesh` cell surface, ported from the `module-placement.ts`/`terrain-modules.ts` prototypes) and `grafting-procgen-structure-generation` (wall/door centerline → up to 3 sibling surfaces sharing jamb `NodeId`s around a door opening), each producing only plain `Node`/`Edge`/`SurfaceSpec` data and feeding the existing node operations rather than reinventing them, per `ADR-0022`'s generation-isolation requirement. **WASM bindings landed 2026-08-12 (PR #87)**: `grafting-procgen-construction-wasm` (`libs/domains/procgen/construction-wasm`) wraps `construction.rs`'s five operations plus both generation crates behind one stateful `ConstructionSession` (JSON-in/JSON-out over `wasm-bindgen`), so all of E3.3 is now reachable from JS/the Studio brush tool. No UI wiring yet — that consumer work is still open. Still deliberately deferred: `ModuleShape::Mesh` terrain modules; partial-height (lintel) doors | Alta | Alto — this is "the bulk of construction" the owner wants finished |
+| E3.4 | Interior generation: BSP/straight-skeleton room partition + a second WFC pass with an interior tileset + path-constraint connectivity | Open — proposal, not designed | Alta | Médio — can land after terrain/exterior work |
+
+**Epic 3 engineering closed 2026-08-12.** The mutation/generation engine
+(`E3.3`) is done, including WASM bindings (PR #87) — every operation the
+owner needs is implemented and tested in Rust. `E3.1`/`E3.2` (tileset
+authoring) and `E3.4` (interior generation) remain open but are
+content/design-dependent, not blocking: `E3.1`/`E3.2` already wait on
+Epic 4's asset pipeline (`E4.2`), and `E3.4` waits on both. The render/
+UI work formerly tracked here as `E3.5` moved to the new Epic 3.5 below,
+since it's really about the *consumer* of this engine, not the engine
+itself.
+
+## Epic 3.5 — VTT map integration & edit-mode validation
+
+Goal: prove Epic 3's engine works by actually wiring it into `apps/vtt` —
+render a generated map, enter an edit mode, mutate it, see it update. This
+is the "first real rendering/Worker slice" `E2.2`'s row already deferred
+acceptance to, and the concrete validation the owner asked for after E3.3
+closed. Confirmed via direct inspection (not assumed) that today
+`apps/vtt` renders tokens only: `SceneRenderPort`
+(`apps/vtt/src/ports/scene-render-port.ts`) carries only
+`ConfirmedTokenRenderChange`, `getMetrics()` hardcodes `terrainUploads: 0`,
+and there is no `map`/`construction` entity, projection, or port anywhere
+under `apps/vtt/src` — this epic is genuinely starting from zero, not
+finishing something partial.
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E3.5 | Render pipeline for map geometry: extend `@grafting/render-3d` and `SceneRenderPort` with a terrain/wall/surface visual kind, chunked sub-buffer upload, and the GPU clip-plane shader for floor cutting, continuous world-space `Y` driven by camera height (not discrete floor indices). Formerly tracked under Epic 3; unblocked now that `E3.3` stabilized the data model | Ready — unblocked, not started | Média | Alto — nothing renders without this |
+| E3.6 | Map product model inside `apps/vtt`: `entities/map` (or `construction`) app-local intents/projections/ports per `ADR-0023`/`VTT-PRODUCT-001`, wired to `grafting-procgen-construction-wasm`'s `ConstructionSession`. Likely behind a Worker boundary, per `VTT-RENDER-001`'s existing buffer-reuse/origin-tagged-state-change decisions | Open — not started | Alta | Alto — the only bridge between the WASM engine and the app |
+| E3.7 | Edit-mode interaction layer in `apps/vtt`: pointer capture, tool/brush selection state, drag-to-move a node, trigger generate-terrain-cell/generate-wall actions, undo/redo. `apps/architecture-studio/src/app/lab/vtt-brush` (1132 lines) is a real interactive reference for the UX, but its data model (`BoundarySegment`/`TerrainSurfaceKind`/`CellId`) predates `ADR-0022`'s node-graph revision — reuse the interaction patterns, rewrite the data model against `Surface`/`NodeId`, do not port directly | Open — not started | Alta | Alto — this is "edit mode" as the owner asked for it |
+| E3.8 | End-to-end validation slice: inside `apps/vtt`, generate a terrain cell and a wall with a door, see both rendered, drag a node in edit mode, see the change propagate live. This is the epic's own acceptance criterion, not a separate feature | Open — depends on E3.5-E3.7 | Média | Alto — this is the actual "posso ver e mexer no mapa" answer |
+
+## Epic 4 — Mesh and procedural texture/asset generation
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E4.1 | Research procedural texture generation — genuinely untouched by any existing research document; needs a first pass before anything else here | Not discussed | Média | Médio |
+| E4.2 | Tileset/asset authoring pipeline (tagging CC0 meshes with socket/adjacency metadata — real content-creation work, not automatable) | Open | Média | Alto — blocks E3.1/E3.2 content |
+| E4.3 | Custom asset import (3D models, textures for props/buildings) | Not discussed | Baixa-Média | Baixo — not urgent, unscoped |
+
+## Epic 5 — Tokens
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E5.1 | Token rendering as a billboard/sprite (`THREE.Sprite`) inside the full-3D world | **Done — `VTT-TOKEN-BILLBOARD-SLICE`: a generic sprite descriptor is realized privately as `THREE.Sprite`; the VTT-owned visual kind, color, size, layer, projection, and renderer adapter remain inside `apps/vtt`** | Baixa | Médio |
+| E5.2 | Token product model and operations inside `apps/vtt`, using app-local intents/projections/ports over generic capabilities, per E2.3 and ADR-0023 | **Done — `VTT-TOKEN-BILLBOARD-SLICE`: immutable normalized placements, stable token identity, optional opaque `SubjectRef`, typed `token.place@1` and `token.bind-subject@1` operations, confirmed token deltas, dependency-scoped render changes, and runtime lifecycle; physics, visibility, rules payloads, and session transport remain in their owning later tasks** | Média | Médio |
+| E5.3 | Per-token vision/light radius and sense-capability inputs under `VTT-VISIBILITY-001` | Contract decided, not implemented; exact token/rules payload belongs to the first consumer | Média | Baixo — visibility architecture no longer blocks it |
+| E5.4 | Token movement/collision/snapping | Not discussed, depends on E6.1 (physics) | Média | Baixo — blocked on Epic 6 |
+
+## Epic 6 — Rules: world, physics, movement, actions
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E6.1 | Collision/grounding only, not full rigid-body physics (`parry2d`/`parry3d`, Apache-2.0) — must run authoritatively in `domain-core`, never client-side `Raycaster`, so every client resolves the same position (DEC-016/§15) | Standby (decided approach, not implemented) | Média | Médio |
+| E6.2 | Water and rivers — flow-accumulation/drainage-basin simulation on the continuous heightmap seed, Three.js `Water`/`WaterMesh` for rendering. Moved here from Epic 3, deliberately deferred | Standby, deliberately deferred | Média | Baixo — do not start yet |
+| E6.3 | System-agnostic vs. single-ruleset fork — a real, unresolved fork (both PlanarAlly and Foundry chose agnostic; not necessarily right for this project's tighter curated-polish goal) | Open — real fork, owner decision | Baixa | Alto — shapes everything downstream in Epic 6 |
+| E6.4 | Dice rolling (`ndm` crate + `domain-core`'s existing `DeterministicRng`) | Standby | Baixa | Baixo |
+| E6.5 | Flexible character/entity data modeling (ECS candidates `hecs`/`specs` vs. plain enum domain model) | Standby | Média | Médio |
+| E6.6 | Rule automation (attack rolls, damage, saves) via a generic `Command → dice roll → modifier → outcome` flow, unifying combat and persistent status effects | Standby | Alta | Médio |
+
+---
+
+## Deliberately not in this roadmap
+
+Tracked in `docs/research/vtt-product-scope-map.md`, not duplicated here:
+multiplayer's VTT-specific command surface and host language (`GATE-004`,
+deferred to Phase 6/Epic H), GM tools (scene management, NPC/monster
+management, journal), player tools (character sheet UI, inventory, chat),
+Tier 2 import (UVTT), Tier 3 AI-driven authoring, desktop/mobile/VR
+platforms, hosting model, and any content marketplace.

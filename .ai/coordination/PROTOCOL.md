@@ -1,271 +1,40 @@
-# Multi-agent coordination protocol
+# Multi-Agent Coordination Protocol
 
-This protocol is the canonical Phase 1 communication mechanism for Claude,
-Codex, Gemini, and future providers. Coordination is a Git worktree + branch
-per task, managed by `tools/ia-graft`, not a JSON record. A project-scoped
-Claude Code hook enforces the Git-safety half of this protocol at runtime; it
-is a vendor adapter, not a second source of policy.
+Canonical multi-agent communication and task execution protocol for Grafting Monorepo.
+All task execution MUST use `tools/ia-graft`.
 
-## Authority
+## 1. AUTHORITY HIERARCHY
 
-This is the single source for the required-reading precedence order; root
-`AGENTS.md`'s "Required reading" section points here instead of restating it.
-The precedence order remains:
+1. `GRAFTING_MASTER_SOURCE.md`
+2. Accepted ADRs (`docs/adr/`)
+3. Root [`AGENTS.md`](../../AGENTS.md)
+4. Implemented code, manifests, contracts, and schemas
+5. Provider adapters (`GEMINI.md`, `CLAUDE.md`) and chat history
 
-1. `GRAFTING_MASTER_SOURCE.md`;
-2. accepted ADRs;
-3. root and nearest scope-local `AGENTS.md`;
-4. implemented code, manifests, schemas, and Graph IR evidence;
-5. provider adapters and private chat context.
+## 2. IA-GRAFT COMMAND FAMILY SUMMARY
 
-Historical build-log/journal content (what was done, when, and why) lives in
-`docs/history/PLANNING_LOG.md` — an archive, not part of this precedence
-order.
+- `task new --id <ID> [--base <b|parent>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). Sweeps merged worktrees silently.
+- `task commit --id <ID> --message "<m>" [--agent <a>] [--co-author <c>]` — Stages and commits inside task worktree with AI co-authorship.
+- `task test --id <ID> --command "<c>"` — Runs verification commands inside worktree with capped summary output.
+- `task done --id <ID> --title "<t>" --body "<b>"` — Pushes task branch and opens/updates PR via `gh`.
+- `task cleanup --id <ID> [--force]` — Removes merged worktree and deletes task branch after PR merge.
+- `task sync --id <ID> [--fetch]` — Integrates forward-only base updates without rebase.
+- `delegate run --prompt "<p>" [--file <f>] [--effort low|med|high]` — Offloads web research / fact-checking headlessly.
+- `delegate edit --id <ID> --prompt "<p>" [--scope <s>]` — Sandboxed code editing in task worktree.
+- `delegate research --id <ID> --topic "<t>" --output-file <f.md>` — Researches and writes Markdown docs directly.
+- `doc-check` — Validates instruction file size limits (`AGENTS.md` ≤ 100 lines).
+- `guard-check` — Deterministic tool permission check.
 
-## ia-graft: the task-lifecycle CLI
+## 3. RUNTIME SAFETY GUARDS & HOOKS
 
-`tools/ia-graft` is the only
-coordination mechanism. There is no task JSON, no handoff record, and no
-ADR-per-task.
+- `.claude/settings.json` and agent hooks invoke `tools/scripts/agent-task-guard.mjs`.
+- **Git Write Policy:** Agents commit only on their own task branch. Direct pushes to `master`/`main` are forbidden except for 100% Markdown prose edits.
+- **Forbidden Git Commands:** `rebase`, raw `merge`, force pushes to shared branches, human PR merge (`gh pr merge`).
 
-- `guard-check` — ask "would `<tool>` on `<path>`/`<command>` be allowed"
-  before attempting it; returns `{ok, allowed, reason}`.
-- `task new --id <TASK-ID> [--base <branch> | --parent <PARENT-TASK-ID>]` — resolves
-  the repository's real default branch when no base is supplied, first sweeps `.worktrees/` for
-  already-merged tasks and cleans them up silently (see `task sweep` below;
-  a sweep failure never blocks creating the task actually being asked for),
-  then creates or resumes an isolated Git worktree (`.worktrees/<TASK-ID>`) and branch
-  (`task/<TASK-ID>`). It reattaches an existing local/remote task branch when its
-  worktree is missing, safely repairs a reserved orphan directory left by an incomplete
-  Windows removal, and records the task's intended base in local Git branch config.
-  It refuses to resume an ID whose PR is already closed or merged; subsequent work
-  gets a new ID from the current default branch instead of extending stale/squashed history.
-  `--parent` creates a dependent branch from the parent's current local HEAD and records
-  the parent branch as the child's PR base; omit it for independent work. It prepares
-  a task-owned overlay for every installed `node_modules`: external dependencies link
-  to the main checkout's pnpm store, while workspace dependencies link to the matching
-  package inside the task worktree. This prevents tests from silently loading a stale
-  workspace package from the main checkout. It reports the overlay/link counts, or
-  reports that the main checkout has no installation to reuse. Never run
-  `pnpm/npm/yarn/bun install/add/remove/update` directly inside a task worktree.
-  Normal installation remains a main-checkout operation. The sole task-scoped
-  exception is `task deps --install`, whose CLI-owned pnpm invocation requires
-  the task's frozen lockfile, disables lifecycle scripts, keeps its marked virtual
-  store under the main checkout and leaves only managed links in the worktree.
-  `task test` continues to reject dependency-mutating commands.
-- `task resume --id <TASK-ID>` / `task resume --pr <number>` — explicitly resumes
-  an existing task. PR-based resume derives the canonical task ID, head and base from
-  GitHub and refuses closed/merged PRs, so requested changes stay on the same PR.
-- `task sync --id <TASK-ID> [--fetch]` — integrates only the task's recorded base.
-  The worktree must be clean. The default uses the local base; `--fetch` refreshes a
-  non-task base from `origin` first. Integration is forward-only (fast-forward when
-  possible, otherwise a merge commit). Conflicts are returned as compact structured
-  state and remain for normal file editing plus `task commit`. `task sync --abort`
-  aborts only an unfinished merge marked as started by this command. Raw Git merge,
-  rebase, and history rewriting remain forbidden.
-- `task deps --id <TASK-ID> [--install]` — without `--install`, rebuilds the
-  marked workspace-aware overlays from the main checkout's existing installation
-  without running a package manager. With `--install`, materializes the task's
-  frozen pnpm lockfile into an ia-graft-owned virtual store under the main checkout,
-  without lifecycle scripts, so task-only external dependencies are available.
-  Resume preserves a valid materialized overlay; cleanup removes its ownership-marked
-  cache. Unmanaged dependency directories or caches are refused.
-- `task commit --id <TASK-ID> --message <msg> [--file <path>]...` — stages
-  (all changed files, or a given subset) and commits inside that worktree. During a
-  sync conflict it refuses unresolved paths and conflict markers.
-- `task test --id <TASK-ID> --command <cmd> [--command <cmd>...] [--keep-going]`
-  — runs up to 12 checks inside the worktree. One command preserves the original
-  result shape; a batch returns per-command results and stops at the first failure
-  unless `--keep-going` is explicit. TAP summaries are preserved, other output uses
-  the last 40 lines, and every line plus single/batch summaries have hard size caps.
-  A failed check returns `passed: false` and a non-zero CLI exit code.
-- `task done --id <TASK-ID> --title <title> --body <body> [--base <branch>]` —
-  pushes the branch and opens a pull request via `gh pr create`. If `gh` is
-  missing or unauthenticated, it still pushes and returns
-  `{prState: "manual", prUrl: <manual compare URL>}` instead of failing. Leaves
-  the worktree in place for any follow-up review commits. Any other `gh pr create`
-  failure is explicit with its stderr; it is never mislabeled as a manual fallback.
-  When the branch already has an open PR, the call appends `--body` to that PR's
-  description rather than discarding it, updates `--title` when it differs, and reports
-  `bodyAppended`/`titleUpdated`. Appending rather than replacing preserves the account a
-  reviewer may already have read; an unchanged body is a no-op.
-  The recorded base is validated, and the first push sets the task branch's own upstream.
-- `task status --id <TASK-ID>` / `task doctor --id <TASK-ID>` — derives local and
-  remote branch existence, registered worktree, on-disk directory, orphan/mismatch,
-  dirty state, HEAD, parent/base, PR, dependency mode, merge-in-progress state and
-  conflict paths from Git/GitHub. `doctor` adds health and the exact recovery action;
-  no committed task/status file is written.
-- `task checkout --id <TASK-ID>` / `task checkout --restore [--force]` — temporarily moves a
-  clean task branch from its linked worktree into a clean main checkout for local
-  runtime testing, then restores the prior branch and recreates the linked worktree.
-  Commits remain forbidden from the main checkout. Restore refuses generated or
-  edited task files unless `--force` explicitly discards them before switching back.
-- `task graph` — reports the default branch and local `task/*` branches with their
-  recorded parent/base, HEAD and worktree location for Source Control/agent discovery.
-- `task cleanup --id <TASK-ID> [--force]` — after the PR has merged, removes the
-  worktree directory (retrying briefly on a transient Windows file-lock) and
-  prunes Git metadata. Cleanup validates the exact reserved target and removes only
-  confirmed dependency junctions or ia-graft-marked overlays before recursive deletion, with a
-  long-path Windows fallback that cannot traverse those links. Without `--force`,
-  dirty or unmerged tasks are refused. A merged cleanup also deletes the remote
-  `task/*` branch only when its live SHA matches the merged PR head and no open PR
-  still uses it as a stacked base; deletion uses an exact force-with-lease. If the
-  dependent-PR check is unavailable, the remote branch is preserved and the JSON
-  result explains why. Force means explicit abandonment and is the supported way
-  to discard an unmerged task; it never deletes the remote branch.
-- `task sweep` — checks every worktree under `.worktrees/` against `gh` and
-  cleans up (worktree + local branch + safely verified unused remote branch)
-  whichever ones already have a merged
-  PR. `task new` already calls this itself before creating anything, so
-  nobody needs to invoke it directly — it's exposed as its own subcommand
-  only for manual/debugging use. Anything `gh` can't confirm as merged is
-  left alone and reported as skipped — it never guesses from local branch
-  topology alone (a brand-new, not-yet-committed-to branch is trivially "an
-  ancestor" of anything the base branch merges later too, so that check
-  can't tell "merged" apart from "never touched").
+## 4. PRE-PULL REQUEST CHECKLIST
 
-## Starting work
-
-1. Decide which of the three paths the change takes (see `AGENTS.md`'s
-   "Task-based work" and "What counts as a direct/simple edit"):
-   **documentation-only** — every touched file is Markdown prose, excluding
-   `docs/generated/` — commits straight to `master`/`main` with no task,
-   branch, or PR, and the rest of this section does not apply; a
-   **direct/simple edit** goes through a task branch and a PR but skips
-   required-reading and gets a terser title/body; a **full task** does
-   everything. The moment one non-Markdown file is touched, the change is
-   not documentation-only and never commits on `master`/`main`.
-2. Classify the request before creating anything: requested changes on an open
-   PR use `task resume --pr <number>` (or the same task ID); independent work
-   uses `task new --id <TASK-ID>`; work that truly depends on an unmerged task
-   uses `task new --id <TASK-ID> --parent <PARENT-TASK-ID>`. Never create a new
-   task merely because review feedback arrived.
-3. Then work only inside the printed
-   worktree path. Pick `<TASK-ID>` so it doesn't collide with another
-   agent's in-flight worktree (check `git worktree list` / open branches
-   named `task/*` first).
-4. `ia-graft task commit --id <TASK-ID> --message <msg>` as you make
-   progress — there is no "declare then batch-commit at the end" step;
-   commit early and often, never with raw `git commit` in the main checkout.
-5. Before opening the PR, run the change's own tests via
-   `ia-graft task test --id <TASK-ID> --command <cmd>` — it returns a
-   compact pass/fail summary, not the raw transcript.
-6. When the task is ready for review, `ia-graft task done --id <TASK-ID> --title
-   <title> --body <body>` pushes the branch and opens the pull request (via
-   `gh`, when available — otherwise it still pushes and returns a manual
-   compare URL). During review, run `task resume --pr <number>` (or `task new --id <TASK-ID>`) to resume, commit requested changes, test, and run `task done` again; it returns the existing PR, **appends** the new body to that
-   PR's description under a `## Update` heading, and replaces the title when it changed.
-   The result reports `bodyAppended`/`titleUpdated` so a caller can tell whether its prose
-   landed. Re-running with an unchanged body appends nothing. A human merges it; once merged,
-   `ia-graft task cleanup --id <TASK-ID>` removes the
-   worktree and its verified unused local/remote task branches.
-
-Isolation between agents comes entirely from separate worktrees/branches. If
-two agents need to touch the same area, that surfaces as a normal Git merge
-conflict on the PR, not as a pre-emptive file-ownership check.
-
-Dependent tasks use ordinary stacked branches/PR bases while retaining one
-worktree per agent. The official GitHub Stacked PR preview is not part of this
-contract: its cascading rebase and force-with-lease behavior conflicts with the
-forward-only policy below. Adopting it requires a separate owner-approved policy
-change; `--parent` itself never rebases or force-pushes.
-
-## Runtime enforcement adapter
-
-`.claude/settings.json` registers a `PreToolUse` hook for `Write`, `Edit`, and
-`Bash`, calling the provider-neutral `tools/scripts/agent-task-guard.mjs` with
-the canonical agent ID `claude`. The guard enforces only Git-safety rules — it
-has no concept of tasks, ownership, or file scope:
-
-- `Write`/`Edit` is allowed anywhere inside the repository (plus the
-  harness's own memory/plan directories under `.claude/`, which live outside
-  any repository).
-- `Bash` is allowed except for the Git write policy below, which the guard
-  checks regardless of current directory.
-
-Project hooks can be disabled by a user's higher-precedence local Claude
-settings. Verify the active `Project` hook through Claude Code's `/hooks`
-screen.
-
-## Git write policy
-
-Agents commit forward on their own task branch as they work — that is the
-whole point of the worktree-per-task model. Agents never rewrite committed
-history, merge a pull request, or invoke raw Git merge commands.
-
-Agents may:
-
-- inspect Git state and history;
-- commit on their own task branch (created by `ia-graft task new`);
-- integrate only that task's recorded base through `ia-graft task sync`, which
-  may create a forward merge commit and may abort only its own unfinished merge;
-- fetch and use `git pull --ff-only` when otherwise authorized;
-- push their own task branch;
-- prepare or open a pull request (`ia-graft task done` does this via `gh`).
-
-Agents push to `main` or `master` only for a documentation-only change as
-defined in `AGENTS.md`'s "Task-based work" — every touched file Markdown
-prose, nothing under `docs/generated/`, and owner approval already given when
-the file is a protocol/registry/policy file. For every other change they
-never push to `main` or `master`, never force/bulk/mirror/tag/delete
-remote refs, never invoke raw `merge`/`rebase`/`cherry-pick`/`revert` or other
-history-editing commands, and never merge a pull request (`gh pr merge`). The
-repository owner remains the only party who may merge a task's pull request.
-The provider-neutral guard continues to reject raw merge commands; the narrow
-base-integration exception exists only inside the validated `task sync` flow.
-
-The provider-neutral task guard enforces this policy for every provider that
-adopts its runtime adapter. Canonical instructions govern providers without
-an adapter.
-
-## Before opening the pull request
-
-This section applies to direct/simple edits and full tasks. A
-documentation-only change opens no pull request; it still runs whatever
-Markdown validation applies before committing. Before running
-`ia-graft task done` (or, for a direct edit, before considering it finished):
-
-1. Run the validations the change actually calls for (format, lint,
-   typecheck, tests, build — whatever applies).
-2. If the change touches a documented project's `src/` (TypeScript:
-   `packages/*`, `apps/*`; Rust: `libs/**`), regenerate that project's
-   API-reference evidence in `docs/generated/api/` and run the
-   `docs-quality-check` skill against it. Scope the regeneration to the
-   project(s) actually touched:
-   `node tools/scripts/generate-api-docs.mjs <name>` /
-   `node tools/scripts/generate-rust-api-docs.mjs <name>`, or the matching
-   `nx run <project>:docs-generate` target where one already exists.
-3. If the change touches a `docs/research/*.md` file other than
-   `docs/research/RESEARCH-DECISIONS-REGISTRY.md` itself, and it changed a
-   candidate's status (adopted, discarded, standby/deferred), update that
-   candidate's row in the registry — it is hand-maintained, no script runs
-   it.
-4. If the change includes code copied or adapted from an external
-   open-source project, add the header marker `Adapted from <Project Name>
-   (<source URL>). Original license: <SPDX-License-Identifier>. See
-   THIRD_PARTY_NOTICES.md.` to the top of that file, add a matching entry to
-   `THIRD_PARTY_NOTICES.md`, and run
-   `node tools/scripts/check-third-party-notices.mjs`.
-
-Steps 2-4 have `PostToolUse` reminder hooks in `.claude/settings.json`
-(`research-registry-reminder.mjs`, `third-party-attribution-reminder.mjs`)
-that nudge inline right after a relevant edit; they only remind and never
-block or edit anything themselves.
-
-## Documentation size
-
-`node tools/scripts/check-doc-organization.mjs` reports every authored
-Markdown document that has grown "large" or "colossal"
-(`tools/scripts/doc-size.mjs`'s thresholds) — run it occasionally to decide
-whether a document needs splitting into a router plus linked sub-documents.
-A `PostToolUse` hook (`tools/scripts/doc-size-reminder.mjs`) gives the same
-reminder inline right after an edit crosses a threshold.
-
-## Rollback
-
-Roll back the Claude enforcement adapter by removing its `PreToolUse` entry
-from `.claude/settings.json` and reverting the guard script's tracked
-changes. Rolling back a task means abandoning its worktree/branch with
-`ia-graft task cleanup --id <TASK-ID> --force` — never use an ad-hoc filesystem
-or Git deletion path, and never delete another
-agent's in-flight worktree or branch.
+1. Run formatting, linting, typechecking, and tests.
+2. If modifying `src/` in TypeScript or Rust packages, regenerate API reference docs:
+   `node tools/scripts/generate-api-docs.mjs <name>` / `node tools/scripts/generate-rust-api-docs.mjs <name>`.
+3. If adding 3rd party code, add attribution header, update `THIRD_PARTY_NOTICES.md`, and run `check-third-party-notices.mjs`.
+4. Validate instruction file sizes with `ia-graft doc-check`.

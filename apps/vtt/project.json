@@ -1,0 +1,62 @@
+{
+  "name": "vtt",
+  "root": "apps/vtt",
+  "projectType": "application",
+  "tags": ["scope:vtt", "lang:typescript", "platform:web", "type:app"],
+  "metadata": {
+    "graphIr": {
+      "id": "vtt",
+      "kind": "app",
+      "tags": ["scope:vtt", "lang:typescript", "platform:web"]
+    }
+  },
+  "implicitDependencies": ["render-3d"],
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["render-3d:build"],
+      "options": { "command": "pnpm --filter @grafting/vtt check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/tsconfig.json", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/vtt dev" },
+      "cache": false
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["render-3d:build"],
+      "options": { "command": "pnpm --filter @grafting/vtt build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/.next"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["render-3d:build"],
+      "options": { "command": "pnpm --filter @grafting/vtt test" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/test/**/*", "{projectRoot}/package.json"]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["render-3d:build"],
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs vtt" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["render-3d:build"],
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs vtt --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/project.json",
+        "{workspaceRoot}/docs/generated/api/ts/vtt.api.md",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
+    }
+  }
+}

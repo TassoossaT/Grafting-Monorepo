@@ -22,6 +22,30 @@ $schemas = @(
     "libs/engine/domain-core/contracts/snapshot.fbs"
 )
 
+# E1.5 removed the unconsumed, superseded VTT map schema from domain-core.
+# Delete only the bindings that older runs generated from that schema so a
+# developer's gitignored output cannot keep leaking dead map types into
+# TypeDoc, IDE completion, or C# compilation after the source schema is gone.
+$obsoleteMapStateOutputs = @(
+    "libs/engine/domain-core/src/generated/map_state_generated.rs",
+    "packages/isekai-web-client/src/generated/grafting/contracts/boundary-kind.ts",
+    "packages/isekai-web-client/src/generated/grafting/contracts/boundary-patch.ts",
+    "packages/isekai-web-client/src/generated/grafting/contracts/boundary-segment.ts",
+    "packages/isekai-web-client/src/generated/grafting/contracts/map-state-message.ts",
+    "packages/isekai-web-client/src/generated/grafting/contracts/prism-cell-assignment.ts",
+    "packages/isekai-web-client/src/generated/grafting/contracts/vec3.ts",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/BoundaryKind.cs",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/BoundaryPatch.cs",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/BoundarySegment.cs",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/MapStateMessage.cs",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/PrismCellAssignment.cs",
+    "dotnet/Grafting.Isekai.Protocol/Generated/Grafting/Contracts/Vec3.cs"
+)
+foreach ($output in $obsoleteMapStateOutputs) {
+    Remove-Item -LiteralPath $output -Force -ErrorAction SilentlyContinue
+}
+
+
 Write-Host "==> flatc --rust" -ForegroundColor Cyan
 flatc --rust -o libs/engine/domain-core/src/generated @schemas
 if ($LASTEXITCODE -ne 0) { throw "flatc --rust failed" }

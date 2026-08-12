@@ -7,6 +7,14 @@ can't be written for a type with no Rust definition, so this directory
 covers the three that do exist: `command.fbs`, `domain_event.fbs`,
 `snapshot.fbs`.
 
+`map_state.fbs` was removed by E1.5. It was a VTT-specific, unconsumed
+experiment generated beside these global execution contracts but never wired
+into `domain-core`'s Rust module, conversions, round-trip tests, TypeScript, or
+C# consumers. Its free-geometry shape was also superseded by ADR-0022. A future
+map persistence, Worker, or transport contract belongs to the domain of its
+first executable consumer and must be designed from that consumer's canonical
+types; this directory does not speculate that boundary in advance.
+
 These schemas are **not the source of truth**. `domain-core`'s own
 hand-written `Command`/`DomainEvent`/`Snapshot` (`src/command.rs`,
 `src/event.rs`, `src/snapshot.rs`) stay canonical; these `.fbs` files
@@ -81,6 +89,9 @@ would be a new frozen file, not a regeneration of this one.
 ## Deliberately not done, and why
 
 - **`ReplicationDelta`** -- not modeled anywhere yet (Phase 6/Epic H).
+- **VTT map state** -- no live persistence, Worker, or transport consumer owns
+  this wire boundary yet. E1.5 removed the stale unconsumed schema rather than
+  replacing it with another speculative contract.
 - **Rewiring `engine_submit_increment`/`WasmEngine::submit_increment`
   to a generic byte-oriented `engine_submit`** (master source §11.6) --
   a separate, larger, not-yet-backlogged task; C-005/C-006's own

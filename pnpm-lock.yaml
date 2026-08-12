@@ -80,6 +80,31 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  apps/vtt:
+    dependencies:
+      '@grafting/render-3d':
+        specifier: workspace:*
+        version: link:../../packages/render-3d
+      next:
+        specifier: ^16.2.12
+        version: 16.2.12(@babel/core@7.29.7(supports-color@8.1.1))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   libs/domains/procgen/discretize: {}
 
   libs/domains/procgen/discretize/pkg: {}

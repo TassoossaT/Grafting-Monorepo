@@ -8,7 +8,7 @@
   are **Open** or **Not discussed**; that is the expected, correct state of
   a product still fully in its planning phase, not a defect in this map
 - Decision authority: none, same as every document in `docs/research/`
-- Scope: the full product surface of the VTT (`apps/web-vtt`, not yet
+- Scope: the full product surface of the VTT (`apps/vtt`, not yet
   scaffolded), cross-referencing
   `docs/research/vtt-map-and-terrain-construction-options.md` for map/terrain
   detail rather than duplicating it, and noting which pieces are VTT-specific
@@ -74,8 +74,8 @@ only indexes it.
 | Flexible character/entity data modeling | **Standby** — ECS crates (`hecs`, `specs`) identified as a candidate pattern, not yet chosen over a plain-enum domain model |
 | Rule automation (attack rolls, damage calculation, saves) | **Standby** — a generic action-resolution flow (Command → dice roll via `ndm`/`DeterministicRng` → modifier application → outcome) is proposed in `docs/research/vtt-rules-and-character-system-options.md`, unifying combat damage/healing with the same modifier mechanism as persistent status effects |
 | Compendiums / content packs (items, spells, monsters, stat blocks) | **Not discussed** |
-| How map entities (doors, containers, triggers — already tied to `domain-core` in the map document) relate to character/rules entities | **Not discussed** — the map document ties map interactivity to `domain-core`; the character/rules side of that same substrate has no design yet |
-| Fog of war / dynamic vision algorithm | **Standby** — PlanarAlly's (MIT) hand-rolled visibility/triangulation module identified as a strong reference, cross-linking back to this document's Map & World section above |
+| How map entities (doors, containers, triggers) relate to character/rules entities | **Decided (boundary only)** — `VTT-PRODUCT-001` separates scene placement, optional rules subject, participant identity, surface identity, and rules-provider composition; exact door/container/trigger payloads remain open until their executable feature slices |
+| Fog of war / dynamic vision algorithm | **Decided (architecture only)** — `VTT-VISIBILITY-001`, based on `VTT-FOG-RESEARCH-001`, fixes character/group knowledge, open sense evidence, disclosure, last-known state, fog/void, grid-independent layered coverage, point silhouettes, and session authority; implementation and numeric tuning remain deferred |
 
 ## 4. Multiplayer & networking
 
@@ -95,16 +95,15 @@ yet). Summary:
 | Wire format for Commands/DomainEvents/ReplicationDeltas/Snapshots | **Decided** — `PROV-003`, FlatBuffers, already implemented for Command/DomainEvent/Snapshot in `libs/engine/domain-core` (generic placeholder domain, not the VTT's real domain yet) |
 | Journal and snapshot minimum record contents | **Decided** — section 15.5/15.6 |
 | Authoritative host language/runtime (`GATE-004`) | **Open — deliberately deferred**, per `docs/adr/ADR-0005-authoritative-host-deferral.md`, to the start of Phase 6/Epic H (task `H-001`); three options recorded, none chosen; no agent should pick one before then |
-| Which VTT-specific Commands exist, and which are GM-only | **Not discussed** — the pipeline is generic; the VTT's own map/token/rules domain model has not been designed against it yet |
+| Which VTT-specific Commands exist, and which are GM-only | **Decided (protocol only)** — `VTT-PRODUCT-001` defines typed app-local operation families, capability-based authorization, and the operation envelope; exact payloads and authoritative enforcement remain open until their slices and `GATE-004` |
 | Self-hosted vs. SaaS hosting model | **Not discussed** — downstream of `GATE-004`, and has licensing/business-model implications given the owner's closed-source-sale goal |
 | Voice/video/text chat | **Not discussed** — Foundry itself does not build this in either (leans on Discord); worth an explicit choice either way rather than a silent default |
 
-The real remaining gap is narrower than this document first suggested: not
-"design multiplayer from scratch," but (a) respecting `GATE-004`'s deliberate
-deferral rather than picking a host language early, and (b) designing the
-VTT's own domain entities (map cells, tokens, rules) the same way
-`domain-core`'s placeholder domain already is, so they plug into the
-already-decided pipeline without rework once Phase 6 starts.
+That architectural gap is now closed by `VTT-PRODUCT-001`. Remaining product
+work is feature-owned: exact construction, token, access, and rules payloads
+are materialized only by their first executable slices, while `GATE-004`
+continues to defer the authoritative host. A reusable package still must not
+gain a VTT namespace or app-exclusive methods.
 
 ## 5. GM tools
 
@@ -156,7 +155,7 @@ building pieces that can serve other future products, not only the VTT:
 - `libs/isekai/wasm-bridge` → `packages/isekai-wasm` → `isekai-web-client`'s
   Worker pathway — a generic Rust-to-browser compute bridge, not VTT-specific
 - `libs/engine/domain-core` (`Command → DomainEvent → Snapshot`) — a generic
-  event-sourced state engine, not VTT-specific
+  authoritative execution/state engine, not VTT-specific
 - The procedural-generation crates (`ghx_proc_gen`, `fast-surface-nets-rs`,
   `noise-rs`, `block-mesh-rs`) — usable by any project needing WFC-style or
   terrain generation, not VTT-specific
@@ -174,12 +173,8 @@ reuse:**
 
 ## Suggested next step (an observation, not a decision)
 
-Multiplayer's *pattern* is already Decided/Locked at the engine level (see
-section 4's correction above), so it is no longer the open architectural
-question this document first suggested. What's still genuinely open, and
-still structural to nearly everything else, is designing the VTT's own
-domain model (map cells, tokens, rules entities) the same disciplined way
-`domain-core`'s placeholder domain already is — so that whichever subsystem
-gets tackled next (map, tokens, rules) is built as real `Command`s from day
-one, ready to plug into the already-decided replication pipeline once
-`GATE-004` closes at the start of Phase 6, instead of needing rework later.
+The app-local product model is now accepted as `VTT-PRODUCT-001`. The next
+work SHOULD materialize one executable consumer at a time: construction in
+Epic 3, token placement/subject binding in `E5.2`, a first visibility consumer
+under `VTT-VISIBILITY-001`, and rules composition after `E6.3`. The future session adapter can translate
+app operations to the authoritative pipeline after `GATE-004` closes.

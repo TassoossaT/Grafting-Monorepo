@@ -1,4 +1,4 @@
-import type { LightDescriptor } from "../contracts/engine.js";
+import type { ClipPlaneDescriptor, LightDescriptor } from "../contracts/engine.js";
 import type { ItemId, LayerId } from "../contracts/scene.js";
 import type { Transform } from "../contracts/space.js";
 import type { CameraDescriptor, PickResult } from "../contracts/view.js";
@@ -34,6 +34,9 @@ export interface RenderBackend {
 
   /** Replaces scene lighting. */
   setLights(lights: readonly LightDescriptor[]): void;
+
+  /** Replaces the active clip plane. `undefined` disables clipping. */
+  setClipPlane(plane: ClipPlaneDescriptor | undefined): void;
 
   /** Declares or updates a draw group. */
   ensureLayer(layer: LayerId, order: number): void;
