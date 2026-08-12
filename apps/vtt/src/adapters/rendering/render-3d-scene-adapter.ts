@@ -3,6 +3,7 @@ import {
   createVisualRegistry,
   type ChangeOrigin as EngineChangeOrigin,
   type ClipPlaneDescriptor,
+  type LightDescriptor,
   type RenderEngine,
   type View,
 } from "@grafting/render-3d";
@@ -44,6 +45,18 @@ interface AttachedView {
   readonly view: View;
   readonly observer?: ResizeObserver;
 }
+
+// The engine ships no default lighting rig (`EngineOptions.lights`'s own
+// doc comment). `"lit"`-material map surfaces (walls, terrain) need at
+// least one light or they render solid black regardless of `color` --
+// unlit visuals (tokens, node handles) are unaffected either way. One
+// ambient light so no lit surface ever goes fully black, plus one
+// directional light positioned above the scene (Y-up, per this app's own
+// floor-cutaway clip plane convention) for shading definition.
+const MAP_LIGHTS: readonly LightDescriptor[] = [
+  { light: "ambient", color: 0xffffff, intensity: 0.55 },
+  { light: "directional", color: 0xffffff, intensity: 0.85, direction: { x: 0.4, y: 1, z: 0.3 } },
+];
 
 function engineOrigin(origin: ChangeOrigin): EngineChangeOrigin {
   switch (origin) {
@@ -151,7 +164,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
     });
 
-    const engine = createEngine({ registry, autoplay: true });
+    const engine = createEngine({ registry, autoplay: true, lights: MAP_LIGHTS });
     // Map geometry draws below node handles below tokens (10 / 15 / 20), so
     // nothing occludes the thing a pointer is more likely trying to hit.
     engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
