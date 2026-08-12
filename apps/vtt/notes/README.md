@@ -9,5 +9,5 @@ an ADR or by a design that makes it impossible, and then says so at the top.
 
 | Note | Subject | Status |
 | ---- | ------- | ------ |
-| [0001](0001-rendering-and-propagation.md) | Rendering and propagation debt carried from the node bench | open |
+| [0001](0001-rendering-and-propagation.md) | Rendering and propagation debt carried from the node bench | resolved by `VTT-RENDER-001`; implementation deferred |
 | [0002](0002-fog-of-war.md) | Fog of war: three states of knowledge, and what the engine must not preclude | design recorded, not implemented |

@@ -349,7 +349,8 @@ Required behavior:
 1. `pointerdown` performs picking and captures the pointer.
 2. `pointermove` changes preview state only.
 3. Pointer samples MUST NOT mutate `ConfirmedProjection`.
-4. `pointerup` creates exactly one operation.
+4. `pointerup` after a semantic drag creates exactly one operation; release
+   without a semantic delta creates none.
 5. Acceptance changes the confirmed projection.
 6. Rejection clears the preview and restores confirmed presentation.
 7. `pointercancel`, Escape, tool switch, and unmount create zero operations.
@@ -359,11 +360,17 @@ Required behavior:
 
 - High-frequency samples and preview MUST remain outside React state.
 - Samples MUST accumulate inside the active gesture.
-- `pointerup` MUST submit one batch operation.
+- `pointerup` MUST submit one batch operation when the accumulated brush has a
+  semantic delta; an empty/no-op brush submits none.
 - Cancellation MUST submit nothing and release or recycle temporary buffers.
 - Preview MUST NOT become confirmed terrain before acceptance.
 
 ## 13. Rendering and Worker rules
+
+`docs/architecture/vtt-rendering-runtime-contract.md` (`VTT-RENDER-001`) is
+the normative refinement of this section. An implementation that introduces
+real rendering, Worker bulk data, or pointer-driven mutation MUST satisfy its
+invariants and acceptance matrix.
 
 - One table runtime MUST own one renderer with multiple views.
 - One WebGL context per UI element is forbidden.
@@ -478,5 +485,8 @@ Primary references:
 - <https://alistair.cockburn.us/hexagonal-architecture>
 - <https://redux.js.org/usage/structuring-reducers/normalizing-state-shape>
 - <https://www.w3.org/TR/pointerevents/>
+- <https://threejs.org/manual/en/multiple-scenes.html>
+- <https://threejs.org/manual/en/responsive.html>
+- <https://html.spec.whatwg.org/multipage/structured-data.html>
 - <https://gameprogrammingpatterns.com/state.html>
 - <https://gameprogrammingpatterns.com/event-queue.html>
