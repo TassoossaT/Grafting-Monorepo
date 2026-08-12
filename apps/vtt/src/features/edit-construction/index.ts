@@ -14,3 +14,5 @@ export type {
   ParticipantId,
   RevisionPrecondition,
 } from "./construction-operations.ts";
+export { createMoveNodeHistoryStack } from "./move-node-history.ts";
+export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState } from "./move-node-history.ts";
