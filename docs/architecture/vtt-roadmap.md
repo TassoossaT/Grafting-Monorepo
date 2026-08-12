@@ -292,9 +292,13 @@ directory.
 | E2.1 | **Decide and record the VTT application architecture.** Define the Next.js product-host boundary, app-owned product composition, vertical-slice/module boundaries, dependency direction, runtime/state ownership, ports/adapters, and interaction commit semantics. This is a decision task; it does not create the app scaffold | **Decided — ADR-0023 accepted (DEC-061, 2026-08-11)** | Média | Alto — governs every downstream VTT task |
 | E2.2 | Close `apps/vtt/notes/0001` (rendering/propagation debt carried from the bench): explicit per-renderer dependency model (a token's position must not invalidate terrain), origin-tagged state changes (local vs. network vs. programmatic — three sources, not two), one renderer with many views instead of one WebGL context per element, a resizable renderer contract from day one, buffer reuse across the worker boundary, uncommitted-until-release drag gestures | **Decided — note resolved by `VTT-RENDER-001` (2026-08-12); implementation acceptance deferred to the first real rendering/Worker slice** | Alta | Alto — six real, previously-measured defects to prevent from recurring at VTT scale |
 | E2.3 | Design the VTT product model and app-local intents, projections, and ports inside `apps/vtt`. Compose generic capabilities from `libs/*` and `packages/*`; reusable packages MUST NOT gain a `vtt` namespace or app-exclusive methods | **Decided — `VTT-PRODUCT-001` accepted (2026-08-12); exact payloads remain owned by executable Epic 3/5/6 slices** | Alta | Alto — foundational for Epics 3, 5, and 6 |
-| E2.4 | Decide `apps/vtt/notes/0002`'s open questions (fog of war): is it grid-tied, what resolution is remembered state stored at, does sound produce the same remembered state as sight, who is authoritative. Deliberately deciding only — implementation is out of this epic's scope, per the note's own framing ("algo que eu devo fazer bem para o futuro") | **Research in progress — `VTT-FOG-RESEARCH-001` records the owner-approved direction; final decision remains open** | Média | Médio — shapes the engine contract now even though implementation is deferred |
+| E2.4 | Decide `apps/vtt/notes/0002`'s open questions (fog of war): is it grid-tied, what resolution is remembered state stored at, does sound produce the same remembered state as sight, who is authoritative. Deliberately deciding only — implementation is out of this epic's scope, per the note's own framing ("algo que eu devo fazer bem para o futuro") | **Decided — `VTT-VISIBILITY-001` accepted (2026-08-12), based on `VTT-FOG-RESEARCH-001`; implementation remains deferred** | Média | Médio — shapes the engine contract now even though implementation is deferred |
 | E2.5 | Domain/folder organization research for the VTT application | **Decided — absorbed into E2.1 and recorded by ADR-0023; no separate implementation task** | Média | Médio |
 | E2.6 | Implement the accepted VTT app scaffold. Materialize only the first executable slice required by ADR-0023, including `project.json`, scope-local `AGENTS.md`, the host/client route boundary, one composition root, and architecture-boundary checks | **Implemented — task `VTT-APP-SCAFFOLD` merged by PR #79** | Média | Alto |
+
+Epic 2 is complete at the architecture/decision/scaffold level. Deferred
+feature implementations remain owned by their later epics and first executable
+consumers.
 
 ## Epic 3 — Map & construction
 
@@ -324,7 +328,7 @@ explicit request to push all physics/water/effects to the future.
 | --- | --- | --- | --- | --- |
 | E5.1 | Token rendering as a billboard/sprite (`THREE.Sprite`) inside the full-3D world | Decided (technique), not implemented | Baixa | Médio |
 | E5.2 | Token product model and operations inside `apps/vtt`, using app-local intents/projections/ports over generic capabilities, per E2.3 and ADR-0023 | Not discussed | Média | Médio |
-| E5.3 | Per-token vision/light radius | Not discussed, connects to E2.4 (fog of war) | Média | Baixo — depends on deferred fog of war |
+| E5.3 | Per-token vision/light radius and sense-capability inputs under `VTT-VISIBILITY-001` | Contract decided, not implemented; exact token/rules payload belongs to the first consumer | Média | Baixo — visibility architecture no longer blocks it |
 | E5.4 | Token movement/collision/snapping | Not discussed, depends on E6.1 (physics) | Média | Baixo — blocked on Epic 6 |
 
 ## Epic 6 — Rules: world, physics, movement, actions

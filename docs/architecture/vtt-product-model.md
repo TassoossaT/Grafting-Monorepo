@@ -48,7 +48,7 @@ authoritative copy of canonical Rust state.
 
 | ID | Choice not made here | Owner or trigger |
 | --- | --- | --- |
-| `VTT-PRODUCT-DEF-001` | Fog states, remembered resolution, sound semantics, and authority | `E2.4` |
+| `VTT-PRODUCT-DEF-001` | Visibility remains outside this base model; its knowledge, senses, memory, fog/void, point-silhouette, storage, and authority semantics are resolved by `VTT-VISIBILITY-001` | first executable visibility consumer |
 | `VTT-PRODUCT-DEF-002` | Authoritative host, transport, hosting model, and authentication protocol | `GATE-004` |
 | `VTT-PRODUCT-DEF-003` | Concrete rules system, action schema, character sheet, and compendiums | `E6.3` and first consumer |
 | `VTT-PRODUCT-DEF-004` | Renderer package and renderer-specific scene representation | accepted renderer decision and first rendering slice |
@@ -156,7 +156,7 @@ Each real slice owns its public types and selectors.
 | `VTT-PRODUCT-PROJ-005` | It MUST NOT contain React elements, mutable vendor objects, GPU resources, Workers, sockets, or pointer samples. |
 | `VTT-PRODUCT-PROJ-006` | Node coordinates MAY support presentation; canonical topology/surface validity remains Rust-owned. |
 | `VTT-PRODUCT-PROJ-007` | Meshes, spatial indexes, picking structures, and visibility caches are derived adapter state. |
-| `VTT-PRODUCT-PROJ-008` | Visibility stays opaque until `E2.4`; only viewer scope and an invalidation revision/stamp MAY exist. |
+| `VTT-PRODUCT-PROJ-008` | Visibility disclosure MUST follow `VTT-VISIBILITY-001`; withheld entities are absent and only authorized knowledge revisions/scopes MAY exist. |
 
 ## 6. Message and operation protocol
 
@@ -255,7 +255,7 @@ The following ports MUST be created only with their first executable consumer:
 | --- | --- | --- |
 | construction capability | first feature needs canonical graph/generation work | Rust ABI, graph storage, vendor types |
 | asset resolution | first surface/token presentation resolves an `AssetRef` | repository/CDN/package API and visual defaults not selected by the app |
-| visibility projection | after `E2.4` defines its contract | algorithm, cache, and authority mechanism |
+| visibility/perception capability | first executable consumer after `VTT-VISIBILITY-001` | canonical computation, ABI, storage, cache, and authority mechanism |
 | rules capability | first `E6.3` provider is selected | crate/provider runtime and provider-owned types |
 | persistence | first decided persistence consumer | storage engine and schema implementation |
 
@@ -372,7 +372,7 @@ does not authorize the complete future model as empty files.
 | --- | --- |
 | Epic 3 | materialize only construction nouns/operations needed by the first workflow; adapt to graph-core/Rust authority |
 | `E5.2` | materialize placement, optional subject binding, projections, and typed token operations without physics assumptions |
-| `E2.4` | refine viewer-safe visibility projection/port without changing identity separation |
+| first visibility consumer | materialize only the slice required by `VTT-VISIBILITY-001` without changing identity separation |
 | `E6.3` | type the first rules capability/provider without adding gameplay fields to generic packages |
 | future multiplayer slice | translate operations/deltas after `GATE-004`; do not rename replication Event Sourcing |
 

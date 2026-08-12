@@ -1,14 +1,17 @@
 # Note 0002 — Fog of war: the design, and what the engine must not preclude
 
 - Recorded: 2026-08-07
-- Status: original design recorded and refined by research; deliberately not
-  implemented; roadmap task `E2.4` remains open
+- Status: resolved by `VTT-VISIBILITY-001`; deliberately not implemented
 - Owner's framing: "é algo que eu devo fazer bem para o futuro, pois será bem
   complexa" — this is written to be picked up later without re-deriving it
 
 Research consolidation:
 `docs/research/vtt-perception-memory-and-fog-of-war.md`
 (`VTT-FOG-RESEARCH-001`).
+
+Normative decision:
+`docs/architecture/vtt-visibility-and-knowledge-contract.md`
+(`VTT-VISIBILITY-001`).
 
 The three-state model below is the historical seed, not an implementation enum.
 The research record separates evidence modality, disclosure level, temporal
@@ -133,7 +136,10 @@ Recorded as the first-pick candidate in the research document above.
 Doing it by hand means writing and maintaining a spatial acceleration structure
 for a problem that has a well-tested MIT answer.
 
-## What to decide before implementing
+## What had to be decided before implementing
+
+Resolved by `VTT-VISIBILITY-001`; the original questions remain below as
+historical traceability.
 
 - **Is fog tied to the grid?** gTove (MIT, the closest web analogue) requires a
   defined grid before anything can be hidden, which simplifies the

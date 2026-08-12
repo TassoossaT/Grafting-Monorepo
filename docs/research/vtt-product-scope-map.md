@@ -75,7 +75,7 @@ only indexes it.
 | Rule automation (attack rolls, damage calculation, saves) | **Standby** — a generic action-resolution flow (Command → dice roll via `ndm`/`DeterministicRng` → modifier application → outcome) is proposed in `docs/research/vtt-rules-and-character-system-options.md`, unifying combat damage/healing with the same modifier mechanism as persistent status effects |
 | Compendiums / content packs (items, spells, monsters, stat blocks) | **Not discussed** |
 | How map entities (doors, containers, triggers) relate to character/rules entities | **Decided (boundary only)** — `VTT-PRODUCT-001` separates scene placement, optional rules subject, participant identity, surface identity, and rules-provider composition; exact door/container/trigger payloads remain open until their executable feature slices |
-| Fog of war / dynamic vision algorithm | **Research in progress** — `VTT-FOG-RESEARCH-001` separates character/group knowledge, sense evidence, disclosure, last-known state, fog/void, and point silhouettes; exact authority/storage/visual policies remain open in `E2.4` |
+| Fog of war / dynamic vision algorithm | **Decided (architecture only)** — `VTT-VISIBILITY-001`, based on `VTT-FOG-RESEARCH-001`, fixes character/group knowledge, open sense evidence, disclosure, last-known state, fog/void, grid-independent layered coverage, point silhouettes, and session authority; implementation and numeric tuning remain deferred |
 
 ## 4. Multiplayer & networking
 
@@ -175,6 +175,6 @@ reuse:**
 
 The app-local product model is now accepted as `VTT-PRODUCT-001`. The next
 work SHOULD materialize one executable consumer at a time: construction in
-Epic 3, token placement/subject binding in `E5.2`, visibility after `E2.4`,
-and rules composition after `E6.3`. The future session adapter can translate
+Epic 3, token placement/subject binding in `E5.2`, a first visibility consumer
+under `VTT-VISIBILITY-001`, and rules composition after `E6.3`. The future session adapter can translate
 app operations to the authoritative pipeline after `GATE-004` closes.

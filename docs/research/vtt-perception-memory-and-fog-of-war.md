@@ -2,8 +2,8 @@
 
 Research-ID: `VTT-FOG-RESEARCH-001`
 
-Status: Owner-approved research record; non-normative until roadmap task
-`E2.4` is explicitly accepted
+Status: Completed research record; normative decision accepted as
+`VTT-VISIBILITY-001`
 
 Recorded: 2026-08-12
 
@@ -23,8 +23,9 @@ This document records the research direction for:
 - point-cloud silhouettes for authorized but non-detailed information;
 - viewer-safe authority, storage, and rendering boundaries.
 
-It does not implement fog, select the authoritative host, adopt a new rendering
-dependency, or close `E2.4`.
+It does not implement fog, select the authoritative host, or adopt a new
+rendering dependency. Its accepted normative result is
+`docs/architecture/vtt-visibility-and-knowledge-contract.md`.
 
 ## 2. Owner requirements
 
@@ -128,8 +129,9 @@ interface PerceptionEvidence {
 }
 ```
 
-This is a research shape, not an implementation contract. Exact types belong
-to the future `E2.4` specification and first executable consumer.
+This is a research shape, not an implementation contract. Normative semantics
+are in `VTT-VISIBILITY-001`; exact types belong to the first executable
+consumer.
 
 ### 5.1 Disclosure levels
 
@@ -349,9 +351,10 @@ The implementation MUST NOT rebuild a whole-table point cloud on each movement
 or reveal. Representative benchmarks must measure update latency, points
 uploaded, allocations, retained memory size, and reconnect payload size.
 
-## 13. Recommended E2.4 decision draft
+## 13. Accepted E2.4 decision shape
 
-The following is the leading decision shape, not yet normative:
+The owner accepted the following direction on 2026-08-12. Its normative form
+is `VTT-VISIBILITY-001`:
 
 1. Knowledge semantics are independent from gameplay grid.
 2. Knowledge belongs to subjects/groups; viewers receive authorized unions.
@@ -367,19 +370,18 @@ The following is the leading decision shape, not yet normative:
    knowledge records.
 10. Point samples are generic renderer derivation, not canonical persistence.
 
-## 14. Decisions still open
+## 14. Implementation parameters remaining
 
-`E2.4` MUST remain open until the owner explicitly accepts or changes:
+`E2.4` is closed. These replaceable implementation parameters do not reopen
+the accepted architecture:
 
-- default hearing disclosure and spatial uncertainty;
-- whether ordinary memory decays and on what rules trigger;
-- party knowledge sharing and unions between controlled subjects;
-- whether fog/void is scene policy, viewer preference, or both;
-- exact world-space coverage representation and resolution;
-- multi-floor/vertical coverage behavior;
+- numeric hearing bounds and provider-specific capability upgrades;
+- rules-provider memory decay/distortion behavior, if any;
+- knowledge-group creation and default sharing policy;
+- exact world-space coverage codec, chunk size, compression, and resolution;
+- layered 2.5D versus 3D vertical encoding, provided floor isolation holds;
 - point density, color, animation, LOD, and transition visual policy;
-- whether photographic last-known detail is normal, desaturated, ghosted, or
-  another explicit stale-information treatment;
+- exact stale-information treatment for photographic last-known detail;
 - benchmark thresholds for reveal cost, storage, and reconnect payload.
 
 ## 15. Future acceptance scenarios
