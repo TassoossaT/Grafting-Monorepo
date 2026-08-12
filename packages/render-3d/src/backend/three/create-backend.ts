@@ -348,6 +348,11 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
         cameraKey: "",
       } as ThreeSurface;
       const camera = resolveCamera(probe, cameraDescriptor, width, height);
+      // `lookAt`/`position.set` only touch the camera's local transform; a
+      // camera outside the scene graph never gets `updateMatrixWorld` called
+      // on it by a render pass, so without this every ray is cast from the
+      // origin along -Z instead of the camera's real pose.
+      camera.updateMatrixWorld(true);
 
       raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
       for (const hit of raycaster.intersectObjects(groupsFor(layers), true)) {

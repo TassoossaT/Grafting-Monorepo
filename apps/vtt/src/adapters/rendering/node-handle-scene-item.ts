@@ -15,8 +15,11 @@ export function nodeHandleSceneItemId(nodeId: string): string {
   return `construction-node-handle:${nodeId}`;
 }
 
+/** Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks. */
+const HANDLE_SCALE = 0.32;
+
 export function nodeHandleTransform(position: ConstructionPosition): Transform {
-  return { position, scale: 0.18 };
+  return { position, scale: HANDLE_SCALE };
 }
 
 export function nodeHandleSceneItem(
