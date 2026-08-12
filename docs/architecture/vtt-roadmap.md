@@ -50,8 +50,9 @@
 ```text
 Epic 1 (Studio/graph-core health)
    -> Epic 2 (VTT app architecture)
-        -> Epic 3 (map/construction)
-             -> Epic 4 (mesh/procedural assets) -- feeds Epic 3's tilesets too
+        -> Epic 3 (map/construction engine)
+             -> Epic 3.5 (VTT map integration & edit-mode validation)
+                  -> Epic 4 (mesh/procedural assets) -- feeds Epic 3's tilesets too
              -> Epic 5 (tokens)
                   -> Epic 6 (rules: world, physics, movement, actions)
 ```
@@ -59,7 +60,11 @@ Epic 1 (Studio/graph-core health)
 Epic 1 blocks Epic 3's C4 task specifically (the mutation engine cannot be
 written correctly until the graph-core question is settled). Epics 4 and 5
 can start once Epic 2's domain model exists, without waiting for all of
-Epic 3.
+Epic 3. **Epic 3.5 is new (2026-08-12):** Epic 3's engine (`E3.1`-`E3.4`)
+closed with zero consumers wired anywhere in `apps/vtt` — Epic 3.5 exists
+specifically to prove that engine end-to-end inside the real app (render it,
+edit it) before more content-authoring work (Epic 4) pours more input into
+an unvalidated pipeline.
 
 ---
 
@@ -319,7 +324,37 @@ explicit request to push all physics/water/effects to the future.
 | E3.2 | Exterior (Townscaper-style) tileset — same engine as E3.1, its own socket vocabulary | Standby | Alta | Alto |
 | E3.3 | Unified brush/mutation engine: node operations (move/add/delete/merge/split, per the revised `ADR-0022`) for **every** construction domain — terrain and walls/doors/windows alike, as sets of `grafting-graph-core` graph nodes. **Revised 2026-08-12**: `apply_cell_patch` as a separate terrain-only algorithm does not exist — `ADR-0022`'s "Terrain/structure seam: resolved" section closes that split; terrain cells are `Surface`s like any other, and `PrismCellAssignment`/"rotation" are generation-time inputs, not a parallel structure or a graph primitive. The "6-slot neighborhood" language elsewhere in this doc and in `vtt-map-construction-roadmap.md` is retired — it described `PrismGridMesh`'s old fixed-grid adjacency, not a rule of the graph operation | **Done.** Node operations landed first: mutation primitives, `Surface`/`SurfaceRegistry`, and all five `ADR-0022` operations (`move_node`/`delete_node`/`merge_surfaces`/`split_surface`/`duplicate_surface`, `libs/graph/core/src/construction.rs`), all sharing the same validate-before-any-mutation discipline; `duplicate_surface` generates its connecting edges automatically as a closed ring over the caller-supplied new nodes (confirmed with the owner). **Generation code landed 2026-08-12 (PR #84)**, closing E3.3: two new isolated crates, `grafting-procgen-terrain-generation` (bilinear corner-height module → `PrismGridMesh` cell surface, ported from the `module-placement.ts`/`terrain-modules.ts` prototypes) and `grafting-procgen-structure-generation` (wall/door centerline → up to 3 sibling surfaces sharing jamb `NodeId`s around a door opening), each producing only plain `Node`/`Edge`/`SurfaceSpec` data and feeding the existing node operations rather than reinventing them, per `ADR-0022`'s generation-isolation requirement. **WASM bindings landed 2026-08-12 (PR #87)**: `grafting-procgen-construction-wasm` (`libs/domains/procgen/construction-wasm`) wraps `construction.rs`'s five operations plus both generation crates behind one stateful `ConstructionSession` (JSON-in/JSON-out over `wasm-bindgen`), so all of E3.3 is now reachable from JS/the Studio brush tool. No UI wiring yet — that consumer work is still open. Still deliberately deferred: `ModuleShape::Mesh` terrain modules; partial-height (lintel) doors | Alta | Alto — this is "the bulk of construction" the owner wants finished |
 | E3.4 | Interior generation: BSP/straight-skeleton room partition + a second WFC pass with an interior tileset + path-constraint connectivity | Open — proposal, not designed | Alta | Médio — can land after terrain/exterior work |
-| E3.5 | Real Phase 3 render: chunked sub-buffers + GPU clip-plane shader, continuous world-space `Y` driven by camera height (not discrete floor indices — confirmed this session) | Deferred until E3.3 stabilizes the data model | Média | Baixo-Médio — confirmed decoupled/deferrable this session |
+
+**Epic 3 engineering closed 2026-08-12.** The mutation/generation engine
+(`E3.3`) is done, including WASM bindings (PR #87) — every operation the
+owner needs is implemented and tested in Rust. `E3.1`/`E3.2` (tileset
+authoring) and `E3.4` (interior generation) remain open but are
+content/design-dependent, not blocking: `E3.1`/`E3.2` already wait on
+Epic 4's asset pipeline (`E4.2`), and `E3.4` waits on both. The render/
+UI work formerly tracked here as `E3.5` moved to the new Epic 3.5 below,
+since it's really about the *consumer* of this engine, not the engine
+itself.
+
+## Epic 3.5 — VTT map integration & edit-mode validation
+
+Goal: prove Epic 3's engine works by actually wiring it into `apps/vtt` —
+render a generated map, enter an edit mode, mutate it, see it update. This
+is the "first real rendering/Worker slice" `E2.2`'s row already deferred
+acceptance to, and the concrete validation the owner asked for after E3.3
+closed. Confirmed via direct inspection (not assumed) that today
+`apps/vtt` renders tokens only: `SceneRenderPort`
+(`apps/vtt/src/ports/scene-render-port.ts`) carries only
+`ConfirmedTokenRenderChange`, `getMetrics()` hardcodes `terrainUploads: 0`,
+and there is no `map`/`construction` entity, projection, or port anywhere
+under `apps/vtt/src` — this epic is genuinely starting from zero, not
+finishing something partial.
+
+| # | Task | Status | Dificuldade | Impacto |
+| --- | --- | --- | --- | --- |
+| E3.5 | Render pipeline for map geometry: extend `@grafting/render-3d` and `SceneRenderPort` with a terrain/wall/surface visual kind, chunked sub-buffer upload, and the GPU clip-plane shader for floor cutting, continuous world-space `Y` driven by camera height (not discrete floor indices). Formerly tracked under Epic 3; unblocked now that `E3.3` stabilized the data model | Ready — unblocked, not started | Média | Alto — nothing renders without this |
+| E3.6 | Map product model inside `apps/vtt`: `entities/map` (or `construction`) app-local intents/projections/ports per `ADR-0023`/`VTT-PRODUCT-001`, wired to `grafting-procgen-construction-wasm`'s `ConstructionSession`. Likely behind a Worker boundary, per `VTT-RENDER-001`'s existing buffer-reuse/origin-tagged-state-change decisions | Open — not started | Alta | Alto — the only bridge between the WASM engine and the app |
+| E3.7 | Edit-mode interaction layer in `apps/vtt`: pointer capture, tool/brush selection state, drag-to-move a node, trigger generate-terrain-cell/generate-wall actions, undo/redo. `apps/architecture-studio/src/app/lab/vtt-brush` (1132 lines) is a real interactive reference for the UX, but its data model (`BoundarySegment`/`TerrainSurfaceKind`/`CellId`) predates `ADR-0022`'s node-graph revision — reuse the interaction patterns, rewrite the data model against `Surface`/`NodeId`, do not port directly | Open — not started | Alta | Alto — this is "edit mode" as the owner asked for it |
+| E3.8 | End-to-end validation slice: inside `apps/vtt`, generate a terrain cell and a wall with a door, see both rendered, drag a node in edit mode, see the change propagate live. This is the epic's own acceptance criterion, not a separate feature | Open — depends on E3.5-E3.7 | Média | Alto — this is the actual "posso ver e mexer no mapa" answer |
 
 ## Epic 4 — Mesh and procedural texture/asset generation
 
