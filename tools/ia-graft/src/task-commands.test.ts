@@ -748,18 +748,18 @@ test("taskContext resolves context sitemap and queries cleanly", async () => {
 
   const full = await taskContext(root);
   assert.equal(full.ok, true);
-  assert.match(full.summary, /# AI Context Index/);
+  assert.match(full.summary!, /# AI Context Index/);
 
   const queryMatch = await taskContext(root, { query: "Component" });
   assert.equal(queryMatch.ok, true);
-  assert.match(queryMatch.summary, /UI: Component library/);
+  assert.match(queryMatch.summary!, /UI: Component library/);
 });
 
 test("taskContext resolves pack mode using context-resolver", async () => {
   const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
   const pack = await taskContext(repoRoot, { pack: true, paths: ["packages/ui/src/index.ts"] });
   assert.equal(pack.ok, true);
-  assert.match(pack.pack, /Context resolution/);
+  assert.match(pack.pack!, /Context resolution/);
 });
 
 test("taskResume resolves state recovery context", async () => {
