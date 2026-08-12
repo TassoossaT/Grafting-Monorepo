@@ -38,16 +38,16 @@ of a 60 fps frame, leaving the rest for rendering, Wasm transfer, and UI work.
 | 100k | 99,856 | 479.390 ms | 70.162 ms | 350.8 µs | 63.9 |
 | 1M | 1,000,000 | 6.567 s | 48.221 ms | 241.1 µs | 63.9 |
 
-The 1M preset is approximately **6.9× below** the 1.67 ms threshold. Variation
-between scales is dominated by single-run machine/cache effects rather than
-topology growth: each brush invalidates about 64 surfaces through the reverse
-index, independent of total map size.
+For the currently implemented quad generators, the 1M preset is approximately
+**6.9× below** the 1.67 ms threshold. Variation between scales is dominated by
+single-run machine/cache effects rather than topology growth: each brush
+invalidates about 64 quad surfaces through the reverse index, independent of
+total map size.
 
 ## Disposition
 
-- **No mesh cache in the wire contract.** `ConstructionSurface` should carry
-  its ordered stable node references plus semantic fields; mesh remains a
-  derived value.
+- **No mesh cache is justified for the current quad generators.** The measured
+  path supports keeping mesh derived from the ordered stable node cycle.
 - **No second authoritative geometry copy.** The benchmark supports the
   accepted graph → mesh → surface layering rather than reopening ADR-0022.
 - **Construction/load time remains separate.** The 1M build took 6.567 s,
@@ -57,9 +57,13 @@ index, independent of total map size.
 
 ## Caveats
 
-- The benchmark derives planar quads. More complex polygons increase work with
-  their vertex count and should be remeasured when a real consumer establishes
-  its representative maximum polygon complexity.
+- The benchmark derives the planar quads currently emitted by terrain and
+  structure generation. Arbitrary authored meshes, concave/holed polygons, or
+  unusually high vertex counts require their own representative measurement.
+- The benchmark's fan triangulation is valid for the measured convex quads; it
+  is not evidence for a future robust triangulator over arbitrary polygons.
+- Native release-mode execution does not measure a future Wasm adapter,
+  JavaScript/Worker boundary calls, serialization, buffer copies, or pooling.
 - GPU upload, chunk rebuilding, Worker transfer, and render scheduling are not
   included. Those are consumer/runtime costs and are deliberately outside this
   Epic 1 measurement.

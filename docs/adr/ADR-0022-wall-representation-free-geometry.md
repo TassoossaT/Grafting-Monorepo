@@ -218,12 +218,15 @@ generation code, are the implementation.
 - ~~**Recomputation cost was unmeasured.**~~ **Resolved 2026-08-12.**
   `docs/benchmarks/vtt-surface-mesh-recomputation-2026-08-12.md` measures the
   complete node move → reverse-index invalidation → polygon materialization
-  path at 1k through 1M surfaces. The 1M preset takes about 0.241 ms per
-  representative 7×7-node brush stroke against the predeclared 1.67 ms
-  ceiling. `ConstructionSurface` therefore keeps no mesh cache: shape remains
-  derived from its ordered node cycle. The separate 6.567 s construction time
-  at 1M surfaces remains a load-time/UX concern, not a reason to persist a
-  second authoritative geometry copy.
+  path for the currently implemented quad generators at 1k through 1M
+  surfaces. The 1M preset takes about 0.241 ms per representative 7×7-node
+  brush stroke against the predeclared 1.67 ms ceiling. No mesh cache is
+  justified for that implemented scope: shape remains derived from its ordered
+  node cycle. Arbitrary authored meshes, complex polygons, Wasm/Worker
+  adaptation, chunk rebuilding, and GPU upload remain consumer-level
+  measurements. The separate 6.567 s construction time at 1M surfaces remains
+  a load-time/UX concern, not a reason to persist a second authoritative
+  geometry copy.
 - **Tier 2 import (UVTT).** A wall imported from an external tool was never
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
@@ -238,10 +241,12 @@ generation code, are the implementation.
   **Resolved 2026-08-12** — see "Terrain/structure seam: resolved" above.
   Kept here, struck through, so the record of what was once open is not
   lost.
-- **`libs/engine/domain-core/contracts/map_state.fbs`** (merged via PR #73)
-  implements the free-geometry `BoundarySegment`/`BoundaryPatch` design
-  this decision reverses. That contract is now stale and needs its own
-  follow-up task — not done as part of writing this document.
+- ~~**The stale `map_state.fbs` contract needed a follow-up.**~~ **Resolved by
+  E1.5.** The schema was never wired into `domain-core`'s Rust contracts,
+  conversions, round trips, or any TypeScript/C# consumer. It was removed from
+  `domain-core` and global codegen without a speculative replacement. The first
+  executable persistence, Worker, or transport consumer owns its future wire
+  contract under the normal domain-location rule.
 
 ## Context kept from the original decision, condensed
 
@@ -277,8 +282,9 @@ positional one.
   `BoundarySegment` (start/end/height) shape it replaces.
 - **Cost:** every surface query re-derives geometry from current node
   positions rather than reading a stored segment. The 2026-08-12 follow-up
-  benchmark measured this path within budget through 1M surfaces; future
-  consumers still need to remeasure unusually complex polygons.
+  benchmark measured the current quad path within budget through 1M surfaces;
+  future consumers still need to measure arbitrary meshes, unusually complex
+  polygons, Wasm/Worker adaptation, chunk rebuilding, and GPU upload.
 - **Cost:** Tier 2 import needs design work this document does not do.
 
 ## Evidence
@@ -300,11 +306,12 @@ positional one.
 
 ## Migration or rollback
 
-`libs/engine/domain-core/contracts/map_state.fbs` (merged, PR #73) and any
-code generated from it implement the superseded free-geometry design and
-are now stale. Redesigning that contract around node-set references is a
-separate, non-Markdown follow-up task (touches `.fbs`, needs `ia-graft task
-new` + PR) — not performed as part of this document.
+E1.5 removed `libs/engine/domain-core/contracts/map_state.fbs` and its stale
+generated bindings. No executable code consumed the schema, and neither
+`domain-core` nor generic `graph-core` owns a VTT-specific positional payload
+or persistence boundary. A future map wire contract is created only with its
+first executable persistence, Worker, or transport consumer and lives in that
+consumer's owning domain.
 
 Rollback direction if `E1.1`'s measurement makes this decision look wrong:
 freezing a surface's derived mesh into stored, static geometry at the
