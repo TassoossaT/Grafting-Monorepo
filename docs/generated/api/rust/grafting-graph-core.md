@@ -361,6 +361,23 @@ node-set collision with an already-registered, unrelated surface
 atomically rather than leaving the node removed with only some of its
 capping surfaces registered.
 
+### `pub fn grafting_graph_core::duplicate_surface<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, duplicate: grafting_graph_core::DuplicateSpec<N, E>) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+
+Duplicates a surface, per `ADR-0022`'s `Duplicate` ("only a whole
+surface... can be duplicated. A single node alone carries no usable
+information"). This crate cannot invent new `NodeId`/`EdgeId` strings or
+domain payloads, so `duplicate` supplies the new nodes explicitly; the
+connecting edges are generated automatically as a closed ring over
+`duplicate.nodes` in order (matching `Surface`'s own cycle shape), from
+the `(EdgeId, E)` pairs `duplicate.ring_edges` supplies -- one entry per
+node, not an arbitrary edge list, since a cycle's natural connectivity
+is exactly its consecutive pairs.
+
+Every new node and edge id is checked against the graph (and against
+each other, to catch a caller accidentally repeating an id within the
+same call) before anything is added, so a validation failure never
+leaves a partial set of new nodes/edges behind.
+
 ### `pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
 
 Unites two existing surfaces into one new surface, per `ADR-0022`'s
@@ -389,6 +406,19 @@ geometry, this crate does not compute it. `key` must already be
 registered; both halves are validated, and checked not to collide with
 *each other*, before `key` is removed -- a failure never leaves the
 original surface gone with only one (or neither) half registered.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch`
+
+[`duplicate_surface`]'s supplied node or ring-edge count did not
+match what the original surface's cycle requires.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize`
+
+The count actually supplied.
+
+### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize`
+
+The count the original surface's cycle requires.
 
 ### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
 
@@ -420,6 +450,26 @@ The deleted node's payload.
 ### `pub grafting_graph_core::DeleteOutcome::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
 
 Surfaces removed because their cycle included the deleted node.
+
+### `pub grafting_graph_core::DuplicateSpec::nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+New nodes, one per node in the original surface's cycle, in the
+same order.
+
+### `pub grafting_graph_core::DuplicateSpec::physical: bool`
+
+Whether the new surface blocks movement or acts as ground.
+
+### `pub grafting_graph_core::DuplicateSpec::ring_edges: alloc::vec::Vec<(grafting_graph_core::EdgeId, E)>`
+
+New edge id + payload for each consecutive pair in `nodes`,
+including the wrap-around from the last node back to the first --
+one entry per node, closing `nodes` into a ring mirroring the
+original cycle's shape. Must be the same length as `nodes`.
+
+### `pub grafting_graph_core::DuplicateSpec::surface_type: grafting_graph_core::SurfaceType`
+
+The new surface's type identifier.
 
 ### `pub grafting_graph_core::FormationInputs::deformation_xy: f32`
 
@@ -642,6 +692,10 @@ inputs belong in node or edge payloads and cross explicit contracts.
 ### `pub struct grafting_graph_core::DeleteOutcome<N>`
 
 Outcome of [`delete_node`].
+
+### `pub struct grafting_graph_core::DuplicateSpec<N, E>`
+
+New nodes and connecting edges for [`duplicate_surface`].
 
 ### `pub struct grafting_graph_core::Edge<E>`
 
