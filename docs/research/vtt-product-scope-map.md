@@ -75,7 +75,7 @@ only indexes it.
 | Rule automation (attack rolls, damage calculation, saves) | **Standby** — a generic action-resolution flow (Command → dice roll via `ndm`/`DeterministicRng` → modifier application → outcome) is proposed in `docs/research/vtt-rules-and-character-system-options.md`, unifying combat damage/healing with the same modifier mechanism as persistent status effects |
 | Compendiums / content packs (items, spells, monsters, stat blocks) | **Not discussed** |
 | How map entities (doors, containers, triggers) relate to character/rules entities | **Decided (boundary only)** — `VTT-PRODUCT-001` separates scene placement, optional rules subject, participant identity, surface identity, and rules-provider composition; exact door/container/trigger payloads remain open until their executable feature slices |
-| Fog of war / dynamic vision algorithm | **Standby** — PlanarAlly's (MIT) hand-rolled visibility/triangulation module identified as a strong reference, cross-linking back to this document's Map & World section above |
+| Fog of war / dynamic vision algorithm | **Research in progress** — `VTT-FOG-RESEARCH-001` separates character/group knowledge, sense evidence, disclosure, last-known state, fog/void, and point silhouettes; exact authority/storage/visual policies remain open in `E2.4` |
 
 ## 4. Multiplayer & networking
 

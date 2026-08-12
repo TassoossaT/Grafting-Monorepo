@@ -1,9 +1,20 @@
 # Note 0002 — Fog of war: the design, and what the engine must not preclude
 
 - Recorded: 2026-08-07
-- Status: design recorded, deliberately not implemented
+- Status: original design recorded and refined by research; deliberately not
+  implemented; roadmap task `E2.4` remains open
 - Owner's framing: "é algo que eu devo fazer bem para o futuro, pois será bem
   complexa" — this is written to be picked up later without re-deriving it
+
+Research consolidation:
+`docs/research/vtt-perception-memory-and-fog-of-war.md`
+(`VTT-FOG-RESEARCH-001`).
+
+The three-state model below is the historical seed, not an implementation enum.
+The research record separates evidence modality, disclosure level, temporal
+relation, spatial precision, and presentation. An implementation MUST NOT use
+current secret geometry as remembered state and MUST NOT treat sound, memory,
+and direct vision as equivalent.
 
 Nothing here is built. The purpose is that the decision exists in writing
 before the code does, and that `@grafting/render-3d` does not quietly make it
