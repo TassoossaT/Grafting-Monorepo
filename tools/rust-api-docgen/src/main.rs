@@ -97,7 +97,20 @@ fn main() -> ExitCode {
         if doc.is_none() && is_undocumented_derive_noise(&signature) {
             continue;
         }
-        items.insert(signature, doc);
+        // A trait impl and an inherent impl can render the identical
+        // signature string for the same method (e.g. a delegating trait
+        // method with no doc comment of its own, next to an already
+        // documented inherent method) -- keep whichever occurrence is
+        // documented instead of letting insertion order silently drop
+        // real docs.
+        items
+            .entry(signature)
+            .and_modify(|existing| {
+                if existing.is_none() && doc.is_some() {
+                    *existing = doc;
+                }
+            })
+            .or_insert(doc);
     }
 
     let mut rendered = format!("# {package}\n\n");

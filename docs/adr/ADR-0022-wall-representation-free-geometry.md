@@ -3,7 +3,7 @@
 - Status: Accepted
 - Decision owner: repository-owner
 - Original decision date: 2026-08-08 (free-geometry model — superseded below)
-- Revision date: 2026-08-10
+- Revision date: 2026-08-10; general deletion-repair algorithm added 2026-08-12
 - Record: DEC-060
 - Supersedes: this document's own 2026-08-08 decision, in place, at the
   owner's explicit direction ("não tem problema em reescrever ela
@@ -98,7 +98,41 @@ geometry.
   themselves, a new surface is generated automatically to cap that cycle
   (example: removing a pyramid's apex forms a new surface capping the
   base). This can leave a hole where no such cycle forms — accepted by
-  design, not treated as an error state.
+  design, not treated as an error state. **General algorithm added
+  2026-08-12** — see below; this bullet stated the specific pyramid
+  example, the algorithm generalizes it.
+
+### Delete: the general cycle-repair algorithm
+
+Added 2026-08-12, closing the gap this document originally left open (see
+the superseded bullet under "What this decision does not resolve," kept
+below for the record). Given node `N` being deleted:
+
+1. Collect `neighbors(N)` — every node directly connected to `N` by an edge,
+   captured **before** `N` and its edges are removed.
+2. Remove `N`, its edges, and every `Surface` whose node-cycle includes `N`.
+3. Consider only the edges that already existed directly **between** members
+   of `neighbors(N)` — edges that did not route through `N`. This is the
+   subgraph induced on `neighbors(N)` alone.
+4. Find every simple cycle in that induced subgraph, where a cycle is only
+   valid if it closes using **exclusively** nodes from `neighbors(N)` — a
+   candidate loop that needs any node outside `neighbors(N)` to close does
+   not count.
+5. A neighbor is not required to participate in any cycle. Neighbors left
+   out of every found cycle leave a hole at that location — still accepted
+   by design, unchanged from the original decision.
+6. Generate one new `Surface` per cycle found in step 4, not one combined
+   surface for the whole neighbor set. If `neighbors(N)` splits into more
+   than one disjoint cycle, each produces its own new surface (example: two
+   pyramids sharing one apex node — deleting the shared apex finds two
+   disjoint 4-cycles, one per pyramid's base, and generates two new capping
+   surfaces, not one).
+7. If no cycle exists in the induced subgraph at all, nothing is generated
+   — the accepted-hole case from the original decision, unchanged.
+
+The pyramid-apex example in the bullet above is this algorithm's simplest
+case: one node (`N`), four neighbors (the base), one cycle among them (step
+4 finds exactly one 4-cycle), one new surface (step 6).
 - **Merge** — two node sets can be united into one surface (a door's nodes
   and an adjoining wall's nodes becoming one thing).
 - **Split** — a surface can be divided (cutting a wall into two).
@@ -123,11 +157,10 @@ geometry.
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
   not designed here.
-- **The deletion-repair rule is a defined heuristic for one case, not a
-  general algorithm.** "Neighbors form a cycle, cap it" is concrete and
-  correct for the stated example (a pyramid's apex); the general case
-  (irregular neighbor shapes, multiple candidate cycles) is not fully
-  specified.
+- ~~**The deletion-repair rule is a defined heuristic for one case, not a
+  general algorithm.**~~ **Resolved 2026-08-12** — see "Delete: the general
+  cycle-repair algorithm" above. Kept here, struck through, so the record of
+  what was once open is not lost.
 - **The terrain/structure seam**
   (`docs/research/vtt-construction-layering-graph-mesh-asset.md`'s
   Problem 2) is untouched by this decision either way and remains open.

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 
@@ -241,16 +241,16 @@ impl Error for GraphError {}
 #[derive(Debug)]
 pub struct Graph<N, E> {
     storage: StableDiGraph<Node<N>, Edge<E>>,
-    node_indices: BTreeMap<NodeId, NodeIndex>,
-    edge_indices: BTreeMap<EdgeId, EdgeIndex>,
+    node_indices: HashMap<NodeId, NodeIndex>,
+    edge_indices: HashMap<EdgeId, EdgeIndex>,
 }
 
 impl<N, E> Graph<N, E> {
     /// Validates identities and endpoints, then constructs the graph.
     pub fn try_from_parts(nodes: Vec<Node<N>>, edges: Vec<Edge<E>>) -> Result<Self, GraphError> {
         let mut storage = StableDiGraph::new();
-        let mut node_indices = BTreeMap::new();
-        let mut edge_indices = BTreeMap::new();
+        let mut node_indices = HashMap::with_capacity(nodes.len());
+        let mut edge_indices = HashMap::with_capacity(edges.len());
 
         for node in nodes {
             let id = node.id.clone();
@@ -383,21 +383,28 @@ impl<N, E> Graph<N, E> {
     }
 
     /// Clones an immutable snapshot sorted by stable identities.
+    ///
+    /// Sorts explicitly rather than relying on iteration order: the
+    /// identity maps are a `HashMap` (unordered), not a `BTreeMap`, so
+    /// `GraphSnapshot`'s "sorted by stable identity" contract has to be
+    /// established here, not inherited for free from storage.
     pub fn snapshot(&self) -> GraphSnapshot<N, E>
     where
         N: Clone,
         E: Clone,
     {
-        let nodes = self
+        let mut nodes = self
             .node_indices
             .values()
             .map(|index| self.storage[*index].clone())
-            .collect();
-        let edges = self
+            .collect::<Vec<_>>();
+        nodes.sort_by(|left, right| left.id().cmp(right.id()));
+        let mut edges = self
             .edge_indices
             .values()
             .map(|index| self.storage[*index].clone())
-            .collect();
+            .collect::<Vec<_>>();
+        edges.sort_by(|left, right| left.id().cmp(right.id()));
         GraphSnapshot { nodes, edges }
     }
 
@@ -419,6 +426,54 @@ impl<N, E> Graph<N, E> {
         neighbors.sort();
         neighbors.dedup();
         Ok(neighbors)
+    }
+}
+
+/// Minimal read/traversal capability graph algorithms need, independent of
+/// which concrete storage backend implements it.
+///
+/// Deliberately narrow: "given a node, its neighbors," per this crate's own
+/// scoping (`docs/architecture/vtt-roadmap.md` E1.2) -- not a general graph
+/// interface. [`Graph::topological_order`] and [`Graph::snapshot`] stay
+/// inherent-only, since a construction-focused backend was explicitly
+/// scoped to not need them. Mutation capability is deliberately not part of
+/// this trait: [`Graph`] has none today, and splitting read/traversal from
+/// mutation only matters once a mutating operation (e.g. a future
+/// `apply_cell_patch`) actually exists to split against.
+///
+/// Exists so a future storage backend (e.g. a deterministic backend, if
+/// multiplayer replay becomes a real requirement) is an additional
+/// implementation of this trait, not a rewrite of every algorithm already
+/// written against it.
+pub trait GraphOps<N, E> {
+    /// Looks up a node by its stable identity.
+    fn node(&self, id: &NodeId) -> Option<&Node<N>>;
+
+    /// Looks up an edge by its stable identity.
+    fn edge(&self, id: &EdgeId) -> Option<&Edge<E>>;
+
+    /// Returns unique successor IDs in deterministic identity order.
+    fn successors(&self, id: &NodeId) -> Result<Vec<NodeId>, GraphError>;
+
+    /// Returns unique predecessor IDs in deterministic identity order.
+    fn predecessors(&self, id: &NodeId) -> Result<Vec<NodeId>, GraphError>;
+}
+
+impl<N, E> GraphOps<N, E> for Graph<N, E> {
+    fn node(&self, id: &NodeId) -> Option<&Node<N>> {
+        Graph::node(self, id)
+    }
+
+    fn edge(&self, id: &EdgeId) -> Option<&Edge<E>> {
+        Graph::edge(self, id)
+    }
+
+    fn successors(&self, id: &NodeId) -> Result<Vec<NodeId>, GraphError> {
+        Graph::successors(self, id)
+    }
+
+    fn predecessors(&self, id: &NodeId) -> Result<Vec<NodeId>, GraphError> {
+        Graph::predecessors(self, id)
     }
 }
 
@@ -517,6 +572,36 @@ mod tests {
             edge_ids,
             vec![&EdgeId::new("a").unwrap(), &EdgeId::new("z").unwrap()]
         );
+    }
+
+    #[test]
+    fn graph_ops_trait_is_generically_usable() {
+        fn reachable_within_two_hops<N, E, G: GraphOps<N, E>>(
+            graph: &G,
+            start: &NodeId,
+        ) -> Result<Vec<NodeId>, GraphError> {
+            let mut seen = BTreeSet::new();
+            for first in graph.successors(start)? {
+                for second in graph.successors(&first)? {
+                    seen.insert(second);
+                }
+                seen.insert(first);
+            }
+            Ok(seen.into_iter().collect())
+        }
+
+        let graph = Graph::try_from_parts(
+            vec![node("a"), node("b"), node("c"), node("d")],
+            vec![edge("ab", "a", "b"), edge("bc", "b", "c")],
+        )
+        .unwrap();
+
+        assert_eq!(
+            reachable_within_two_hops(&graph, &NodeId::new("a").unwrap()).unwrap(),
+            vec![NodeId::new("b").unwrap(), NodeId::new("c").unwrap()]
+        );
+        assert!(GraphOps::node(&graph, &NodeId::new("d").unwrap()).is_some());
+        assert!(GraphOps::edge(&graph, &EdgeId::new("ab").unwrap()).is_some());
     }
 
     #[test]

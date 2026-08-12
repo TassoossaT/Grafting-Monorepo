@@ -1,5 +1,9 @@
 # grafting-graph-core
 
+### `#[repr(u8)] pub enum grafting_graph_core::GraphPrimitive`
+
+Generic domain-agnostic primitive role for graph formation.
+
 ### `pub enum grafting_graph_core::GraphError`
 
 Structural or algorithm error returned through the Grafting graph contract.
@@ -88,6 +92,11 @@ Returns unique predecessor IDs in deterministic identity order.
 
 Clones an immutable snapshot sorted by stable identities.
 
+Sorts explicitly rather than relying on iteration order: the
+identity maps are a `HashMap` (unordered), not a `BTreeMap`, so
+`GraphSnapshot`'s "sorted by stable identity" contract has to be
+established here, not inherited for free from storage.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
 
 Returns unique successor IDs in deterministic identity order.
@@ -99,6 +108,22 @@ Returns a deterministic topological order or the nodes left blocked by a cycle.
 ### `pub fn grafting_graph_core::Graph<N, E>::try_from_parts(nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>, edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>) -> core::result::Result<Self, grafting_graph_core::GraphError>`
 
 Validates identities and endpoints, then constructs the graph.
+
+### `pub fn grafting_graph_core::GraphOps::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>`
+
+Looks up an edge by its stable identity.
+
+### `pub fn grafting_graph_core::GraphOps::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>`
+
+Looks up a node by its stable identity.
+
+### `pub fn grafting_graph_core::GraphOps::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
+
+Returns unique predecessor IDs in deterministic identity order.
+
+### `pub fn grafting_graph_core::GraphOps::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>`
+
+Returns unique successor IDs in deterministic identity order.
 
 ### `pub fn grafting_graph_core::GraphSnapshot<N, E>::clone(&self) -> grafting_graph_core::GraphSnapshot<N, E>`
 
@@ -183,6 +208,26 @@ Returns the stable identifier text.
 Creates a non-empty identifier without applying product-specific
 normalization rules.
 
+### `pub fn grafting_graph_core::PrismGridMesh::cell_count(&self) -> usize`
+
+Total number of cells in the mesh.
+
+### `pub fn grafting_graph_core::PrismGridMesh::new(width: u32, height: u32, layers: u32, inputs: grafting_graph_core::FormationInputs) -> Self`
+
+Constructs a grid of width x height x layers cells with 6-slot connectivity.
+
+### `pub grafting_graph_core::FormationInputs::deformation_xy: f32`
+
+Planar XY alignment deformation factor (0.0 = regular quad lattice, 1.0 = organic quad mesh).
+
+### `pub grafting_graph_core::FormationInputs::deformation_z: f32`
+
+Vertical Z height variation factor (0.0 = flat plane, 1.0 = chaotic terrain desnivel).
+
+### `pub grafting_graph_core::FormationInputs::primitive: grafting_graph_core::GraphPrimitive`
+
+The primitive topological role.
+
 ### `pub grafting_graph_core::GraphError::CycleDetected`
 
 Topological ordering cannot consume every node because a cycle exists.
@@ -239,6 +284,18 @@ A query refers to a node that is not present.
 
 Identity that could not be resolved.
 
+### `pub grafting_graph_core::GraphPrimitive::Boundary = 1`
+
+Vertical separating structure / boundary.
+
+### `pub grafting_graph_core::GraphPrimitive::Passage = 0`
+
+Open passage / empty cell space.
+
+### `pub grafting_graph_core::GraphPrimitive::Surface = 2`
+
+Horizontal ground or surface support.
+
 ### `pub grafting_graph_core::IdentifierError::EmptyEdgeId`
 
 An edge identifier must contain at least one character.
@@ -291,6 +348,35 @@ A grouping edge identity was not present in the graph.
 
 Missing grouping edge identity.
 
+### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
+
+8 corner vertex indices per cell [V0..V7].
+
+### `pub grafting_graph_core::PrismGridMesh::cell_neighbors: alloc::vec::Vec<u32>`
+
+Contiguous list of 6 neighbor cell IDs per cell [North, East, South, West, Bottom, Top].
+u32::MAX indicates a boundary edge (no neighbor).
+
+### `pub grafting_graph_core::PrismGridMesh::height: u32`
+
+Height of the grid in cells.
+
+### `pub grafting_graph_core::PrismGridMesh::inputs: alloc::vec::Vec<grafting_graph_core::FormationInputs>`
+
+Formation inputs per cell.
+
+### `pub grafting_graph_core::PrismGridMesh::layers: u32`
+
+Number of vertical layers in the grid.
+
+### `pub grafting_graph_core::PrismGridMesh::positions: alloc::vec::Vec<[f32; 3]>`
+
+Flat list of 3D vertex positions [x, y, z] for corners across all layers.
+
+### `pub grafting_graph_core::PrismGridMesh::width: u32`
+
+Width of the grid in cells.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -307,6 +393,10 @@ A directed graph edge with stable identity and caller-chosen payload.
 ### `pub struct grafting_graph_core::EdgeId(_)`
 
 Stable Grafting edge identity.
+
+### `pub struct grafting_graph_core::FormationInputs`
+
+Generic formation inputs for mesh deformation and top-down layout.
 
 ### `pub struct grafting_graph_core::Graph<N, E>`
 
@@ -335,3 +425,27 @@ A graph node with a stable identity and caller-chosen calculation payload.
 ### `pub struct grafting_graph_core::NodeId(_)`
 
 Stable Grafting node identity.
+
+### `pub struct grafting_graph_core::PrismGridMesh`
+
+A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
+(4 lateral, 1 bottom, 1 top), positions, and deformation inputs.
+
+### `pub trait grafting_graph_core::GraphOps<N, E>`
+
+Minimal read/traversal capability graph algorithms need, independent of
+which concrete storage backend implements it.
+
+Deliberately narrow: "given a node, its neighbors," per this crate's own
+scoping (`docs/architecture/vtt-roadmap.md` E1.2) -- not a general graph
+interface. [`Graph::topological_order`] and [`Graph::snapshot`] stay
+inherent-only, since a construction-focused backend was explicitly
+scoped to not need them. Mutation capability is deliberately not part of
+this trait: [`Graph`] has none today, and splitting read/traversal from
+mutation only matters once a mutating operation (e.g. a future
+`apply_cell_patch`) actually exists to split against.
+
+Exists so a future storage backend (e.g. a deterministic backend, if
+multiplayer replay becomes a real requirement) is an additional
+implementation of this trait, not a rewrite of every algorithm already
+written against it.
