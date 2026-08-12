@@ -1,3 +1,4 @@
+import { chunkSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
   createTokenCollection,
@@ -5,13 +6,22 @@ import {
   type TokenProjection,
   type TokenProjectionDelta,
 } from "../../entities/token/index.ts";
+import {
+  createMapProjection,
+  createSurfaceProjection,
+  surfaceRefFromNodeSet,
+  type MapProjection,
+} from "../../entities/map/index.ts";
 import type {
   ChangeOrigin,
   ConfirmedTokenRenderChange,
+  ConstructionSessionPort,
   RenderViewId,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "@/ports";
+
+import { defaultMapSeed } from "./default-map-seed.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -20,6 +30,7 @@ export interface TabletopSnapshot {
   readonly status: TabletopRuntimeStatus;
   readonly tableId: string;
   readonly tokens: TokenCollectionProjection;
+  readonly map: MapProjection;
 }
 
 export interface ConfirmedTokenDeltaEnvelope {
@@ -47,8 +58,9 @@ function snapshot(
   status: TabletopRuntimeStatus,
   revision: number,
   tokens: TokenCollectionProjection,
+  map: MapProjection,
 ): TabletopSnapshot {
-  return Object.freeze({ revision, status, tableId, tokens });
+  return Object.freeze({ revision, status, tableId, tokens, map });
 }
 
 function renderChange(
@@ -93,12 +105,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
   readonly #tableId: string;
   readonly #render: SceneRenderPort;
+  readonly #construction: ConstructionSessionPort;
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
   constructor(
     tableId: string,
     render: SceneRenderPort,
+    construction: ConstructionSessionPort,
     initialTokens: readonly TokenProjection[] = [],
   ) {
     const normalizedTableId = tableId.trim();
@@ -108,11 +122,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     this.#tableId = normalizedTableId;
     this.#render = render;
+    this.#construction = construction;
     this.#snapshot = snapshot(
       this.#tableId,
       "idle",
       0,
       createTokenCollection(initialTokens),
+      createMapProjection(),
     );
   }
 
@@ -124,6 +140,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const generation = ++this.#generation;
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
+    await this.#construction.start();
 
     if (generation !== this.#generation) return;
 
@@ -139,7 +156,55 @@ export class AppTabletopRuntime implements TabletopRuntime {
         ),
       );
     }
+
+    const map = this.#seedDefaultMap(generation);
+    this.#snapshot = snapshot(
+      this.#tableId,
+      this.#snapshot.status,
+      this.#snapshot.revision,
+      this.#snapshot.tokens,
+      map,
+    );
     this.#publishLifecycle("ready");
+  }
+
+  /**
+   * Generates one terrain cell and one wall-with-door through the real
+   * construction engine and renders them -- the same role the guide token
+   * plays for `entities/token`, so `pnpm nx run vtt:dev` shows map geometry
+   * without waiting on `E3.7`'s edit-mode UI. Every seeded surface starts
+   * at revision 1; there is no earlier revision to invalidate.
+   */
+  #seedDefaultMap(generation: number): MapProjection {
+    const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
+    this.#construction.setTerrainMesh(2, 2, 1, "surface", 0, 0);
+    this.#construction.generateTerrainCell(terrainCell.payload);
+    this.#construction.generateWall(wall.payload);
+
+    const meshes = this.#construction.getAllSurfaceMeshes();
+    const causeId = `table-load:${this.#tableId}`;
+    for (const chunk of chunkSurfaceMeshes(meshes)) {
+      this.#render.applyConfirmed({
+        type: "map-chunk-upserted",
+        origin: "programmatic",
+        causeId,
+        runtimeGeneration: generation,
+        dependency: { layer: "terrain", scopeId: chunk.chunkId, revision: 1 },
+        chunk,
+      });
+    }
+
+    return createMapProjection(
+      meshes.map((mesh) =>
+        createSurfaceProjection({
+          surfaceRef: surfaceRefFromNodeSet(mesh.surfaceKey),
+          orderedNodeRefs: mesh.surfaceKey,
+          type: mesh.surfaceType,
+          physical: mesh.physical,
+          revision: 1,
+        }),
+      ),
+    );
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {
@@ -155,6 +220,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.status,
       this.#snapshot.revision + 1,
       tokens,
+      this.#snapshot.map,
     );
     this.#notify();
   }
@@ -192,6 +258,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#publishLifecycle("disposed");
     this.#listeners.clear();
     await this.#render.dispose();
+    await this.#construction.dispose();
   }
 
   #publishLifecycle(status: TabletopRuntimeStatus): void {
@@ -201,6 +268,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       status,
       this.#snapshot.revision + 1,
       this.#snapshot.tokens,
+      this.#snapshot.map,
     );
     this.#notify();
   }

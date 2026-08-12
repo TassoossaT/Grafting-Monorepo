@@ -5,6 +5,7 @@
 //!
 mod dto;
 mod editing;
+mod mesh;
 mod session;
 mod terrain;
 mod wall;

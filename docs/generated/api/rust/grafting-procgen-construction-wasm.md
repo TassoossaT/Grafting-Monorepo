@@ -12,6 +12,12 @@ Adds a brand-new node. See `editing::add_node`.
 
 Registers a brand-new surface. See `editing::add_surface`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::all_surface_meshes_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Every currently-known surface's triangulated mesh, in stable key
+order -- the one bootstrap call a renderer uses to draw everything
+already in the session. See `mesh::all_surface_meshes`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_node_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
@@ -67,6 +73,12 @@ render from without re-deriving state.
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::split_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Divides one surface into two. See `editing::apply_split_surface`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+One surface's triangulated mesh, by key -- what a caller re-fetches
+for each entry in an operation's `affectedSurfaceKeys` after a
+mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
 

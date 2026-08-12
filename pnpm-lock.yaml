@@ -82,6 +82,9 @@ importers:
 
   apps/vtt:
     dependencies:
+      '@grafting/procgen-construction-wasm':
+        specifier: workspace:*
+        version: link:../../libs/domains/procgen/construction-wasm
       '@grafting/render-3d':
         specifier: workspace:*
         version: link:../../packages/render-3d
@@ -105,6 +108,10 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  libs/domains/procgen/construction-wasm: {}
+
+  libs/domains/procgen/construction-wasm/pkg: {}
+
   libs/domains/procgen/discretize: {}
 
   libs/domains/procgen/discretize/pkg: {}
@@ -113,15 +120,11 @@ importers:
 
   libs/domains/procgen/generation-wasm/pkg: {}
 
-  libs/domains/procgen/terrain-quantization/pkg: {}
-
   libs/domains/procgen/tileset-wfc: {}
 
   libs/domains/procgen/tileset-wfc/pkg: {}
 
   libs/isekai/wasm-bridge: {}
-
-  libs/isekai/wasm-bridge/pkg: {}
 
   packages/isekai-web-client:
     dependencies:
