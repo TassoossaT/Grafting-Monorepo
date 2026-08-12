@@ -8,10 +8,12 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+mod construction;
 mod layout;
 mod model;
 mod surface;
 
+pub use construction::{ConstructionError, DeleteOutcome, delete_node, move_node};
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,

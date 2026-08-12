@@ -4,6 +4,11 @@
 
 Generic domain-agnostic primitive role for graph formation.
 
+### `pub enum grafting_graph_core::ConstructionError`
+
+Structural error from a domain-level construction operation -- either
+the graph mutation or the surface bookkeeping it coordinates can fail.
+
 ### `pub enum grafting_graph_core::GraphError`
 
 Structural or algorithm error returned through the Grafting graph contract.
@@ -19,6 +24,12 @@ Invalid input or arithmetic failure from the grouped-grid heuristic.
 ### `pub enum grafting_graph_core::SurfaceError`
 
 Structural error from surface registration or lookup.
+
+### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self`
+
+### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self`
+
+### `pub fn grafting_graph_core::DeleteOutcome<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::Edge<E>::clone(&self) -> grafting_graph_core::Edge<E>`
 
@@ -321,6 +332,65 @@ Returns the identifier text.
 
 Creates a surface-type identifier from caller-chosen text.
 
+### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
+
+Deletes a node and repairs the hole it leaves, per `ADR-0022`'s general
+cycle-repair algorithm:
+
+1. Every surface referencing the deleted node is removed.
+2. The node (and its edges) is removed from the graph.
+3. Each connected component of the induced subgraph on the deleted
+   node's former neighbors -- using only edges that already existed
+   directly between them, collapsing any multi-edge between the same
+   pair to one logical adjacency -- is checked: if every node in that
+   component has degree exactly 2 within it (a connected 2-regular
+   subgraph, which is always exactly one simple cycle), a new surface
+   is generated to cap it, via `cap_surface`. A component that is not a
+   clean cycle (a branch, an open path) is left as an accepted hole --
+   not an error, and not searched for a sub-cycle within it (confirmed
+   scope with the repository owner: no general cycle search inside an
+   irregular component).
+
+`cap_surface` receives each found cycle's nodes, in traversal order,
+and returns the `(SurfaceType, physical)` the new capping surface
+should have -- this crate does not decide domain semantics.
+
+Every candidate capping surface is checked against `surfaces` for a
+node-set collision with an already-registered, unrelated surface
+*before* anything is mutated, so a collision fails the whole operation
+atomically rather than leaving the node removed with only some of its
+capping surfaces registered.
+
+### `pub fn grafting_graph_core::move_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::SurfaceKey>, grafting_graph_core::GraphError>`
+
+Moves a node by applying `update` to its payload, then reports every
+surface that referenced it and therefore needs its mesh recomputed --
+the reactive-redraw behavior `ADR-0022` describes for `Move`. Always
+safe: moving a node never changes graph topology or surface membership,
+so this cannot fail for any reason but the node not existing.
+
+### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
+
+The underlying graph query or mutation failed.
+
+### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
+
+The underlying surface registry mutation failed.
+
+### `pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+New surfaces generated to cap a hole -- one per simple cycle found
+among the deleted node's former neighbors, per `ADR-0022`'s general
+cycle-repair algorithm.
+
+### `pub grafting_graph_core::DeleteOutcome::removed_node: grafting_graph_core::Node<N>`
+
+The deleted node's payload.
+
+### `pub grafting_graph_core::DeleteOutcome::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Surfaces removed because their cycle included the deleted node.
+
 ### `pub grafting_graph_core::FormationInputs::deformation_xy: f32`
 
 Planar XY alignment deformation factor (0.0 = regular quad lattice, 1.0 = organic quad mesh).
@@ -526,6 +596,10 @@ The public contract deliberately exposes only Grafting types. [`Graph`]
 currently uses `petgraph` privately, but consumers cannot depend on that
 implementation detail. Presentation data remains in callers; calculation
 inputs belong in node or edge payloads and cross explicit contracts.
+
+### `pub struct grafting_graph_core::DeleteOutcome<N>`
+
+Outcome of [`delete_node`].
 
 ### `pub struct grafting_graph_core::Edge<E>`
 
