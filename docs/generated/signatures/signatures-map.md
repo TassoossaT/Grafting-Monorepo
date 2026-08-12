@@ -218,6 +218,13 @@ pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::Gra
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
 pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::GraphError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub grafting_graph_core::GraphPrimitive::Boundary = 1
+pub grafting_graph_core::GraphPrimitive::Passage = 0
+pub grafting_graph_core::GraphPrimitive::Surface = 2
+pub fn grafting_graph_core::GraphPrimitive::clone(&self) -> grafting_graph_core::GraphPrimitive
+pub fn grafting_graph_core::GraphPrimitive::eq(&self, other: &grafting_graph_core::GraphPrimitive) -> bool
+pub fn grafting_graph_core::GraphPrimitive::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::GraphPrimitive::hash<__H: core::hash::Hasher>(&self, state: &mut __H)
 pub enum grafting_graph_core::IdentifierError
 pub grafting_graph_core::IdentifierError::EmptyEdgeId
 pub grafting_graph_core::IdentifierError::EmptyNodeId
@@ -226,13 +233,6 @@ pub fn grafting_graph_core::IdentifierError::eq(&self, other: &grafting_graph_co
 pub fn grafting_graph_core::IdentifierError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::IdentifierError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::LayoutError
-pub grafting_graph_core::LayoutError::DimensionsOverflow
-pub grafting_graph_core::LayoutError::InvalidOption
-pub grafting_graph_core::LayoutError::InvalidOption::name: &'static str
-pub grafting_graph_core::LayoutError::MultipleGroups
-pub grafting_graph_core::LayoutError::MultipleGroups::first: grafting_graph_core::NodeId
-pub grafting_graph_core::LayoutError::MultipleGroups::node: grafting_graph_core::NodeId
-pub grafting_graph_core::LayoutError::MultipleGroups::second: grafting_graph_core::NodeId
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
