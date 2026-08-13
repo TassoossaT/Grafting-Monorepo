@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@grafting/ui": [
+        "../../packages/ui/src/index.ts"
       ]
     },
     "allowJs": true

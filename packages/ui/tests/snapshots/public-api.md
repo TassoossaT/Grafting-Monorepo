@@ -594,4 +594,231 @@ export type { GeometryCanvas, GeometryCanvasOptions } from "./geometry/contracts
  * @returns A Grafting-owned update, capture, and disposal handle.
  */
 export declare function createGeometryCanvas(container: HTMLElement, options: GeometryCanvasOptions): GeometryCanvas;
+
+import type { ReactElement, ReactNode } from "react";
+/** Menu item entry for a circular radial context menu. */
+export interface RadialMenuItem {
+    /**
+     * Unique menu item identifier.
+     * @example "move"
+     */
+    readonly id: string;
+    /**
+     * Display label for the menu item.
+     * @example "Mover Nó"
+     */
+    readonly label: string;
+    /** Optional icon element. */
+    readonly icon?: ReactNode;
+    /** Invoked when this item is selected. */
+    readonly action: () => void;
+    /** Optional visual accent color for the border. */
+    readonly accentColor?: string;
+}
+/** Public inputs for the floating 3D Radial Context Menu. */
+export interface RadialContextMenuProps {
+    /**
+     * Target screen position (x, y) where the radial menu opens. Pass null when hidden.
+     * @example { x: 300, y: 400 }
+     */
+    readonly position: {
+        readonly x: number;
+        readonly y: number;
+    } | null;
+    /**
+     * Items rendered around the ring.
+     * @example [{ id: "move", label: "Mover Nó", action: () => {} }]
+     */
+    readonly items: readonly RadialMenuItem[];
+    /**
+     * Invoked when clicking outside or canceling the menu.
+     * @example () => {}
+     */
+    readonly onClose: () => void;
+    /** Optional title shown at the center pivot. */
+    readonly title?: string;
+}
+/**
+  * Floating circular 2D/3D Radial Context Menu for rapid map actions.
+  *
+  * @layer molecule
+  * @status stable
+  */
+export declare function RadialContextMenu(props: RadialContextMenuProps): ReactElement | null;
+
+import type { ReactElement } from "react";
+/** Floor level preset item. */
+export interface FloorLevelOption {
+    /**
+     * Unique level identifier.
+     * @example "L1"
+     */
+    readonly id: string;
+    /**
+     * Human-readable level name.
+     * @example "Térreo"
+     */
+    readonly label: string;
+    /**
+     * Elevation height in meters.
+     * @example 3.5
+     */
+    readonly heightMeters: number;
+}
+/** Default floor level presets for building cutaways. */
+export declare const DEFAULT_FLOOR_LEVELS: readonly FloorLevelOption[];
+/** Public inputs for the Floor Height Slicer component. */
+export interface FloorLevelSlicerProps {
+    /**
+     * Current cutaway height in meters.
+     * @example 3.5
+     */
+    readonly heightMeters: number;
+    /**
+     * Currently active level ID preset.
+     * @example "L1"
+     */
+    readonly activeLevelId: string;
+    /** Optional array of level presets. */
+    readonly levels?: readonly FloorLevelOption[];
+    /**
+     * Callback when height in meters is adjusted.
+     * @example (height) => console.log(height)
+     */
+    readonly onChangeHeight: (heightMeters: number) => void;
+    /**
+     * Callback when a level preset is chosen.
+     * @example (id, height) => console.log(id, height)
+     */
+    readonly onSelectLevel: (levelId: string, heightMeters: number) => void;
+    /** Optional custom class name. */
+    readonly className?: string;
+}
+/**
+ * Floor Height Cutaway Slicer molecule for multi-story level design.
+ *
+ * @layer molecule
+ * @status stable
+ */
+export declare function FloorLevelSlicer(props: FloorLevelSlicerProps): ReactElement;
+
+import type { ReactElement } from "react";
+/** Material option entry for swatch selection. */
+export interface MaterialSwatchOption {
+    /**
+     * Unique material identifier.
+     * @example "wall-white"
+     */
+    readonly id: string;
+    /**
+     * Display name of the material or prototype block.
+     * @example "Bloco Branco"
+     */
+    readonly name: string;
+    /**
+     * Color hex code or preview styling.
+     * @example "#e2e8f0"
+     */
+    readonly colorHex: string;
+    /** Optional material category. */
+    readonly category?: string;
+}
+/** Default material options for prototype blocks. */
+export declare const DEFAULT_SWATCH_MATERIALS: readonly MaterialSwatchOption[];
+/** Public inputs for Material Swatch Palette Grid component. */
+export interface MaterialSwatchGridProps {
+    /**
+     * Currently active material swatch ID.
+     * @example "wall-white"
+     */
+    readonly activeMaterialId: string;
+    /** Optional array of available material swatches. */
+    readonly materials?: readonly MaterialSwatchOption[];
+    /**
+     * Callback when a material is chosen.
+     * @example (id) => console.log(id)
+     */
+    readonly onSelectMaterial: (id: string) => void;
+    /** Optional custom CSS class name. */
+    readonly className?: string;
+}
+/**
+ * Material Swatch Palette Grid molecule for block and surface styling.
+ *
+ * @layer molecule
+ * @status stable
+ */
+export declare function MaterialSwatchGrid(props: MaterialSwatchGridProps): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
+/** Option item for Category Dock pill buttons. */
+export interface CategoryDockOption {
+    /**
+     * Unique category identifier.
+     * @example "walls"
+     */
+    readonly id: string;
+    /**
+     * Category display name.
+     * @example "Paredes"
+     */
+    readonly label: string;
+    /** Optional icon node. */
+    readonly icon?: ReactNode;
+}
+/** Default category options for the studio bottom dock. */
+export declare const DEFAULT_STUDIO_CATEGORIES: readonly CategoryDockOption[];
+/** Public inputs for Category Dock organism. */
+export interface CategoryDockProps {
+    /**
+     * Currently active category ID.
+     * @example "walls"
+     */
+    readonly activeCategoryId: string;
+    /** Optional array of available categories. */
+    readonly categories?: readonly CategoryDockOption[];
+    /**
+     * Callback when a category pill is selected.
+     * @example (id) => console.log(id)
+     */
+    readonly onSelectCategory: (id: string) => void;
+    /** Optional sub-palette content rendered floating above the dock. */
+    readonly subPalette?: ReactNode;
+    /** Optional custom class name. */
+    readonly className?: string;
+}
+/**
+ * Bottom Category Dock organism for Level Design Studio (Concept B).
+ *
+ * @layer organism
+ * @status stable
+ */
+export declare function CategoryDock(props: CategoryDockProps): ReactElement;
+
+import type { ReactElement, ReactNode } from "react";
+/** Public inputs for Studio Property Inspector organism. */
+export interface StudioPropertyInspectorProps {
+    /**
+     * Header title for the property inspector panel.
+     * @example "Nó n_01 [X: 2.0, Y: 3.5]"
+     */
+    readonly title: string;
+    /** Optional subtitle or status badge text. */
+    readonly subtitle?: string;
+    /** Optional floor level slicer element. */
+    readonly floorSlicer?: ReactNode;
+    /** Optional material swatch grid element. */
+    readonly materialPalette?: ReactNode;
+    /** Additional inspection cards or children. */
+    readonly children?: ReactNode;
+    /** Optional custom class name. */
+    readonly className?: string;
+}
+/**
+ * Studio Property Inspector organism combining node properties, floor height slicer, and materials.
+ *
+ * @layer organism
+ * @status stable
+ */
+export declare function StudioPropertyInspector(props: StudioPropertyInspectorProps): ReactElement;
 ```

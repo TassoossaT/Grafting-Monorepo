@@ -20,3 +20,12 @@ export type {
   MoveNodeHistoryState,
 } from "../../features/edit-construction/index.ts";
 export type { ConstructionPosition, RenderViewId } from "@/ports";
+
+export {
+  CategoryDock,
+  FloorLevelSlicer,
+  MaterialSwatchGrid,
+  RadialContextMenu,
+  StudioPropertyInspector,
+  type RadialMenuItem,
+} from "../../ui/index.ts";

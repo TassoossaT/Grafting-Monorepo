@@ -12,6 +12,7 @@
   "dependencies": {
     "@grafting/procgen-construction-wasm": "workspace:*",
     "@grafting/render-3d": "workspace:*",
+    "@grafting/ui": "workspace:*",
     "next": "^16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -948,6 +948,288 @@
           "description": "Optional caller-owned class name for layout composition."
         }
       ]
+    },
+    {
+      "id": "molecule.radial-context-menu",
+      "name": "RadialContextMenu",
+      "layer": "molecule",
+      "summary": "Floating circular 2D/3D Radial Context Menu for rapid map actions.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "position",
+          "type": "{ readonly x: number; readonly y: number } | null",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "Target screen position (x, y) where the radial menu opens. Pass null when hidden.",
+          "example": "{ x: 300, y: 400 }"
+        },
+        {
+          "name": "items",
+          "type": "readonly RadialMenuItem[]",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "Items rendered around the ring.",
+          "example": "[{ id: \"move\", label: \"Mover Nó\", action: () => {} }]"
+        },
+        {
+          "name": "onClose",
+          "type": "() => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when clicking outside or canceling the menu.",
+          "example": "() => {}"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional title shown at the center pivot."
+        }
+      ]
+    },
+    {
+      "id": "molecule.floor-level-slicer",
+      "name": "FloorLevelSlicer",
+      "layer": "molecule",
+      "summary": "Floor Height Cutaway Slicer molecule for multi-story level design.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "heightMeters",
+          "type": "number",
+          "required": true,
+          "control": {
+            "kind": "number"
+          },
+          "description": "Current cutaway height in meters.",
+          "example": "3.5"
+        },
+        {
+          "name": "activeLevelId",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Currently active level ID preset.",
+          "example": "\"L1\""
+        },
+        {
+          "name": "levels",
+          "type": "readonly FloorLevelOption[]",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional array of level presets."
+        },
+        {
+          "name": "onChangeHeight",
+          "type": "(heightMeters: number) => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Callback when height in meters is adjusted.",
+          "example": "(height) => console.log(height)"
+        },
+        {
+          "name": "onSelectLevel",
+          "type": "(levelId: string, heightMeters: number) => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Callback when a level preset is chosen.",
+          "example": "(id, height) => console.log(id, height)"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional custom class name."
+        }
+      ]
+    },
+    {
+      "id": "molecule.material-swatch-grid",
+      "name": "MaterialSwatchGrid",
+      "layer": "molecule",
+      "summary": "Material Swatch Palette Grid molecule for block and surface styling.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "activeMaterialId",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Currently active material swatch ID.",
+          "example": "\"wall-white\""
+        },
+        {
+          "name": "materials",
+          "type": "readonly MaterialSwatchOption[]",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional array of available material swatches."
+        },
+        {
+          "name": "onSelectMaterial",
+          "type": "(id: string) => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Callback when a material is chosen.",
+          "example": "(id) => console.log(id)"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional custom CSS class name."
+        }
+      ]
+    },
+    {
+      "id": "organism.category-dock",
+      "name": "CategoryDock",
+      "layer": "organism",
+      "summary": "Bottom Category Dock organism for Level Design Studio (Concept B).",
+      "status": "stable",
+      "props": [
+        {
+          "name": "activeCategoryId",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Currently active category ID.",
+          "example": "\"walls\""
+        },
+        {
+          "name": "categories",
+          "type": "readonly CategoryDockOption[]",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional array of available categories."
+        },
+        {
+          "name": "onSelectCategory",
+          "type": "(id: string) => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Callback when a category pill is selected.",
+          "example": "(id) => console.log(id)"
+        },
+        {
+          "name": "subPalette",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional sub-palette content rendered floating above the dock."
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional custom class name."
+        }
+      ]
+    },
+    {
+      "id": "organism.studio-property-inspector",
+      "name": "StudioPropertyInspector",
+      "layer": "organism",
+      "summary": "Studio Property Inspector organism combining node properties, floor height slicer, and materials.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Header title for the property inspector panel.",
+          "example": "\"Nó n_01 [X: 2.0, Y: 3.5]\""
+        },
+        {
+          "name": "subtitle",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional subtitle or status badge text."
+        },
+        {
+          "name": "floorSlicer",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional floor level slicer element."
+        },
+        {
+          "name": "materialPalette",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional material swatch grid element."
+        },
+        {
+          "name": "children",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Additional inspection cards or children."
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional custom class name."
+        }
+      ]
     }
   ]
 }

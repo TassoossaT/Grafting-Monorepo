@@ -65,3 +65,36 @@ export {
   type HeightfieldCanvas,
   type HeightfieldCanvasOptions,
 } from "./canvas/index.js";
+
+export {
+  RadialContextMenu,
+  type RadialMenuItem,
+  type RadialContextMenuProps,
+} from "./molecules/radial-context-menu.js";
+
+export {
+  FloorLevelSlicer,
+  DEFAULT_FLOOR_LEVELS,
+  type FloorLevelOption,
+  type FloorLevelSlicerProps,
+} from "./molecules/floor-level-slicer.js";
+
+export {
+  MaterialSwatchGrid,
+  DEFAULT_SWATCH_MATERIALS,
+  type MaterialSwatchOption,
+  type MaterialSwatchGridProps,
+} from "./molecules/material-swatch-grid.js";
+
+export {
+  CategoryDock,
+  DEFAULT_STUDIO_CATEGORIES,
+  type CategoryDockOption,
+  type CategoryDockProps,
+} from "./organisms/category-dock.js";
+
+export {
+  StudioPropertyInspector,
+  type StudioPropertyInspectorProps,
+} from "./organisms/studio-property-inspector.js";
+

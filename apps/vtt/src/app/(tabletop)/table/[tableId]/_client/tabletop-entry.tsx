@@ -4,12 +4,18 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import {
+  CategoryDock,
+  FloorLevelSlicer,
+  MaterialSwatchGrid,
+  RadialContextMenu,
+  StudioPropertyInspector,
   buildGenerateTerrainCellOperation,
   buildGenerateWallOperation,
   createMoveNodeHistoryStack,
   createTabletopRuntime,
   type ConstructionPosition,
   type MoveNodeHistoryStack,
+  type RadialMenuItem,
   type RenderViewId,
   type TabletopRuntime,
 } from "@/composition/tabletop";
@@ -53,6 +59,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ id: string; point: ConstructionPosition } | null>(null);
+  const [activeCategory, setActiveCategory] = useState("walls");
+  const [heightMeters, setHeightMeters] = useState(3.5);
+  const [activeLevelId, setActiveLevelId] = useState("L1");
+  const [radialPosition, setRadialPosition] = useState<{ x: number; y: number } | null>(null);
   const [, forceHistoryUpdate] = useState(0);
 
   const historyState = history.getState();
@@ -189,8 +199,24 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [historyState.canUndo, historyState.canRedo, handleUndo, handleRedo, current.status, handleGenerateWall, handleGenerateTerrainCell]);
 
+  const radialItems: readonly RadialMenuItem[] = [
+    { id: "move", label: "Mover", action: () => setTool("move-node") },
+    { id: "wall", label: "+ Parede", action: handleGenerateWall },
+    { id: "terrain", label: "+ Terreno", action: handleGenerateTerrainCell },
+    { id: "undo", label: "Desfazer", action: handleUndo },
+    { id: "redo", label: "Refazer", action: handleRedo },
+  ];
+
   return (
     <div className="gm-studio-app">
+      {/* Radial Context Menu */}
+      <RadialContextMenu
+        items={radialItems}
+        onClose={() => setRadialPosition(null)}
+        position={radialPosition}
+        title="Ações Rápidas VTT"
+      />
+
       {/* Header Bar */}
       <header className="gm-header">
         <div className="gm-brand">
@@ -303,6 +329,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <div
             className="gm-viewport-canvas"
             ref={viewportRef}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setRadialPosition({ x: e.clientX, y: e.clientY });
+            }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
@@ -310,94 +340,38 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           />
           <div className="gm-stage-overlay-info">
             <strong>{current.tokens.byId.size} Token Activo</strong>
-            <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D (Arraste os nós amarelos)" : "Navegação da Câmera"}</span>
+            <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D (Arraste os nós amarelos)" : "Navegação da Câmera"} | Botão Direito: Radial Menu</span>
           </div>
+
+          {/* Bottom Floating Category Dock (Concept B) */}
+          <CategoryDock
+            activeCategoryId={activeCategory}
+            onSelectCategory={setActiveCategory}
+          />
         </section>
 
-        {/* Right Inspector & Material Selector */}
-        <aside className="gm-inspector-right">
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Inspector de Seleção</span>
-            {selectedNodeInfo !== null ? (
-              <div style={{ display: "grid", gap: "0.4rem", fontSize: "0.78rem" }}>
-                <div className="gm-stat-row">
-                  <span>Node ID:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.id}</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição X:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.x.toFixed(2)}m</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição Y:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.y.toFixed(2)}m</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição Z:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.z.toFixed(2)}m</span>
-                </div>
-              </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-                Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Nodes</em> ativada para inspecionar.
-              </p>
-            )}
-          </div>
-
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Estilo de Bloco & Material</span>
-            <div className="gm-material-grid">
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-white" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-white")}
-              >
-                <div className="gm-swatch gm-swatch--wall-white" />
-                <span>Bloco Branco</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-gray" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-gray")}
-              >
-                <div className="gm-swatch gm-swatch--wall-gray" />
-                <span>Bloco Cinza</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain")}
-              >
-                <div className="gm-swatch gm-swatch--terrain" />
-                <span>Grid Terreno</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain-grass" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain-grass")}
-              >
-                <div className="gm-swatch gm-swatch--terrain-grass" />
-                <span>Terreno Grama</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Métricas da Cena</span>
-            <div className="gm-stat-row">
-              <span>Tokens no Mapa:</span>
-              <span className="gm-stat-value">{current.tokens.byId.size}</span>
-            </div>
-            <div className="gm-stat-row">
-              <span>Snap ao Grid:</span>
-              <span className="gm-stat-value">Ativado (1.0m)</span>
-            </div>
-            <div className="gm-stat-row">
-              <span>Iluminação:</span>
-              <span className="gm-stat-value">Direcional + Amb</span>
-            </div>
-          </div>
-        </aside>
+        {/* Right Inspector using @grafting/ui StudioPropertyInspector */}
+        <StudioPropertyInspector
+          title={selectedNodeInfo !== null ? `Nó ${selectedNodeInfo.id}` : "Seleção de Cena"}
+          subtitle={selectedNodeInfo !== null ? `X: ${selectedNodeInfo.point.x.toFixed(1)}m | Y: ${selectedNodeInfo.point.y.toFixed(1)}m | Z: ${selectedNodeInfo.point.z.toFixed(1)}m` : "Nenhum nó selecionado"}
+          floorSlicer={
+            <FloorLevelSlicer
+              activeLevelId={activeLevelId}
+              heightMeters={heightMeters}
+              onChangeHeight={setHeightMeters}
+              onSelectLevel={(levelId: string, h: number) => {
+                setActiveLevelId(levelId);
+                setHeightMeters(h);
+              }}
+            />
+          }
+          materialPalette={
+            <MaterialSwatchGrid
+              activeMaterialId={activeMaterial}
+              onSelectMaterial={(id: string) => setActiveMaterial(id as SurfaceStyle)}
+            />
+          }
+        />
       </div>
 
       {/* Bottom Bar */}
@@ -422,7 +396,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </div>
 
         <div>
-          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno)</span>
+          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno) | <strong>Botão Direito</strong> (Radial Menu)</span>
         </div>
 
         <div className="gm-bar-group">
