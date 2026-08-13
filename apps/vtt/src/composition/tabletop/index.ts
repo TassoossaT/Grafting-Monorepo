@@ -20,3 +20,25 @@ export type {
   MoveNodeHistoryState,
 } from "../../features/edit-construction/index.ts";
 export type { ConstructionPosition, RenderViewId } from "@/ports";
+
+export {
+  FloorSlicer,
+  IconCutaway,
+  IconMoveNode,
+  IconNavigate,
+  IconRedo,
+  IconSparkles,
+  IconTerrain,
+  IconUndo,
+  IconWall,
+  MaterialPalette,
+  RadialMenu,
+} from "../../features/ui/index.ts";
+export type {
+  FloorSlicerProps,
+  MaterialOption,
+  MaterialPaletteProps,
+  RadialMenuItem,
+  RadialMenuProps,
+} from "../../features/ui/index.ts";
+

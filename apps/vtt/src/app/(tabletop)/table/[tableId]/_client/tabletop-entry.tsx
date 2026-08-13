@@ -1,15 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import {
   buildGenerateTerrainCellOperation,
   buildGenerateWallOperation,
   createMoveNodeHistoryStack,
   createTabletopRuntime,
+  FloorSlicer,
+  IconCutaway,
+  IconMoveNode,
+  IconNavigate,
+  IconRedo,
+  IconSparkles,
+  IconTerrain,
+  IconUndo,
+  IconWall,
+  MaterialPalette,
+  RadialMenu,
   type ConstructionPosition,
   type MoveNodeHistoryStack,
+  type RadialMenuItem,
   type RenderViewId,
   type TabletopRuntime,
 } from "@/composition/tabletop";
@@ -19,7 +31,6 @@ export interface TabletopEntryProps {
 }
 
 type EditTool = "navigate" | "move-node";
-type SurfaceStyle = "wall-white" | "wall-gray" | "terrain" | "terrain-grass";
 
 interface DragState {
   readonly nodeId: string;
@@ -50,9 +61,11 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const generateCountRef = useRef(0);
 
   const [tool, setTool] = useState<EditTool>("navigate");
-  const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
+  const [activeMaterial, setActiveMaterial] = useState<string>("wall-white");
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
+  const [cutawayHeight, setCutawayHeight] = useState<number>(10);
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ id: string; point: ConstructionPosition } | null>(null);
+  const [radialPosition, setRadialPosition] = useState<{ x: number; y: number } | null>(null);
   const [, forceHistoryUpdate] = useState(0);
 
   const historyState = history.getState();
@@ -80,6 +93,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button === 2) return; // Right-click handled separately
       if (tool !== "move-node" || viewIdRef.current === undefined) return;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewIdRef.current, x, y);
@@ -90,6 +104,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
       dragRef.current = { nodeId: hit.nodeId, pointerId: event.pointerId, from: hit.point, last: hit.point };
     },
     [runtime, tool],
+  );
+
+  const handleContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setRadialPosition({ x: event.clientX, y: event.clientY });
+    },
+    [],
   );
 
   const handlePointerMove = useCallback(
@@ -179,6 +201,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         setTool("move-node");
       } else if (e.key.toLowerCase() === "n" || e.key === "Escape") {
         setTool("navigate");
+        setRadialPosition(null);
       } else if (e.key.toLowerCase() === "w") {
         if (current.status === "ready") handleGenerateWall();
       } else if (e.key.toLowerCase() === "t") {
@@ -188,6 +211,37 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [historyState.canUndo, historyState.canRedo, handleUndo, handleRedo, current.status, handleGenerateWall, handleGenerateTerrainCell]);
+
+  const radialMenuItems: readonly RadialMenuItem[] = [
+    {
+      id: "move",
+      label: "Mover Node",
+      icon: <IconMoveNode />,
+      action: () => setTool("move-node"),
+      color: "#72d69e",
+    },
+    {
+      id: "wall",
+      label: "Criar Parede",
+      icon: <IconWall />,
+      action: () => handleGenerateWall(),
+      color: "#e2e8f0",
+    },
+    {
+      id: "terrain",
+      label: "Criar Terreno",
+      icon: <IconTerrain />,
+      action: () => handleGenerateTerrainCell(),
+      color: "#334155",
+    },
+    {
+      id: "nav",
+      label: "Navegar",
+      icon: <IconNavigate />,
+      action: () => setTool("navigate"),
+      color: "#94a3b8",
+    },
+  ];
 
   return (
     <div className="gm-studio-app">
@@ -236,6 +290,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               className={`gm-tool-button ${tool === "navigate" ? "gm-tool-button--active" : ""}`}
               onClick={() => setTool("navigate")}
             >
+              <IconNavigate />
               <span>Navegar / Pan</span>
               <kbd className="gm-key-hint">N</kbd>
             </button>
@@ -244,6 +299,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               className={`gm-tool-button ${tool === "move-node" ? "gm-tool-button--active" : ""}`}
               onClick={() => setTool("move-node")}
             >
+              <IconMoveNode />
               <span>Mover Nodes (Drag)</span>
               <kbd className="gm-key-hint">M</kbd>
             </button>
@@ -257,6 +313,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               onClick={handleGenerateWall}
               disabled={current.status !== "ready"}
             >
+              <IconWall />
               <span>Adicionar Parede</span>
               <kbd className="gm-key-hint">W</kbd>
             </button>
@@ -266,6 +323,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               onClick={handleGenerateTerrainCell}
               disabled={current.status !== "ready"}
             >
+              <IconTerrain />
               <span>Adicionar Célula Grid</span>
               <kbd className="gm-key-hint">T</kbd>
             </button>
@@ -282,6 +340,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               }}
               disabled={current.status !== "ready"}
             >
+              <IconSparkles />
               <span>Preset Masmorra Branca</span>
             </button>
             <button
@@ -293,6 +352,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               }}
               disabled={current.status !== "ready"}
             >
+              <IconSparkles />
               <span>Preset Masmorra Cinza</span>
             </button>
           </div>
@@ -307,14 +367,22 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
+            onContextMenu={handleContextMenu}
           />
           <div className="gm-stage-overlay-info">
             <strong>{current.tokens.byId.size} Token Activo</strong>
-            <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D (Arraste os nós amarelos)" : "Navegação da Câmera"}</span>
+            <span>| Clique com Botão Direito para Menu Contextual Radial</span>
           </div>
+
+          <RadialMenu
+            position={radialPosition}
+            items={radialMenuItems}
+            onClose={() => setRadialPosition(null)}
+            title="Ações Rápida"
+          />
         </section>
 
-        {/* Right Inspector & Material Selector */}
+        {/* Right Inspector, Material Palette & Floor Slicer */}
         <aside className="gm-inspector-right">
           <div className="gm-panel-card">
             <span className="gm-panel-card-title">Inspector de Seleção</span>
@@ -339,48 +407,20 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               </div>
             ) : (
               <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-                Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Nodes</em> ativada para inspecionar.
+                Clique em uma alça de node (esfera amarela) ou use botão direito no mapa.
               </p>
             )}
           </div>
 
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Estilo de Bloco & Material</span>
-            <div className="gm-material-grid">
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-white" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-white")}
-              >
-                <div className="gm-swatch gm-swatch--wall-white" />
-                <span>Bloco Branco</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-gray" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-gray")}
-              >
-                <div className="gm-swatch gm-swatch--wall-gray" />
-                <span>Bloco Cinza</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain")}
-              >
-                <div className="gm-swatch gm-swatch--terrain" />
-                <span>Grid Terreno</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain-grass" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain-grass")}
-              >
-                <div className="gm-swatch gm-swatch--terrain-grass" />
-                <span>Terreno Grama</span>
-              </button>
-            </div>
-          </div>
+          <MaterialPalette
+            activeMaterialId={activeMaterial}
+            onSelectMaterial={(id) => setActiveMaterial(id)}
+          />
+
+          <FloorSlicer
+            height={cutawayHeight}
+            onChange={(h) => setCutawayHeight(h)}
+          />
 
           <div className="gm-panel-card">
             <span className="gm-panel-card-title">Métricas da Cena</span>
@@ -409,7 +449,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             onClick={handleUndo}
             disabled={!historyState.canUndo}
           >
-            Desfazer (Ctrl+Z)
+            <IconUndo style={{ marginRight: "0.2rem" }} /> Desfazer (Ctrl+Z)
           </button>
           <button
             type="button"
@@ -417,12 +457,12 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             onClick={handleRedo}
             disabled={!historyState.canRedo}
           >
-            Refazer (Ctrl+Y)
+            <IconRedo style={{ marginRight: "0.2rem" }} /> Refazer (Ctrl+Y)
           </button>
         </div>
 
         <div>
-          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno)</span>
+          <span>Atalhos: <strong>M</strong> (Move) | <strong>N</strong> (Nav) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno) | <strong>Botão Direito</strong> (Menu Radial)</span>
         </div>
 
         <div className="gm-bar-group">
@@ -432,4 +472,5 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     </div>
   );
 }
+
 

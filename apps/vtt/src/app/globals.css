@@ -414,3 +414,129 @@ h1 {
   }
 }
 
+/* Floor Slicer Card Component */
+.gm-floor-slicer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid #1e293b;
+  border-radius: 0.6rem;
+  background: #182234;
+}
+
+.gm-floor-slicer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.gm-floor-slicer-val {
+  margin-left: auto;
+  color: #72d69e;
+  font-family: monospace;
+}
+
+.gm-floor-slicer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.gm-floor-slider-input {
+  width: 100%;
+  accent-color: #72d69e;
+  cursor: pointer;
+}
+
+.gm-floor-presets {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.gm-floor-preset-btn {
+  flex: 1;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #1e293b;
+  border-radius: 0.4rem;
+  background: #0f172a;
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gm-floor-preset-btn:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.gm-floor-preset-btn--active {
+  border-color: #72d69e;
+  background: rgba(114, 214, 158, 0.15);
+  color: #72d69e;
+}
+
+/* Radial Context Menu Component */
+.gm-radial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: transparent;
+}
+
+.gm-radial-container {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.gm-radial-center-title {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.35rem;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f1f5f9;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid #334155;
+  backdrop-filter: blur(6px);
+}
+
+.gm-radial-item {
+  position: absolute;
+  top: -1.5rem;
+  left: -1.5rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  border: 2px solid #72d69e;
+  background: #0f172a;
+  color: #72d69e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gm-radial-item:hover {
+  transform: scale(1.18) !important;
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.gm-radial-item-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+
