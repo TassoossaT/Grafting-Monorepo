@@ -20,11 +20,16 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   if (!physical) return 0x3a6b8a;
   switch (surfaceType) {
     case "wall":
-      return 0x8a7a6b;
+    case "wall-white":
+      return 0xe2e8f0; // White / light gray block prototype
+    case "wall-gray":
+      return 0x64748b; // Slate gray block prototype
     case "terrain":
-      return 0x4a7a4a;
+      return 0x334155; // Dark Slate / Construction floor grid
+    case "terrain-grass":
+      return 0x4a7a4a; // Grass green
     default:
-      return 0x808080;
+      return 0x94a3b8;
   }
 }
 
