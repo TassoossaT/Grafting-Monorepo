@@ -1,4 +1,6 @@
 export type {
+  CameraControlHandle,
+  CameraControlOptions,
   ChangeOrigin,
   ConfirmedMapChunkRenderChange,
   ConfirmedNodeHandleRenderChange,

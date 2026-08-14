@@ -19,4 +19,9 @@ export type {
   MoveNodeHistoryStack,
   MoveNodeHistoryState,
 } from "../../features/edit-construction/index.ts";
-export type { ConstructionPosition, RenderViewId } from "@/ports";
+export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
+
+// Re-exported for the same reason as `createMoveNodeHistoryStack` above --
+// `navigate-camera` is a `features/` verb, and `TabletopEntry` must not
+// reach past `composition` into `features` itself.
+export { attachCameraNavigation } from "../../features/navigate-camera/index.ts";

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import {
+  attachCameraNavigation,
   buildGenerateTerrainCellOperation,
   buildGenerateWallOperation,
   createMoveNodeHistoryStack,
@@ -65,13 +66,16 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   useEffect(() => {
     let active = true;
     let viewId: RenderViewId | undefined;
+    let detachCamera: (() => void) | undefined;
     void runtime.start().then(() => {
       if (!active || viewportRef.current === null) return;
       viewId = runtime.attachView(viewportRef.current);
       viewIdRef.current = viewId;
+      detachCamera = attachCameraNavigation(runtime, viewId, viewportRef.current);
     });
     return () => {
       active = false;
+      detachCamera?.();
       if (viewId !== undefined) runtime.detachView(viewId);
       viewIdRef.current = undefined;
       void runtime.dispose();
@@ -80,7 +84,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (tool !== "move-node" || viewIdRef.current === undefined) return;
+      // The right and middle buttons are reserved for camera orbit/pan
+      // (see features/navigate-camera) -- only the left button drives tools.
+      if (event.button !== 0 || tool !== "move-node" || viewIdRef.current === undefined) return;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewIdRef.current, x, y);
       if (hit?.nodeId === undefined) return;
@@ -307,6 +313,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
+            onContextMenu={(event) => event.preventDefault()}
           />
           <div className="gm-stage-overlay-info">
             <strong>{current.tokens.byId.size} Token Activo</strong>
@@ -422,7 +429,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </div>
 
         <div>
-          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno)</span>
+          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno) | Câmera: <strong>Botão direito</strong> orbita, <strong>Botão do meio</strong> arrasta</span>
         </div>
 
         <div className="gm-bar-group">
@@ -432,4 +439,3 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     </div>
   );
 }
-
