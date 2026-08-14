@@ -1051,6 +1051,29 @@ export declare function orbitDrag(state: OrbitState, dx: number, dy: number, rad
  * into the target when close.
  */
 export declare function orbitZoom(state: OrbitState, delta: number, factorPerNotch?: number): OrbitState;
+/**
+ * Applies a drag, in pixels, as a lateral pan -- translating the orbited
+ * target across the view plane instead of rotating around it.
+ *
+ * Every reference in `docs/research/vtt-board-construction-mode-ui-references.md`
+ * and `docs/research/godview-builder-game-construction-ui-references.md` offers
+ * this as a gesture independent of orbit (RMB/MMB-drag or WASD), so it is a
+ * second pure function beside {@link orbitDrag} rather than a mode of it.
+ *
+ * Scaled by the current distance, like {@link orbitZoom}, so a pixel of drag
+ * moves the same apparent amount of world regardless of how far the camera has
+ * zoomed -- an unscaled pan would crawl when zoomed out and overshoot when
+ * zoomed in. The camera keeps its yaw, pitch, and distance; only `target`
+ * (and therefore the derived position, rigidly) moves.
+ *
+ * Convention: the world follows the cursor, like grabbing the ground and
+ * pulling it -- dragging right brings what was to the right into view, and
+ * dragging down (screen y grows downward, per {@link orbitDrag}'s own
+ * convention) brings what was below into view. Achieving that means the
+ * *camera* moves opposite the drag along `right`, and with the drag along
+ * `up`.
+ */
+export declare function orbitPan(state: OrbitState, dx: number, dy: number, unitsPerPixel?: number): OrbitState;
 /** The minimum of {@link View} this needs. Keeps the helper testable. */
 export interface OrbitableView {
     /** Replaces the camera description driven by the orbit helper. */
@@ -1085,6 +1108,46 @@ export interface OrbitOptions {
      * orbit itself. That mistake shipped once.
      */
     readonly exclusive?: boolean;
+    /**
+     * Restricts orbit-drag to one `PointerEvent.button` value (0 = left,
+     * 1 = middle, 2 = right). Undefined -- the default -- preserves this
+     * module's original behaviour: any button orbits.
+     *
+     * A consumer that also drives its own tool gestures with the left button on
+     * this same element (apps/vtt's construction tools, reserving LMB per the
+     * board plan's camera control scheme) MUST set this explicitly, e.g. to
+     * `2`, so the two gesture sets stop fighting over `pointerdown`.
+     */
+    readonly orbitButton?: number;
+    /**
+     * Enables a second, independent lateral-pan gesture bound to one
+     * `PointerEvent.button` value, driven by {@link orbitPan}. Undefined --
+     * the default -- disables panning entirely, this module's original
+     * behaviour. Must differ from `orbitButton` when both are set.
+     */
+    readonly panButton?: number;
+    /**
+     * Where an orbit drag re-centers before rotating.
+     *
+     * `"center"` (the default) keeps today's behaviour: orbiting always turns
+     * around whatever `target` already is. `"cursor"` asks {@link resolvePivot}
+     * for the world point under the pointer at drag-start and re-targets there
+     * first -- the Tiny Glade convention (`docs/research/vtt-board-construction-mode-ui-references.md`)
+     * for framing one detail precisely without recentring the whole scene by
+     * hand first.
+     */
+    readonly pivot?: "center" | "cursor";
+    /**
+     * Resolves the world point under a client-space pointer position. Required
+     * for `pivot: "cursor"`; ignored otherwise.
+     *
+     * Kept as an injected callback rather than a raycast implemented here,
+     * because this module owns no scene geometry (`VTT-ARCH-002`) -- the real
+     * answer comes from the consumer's own picking (e.g. `SceneRenderPort.pick`
+     * in `apps/vtt`). Returning `undefined` (the pointer is over empty space)
+     * leaves the current target unchanged for that drag.
+     */
+    readonly resolvePivot?: (clientX: number, clientY: number) => Vec3 | undefined;
 }
 /**
  * Makes `element` drive `view`'s camera by dragging and scrolling.
@@ -1157,6 +1220,29 @@ export declare function orbitDrag(state: OrbitState, dx: number, dy: number, rad
  * into the target when close.
  */
 export declare function orbitZoom(state: OrbitState, delta: number, factorPerNotch?: number): OrbitState;
+/**
+ * Applies a drag, in pixels, as a lateral pan -- translating the orbited
+ * target across the view plane instead of rotating around it.
+ *
+ * Every reference in `docs/research/vtt-board-construction-mode-ui-references.md`
+ * and `docs/research/godview-builder-game-construction-ui-references.md` offers
+ * this as a gesture independent of orbit (RMB/MMB-drag or WASD), so it is a
+ * second pure function beside {@link orbitDrag} rather than a mode of it.
+ *
+ * Scaled by the current distance, like {@link orbitZoom}, so a pixel of drag
+ * moves the same apparent amount of world regardless of how far the camera has
+ * zoomed -- an unscaled pan would crawl when zoomed out and overshoot when
+ * zoomed in. The camera keeps its yaw, pitch, and distance; only `target`
+ * (and therefore the derived position, rigidly) moves.
+ *
+ * Convention: the world follows the cursor, like grabbing the ground and
+ * pulling it -- dragging right brings what was to the right into view, and
+ * dragging down (screen y grows downward, per {@link orbitDrag}'s own
+ * convention) brings what was below into view. Achieving that means the
+ * *camera* moves opposite the drag along `right`, and with the drag along
+ * `up`.
+ */
+export declare function orbitPan(state: OrbitState, dx: number, dy: number, unitsPerPixel?: number): OrbitState;
 /** The minimum of {@link View} this needs. Keeps the helper testable. */
 export interface OrbitableView {
     /** Replaces the camera description driven by the orbit helper. */
@@ -1191,6 +1277,46 @@ export interface OrbitOptions {
      * orbit itself. That mistake shipped once.
      */
     readonly exclusive?: boolean;
+    /**
+     * Restricts orbit-drag to one `PointerEvent.button` value (0 = left,
+     * 1 = middle, 2 = right). Undefined -- the default -- preserves this
+     * module's original behaviour: any button orbits.
+     *
+     * A consumer that also drives its own tool gestures with the left button on
+     * this same element (apps/vtt's construction tools, reserving LMB per the
+     * board plan's camera control scheme) MUST set this explicitly, e.g. to
+     * `2`, so the two gesture sets stop fighting over `pointerdown`.
+     */
+    readonly orbitButton?: number;
+    /**
+     * Enables a second, independent lateral-pan gesture bound to one
+     * `PointerEvent.button` value, driven by {@link orbitPan}. Undefined --
+     * the default -- disables panning entirely, this module's original
+     * behaviour. Must differ from `orbitButton` when both are set.
+     */
+    readonly panButton?: number;
+    /**
+     * Where an orbit drag re-centers before rotating.
+     *
+     * `"center"` (the default) keeps today's behaviour: orbiting always turns
+     * around whatever `target` already is. `"cursor"` asks {@link resolvePivot}
+     * for the world point under the pointer at drag-start and re-targets there
+     * first -- the Tiny Glade convention (`docs/research/vtt-board-construction-mode-ui-references.md`)
+     * for framing one detail precisely without recentring the whole scene by
+     * hand first.
+     */
+    readonly pivot?: "center" | "cursor";
+    /**
+     * Resolves the world point under a client-space pointer position. Required
+     * for `pivot: "cursor"`; ignored otherwise.
+     *
+     * Kept as an injected callback rather than a raycast implemented here,
+     * because this module owns no scene geometry (`VTT-ARCH-002`) -- the real
+     * answer comes from the consumer's own picking (e.g. `SceneRenderPort.pick`
+     * in `apps/vtt`). Returning `undefined` (the pointer is over empty space)
+     * leaves the current target unchanged for that drag.
+     */
+    readonly resolvePivot?: (clientX: number, clientY: number) => Vec3 | undefined;
 }
 /**
  * Makes `element` drive `view`'s camera by dragging and scrolling.

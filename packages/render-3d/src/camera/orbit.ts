@@ -105,6 +105,64 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
   };
 }
 
+const WORLD_UP: Vec3 = { x: 0, y: 1, z: 0 };
+
+function normalize(v: Vec3): Vec3 {
+  const len = Math.hypot(v.x, v.y, v.z);
+  if (len === 0) return v;
+  return { x: v.x / len, y: v.y / len, z: v.z / len };
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+/**
+ * Applies a drag, in pixels, as a lateral pan -- translating the orbited
+ * target across the view plane instead of rotating around it.
+ *
+ * Every reference in `docs/research/vtt-board-construction-mode-ui-references.md`
+ * and `docs/research/godview-builder-game-construction-ui-references.md` offers
+ * this as a gesture independent of orbit (RMB/MMB-drag or WASD), so it is a
+ * second pure function beside {@link orbitDrag} rather than a mode of it.
+ *
+ * Scaled by the current distance, like {@link orbitZoom}, so a pixel of drag
+ * moves the same apparent amount of world regardless of how far the camera has
+ * zoomed -- an unscaled pan would crawl when zoomed out and overshoot when
+ * zoomed in. The camera keeps its yaw, pitch, and distance; only `target`
+ * (and therefore the derived position, rigidly) moves.
+ *
+ * Convention: the world follows the cursor, like grabbing the ground and
+ * pulling it -- dragging right brings what was to the right into view, and
+ * dragging down (screen y grows downward, per {@link orbitDrag}'s own
+ * convention) brings what was below into view. Achieving that means the
+ * *camera* moves opposite the drag along `right`, and with the drag along
+ * `up`.
+ */
+export function orbitPan(state: OrbitState, dx: number, dy: number, unitsPerPixel = 0.0016): OrbitState {
+  const position = orbitPosition(state);
+  const forward = normalize({
+    x: state.target.x - position.x,
+    y: state.target.y - position.y,
+    z: state.target.z - position.z,
+  });
+  const right = normalize(cross(forward, WORLD_UP));
+  const up = cross(right, forward);
+  const scale = state.distance * unitsPerPixel;
+  return {
+    ...state,
+    target: {
+      x: state.target.x - right.x * dx * scale + up.x * dy * scale,
+      y: state.target.y - right.y * dx * scale + up.y * dy * scale,
+      z: state.target.z - right.z * dx * scale + up.z * dy * scale,
+    },
+  };
+}
+
 /** The minimum of {@link View} this needs. Keeps the helper testable. */
 export interface OrbitableView {
   /** Replaces the camera description driven by the orbit helper. */
@@ -140,6 +198,46 @@ export interface OrbitOptions {
    * orbit itself. That mistake shipped once.
    */
   readonly exclusive?: boolean;
+  /**
+   * Restricts orbit-drag to one `PointerEvent.button` value (0 = left,
+   * 1 = middle, 2 = right). Undefined -- the default -- preserves this
+   * module's original behaviour: any button orbits.
+   *
+   * A consumer that also drives its own tool gestures with the left button on
+   * this same element (apps/vtt's construction tools, reserving LMB per the
+   * board plan's camera control scheme) MUST set this explicitly, e.g. to
+   * `2`, so the two gesture sets stop fighting over `pointerdown`.
+   */
+  readonly orbitButton?: number;
+  /**
+   * Enables a second, independent lateral-pan gesture bound to one
+   * `PointerEvent.button` value, driven by {@link orbitPan}. Undefined --
+   * the default -- disables panning entirely, this module's original
+   * behaviour. Must differ from `orbitButton` when both are set.
+   */
+  readonly panButton?: number;
+  /**
+   * Where an orbit drag re-centers before rotating.
+   *
+   * `"center"` (the default) keeps today's behaviour: orbiting always turns
+   * around whatever `target` already is. `"cursor"` asks {@link resolvePivot}
+   * for the world point under the pointer at drag-start and re-targets there
+   * first -- the Tiny Glade convention (`docs/research/vtt-board-construction-mode-ui-references.md`)
+   * for framing one detail precisely without recentring the whole scene by
+   * hand first.
+   */
+  readonly pivot?: "center" | "cursor";
+  /**
+   * Resolves the world point under a client-space pointer position. Required
+   * for `pivot: "cursor"`; ignored otherwise.
+   *
+   * Kept as an injected callback rather than a raycast implemented here,
+   * because this module owns no scene geometry (`VTT-ARCH-002`) -- the real
+   * answer comes from the consumer's own picking (e.g. `SceneRenderPort.pick`
+   * in `apps/vtt`). Returning `undefined` (the pointer is over empty space)
+   * leaves the current target unchanged for that drag.
+   */
+  readonly resolvePivot?: (clientX: number, clientY: number) => Vec3 | undefined;
 }
 
 /**
@@ -157,6 +255,7 @@ export function attachOrbit(
 ): () => void {
   let state = initial;
   let dragging: number | null = null;
+  let dragMode: "orbit" | "pan" = "orbit";
   let lastX = 0;
   let lastY = 0;
 
@@ -177,8 +276,28 @@ export function attachOrbit(
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    claim(event);
     if (dragging !== null) return;
+    // Undefined `orbitButton`/`panButton` preserves the original "any button
+    // orbits" behaviour; only a caller that opts in by setting either gets
+    // button-specific routing.
+    const isPan = options.panButton !== undefined && event.button === options.panButton;
+    const isOrbit = !isPan && (options.orbitButton === undefined || event.button === options.orbitButton);
+    if (!isPan && !isOrbit) return;
+
+    claim(event);
+    dragMode = isPan ? "pan" : "orbit";
+    if (dragMode === "orbit" && options.pivot === "cursor") {
+      const pivot = options.resolvePivot?.(event.clientX, event.clientY);
+      if (pivot !== undefined) {
+        // Re-derives yaw/pitch/distance from the unchanged camera position so
+        // the view does not jump-cut to the new pivot -- only what it orbits
+        // around changes. Applied immediately (not deferred to the first
+        // `pointermove`) so a click-and-release with no drag still leaves the
+        // camera pointed at the resolved pivot.
+        state = orbitFromCamera(orbitPosition(state), pivot);
+        apply();
+      }
+    }
     dragging = event.pointerId;
     lastX = event.clientX;
     lastY = event.clientY;
@@ -188,7 +307,9 @@ export function attachOrbit(
   const onPointerMove = (event: PointerEvent) => {
     if (dragging !== event.pointerId) return;
     claim(event);
-    state = orbitDrag(state, event.clientX - lastX, event.clientY - lastY);
+    const dx = event.clientX - lastX;
+    const dy = event.clientY - lastY;
+    state = dragMode === "pan" ? orbitPan(state, dx, dy) : orbitDrag(state, dx, dy);
     lastX = event.clientX;
     lastY = event.clientY;
     apply();
