@@ -54,6 +54,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ id: string; point: ConstructionPosition } | null>(null);
+  // Settings/inspector drawer starts closed -- it must float over the map,
+  // not reserve space beside it, so it opens only on request.
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [, forceHistoryUpdate] = useState(0);
 
   const historyState = history.getState();
@@ -197,7 +200,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   return (
     <div className="gm-studio-app">
-      {/* Header Bar */}
+      {/* Header Bar -- thin, crops the map on purpose */}
       <header className="gm-header">
         <div className="gm-brand">
           <div className="gm-logo">G</div>
@@ -218,111 +221,142 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               className={`gm-mode-btn ${editorMode === "gm" ? "gm-mode-btn--active" : ""}`}
               onClick={() => setEditorMode("gm")}
             >
-              Mode: Mestre (Criador)
+              Mestre
             </button>
             <button
               type="button"
               className={`gm-mode-btn ${editorMode === "player" ? "gm-mode-btn--active" : ""}`}
               onClick={() => setEditorMode("player")}
             >
-              Mode: Jogador
+              Jogador
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Workspace Layout */}
-      <div className="gm-workspace">
-        {/* Left Toolbar (Tool Palette) */}
-        <aside className="gm-toolbar-left" role="toolbar" aria-label="Ferramentas de Construção do Mestre">
-          <div className="gm-tool-section">
-            <span className="gm-tool-section-title">Navegação & Seleção</span>
-            <button
-              type="button"
-              className={`gm-tool-button ${tool === "navigate" ? "gm-tool-button--active" : ""}`}
-              onClick={() => setTool("navigate")}
-            >
-              <span>Navegar / Pan</span>
-              <kbd className="gm-key-hint">N</kbd>
-            </button>
-            <button
-              type="button"
-              className={`gm-tool-button ${tool === "move-node" ? "gm-tool-button--active" : ""}`}
-              onClick={() => setTool("move-node")}
-            >
-              <span>Mover Nodes (Drag)</span>
-              <kbd className="gm-key-hint">M</kbd>
-            </button>
-          </div>
+      {/* Stage -- the map fills this whole area; every panel below floats over it */}
+      <section className="gm-stage" aria-label="Viewport 3D do Mapa">
+        <div
+          className="gm-viewport-canvas"
+          ref={viewportRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onContextMenu={(event) => event.preventDefault()}
+        />
 
-          <div className="gm-tool-section">
-            <span className="gm-tool-section-title">Construção Procedural</span>
-            <button
-              type="button"
-              className="gm-tool-button"
-              onClick={handleGenerateWall}
-              disabled={current.status !== "ready"}
-            >
-              <span>Adicionar Parede</span>
-              <kbd className="gm-key-hint">W</kbd>
-            </button>
-            <button
-              type="button"
-              className="gm-tool-button"
-              onClick={handleGenerateTerrainCell}
-              disabled={current.status !== "ready"}
-            >
-              <span>Adicionar Célula Grid</span>
-              <kbd className="gm-key-hint">T</kbd>
-            </button>
-          </div>
+        <div className="gm-stage-overlay-info">
+          <strong>{current.tokens.byId.size} Token Activo</strong>
+          <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D" : "Navegação da Câmera"}</span>
+        </div>
 
-          <div className="gm-tool-section">
-            <span className="gm-tool-section-title">Presets Rápidos</span>
-            <button
-              type="button"
-              className="gm-tool-button"
-              onClick={() => {
-                setActiveMaterial("wall-white");
-                handleGenerateWall();
-              }}
-              disabled={current.status !== "ready"}
-            >
-              <span>Preset Masmorra Branca</span>
-            </button>
-            <button
-              type="button"
-              className="gm-tool-button"
-              onClick={() => {
-                setActiveMaterial("wall-gray");
-                handleGenerateWall();
-              }}
-              disabled={current.status !== "ready"}
-            >
-              <span>Preset Masmorra Cinza</span>
-            </button>
-          </div>
+        {/* Left rail -- small, specific, powerful tools */}
+        <aside className="gm-rail-left" role="toolbar" aria-label="Ferramentas de Construção do Mestre">
+          <button
+            type="button"
+            className={`gm-rail-btn ${tool === "navigate" ? "gm-rail-btn--active" : ""}`}
+            onClick={() => setTool("navigate")}
+            title="Navegar / Pan (tecla N)"
+          >
+            N
+          </button>
+          <button
+            type="button"
+            className={`gm-rail-btn ${tool === "move-node" ? "gm-rail-btn--active" : ""}`}
+            onClick={() => setTool("move-node")}
+            title="Mover Node do Grafo (tecla M)"
+          >
+            M
+          </button>
+          <div className="gm-rail-divider" />
+          <button
+            type="button"
+            className="gm-rail-btn"
+            onClick={handleUndo}
+            disabled={!historyState.canUndo}
+            title="Desfazer (Ctrl+Z)"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className="gm-rail-btn"
+            onClick={handleRedo}
+            disabled={!historyState.canRedo}
+            title="Refazer (Ctrl+Y)"
+          >
+            ↷
+          </button>
         </aside>
 
-        {/* Center 3D Stage Viewport */}
-        <section className="gm-stage-container" aria-label="Viewport 3D do Mapa">
-          <div
-            className="gm-viewport-canvas"
-            ref={viewportRef}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onContextMenu={(event) => event.preventDefault()}
-          />
-          <div className="gm-stage-overlay-info">
-            <strong>{current.tokens.byId.size} Token Activo</strong>
-            <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D (Arraste os nós amarelos)" : "Navegação da Câmera"}</span>
-          </div>
-        </section>
+        {/* Bottom hotbar -- bigger blocks for quick/procedural construction */}
+        <div className="gm-hotbar" role="toolbar" aria-label="Construção Rápida">
+          <button
+            type="button"
+            className="gm-hotbar-block"
+            onClick={handleGenerateWall}
+            disabled={current.status !== "ready"}
+            title="Adicionar Parede (tecla W)"
+          >
+            <span className="gm-hotbar-block-icon" aria-hidden="true">W</span>
+            <span>Parede</span>
+          </button>
+          <button
+            type="button"
+            className="gm-hotbar-block"
+            onClick={handleGenerateTerrainCell}
+            disabled={current.status !== "ready"}
+            title="Adicionar Célula de Terreno (tecla T)"
+          >
+            <span className="gm-hotbar-block-icon" aria-hidden="true">T</span>
+            <span>Terreno</span>
+          </button>
+          <button
+            type="button"
+            className={`gm-hotbar-block ${activeMaterial === "wall-white" ? "gm-hotbar-block--selected" : ""}`}
+            onClick={() => {
+              setActiveMaterial("wall-white");
+              handleGenerateWall();
+            }}
+            disabled={current.status !== "ready"}
+            title="Preset Masmorra Branca"
+          >
+            <span className="gm-hotbar-block-icon" aria-hidden="true">▢</span>
+            <span>Branca</span>
+          </button>
+          <button
+            type="button"
+            className={`gm-hotbar-block ${activeMaterial === "wall-gray" ? "gm-hotbar-block--selected" : ""}`}
+            onClick={() => {
+              setActiveMaterial("wall-gray");
+              handleGenerateWall();
+            }}
+            disabled={current.status !== "ready"}
+            title="Preset Masmorra Cinza"
+          >
+            <span className="gm-hotbar-block-icon" aria-hidden="true">▨</span>
+            <span>Cinza</span>
+          </button>
+        </div>
 
-        {/* Right Inspector & Material Selector */}
-        <aside className="gm-inspector-right">
+        {/* Right drawer -- settings & inspector, collapsed by default */}
+        <button
+          type="button"
+          className={`gm-drawer-toggle ${drawerOpen ? "gm-drawer-toggle--open" : ""}`}
+          onClick={() => setDrawerOpen((open) => !open)}
+          aria-expanded={drawerOpen}
+          aria-controls="gm-settings-drawer"
+          title={drawerOpen ? "Fechar painel de configurações" : "Abrir painel de configurações"}
+        >
+          {drawerOpen ? "×" : "☰"}
+        </button>
+
+        <aside
+          id="gm-settings-drawer"
+          className={`gm-drawer-right ${drawerOpen ? "gm-drawer-right--open" : ""}`}
+          aria-hidden={!drawerOpen}
+        >
           <div className="gm-panel-card">
             <span className="gm-panel-card-title">Inspector de Seleção</span>
             {selectedNodeInfo !== null ? (
@@ -346,7 +380,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               </div>
             ) : (
               <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-                Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Nodes</em> ativada para inspecionar.
+                Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Node</em> (M) ativada para inspecionar.
               </p>
             )}
           </div>
@@ -405,35 +439,23 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             </div>
           </div>
         </aside>
-      </div>
+      </section>
 
-      {/* Bottom Bar */}
+      {/* Bottom Bar -- thin, crops the map on purpose */}
       <footer className="gm-bottom-bar">
         <div className="gm-bar-group">
-          <button
-            type="button"
-            className="gm-action-btn"
-            onClick={handleUndo}
-            disabled={!historyState.canUndo}
-          >
-            Desfazer (Ctrl+Z)
-          </button>
-          <button
-            type="button"
-            className="gm-action-btn"
-            onClick={handleRedo}
-            disabled={!historyState.canRedo}
-          >
-            Refazer (Ctrl+Y)
-          </button>
+          <span>Grafting Monorepo Engine v1.0</span>
         </div>
 
         <div>
-          <span>Atalhos: <strong>M</strong> (Move Node) | <strong>N</strong> (Navegar) | <strong>W</strong> (Parede) | <strong>T</strong> (Terreno) | Câmera: <strong>Botão direito</strong> orbita, <strong>Botão do meio</strong> arrasta</span>
+          <span>
+            <strong>M</strong> Mover · <strong>N</strong> Navegar · <strong>W</strong> Parede · <strong>T</strong> Terreno · Câmera:{" "}
+            <strong>botão direito</strong> orbita, <strong>botão do meio</strong> arrasta
+          </span>
         </div>
 
         <div className="gm-bar-group">
-          <span>Grafting Monorepo Engine v1.0</span>
+          <span>Ctrl+Z / Ctrl+Y para desfazer/refazer</span>
         </div>
       </footer>
     </div>
