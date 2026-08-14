@@ -14,6 +14,7 @@ import {
   type RenderViewId,
   type TabletopRuntime,
 } from "@/composition/tabletop";
+import { TerrainShapePicker, type CornerHeights } from "@/ui";
 
 export interface TabletopEntryProps {
   readonly tableId: string;
@@ -57,6 +58,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   // Settings/inspector drawer starts closed -- it must float over the map,
   // not reserve space beside it, so it opens only on request.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [terrainShape, setTerrainShape] = useState<CornerHeights>([1, 1, 1, 1]);
+  const [terrainPickerOpen, setTerrainPickerOpen] = useState(false);
   const [, forceHistoryUpdate] = useState(0);
 
   const historyState = history.getState();
@@ -152,11 +155,11 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
       `edit-${generateCountRef.current}`,
       { operationId: `${tableId}:edit:terrain-cell:${generateCountRef.current}`, tableId, initiatedBy: "local" },
       cell,
-      { name: "flat", cornerHeights: [1, 1, 1, 1] },
+      { name: "custom", cornerHeights: terrainShape },
       activeMaterial === "terrain-grass" ? "terrain-grass" : "terrain",
     );
     runtime.generateTerrainCell(operation.payload, "local", operation.operationId);
-  }, [runtime, tableId, activeMaterial]);
+  }, [runtime, tableId, activeMaterial, terrainShape]);
 
   const handleGenerateWall = useCallback(() => {
     generateCountRef.current += 1;
@@ -304,10 +307,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           </button>
           <button
             type="button"
-            className="gm-hotbar-block"
-            onClick={handleGenerateTerrainCell}
+            className={`gm-hotbar-block ${terrainPickerOpen ? "gm-hotbar-block--selected" : ""}`}
+            onClick={() => setTerrainPickerOpen((open) => !open)}
             disabled={current.status !== "ready"}
-            title="Adicionar Célula de Terreno (tecla T)"
+            title="Moldar e Adicionar Célula de Terreno (tecla T gera direto)"
           >
             <span className="gm-hotbar-block-icon" aria-hidden="true">T</span>
             <span>Terreno</span>
@@ -339,6 +342,38 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             <span>Cinza</span>
           </button>
         </div>
+
+        {terrainPickerOpen && (
+          <div className="gm-terrain-popover" role="dialog" aria-label="Moldar Célula de Terreno">
+            <div className="gm-terrain-popover-header">
+              <span>Moldar Terreno</span>
+              <button
+                type="button"
+                className="gm-popover-close"
+                onClick={() => setTerrainPickerOpen(false)}
+                title="Fechar"
+              >
+                ×
+              </button>
+            </div>
+            <TerrainShapePicker cornerHeights={terrainShape} onChange={setTerrainShape} />
+            <div className="gm-terrain-popover-actions">
+              <button type="button" className="gm-popover-btn" onClick={() => setTerrainShape([1, 1, 1, 1])}>
+                Nivelar
+              </button>
+              <button
+                type="button"
+                className="gm-popover-btn gm-popover-btn--primary"
+                onClick={() => {
+                  handleGenerateTerrainCell();
+                  setTerrainPickerOpen(false);
+                }}
+              >
+                Gerar Terreno
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Right drawer -- settings & inspector, collapsed by default */}
         <button
