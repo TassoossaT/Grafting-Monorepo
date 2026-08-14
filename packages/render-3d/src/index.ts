@@ -100,6 +100,7 @@ export {
   attachOrbit,
   orbitDrag,
   orbitFromCamera,
+  orbitPan,
   orbitPosition,
   orbitZoom,
 } from "./camera/orbit.js";
