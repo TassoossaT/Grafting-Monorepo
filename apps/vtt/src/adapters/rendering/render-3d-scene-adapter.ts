@@ -1,6 +1,8 @@
 import {
+  attachOrbit,
   createEngine,
   createVisualRegistry,
+  orbitFromCamera,
   type ChangeOrigin as EngineChangeOrigin,
   type ClipPlaneDescriptor,
   type LightDescriptor,
@@ -9,6 +11,8 @@ import {
 } from "@grafting/render-3d";
 
 import type {
+  CameraControlHandle,
+  CameraControlOptions,
   ChangeOrigin,
   ConfirmedRenderChange,
   RenderToken,
@@ -44,7 +48,17 @@ import {
 interface AttachedView {
   readonly view: View;
   readonly observer?: ResizeObserver;
+  /** The framing the view was created with -- {@link Render3dSceneAdapter.attachCameraControls} starts orbiting from here. */
+  readonly initialCamera: { readonly position: { x: number; y: number; z: number }; readonly target: { x: number; y: number; z: number } };
 }
+
+const INITIAL_VIEW_CAMERA = {
+  fov: 38,
+  near: 0.1,
+  far: 200,
+  position: { x: 6, y: 4.5, z: 7 },
+  target: { x: 0, y: 0.8, z: 0 },
+} as const;
 
 // The engine ships no default lighting rig (`EngineOptions.lights`'s own
 // doc comment). `"lit"`-material map surfaces (walls, terrain) need at
@@ -185,11 +199,11 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       target,
       camera: {
         projection: "perspective",
-        fov: 38,
-        position: { x: 6, y: 4.5, z: 7 },
-        target: { x: 0, y: 0.8, z: 0 },
-        near: 0.1,
-        far: 200,
+        fov: INITIAL_VIEW_CAMERA.fov,
+        position: INITIAL_VIEW_CAMERA.position,
+        target: INITIAL_VIEW_CAMERA.target,
+        near: INITIAL_VIEW_CAMERA.near,
+        far: INITIAL_VIEW_CAMERA.far,
       },
       layers: [MAP_LAYER_ID, NODE_HANDLE_LAYER_ID, TOKEN_LAYER_ID],
       background: 0x07100f,
@@ -203,7 +217,11 @@ export class Render3dSceneAdapter implements SceneRenderPort {
             this.resizeView(id, entry.contentRect.width, entry.contentRect.height);
           });
     observer?.observe(target);
-    this.#views.set(id, { view, observer });
+    this.#views.set(id, {
+      view,
+      observer,
+      initialCamera: { position: INITIAL_VIEW_CAMERA.position, target: INITIAL_VIEW_CAMERA.target },
+    });
     return id;
   }
 
@@ -314,6 +332,33 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         ? data.nodeId
         : undefined;
     return { point: result.point, nodeId };
+  }
+
+  attachCameraControls(
+    viewId: RenderViewId,
+    element: HTMLElement,
+    options: CameraControlOptions = {},
+  ): CameraControlHandle {
+    const attached = this.#views.get(viewId);
+    if (attached === undefined) throw new Error(`unknown render view "${viewId}"`);
+
+    const initial = orbitFromCamera(attached.initialCamera.position, attached.initialCamera.target);
+    const dispose = attachOrbit(element, attached.view, initial, {
+      fov: INITIAL_VIEW_CAMERA.fov,
+      near: INITIAL_VIEW_CAMERA.near,
+      far: INITIAL_VIEW_CAMERA.far,
+      orbitButton: options.orbitButton,
+      panButton: options.panButton,
+      pivot: options.pivot,
+      resolvePivot:
+        options.pivot === "cursor"
+          ? (clientX, clientY) => {
+              const rect = element.getBoundingClientRect();
+              return this.pick(viewId, clientX - rect.left, clientY - rect.top)?.point;
+            }
+          : undefined,
+    });
+    return { dispose };
   }
 
   setFloorClipHeight(height: number | undefined): void {

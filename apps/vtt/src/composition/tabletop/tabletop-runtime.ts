@@ -15,6 +15,8 @@ import {
 } from "../../entities/map/index.ts";
 import type {
   AffectedSurfaces,
+  CameraControlHandle,
+  CameraControlOptions,
   ChangeOrigin,
   ConfirmedTokenRenderChange,
   ConstructionNodeId,
@@ -71,6 +73,11 @@ export interface TabletopRuntime {
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
   resizeView(viewId: RenderViewId, width: number, height: number): void;
+  attachCameraControls(
+    viewId: RenderViewId,
+    element: HTMLElement,
+    options?: CameraControlOptions,
+  ): CameraControlHandle;
   getRenderMetrics(): SceneRenderMetrics;
   getSnapshot(): TabletopSnapshot;
   subscribe(listener: TabletopRuntimeListener): () => void;
@@ -487,6 +494,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   resizeView(viewId: RenderViewId, width: number, height: number): void {
     this.#render.resizeView(viewId, width, height);
+  }
+
+  attachCameraControls(
+    viewId: RenderViewId,
+    element: HTMLElement,
+    options?: CameraControlOptions,
+  ): CameraControlHandle {
+    return this.#render.attachCameraControls(viewId, element, options);
   }
 
   getRenderMetrics(): SceneRenderMetrics {
