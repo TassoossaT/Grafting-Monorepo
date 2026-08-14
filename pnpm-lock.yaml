@@ -88,6 +88,9 @@ importers:
       '@grafting/render-3d':
         specifier: workspace:*
         version: link:../../packages/render-3d
+      '@grafting/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: ^16.2.12
         version: 16.2.12(@babel/core@7.29.7(supports-color@8.1.1))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

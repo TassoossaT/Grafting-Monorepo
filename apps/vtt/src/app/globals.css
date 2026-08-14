@@ -380,6 +380,118 @@ h1 {
   pointer-events: auto;
 }
 
+/* Terrain-shape popover -- opens above the hotbar's Terreno block */
+.gm-terrain-popover {
+  position: absolute;
+  left: 50%;
+  bottom: 5.5rem;
+  z-index: 17;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 16rem;
+  padding: 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transform: translateX(-50%);
+}
+
+.gm-terrain-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.gm-popover-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.gm-popover-close:hover {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+.gm-terrain-picker-preview {
+  width: 100%;
+  height: 8rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #0b1220;
+}
+
+.gm-terrain-picker-sliders {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.gm-terrain-picker-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.gm-terrain-picker-slider input[type="range"] {
+  width: 100%;
+}
+
+.gm-terrain-picker-value {
+  font-family: monospace;
+  color: #cbd5e1;
+}
+
+.gm-terrain-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.gm-popover-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #334155;
+  border-radius: 0.4rem;
+  background: #1e293b;
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gm-popover-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.gm-popover-btn--primary {
+  border-color: #72d69e;
+  background: rgba(114, 214, 158, 0.14);
+  color: #72d69e;
+}
+
+.gm-popover-btn--primary:hover {
+  background: rgba(114, 214, 158, 0.22);
+}
+
 .gm-panel-card {
   display: flex;
   flex-direction: column;
