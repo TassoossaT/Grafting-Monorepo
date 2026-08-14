@@ -5,10 +5,14 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 
 import {
   attachCameraNavigation,
+  buildGenerateRoomOperations,
   buildGenerateTerrainCellOperation,
-  buildGenerateWallOperation,
   createMoveNodeHistoryStack,
   createTabletopRuntime,
+  layoutNextRoomOrigin,
+  ROOM_DEPTH,
+  ROOM_HEIGHT,
+  ROOM_WIDTH,
   type ConstructionPosition,
   type MoveNodeHistoryStack,
   type RenderViewId,
@@ -163,18 +167,18 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handleGenerateWall = useCallback(() => {
     generateCountRef.current += 1;
-    const offset = 2 + generateCountRef.current * 2;
     const wallKind = activeMaterial === "wall-gray" ? "wall-gray" : "wall-white";
-    const operation = buildGenerateWallOperation(
+    const operations = buildGenerateRoomOperations(
       tableId,
       `edit-${generateCountRef.current}`,
-      { operationId: `${tableId}:edit:wall:${generateCountRef.current}`, tableId, initiatedBy: "local" },
-      { start: { x: offset, y: 0, z: 0 }, end: { x: offset, y: 0, z: 4 }, height: 3 },
-      undefined,
+      { operationId: `${tableId}:edit:room:${generateCountRef.current}`, tableId, initiatedBy: "local" },
+      { origin: layoutNextRoomOrigin(generateCountRef.current), width: ROOM_WIDTH, depth: ROOM_DEPTH, height: ROOM_HEIGHT },
       wallKind,
       wallKind,
     );
-    runtime.generateWall(operation.payload, "local", operation.operationId);
+    for (const operation of operations) {
+      runtime.generateWall(operation.payload, "local", operation.operationId);
+    }
   }, [runtime, tableId, activeMaterial]);
 
   // Global Keyboard Shortcuts
@@ -300,10 +304,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             className="gm-hotbar-block"
             onClick={handleGenerateWall}
             disabled={current.status !== "ready"}
-            title="Adicionar Parede (tecla W)"
+            title="Adicionar Sala (4 paredes com porta, tecla W)"
           >
             <span className="gm-hotbar-block-icon" aria-hidden="true">W</span>
-            <span>Parede</span>
+            <span>Sala</span>
           </button>
           <button
             type="button"
@@ -323,7 +327,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               handleGenerateWall();
             }}
             disabled={current.status !== "ready"}
-            title="Preset Masmorra Branca"
+            title="Preset Masmorra Branca (gera uma sala)"
           >
             <span className="gm-hotbar-block-icon" aria-hidden="true">▢</span>
             <span>Branca</span>
@@ -336,7 +340,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
               handleGenerateWall();
             }}
             disabled={current.status !== "ready"}
-            title="Preset Masmorra Cinza"
+            title="Preset Masmorra Cinza (gera uma sala)"
           >
             <span className="gm-hotbar-block-icon" aria-hidden="true">▨</span>
             <span>Cinza</span>
