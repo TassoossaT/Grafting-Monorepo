@@ -8,8 +8,8 @@ export type {
   TabletopSnapshot,
 } from "./tabletop-runtime.ts";
 export { buildGenerateTerrainCellOperation, buildGenerateWallOperation } from "./default-map-seed.ts";
-export { buildGenerateRoomOperations, layoutNextRoomOrigin, ROOM_DEPTH, ROOM_HEIGHT, ROOM_WIDTH } from "./room-seed.ts";
-export type { RoomLayout } from "./room-seed.ts";
+export { buildGenerateRoomOperations, layoutNextRoomOrigin, roomVariantForIndex } from "./room-seed.ts";
+export type { RoomLayout, RoomVariant } from "./room-seed.ts";
 
 // Re-exported (not imported directly by `app/`, per this layer's own
 // boundary rule -- see `test/architecture-boundaries.test.mjs`) so

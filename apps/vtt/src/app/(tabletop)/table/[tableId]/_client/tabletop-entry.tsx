@@ -10,9 +10,7 @@ import {
   createMoveNodeHistoryStack,
   createTabletopRuntime,
   layoutNextRoomOrigin,
-  ROOM_DEPTH,
-  ROOM_HEIGHT,
-  ROOM_WIDTH,
+  roomVariantForIndex,
   type ConstructionPosition,
   type MoveNodeHistoryStack,
   type RenderViewId,
@@ -167,12 +165,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handleGenerateWall = useCallback(() => {
     generateCountRef.current += 1;
+    const index = generateCountRef.current;
     const wallKind = activeMaterial === "wall-gray" ? "wall-gray" : "wall-white";
     const operations = buildGenerateRoomOperations(
       tableId,
-      `edit-${generateCountRef.current}`,
-      { operationId: `${tableId}:edit:room:${generateCountRef.current}`, tableId, initiatedBy: "local" },
-      { origin: layoutNextRoomOrigin(generateCountRef.current), width: ROOM_WIDTH, depth: ROOM_DEPTH, height: ROOM_HEIGHT },
+      `edit-${index}`,
+      { operationId: `${tableId}:edit:room:${index}`, tableId, initiatedBy: "local" },
+      layoutNextRoomOrigin(index),
+      roomVariantForIndex(index),
       wallKind,
       wallKind,
     );
