@@ -139,14 +139,17 @@ export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMap
     "terrain",
   );
 
+  // No door -- see `WallBrushParams`'s own doc: door generation is a
+  // separate concern from a plain wall for now, not wired into this demo
+  // seed either.
   const wall = buildGenerateWallOperation(
     tableId,
     "seed",
     { operationId: `${tableId}:seed:wall`, tableId, initiatedBy },
     { start: { x: 2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 4 }, height: 3 },
-    { opensAt: 0.25, closesAt: 0.75 },
+    undefined,
     "wall",
-    "door",
+    "wall",
   );
 
   return { terrainCell, wall };
