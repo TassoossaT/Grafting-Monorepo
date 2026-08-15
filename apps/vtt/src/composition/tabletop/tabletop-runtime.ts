@@ -109,6 +109,24 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): readonly ConstructionSurfaceKey[];
+  /**
+   * Inserts `nodes` (e.g. a crossing point's bottom/top pair), then splits
+   * each existing surface named in `splits` into two new ones through the
+   * generic `addNode`/`splitSurface` operations -- no new Rust/Wasm surface.
+   * The old surface's projection entry is explicitly removed (unlike
+   * `applyIrregularTerrainPatch`'s add-only shape, `splitSurface` always
+   * *replaces* what it's given).
+   */
+  applyWallCrossingSplit(
+    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+    splits: readonly {
+      readonly originalKey: ConstructionSurfaceKey;
+      readonly first: ConstructionSurfaceSpec;
+      readonly second: ConstructionSurfaceSpec;
+    }[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly ConstructionSurfaceKey[];
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
   generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
@@ -550,6 +568,44 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
     return surfaceKeys;
+  }
+
+  applyWallCrossingSplit(
+    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+    splits: readonly {
+      readonly originalKey: ConstructionSurfaceKey;
+      readonly first: ConstructionSurfaceSpec;
+      readonly second: ConstructionSurfaceSpec;
+    }[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly ConstructionSurfaceKey[] {
+    this.#requireReady("splitting a wall at a crossing");
+
+    for (const node of nodes) this.#construction.addNode(node.id, node.position);
+
+    const newKeys: ConstructionSurfaceKey[] = [];
+    const removedRefs: string[] = [];
+    for (const split of splits) {
+      const outcome = this.#construction.splitSurface(split.originalKey, split.first, split.second);
+      newKeys.push(outcome.firstKey, outcome.secondKey);
+      removedRefs.push(surfaceRefFromNodeSet(split.originalKey));
+    }
+
+    this.#applyConstructionMutation(newKeys, origin, causeId, (map) => {
+      let next = map;
+      for (const removedRef of removedRefs) {
+        const previous = next.byId.get(removedRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, {
+          type: "surface-removed",
+          surfaceRef: removedRef,
+          revision: previous.revision + 1,
+        });
+      }
+      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+    });
+    return newKeys;
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {
