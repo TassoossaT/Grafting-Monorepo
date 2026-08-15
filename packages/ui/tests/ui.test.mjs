@@ -4,7 +4,17 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Card, DataTable, EntitySummary, GridLayout, PreviewCard, StatusBadge, Text } from "../dist/index.js";
+import {
+  Card,
+  DataTable,
+  EntitySummary,
+  GridLayout,
+  IconButton,
+  PreviewCard,
+  SelectableChip,
+  StatusBadge,
+  Text,
+} from "../dist/index.js";
 import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
@@ -15,7 +25,9 @@ test("exports only the deliberate Grafting component surface", async () => {
     "DataTable",
     "EntitySummary",
     "GridLayout",
+    "IconButton",
     "PreviewCard",
+    "SelectableChip",
     "StatusBadge",
     "Text",
     "createCanvas",
@@ -34,6 +46,39 @@ test("renders a bounded surface built on Ant Design's Card (DEC: card-antd-rebui
   assert.match(markup, /class="ant-card/);
   assert.match(markup, /aria-label="Panel"/);
   assert.match(markup, /Content/);
+});
+
+test("renders an icon-only IconButton with its title as the accessible name", () => {
+  const markup = renderToStaticMarkup(
+    createElement(IconButton, { icon: "▢", title: "Adicionar Sala" }),
+  );
+
+  assert.match(markup, /<button/);
+  assert.match(markup, /title="Adicionar Sala"/);
+  assert.doesNotMatch(markup, /data-selected/);
+});
+
+test("marks a selected IconButton so the app's own boundary color can key off it", () => {
+  const markup = renderToStaticMarkup(
+    createElement(IconButton, { icon: "▢", title: "Terreno", label: "Terreno", selected: true }),
+  );
+
+  assert.match(markup, /data-selected="true"/);
+  assert.match(markup, /Terreno/);
+});
+
+test("renders a SelectableChip as an Ant Design checkable tag with its swatch and checked state", () => {
+  const checkedMarkup = renderToStaticMarkup(
+    createElement(SelectableChip, { label: "Bloco Branco", swatchColor: "#e2e8f0", selected: true }),
+  );
+  const uncheckedMarkup = renderToStaticMarkup(
+    createElement(SelectableChip, { label: "Bloco Cinza", selected: false }),
+  );
+
+  assert.match(checkedMarkup, /ant-tag-checkable-checked/);
+  assert.match(checkedMarkup, /background:#e2e8f0/);
+  assert.match(checkedMarkup, /Bloco Branco/);
+  assert.doesNotMatch(uncheckedMarkup, /ant-tag-checkable-checked/);
 });
 
 test("renders semantic atoms without exposing vendor configuration", () => {

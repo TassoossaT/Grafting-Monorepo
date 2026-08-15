@@ -18,6 +18,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 - **Code Autonomy & Boundaries:**
   - MUST NOT duplicate Rust logic in TypeScript, C#, or Python. Reusable graph structures, algorithms, layout math, and queries belong strictly to `grafting-graph-core` (DEC-051, [ADR-0013](docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md)).
   - MUST NOT duplicate authoritative behavior across packages; maintain single canonical source (DEC-049).
+  - MUST NOT hand-roll a generic, product-agnostic capability (a UI atom, a hook, a math/utility function, a template) inside an app when it carries no product-specific semantics. Promote it to the relevant `packages/*`, or create a new package, so other apps can reuse it instead of re-deriving it later. Packages MAY be created freely whenever a genuinely reusable capability emerges; do not wait for a second consumer to justify extraction — the test is whether the thing has any product meaning baked in, not how many callers it currently has.
   - MUST NOT import vendor APIs outside designated owning package or leak vendor-owned types in Grafting public APIs (DEC-049, [ADR-0011](docs/adr/ADR-0011-package-autonomy-and-external-isolation.md)).
   - MUST NOT hardcode visual identity or interaction policy in capability packages (DEC-052, [ADR-0014](docs/adr/ADR-0014-composable-capability-packages.md)).
   - MUST NOT expose Rust types directly through ABI, promise cross-domain zero-copy, or misname authoritative replication "Event Sourcing".
