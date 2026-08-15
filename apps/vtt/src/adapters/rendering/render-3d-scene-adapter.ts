@@ -31,6 +31,7 @@ import {
   type MapChunkVisualParams,
 } from "./map-chunk-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
+import { createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -83,47 +84,6 @@ function engineOrigin(origin: ChangeOrigin): EngineChangeOrigin {
     case "programmatic":
       return "engine";
   }
-}
-
-function createMarkerTexture(): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 128;
-  const context = canvas.getContext("2d");
-  if (context === null) throw new Error("token marker texture needs a 2D canvas context");
-
-  context.clearRect(0, 0, 128, 128);
-  context.fillStyle = "#ffffff";
-  context.beginPath();
-  context.arc(64, 58, 47, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = "rgba(255, 255, 255, 0.72)";
-  context.beginPath();
-  context.moveTo(42, 95);
-  context.lineTo(86, 95);
-  context.lineTo(64, 123);
-  context.closePath();
-  context.fill();
-  return canvas;
-}
-
-/** A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token. */
-function createNodeHandleTexture(): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 64;
-  const context = canvas.getContext("2d");
-  if (context === null) throw new Error("node handle texture needs a 2D canvas context");
-
-  context.clearRect(0, 0, 64, 64);
-  context.strokeStyle = "#0b1a17";
-  context.lineWidth = 4;
-  context.fillStyle = "#f2c94c";
-  context.beginPath();
-  context.arc(32, 32, 22, 0, Math.PI * 2);
-  context.fill();
-  context.stroke();
-  return canvas;
 }
 
 export class Render3dSceneAdapter implements SceneRenderPort {
