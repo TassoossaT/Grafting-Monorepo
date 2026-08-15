@@ -24,9 +24,9 @@ export interface TerrainBrushParams {
   readonly seed: number;
 }
 
+/** Door generation is a separate concern from wall-brush for now -- see `room-seed.ts` for the still-valid case, a procedurally generated room's own doors. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
-  readonly withDoor: boolean;
   readonly seed: number;
 }
 
@@ -77,7 +77,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white", withDoor: true, seed: 1 }),
+  "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
   "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

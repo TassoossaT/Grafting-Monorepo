@@ -9,8 +9,6 @@ import { segmentBetween } from "./preview-shapes.ts";
 /** Fixed wall height for a brush-drawn segment -- matches `room-seed.ts`'s own generated-room wall height range. */
 const WALL_HEIGHT = 3;
 const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
-/** Centered door, one third of the segment's own length -- a fixed default for v1, not yet a parameter. */
-const DOOR_OPENING = { opensAt: 0.33, closesAt: 0.67 };
 
 /**
  * Walls have no thickness (`structure-generation/wall.rs`'s own doc: "the
@@ -103,9 +101,12 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
       `brush-wall-${sequence}`,
       { operationId: `${ctx.tableId}:brush-wall:${sequence}`, tableId: ctx.tableId, initiatedBy: "local" },
       { start: gesture.start.point, end: gesture.current.point, height: WALL_HEIGHT },
-      params.withDoor ? DOOR_OPENING : undefined,
+      // Door generation is a separate concern from wall-brush for now -- see
+      // `WallBrushParams`'s own doc. `room-seed.ts`'s procedural room walls
+      // still generate doors; this tool's straight segments do not.
+      undefined,
       params.wallType,
-      params.withDoor ? "door" : params.wallType,
+      params.wallType,
       cornerOverrides,
     );
     ctx.runtime.generateWall(operation.payload, "local", operation.operationId);
