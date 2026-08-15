@@ -15,15 +15,22 @@ import {
   type MoveNodeHistoryStack,
   type RenderViewId,
   type TabletopRuntime,
+  type TabletopRuntimeStatus,
 } from "@/composition/tabletop";
-import { TerrainShapePicker, type CornerHeights } from "@/ui";
+import { StatusBadge, type CornerHeights } from "@/ui";
+import {
+  ConstructionHotbar,
+  SettingsDrawer,
+  ToolRail,
+  useKeyboardShortcuts,
+  type EditTool,
+  type SelectedNodeInfo,
+  type SurfaceStyle,
+} from "@/widgets";
 
 export interface TabletopEntryProps {
   readonly tableId: string;
 }
-
-type EditTool = "navigate" | "move-node";
-type SurfaceStyle = "wall-white" | "wall-gray" | "terrain" | "terrain-grass";
 
 interface DragState {
   readonly nodeId: string;
@@ -35,6 +42,20 @@ interface DragState {
 function pointerOffset(event: ReactPointerEvent<HTMLDivElement>): { x: number; y: number } {
   const rect = event.currentTarget.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+/** Maps this app's own runtime lifecycle onto the generic `UiStatus` vocabulary `StatusBadge` expects. */
+function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "success" | "error" {
+  switch (status) {
+    case "idle":
+      return "neutral";
+    case "starting":
+      return "info";
+    case "ready":
+      return "success";
+    case "disposed":
+      return "error";
+  }
 }
 
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
@@ -56,7 +77,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [tool, setTool] = useState<EditTool>("navigate");
   const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
-  const [selectedNodeInfo, setSelectedNodeInfo] = useState<{ id: string; point: ConstructionPosition } | null>(null);
+  const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   // Settings/inspector drawer starts closed -- it must float over the map,
   // not reserve space beside it, so it opens only on request.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -163,47 +184,38 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     runtime.generateTerrainCell(operation.payload, "local", operation.operationId);
   }, [runtime, tableId, activeMaterial, terrainShape]);
 
-  const handleGenerateWall = useCallback(() => {
-    generateCountRef.current += 1;
-    const index = generateCountRef.current;
-    const wallKind = activeMaterial === "wall-gray" ? "wall-gray" : "wall-white";
-    const operations = buildGenerateRoomOperations(
-      tableId,
-      `edit-${index}`,
-      { operationId: `${tableId}:edit:room:${index}`, tableId, initiatedBy: "local" },
-      layoutNextRoomOrigin(index),
-      roomVariantForIndex(index),
-      wallKind,
-      wallKind,
-    );
-    for (const operation of operations) {
-      runtime.generateWall(operation.payload, "local", operation.operationId);
-    }
-  }, [runtime, tableId, activeMaterial]);
-
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.ctrlKey && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (historyState.canUndo) handleUndo();
-      } else if (e.ctrlKey && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        if (historyState.canRedo) handleRedo();
-      } else if (e.key.toLowerCase() === "m") {
-        setTool("move-node");
-      } else if (e.key.toLowerCase() === "n" || e.key === "Escape") {
-        setTool("navigate");
-      } else if (e.key.toLowerCase() === "w") {
-        if (current.status === "ready") handleGenerateWall();
-      } else if (e.key.toLowerCase() === "t") {
-        if (current.status === "ready") handleGenerateTerrainCell();
+  const handleGenerateWall = useCallback(
+    (materialOverride?: "wall-white" | "wall-gray") => {
+      generateCountRef.current += 1;
+      const index = generateCountRef.current;
+      const wallKind = materialOverride ?? (activeMaterial === "wall-gray" ? "wall-gray" : "wall-white");
+      if (materialOverride !== undefined) setActiveMaterial(materialOverride);
+      const operations = buildGenerateRoomOperations(
+        tableId,
+        `edit-${index}`,
+        { operationId: `${tableId}:edit:room:${index}`, tableId, initiatedBy: "local" },
+        layoutNextRoomOrigin(index),
+        roomVariantForIndex(index),
+        wallKind,
+        wallKind,
+      );
+      for (const operation of operations) {
+        runtime.generateWall(operation.payload, "local", operation.operationId);
       }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [historyState.canUndo, historyState.canRedo, handleUndo, handleRedo, current.status, handleGenerateWall, handleGenerateTerrainCell]);
+    },
+    [runtime, tableId, activeMaterial],
+  );
+
+  useKeyboardShortcuts({
+    canUndo: historyState.canUndo,
+    canRedo: historyState.canRedo,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onToolChange: setTool,
+    ready: current.status === "ready",
+    onGenerateWall: () => handleGenerateWall(),
+    onGenerateTerrainCell: handleGenerateTerrainCell,
+  });
 
   return (
     <div className="gm-studio-app">
@@ -218,9 +230,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         </div>
 
         <div className="gm-header-actions">
-          <span className={`gm-badge ${current.status === "ready" ? "gm-badge--ready" : ""}`}>
-            Engine WASM: {current.status}
-          </span>
+          <StatusBadge className="gm-badge" status={statusToUiStatus(current.status)} label={`Engine WASM: ${current.status}`} />
 
           <div className="gm-mode-toggle">
             <button
@@ -258,126 +268,26 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D" : "Navegação da Câmera"}</span>
         </div>
 
-        {/* Left rail -- small, specific, powerful tools */}
-        <aside className="gm-rail-left" role="toolbar" aria-label="Ferramentas de Construção do Mestre">
-          <button
-            type="button"
-            className={`gm-rail-btn ${tool === "navigate" ? "gm-rail-btn--active" : ""}`}
-            onClick={() => setTool("navigate")}
-            title="Navegar / Pan (tecla N)"
-          >
-            N
-          </button>
-          <button
-            type="button"
-            className={`gm-rail-btn ${tool === "move-node" ? "gm-rail-btn--active" : ""}`}
-            onClick={() => setTool("move-node")}
-            title="Mover Node do Grafo (tecla M)"
-          >
-            M
-          </button>
-          <div className="gm-rail-divider" />
-          <button
-            type="button"
-            className="gm-rail-btn"
-            onClick={handleUndo}
-            disabled={!historyState.canUndo}
-            title="Desfazer (Ctrl+Z)"
-          >
-            ↶
-          </button>
-          <button
-            type="button"
-            className="gm-rail-btn"
-            onClick={handleRedo}
-            disabled={!historyState.canRedo}
-            title="Refazer (Ctrl+Y)"
-          >
-            ↷
-          </button>
-        </aside>
+        <ToolRail
+          tool={tool}
+          onToolChange={setTool}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+        />
 
-        {/* Bottom hotbar -- bigger blocks for quick/procedural construction */}
-        <div className="gm-hotbar" role="toolbar" aria-label="Construção Rápida">
-          <button
-            type="button"
-            className="gm-hotbar-block"
-            onClick={handleGenerateWall}
-            disabled={current.status !== "ready"}
-            title="Adicionar Sala (4 paredes com porta, tecla W)"
-          >
-            <span className="gm-hotbar-block-icon" aria-hidden="true">W</span>
-            <span>Sala</span>
-          </button>
-          <button
-            type="button"
-            className={`gm-hotbar-block ${terrainPickerOpen ? "gm-hotbar-block--selected" : ""}`}
-            onClick={() => setTerrainPickerOpen((open) => !open)}
-            disabled={current.status !== "ready"}
-            title="Moldar e Adicionar Célula de Terreno (tecla T gera direto)"
-          >
-            <span className="gm-hotbar-block-icon" aria-hidden="true">T</span>
-            <span>Terreno</span>
-          </button>
-          <button
-            type="button"
-            className={`gm-hotbar-block ${activeMaterial === "wall-white" ? "gm-hotbar-block--selected" : ""}`}
-            onClick={() => {
-              setActiveMaterial("wall-white");
-              handleGenerateWall();
-            }}
-            disabled={current.status !== "ready"}
-            title="Preset Masmorra Branca (gera uma sala)"
-          >
-            <span className="gm-hotbar-block-icon" aria-hidden="true">▢</span>
-            <span>Branca</span>
-          </button>
-          <button
-            type="button"
-            className={`gm-hotbar-block ${activeMaterial === "wall-gray" ? "gm-hotbar-block--selected" : ""}`}
-            onClick={() => {
-              setActiveMaterial("wall-gray");
-              handleGenerateWall();
-            }}
-            disabled={current.status !== "ready"}
-            title="Preset Masmorra Cinza (gera uma sala)"
-          >
-            <span className="gm-hotbar-block-icon" aria-hidden="true">▨</span>
-            <span>Cinza</span>
-          </button>
-        </div>
-
-        {terrainPickerOpen && (
-          <div className="gm-terrain-popover" role="dialog" aria-label="Moldar Célula de Terreno">
-            <div className="gm-terrain-popover-header">
-              <span>Moldar Terreno</span>
-              <button
-                type="button"
-                className="gm-popover-close"
-                onClick={() => setTerrainPickerOpen(false)}
-                title="Fechar"
-              >
-                ×
-              </button>
-            </div>
-            <TerrainShapePicker cornerHeights={terrainShape} onChange={setTerrainShape} />
-            <div className="gm-terrain-popover-actions">
-              <button type="button" className="gm-popover-btn" onClick={() => setTerrainShape([1, 1, 1, 1])}>
-                Nivelar
-              </button>
-              <button
-                type="button"
-                className="gm-popover-btn gm-popover-btn--primary"
-                onClick={() => {
-                  handleGenerateTerrainCell();
-                  setTerrainPickerOpen(false);
-                }}
-              >
-                Gerar Terreno
-              </button>
-            </div>
-          </div>
-        )}
+        <ConstructionHotbar
+          ready={current.status === "ready"}
+          activeMaterial={activeMaterial}
+          onGenerateWall={handleGenerateWall}
+          terrainPickerOpen={terrainPickerOpen}
+          onToggleTerrainPicker={() => setTerrainPickerOpen((open) => !open)}
+          onCloseTerrainPicker={() => setTerrainPickerOpen(false)}
+          terrainShape={terrainShape}
+          onTerrainShapeChange={setTerrainShape}
+          onGenerateTerrainCell={handleGenerateTerrainCell}
+        />
 
         {/* Right drawer -- settings & inspector, collapsed by default */}
         <button
@@ -391,93 +301,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           {drawerOpen ? "×" : "☰"}
         </button>
 
-        <aside
-          id="gm-settings-drawer"
-          className={`gm-drawer-right ${drawerOpen ? "gm-drawer-right--open" : ""}`}
-          aria-hidden={!drawerOpen}
-        >
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Inspector de Seleção</span>
-            {selectedNodeInfo !== null ? (
-              <div style={{ display: "grid", gap: "0.4rem", fontSize: "0.78rem" }}>
-                <div className="gm-stat-row">
-                  <span>Node ID:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.id}</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição X:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.x.toFixed(2)}m</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição Y:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.y.toFixed(2)}m</span>
-                </div>
-                <div className="gm-stat-row">
-                  <span>Posição Z:</span>
-                  <span className="gm-stat-value">{selectedNodeInfo.point.z.toFixed(2)}m</span>
-                </div>
-              </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-                Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Node</em> (M) ativada para inspecionar.
-              </p>
-            )}
-          </div>
-
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Estilo de Bloco & Material</span>
-            <div className="gm-material-grid">
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-white" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-white")}
-              >
-                <div className="gm-swatch gm-swatch--wall-white" />
-                <span>Bloco Branco</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "wall-gray" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("wall-gray")}
-              >
-                <div className="gm-swatch gm-swatch--wall-gray" />
-                <span>Bloco Cinza</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain")}
-              >
-                <div className="gm-swatch gm-swatch--terrain" />
-                <span>Grid Terreno</span>
-              </button>
-              <button
-                type="button"
-                className={`gm-material-chip ${activeMaterial === "terrain-grass" ? "gm-material-chip--selected" : ""}`}
-                onClick={() => setActiveMaterial("terrain-grass")}
-              >
-                <div className="gm-swatch gm-swatch--terrain-grass" />
-                <span>Terreno Grama</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="gm-panel-card">
-            <span className="gm-panel-card-title">Métricas da Cena</span>
-            <div className="gm-stat-row">
-              <span>Tokens no Mapa:</span>
-              <span className="gm-stat-value">{current.tokens.byId.size}</span>
-            </div>
-            <div className="gm-stat-row">
-              <span>Snap ao Grid:</span>
-              <span className="gm-stat-value">Ativado (1.0m)</span>
-            </div>
-            <div className="gm-stat-row">
-              <span>Iluminação:</span>
-              <span className="gm-stat-value">Direcional + Amb</span>
-            </div>
-          </div>
-        </aside>
+        <SettingsDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          selectedNodeInfo={selectedNodeInfo}
+          activeMaterial={activeMaterial}
+          onSelectMaterial={setActiveMaterial}
+          tokenCount={current.tokens.byId.size}
+        />
       </section>
 
       {/* Bottom Bar -- thin, crops the map on purpose */}

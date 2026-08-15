@@ -4,7 +4,19 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { Card, DataTable, EntitySummary, GridLayout, PreviewCard, StatusBadge, Text } from "../dist/index.js";
+import {
+  Card,
+  DataTable,
+  Drawer,
+  EntitySummary,
+  GridLayout,
+  IconButton,
+  Popover,
+  PreviewCard,
+  SelectableChip,
+  StatusBadge,
+  Text,
+} from "../dist/index.js";
 import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 
 test("exports only the deliberate Grafting component surface", async () => {
@@ -13,9 +25,13 @@ test("exports only the deliberate Grafting component surface", async () => {
     "Button",
     "Card",
     "DataTable",
+    "Drawer",
     "EntitySummary",
     "GridLayout",
+    "IconButton",
+    "Popover",
     "PreviewCard",
+    "SelectableChip",
     "StatusBadge",
     "Text",
     "createCanvas",
@@ -34,6 +50,76 @@ test("renders a bounded surface built on Ant Design's Card (DEC: card-antd-rebui
   assert.match(markup, /class="ant-card/);
   assert.match(markup, /aria-label="Panel"/);
   assert.match(markup, /Content/);
+});
+
+test("renders an icon-only IconButton with its title as the accessible name", () => {
+  const markup = renderToStaticMarkup(
+    createElement(IconButton, { icon: "▢", title: "Adicionar Sala" }),
+  );
+
+  assert.match(markup, /<button/);
+  assert.match(markup, /title="Adicionar Sala"/);
+  assert.doesNotMatch(markup, /data-selected/);
+});
+
+test("marks a selected IconButton so the app's own boundary color can key off it", () => {
+  const markup = renderToStaticMarkup(
+    createElement(IconButton, { icon: "▢", title: "Terreno", label: "Terreno", selected: true }),
+  );
+
+  assert.match(markup, /data-selected="true"/);
+  assert.match(markup, /Terreno/);
+});
+
+test("renders a SelectableChip as an Ant Design checkable tag with its swatch and checked state", () => {
+  const checkedMarkup = renderToStaticMarkup(
+    createElement(SelectableChip, { label: "Bloco Branco", swatchColor: "#e2e8f0", selected: true }),
+  );
+  const uncheckedMarkup = renderToStaticMarkup(
+    createElement(SelectableChip, { label: "Bloco Cinza", selected: false }),
+  );
+
+  assert.match(checkedMarkup, /ant-tag-checkable-checked/);
+  assert.match(checkedMarkup, /background:#e2e8f0/);
+  assert.match(checkedMarkup, /Bloco Branco/);
+  assert.doesNotMatch(uncheckedMarkup, /ant-tag-checkable-checked/);
+});
+
+// Drawer and Popover both render their panel content through Ant Design's
+// own portal (into `document.body`), which does not exist under
+// `renderToStaticMarkup` -- confirmed directly (antd itself logs "Portal
+// only work in client side" during these tests). So unlike every other atom
+// in this file, their panel content is not observable through static markup
+// in either open or closed state; these tests assert only what actually is
+// observable server-side: that each renders without throwing, and that a
+// Popover's own anchor (not portaled) is present and reflects `open`.
+
+test("renders a Drawer for either open state without throwing", () => {
+  assert.doesNotThrow(() =>
+    renderToStaticMarkup(
+      createElement(Drawer, { open: true, onClose: () => {}, title: "Ajustes" }, createElement("span", null, "body")),
+    ),
+  );
+  assert.doesNotThrow(() =>
+    renderToStaticMarkup(createElement(Drawer, { open: false, onClose: () => {} }, createElement("span", null, "body"))),
+  );
+});
+
+test("renders a Popover's own anchor, marked open when shown", () => {
+  const openMarkup = renderToStaticMarkup(
+    createElement(
+      Popover,
+      { anchor: createElement("button", null, "Trigger"), open: true, onClose: () => {}, title: "Moldar Terreno" },
+      createElement("span", null, "body"),
+    ),
+  );
+  const closedMarkup = renderToStaticMarkup(
+    createElement(Popover, { anchor: createElement("button", null, "Trigger"), open: false, onClose: () => {} }, "body"),
+  );
+
+  assert.match(openMarkup, /Trigger/);
+  assert.match(openMarkup, /ant-popover-open/);
+  assert.doesNotMatch(closedMarkup, /ant-popover-open/);
 });
 
 test("renders semantic atoms without exposing vendor configuration", () => {

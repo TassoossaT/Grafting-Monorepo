@@ -1,3 +1,5 @@
+import { lerp, mulberry32 } from "../../ui/seeded-random.ts";
+
 import { buildGenerateWallOperation } from "./default-map-seed.ts";
 import type { ConstructionOperationContext, GenerateWallOperation } from "../../features/edit-construction/index.ts";
 import type { ConstructionPosition, DoorOpening } from "@/ports";
@@ -58,29 +60,11 @@ export function layoutNextRoomOrigin(index: number): ConstructionPosition {
 }
 
 /**
- * A small, self-contained PRNG (mulberry32) rather than `Math.random` --
- * seeded deterministically by the room `index`, so the same click count
- * always reshapes into the same room. That keeps `roomVariantForIndex`
- * reproducible in tests instead of flaky, and lets a GM regenerate the same
- * table's layout on reload.
- */
-function mulberry32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function lerp(min: number, max: number, fraction: number): number {
-  return min + (max - min) * fraction;
-}
-
-/**
  * Derives a deterministic, bounded room shape and door placement for the
- * `index`-th generated room. Width/depth stay within
+ * `index`-th generated room, seeded via `@grafting/render-3d`'s `mulberry32`
+ * rather than `Math.random` so the same click count always reshapes into the
+ * same room -- reproducible in tests instead of flaky, and lets a GM
+ * regenerate the same table's layout on reload. Width/depth stay within
  * [{@link MIN_ROOM_WIDTH}/{@link MIN_ROOM_DEPTH}, {@link ROOM_STRIDE}'s
  * bound] so {@link layoutNextRoomOrigin}'s fixed stride still guarantees no
  * two rooms overlap.

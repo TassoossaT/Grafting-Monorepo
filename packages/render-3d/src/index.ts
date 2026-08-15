@@ -93,6 +93,8 @@ export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export { heightfieldVisual } from "./visual/heightfield-visual.js";
 export { mergeMeshChunks } from "./visual/merge-mesh-chunks.js";
 
+export { lerp, mulberry32 } from "./math/seeded-random.js";
+
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
 export {
   DISTANCE_RANGE,
