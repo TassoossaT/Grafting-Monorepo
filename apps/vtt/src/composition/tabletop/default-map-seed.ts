@@ -26,9 +26,18 @@ const WALL_NODE_ROLES = [
   "doorEndTop",
 ] as const;
 
-function wallNodeIds(tableId: string, salt: string): Record<string, string> {
+/** The 4 corner roles a wall's endpoints can weld onto an existing node -- door-jamb roles are always fresh (interior to this one segment), never weld candidates. */
+export type WallCornerRole = "startBottom" | "startTop" | "endBottom" | "endTop";
+
+function wallNodeIds(
+  tableId: string,
+  salt: string,
+  cornerOverrides: Partial<Record<WallCornerRole, string>> = {},
+): Record<string, string> {
   const ids: Record<string, string> = {};
-  for (const role of WALL_NODE_ROLES) ids[role] = `${tableId}:${salt}:wall:${role}`;
+  for (const role of WALL_NODE_ROLES) {
+    ids[role] = (cornerOverrides as Partial<Record<string, string>>)[role] ?? `${tableId}:${salt}:wall:${role}`;
+  }
   return ids;
 }
 
@@ -58,14 +67,17 @@ export function buildGenerateWallOperation(
   door: DoorOpening | undefined,
   wallType: string,
   doorType: string,
+  /** Corner roles that should reuse an existing node instead of minting a fresh one -- see `wall-brush-tool.ts`'s own corner-weld search. */
+  cornerOverrides: Partial<Record<WallCornerRole, string>> = {},
 ): GenerateWallOperation {
   const payload: GenerateWallRequest = {
     wall,
     door,
     wallType,
     doorType,
-    nodeIds: wallNodeIds(tableId, salt),
+    nodeIds: wallNodeIds(tableId, salt, cornerOverrides),
     edgeIds: wallEdgeIds(tableId, salt),
+    weldedNodeIds: Object.values(cornerOverrides),
   };
   return createGenerateWallOperation(payload, context);
 }
@@ -127,14 +139,17 @@ export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMap
     "terrain",
   );
 
+  // No door -- see `WallBrushParams`'s own doc: door generation is a
+  // separate concern from a plain wall for now, not wired into this demo
+  // seed either.
   const wall = buildGenerateWallOperation(
     tableId,
     "seed",
     { operationId: `${tableId}:seed:wall`, tableId, initiatedBy },
     { start: { x: 2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 4 }, height: 3 },
-    { opensAt: 0.25, closesAt: 0.75 },
+    undefined,
     "wall",
-    "door",
+    "wall",
   );
 
   return { terrainCell, wall };

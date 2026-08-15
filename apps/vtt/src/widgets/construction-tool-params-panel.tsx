@@ -84,12 +84,6 @@ function WallBrushFields(props: {
           onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
         />
       </div>
-      <SelectableChip
-        label="Com porta"
-        swatchColor="#f59e0b"
-        selected={params.withDoor}
-        onSelect={(withDoor) => onChange({ ...params, withDoor })}
-      />
       {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );

@@ -45,6 +45,15 @@ pub struct GenerateAndApplyWallRequest {
     pub node_ids: HashMap<String, String>,
     /// Keyed by [`wall_edge_role_pair_wire_name`] (directional).
     pub edge_ids: HashMap<String, String>,
+    /// Node ids (values from `node_ids`, not role names) the caller asserts
+    /// already exist in the graph -- e.g. a wall corner welded onto an
+    /// adjoining wall's endpoint (`VTT-WALL-CORNER-WELD`). Every other node
+    /// id must still be free, exactly as before; a welded id must already
+    /// exist, and is reused (not recreated) rather than requiring it be
+    /// free. `#[serde(default)]` keeps every existing caller (the seed wall,
+    /// any request predating this field) working unchanged with no welds.
+    #[serde(default)]
+    pub welded_node_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,8 +72,8 @@ pub struct GenerateAndApplyWallResponse {
 /// Generates a wall's (and, if `door` is given, its door's) surface pieces
 /// and applies them to the session's live state. Errors, leaving nothing
 /// added, if the door opening is invalid, a needed `nodeIds`/`edgeIds`
-/// entry is missing or invalid, or any id collides with the graph's
-/// existing state.
+/// entry is missing or invalid, a non-welded id collides with the graph's
+/// existing state, or a `welded_node_ids` entry does not already exist.
 pub fn generate_and_apply_wall(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
@@ -112,11 +121,19 @@ pub fn generate_and_apply_wall(
         return Err(message);
     }
 
+    let welded: Vec<NodeId> = request
+        .welded_node_ids
+        .iter()
+        .map(|id| NodeId::new(id.clone()).map_err(|_| format!("invalid weldedNodeId: {id}")))
+        .collect::<Result<_, _>>()?;
+
     // Dedup shared jamb nodes across sibling pieces (the same NodeId
     // intentionally appears in two adjacent pieces, per generate_wall's own
     // doc comment), then pre-validate every unique id and every surface
     // cycle is free in the current graph/registry before committing
-    // anything.
+    // anything. A welded id is the opposite of the usual rule: it must
+    // already exist (it is the pre-existing node this wall's corner is
+    // joining), not be free.
     let mut unique_nodes: HashMap<NodeId, Node<[f32; 3]>> = HashMap::new();
     for piece in &generation.pieces {
         for node in &piece.nodes {
@@ -124,7 +141,12 @@ pub fn generate_and_apply_wall(
         }
     }
     for id in unique_nodes.keys() {
-        if graph.node(id).is_some() {
+        let exists = graph.node(id).is_some();
+        if welded.contains(id) {
+            if !exists {
+                return Err(format!("welded node id does not exist: {id}"));
+            }
+        } else if exists {
             return Err(format!("node id already exists: {id}"));
         }
     }
@@ -142,7 +164,10 @@ pub fn generate_and_apply_wall(
         }
     }
 
-    for node in unique_nodes.into_values() {
+    for (id, node) in unique_nodes {
+        if welded.contains(&id) {
+            continue;
+        }
         graph.add_node(node).expect("checked above: id is free");
     }
     for piece in &generation.pieces {
@@ -221,6 +246,7 @@ mod tests {
                 door_type: "door".into(),
                 node_ids: all_node_ids(),
                 edge_ids: all_edge_ids(),
+                welded_node_ids: Vec::new(),
             },
         )
         .unwrap();
@@ -246,6 +272,7 @@ mod tests {
                 door_type: "door".into(),
                 node_ids: all_node_ids(),
                 edge_ids: all_edge_ids(),
+                welded_node_ids: Vec::new(),
             },
         )
         .unwrap();
@@ -272,6 +299,7 @@ mod tests {
                 door_type: "door".into(),
                 node_ids: all_node_ids(),
                 edge_ids: all_edge_ids(),
+                welded_node_ids: Vec::new(),
             },
         )
         .unwrap_err();
@@ -297,6 +325,7 @@ mod tests {
                 door_type: "door".into(),
                 node_ids,
                 edge_ids: all_edge_ids(),
+                welded_node_ids: Vec::new(),
             },
         )
         .unwrap_err();
@@ -322,6 +351,7 @@ mod tests {
                 door_type: "door".into(),
                 node_ids: all_node_ids(),
                 edge_ids: all_edge_ids(),
+                welded_node_ids: Vec::new(),
             },
         )
         .unwrap_err();
@@ -330,5 +360,57 @@ mod tests {
         // Only the pre-existing node remains -- nothing else committed.
         assert_eq!(graph.node_count(), 1);
         assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn a_welded_node_id_reuses_the_existing_node_instead_of_erroring() {
+        let mut graph = empty_graph();
+        graph.add_node(Node::new(NodeId::new("startBottom-id").unwrap(), [9.0, 9.0, 9.0])).unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+
+        let response = generate_and_apply_wall(
+            &mut graph,
+            &mut surfaces,
+            GenerateAndApplyWallRequest {
+                wall: wall_dto(),
+                door: None,
+                wall_type: "wall".into(),
+                door_type: "door".into(),
+                node_ids: all_node_ids(),
+                edge_ids: all_edge_ids(),
+                welded_node_ids: vec!["startBottom-id".into()],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.pieces.len(), 1);
+        // The welded corner reuses the pre-existing node -- 3 new corners, not 4.
+        assert_eq!(graph.node_count(), 4);
+        // The welded node's own position is untouched by this call.
+        assert_eq!(graph.node(&NodeId::new("startBottom-id").unwrap()).unwrap().data(), &[9.0, 9.0, 9.0]);
+    }
+
+    #[test]
+    fn a_welded_node_id_that_does_not_exist_yet_errors() {
+        let mut graph = empty_graph();
+        let mut surfaces = SurfaceRegistry::new();
+
+        let error = generate_and_apply_wall(
+            &mut graph,
+            &mut surfaces,
+            GenerateAndApplyWallRequest {
+                wall: wall_dto(),
+                door: None,
+                wall_type: "wall".into(),
+                door_type: "door".into(),
+                node_ids: all_node_ids(),
+                edge_ids: all_edge_ids(),
+                welded_node_ids: vec!["startBottom-id".into()],
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.contains("startBottom-id"));
+        assert_eq!(graph.node_count(), 0);
     }
 }

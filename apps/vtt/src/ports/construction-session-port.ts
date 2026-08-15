@@ -77,6 +77,15 @@ export interface GenerateWallRequest {
   readonly nodeIds: Readonly<Record<string, ConstructionNodeId>>;
   /** Keyed by directional role-pair wire name (e.g. `"startBottom->startTop"`). */
   readonly edgeIds: Readonly<Record<string, ConstructionEdgeId>>;
+  /**
+   * `nodeIds` values (not role names) the caller asserts already exist --
+   * e.g. a wall corner welded onto an adjoining wall's endpoint
+   * (`VTT-WALL-CORNER-WELD`). The Rust side reuses these instead of
+   * creating a new node, and still requires every other id to be free.
+   * Omitted/empty means "no welds," matching every caller predating this
+   * field.
+   */
+  readonly weldedNodeIds?: readonly ConstructionNodeId[];
 }
 
 export interface WallPiece {

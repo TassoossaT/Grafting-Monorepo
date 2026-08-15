@@ -178,6 +178,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       doorType: request.doorType,
       nodeIds: request.nodeIds,
       edgeIds: request.edgeIds,
+      weldedNodeIds: request.weldedNodeIds ?? [],
     };
     const response = JSON.parse(this.#require().generate_and_apply_wall_json(JSON.stringify(wire))) as {
       pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
