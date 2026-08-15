@@ -19,6 +19,7 @@
     "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@grafting/render-3d": "workspace:*",
     "antd": "6.5.2",
     "react-grid-layout": "2.2.3",

@@ -1,6 +1,6 @@
 "use client";
 
-import { IconButton } from "@/ui";
+import { FloatButtonGroup } from "@/ui";
 
 export type EditTool = "navigate" | "move-node";
 
@@ -13,39 +13,52 @@ export interface ToolRailProps {
   readonly onRedo: () => void;
 }
 
-/** The left rail: small, specific, high-frequency tools -- navigate/move-node selection plus undo/redo. */
+/**
+ * The left rail: navigate/move-node tool selection plus undo/redo, always
+ * visible as a plain button column (no separate open/close trigger),
+ * edit-mode only.
+ */
 export function ToolRail(props: ToolRailProps) {
   return (
-    <aside className="gm-rail-left" role="toolbar" aria-label="Ferramentas de Construção do Mestre">
-      <IconButton
-        className="gm-rail-btn"
-        icon="N"
-        title="Navegar / Pan (tecla N)"
-        selected={props.tool === "navigate"}
-        onClick={() => props.onToolChange("navigate")}
-      />
-      <IconButton
-        className="gm-rail-btn"
-        icon="M"
-        title="Mover Node do Grafo (tecla M)"
-        selected={props.tool === "move-node"}
-        onClick={() => props.onToolChange("move-node")}
-      />
-      <div className="gm-rail-divider" />
-      <IconButton
-        className="gm-rail-btn"
-        icon="↶"
-        title="Desfazer (Ctrl+Z)"
-        disabled={!props.canUndo}
-        onClick={props.onUndo}
-      />
-      <IconButton
-        className="gm-rail-btn"
-        icon="↷"
-        title="Refazer (Ctrl+Y)"
-        disabled={!props.canRedo}
-        onClick={props.onRedo}
-      />
-    </aside>
+    <FloatButtonGroup
+      alwaysExpanded
+      placement="bottom"
+      style={{
+        position: "absolute",
+        top: "0.75rem",
+        left: "0.75rem",
+        zIndex: 15,
+      }}
+      items={[
+        {
+          key: "navigate",
+          icon: "N",
+          tooltip: "Navegar / Pan (tecla N)",
+          tone: props.tool === "navigate" ? "primary" : "default",
+          onClick: () => props.onToolChange("navigate"),
+        },
+        {
+          key: "move-node",
+          icon: "M",
+          tooltip: "Mover Node do Grafo (tecla M)",
+          tone: props.tool === "move-node" ? "primary" : "default",
+          onClick: () => props.onToolChange("move-node"),
+        },
+        {
+          key: "undo",
+          icon: "↶",
+          tooltip: "Desfazer (Ctrl+Z)",
+          disabled: !props.canUndo,
+          onClick: props.onUndo,
+        },
+        {
+          key: "redo",
+          icon: "↷",
+          tooltip: "Refazer (Ctrl+Y)",
+          disabled: !props.canRedo,
+          onClick: props.onRedo,
+        },
+      ]}
+    />
   );
 }

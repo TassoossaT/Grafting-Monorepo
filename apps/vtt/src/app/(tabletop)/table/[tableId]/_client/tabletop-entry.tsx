@@ -78,9 +78,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
-  // Settings/inspector drawer starts closed -- it must float over the map,
-  // not reserve space beside it, so it opens only on request.
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [terrainShape, setTerrainShape] = useState<CornerHeights>([1, 1, 1, 1]);
   const [terrainPickerOpen, setTerrainPickerOpen] = useState(false);
   const [, forceHistoryUpdate] = useState(0);
@@ -268,14 +265,14 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D" : "Navegação da Câmera"}</span>
         </div>
 
-        <ToolRail
-          tool={tool}
-          onToolChange={setTool}
-          canUndo={historyState.canUndo}
-          canRedo={historyState.canRedo}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-        />
+          <ToolRail
+            tool={tool}
+            onToolChange={setTool}
+            canUndo={historyState.canUndo}
+            canRedo={historyState.canRedo}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+          />
 
         <ConstructionHotbar
           ready={current.status === "ready"}
@@ -289,21 +286,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onGenerateTerrainCell={handleGenerateTerrainCell}
         />
 
-        {/* Right drawer -- settings & inspector, collapsed by default */}
-        <button
-          type="button"
-          className={`gm-drawer-toggle ${drawerOpen ? "gm-drawer-toggle--open" : ""}`}
-          onClick={() => setDrawerOpen((open) => !open)}
-          aria-expanded={drawerOpen}
-          aria-controls="gm-settings-drawer"
-          title={drawerOpen ? "Fechar painel de configurações" : "Abrir painel de configurações"}
-        >
-          {drawerOpen ? "×" : "☰"}
-        </button>
-
+        {/* Right drawer -- settings & inspector, collapsed by default. Owns
+            its own open state and handle (see `SlidingPanel`). */}
         <SettingsDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
           selectedNodeInfo={selectedNodeInfo}
           activeMaterial={activeMaterial}
           onSelectMaterial={setActiveMaterial}

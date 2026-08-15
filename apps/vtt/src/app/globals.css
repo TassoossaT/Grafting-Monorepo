@@ -492,14 +492,15 @@ h1 {
   background: rgba(114, 214, 158, 0.22);
 }
 
+/* Background/border/radius/padding now come from Card's own props
+   (backgroundColor/accentColor) in settings-drawer.tsx -- an inline style
+   always wins over a class rule for the same property, so declaring them
+   here too was dead weight that also double-padded the card (this class's
+   own padding around the whole card, on top of Card's own body padding). */
 .gm-panel-card {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.85rem;
-  border: 1px solid #1e293b;
-  border-radius: 0.6rem;
-  background: #182234;
 }
 
 .gm-panel-card-title {

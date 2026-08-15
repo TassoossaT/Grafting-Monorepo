@@ -284,6 +284,12 @@ export function attachOrbit(
     const isOrbit = !isPan && (options.orbitButton === undefined || event.button === options.orbitButton);
     if (!isPan && !isOrbit) return;
 
+    // The middle button in particular triggers the browser's own native
+    // autoscroll gesture (the page grabs the cursor to scroll on drag) unless
+    // suppressed here -- without this, that native gesture wins the pointer
+    // before `onPointerMove` ever sees it, so pan silently never fires no
+    // matter how correct its own math is.
+    event.preventDefault();
     claim(event);
     dragMode = isPan ? "pan" : "orbit";
     if (dragMode === "orbit" && options.pivot === "cursor") {

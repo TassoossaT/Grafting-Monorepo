@@ -8,9 +8,19 @@ export { IconButton, type IconButtonProps } from "./atoms/icon-button.js";
 export { SelectableChip, type SelectableChipProps } from "./atoms/selectable-chip.js";
 export { Popover, type PopoverProps } from "./atoms/popover.js";
 export { Drawer, type DrawerProps } from "./atoms/drawer.js";
+export { Descriptions, type DescriptionItem, type DescriptionsProps } from "./atoms/descriptions.js";
+export { Collapse, type CollapsePanel, type CollapseProps } from "./atoms/collapse.js";
+export { FloatButton, type FloatButtonProps } from "./atoms/float-button.js";
+export { EdgeHandle, EDGE_HANDLE_SIZE, type EdgeHandleProps } from "./atoms/edge-handle.js";
 
 export { EntitySummary, type EntitySummaryProps, mountEntitySummary } from "./molecules/entity-summary.js";
 export { PreviewCard, type PreviewCardProps } from "./molecules/preview-card.js";
+export {
+  FloatButtonGroup,
+  type FloatButtonItem,
+  type FloatButtonGroupProps,
+} from "./molecules/float-button-group.js";
+export { SlidingPanel, type SlidingPanelProps } from "./molecules/sliding-panel.js";
 
 export {
   DataTable,
@@ -21,6 +31,17 @@ export {
   type DataTableRowKey,
   type DataTableSelection,
 } from "./organisms/data-table.js";
+
+export {
+  FloatButtonTree,
+  type FloatButtonTreeBranch,
+  type FloatButtonTreeLeaf,
+  type FloatButtonTreeNode,
+  type FloatButtonTreePlacement,
+  type FloatButtonTreeProps,
+  type FloatButtonTreeSiblingMode,
+  type FloatButtonTreeTrigger,
+} from "./organisms/float-button-tree.js";
 
 export {
   GridLayout,

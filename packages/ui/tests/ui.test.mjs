@@ -6,14 +6,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   Card,
+  Collapse,
   DataTable,
+  Descriptions,
   Drawer,
+  EDGE_HANDLE_SIZE,
+  EdgeHandle,
   EntitySummary,
+  FloatButton,
+  FloatButtonGroup,
+  FloatButtonTree,
   GridLayout,
   IconButton,
   Popover,
   PreviewCard,
   SelectableChip,
+  SlidingPanel,
   StatusBadge,
   Text,
 } from "../dist/index.js";
@@ -24,14 +32,22 @@ test("exports only the deliberate Grafting component surface", async () => {
   assert.deepEqual(Object.keys(ui).sort(), [
     "Button",
     "Card",
+    "Collapse",
     "DataTable",
+    "Descriptions",
     "Drawer",
+    "EDGE_HANDLE_SIZE",
+    "EdgeHandle",
     "EntitySummary",
+    "FloatButton",
+    "FloatButtonGroup",
+    "FloatButtonTree",
     "GridLayout",
     "IconButton",
     "Popover",
     "PreviewCard",
     "SelectableChip",
+    "SlidingPanel",
     "StatusBadge",
     "Text",
     "createCanvas",
@@ -52,6 +68,81 @@ test("renders a bounded surface built on Ant Design's Card (DEC: card-antd-rebui
   assert.match(markup, /Content/);
 });
 
+test("renders an EdgeHandle fused to the requested edge, flat on the panel side and rounded on the other", () => {
+  const rightMarkup = renderToStaticMarkup(
+    createElement(EdgeHandle, { open: false, onClick: () => {}, edge: "right", title: "Abrir" }),
+  );
+  const leftMarkup = renderToStaticMarkup(
+    createElement(EdgeHandle, { open: false, onClick: () => {}, edge: "left", title: "Abrir" }),
+  );
+
+  // Rounded on the side facing away from the panel, flat on the side
+  // touching it -- edge="right" (panel anchored left) rounds its right side.
+  assert.match(rightMarkup, /border-top-left-radius:0[;"]/);
+  assert.match(rightMarkup, /border-top-right-radius:28px/);
+  assert.match(leftMarkup, /border-top-right-radius:0[;"]/);
+  assert.match(leftMarkup, /border-top-left-radius:28px/);
+});
+
+test("flips an EdgeHandle's glyph between open and closed", () => {
+  const closedMarkup = renderToStaticMarkup(
+    createElement(EdgeHandle, { open: false, onClick: () => {}, edge: "right", title: "Abrir" }),
+  );
+  const openMarkup = renderToStaticMarkup(
+    createElement(EdgeHandle, { open: true, onClick: () => {}, edge: "right", title: "Fechar" }),
+  );
+
+  assert.match(closedMarkup, /aria-expanded="false"/);
+  assert.match(openMarkup, /aria-expanded="true"/);
+  assert.notEqual(closedMarkup.includes(">›<"), openMarkup.includes(">›<"));
+});
+
+test("slides a SlidingPanel fully off its anchored edge when closed and back when open", () => {
+  const closedMarkup = renderToStaticMarkup(
+    createElement(
+      SlidingPanel,
+      { open: false, onOpenChange: () => {}, edge: "right", width: 280, title: "Configurações" },
+      createElement("span", null, "Content"),
+    ),
+  );
+  const openMarkup = renderToStaticMarkup(
+    createElement(
+      SlidingPanel,
+      { open: true, onOpenChange: () => {}, edge: "right", width: 280, title: "Configurações" },
+      createElement("span", null, "Content"),
+    ),
+  );
+
+  assert.match(closedMarkup, /transform:translateX\(280px\)/);
+  assert.match(openMarkup, /transform:translateX\(0px\)/);
+  assert.match(closedMarkup, /Configurações/);
+  assert.match(closedMarkup, /Content/);
+});
+
+test("fuses a SlidingPanel's EdgeHandle to the edge opposite its screen anchor, sized by EDGE_HANDLE_SIZE", () => {
+  const rightAnchored = renderToStaticMarkup(
+    createElement(
+      SlidingPanel,
+      { open: false, onOpenChange: () => {}, edge: "right", width: 280, title: "Configurações" },
+      createElement("span", null, "Content"),
+    ),
+  );
+  const leftAnchored = renderToStaticMarkup(
+    createElement(
+      SlidingPanel,
+      { open: false, onOpenChange: () => {}, edge: "left", width: 280, title: "Configurações" },
+      createElement("span", null, "Content"),
+    ),
+  );
+
+  // Anchored right -> handle bulges left, so it must be flat on its right side.
+  assert.match(rightAnchored, new RegExp(`left:-${EDGE_HANDLE_SIZE}px`));
+  assert.match(rightAnchored, /border-top-right-radius:0[;"]/);
+  // Anchored left -> handle bulges right, so it must be flat on its left side.
+  assert.match(leftAnchored, new RegExp(`right:-${EDGE_HANDLE_SIZE}px`));
+  assert.match(leftAnchored, /border-top-left-radius:0[;"]/);
+});
+
 test("renders an icon-only IconButton with its title as the accessible name", () => {
   const markup = renderToStaticMarkup(
     createElement(IconButton, { icon: "▢", title: "Adicionar Sala" }),
@@ -69,6 +160,108 @@ test("marks a selected IconButton so the app's own boundary color can key off it
 
   assert.match(markup, /data-selected="true"/);
   assert.match(markup, /Terreno/);
+});
+
+test("renders a Descriptions label-value grid in order", () => {
+  const markup = renderToStaticMarkup(
+    createElement(Descriptions, {
+      items: [
+        { key: "id", label: "Node ID", value: "node:42" },
+        { key: "x", label: "Posição X", value: "1.23m" },
+      ],
+    }),
+  );
+
+  assert.match(markup, /Node ID/);
+  assert.match(markup, /node:42/);
+  assert.match(markup, /Posição X/);
+  assert.match(markup, /1\.23m/);
+  assert.ok(markup.indexOf("Node ID") < markup.indexOf("Posição X"), "rows stay in the given order");
+});
+
+test("renders a Collapse with every panel's header, expanded by default", () => {
+  const markup = renderToStaticMarkup(
+    createElement(Collapse, {
+      panels: [
+        { key: "inspector", header: "Inspector de Seleção", content: createElement("span", null, "node info") },
+        { key: "material", header: "Material", content: createElement("span", null, "chips") },
+      ],
+    }),
+  );
+
+  assert.match(markup, /Inspector de Seleção/);
+  assert.match(markup, /Material/);
+  // Expanded by default (no explicit `defaultActiveKeys`) means both panels'
+  // own content renders, not just their headers.
+  assert.match(markup, /node info/);
+  assert.match(markup, /chips/);
+});
+
+test("renders a Collapse with only the requested panels expanded", () => {
+  const markup = renderToStaticMarkup(
+    createElement(Collapse, {
+      defaultActiveKeys: ["inspector"],
+      panels: [
+        { key: "inspector", header: "Inspector", content: createElement("span", null, "node info") },
+        { key: "material", header: "Material", content: createElement("span", null, "chips") },
+      ],
+    }),
+  );
+
+  assert.match(markup, /node info/);
+  assert.doesNotMatch(markup, /chips/);
+});
+
+test("a borderless Collapse drops its own outer frame, for nesting inside an already-bounded surface", () => {
+  const bordered = renderToStaticMarkup(createElement(Collapse, { panels: [{ key: "a", header: "A", content: "x" }] }));
+  const borderless = renderToStaticMarkup(
+    createElement(Collapse, { bordered: false, panels: [{ key: "a", header: "A", content: "x" }] }),
+  );
+
+  assert.doesNotMatch(bordered, /ant-collapse-borderless/);
+  assert.match(borderless, /ant-collapse-borderless/);
+  assert.match(borderless, /ant-collapse-ghost/);
+});
+
+test("renders a standalone FloatButton with its tooltip as the accessible name", () => {
+  const markup = renderToStaticMarkup(createElement(FloatButton, { icon: "☰", tooltip: "Configurações" }));
+
+  assert.match(markup, /float-btn/);
+});
+
+// Like Drawer and Popover, a FloatButtonGroup's expanded item list only
+// renders once opened client-side (menu-mode) -- its SSR markup shows only
+// the collapsed trigger. This asserts what is actually observable server-side.
+test("renders a FloatButtonGroup's own trigger icon", () => {
+  const markup = renderToStaticMarkup(
+    createElement(FloatButtonGroup, {
+      icon: "⚒",
+      items: [
+        { key: "navigate", icon: "N", tooltip: "Navegar" },
+        { key: "move-node", icon: "M", tooltip: "Mover Node" },
+      ],
+    }),
+  );
+
+  assert.match(markup, /ant-float-btn-group/);
+  assert.match(markup, />⚒</);
+});
+
+test("renders an alwaysExpanded FloatButtonGroup as every item directly, with no trigger button at all", () => {
+  const markup = renderToStaticMarkup(
+    createElement(FloatButtonGroup, {
+      alwaysExpanded: true,
+      items: [
+        { key: "navigate", icon: "N", tooltip: "Navegar" },
+        { key: "move-node", icon: "M", tooltip: "Mover Node" },
+      ],
+    }),
+  );
+
+  assert.doesNotMatch(markup, /ant-float-btn-group/);
+  assert.match(markup, /position:static/);
+  assert.match(markup, />N</);
+  assert.match(markup, />M</);
 });
 
 test("renders a SelectableChip as an Ant Design checkable tag with its swatch and checked state", () => {

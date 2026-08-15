@@ -231,6 +231,26 @@ Views skipped because nothing they draw had changed.
 
 Item visuals rebuilt this frame.
 
+### `interface render-3d.GridParams`
+
+Parameters for the gridVisual kind.
+
+### `property render-3d.GridParams.cellSize: number`
+
+World-space distance between adjacent lines.
+
+### `property render-3d.GridParams.color?: number`
+
+Line color. Defaults to white, so the caller's palette decides.
+
+### `property render-3d.GridParams.extent: number`
+
+Half the grid's world-space span on each axis -- it runs from `-extent` to `extent` on both X and Z.
+
+### `property render-3d.GridParams.opacity?: number`
+
+Line opacity, in `(0, 1]`. Defaults to `1`.
+
 ### `interface render-3d.HeightfieldData`
 
 A regular grid of elevation samples, the shape a terrain or a fluid surface takes.
@@ -426,6 +446,46 @@ Near clipping distance in world units.
 ### `property render-3d.OrbitOptions.onChange?: (state: OrbitState) => void`
 
 Called after every change, so the caller can redraw.
+
+### `property render-3d.OrbitOptions.orbitButton?: number`
+
+Restricts orbit-drag to one `PointerEvent.button` value (0 = left,
+1 = middle, 2 = right). Undefined -- the default -- preserves this
+module's original behaviour: any button orbits.
+
+A consumer that also drives its own tool gestures with the left button on
+this same element (apps/vtt's construction tools, reserving LMB per the
+board plan's camera control scheme) MUST set this explicitly, e.g. to
+`2`, so the two gesture sets stop fighting over `pointerdown`.
+
+### `property render-3d.OrbitOptions.panButton?: number`
+
+Enables a second, independent lateral-pan gesture bound to one
+`PointerEvent.button` value, driven by orbitPan. Undefined --
+the default -- disables panning entirely, this module's original
+behaviour. Must differ from `orbitButton` when both are set.
+
+### `property render-3d.OrbitOptions.pivot?: "center" | "cursor"`
+
+Where an orbit drag re-centers before rotating.
+
+`"center"` (the default) keeps today's behaviour: orbiting always turns
+around whatever `target` already is. `"cursor"` asks resolvePivot
+for the world point under the pointer at drag-start and re-targets there
+first -- the Tiny Glade convention (`docs/research/vtt-board-construction-mode-ui-references.md`)
+for framing one detail precisely without recentring the whole scene by
+hand first.
+
+### `property render-3d.OrbitOptions.resolvePivot?: (clientX: number, clientY: number) => Vec3 | undefined`
+
+Resolves the world point under a client-space pointer position. Required
+for `pivot: "cursor"`; ignored otherwise.
+
+Kept as an injected callback rather than a raycast implemented here,
+because this module owns no scene geometry (`VTT-ARCH-002`) -- the real
+answer comes from the consumer's own picking (e.g. `SceneRenderPort.pick`
+in `apps/vtt`). Returning `undefined` (the pointer is over empty space)
+leaves the current target unchanged for that drag.
 
 ### `interface render-3d.OrbitState`
 
@@ -924,6 +984,19 @@ These are conveniences, not policy: a track supplies its own curve whenever
 the product's motion language calls for one, and nothing here is applied
 unless a track asks for it.
 
+### `variable render-3d.gridVisual: VisualDefinition<GridParams>`
+
+A replaceable default for a bounded ground-plane reference grid, on
+`y = 0`, spanning `[-extent, extent]` on both X and Z with a line every
+`cellSize` units.
+
+It is here, generic and product-agnostic, for the same reason
+heightfieldVisual is: a reference/board grid is not specific to
+any one product's meaning, only its placement and color are. A product
+that wants a different default (e.g. a camera-anchored infinite-grid
+shader instead of bounded line geometry) registers its own kind under a
+different name and this one costs it nothing.
+
 ### `variable render-3d.heightfieldVisual: VisualDefinition<HeightfieldParams>`
 
 A replaceable default for the most common surface shape: a regular grid of
@@ -1008,6 +1081,10 @@ not know about. It is created by the caller and may be shared across engines,
 so a separate package can populate one — defining what its own concepts look
 like — and hand it over without either package importing the other.
 
+### `function render-3d.lerp(min: number, max: number, fraction: number): number`
+
+Linear interpolation: `fraction` of the way from `min` to `max`.
+
 ### `function render-3d.mergeMeshChunks(pieces: readonly MeshData[]): MeshData`
 
 Concatenates several meshes into one buffer, offsetting each piece's
@@ -1025,6 +1102,14 @@ implicit `0..n-1` index run, never by dropping indices from every *other*
 piece just because one piece lacks them; that would silently discard the
 shared-vertex structure indexed pieces depend on.
 
+### `function render-3d.mulberry32(seed: number): () => number`
+
+A small, self-contained PRNG (mulberry32) rather than `Math.random` --
+seeded deterministically, so the same seed always produces the same
+sequence. That is what makes procedural visual variation (a room's shape,
+a scatter of instances, a jittered grid) reproducible in tests and
+replayable across a reload, instead of flaky.
+
 ### `function render-3d.orbitDrag(state: OrbitState, dx: number, dy: number, radiansPerPixel: number): OrbitState`
 
 Applies a drag, in pixels, to an orbit.
@@ -1035,6 +1120,29 @@ Recovers an orbit from a camera already pointed somewhere.
 
 Lets a trial keep the framing it was authored with instead of snapping to a
 default the moment orbiting is switched on.
+
+### `function render-3d.orbitPan(state: OrbitState, dx: number, dy: number, unitsPerPixel: number): OrbitState`
+
+Applies a drag, in pixels, as a lateral pan -- translating the orbited
+target across the view plane instead of rotating around it.
+
+Every reference in `docs/research/vtt-board-construction-mode-ui-references.md`
+and `docs/research/godview-builder-game-construction-ui-references.md` offers
+this as a gesture independent of orbit (RMB/MMB-drag or WASD), so it is a
+second pure function beside orbitDrag rather than a mode of it.
+
+Scaled by the current distance, like orbitZoom, so a pixel of drag
+moves the same apparent amount of world regardless of how far the camera has
+zoomed -- an unscaled pan would crawl when zoomed out and overshoot when
+zoomed in. The camera keeps its yaw, pitch, and distance; only `target`
+(and therefore the derived position, rigidly) moves.
+
+Convention: the world follows the cursor, like grabbing the ground and
+pulling it -- dragging right brings what was to the right into view, and
+dragging down (screen y grows downward, per orbitDrag's own
+convention) brings what was below into view. Achieving that means the
+*camera* moves opposite the drag along `right`, and with the drag along
+`up`.
 
 ### `function render-3d.orbitPosition(state: OrbitState): Vec3`
 

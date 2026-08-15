@@ -114,7 +114,7 @@ test("a drag only moves the camera between pointer down and up", () => {
   listeners.get("pointermove")({ pointerId: 1, clientX: 10, clientY: 10 });
   assert.equal(cameras.length, before);
 
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, preventDefault: () => {} });
   listeners.get("pointermove")({ pointerId: 1, clientX: 40, clientY: 0 });
   assert.equal(cameras.length, before + 1, "a drag moves the camera");
 
@@ -126,8 +126,8 @@ test("a drag only moves the camera between pointer down and up", () => {
 test("a second pointer does not fight the one already dragging", () => {
   const { element, listeners, view, cameras } = fakes();
   attachOrbit(element, view, orbitFromCamera({ x: 0, y: 0, z: 5 }, ORIGIN));
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0 });
-  listeners.get("pointerdown")({ pointerId: 2, clientX: 500, clientY: 500 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, preventDefault: () => {} });
+  listeners.get("pointerdown")({ pointerId: 2, clientX: 500, clientY: 500, preventDefault: () => {} });
   const before = cameras.length;
   listeners.get("pointermove")({ pointerId: 2, clientX: 600, clientY: 500 });
   assert.equal(cameras.length, before, "the second pointer must be ignored");
@@ -172,11 +172,11 @@ test("orbitButton restricts orbit-drag to one pointer button; other buttons do n
   attachOrbit(element, view, orbitFromCamera({ x: 0, y: 0, z: 5 }, ORIGIN), { orbitButton: 2 });
   const before = cameras.length;
 
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 0 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 0, preventDefault: () => {} });
   listeners.get("pointermove")({ pointerId: 1, clientX: 40, clientY: 0 });
   assert.equal(cameras.length, before, "left button must not orbit once orbitButton is set");
 
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 2 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 2, preventDefault: () => {} });
   listeners.get("pointermove")({ pointerId: 1, clientX: 40, clientY: 0 });
   assert.equal(cameras.length, before + 1, "the configured button must still orbit");
 });
@@ -186,7 +186,7 @@ test("panButton drives a lateral pan independent of orbitButton, on the same ele
   attachOrbit(element, view, orbitFromCamera({ x: 0, y: 0, z: 5 }, ORIGIN), { orbitButton: 2, panButton: 1 });
 
   const initialDistance = 5;
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 1 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 1, preventDefault: () => {} });
   listeners.get("pointermove")({ pointerId: 1, clientX: 40, clientY: 0 });
 
   const after = cameras[cameras.length - 1];
@@ -203,7 +203,7 @@ test("without orbitButton/panButton set, every button still orbits (unchanged de
   const { element, listeners, view, cameras } = fakes();
   attachOrbit(element, view, orbitFromCamera({ x: 0, y: 0, z: 5 }, ORIGIN));
   const before = cameras.length;
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 1 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 0, clientY: 0, button: 1, preventDefault: () => {} });
   listeners.get("pointermove")({ pointerId: 1, clientX: 40, clientY: 0 });
   assert.equal(cameras.length, before + 1, "legacy behaviour: any button orbits when unset");
 });
@@ -219,7 +219,7 @@ test("pivot: cursor re-targets to the resolved world point without moving the ca
   });
   const beforePosition = cameras[cameras.length - 1].position;
 
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 5, clientY: 5, button: 2 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 5, clientY: 5, button: 2, preventDefault: () => {} });
   const afterDown = cameras[cameras.length - 1];
   assert.ok(near(afterDown.position.x, beforePosition.x, 1e-9), "re-targeting must not jump the camera position");
   assert.ok(near(afterDown.position.y, beforePosition.y, 1e-9));
@@ -231,7 +231,7 @@ test("pivot: cursor with no resolvable point leaves the existing target alone", 
   const { element, listeners, view, cameras } = fakes();
   const initial = orbitFromCamera({ x: 0, y: 0, z: 5 }, ORIGIN);
   attachOrbit(element, view, initial, { orbitButton: 2, pivot: "cursor", resolvePivot: () => undefined });
-  listeners.get("pointerdown")({ pointerId: 1, clientX: 5, clientY: 5, button: 2 });
+  listeners.get("pointerdown")({ pointerId: 1, clientX: 5, clientY: 5, button: 2, preventDefault: () => {} });
   const after = cameras[cameras.length - 1];
   assert.ok(near(after.target.x, ORIGIN.x, 1e-9));
 });
