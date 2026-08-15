@@ -9,6 +9,30 @@ not pre-populate speculative ones.
 
 ## Open
 
+- **Task-worktree dependency symlinks break `next dev --turbo` module
+  resolution for some transitive packages.** Discovered 2026-08-14 on
+  `VTT-CONSTRUCTION-GRID` trying to browser-verify a change to
+  `apps/vtt`: `packages/ui/node_modules/rete-connection-plugin` (a real
+  transitive dependency `packages/ui/package.json` declares, needed by its
+  `canvas/graph` module which `apps/vtt`'s barrel import pulls in even
+  though `apps/vtt` itself only uses `createHeightfieldCanvas`) is a symlink
+  into the *main repo's* `node_modules/.ia-graft-task-deps/<taskId>/...`
+  cache, outside the task worktree entirely — Turbopack's dev server fails
+  to resolve it (`Module not found: Can't resolve 'rete-connection-plugin'`)
+  even though the file genuinely exists at that path and `tsc --noEmit`
+  resolves it fine. Setting `turbopack.root` explicitly made it *worse*
+  (`next/package.json` itself unresolvable — `next` is linked the same
+  symlinked way), confirming this is general to the linking scheme, not one
+  package. Root cause not fully isolated (unclear whether Turbopack refuses
+  to follow symlinks that resolve outside its inferred root, or something
+  narrower); not fixed here — reverted the `next.config.mjs` attempt rather
+  than guess further, and verified this task's actual change via
+  `tsc --noEmit` + `node --test` only, no live browser check. Worth
+  isolating properly since it silently blocks the project's own
+  "browser-verify before done" convention for any task-worktree touching
+  `apps/vtt` (or any other Next.js app) whose dependency graph reaches a
+  package with this symlink shape.
+
 - **No commit-message fix/amend path.** `task commit --input
   '{"taskId","message"}'` (`task-commands.ts`, `taskCommit`) always creates
   a new commit; there is no `--amend` or `task commit --fix-message`
