@@ -356,36 +356,37 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
 
   /**
-   * Moves an existing construction node to an absolute position through the
-   * real engine, then re-derives and re-uploads every chunk (see
-   * {@link AppTabletopRuntime.#uploadMapChunks}) and folds the affected
-   * surfaces plus the moved node's own new position into the cached
-   * `MapProjection`. Returns the engine's own `AffectedSurfaces` so a caller
-   * (e.g. an undo/redo stack) can see what else changed.
+   * Requires a ready runtime for a construction mutation, naming the caller's
+   * own action in the error so `moveNode`/`generateTerrainCell`/`generateWall`
+   * each keep a distinct, readable message despite sharing this guard.
    */
-  moveNode(
-    nodeId: ConstructionNodeId,
-    position: ConstructionPosition,
+  #requireReady(action: string): void {
+    if (this.#snapshot.status !== "ready") {
+      throw new Error(`${action} requires a ready tabletop runtime`);
+    }
+  }
+
+  /**
+   * The sequence every construction mutation shares once the engine call
+   * itself has already run: re-derive and re-upload every chunk (see
+   * {@link AppTabletopRuntime.#uploadMapChunks}), fold `surfaceKeys` into the
+   * cached `MapProjection`, let the caller fold in whatever node-position
+   * change its own mutation implies (a full re-scan for a newly-generated
+   * cell/wall, or a direct known-position fold for a move -- see
+   * {@link AppTabletopRuntime.#foldDiscoveredNodePositions}'s own doc comment
+   * for why those differ), then bump the snapshot revision and notify.
+   */
+  #applyConstructionMutation(
+    surfaceKeys: readonly ConstructionSurfaceKey[],
     origin: ChangeOrigin,
     causeId: string,
-  ): AffectedSurfaces {
-    if (this.#snapshot.status !== "ready") {
-      throw new Error("moving a node requires a ready tabletop runtime");
-    }
-
-    const affected = this.#construction.moveNode(nodeId, position);
+    foldNodePositions: (map: MapProjection) => MapProjection,
+  ): void {
     const meshes = this.#construction.getAllSurfaceMeshes();
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
 
-    let map = this.#foldAffectedSurfaces(this.#snapshot.map, affected.affectedSurfaceKeys, meshes);
-    const previousNode = map.nodePositions.get(nodeId);
-    map = applyMapProjectionDelta(map, {
-      type: "node-moved",
-      nodeRef: nodeId,
-      position,
-      revision: (previousNode?.revision ?? 0) + 1,
-    });
-    this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
+    let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
+    map = foldNodePositions(map);
 
     this.#snapshot = snapshot(
       this.#tableId,
@@ -395,6 +396,35 @@ export class AppTabletopRuntime implements TabletopRuntime {
       map,
     );
     this.#notify();
+  }
+
+  /**
+   * Moves an existing construction node to an absolute position through the
+   * real engine, then re-derives and re-uploads every chunk and folds the
+   * affected surfaces plus the moved node's own new position into the cached
+   * `MapProjection`. Returns the engine's own `AffectedSurfaces` so a caller
+   * (e.g. an undo/redo stack) can see what else changed.
+   */
+  moveNode(
+    nodeId: ConstructionNodeId,
+    position: ConstructionPosition,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): AffectedSurfaces {
+    this.#requireReady("moving a node");
+
+    const affected = this.#construction.moveNode(nodeId, position);
+    this.#applyConstructionMutation(affected.affectedSurfaceKeys, origin, causeId, (map) => {
+      const previousNode = map.nodePositions.get(nodeId);
+      const next = applyMapProjectionDelta(map, {
+        type: "node-moved",
+        nodeRef: nodeId,
+        position,
+        revision: (previousNode?.revision ?? 0) + 1,
+      });
+      this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
+      return next;
+    });
     return affected;
   }
 
@@ -409,53 +439,26 @@ export class AppTabletopRuntime implements TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionSurfaceKey {
-    if (this.#snapshot.status !== "ready") {
-      throw new Error("generating terrain requires a ready tabletop runtime");
-    }
+    this.#requireReady("generating terrain");
 
     const surfaceKey = this.#construction.generateTerrainCell(request);
-    const meshes = this.#construction.getAllSurfaceMeshes();
-    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
-
-    let map = this.#foldAffectedSurfaces(this.#snapshot.map, [surfaceKey], meshes);
-    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
-
-    this.#snapshot = snapshot(
-      this.#tableId,
-      this.#snapshot.status,
-      this.#snapshot.revision + 1,
-      this.#snapshot.tokens,
-      map,
+    this.#applyConstructionMutation([surfaceKey], origin, causeId, (map) =>
+      this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
-    this.#notify();
     return surfaceKey;
   }
 
   /** Generates one more wall (and its door) through the real engine and folds every piece into the running map. */
   generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[] {
-    if (this.#snapshot.status !== "ready") {
-      throw new Error("generating a wall requires a ready tabletop runtime");
-    }
+    this.#requireReady("generating a wall");
 
     const pieces = this.#construction.generateWall(request);
-    const meshes = this.#construction.getAllSurfaceMeshes();
-    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
-
-    let map = this.#foldAffectedSurfaces(
-      this.#snapshot.map,
+    this.#applyConstructionMutation(
       pieces.map((piece) => piece.surfaceKey),
-      meshes,
+      origin,
+      causeId,
+      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
-    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
-
-    this.#snapshot = snapshot(
-      this.#tableId,
-      this.#snapshot.status,
-      this.#snapshot.revision + 1,
-      this.#snapshot.tokens,
-      map,
-    );
-    this.#notify();
     return pieces;
   }
 
