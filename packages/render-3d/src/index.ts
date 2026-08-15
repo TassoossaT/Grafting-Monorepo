@@ -91,6 +91,8 @@ export { createInvalidationTracker } from "./invalidation/create-invalidation.js
 
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export { heightfieldVisual } from "./visual/heightfield-visual.js";
+export type { GridParams } from "./visual/grid-visual.js";
+export { gridVisual } from "./visual/grid-visual.js";
 export { mergeMeshChunks } from "./visual/merge-mesh-chunks.js";
 
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
