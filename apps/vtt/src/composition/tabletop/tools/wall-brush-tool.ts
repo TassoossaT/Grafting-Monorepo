@@ -161,8 +161,15 @@ function segmentIntersection2D(
  * exclude.
  */
 const CROSSING_ENDPOINT_GUARD = 0.05;
-/** `t` (along the new wall) must fall strictly within its drawn span -- this only rules out a numerically-degenerate zero-length remainder, not "too close to an end." */
-const CROSSING_T_EPSILON = 1e-4;
+/**
+ * `t` (along the new wall) must fall within its actual drawn span, not on
+ * the line's extension past either end -- a tiny slop for float precision,
+ * not a "too close to an end" exclusion. `t` at (or right next to) 0 is the
+ * legitimate, intended case of starting a new wall's drag *from* a point on
+ * an existing wall's middle, not something to reject: `onPointerUp`'s own
+ * branching already treats a near-0/near-1 `t` as a one-segment T-junction.
+ */
+const CROSSING_T_SLOP = 1e-6;
 
 interface WallCrossing {
   readonly originalKey: ConstructionSurfaceKey;
@@ -209,7 +216,7 @@ function findNearestWallCrossing(
       { x: postB.x, z: postB.z },
     );
     if (hit === undefined) continue;
-    if (hit.t <= CROSSING_T_EPSILON || hit.t >= 1 - CROSSING_T_EPSILON) continue;
+    if (hit.t < -CROSSING_T_SLOP || hit.t > 1 + CROSSING_T_SLOP) continue;
     if (hit.u <= CROSSING_ENDPOINT_GUARD || hit.u >= 1 - CROSSING_ENDPOINT_GUARD) continue;
     if (best === undefined || hit.t < best.t) {
       best = { originalKey: surface.orderedNodeRefs, surfaceType: surface.type, postA, postB, u: hit.u, t: hit.t };
