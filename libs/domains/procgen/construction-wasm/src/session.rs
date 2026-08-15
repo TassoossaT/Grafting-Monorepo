@@ -399,6 +399,33 @@ mod tests {
         assert_eq!(meshes.len(), 4, "1 terrain + 3 wall/door pieces, every one triangulable");
     }
 
+    /// The TS adapter's `JSON.stringify` drops any key whose value is
+    /// `undefined` -- a no-door wall-brush call therefore sends a request
+    /// with the `door` key *absent*, not `null`. No prior test exercised
+    /// that exact wire shape (every other test spells out `"door": {...}`
+    /// or uses the Rust struct literal directly, which is a different
+    /// boundary). Reported while testing `VTT-WALL-CORNER-WELD`: a wall
+    /// drawn with the door UI removed still produced more than 4 nodes.
+    #[test]
+    fn a_wall_request_with_no_door_key_at_all_still_produces_exactly_four_nodes() {
+        let mut session = ConstructionSession::new();
+        let request = json!({
+            "wall": {"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "height": 3.0},
+            "wallType": "wall",
+            "doorType": "wall",
+            "nodeIds": all_role_node_ids_json(),
+            "edgeIds": all_role_edge_ids_json(),
+        })
+        .to_string();
+
+        let response = session.generate_and_apply_wall_json(&request).expect("wall generates");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(parsed["pieces"].as_array().unwrap().len(), 1);
+
+        let snapshot: serde_json::Value = serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
+        assert_eq!(snapshot["nodes"].as_array().unwrap().len(), 4, "no-door wall must be exactly 4 nodes: {snapshot}");
+    }
+
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();
