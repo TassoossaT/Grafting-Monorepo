@@ -9,6 +9,21 @@ not pre-populate speculative ones.
 
 ## Open
 
+- **No CLI-native way to add a new cross-package workspace dependency.**
+  `task deps --install` (`taskDependencies` → `GitClient.prepareTaskDependencies`
+  → `materializeTaskDependencies`, `git-client.ts`) always runs `pnpm install
+  --frozen-lockfile`, unconditionally. Discovered 2026-08-14 on
+  `VTT-TERRAIN-SHAPE-PICKER`: adding `"@grafting/ui": "workspace:*"` to
+  `apps/vtt/package.json` (a real, wanted new dependency edge, not a probe)
+  left `pnpm-lock.yaml` out of date, and `task deps --install` failed with
+  `ERR_PNPM_OUTDATED_LOCKFILE` instead of updating it — there is no
+  `--no-frozen-lockfile` escape hatch, and `agent-task-guard.mjs` separately
+  blocks calling `pnpm install` directly. A fix needs either: (a) `task deps
+  --install --update-lockfile` (or similar) that runs pnpm without
+  `--frozen-lockfile` when the task's own `package.json` changed, or (b) a
+  dedicated `task deps --add <pkg>@<range> --workspace <name>` that edits
+  `package.json` and regenerates the lockfile together in one guarded step.
+
 - **No commit-message fix/amend path.** `task commit --input
   '{"taskId","message"}'` (`task-commands.ts`, `taskCommit`) always creates
   a new commit; there is no `--amend` or `task commit --fix-message`
