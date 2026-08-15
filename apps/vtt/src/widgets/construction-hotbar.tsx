@@ -1,123 +1,58 @@
 "use client";
 
-import { useState } from "react";
-
-import { Button, FloatButton, FloatButtonGroup, Popover, TerrainShapePicker, type CornerHeights } from "@/ui";
-
-import type { SurfaceStyle } from "./surface-style.ts";
+import { FloatButtonTree, type FloatButtonTreeLeaf } from "@/ui";
+import type { ConstructionToolId } from "@/features/edit-construction";
 
 export interface ConstructionHotbarProps {
   readonly ready: boolean;
-  readonly activeMaterial: SurfaceStyle;
-  readonly onGenerateWall: (material?: "wall-white" | "wall-gray") => void;
-  readonly terrainPickerOpen: boolean;
-  readonly onToggleTerrainPicker: () => void;
-  readonly onCloseTerrainPicker: () => void;
-  readonly terrainShape: CornerHeights;
-  readonly onTerrainShapeChange: (shape: CornerHeights) => void;
-  readonly onGenerateTerrainCell: () => void;
+  readonly activeTool: ConstructionToolId;
+  readonly onToolChange: (tool: ConstructionToolId) => void;
 }
 
+const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
+  { id: "terrain-brush", icon: "T", tooltip: "Pincel de Terreno (tecla T)" },
+  { id: "wall-brush", icon: "W", tooltip: "Pincel de Parede (arraste para desenhar, tecla P)" },
+  { id: "room-stamp", icon: "R", tooltip: "Carimbo de Sala (clique para gerar, tecla R)" },
+  { id: "irregular-terrain-stamp", icon: "◆", tooltip: "Pincel de Terreno Irregular (clique ou arraste, tecla I)" },
+];
+
 /**
- * The bottom hotbar: quick/procedural construction actions, edit-mode only.
- * Sala/Branca/Cinza are direct actions collapsed behind one square,
- * joined-block `FloatButtonGroup` trigger -- `open` is controlled here (per
- * Ant Design's own "controlled mode" contract: `open` used together with
- * `trigger`) purely so each item's own `onClick` can also close the group
- * back to its trigger, which Ant Design does not do on its own. Terreno
- * stays a standalone `FloatButton` outside that group, since its behavior
- * (opens a shape picker) is a panel toggle, not a same-shape action
- * alongside the others -- it keeps the same square outline for visual
- * consistency with the group beside it, without being part of its joined
- * block.
+ * The bottom hotbar: selects the active construction tool only -- it never
+ * generates geometry itself. A tool's own parameters live in
+ * `ConstructionToolParamsPanel` (the right drawer); what a selected tool
+ * does with the pointer lives in `composition/tabletop/tools/*.ts` via
+ * `useConstructionPointer`. One root {@link FloatButtonTree} branch
+ * ("Construir") expands into one leaf per tool, replacing the former
+ * direct-action buttons.
  */
 export function ConstructionHotbar(props: ConstructionHotbarProps) {
-  const [actionsOpen, setActionsOpen] = useState(false);
-
-  const generateWall = (material?: "wall-white" | "wall-gray") => {
-    props.onGenerateWall(material);
-    setActionsOpen(false);
-  };
+  const leaves: FloatButtonTreeLeaf[] = CONSTRUCTION_TOOLS.map((tool) => ({
+    key: tool.id,
+    icon: tool.icon,
+    tooltip: tool.tooltip,
+    tone: props.activeTool === tool.id ? "primary" : "default",
+    disabled: !props.ready,
+    onClick: () => props.onToolChange(tool.id),
+  }));
 
   return (
-    <>
-      <Popover
-        open={props.terrainPickerOpen}
-        onClose={props.onCloseTerrainPicker}
-        title="Moldar Terreno"
-        placement="top"
-        anchor={
-          <FloatButton
-            icon="T"
-            tooltip="Moldar e Adicionar Célula de Terreno (tecla T gera direto)"
-            tone={props.terrainPickerOpen ? "primary" : "default"}
-            shape="square"
-            disabled={!props.ready}
-            onClick={props.onToggleTerrainPicker}
-            style={{
-              position: "absolute",
-              left: "calc(50% - 3rem)",
-              bottom: "0.75rem",
-              zIndex: 15,
-              insetInlineEnd: "auto",
-            }}
-          />
-        }
-      >
-        <div className="gm-terrain-popover-body">
-          <TerrainShapePicker cornerHeights={props.terrainShape} onChange={props.onTerrainShapeChange} />
-          <div className="gm-terrain-popover-actions">
-            <Button label="Nivelar" onClick={() => props.onTerrainShapeChange([1, 1, 1, 1])} />
-            <Button
-              label="Gerar Terreno"
-              tone="accent"
-              onClick={() => {
-                props.onGenerateTerrainCell();
-                props.onCloseTerrainPicker();
-              }}
-            />
-          </div>
-        </div>
-      </Popover>
-
-      <FloatButtonGroup
-        icon="W"
-        placement="right"
-        shape="square"
-        trigger="hover"
-        open={actionsOpen}
-        onOpenChange={setActionsOpen}
-        style={{
-          position: "absolute",
-          left: "calc(50% + 0.5rem)",
-          bottom: "0.75rem",
-          zIndex: 15,
-          insetInlineEnd: "auto",
-        }}
-        items={[
-          {
-            key: "room",
-            icon: "W",
-            tooltip: "Adicionar Sala (4 paredes com porta, tecla W)",
-            disabled: !props.ready,
-            onClick: () => generateWall(),
-          },
-          {
-            key: "wall-white",
-            icon: "▢",
-            tooltip: "Preset Masmorra Branca (gera uma sala)",
-            disabled: !props.ready,
-            onClick: () => generateWall("wall-white"),
-          },
-          {
-            key: "wall-gray",
-            icon: "▨",
-            tooltip: "Preset Masmorra Cinza (gera uma sala)",
-            disabled: !props.ready,
-            onClick: () => generateWall("wall-gray"),
-          },
-        ]}
-      />
-    </>
+    <FloatButtonTree
+      shape="square"
+      placement="top"
+      style={{
+        position: "absolute",
+        left: "50%",
+        bottom: "0.75rem",
+        transform: "translateX(-50%)",
+        zIndex: 15,
+      }}
+      root={{
+        key: "construction-tools",
+        icon: "C",
+        tooltip: "Construir",
+        tone: props.activeTool === "navigate" || props.activeTool === "move-node" ? "default" : "primary",
+        children: leaves,
+      }}
+    />
   );
 }

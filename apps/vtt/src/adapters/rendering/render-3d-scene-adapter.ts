@@ -16,6 +16,7 @@ import type {
   CameraControlOptions,
   ChangeOrigin,
   ConfirmedRenderChange,
+  RenderPreviewDescriptor,
   RenderToken,
   RenderViewId,
   ScenePickResult,
@@ -23,7 +24,21 @@ import type {
   SceneRenderPort,
 } from "@/ports";
 
-import { CONSTRUCTION_GRID_LAYER_ID, constructionGridSceneItems } from "./construction-grid-scene-item.ts";
+import {
+  CONSTRUCTION_PREVIEW_ITEM_ID,
+  CONSTRUCTION_PREVIEW_LAYER_ID,
+  CONSTRUCTION_PREVIEW_VISUAL_KIND,
+  constructionPreviewSceneItem,
+  type ConstructionPreviewVisualParams,
+} from "./construction-preview-scene-item.ts";
+import {
+  CONSTRUCTION_GRID_EXTENT,
+  CONSTRUCTION_GRID_LAYER_ID,
+  CONSTRUCTION_GROUND_LAYER_ID,
+  CONSTRUCTION_GROUND_VISUAL_KIND,
+  constructionGridSceneItems,
+  constructionGroundSceneItem,
+} from "./construction-grid-scene-item.ts";
 import {
   MAP_LAYER_ID,
   MAP_SURFACE_VISUAL_KIND,
@@ -74,6 +89,9 @@ const MAP_LIGHTS: readonly LightDescriptor[] = [
   { light: "ambient", color: 0xffffff, intensity: 0.55 },
   { light: "directional", color: 0xffffff, intensity: 0.85, direction: { x: 0.4, y: 1, z: 0.3 } },
 ];
+
+/** Two triangles over a preview's 4 corner points -- the only topology a `"quad"` preview ever needs. */
+const PREVIEW_QUAD_INDICES = Uint32Array.from([0, 1, 2, 0, 2, 3]);
 
 function engineOrigin(origin: ChangeOrigin): EngineChangeOrigin {
   switch (origin) {
@@ -140,21 +158,62 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
     });
     registry.register(gridVisual);
+    registry.register<Record<string, never>>({
+      kind: CONSTRUCTION_GROUND_VISUAL_KIND,
+      describe: () => ({
+        geometry: { shape: "plane", width: CONSTRUCTION_GRID_EXTENT * 2, depth: CONSTRUCTION_GRID_EXTENT * 2 },
+        // Fully transparent -- this plane exists only to give `pick()`
+        // something to hit over empty ground, never to be seen. The visible
+        // grid lines (`gridVisual`, above) are the only thing drawn there.
+        material: { surface: "unlit", color: 0x000000, opacity: 0 },
+      }),
+      equals: () => true,
+    });
+    registry.register<ConstructionPreviewVisualParams>({
+      kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
+      describe: (params) =>
+        params.filled
+          ? {
+              geometry: { shape: "mesh", data: { positions: params.positions, indices: PREVIEW_QUAD_INDICES } },
+              material: { surface: "unlit", color: params.color, opacity: params.opacity, doubleSided: true },
+              pickable: false,
+            }
+          : {
+              geometry: { shape: "segments", positions: params.positions },
+              material: { surface: "line", color: params.color, opacity: params.opacity },
+              pickable: false,
+            },
+      equals: (left, right) =>
+        left.positions === right.positions &&
+        left.color === right.color &&
+        left.opacity === right.opacity &&
+        left.filled === right.filled,
+    });
 
     const engine = createEngine({ registry, autoplay: true, lights: MAP_LIGHTS });
-    // The board grid draws first (order 5), below map geometry below node
-    // handles below tokens (10 / 15 / 20), so nothing occludes the thing a
-    // pointer is more likely trying to hit -- it is also never pickable, so
-    // it can never intercept a click meant for the geometry above it.
+    // The invisible ground plane draws first of all (order 0) -- it is
+    // deliberately pickable (default), unlike the grid lines above it, so
+    // `pick()` resolves a real point over empty ground and a construction
+    // tool can start generating geometry there, not only extend geometry
+    // that already exists. The board grid draws next (order 5), below map
+    // geometry below node handles below tokens (10 / 15 / 20), so nothing
+    // occludes the thing a pointer is more likely trying to hit -- the grid
+    // itself is never pickable, so it can never intercept a click meant for
+    // the geometry (or the ground plane) beneath it. The active tool preview
+    // draws last (25), above tokens, so a ghost is never hidden behind real
+    // geometry -- also never pickable, for the same reason the grid isn't.
+    engine.scene.defineLayer({ id: CONSTRUCTION_GROUND_LAYER_ID, order: 0 }, "engine");
     engine.scene.defineLayer({ id: CONSTRUCTION_GRID_LAYER_ID, order: 5, pickable: false }, "engine");
     engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
     engine.scene.defineLayer({ id: NODE_HANDLE_LAYER_ID, order: 15 }, "engine");
     engine.scene.defineLayer({ id: TOKEN_LAYER_ID, order: 20 }, "engine");
+    engine.scene.defineLayer({ id: CONSTRUCTION_PREVIEW_LAYER_ID, order: 25, pickable: false }, "engine");
     engine.start();
     // The board is present from the first frame, independent of any
     // generated construction geometry -- matching the persistent build-grid
     // every reference surveyed in `vtt-board-construction-mode-ui-references.md`
     // renders before anything is built on it.
+    engine.scene.put(constructionGroundSceneItem(), "engine");
     for (const item of constructionGridSceneItems()) engine.scene.put(item, "engine");
 
     this.#runtimeGeneration = runtimeGeneration;
@@ -176,7 +235,14 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         near: INITIAL_VIEW_CAMERA.near,
         far: INITIAL_VIEW_CAMERA.far,
       },
-      layers: [CONSTRUCTION_GRID_LAYER_ID, MAP_LAYER_ID, NODE_HANDLE_LAYER_ID, TOKEN_LAYER_ID],
+      layers: [
+        CONSTRUCTION_GROUND_LAYER_ID,
+        CONSTRUCTION_GRID_LAYER_ID,
+        MAP_LAYER_ID,
+        NODE_HANDLE_LAYER_ID,
+        TOKEN_LAYER_ID,
+        CONSTRUCTION_PREVIEW_LAYER_ID,
+      ],
       background: 0x07100f,
     });
 
@@ -303,6 +369,20 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         ? data.nodeId
         : undefined;
     return { point: result.point, nodeId };
+  }
+
+  showPreview(descriptor: RenderPreviewDescriptor): void {
+    const engine = this.#requireEngine();
+    // `put` on the fixed preview id always replaces whatever was there --
+    // there is only ever one active tool preview, never a growing set.
+    engine.scene.put(constructionPreviewSceneItem(descriptor), "engine");
+  }
+
+  clearPreview(): void {
+    const engine = this.#requireEngine();
+    // Safe no-op when nothing is currently shown (`scene.remove` on an
+    // unknown id just returns `false`).
+    engine.scene.remove(CONSTRUCTION_PREVIEW_ITEM_ID, "engine");
   }
 
   attachCameraControls(

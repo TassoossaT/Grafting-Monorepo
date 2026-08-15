@@ -118,6 +118,18 @@ export interface ScenePickResult {
   readonly nodeId?: string;
 }
 
+/**
+ * A construction tool's not-yet-committed ghost, as plain geometry -- mirrors
+ * `features/edit-construction`'s own `PreviewDescriptor` one-for-one, but
+ * this port cannot import that layer (`ports` sits below `features` in
+ * `VTT-ARCH-002`'s allowed-import graph), so the shape is repeated here
+ * rather than shared. `"segments"` draws an open polyline; `"quad"` draws a
+ * filled footprint as two triangles over 4 corner points.
+ */
+export type RenderPreviewDescriptor =
+  | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
+  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };
+
 export interface SceneRenderMetrics {
   readonly rendererCreates: number;
   readonly rendererDisposes: number;
@@ -165,6 +177,15 @@ export interface SceneRenderPort {
   setFloorClipHeight(height: number | undefined): void;
   /** Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undefined` if it hit nothing. */
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
+  /**
+   * Shows (or replaces) the single active construction-tool preview. Never
+   * touches the construction session -- purely visual, so a tool can call
+   * this on every pointer move without paying for a real generate/mutate
+   * request until the tool actually commits.
+   */
+  showPreview(descriptor: RenderPreviewDescriptor): void;
+  /** Hides the active preview, if any. A no-op when nothing is shown. */
+  clearPreview(): void;
   /**
    * Makes `element`'s drag/scroll gestures drive `viewId`'s camera, starting
    * from the framing that view was created with. Call once per view and hold

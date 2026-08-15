@@ -1,8 +1,10 @@
 "use client";
 
 import { FloatButtonGroup } from "@/ui";
+import type { ConstructionToolId } from "@/features/edit-construction";
 
-export type EditTool = "navigate" | "move-node";
+/** `tool-rail.tsx`'s own two tools are a subset of the shared `ConstructionToolId` vocabulary -- kept as an alias (not a separate type) so both this rail and `ConstructionHotbar` write to the same piece of state. */
+export type EditTool = ConstructionToolId;
 
 export interface ToolRailProps {
   readonly tool: EditTool;
@@ -11,12 +13,17 @@ export interface ToolRailProps {
   readonly canRedo: boolean;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
+  readonly snapToGrid: boolean;
+  readonly onSnapToGridChange: (snap: boolean) => void;
 }
 
 /**
- * The left rail: navigate/move-node tool selection plus undo/redo, always
- * visible as a plain button column (no separate open/close trigger),
- * edit-mode only.
+ * The left rail: navigate/move-node tool selection, the grid-snap toggle,
+ * and undo/redo -- always visible as a plain button column (no separate
+ * open/close trigger), edit-mode only. Grid snap sits here (not in the
+ * construction hotbar) because it is not itself a tool -- it modifies every
+ * construction tool's resolved point the same way, via
+ * `use-construction-pointer.ts`.
  */
 export function ToolRail(props: ToolRailProps) {
   return (
@@ -43,6 +50,13 @@ export function ToolRail(props: ToolRailProps) {
           tooltip: "Mover Node do Grafo (tecla M)",
           tone: props.tool === "move-node" ? "primary" : "default",
           onClick: () => props.onToolChange("move-node"),
+        },
+        {
+          key: "snap-to-grid",
+          icon: "🧲",
+          tooltip: props.snapToGrid ? "Ímã do Grid: Ativado (tecla G)" : "Ímã do Grid: Desativado (tecla G)",
+          tone: props.snapToGrid ? "primary" : "default",
+          onClick: () => props.onSnapToGridChange(!props.snapToGrid),
         },
         {
           key: "undo",

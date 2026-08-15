@@ -27,3 +27,11 @@ export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, R
 // `navigate-camera` is a `features/` verb, and `TabletopEntry` must not
 // reach past `composition` into `features` itself.
 export { attachCameraNavigation } from "../../features/navigate-camera/index.ts";
+
+// Same reason again: the tool vocabulary is a `features/` type, `TabletopEntry`
+// reaches it only through this barrel.
+export { DEFAULT_TOOL_PARAMS } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+
+export { useConstructionPointer } from "./use-construction-pointer.ts";
+export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";

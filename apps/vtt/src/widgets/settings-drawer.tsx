@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-import { Card, SelectableChip, SlidingPanel } from "@/ui";
+import { Card, SlidingPanel } from "@/ui";
+import type { ConstructionToolId, ToolParamsByTool } from "@/features/edit-construction";
 
-import type { SurfaceStyle } from "./surface-style.ts";
+import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
 export interface SelectedNodeInfo {
   readonly id: string;
@@ -12,25 +13,20 @@ export interface SelectedNodeInfo {
   readonly point: { readonly x: number; readonly y: number; readonly z: number };
 }
 
-const MATERIAL_CHOICES: readonly { readonly value: SurfaceStyle; readonly label: string; readonly swatchColor: string }[] = [
-  { value: "wall-white", label: "Bloco Branco", swatchColor: "#e2e8f0" },
-  { value: "wall-gray", label: "Bloco Cinza", swatchColor: "#64748b" },
-  { value: "terrain", label: "Grid Terreno", swatchColor: "#334155" },
-  { value: "terrain-grass", label: "Terreno Grama", swatchColor: "#4a7a4a" },
-];
-
 const PANEL_WIDTH = 280;
 
 export interface SettingsDrawerProps {
   readonly selectedNodeInfo: SelectedNodeInfo | null;
-  readonly activeMaterial: SurfaceStyle;
-  readonly onSelectMaterial: (material: SurfaceStyle) => void;
+  readonly activeTool: ConstructionToolId;
+  readonly toolParams: ToolParamsByTool;
+  readonly onToolParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
   readonly tokenCount: number;
 }
 
 /**
- * The right-side settings/inspector drawer: selection inspector, material
- * picker, and scene metrics -- floats over the map, collapsed by default.
+ * The right-side settings/inspector drawer: selection inspector, the active
+ * construction tool's parameters, and scene metrics -- floats over the map,
+ * collapsed by default.
  * Built on the shared `SlidingPanel` molecule, which owns the slide
  * animation and the fused open/close handle; this widget only supplies the
  * product-specific content.
@@ -39,7 +35,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <SlidingPanel open={open} onOpenChange={setOpen} edge="right" width={PANEL_WIDTH} title="Configurações">
+    <SlidingPanel open={open} onOpenChange={setOpen} edge="right" width={PANEL_WIDTH}>
+      <span className="gm-panel-card-title" style={{ padding: "0.75rem 1rem 0" }}>
+        Configurações
+      </span>
+
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Inspector de Seleção</span>
         {props.selectedNodeInfo !== null ? (
@@ -69,20 +69,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         )}
       </Card>
 
-      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
-        <span className="gm-panel-card-title">Estilo de Bloco & Material</span>
-        <div className="gm-material-grid">
-          {MATERIAL_CHOICES.map((choice) => (
-            <SelectableChip
-              key={choice.value}
-              label={choice.label}
-              swatchColor={choice.swatchColor}
-              selected={props.activeMaterial === choice.value}
-              onSelect={() => props.onSelectMaterial(choice.value)}
-            />
-          ))}
-        </div>
-      </Card>
+      <ConstructionToolParamsPanel
+        activeTool={props.activeTool}
+        params={props.toolParams}
+        onParamsChange={props.onToolParamsChange}
+      />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Métricas da Cena</span>

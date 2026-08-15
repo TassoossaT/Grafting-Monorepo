@@ -11,12 +11,14 @@ export type {
   RenderMapChunk,
   RenderMeshData,
   RenderNodeHandle,
+  RenderPreviewDescriptor,
   RenderToken,
   RenderViewId,
   ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
 } from "./scene-render-port.ts";
+export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
   ConstructionEdgeId,

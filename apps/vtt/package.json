@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@grafting/procgen-construction-wasm": "workspace:*",
+    "@grafting/procgen-generation-wasm": "workspace:*",
     "@grafting/render-3d": "workspace:*",
     "@grafting/ui": "workspace:*",
     "next": "^16.2.12",

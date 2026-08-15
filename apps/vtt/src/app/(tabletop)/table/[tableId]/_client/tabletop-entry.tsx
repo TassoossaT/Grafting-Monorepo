@@ -1,23 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 
 import {
   attachCameraNavigation,
-  buildGenerateRoomOperations,
-  buildGenerateTerrainCellOperation,
   createMoveNodeHistoryStack,
   createTabletopRuntime,
-  layoutNextRoomOrigin,
-  roomVariantForIndex,
-  type ConstructionPosition,
+  DEFAULT_TOOL_PARAMS,
+  useConstructionPointer,
+  type ConstructionToolId,
   type MoveNodeHistoryStack,
   type RenderViewId,
   type TabletopRuntime,
   type TabletopRuntimeStatus,
+  type ToolParamsByTool,
 } from "@/composition/tabletop";
-import { StatusBadge, type CornerHeights } from "@/ui";
+import { StatusBadge } from "@/ui";
 import {
   ConstructionHotbar,
   SettingsDrawer,
@@ -25,23 +23,10 @@ import {
   useKeyboardShortcuts,
   type EditTool,
   type SelectedNodeInfo,
-  type SurfaceStyle,
 } from "@/widgets";
 
 export interface TabletopEntryProps {
   readonly tableId: string;
-}
-
-interface DragState {
-  readonly nodeId: string;
-  readonly pointerId: number;
-  readonly from: ConstructionPosition;
-  last: ConstructionPosition;
-}
-
-function pointerOffset(event: ReactPointerEvent<HTMLDivElement>): { x: number; y: number } {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
 
 /** Maps this app's own runtime lifecycle onto the generic `UiStatus` vocabulary `StatusBadge` expects. */
@@ -58,6 +43,15 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
   }
 }
 
+const TOOL_LABEL: Record<ConstructionToolId, string> = {
+  navigate: "Navegação da Câmera",
+  "move-node": "Arrastar Node 3D",
+  "terrain-brush": "Pincel de Terreno",
+  "wall-brush": "Pincel de Parede",
+  "room-stamp": "Carimbo de Sala",
+  "irregular-terrain-stamp": "Terreno Irregular",
+};
+
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<TabletopRuntime | null>(null);
@@ -71,16 +65,13 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const history = historyRef.current;
 
   const viewIdRef = useRef<RenderViewId | undefined>(undefined);
-  const dragRef = useRef<DragState | null>(null);
-  const generateCountRef = useRef(0);
+  const [, forceHistoryUpdate] = useState(0);
 
   const [tool, setTool] = useState<EditTool>("navigate");
-  const [activeMaterial, setActiveMaterial] = useState<SurfaceStyle>("wall-white");
+  const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
-  const [terrainShape, setTerrainShape] = useState<CornerHeights>([1, 1, 1, 1]);
-  const [terrainPickerOpen, setTerrainPickerOpen] = useState(false);
-  const [, forceHistoryUpdate] = useState(0);
 
   const historyState = history.getState();
   const current = useSyncExternalStore(
@@ -108,49 +99,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     };
   }, [runtime]);
 
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      // The right and middle buttons are reserved for camera orbit/pan
-      // (see features/navigate-camera) -- only the left button drives tools.
-      if (event.button !== 0 || tool !== "move-node" || viewIdRef.current === undefined) return;
-      const { x, y } = pointerOffset(event);
-      const hit = runtime.pick(viewIdRef.current, x, y);
-      if (hit?.nodeId === undefined) return;
-
-      setSelectedNodeInfo({ id: hit.nodeId, point: hit.point });
-      event.currentTarget.setPointerCapture(event.pointerId);
-      dragRef.current = { nodeId: hit.nodeId, pointerId: event.pointerId, from: hit.point, last: hit.point };
-    },
-    [runtime, tool],
-  );
-
-  const handlePointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = dragRef.current;
-      if (drag === null || drag.pointerId !== event.pointerId || viewIdRef.current === undefined) return;
-      const { x, y } = pointerOffset(event);
-      const hit = runtime.pick(viewIdRef.current, x, y);
-      if (hit === undefined) return;
-
-      drag.last = hit.point;
-      setSelectedNodeInfo({ id: drag.nodeId, point: hit.point });
-      runtime.moveNode(drag.nodeId, hit.point, "local", `drag:${drag.nodeId}`);
-    },
-    [runtime],
-  );
-
-  const endDrag = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const drag = dragRef.current;
-      if (drag === null || drag.pointerId !== event.pointerId) return;
-      history.record({ nodeId: drag.nodeId, from: drag.from, to: drag.last });
-      dragRef.current = null;
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      forceHistoryUpdate((value) => value + 1);
-    },
-    [history],
-  );
-
   const handleUndo = useCallback(() => {
     const entry = history.undo();
     if (entry === undefined) return;
@@ -167,41 +115,23 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     forceHistoryUpdate((value) => value + 1);
   }, [history, runtime]);
 
-  const handleGenerateTerrainCell = useCallback(() => {
-    generateCountRef.current += 1;
-    const cell = (generateCountRef.current % 3) + 1;
-    const operation = buildGenerateTerrainCellOperation(
-      tableId,
-      `edit-${generateCountRef.current}`,
-      { operationId: `${tableId}:edit:terrain-cell:${generateCountRef.current}`, tableId, initiatedBy: "local" },
-      cell,
-      { name: "custom", cornerHeights: terrainShape },
-      activeMaterial === "terrain-grass" ? "terrain-grass" : "terrain",
-    );
-    runtime.generateTerrainCell(operation.payload, "local", operation.operationId);
-  }, [runtime, tableId, activeMaterial, terrainShape]);
-
-  const handleGenerateWall = useCallback(
-    (materialOverride?: "wall-white" | "wall-gray") => {
-      generateCountRef.current += 1;
-      const index = generateCountRef.current;
-      const wallKind = materialOverride ?? (activeMaterial === "wall-gray" ? "wall-gray" : "wall-white");
-      if (materialOverride !== undefined) setActiveMaterial(materialOverride);
-      const operations = buildGenerateRoomOperations(
-        tableId,
-        `edit-${index}`,
-        { operationId: `${tableId}:edit:room:${index}`, tableId, initiatedBy: "local" },
-        layoutNextRoomOrigin(index),
-        roomVariantForIndex(index),
-        wallKind,
-        wallKind,
-      );
-      for (const operation of operations) {
-        runtime.generateWall(operation.payload, "local", operation.operationId);
-      }
+  const handleToolParamsChange = useCallback(
+    <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => {
+      setToolParams((previous) => ({ ...previous, [toolId]: next }));
     },
-    [runtime, tableId, activeMaterial],
+    [],
   );
+
+  const pointerHandlers = useConstructionPointer({
+    activeTool: tool,
+    toolParams,
+    runtime,
+    history,
+    tableId,
+    viewId: viewIdRef.current,
+    snapToGrid,
+    onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
+  });
 
   useKeyboardShortcuts({
     canUndo: historyState.canUndo,
@@ -210,8 +140,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     onRedo: handleRedo,
     onToolChange: setTool,
     ready: current.status === "ready",
-    onGenerateWall: () => handleGenerateWall(),
-    onGenerateTerrainCell: handleGenerateTerrainCell,
+    snapToGrid,
+    onSnapToGridChange: setSnapToGrid,
   });
 
   return (
@@ -253,16 +183,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         <div
           className="gm-viewport-canvas"
           ref={viewportRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          onPointerDown={pointerHandlers.onPointerDown}
+          onPointerMove={pointerHandlers.onPointerMove}
+          onPointerUp={pointerHandlers.onPointerUp}
+          onPointerCancel={pointerHandlers.onPointerCancel}
+          onClick={pointerHandlers.onClick}
           onContextMenu={(event) => event.preventDefault()}
         />
 
         <div className="gm-stage-overlay-info">
           <strong>{current.tokens.byId.size} Token Activo</strong>
-          <span>| Modo: {tool === "move-node" ? "Arrastar Node 3D" : "Navegação da Câmera"}</span>
+          <span>| Modo: {TOOL_LABEL[tool]}</span>
         </div>
 
           <ToolRail
@@ -272,26 +203,19 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             canRedo={historyState.canRedo}
             onUndo={handleUndo}
             onRedo={handleRedo}
+            snapToGrid={snapToGrid}
+            onSnapToGridChange={setSnapToGrid}
           />
 
-        <ConstructionHotbar
-          ready={current.status === "ready"}
-          activeMaterial={activeMaterial}
-          onGenerateWall={handleGenerateWall}
-          terrainPickerOpen={terrainPickerOpen}
-          onToggleTerrainPicker={() => setTerrainPickerOpen((open) => !open)}
-          onCloseTerrainPicker={() => setTerrainPickerOpen(false)}
-          terrainShape={terrainShape}
-          onTerrainShapeChange={setTerrainShape}
-          onGenerateTerrainCell={handleGenerateTerrainCell}
-        />
+        <ConstructionHotbar ready={current.status === "ready"} activeTool={tool} onToolChange={setTool} />
 
         {/* Right drawer -- settings & inspector, collapsed by default. Owns
             its own open state and handle (see `SlidingPanel`). */}
         <SettingsDrawer
           selectedNodeInfo={selectedNodeInfo}
-          activeMaterial={activeMaterial}
-          onSelectMaterial={setActiveMaterial}
+          activeTool={tool}
+          toolParams={toolParams}
+          onToolParamsChange={handleToolParamsChange}
           tokenCount={current.tokens.byId.size}
         />
       </section>
@@ -304,8 +228,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
         <div>
           <span>
-            <strong>M</strong> Mover · <strong>N</strong> Navegar · <strong>W</strong> Parede · <strong>T</strong> Terreno · Câmera:{" "}
-            <strong>botão direito</strong> orbita, <strong>botão do meio</strong> arrasta
+            <strong>M</strong> Mover · <strong>N</strong> Navegar · <strong>T</strong> Terreno · <strong>P</strong>{" "}
+            Parede · <strong>R</strong> Sala · <strong>I</strong> Terreno Irregular · <strong>G</strong> Ímã do
+            Grid · Câmera: <strong>botão direito</strong> orbita, <strong>botão do meio</strong> arrasta
           </span>
         </div>
 

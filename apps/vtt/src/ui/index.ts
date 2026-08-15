@@ -1,5 +1,3 @@
-export { TerrainShapePicker } from "./terrain-shape-picker.tsx";
-export type { CornerHeights, TerrainShapePickerProps } from "./terrain-shape-picker.tsx";
 export { lerp, mulberry32 } from "./seeded-random.ts";
 
 // Re-exported so `widgets/` (which, like this layer, may not import
@@ -26,6 +24,11 @@ export {
   FloatButtonGroup,
   type FloatButtonItem,
   type FloatButtonGroupProps,
+  FloatButtonTree,
+  type FloatButtonTreeBranch,
+  type FloatButtonTreeLeaf,
+  type FloatButtonTreeNode,
+  type FloatButtonTreeProps,
   IconButton,
   type IconButtonProps,
   Popover,

@@ -85,6 +85,9 @@ importers:
       '@grafting/procgen-construction-wasm':
         specifier: workspace:*
         version: link:../../libs/domains/procgen/construction-wasm
+      '@grafting/procgen-generation-wasm':
+        specifier: workspace:*
+        version: link:../../libs/domains/procgen/generation-wasm
       '@grafting/render-3d':
         specifier: workspace:*
         version: link:../../packages/render-3d

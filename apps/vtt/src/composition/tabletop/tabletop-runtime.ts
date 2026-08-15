@@ -1,4 +1,4 @@
-import { chunkSurfaceMeshes } from "../../adapters/rendering/index.ts";
+import { chunkSurfaceMeshes, CONSTRUCTION_GRID_EXTENT } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
   createTokenCollection,
@@ -23,18 +23,45 @@ import type {
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
+  ConstructionSurfaceSpec,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
   RenderMapChunk,
+  RenderPreviewDescriptor,
   RenderViewId,
   ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
   SurfaceMeshResult,
+  TerrainNoisePort,
   WallPiece,
 } from "@/ports";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
+
+/**
+ * The one `setTerrainMesh` grid declared per table (`ConstructionSessionPort`
+ * requires exactly one call, before any `generateTerrainCell`). `cell`
+ * addresses this grid by index (`z * width + x` for layer 0), and each
+ * cell's *physical* footprint is fixed by `PrismGridMesh` itself to
+ * render-space `X ∈ [x, x+1]`, `Z ∈ [z, z+1]` -- there is no origin/offset
+ * parameter anywhere in `ConstructionSessionPort.setTerrainMesh`, so this
+ * grid always starts at world `(0, 0)`, not centered like the visible
+ * reference grid (`construction-grid-scene-item.ts`, `±CONSTRUCTION_GRID_EXTENT`).
+ * `terrain-brush-tool.ts` clamps a click into this positive quadrant, so it
+ * is sized to `CONSTRUCTION_GRID_EXTENT` on purpose: that makes the
+ * buildable quadrant exactly the positive-X/positive-Z **half** of the
+ * visible reference grid, not some arbitrary smaller area a player would
+ * have to discover by trial and error. A click in the negative half still
+ * clamps to its nearest edge cell rather than erroring -- a real, permanent
+ * limit of this API (there is no way to give a `PrismGridMesh` cell a
+ * negative position), not something a bigger grid or a client-side offset
+ * trick can remove.
+ */
+export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
+export const TERRAIN_GRID_HEIGHT = CONSTRUCTION_GRID_EXTENT;
+export const TERRAIN_GRID_LAYERS = 1;
+export const TERRAIN_CELL_COUNT = TERRAIN_GRID_WIDTH * TERRAIN_GRID_HEIGHT * TERRAIN_GRID_LAYERS;
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -69,7 +96,26 @@ export interface TabletopRuntime {
     causeId: string,
   ): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[];
+  /**
+   * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
+   * hexagon's worth) through the construction session's existing generic
+   * `addNode`/`addSurface` operations, then re-derives/re-uploads exactly
+   * like `generateTerrainCell`/`generateWall` do. No new Rust/Wasm surface --
+   * `ConstructionSessionPort.addNode`/`addSurface` already exist.
+   */
+  applyIrregularTerrainPatch(
+    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+    surfaces: readonly ConstructionSurfaceSpec[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly ConstructionSurfaceKey[];
+  /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
+  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
+  /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
+  showPreview(descriptor: RenderPreviewDescriptor): void;
+  /** Hides the active tool preview, if any. */
+  clearPreview(): void;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
   resizeView(viewId: RenderViewId, width: number, height: number): void;
@@ -137,6 +183,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #tableId: string;
   readonly #render: SceneRenderPort;
   readonly #construction: ConstructionSessionPort;
+  readonly #terrainNoise: TerrainNoisePort;
   /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
   readonly #chunkRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
@@ -148,6 +195,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     tableId: string,
     render: SceneRenderPort,
     construction: ConstructionSessionPort,
+    terrainNoise: TerrainNoisePort,
     initialTokens: readonly TokenProjection[] = [],
   ) {
     const normalizedTableId = tableId.trim();
@@ -158,6 +206,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#tableId = normalizedTableId;
     this.#render = render;
     this.#construction = construction;
+    this.#terrainNoise = terrainNoise;
     this.#snapshot = snapshot(
       this.#tableId,
       "idle",
@@ -176,6 +225,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
     await this.#construction.start();
+    await this.#terrainNoise.start();
 
     if (generation !== this.#generation) return;
 
@@ -212,7 +262,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
    */
   #seedDefaultMap(generation: number): MapProjection {
     const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
-    this.#construction.setTerrainMesh(2, 2, 1, "surface", 0, 0);
+    this.#construction.setTerrainMesh(TERRAIN_GRID_WIDTH, TERRAIN_GRID_HEIGHT, TERRAIN_GRID_LAYERS, "surface", 0, 0);
     const terrainKey = this.#construction.generateTerrainCell(terrainCell.payload);
     const wallPieces = this.#construction.generateWall(wall.payload);
 
@@ -462,6 +512,46 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return pieces;
   }
 
+  applyIrregularTerrainPatch(
+    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+    surfaces: readonly ConstructionSurfaceSpec[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly ConstructionSurfaceKey[] {
+    this.#requireReady("applying an irregular terrain patch");
+
+    for (const node of nodes) this.#construction.addNode(node.id, node.position);
+
+    // A duplicate node-set is an *expected* outcome of the irregular-terrain
+    // brush's own merge strategy -- `irregular-terrain-tool.ts`'s `revealNear`
+    // deliberately welds a new stroke's vertices onto nearby existing nodes,
+    // so two overlapping strokes (or two overlapping dabs of the same
+    // stroke) can legitimately compute the exact same cycle twice. If a
+    // surface for that cycle already exists, that surface already *is* the
+    // connected geometry this call wanted -- nothing to add, nothing wrong.
+    // Each surface gets its own attempt (not one `.map()` that aborts the
+    // whole batch on the first failure) so one redundant cycle can't also
+    // silently drop every surface queued after it in the same call.
+    const surfaceKeys: ConstructionSurfaceKey[] = [];
+    for (const spec of surfaces) {
+      try {
+        surfaceKeys.push(this.#construction.addSurface(spec));
+      } catch (error) {
+        // The Rust side throws a bare `JsValue::from_str` for this, not a
+        // wrapped `Error` -- see `session.rs`'s `to_js_error` -- so a plain
+        // string is the normal shape here, not just a defensive fallback.
+        const message = typeof error === "string" ? error : error instanceof Error ? error.message : undefined;
+        const isDuplicate = message !== undefined && message.includes("a surface already exists for node set");
+        if (!isDuplicate) throw error;
+      }
+    }
+
+    this.#applyConstructionMutation(surfaceKeys, origin, causeId, (map) =>
+      this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
+    );
+    return surfaceKeys;
+  }
+
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {
     if (this.#snapshot.status !== "ready") {
       throw new Error("confirmed token changes require a ready tabletop runtime");
@@ -482,6 +572,18 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {
     return this.#render.pick(viewId, x, y);
+  }
+
+  showPreview(descriptor: RenderPreviewDescriptor): void {
+    this.#render.showPreview(descriptor);
+  }
+
+  clearPreview(): void {
+    this.#render.clearPreview();
+  }
+
+  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array {
+    return this.#terrainNoise.generateHeightmap(width, height, seed, scale);
   }
 
   attachView(target: HTMLElement): RenderViewId {

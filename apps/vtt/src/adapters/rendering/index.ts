@@ -1,4 +1,5 @@
 export { createRender3dSceneAdapter } from "./render-3d-scene-adapter.ts";
+export { CONSTRUCTION_GRID_EXTENT, GRID_SNAP_UNIT } from "./construction-grid-scene-item.ts";
 export { chunkKeyFor, clipPlaneForCameraHeight } from "./map-chunk-key.ts";
 export { chunkSurfaceMeshes } from "./map-chunk-batching.ts";
 export {
