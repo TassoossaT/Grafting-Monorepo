@@ -233,6 +233,20 @@ No genuinely open-source, Houdini-equivalent, Rust-backed node-graph engine
 for 3D procedural generation exists today — recorded as a real gap, not an
 oversight, per `docs/research/vtt-map-and-terrain-construction-options.md`.
 
+## VTT board foundation and camera navigation
+
+Full reasoning: `docs/research/vtt-board-navigation-and-open-source-editor-candidates.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| SketchForge-3D (Formsmith746) | **AGPLv3** | **Discarded** as a code/dependency source | Active (844 stars, pushed 2026-08-10), Next.js/React/TS/Three.js/Manifold CAD-style solid modeler — a real, well-built tool, but AGPL's network-copyleft clause is incompatible with this repository's licensing posture, and its domain (mechanical CAD parts) has little to do with VTT construction semantics anyway. Its ground-plane/grid and camera-controls *pattern* (bounded grid geometry + stock Three.js `OrbitControls`) is a useful reference to reimplement independently, not to port from |
+| Three.js bundled `OrbitControls` | MIT (ships inside the already-installed `three` package) | Reference only | Confirmed the installed `three@0.182.0` already includes `zoomToCursor` and `enableDamping` — exactly this repo's two missing camera behaviors, available for free. Not adopted directly because `packages/render-3d/src/camera/orbit.ts` deliberately keeps all `THREE.Camera`-shaped types out of its public boundary (`VTT-ARCH-002`); reimplementing the same math by hand (already ~90% done in `orbit.ts`) preserves that seam instead of reintroducing a Three.js-coupled controls object into the consumer |
+| `camera-controls` (yomotsu) | MIT | Reference only | Damped orbit/pan/dolly with `dollyToCursor`, actively maintained (2,423 stars). Same boundary concern as stock `OrbitControls`, and heavier (a full external state machine) for gaps that are small, well-understood math already mostly implemented by hand in this repo |
+| PlayCanvas Editor | Engine is MIT; Editor is hosted/closed | Discarded | Not actually open source as an editor — only the PlayCanvas Engine runtime is |
+| Three.js official editor (`mrdoob/three.js/editor`) | MIT | Reference only | Scene-graph/gizmo/outliner UI precedent for Epic 7's construction-editor foundation (E7.1); an application, not a package — nothing to depend on |
+| Babylon.js Inspector/gizmo system | Apache-2.0 | Reference only | A different engine entirely; adopting anything means evaluating a full Three.js → Babylon.js swap, out of scope |
+| Infinite-grid ground shader technique | N/A — technique, not a library | Reference only (concept) | A camera-anchored fullscreen-quad fragment shader fading grid lines by distance; small enough (~100 lines) to write directly inside `packages/render-3d`'s Three backend with no dependency or license question, if an unbounded board is wanted over a bounded one |
+
 ## Component preview tooling (`packages/ui`, shared across apps)
 
 Full reasoning: discussed in conversation 2026-07-31; not (yet) captured in a
