@@ -95,6 +95,8 @@ export type { GridParams } from "./visual/grid-visual.js";
 export { gridVisual } from "./visual/grid-visual.js";
 export { mergeMeshChunks } from "./visual/merge-mesh-chunks.js";
 
+export { lerp, mulberry32 } from "./math/seeded-random.js";
+
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
 export {
   DISTANCE_RANGE,
