@@ -233,6 +233,18 @@ No genuinely open-source, Houdini-equivalent, Rust-backed node-graph engine
 for 3D procedural generation exists today — recorded as a real gap, not an
 oversight, per `docs/research/vtt-map-and-terrain-construction-options.md`.
 
+## VTT roof generation (straight skeleton, E7.7 gate)
+
+Full reasoning: `docs/research/vtt-roof-straight-skeleton-options.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| `straight-skeleton` (lizelive, crates.io) | **GPL-2.0-or-later** | Discarded | Copyleft, breaks with every other dependency in this repository's `Cargo.toml`s being MIT/Apache-2.0; also immature (v0.2.1, 79 downloads, published 2026-07-17) and works on integer coordinates, not this app's `f32` world positions |
+| `sfcgal` (Rust bindings to SFCGAL/CGAL) | MIT/Apache-2.0 binding, but links LGPL-2.0+/LGPL-3.0+ (SFCGAL/CGAL `Straight_skeleton_2`) | Discarded | License itself is workable (LGPL linking doesn't force this project LGPL), but CGAL is a large C++/GMP/MPFR kernel not designed for `wasm32-unknown-unknown` — every existing WASM crate here (`construction-wasm`, `generation-wasm`, etc.) uses that pure-Rust target; adopting this needs a second, C++-based WASM toolchain this repository does not have |
+| `vHawk/straight-skeleton` (npm, TS wrapper over CGAL-via-Emscripten) | MIT wrapper bundling CGAL's own license terms | Discarded | Not a Rust crate; also puts roof geometry in the app's JS layer, the opposite direction of this project's standing "no calculations in .ts" preference |
+| `geo-buf` (GeoRust ecosystem) | Apache-2.0 | Discarded, reference only | License-clean and pure Rust (should target `wasm32-unknown-unknown` fine), but its public API only returns a buffered/inset polygon — never exposes the skeleton's ridge/hip edges a roof mesh actually needs. Low maturity (0 stars, single maintainer, fork of an abandoned crate). Legitimate algorithm reference while hand-rolling, given its permissive license |
+| Hand-rolled event-based straight skeleton (Felkel/Obdržálek algorithm), simple-polygon scope only | — (own implementation) | Standby — recommended, not yet built | No license-clean, WASM-viable, API-complete third-party option exists for this project's actual constraints — matches the already-established pattern of `terrain-generation`/`structure-generation`/`surface-mesh` being hand-rolled procedural geometry rather than third-party dependencies. Proposed as a new `libs/domains/procgen/roof-generation` crate; v1 scope is a single simple polygon (no holes), one uniform pitch, hip roof only |
+
 ## VTT board foundation and camera navigation
 
 Full reasoning: `docs/research/vtt-board-navigation-and-open-source-editor-candidates.md`
