@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createVisualRegistry, heightfieldVisual } from "../dist/index.js";
+import { createVisualRegistry, gridVisual, heightfieldVisual } from "../dist/index.js";
 
 /**
  * Descriptors are the whole extension surface, so what matters is what a
@@ -65,6 +65,37 @@ test("the heightfield default compares sample data by reference", () => {
     false,
     "a new array is the caller's signal that the data changed",
   );
+});
+
+test("the grid default describes a bounded line surface spanning its caller's extent", () => {
+  const descriptor = gridVisual.describe({ extent: 4, cellSize: 2, color: 0x123456, opacity: 0.5 });
+
+  assert.equal(descriptor.geometry.shape, "segments");
+  assert.equal(descriptor.material.surface, "line");
+  assert.equal(descriptor.material.color, 0x123456);
+  assert.equal(descriptor.material.opacity, 0.5);
+
+  // extent=4, cellSize=2 -> lines at -4, -2, 0, 2, 4 (5 lines per axis), 2
+  // segments (4 vertices, 12 floats) per line.
+  const positions = descriptor.geometry.positions;
+  assert.equal(positions.length, 5 * 2 * 2 * 3);
+  for (let i = 0; i < positions.length; i += 3) {
+    assert.ok(positions[i] >= -4 && positions[i] <= 4);
+    assert.equal(positions[i + 1], 0, "every vertex stays on the grid's own ground plane");
+    assert.ok(positions[i + 2] >= -4 && positions[i + 2] <= 4);
+  }
+});
+
+test("the grid default rejects a non-positive extent or cellSize", () => {
+  assert.throws(() => gridVisual.describe({ extent: 0, cellSize: 1 }));
+  assert.throws(() => gridVisual.describe({ extent: 10, cellSize: 0 }));
+});
+
+test("the grid default compares by value, since its geometry is derived rather than caller-supplied", () => {
+  const base = { extent: 10, cellSize: 1, color: 0xffffff, opacity: 1 };
+
+  assert.equal(gridVisual.equals(base, { ...base }), true);
+  assert.equal(gridVisual.equals(base, { ...base, cellSize: 2 }), false);
 });
 
 test("a caller can describe a camera-facing sprite without a renderer type", () => {

@@ -2,6 +2,7 @@ import {
   attachOrbit,
   createEngine,
   createVisualRegistry,
+  gridVisual,
   orbitFromCamera,
   type ChangeOrigin as EngineChangeOrigin,
   type ClipPlaneDescriptor,
@@ -22,12 +23,7 @@ import type {
   SceneRenderPort,
 } from "@/ports";
 
-import {
-  CONSTRUCTION_GRID_LAYER_ID,
-  CONSTRUCTION_GRID_VISUAL_KIND,
-  constructionGridSceneItems,
-  type ConstructionGridParams,
-} from "./construction-grid-scene-item.ts";
+import { CONSTRUCTION_GRID_LAYER_ID, constructionGridSceneItems } from "./construction-grid-scene-item.ts";
 import {
   MAP_LAYER_ID,
   MAP_SURFACE_VISUAL_KIND,
@@ -183,15 +179,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       // and a new buffer is the caller's signal that the geometry changed.
       equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
     });
-    registry.register<ConstructionGridParams>({
-      kind: CONSTRUCTION_GRID_VISUAL_KIND,
-      describe: (params) => ({
-        geometry: { shape: "segments", positions: params.positions },
-        material: { surface: "line", color: params.color, opacity: params.opacity },
-      }),
-      equals: (left, right) =>
-        left.positions === right.positions && left.color === right.color && left.opacity === right.opacity,
-    });
+    registry.register(gridVisual);
 
     const engine = createEngine({ registry, autoplay: true, lights: MAP_LIGHTS });
     // The board grid draws first (order 5), below map geometry below node
