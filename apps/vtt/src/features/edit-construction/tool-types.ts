@@ -12,6 +12,7 @@ export type ConstructionToolId =
   | "terrain-brush"
   | "wall-brush"
   | "room-stamp"
+  | "room-derive"
   | "irregular-terrain-stamp";
 
 export interface TerrainBrushParams {
@@ -68,6 +69,7 @@ export interface ToolParamsByTool {
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "room-stamp": RoomStampParams;
+  readonly "room-derive": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
 
@@ -79,6 +81,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
   "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
+  "room-derive": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,
     irregularity: 0.7,

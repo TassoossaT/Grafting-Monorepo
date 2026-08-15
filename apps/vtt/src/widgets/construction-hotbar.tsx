@@ -13,6 +13,7 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
   { id: "terrain-brush", icon: "T", tooltip: "Pincel de Terreno (tecla T)" },
   { id: "wall-brush", icon: "W", tooltip: "Pincel de Parede (arraste para desenhar, tecla P)" },
   { id: "room-stamp", icon: "R", tooltip: "Carimbo de Sala (clique para gerar, tecla R)" },
+  { id: "room-derive", icon: "◻", tooltip: "Derivar Sala (clique dentro de paredes já fechadas)" },
   { id: "irregular-terrain-stamp", icon: "◆", tooltip: "Pincel de Terreno Irregular (clique ou arraste, tecla I)" },
 ];
 

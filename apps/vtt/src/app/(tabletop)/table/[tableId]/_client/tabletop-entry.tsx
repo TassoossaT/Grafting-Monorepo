@@ -49,6 +49,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "terrain-brush": "Pincel de Terreno",
   "wall-brush": "Pincel de Parede",
   "room-stamp": "Carimbo de Sala",
+  "room-derive": "Derivar Sala",
   "irregular-terrain-stamp": "Terreno Irregular",
 };
 
