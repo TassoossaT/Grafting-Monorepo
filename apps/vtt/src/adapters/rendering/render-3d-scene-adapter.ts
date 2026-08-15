@@ -23,6 +23,12 @@ import type {
 } from "@/ports";
 
 import {
+  CONSTRUCTION_GRID_LAYER_ID,
+  CONSTRUCTION_GRID_VISUAL_KIND,
+  constructionGridSceneItems,
+  type ConstructionGridParams,
+} from "./construction-grid-scene-item.ts";
+import {
   MAP_LAYER_ID,
   MAP_SURFACE_VISUAL_KIND,
   mapChunkSceneItem,
@@ -177,14 +183,31 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       // and a new buffer is the caller's signal that the geometry changed.
       equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
     });
+    registry.register<ConstructionGridParams>({
+      kind: CONSTRUCTION_GRID_VISUAL_KIND,
+      describe: (params) => ({
+        geometry: { shape: "segments", positions: params.positions },
+        material: { surface: "line", color: params.color, opacity: params.opacity },
+      }),
+      equals: (left, right) =>
+        left.positions === right.positions && left.color === right.color && left.opacity === right.opacity,
+    });
 
     const engine = createEngine({ registry, autoplay: true, lights: MAP_LIGHTS });
-    // Map geometry draws below node handles below tokens (10 / 15 / 20), so
-    // nothing occludes the thing a pointer is more likely trying to hit.
+    // The board grid draws first (order 5), below map geometry below node
+    // handles below tokens (10 / 15 / 20), so nothing occludes the thing a
+    // pointer is more likely trying to hit -- it is also never pickable, so
+    // it can never intercept a click meant for the geometry above it.
+    engine.scene.defineLayer({ id: CONSTRUCTION_GRID_LAYER_ID, order: 5, pickable: false }, "engine");
     engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
     engine.scene.defineLayer({ id: NODE_HANDLE_LAYER_ID, order: 15 }, "engine");
     engine.scene.defineLayer({ id: TOKEN_LAYER_ID, order: 20 }, "engine");
     engine.start();
+    // The board is present from the first frame, independent of any
+    // generated construction geometry -- matching the persistent build-grid
+    // every reference surveyed in `vtt-board-construction-mode-ui-references.md`
+    // renders before anything is built on it.
+    for (const item of constructionGridSceneItems()) engine.scene.put(item, "engine");
 
     this.#runtimeGeneration = runtimeGeneration;
     this.#engine = engine;
@@ -205,7 +228,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         near: INITIAL_VIEW_CAMERA.near,
         far: INITIAL_VIEW_CAMERA.far,
       },
-      layers: [MAP_LAYER_ID, NODE_HANDLE_LAYER_ID, TOKEN_LAYER_ID],
+      layers: [CONSTRUCTION_GRID_LAYER_ID, MAP_LAYER_ID, NODE_HANDLE_LAYER_ID, TOKEN_LAYER_ID],
       background: 0x07100f,
     });
 
