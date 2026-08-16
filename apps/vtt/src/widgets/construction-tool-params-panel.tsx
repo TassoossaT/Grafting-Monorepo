@@ -3,8 +3,7 @@
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   ConstructionToolId,
-  HouseRoomAddParams,
-  HouseStampParams,
+  HouseBrushParams,
   IrregularTerrainParams,
   RoomStampParams,
   TerrainBrushParams,
@@ -104,30 +103,16 @@ function RoomStampFields(props: {
   );
 }
 
-function HouseStampFields(props: {
-  readonly params: HouseStampParams;
-  readonly onChange: (next: HouseStampParams) => void;
+function HouseBrushFields(props: {
+  readonly params: HouseBrushParams;
+  readonly onChange: (next: HouseBrushParams) => void;
 }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Largura", params.width, 4, 24, 1, (width) => onChange({ ...params, width }))}
-      {sliderRow("Profundidade", params.depth, 4, 24, 1, (depth) => onChange({ ...params, depth }))}
-      {sliderRow("Número de Cômodos", params.roomCount, 1, 8, 1, (roomCount) => onChange({ ...params, roomCount }))}
+      {sliderRow("Tamanho da célula", params.cellSize, 1.5, 4, 0.5, (cellSize) => onChange({ ...params, cellSize }))}
+      {sliderRow("Máx. células por cômodo", params.maxRoomCells, 2, 16, 1, (maxRoomCells) => onChange({ ...params, maxRoomCells }))}
       {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
-    </div>
-  );
-}
-
-function HouseRoomAddFields(props: {
-  readonly params: HouseRoomAddParams;
-  readonly onChange: (next: HouseRoomAddParams) => void;
-}) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Largura mínima", params.width, 2, 12, 1, (width) => onChange({ ...params, width }))}
-      {sliderRow("Profundidade mínima", params.depth, 2, 12, 1, (depth) => onChange({ ...params, depth }))}
     </div>
   );
 }
@@ -172,8 +157,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede",
   "room-stamp": "Parâmetros: Sala",
-  "house-stamp": "Parâmetros: Casa",
-  "house-room-add": "Parâmetros: Adicionar Cômodo",
+  "house-brush": "Parâmetros: Pintar Casa",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -193,8 +177,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Terreno, Parede, Sala, Casa, Adicionar/Apagar Cômodo ou Terreno
-          Irregular) no hotbar para ajustar seus parâmetros.
+          Selecione uma ferramenta de construção (Terreno, Parede, Sala, Pintar/Apagar Cômodo ou Terreno Irregular)
+          no hotbar para ajustar seus parâmetros.
         </p>
       </Card>
     );
@@ -213,10 +197,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "room-stamp" ? (
         <RoomStampFields params={params["room-stamp"]} onChange={(next) => onParamsChange("room-stamp", next)} />
-      ) : activeTool === "house-stamp" ? (
-        <HouseStampFields params={params["house-stamp"]} onChange={(next) => onParamsChange("house-stamp", next)} />
-      ) : activeTool === "house-room-add" ? (
-        <HouseRoomAddFields params={params["house-room-add"]} onChange={(next) => onParamsChange("house-room-add", next)} />
+      ) : activeTool === "house-brush" ? (
+        <HouseBrushFields params={params["house-brush"]} onChange={(next) => onParamsChange("house-brush", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

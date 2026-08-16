@@ -10,18 +10,17 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
+  CellPartitionOutcome,
   ConstructionNodeSnapshot,
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  GenerateRoomAdditionRequest,
-  GenerateRoomGridRequest,
+  GenerateCellPartitionRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
   RemoveRoomOutcome,
   RemoveRoomRequest,
-  RoomGridPiece,
   SurfaceMeshResult,
   WallPiece,
 } from "@/ports";
@@ -191,44 +190,30 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return response.pieces;
   }
 
-  generateRoomGrid(request: GenerateRoomGridRequest): readonly RoomGridPiece[] {
+  generateCellPartition(request: GenerateCellPartitionRequest): CellPartitionOutcome {
     const wire = {
-      layout: {
-        origin: toWirePosition(request.layout.origin),
-        width: request.layout.width,
-        depth: request.layout.depth,
-        roomCount: request.layout.roomCount,
-        wallHeight: request.layout.wallHeight,
-        seed: request.layout.seed,
-      },
-      idPrefix: request.idPrefix,
-      wallType: request.wallType,
-      doorType: request.doorType,
-      floorType: request.floorType,
-      ceilingType: request.ceilingType,
-    };
-    const response = JSON.parse(this.#require().generate_and_apply_room_grid_json(JSON.stringify(wire))) as {
-      pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
-    };
-    return response.pieces;
-  }
-
-  generateRoomAddition(request: GenerateRoomAdditionRequest): readonly RoomGridPiece[] {
-    const wire = {
-      tile: request.tile,
-      originY: request.originY,
+      cells: request.cells,
+      cellSize: request.cellSize,
+      origin: toWirePosition(request.origin),
       wallHeight: request.wallHeight,
+      maxRoomCells: request.maxRoomCells,
+      seed: request.seed,
       idPrefix: request.idPrefix,
       wallType: request.wallType,
       doorType: request.doorType,
       floorType: request.floorType,
       ceilingType: request.ceilingType,
-      weldCandidates: request.weldCandidates ?? [],
     };
-    const response = JSON.parse(this.#require().generate_and_apply_room_addition_json(JSON.stringify(wire))) as {
-      pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
+    const response = JSON.parse(this.#require().generate_and_apply_cell_partition_json(JSON.stringify(wire))) as {
+      addedSurfaceKeys: readonly (readonly string[])[];
+      removedSurfaceKeys: readonly (readonly string[])[];
+      removedNodeIds: readonly string[];
     };
-    return response.pieces;
+    return {
+      addedSurfaceKeys: response.addedSurfaceKeys,
+      removedSurfaceKeys: response.removedSurfaceKeys,
+      removedNodeIds: response.removedNodeIds,
+    };
   }
 
   removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome {

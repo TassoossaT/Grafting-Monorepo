@@ -3,11 +3,10 @@
 //! one stateful `ConstructionSession` for the Web host. Pure wiring only --
 //! see this crate's `AGENTS.md` for the boundary this crate must not cross.
 //!
+mod cell_partition;
 mod dto;
 mod editing;
 mod mesh;
-mod room_addition;
-mod room_grid;
 mod room_removal;
 mod session;
 mod terrain;

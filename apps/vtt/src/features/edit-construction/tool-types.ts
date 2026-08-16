@@ -13,8 +13,7 @@ export type ConstructionToolId =
   | "wall-brush"
   | "room-stamp"
   | "room-derive"
-  | "house-stamp"
-  | "house-room-add"
+  | "house-brush"
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
@@ -65,27 +64,18 @@ export interface IrregularTerrainParams {
 }
 
 /**
- * A rectangular footprint partitioned into `roomCount` connected rooms of
- * varied size, stamped in one commit -- all treemap/weld math happens on
- * the Rust side (`ConstructionSessionPort.generateRoomGrid`), this tool
- * only picks where, how big, and which seed.
+ * The continuous "Pintar Casa" brush: paint cells, and the Rust side
+ * (`ConstructionSessionPort.generateCellPartition`) decides every tick
+ * whether the painted region grows the current room, splits into more, or
+ * starts a new one -- see `cell_partition`'s own doc for the algorithm.
  */
-export interface HouseStampParams {
-  readonly width: number;
-  readonly depth: number;
-  readonly roomCount: number;
+export interface HouseBrushParams {
+  /** World-space side length of one grid cell. */
+  readonly cellSize: number;
+  /** A connected painted region larger than this many cells gets auto-split into more than one room. */
+  readonly maxRoomCells: number;
+  /** Drives the split layout's jitter -- the same cell set always reproduces the same rooms for a given seed. */
   readonly seed: number;
-}
-
-/**
- * One new room's minimum footprint, dragged out and welded onto whatever
- * existing geometry it touches -- "Adicionar Cômodo." `width`/`depth` are
- * a floor, not a fixed size: a drag longer than either just grows the
- * room past it (`house-room-add-tool.ts`'s `tileFromDrag`).
- */
-export interface HouseRoomAddParams {
-  readonly width: number;
-  readonly depth: number;
 }
 
 export type NoToolParams = Record<string, never>;
@@ -97,8 +87,7 @@ export interface ToolParamsByTool {
   readonly "wall-brush": WallBrushParams;
   readonly "room-stamp": RoomStampParams;
   readonly "room-derive": NoToolParams;
-  readonly "house-stamp": HouseStampParams;
-  readonly "house-room-add": HouseRoomAddParams;
+  readonly "house-brush": HouseBrushParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -112,8 +101,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
   "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
   "room-derive": Object.freeze({}),
-  "house-stamp": Object.freeze({ width: 12, depth: 8, roomCount: 4, seed: 1 }),
-  "house-room-add": Object.freeze({ width: 4, depth: 4 }),
+  "house-brush": Object.freeze({ cellSize: 2, maxRoomCells: 6, seed: 1 }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

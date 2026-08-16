@@ -13,11 +13,10 @@ use wasm_bindgen::prelude::*;
 
 use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry};
 
+use crate::cell_partition;
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::mesh;
-use crate::room_addition;
-use crate::room_grid;
 use crate::room_removal;
 use crate::terrain;
 use crate::wall;
@@ -215,29 +214,19 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Generates a rectangular grid of walled, welded rooms (walls, doors,
-    /// floors, ceilings) and applies every piece. See
-    /// `room_grid::generate_and_apply_room_grid`.
-    pub fn generate_and_apply_room_grid_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// Regenerates a painted cell set's whole partition (walls, doors,
+    /// floors, ceilings) and applies only the difference against whatever
+    /// this structure already holds -- the "Pintar Casa" tool's per-tick
+    /// commit. See `cell_partition::generate_and_apply_cell_partition`.
+    pub fn generate_and_apply_cell_partition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
-            room_grid::generate_and_apply_room_grid(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
-        for piece in &response.pieces {
-            self.remember(&piece.surface_key);
-        }
-        serialize(&response)
-    }
-
-    /// Generates one new room's wall/floor/ceiling pieces, welding onto
-    /// pre-existing geometry wherever a `weldCandidates` entry names it,
-    /// and applies every piece. See
-    /// `room_addition::generate_and_apply_room_addition`.
-    pub fn generate_and_apply_room_addition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = room_addition::generate_and_apply_room_addition(&mut self.graph, &mut self.surfaces, request)
+        let response = cell_partition::generate_and_apply_cell_partition(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
             .map_err(to_js_error)?;
-        for piece in &response.pieces {
-            self.remember(&piece.surface_key);
+        for key in &response.removed_surface_keys {
+            self.forget(key);
+        }
+        for key in &response.added_surface_keys {
+            self.remember(key);
         }
         serialize(&response)
     }

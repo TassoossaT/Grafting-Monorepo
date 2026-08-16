@@ -17,10 +17,9 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
   { id: "irregular-terrain-stamp", icon: "◆", tooltip: "Pincel de Terreno Irregular (clique ou arraste, tecla I)" },
 ];
 
-/** The "Casa" branch's own children -- one leaf per way of editing a house, replacing the old single `house-stamp` direct action. */
+/** The "Casa" branch's own children -- "Pintar Casa" replaced the old `house-stamp`/`house-room-add` pair with one continuous brush that decides itself whether to grow, split, or start a new room. */
 const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "house-stamp", icon: "H", tooltip: "Casa Completa (grade de salas conectadas)" },
-  { id: "house-room-add", icon: "+", tooltip: "Adicionar Cômodo (arraste um retângulo, solda no que tocar)" },
+  { id: "house-brush", icon: "H", tooltip: "Pintar Casa (arraste continuamente, o algoritmo divide em cômodos sozinho)" },
   { id: "house-room-delete", icon: "−", tooltip: "Apagar Cômodo (clique dentro de um cômodo)" },
   { id: "move-node", icon: "◇", tooltip: "Expandir Cômodo (arraste um canto -- mesma ferramenta de mover nó)" },
 ];

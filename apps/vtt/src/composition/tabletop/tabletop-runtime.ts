@@ -17,6 +17,7 @@ import type {
   AffectedSurfaces,
   CameraControlHandle,
   CameraControlOptions,
+  CellPartitionOutcome,
   ChangeOrigin,
   ConfirmedTokenRenderChange,
   ConstructionNodeId,
@@ -24,8 +25,7 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  GenerateRoomAdditionRequest,
-  GenerateRoomGridRequest,
+  GenerateCellPartitionRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
   RemoveRoomOutcome,
@@ -33,7 +33,6 @@ import type {
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
-  RoomGridPiece,
   ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
@@ -101,18 +100,18 @@ export interface TabletopRuntime {
     causeId: string,
   ): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[];
-  /** Generates a rectangular grid of walled, welded rooms (walls, doors, floors, ceilings) through the real engine and folds every piece into the running map -- all grid layout/id math happens on the Rust side, see `ConstructionSessionPort.generateRoomGrid`. */
-  generateRoomGrid(
-    request: GenerateRoomGridRequest,
+  /**
+   * One tick of the continuous "Pintar Casa" brush: regenerates the whole
+   * painted structure's partition from `request.cells` and applies only
+   * the difference against what already exists -- walls/floors/ceilings
+   * can be added AND removed in the same call (a split moving, two rooms
+   * merging). See `ConstructionSessionPort.generateCellPartition`.
+   */
+  generateCellPartition(
+    request: GenerateCellPartitionRequest,
     origin: ChangeOrigin,
     causeId: string,
-  ): readonly RoomGridPiece[];
-  /** Welds one new room onto pre-existing geometry wherever `request.weldCandidates` names it -- "Adicionar Cômodo." See `ConstructionSessionPort.generateRoomAddition`. */
-  generateRoomAddition(
-    request: GenerateRoomAdditionRequest,
-    origin: ChangeOrigin,
-    causeId: string,
-  ): readonly RoomGridPiece[];
+  ): CellPartitionOutcome;
   /** Removes a whole room, preserving (door-stripped) any side still shared with a standing neighbor -- "Apagar Cômodo." See `ConstructionSessionPort.removeRoom`. */
   removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome;
   /**
@@ -563,30 +562,26 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return pieces;
   }
 
-  generateRoomGrid(request: GenerateRoomGridRequest, origin: ChangeOrigin, causeId: string): readonly RoomGridPiece[] {
-    this.#requireReady("generating a room grid");
+  generateCellPartition(request: GenerateCellPartitionRequest, origin: ChangeOrigin, causeId: string): CellPartitionOutcome {
+    this.#requireReady("painting a house");
 
-    const pieces = this.#construction.generateRoomGrid(request);
-    this.#applyConstructionMutation(
-      pieces.map((piece) => piece.surfaceKey),
-      origin,
-      causeId,
-      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return pieces;
-  }
-
-  generateRoomAddition(request: GenerateRoomAdditionRequest, origin: ChangeOrigin, causeId: string): readonly RoomGridPiece[] {
-    this.#requireReady("adding a room");
-
-    const pieces = this.#construction.generateRoomAddition(request);
-    this.#applyConstructionMutation(
-      pieces.map((piece) => piece.surfaceKey),
-      origin,
-      causeId,
-      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return pieces;
+    const outcome = this.#construction.generateCellPartition(request);
+    this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
+      let next = map;
+      for (const removedKey of outcome.removedSurfaceKeys) {
+        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+        const previous = next.byId.get(surfaceRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
+      }
+      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+      for (const nodeId of outcome.removedNodeIds) {
+        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      }
+      return next;
+    });
+    return outcome;
   }
 
   removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome {

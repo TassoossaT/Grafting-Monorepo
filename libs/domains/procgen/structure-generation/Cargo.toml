@@ -10,13 +10,9 @@ crate-type = ["rlib"]
 
 [dependencies]
 grafting-graph-core = { path = "../../../graph/core" }
-# Squarified-treemap room-size variety (`room_grid`'s `generate_room_grid`).
-# Pure computation, single dependency (`num-traits`), no OS/threading --
-# wasm32-unknown-unknown clean, same category already approved in this
-# worktree for `tileset-wfc`/`generation-wasm`.
-streemap = "0.1"
-# Seeded weight jitter for room variety -- `default-features = false` on
-# both skips `getrandom`/OS entropy entirely, since a seed always comes
-# from the caller (same UX as `TerrainBrushParams.seed`/`RoomStampParams.seed`).
+# Seeded jitter for `cell_partition`'s bisection splits -- `default-features
+# = false` on both skips `getrandom`/OS entropy entirely, since a seed
+# always comes from the caller (same UX as
+# `TerrainBrushParams.seed`/`RoomStampParams.seed`).
 rand = { version = "0.8", default-features = false }
 rand_pcg = { version = "0.3", default-features = false }

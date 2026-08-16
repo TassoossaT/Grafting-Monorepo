@@ -9,12 +9,10 @@
 
 #![deny(missing_docs)]
 
-mod rect_tiling;
-mod room_grid;
+mod cell_partition;
 mod wall;
 
-pub use rect_tiling::{RectTile, generate_tiled_rooms};
-pub use room_grid::{RoomGridGeneration, RoomGridLayout, generate_room_grid};
+pub use cell_partition::{CellCoord, RoomGridGeneration, generate_cell_partition};
 pub use wall::{
     DoorOpening, StructureGenerationError, StructurePiece, WallGeneration, WallNodeRole,
     WallSegment, generate_wall,
