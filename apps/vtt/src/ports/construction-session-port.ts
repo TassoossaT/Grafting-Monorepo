@@ -143,6 +143,41 @@ export interface CellPartitionOutcome {
   readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
+/** One straight or semicircular-arc edge of a drawn wall path -- see `grafting_procgen_structure_generation::wall_path`'s own doc for why a curve is always fully derived from its two endpoints, never a free parameter. */
+export interface PathEdgeSpec {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly curvature: "straight" | "arc-left" | "arc-right";
+}
+
+/**
+ * One tick of the continuous wall-brush pen: the stroke's *whole* current
+ * accumulated path (not just what changed since the last tick), regenerated
+ * and diffed against whatever this structure already holds every call --
+ * same full-resend contract as {@link GenerateCellPartitionRequest}. Once
+ * the last edge's end lands back on the first edge's start, the Rust side
+ * derives a floor + ceiling for free -- no separate room-derive step.
+ */
+export interface GenerateWallPathRequest {
+  readonly edges: readonly PathEdgeSpec[];
+  readonly wallHeight: number;
+  /** How many straight chords approximate one arc edge. Ignored if every edge is straight. */
+  readonly arcFacets: number;
+  /** Namespaces every id this call derives -- same stability contract as {@link GenerateCellPartitionRequest.idPrefix}. */
+  readonly idPrefix: string;
+  readonly wallType: string;
+  readonly floorType: string;
+  readonly ceilingType: string;
+}
+
+export interface WallPathOutcome {
+  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedNodeIds: readonly ConstructionNodeId[];
+  /** True once this call's own path closed into a room. */
+  readonly closed: boolean;
+}
+
 export interface RemoveRoomRequest {
   /** The room's own floor corner ids, in cycle order -- e.g. `findEnclosingRoom`'s result for a click inside the room. */
   readonly bottomCycle: readonly ConstructionNodeId[];
@@ -229,6 +264,7 @@ export interface ConstructionSessionPort {
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest): readonly WallPiece[];
   generateCellPartition(request: GenerateCellPartitionRequest): CellPartitionOutcome;
+  generateWallPath(request: GenerateWallPathRequest): WallPathOutcome;
   removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome;
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;

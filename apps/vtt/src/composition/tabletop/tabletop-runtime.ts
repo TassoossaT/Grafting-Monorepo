@@ -27,6 +27,7 @@ import type {
   ConstructionSurfaceSpec,
   GenerateCellPartitionRequest,
   GenerateTerrainCellRequest,
+  GenerateWallPathRequest,
   GenerateWallRequest,
   RemoveRoomOutcome,
   RemoveRoomRequest,
@@ -38,6 +39,7 @@ import type {
   SceneRenderPort,
   SurfaceMeshResult,
   TerrainNoisePort,
+  WallPathOutcome,
   WallPiece,
 } from "@/ports";
 
@@ -112,6 +114,14 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): CellPartitionOutcome;
+  /**
+   * One tick of the continuous wall-brush pen: regenerates the whole
+   * drawn path's straight/arc geometry from `request.edges` and applies
+   * only the difference against what already exists -- once the path
+   * closes back on itself, a floor + ceiling appear in the same call, no
+   * separate room-derive step. See `ConstructionSessionPort.generateWallPath`.
+   */
+  generateWallPath(request: GenerateWallPathRequest, origin: ChangeOrigin, causeId: string): WallPathOutcome;
   /** Removes a whole room, preserving (door-stripped) any side still shared with a standing neighbor -- "Apagar Cômodo." See `ConstructionSessionPort.removeRoom`. */
   removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome;
   /**
@@ -569,6 +579,28 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("painting a house");
 
     const outcome = this.#construction.generateCellPartition(request);
+    this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
+      let next = map;
+      for (const removedKey of outcome.removedSurfaceKeys) {
+        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+        const previous = next.byId.get(surfaceRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
+      }
+      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+      for (const nodeId of outcome.removedNodeIds) {
+        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      }
+      return next;
+    });
+    return outcome;
+  }
+
+  generateWallPath(request: GenerateWallPathRequest, origin: ChangeOrigin, causeId: string): WallPathOutcome {
+    this.#requireReady("drawing a wall path");
+
+    const outcome = this.#construction.generateWallPath(request);
     this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
       let next = map;
       for (const removedKey of outcome.removedSurfaceKeys) {

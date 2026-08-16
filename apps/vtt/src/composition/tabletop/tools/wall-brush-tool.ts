@@ -1,288 +1,122 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallBrushParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey, ConstructionSurfaceSpec } from "@/ports";
+import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
 
-import { buildGenerateWallOperation } from "../default-map-seed.ts";
-import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
-import { segmentBetween } from "./preview-shapes.ts";
-import { type ExistingWallNode, weldCornerOverrides } from "./wall-corner-weld.ts";
+import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /** Fixed wall height for a brush-drawn segment -- matches `room-seed.ts`'s own generated-room wall height range. */
 const WALL_HEIGHT = 3;
 const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
-
+/** No curved edges from this tool yet -- reserved for a future arc-drawing gesture. Ignored by the engine while every edge is `"straight"`. */
+const ARC_FACETS = 12;
 /**
- * Walls have no thickness (`structure-generation/wall.rs`'s own doc: "the
- * fix is dropping the box extrusion, not adding anything"), so two walls
- * meeting at a corner is not a miter-geometry problem -- it is a shared-node
- * problem: if both walls' corner nodes are the *same* `NodeId`, the two flat
- * planes already meet exactly, for free, by the same graph-identity
- * principle `irregular-terrain-tool.ts`'s own weld already relies on. This
- * is the E7.3 "recognize shared edges/corners" mechanism -- corner welding
- * itself lives in `wall-corner-weld.ts`, shared with `house-seed.ts`.
- *
- * Two cases are handled: a new wall's *endpoint* landing near an existing
- * corner welds onto it directly (`weldCornerOverrides`, imported); a new
- * wall *crossing through the middle* of an existing wall's span instead
- * splits that existing wall in two via `splitSurface`, inserting a fresh
- * shared node pair at the crossing point (`findNearestWallCrossing`/
- * `splitCrossedWall`, further down) -- then the new wall is drawn as two
- * segments meeting at that same pair, welding onto it the ordinary way.
- *
- * v1 scope, deliberate: only the single nearest crossing per draw. A wall
- * crossing more than one existing wall only picks up the first; drawing it
- * again picks up the next. T-junctions where only one wall's endpoint (not
- * a full pass-through) lands mid-span are also covered by the same
- * crossing search, since it does not care whether the *new* wall continues
- * past the crossing or the gesture happened to end there.
+ * How close (XZ) a new click must land to the path's own first point before
+ * it counts as closing the loop instead of extending it -- world units, half
+ * a grid cell (`construction-grid-scene-item.ts`'s `MINOR_CELL_SIZE`).
  */
+const CLOSE_DISTANCE = 0.5;
 
-/**
- * Two vertical posts (a node pair sharing one XZ, one at the base and one
- * `WALL_HEIGHT` above) an existing 4-node wall quad is built from --
- * recovered from *positions*, not from `orderedNodeRefs`' array order: a
- * `ConstructionSurfaceKey` is an unordered node-set identity
- * (`ports/construction-session-port.ts`'s own doc), so the array index
- * carries no cyclic/winding meaning to rely on here.
- */
-interface WallPost {
-  readonly bottomId: ConstructionNodeId;
-  readonly topId: ConstructionNodeId;
-  readonly x: number;
-  readonly z: number;
-  readonly bottomY: number;
-  readonly topY: number;
+function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.hypot(dx, dz);
 }
 
-function wallPostsFromNodes(
-  nodeIds: readonly ConstructionNodeId[],
-  existing: readonly ExistingWallNode[],
-): readonly [WallPost, WallPost] | undefined {
-  if (nodeIds.length !== 4) return undefined;
-  const byId = new Map(existing.map((node) => [node.id, node]));
-  const nodes = nodeIds.map((id) => byId.get(id)).filter((node): node is ExistingWallNode => node !== undefined);
-  if (nodes.length !== 4) return undefined;
-
-  const [first, ...rest] = nodes;
-  if (first === undefined) return undefined;
-  const sameXz = (a: ExistingWallNode, b: ExistingWallNode) =>
-    Math.abs(a.x - b.x) < 1e-3 && Math.abs(a.z - b.z) < 1e-3;
-  const groupA = [first, ...rest.filter((node) => sameXz(node, first))];
-  const groupB = rest.filter((node) => !sameXz(node, first));
-  if (groupA.length !== 2 || groupB.length !== 2) return undefined; // not a simple vertical-post quad -- skip (e.g. an already-split, non-rectangular piece)
-
-  const toPost = (group: readonly [ExistingWallNode, ExistingWallNode]): WallPost => {
-    const [a, b] = group;
-    const [bottom, top] = a.y <= b.y ? [a, b] : [b, a];
-    return { bottomId: bottom.id, topId: top.id, x: bottom.x, z: bottom.z, bottomY: bottom.y, topY: top.y };
-  };
-  return [toPost(groupA as [ExistingWallNode, ExistingWallNode]), toPost(groupB as [ExistingWallNode, ExistingWallNode])];
-}
-
-/** Standard 2D segment intersection (XZ plane), parametrized 0..1 along each segment. `undefined` when parallel (including collinear). */
-function segmentIntersection2D(
-  p1: { readonly x: number; readonly z: number },
-  p2: { readonly x: number; readonly z: number },
-  p3: { readonly x: number; readonly z: number },
-  p4: { readonly x: number; readonly z: number },
-): { readonly t: number; readonly u: number } | undefined {
-  const d1x = p2.x - p1.x;
-  const d1z = p2.z - p1.z;
-  const d2x = p4.x - p3.x;
-  const d2z = p4.z - p3.z;
-  const denom = d1x * d2z - d1z * d2x;
-  if (Math.abs(denom) < 1e-9) return undefined;
-  const dx = p3.x - p1.x;
-  const dz = p3.z - p1.z;
-  const t = (dx * d2z - dz * d2x) / denom;
-  const u = (dx * d1z - dz * d1x) / denom;
-  return { t, u };
-}
-
-/**
- * How far (fraction along the *existing* wall) a crossing must sit from
- * that wall's own endpoints before it counts as a real mid-span crossing --
- * closer than this and it is what `weldCornerOverrides` already handles
- * (two walls sharing a corner), not a new node to insert. Only applies to
- * `u` (the existing wall) -- `t` (the new wall being drawn) has its own,
- * much smaller bound below, since a crossing landing at the new wall's own
- * endpoint is a legitimate T-junction (one segment, not two), not a case to
- * exclude.
- */
-const CROSSING_ENDPOINT_GUARD = 0.05;
-/**
- * `t` (along the new wall) must fall within its actual drawn span, not on
- * the line's extension past either end -- a tiny slop for float precision,
- * not a "too close to an end" exclusion. `t` at (or right next to) 0 is the
- * legitimate, intended case of starting a new wall's drag *from* a point on
- * an existing wall's middle, not something to reject: `onPointerUp`'s own
- * branching already treats a near-0/near-1 `t` as a one-segment T-junction.
- */
-const CROSSING_T_SLOP = 1e-6;
-
-interface WallCrossing {
-  readonly originalKey: ConstructionSurfaceKey;
-  readonly surfaceType: string;
-  readonly postA: WallPost;
-  readonly postB: WallPost;
-  /** Param along postA->postB (the *existing* wall) where the new wall crosses it, in (0, 1). */
-  readonly u: number;
-  /** Param along the *new* wall's own start->end where this crossing falls, in (0, 1). */
-  readonly t: number;
-}
-
-/**
- * The nearest point (by `t` along the new wall) where the segment about to
- * be drawn crosses the *middle* of an existing wall -- E7.3's "passar por
- * cima" case: the new wall doesn't just touch an existing corner, it cuts
- * through an existing wall's span. v1 scope: only the single nearest
- * crossing is handled per draw; a wall crossing more than one existing wall
- * needs repeating this against the remaining sub-segments, not built yet.
- */
-function findNearestWallCrossing(
-  ctx: ToolContext,
-  newStart: ConstructionPosition,
-  newEnd: ConstructionPosition,
-): WallCrossing | undefined {
-  const map = ctx.runtime.getSnapshot().map;
-  const existing: readonly ExistingWallNode[] = [...map.nodePositions.values()].map((entry) => ({
-    id: entry.nodeRef,
-    x: entry.position.x,
-    y: entry.position.y,
-    z: entry.position.z,
-  }));
-
-  let best: WallCrossing | undefined;
-  for (const surface of map.byId.values()) {
-    if (surface.type !== "wall-white" && surface.type !== "wall-gray") continue;
-    const posts = wallPostsFromNodes(surface.orderedNodeRefs, existing);
-    if (posts === undefined) continue;
-    const [postA, postB] = posts;
-    const hit = segmentIntersection2D(
-      { x: newStart.x, z: newStart.z },
-      { x: newEnd.x, z: newEnd.z },
-      { x: postA.x, z: postA.z },
-      { x: postB.x, z: postB.z },
-    );
-    if (hit === undefined) continue;
-    if (hit.t < -CROSSING_T_SLOP || hit.t > 1 + CROSSING_T_SLOP) continue;
-    if (hit.u <= CROSSING_ENDPOINT_GUARD || hit.u >= 1 - CROSSING_ENDPOINT_GUARD) continue;
-    if (best === undefined || hit.t < best.t) {
-      best = { originalKey: surface.orderedNodeRefs, surfaceType: surface.type, postA, postB, u: hit.u, t: hit.t };
-    }
+function pathEdges(points: readonly ConstructionPosition[]): readonly PathEdgeSpec[] {
+  const edges: PathEdgeSpec[] = [];
+  for (let index = 0; index + 1 < points.length; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    if (start === undefined || end === undefined) continue;
+    edges.push({ start, end, curvature: "straight" });
   }
-  return best;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-/** Splits `crossing`'s existing wall at its crossing point into two sibling quads, sharing a freshly inserted node pair with the new wall about to be drawn through it. */
-function splitCrossedWall(ctx: ToolContext, sequence: number, crossing: WallCrossing): void {
-  const { postA, postB, u } = crossing;
-  const midBottomId: ConstructionNodeId = `${ctx.tableId}:brush-wall-${sequence}:cross-bottom`;
-  const midTopId: ConstructionNodeId = `${ctx.tableId}:brush-wall-${sequence}:cross-top`;
-  const midX = lerp(postA.x, postB.x, u);
-  const midZ = lerp(postA.z, postB.z, u);
-  // Interpolated from the two real posts (not assumed flat/equal-height) --
-  // correct even if a future tool draws sloped or uneven-base walls.
-  const bottomY = lerp(postA.bottomY, postB.bottomY, u);
-  const topY = lerp(postA.topY, postB.topY, u);
-
-  const nodes = [
-    { id: midBottomId, position: { x: midX, y: bottomY, z: midZ } },
-    { id: midTopId, position: { x: midX, y: topY, z: midZ } },
-  ];
-  const first: ConstructionSurfaceSpec = {
-    cycle: [postA.bottomId, midBottomId, midTopId, postA.topId],
-    surfaceType: crossing.surfaceType,
-    physical: true,
-  };
-  const second: ConstructionSurfaceSpec = {
-    cycle: [midBottomId, postB.bottomId, postB.topId, midTopId],
-    surfaceType: crossing.surfaceType,
-    physical: true,
-  };
-  ctx.runtime.applyWallCrossingSplit(
-    nodes,
-    [{ originalKey: crossing.originalKey, first, second }],
-    "local",
-    `${ctx.tableId}:brush-wall-crossing:${sequence}`,
-  );
-}
-
-function commitWallSegment(
-  ctx: ToolContext,
-  sequence: number,
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-  params: WallBrushParams,
-): void {
-  const cornerOverrides = weldCornerOverrides(ctx, start, end, WALL_HEIGHT);
-  const operation = buildGenerateWallOperation(
-    ctx.tableId,
-    `brush-wall-${sequence}`,
-    { operationId: `${ctx.tableId}:brush-wall:${sequence}`, tableId: ctx.tableId, initiatedBy: "local" },
-    { start, end, height: WALL_HEIGHT },
-    // Door generation is a separate concern from wall-brush for now -- see
-    // `WallBrushParams`'s own doc. `room-seed.ts`'s procedural room walls
-    // still generate doors; this tool's straight segments do not.
-    undefined,
-    params.wallType,
-    params.wallType,
-    cornerOverrides,
-  );
-  ctx.runtime.generateWall(operation.payload, "local", operation.operationId);
+  return edges;
 }
 
 /**
- * Click-drag to draw one wall segment: `onPointerDown` marks the start,
- * `onPointerMove` only updates the ghost (no commit -- closes the gap
- * `0005-edit-mode-interaction.md` flagged: "generate wall auto-places, does
- * not offer click-to-choose placement"), `onPointerUp` commits the real
- * segment from start to release point.
+ * The in-progress pen stroke's own accumulated corner points -- lives for as
+ * long as the wall-brush tool keeps drawing one continuous structure, the
+ * same "dies with the gesture, cheap full resend" lifetime
+ * `house-brush-tool.ts`'s own `activeSession` uses, except here the gesture
+ * is a chain of clicks (`onClick`), not a drag.
+ */
+let activePath: ConstructionPosition[] | undefined;
+
+/**
+ * A single stable prefix for every wall-brush structure on this table --
+ * unlike `house-brush-tool.ts`'s cell-grid ids, a wall path's corner ids are
+ * derived purely from XZ position (`generate_wall_path`'s own doc), so two
+ * separate loops sharing this one prefix still weld together for free
+ * wherever their corners happen to coincide, without either loop needing to
+ * know about the other -- "ligar casas" (E7's own wording) comes for free.
+ */
+function idPrefixFor(ctx: ToolContext): string {
+  return `${ctx.tableId}:wall-brush`;
+}
+
+function commitPath(ctx: ToolContext, points: readonly ConstructionPosition[], params: WallBrushParams): void {
+  const edges = pathEdges(points);
+  if (edges.length === 0) return;
+  const sequence = ctx.nextSequence();
+  ctx.runtime.generateWallPath(
+    {
+      edges,
+      wallHeight: WALL_HEIGHT,
+      arcFacets: ARC_FACETS,
+      idPrefix: idPrefixFor(ctx),
+      wallType: params.wallType,
+      floorType: "floor",
+      ceilingType: "ceiling",
+    },
+    "local",
+    `${ctx.tableId}:wall-brush:${sequence}`,
+  );
+}
+
+/**
+ * Click to place each corner of a continuous wall -- straight segments for
+ * now (see `ARC_FACETS`'s own doc). Clicking back near the loop's own first
+ * corner closes it: the same call that draws the closing segment also gets
+ * a floor + ceiling back from the engine, for free (`generate_wall_path`'s
+ * own closure detection) -- no separate "derive room" click needed. Every
+ * tick resends the whole path so far (`GenerateWallPathRequest`'s own doc
+ * on why that's cheap), so a stroke abandoned mid-loop leaves exactly the
+ * open fence it already drew, nothing more.
  */
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
 
   previewFor(gesture: ToolGesture, params: WallBrushParams) {
-    return segmentBetween(gesture.start.point, gesture.current.point, WALL_COLOR[params.wallType]);
+    const path = activePath;
+    if (path === undefined || path.length === 0) return undefined;
+
+    const committed = pathEdges(path).flatMap((edge) => [
+      edge.start.x, edge.start.y, edge.start.z,
+      edge.end.x, edge.end.y, edge.end.z,
+    ]);
+    const last = path[path.length - 1];
+    const ghost = last === undefined
+      ? []
+      : [last.x, last.y, last.z, gesture.current.point.x, gesture.current.point.y, gesture.current.point.z];
+
+    return { kind: "segments", color: WALL_COLOR[params.wallType], opacity: 0.7, positions: Float32Array.from([...committed, ...ghost]) };
   },
 
-  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallBrushParams): void {
-    const sequence = ctx.nextSequence();
-    const start = gesture.start.point;
-    const end = gesture.current.point;
+  onClick(ctx: ToolContext, sample: PointerSample, params: WallBrushParams): void {
+    const point = sample.point;
 
-    const crossing = findNearestWallCrossing(ctx, start, end);
-    if (crossing === undefined) {
-      commitWallSegment(ctx, sequence, start, end, params);
+    if (activePath === undefined) {
+      activePath = [point];
       return;
     }
 
-    // Insert the shared node pair and split the crossed wall *before*
-    // drawing either half of the new wall, so `weldCornerOverrides` finds
-    // and welds onto those brand new nodes exactly like any other existing
-    // corner -- no separate weld path needed for the crossing point itself.
-    splitCrossedWall(ctx, sequence, crossing);
-    const crossPoint: ConstructionPosition = {
-      x: lerp(start.x, end.x, crossing.t),
-      y: start.y,
-      z: lerp(start.z, end.z, crossing.t),
-    };
+    const first = activePath[0];
+    const closing = first !== undefined && activePath.length >= 3 && xzDistance(point, first) <= CLOSE_DISTANCE;
+    const nextPoints = closing && first !== undefined ? [...activePath, first] : [...activePath, point];
 
-    // A T-junction (the new wall's own tip lands at the crossing, not its
-    // middle) needs only one segment -- the other "half" would be a
-    // near-zero sliver. `crossing.t` close to 0/1 is exactly that case.
-    if (crossing.t <= CROSSING_ENDPOINT_GUARD) {
-      commitWallSegment(ctx, sequence, crossPoint, end, params);
-    } else if (crossing.t >= 1 - CROSSING_ENDPOINT_GUARD) {
-      commitWallSegment(ctx, sequence, start, crossPoint, params);
-    } else {
-      commitWallSegment(ctx, sequence, start, crossPoint, params);
-      commitWallSegment(ctx, ctx.nextSequence(), crossPoint, end, params);
-    }
+    commitPath(ctx, nextPoints, params);
+
+    activePath = closing ? undefined : nextPoints;
   },
 };
