@@ -46,10 +46,17 @@ import {
   type MapChunkVisualParams,
 } from "./map-chunk-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
+import { createHeightGizmoTexture, createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
 import {
+  HEIGHT_GIZMO_STEM_VISUAL_KIND,
+  HEIGHT_GIZMO_VISUAL_KIND,
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
+  heightGizmoSceneItem,
+  heightGizmoSceneItemId,
+  heightGizmoStemSceneItem,
+  heightGizmoStemSceneItemId,
+  heightGizmoTransform,
   nodeHandleSceneItem,
   nodeHandleSceneItemId,
   nodeHandleTransform,
@@ -123,8 +130,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   async start(runtimeGeneration: number): Promise<void> {
     if (this.#engine !== undefined) throw new Error("scene renderer is already started");
 
-    const texture = createMarkerTexture();
-    const handleTexture = createNodeHandleTexture();
+    const texture = typeof document !== "undefined" ? createMarkerTexture() : undefined;
+    const handleTexture = typeof document !== "undefined" ? createNodeHandleTexture() : undefined;
+    const heightGizmoTexture = typeof document !== "undefined" ? createHeightGizmoTexture() : undefined;
+
     const registry = createVisualRegistry();
     registry.register<TokenVisualParams>({
       kind: TOKEN_VISUAL_KIND,
@@ -145,6 +154,23 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
       }),
       equals: () => true,
+    });
+    registry.register<Record<string, never>>({
+      kind: HEIGHT_GIZMO_VISUAL_KIND,
+      describe: () => ({
+        geometry: { shape: "sprite" },
+        material: { surface: "unlit", color: 0xffffff, texture: heightGizmoTexture },
+      }),
+      equals: () => true,
+    });
+    registry.register<{ readonly positions: Float32Array }>({
+      kind: HEIGHT_GIZMO_STEM_VISUAL_KIND,
+      describe: (params) => ({
+        geometry: { shape: "segments", positions: params.positions },
+        material: { surface: "line", color: 0x50b0ff, opacity: 0.75 },
+        pickable: false,
+      }),
+      equals: (left, right) => left.positions === right.positions,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -325,11 +351,15 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       this.#confirmedTokenChanges += 1;
     } else if (change.type === "node-handle-removed") {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
+      engine.scene.remove(heightGizmoSceneItemId(change.nodeId), origin);
+      engine.scene.remove(heightGizmoStemSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
       if (previous === undefined) {
         engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+        engine.scene.put(heightGizmoSceneItem(change.handle.nodeId, change.handle.position), origin);
+        engine.scene.put(heightGizmoStemSceneItem(change.handle.nodeId, change.handle.position), origin);
       } else if (
         previous.x !== change.handle.position.x ||
         previous.y !== change.handle.position.y ||
@@ -340,6 +370,12 @@ export class Render3dSceneAdapter implements SceneRenderPort {
           nodeHandleTransform(change.handle.position),
           origin,
         );
+        engine.scene.setTransform(
+          heightGizmoSceneItemId(change.handle.nodeId),
+          heightGizmoTransform(change.handle.position),
+          origin,
+        );
+        engine.scene.put(heightGizmoStemSceneItem(change.handle.nodeId, change.handle.position), origin);
       }
       this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
     } else if (change.type === "map-chunk-removed") {
@@ -368,7 +404,11 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       data?.entity === "construction-node-handle" && typeof data.nodeId === "string"
         ? data.nodeId
         : undefined;
-    return { point: result.point, nodeId };
+    const axis =
+      data?.entity === "construction-node-handle" && data.axis !== undefined
+        ? data.axis
+        : undefined;
+    return { point: result.point, nodeId, axis };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor): void {

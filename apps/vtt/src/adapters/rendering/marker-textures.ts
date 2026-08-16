@@ -39,3 +39,52 @@ export function createNodeHandleTexture(): HTMLCanvasElement {
   context.stroke();
   return canvas;
 }
+
+/**
+ * A vertical elevation/height gizmo handle inspired by Tiny Glade direct 3D manipulation:
+ * a vibrant pill/diamond with vertical elevation arrows.
+ */
+export function createHeightGizmoTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("height gizmo texture needs a 2D canvas context");
+
+  context.clearRect(0, 0, 64, 64);
+
+  // Outer badge
+  context.fillStyle = "#50b0ff";
+  context.strokeStyle = "#0f233a";
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(32, 32, 24, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  // Vertical arrow pointing up
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.moveTo(32, 14);
+  context.lineTo(44, 28);
+  context.lineTo(36, 28);
+  context.lineTo(36, 42);
+  context.lineTo(28, 42);
+  context.lineTo(28, 28);
+  context.lineTo(20, 28);
+  context.closePath();
+  context.fill();
+
+  // Bottom small chevron
+  context.beginPath();
+  context.moveTo(26, 46);
+  context.lineTo(32, 51);
+  context.lineTo(38, 46);
+  context.lineTo(38, 49);
+  context.lineTo(32, 54);
+  context.lineTo(26, 49);
+  context.closePath();
+  context.fill();
+
+  return canvas;
+}

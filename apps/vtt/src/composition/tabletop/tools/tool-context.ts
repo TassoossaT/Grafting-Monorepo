@@ -8,6 +8,7 @@ import type { TabletopRuntime } from "../tabletop-runtime.ts";
 export interface PointerSample {
   readonly point: ConstructionPosition;
   readonly nodeId?: string;
+  readonly axis?: "y-height" | "xz-planar" | "all";
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */
