@@ -11,16 +11,15 @@ use std::collections::HashSet;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry};
+use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType};
 
-use crate::cell_partition;
+use crate::boundary_delete;
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
+use crate::generation;
+use crate::geometry::connected_component;
 use crate::mesh;
-use crate::room_removal;
 use crate::terrain;
-use crate::wall;
-use crate::wall_path;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json).map_err(|error| JsValue::from_str(&format!("invalid request JSON: {error}")))
@@ -204,25 +203,16 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Generates a wall's (and its door's) surface pieces and applies them.
-    /// See `wall::generate_and_apply_wall`.
-    pub fn generate_and_apply_wall_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// Regenerates a path's whole panel geometry (straight and
+    /// semicircular-arc edges, with an optional single-edge notch) and
+    /// applies only the difference against whatever this structure already
+    /// holds -- the free-form path/wall brush's per-tick commit, and the
+    /// generic replacement for a one-shot wall-with-door generation. Never
+    /// generates a floor/ceiling itself. See
+    /// `generation::generate_and_apply_path_extrusion`.
+    pub fn generate_and_apply_path_extrusion_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = wall::generate_and_apply_wall(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
-        for piece in &response.pieces {
-            self.remember(&piece.surface_key);
-        }
-        serialize(&response)
-    }
-
-    /// Regenerates a painted cell set's whole partition (walls, doors,
-    /// floors, ceilings) and applies only the difference against whatever
-    /// this structure already holds -- the "Pintar Casa" tool's per-tick
-    /// commit. See `cell_partition::generate_and_apply_cell_partition`.
-    pub fn generate_and_apply_cell_partition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = cell_partition::generate_and_apply_cell_partition(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
-            .map_err(to_js_error)?;
+        let response = generation::generate_and_apply_path_extrusion(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -232,16 +222,13 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Regenerates a continuous wall-brush stroke's whole path (straight
-    /// and semicircular-arc edges) and applies only the difference against
-    /// whatever this structure already holds -- the free-form wall brush's
-    /// per-tick commit. Once the path closes into a loop, a floor and
-    /// ceiling are included too. See
-    /// `wall_path::generate_and_apply_wall_path`.
-    pub fn generate_and_apply_wall_path_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// Regenerates one closed boundary's cap (a floor, a ceiling, or any
+    /// other flat or per-vertex-height polygon) and applies only the
+    /// difference against whatever this structure already holds. See
+    /// `generation::generate_and_apply_boundary_cap`.
+    pub fn generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = wall_path::generate_and_apply_wall_path(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
-            .map_err(to_js_error)?;
+        let response = generation::generate_and_apply_boundary_cap(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -251,13 +238,31 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Removes a whole room (floor, ceiling, every bounding wall),
-    /// preserving and door-stripping any side still shared with a
-    /// standing neighbor. See `room_removal::remove_room`.
-    pub fn remove_room_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// Regenerates a painted cell set's whole region partition (every
+    /// region's own per-cell floor/ceiling, and a wall -- notched where a
+    /// run borders a different region -- along every boundary run) and
+    /// applies only the difference against whatever this structure already
+    /// holds -- the "Pintar Casa" tool's per-tick commit, and (once a
+    /// wall-brush stroke's path closes) the wall-brush's own closure
+    /// commit. See `generation::generate_and_apply_region_partition`.
+    pub fn generate_and_apply_region_partition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = room_removal::remove_room(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
-            .map_err(to_js_error)?;
+        let response = generation::generate_and_apply_region_partition(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
+        for key in &response.removed_surface_keys {
+            self.forget(key);
+        }
+        for key in &response.added_surface_keys {
+            self.remember(key);
+        }
+        serialize(&response)
+    }
+
+    /// Removes a whole closed boundary (floor, ceiling, every bounding
+    /// side), preserving and notch-stripping any side still shared with a
+    /// standing neighbor. See `boundary_delete::delete_boundary`.
+    pub fn delete_boundary_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = boundary_delete::delete_boundary(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -265,6 +270,19 @@ impl ConstructionSession {
             self.remember(key);
         }
         serialize(&response)
+    }
+
+    // ---- Clouds ----
+
+    /// The connected component of same-`type` surfaces reachable from
+    /// `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
+    /// `geometry::connected_component`.
+    pub fn cloud_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: CloudRequest = parse(request_json)?;
+        let seed = surface_key_from_wire(&request.seed).map_err(to_js_error)?;
+        let cloud = connected_component(&self.surfaces, &self.known_surfaces, &seed, &SurfaceType::new(request.surface_type));
+        let surface_keys: Vec<Vec<String>> = cloud.iter().map(surface_key_to_wire).collect();
+        serialize(&CloudResponse { surface_keys })
     }
 
     // ---- Mesh derivation ----
@@ -352,37 +370,25 @@ struct SnapshotResponse {
     surfaces: Vec<SurfaceSnapshot>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudRequest {
+    seed: Vec<String>,
+    surface_type: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudResponse {
+    surface_keys: Vec<Vec<String>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     use serde_json::json;
     use wasm_bindgen_test::wasm_bindgen_test;
-
-    fn all_role_node_ids_json() -> serde_json::Value {
-        let map: HashMap<String, String> = crate::dto::ALL_WALL_NODE_ROLES
-            .into_iter()
-            .map(|role| {
-                let wire = crate::dto::wall_node_role_wire_name(role);
-                (wire.to_string(), format!("{wire}-id"))
-            })
-            .collect();
-        serde_json::to_value(map).unwrap()
-    }
-
-    fn all_role_edge_ids_json() -> serde_json::Value {
-        let mut map: HashMap<String, String> = HashMap::new();
-        for &a in &crate::dto::ALL_WALL_NODE_ROLES {
-            for &b in &crate::dto::ALL_WALL_NODE_ROLES {
-                if a != b {
-                    let wire = crate::dto::wall_edge_role_pair_wire_name(a, b);
-                    map.insert(wire.clone(), format!("{wire}-edge"));
-                }
-            }
-        }
-        serde_json::to_value(map).unwrap()
-    }
 
     #[wasm_bindgen_test]
     fn a_full_session_sequence_generates_moves_and_merges() {
@@ -426,7 +432,7 @@ mod tests {
     /// `all_surface_meshes_json`. Plain `#[test]`, not `#[wasm_bindgen_test]`
     /// -- this crate's `wasm_bindgen_test`s are not wired into any CI job
     /// and do not run under a plain `cargo test`, which is exactly how this
-    /// bug went uncaught despite `generating_a_door_wall_exposes_three_sibling_meshes`
+    /// bug went uncaught despite `generating_a_notched_wall_exposes_three_sibling_meshes`
     /// already asserting the right mesh count.
     #[test]
     fn generating_a_terrain_cell_then_a_z_running_wall_exposes_all_four_meshes() {
@@ -439,15 +445,15 @@ mod tests {
             .expect("terrain cell generates");
 
         let request = json!({
-            "wall": {"start": [2.0, 0.0, 0.0], "end": [2.0, 0.0, 4.0], "height": 3.0},
-            "door": {"opensAt": 0.25, "closesAt": 0.75},
-            "wallType": "wall",
-            "doorType": "door",
-            "nodeIds": all_role_node_ids_json(),
-            "edgeIds": all_role_edge_ids_json(),
+            "edges": [{"start": [2.0, 0.0, 0.0], "end": [2.0, 0.0, 4.0], "curvature": "straight"}],
+            "height": 3.0,
+            "arcFacets": 6,
+            "idPrefix": "z-wall-1",
+            "surfaceType": "wall",
+            "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
         })
         .to_string();
-        session.generate_and_apply_wall_json(&request).expect("wall generates");
+        session.generate_and_apply_path_extrusion_json(&request).expect("wall generates");
 
         let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
@@ -455,30 +461,29 @@ mod tests {
     }
 
     /// The TS adapter's `JSON.stringify` drops any key whose value is
-    /// `undefined` -- a no-door wall-brush call therefore sends a request
-    /// with the `door` key *absent*, not `null`. No prior test exercised
-    /// that exact wire shape (every other test spells out `"door": {...}`
-    /// or uses the Rust struct literal directly, which is a different
-    /// boundary). Reported while testing `VTT-WALL-CORNER-WELD`: a wall
-    /// drawn with the door UI removed still produced more than 4 nodes.
+    /// `undefined` -- a no-notch wall-brush call therefore sends a request
+    /// with the `notch` key *absent*, not `null`. No prior test exercised
+    /// that exact wire shape. Reported while testing `VTT-WALL-CORNER-WELD`:
+    /// a wall drawn with the door UI removed still produced more than 4
+    /// nodes.
     #[test]
-    fn a_wall_request_with_no_door_key_at_all_still_produces_exactly_four_nodes() {
+    fn a_path_extrusion_request_with_no_notch_key_at_all_still_produces_exactly_four_nodes() {
         let mut session = ConstructionSession::new();
         let request = json!({
-            "wall": {"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "height": 3.0},
-            "wallType": "wall",
-            "doorType": "wall",
-            "nodeIds": all_role_node_ids_json(),
-            "edgeIds": all_role_edge_ids_json(),
+            "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
+            "height": 3.0,
+            "arcFacets": 6,
+            "idPrefix": "no-notch-1",
+            "surfaceType": "wall",
         })
         .to_string();
 
-        let response = session.generate_and_apply_wall_json(&request).expect("wall generates");
+        let response = session.generate_and_apply_path_extrusion_json(&request).expect("wall generates");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(parsed["pieces"].as_array().unwrap().len(), 1);
+        assert_eq!(parsed["addedSurfaceKeys"].as_array().unwrap().len(), 1);
 
         let snapshot: serde_json::Value = serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
-        assert_eq!(snapshot["nodes"].as_array().unwrap().len(), 4, "no-door wall must be exactly 4 nodes: {snapshot}");
+        assert_eq!(snapshot["nodes"].as_array().unwrap().len(), 4, "no-notch wall must be exactly 4 nodes: {snapshot}");
     }
 
     #[wasm_bindgen_test]
@@ -547,19 +552,19 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn generating_a_door_wall_exposes_three_sibling_meshes() {
+    fn generating_a_notched_wall_exposes_three_sibling_meshes() {
         let mut session = ConstructionSession::new();
         let request = json!({
-            "wall": {"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "height": 3.0},
-            "door": {"opensAt": 0.25, "closesAt": 0.75},
-            "wallType": "wall",
-            "doorType": "door",
-            "nodeIds": all_role_node_ids_json(),
-            "edgeIds": all_role_edge_ids_json(),
+            "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
+            "height": 3.0,
+            "arcFacets": 6,
+            "idPrefix": "notched-1",
+            "surfaceType": "wall",
+            "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
         })
         .to_string();
 
-        session.generate_and_apply_wall_json(&request).expect("wall with door generates");
+        session.generate_and_apply_path_extrusion_json(&request).expect("wall with notch generates");
 
         let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
