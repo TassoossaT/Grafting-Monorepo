@@ -106,6 +106,14 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
       dev: argv.includes("--dev") || argv.includes("-D"),
     };
   }
+  if (subcommand === "done") {
+    return {
+      taskId,
+      title: readValue(argv, "--title"),
+      body: readValue(argv, "--body"),
+      base: readValue(argv, "--base"),
+    };
+  }
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
