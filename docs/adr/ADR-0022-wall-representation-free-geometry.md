@@ -4,7 +4,9 @@
 - Decision owner: repository-owner
 - Original decision date: 2026-08-08 (free-geometry model — superseded below)
 - Revision date: 2026-08-10; general deletion-repair algorithm added
-  2026-08-12; terrain/structure seam resolved 2026-08-12
+  2026-08-12; terrain/structure seam resolved 2026-08-12; structure-cloud
+  layer and generation/orchestration split added 2026-08-16; cloud
+  connectivity/reclassification semantics clarified 2026-08-16
 - Record: DEC-060
 - Supersedes: this document's own 2026-08-08 decision, in place, at the
   owner's explicit direction ("não tem problema em reescrever ela
@@ -73,7 +75,12 @@ the part this ADR governs:
    mistake `DEC-052`/`ADR-0014` already forbids elsewhere). `physical` says
    whether the surface currently blocks movement or acts as ground —
    nothing about vision or rendering; that belongs to the asset layer.
-4. **Asset** — fills the mesh, either by replication (a small reusable
+4. **Cloud** — added 2026-08-16, see "Structure clouds and the
+   generation/orchestration split" below. The connected component of
+   `Surface`s sharing one `type`, linked to each other via shared graph
+   nodes/edges. Derived, not stored, exactly like `Mesh` — a query over the
+   graph and its surfaces, never a fourth persisted structure.
+5. **Asset** — fills the mesh, either by replication (a small reusable
    fragment duplicated along the mesh to fill it, count depending on size —
    a repeating brick or fence-post pattern) or by stretch/fit (a single
    unique asset scaled to match the mesh's exact dimensions — a specific
@@ -213,6 +220,122 @@ There is no separate `apply_cell_patch` algorithm to design — the
 generic `Move`/`Add` node operations, plus terrain's own isolated
 generation code, are the implementation.
 
+## Structure clouds and the generation/orchestration split
+
+Added 2026-08-16. Motivated by a concrete failure: `wall_path`'s
+`generate_and_apply_wall_path` (`libs/domains/procgen/construction-wasm/src/wall_path.rs`,
+built on top of `libs/domains/procgen/structure-generation/src/wall_path.rs`'s
+`generate_wall_path`) fuses three separate concerns into one function —
+tessellating a path's geometry, deciding whether a closed loop gets a
+ceiling, and diffing/applying the result against the graph — with no way to
+call any one of those independently. `cell_partition` has the identical
+shape. Both were reached for "what's the generic version of this" and
+turned out not to be generic at all: each hardcodes its own scope
+computation, its own floor+ceiling coupling, and its own notion of what a
+"structure" is, none of it reusable by a generator for anything other than
+a wall or a cell grid.
+
+**A cloud is the connected component of `Surface`s sharing one `type`,
+linked via shared graph nodes/edges.** Not a new persisted structure —
+computed on demand from the graph and its surfaces, the same "derive, don't
+store" posture `Mesh` already has. A cloud of one `Surface` is not a special
+case; it is a connected component of size one, same code path as a
+component of a thousand. This is the unit generation and editing operate
+on — never an individual `Surface` in isolation, and never a whole domain's
+worth of surfaces at once regardless of connectivity.
+
+**Clarified 2026-08-16 — graph connectivity never depends on `type`, and
+merging/splitting clouds is the same query, not a separate algorithm.** Two
+`Surface`s sharing a node stay connected in the graph regardless of what
+either's `type` is; changing a `Surface`'s `type` (see the independent
+attribute-edit rule above) never severs or creates a graph edge. What
+changes is only which cloud-query result that `Surface` now falls into:
+
+- **Merge** (e.g. two separately drawn terrain patches, later welded where
+  a new stroke's node lands on the other's existing node): no explicit
+  merge step exists. The moment a shared node exists, the *next* time
+  anyone queries "what cloud does this `Surface` belong to," the walk
+  crosses into the other patch, because the graph now connects them. The
+  cloud query is agnostic to *why* the graph changed — a new node, a welded
+  node, a reclassified `type` — it always just reflects current state.
+- **Split-by-reclassification** (e.g. carving a dirt path through one
+  terrain cloud by rewriting `type: "terrain"` → `type: "path"` on a
+  sub-strip of `Surface`s): the underlying graph is untouched and stays one
+  connected mesh — the terrain on either side of the new path is still
+  physically continuous through the path's own nodes. What splits is the
+  *same-type* cloud query: querying from either remaining terrain edge no
+  longer walks across the reclassified strip (different `type`), so it
+  resolves to its own smaller terrain cloud, and the reclassified strip
+  resolves to a new path cloud — again, no cloud data structure was
+  mutated, only the `Surface.type` values the query reads.
+- **Seams are meaningful, not incidental.** Because the graph connection
+  across a cloud boundary survives, a cloud can be asked for its own
+  boundary nodes/edges that touch a *different* `type`'s cloud — e.g. the
+  terrain/path seam above. This is reserved for later use (a blended
+  transition texture at that exact seam, rather than a hard edge) — not
+  designed here, but the connectivity this decision keeps intact is what
+  makes it possible at all.
+
+**Rust knows shapes and mechanics, never product `type`.** Concretely, two
+kinds of Rust function, cleanly separated, replacing the fused
+`generate_and_apply_*` shape:
+
+1. **Pattern generators** — pure functions: parameters in (points, a seed,
+   a height, a boundary), a target node/edge/surface-cycle description out.
+   No mutation, no orchestration, no branching on any `type` string.
+   `generate_wall_path`'s path-tessellation math and `generate_cell_partition`'s
+   grid-subdivision math are examples that already exist; "generate
+   rooms+walls filling an area" (interior generation) is another pattern
+   generator of the same shape, not a special method living inside a cloud.
+   A generator's output can be handed to the orchestration step below
+   regardless of which generator produced it.
+2. **Cloud orchestration** — generic apply/diff/dedupe against the current
+   graph (this already exists as `construction-wasm/src/diff_apply.rs`'s
+   `diff_and_apply`, minted for `cell_partition` but already
+   generator-agnostic in practice). Takes a scope and a target geometry
+   description, applies Add/Delete/Merge/Split to reach it, regardless of
+   which pattern generator — or how many, composed — produced that target.
+   The cloud's own job stops at orchestrating faces into/out of the graph;
+   it never contains generation logic itself.
+
+**`type` lives in the front (`apps/vtt`), only as a preset, never as a
+branch condition Rust evaluates.** A `type` (a house wall, a terrain patch,
+a roof) is a named bundle of parameters/seed/pattern choice the front
+resolves before ever calling into Rust — the same shape `DEFAULT_TOOL_PARAMS`
+already has for e.g. `WallBrushParams`. Rust receives only the resolved
+parameters and executes the math; it does not need to know, and must not be
+given a reason to know, that the caller thinks of the result as "a house."
+This sharpens, rather than replaces, "Generation must stay isolated per
+domain" above: isolation is not achieved by one Rust module per product
+concept (`wall.rs`, `wall_path.rs`, `cell_partition.rs` each reimplementing
+extrusion/capping), it is achieved by generic shape math in Rust plus
+product meaning living entirely in the front's own preset/parameter
+resolution.
+
+**Reclassifying `type` is a front-side workflow that pairs with a
+generator call, not just a label edit.** The graph layer's own
+independence (a `Surface.type` edit touches no node and forces no mesh
+recompute, per the rule above) is still exactly true — nothing at the
+graph/mesh layer reacts automatically to a `type` change. But the front is
+expected to *pair* a reclassification with calling that new `type`'s own
+pattern generator over the reclassified `Surface`s' current node positions,
+applying the result through the ordinary `Move` operation — e.g. a "path"
+preset's generator might compute slightly sunken Y values for the
+reclassified strip's nodes, or only reshape its edge nodes, or flatten it
+uniformly. This is not a new mechanism: it is one more pattern-generator
+call (parameters, here including "the nodes already at these positions,"
+in; target positions out) applied through the same generic `Move`, exactly
+like every other generation path in this section.
+
+**Editing dispatches by cloud, not by individual surface.** An edit-mode
+action resolves which cloud a clicked/selected `Surface` belongs to (the
+same connected-component-by-`type` query cloud orchestration already needs
+for scoping), then the front applies whatever behavior that cloud's `type`
+implies against the whole cloud's member surfaces. Editing a roof and
+editing a terrain patch use the identical resolution mechanism and differ
+only in which front-side behavior runs once the cloud is resolved — never a
+per-`Surface` special case, and never a Rust-side distinction between them.
+
 ## What this decision does not resolve — recorded honestly, not glossed over
 
 - ~~**Recomputation cost was unmeasured.**~~ **Resolved 2026-08-12.**
@@ -231,6 +354,31 @@ generation code, are the implementation.
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
   not designed here.
+- **Cloud membership: on-demand query vs. maintained index.** ~~This
+  document decides a cloud is derived, not stored, but not whether "find
+  the connected component of same-`type` surfaces containing this one" is
+  recomputed from scratch each call...~~ **Narrowed 2026-08-16**: there is
+  no separate merge/split algorithm to design — see "graph connectivity
+  never depends on `type`" above, merging and splitting are both just the
+  same connected-component query re-run against a graph/type-set that
+  changed. What remains genuinely open is only performance: recompute from
+  scratch each call (like `room-lookup.ts`'s `findEnclosingRoom` already
+  does for one specific shape) versus an incrementally maintained
+  adjacency/Union-Find index once cloud sizes make a full walk too slow. A
+  measurement question, not decided here.
+- **Concrete Rust module/function boundaries for the split.** This decision
+  says pattern generators and cloud orchestration must separate; it does
+  not design the actual function signatures, which existing modules
+  (`wall.rs`, `wall_path.rs`, `cell_partition.rs`, `diff_apply.rs`,
+  `geometry.rs`) keep, merge, or lose, or the migration path for
+  `apps/vtt`'s existing callers (`wall-brush-tool.ts`,
+  `house-brush-tool.ts`, `room-stamp-tool.ts`, `room-derive-tool.ts`). That
+  is implementation planning, deliberately kept out of this ADR.
+- **Interior generation as a pattern generator.** "Given a closed boundary,
+  generate rooms+walls filling it" is named here as an example pattern
+  generator of the same shape as path/grid generation, but its own
+  algorithm (how rooms subdivide the area) is not designed by this
+  decision.
 - ~~**The deletion-repair rule is a defined heuristic for one case, not a
   general algorithm.**~~ **Resolved 2026-08-12** — see "Delete: the general
   cycle-repair algorithm" above. Kept here, struck through, so the record of
@@ -303,6 +451,22 @@ positional one.
 - `docs/research/vtt-construction-layering-graph-mesh-asset.md` — the
   design conversation this decision is extracted from, including the
   problems it does not resolve.
+- `libs/domains/procgen/construction-wasm/src/wall_path.rs`'s
+  `generate_and_apply_wall_path` and
+  `libs/domains/procgen/structure-generation/src/wall_path.rs`'s
+  `generate_wall_path` — read directly 2026-08-16 while integrating the
+  wall-brush tool (PR #130); the concrete fused generation+ceiling+
+  orchestration function that motivates the cloud/generator split above.
+- `libs/domains/procgen/construction-wasm/src/diff_apply.rs`'s
+  `diff_and_apply` and `libs/domains/procgen/construction-wasm/src/geometry.rs`'s
+  `point_in_or_on_polygon` — already-generic orchestration/scoping code
+  (extracted from `cell_partition.rs`/`room_removal.rs` in PR #125) offered
+  as evidence this split is already partly underway, not a green-field
+  proposal.
+- `apps/vtt/src/composition/tabletop/tools/room-lookup.ts`'s
+  `findEnclosingRoom` — an existing precedent for "derive the connected
+  region on demand from the live graph, do not keep a separate model in
+  sync," the same posture a cloud query would take.
 
 ## Migration or rollback
 
