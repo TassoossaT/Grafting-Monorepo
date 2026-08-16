@@ -115,8 +115,9 @@ test("allows Bash with no claim at all, as long as it is not a forbidden git ope
   assert.equal(decision.allowed, true);
 });
 
-test("allows agents to commit forward and invoke controlled task sync", () => {
-  assert.equal(evaluateAgentGitCommand('git commit -m "progress"').allowed, true);
+test("allows ia-graft launcher commands and controlled task sync", () => {
+  assert.equal(evaluateAgentGitCommand('.\\ia-graft.cmd task commit --id DEMO-TASK --message "progress"').allowed, true);
+  assert.equal(evaluateAgentGitCommand("./ia-graft.cmd task test --id DEMO-TASK --command \"pnpm test\"").allowed, true);
   assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK").allowed, true);
 });
 
@@ -126,6 +127,25 @@ test("rejects direct package manager installation commands", () => {
     const decision = evaluateAgentGitCommand(command);
     assert.equal(decision.allowed, false, command);
     assert.match(decision.reason, /direct package-manager installation is forbidden/);
+  }
+});
+
+test("rejects direct git mutating commands in favor of ia-graft", () => {
+  const mutatingGit = [
+    { cmd: 'git commit -m "feat: new thing"', reason: /direct 'git commit' is forbidden/ },
+    { cmd: "git add .", reason: /direct 'git add' is forbidden/ },
+    { cmd: "git checkout -b feature", reason: /direct 'git checkout\/switch\/branch' is forbidden/ },
+    { cmd: "git switch main", reason: /direct 'git checkout\/switch\/branch' is forbidden/ },
+    { cmd: "git branch new-branch", reason: /direct 'git checkout\/switch\/branch' is forbidden/ },
+    { cmd: "git push -u origin feature", reason: /direct 'git push' is forbidden/ },
+    { cmd: "git reset --hard HEAD", reason: /direct raw git state mutation/ },
+    { cmd: "git stash", reason: /direct raw git state mutation/ },
+  ];
+
+  for (const { cmd, reason } of mutatingGit) {
+    const decision = evaluateAgentGitCommand(cmd);
+    assert.equal(decision.allowed, false, cmd);
+    assert.match(decision.reason, reason);
   }
 });
 
@@ -142,24 +162,6 @@ test("rejects history-rewriting and merge operations", () => {
     const decision = evaluateAgentGitCommand(command);
     assert.equal(decision.allowed, false, command);
   }
-});
-
-test("allows branch preparation and pushes to any branch except main/master", () => {
-  const branch = evaluateAgentGitCommand("git switch -c task/DEMO-TASK");
-  const push = evaluateAgentGitCommand("git push -u origin task/DEMO-TASK");
-  const defaultPush = evaluateAgentGitCommand("git push origin main");
-  const implicitPush = evaluateAgentGitCommand("git push");
-
-  assert.equal(branch.allowed, true);
-  assert.equal(push.allowed, true);
-  assert.equal(defaultPush.allowed, false);
-  assert.match(defaultPush.reason, /never push to main/);
-  assert.equal(implicitPush.allowed, true);
-});
-
-test("rejects force, mirror, bulk, tag, or delete pushes", () => {
-  assert.equal(evaluateAgentGitCommand("git push --force origin task/DEMO-TASK").allowed, false);
-  assert.equal(evaluateAgentGitCommand("git push --delete origin task/DEMO-TASK").allowed, false);
 });
 
 test("allows only fast-forward pulls", () => {

@@ -26,37 +26,33 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
   - MUST NOT inspect `cfg(target_os)`, `navigator.gpu`, `process.platform`, or RID outside `polymath` abstractions (DEC-042, [ADR-0006](docs/adr/ADR-0006-polymath-platform-abstraction.md)).
 
 - **Git & PR Governance:**
+  - MUST NOT execute direct mutating git commands (`git commit`, `git add`, `git checkout`, `git switch`, `git branch`, `git push`, `git merge`, `git rebase`, `git reset`, `git stash`). All Git operations MUST execute through `ia-graft`.
+  - MUST NOT execute direct package installs (`pnpm/npm/yarn install/add`); use `ia-graft task deps`.
   - MUST NOT merge a pull request (human merges only, DEC-053, [ADR-0015](docs/adr/ADR-0015-agent-git-write-policy.md)).
   - MUST NOT commit directly on `master`/`main` for any change touching non-Markdown files.
 
-## 2. TASK LIFECYCLE (`tools/ia-graft`)
+## 2. TASK LIFECYCLE & STACKED PRS (`tools/ia-graft`)
 
-- `ia-graft` is the opaque repository-owned boundary for every command it exposes; agents must not invoke its Node entry point directly or inspect, reproduce, or separately operate its internal Git or hosting mechanics.
-- Any request authorizing in-scope code, config, contract, or script work also authorizes every necessary `ia-graft` invocation through `task done`, including configured submission side effects, without separate confirmation; merging remains human-only.
-- On Windows invoke `.\ia-graft.cmd` followed by the command; the project rule at `.codex/rules/ia-graft.rules` intentionally authorizes the entire launcher, including future subcommands.
-
-- **Documentation-Only Edits (100% Markdown prose):**
-  - Commit directly to `master`/`main` (no task branch, no PR needed).
-  - Protocol/policy changes require owner approval before commit.
-
+- **Autonomous Execution:** User requests pre-authorize all necessary `ia-graft` commands through `task done` without pausing for confirmation; merging PRs remains human-only.
+- On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
+- **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**
   1. Start task: `ia-graft task new --id <TASK-ID> [--base <branch>] [--parent <ID>]`
-  2. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
-  3. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--agent <name>] [--co-author <name>]`
-  4. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
-  5. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "<body>"`
-  6. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
+  2. **Stacked PRs:** When building upon an unmerged task, MUST use `--parent <PARENT-TASK-ID>`. `task done` automatically opens a stacked PR targeting the parent branch.
+  3. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
+  4. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--amend] [--agent <name>]`
+  5. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
+  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "<body>"`
+  7. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)
 
-- **Mandatory Context Packing & Recovery:**
-  - Agents MUST run `ia-graft context --pack` or `ia-graft task resume` when starting/resuming tasks to load scoped context and avoid token waste.
-  - Agents MUST use pattern search (`grep`, `glob`) and targeted line ranges (`view_file`), never reading full files unnecessarily.
-
+- **Mandatory Context Packing:** Agents MUST run `ia-graft context --pack` or `ia-graft task resume` when starting/resuming tasks to load scoped context and avoid token waste.
+- **Surgical Inspection:** Agents MUST use pattern search (`grep`, `glob`) and targeted line ranges (`view_file`), never reading full files (>100 lines) unnecessarily.
 - **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
   - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
   - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
-  - **Stdio MCP Integration:** When running as an MCP client, agents MUST prefer native `graft_context_pack`, `graft_task_resume`, and `graft_task_status` MCP tools.
+  - **Stdio MCP Integration:** Prefer native `graft_context_pack`, `graft_task_resume`, and `graft_task_status` MCP tools.
 
 ## 4. STOP CONDITIONS
 

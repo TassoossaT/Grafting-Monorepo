@@ -68,10 +68,50 @@ const gitSubcommandPattern = (subcommands) =>
 export function evaluateAgentGitCommand(command) {
   if (typeof command !== "string" || command.trim().length === 0) return allowed();
 
+  // Explicitly allow ia-graft CLI invocations
+  if (/^(?:\.\\|\.\/)?ia-graft(?:\.cmd)?\b/i.test(command.trim()) || /\bnode\s+(?:\S+[\\/])?tools[\\/]ia-graft[\\/]src[\\/]bin\.ts\b/i.test(command)) {
+    return allowed();
+  }
+
   const packageInstall = /\b(?:pnpm|npm|yarn|bun|uv|pip)\s+(?:install|add|i)\b/i;
   if (packageInstall.test(command)) {
     return denied(
-      "direct package-manager installation is forbidden; use 'ia-graft task deps --install' instead to prevent lockfile drift and context noise",
+      "direct package-manager installation is forbidden; use 'ia-graft task deps --install' or 'ia-graft task deps --add' instead to prevent lockfile drift and context noise",
+    );
+  }
+
+  const directCommit = gitSubcommandPattern(["commit"]);
+  if (directCommit.test(command)) {
+    return denied(
+      "direct 'git commit' is forbidden; use 'ia-graft task commit --id <TASK-ID> --message \"...\"' to ensure managed worktree tracking and AI attribution",
+    );
+  }
+
+  const directAdd = gitSubcommandPattern(["add"]);
+  if (directAdd.test(command)) {
+    return denied(
+      "direct 'git add' is forbidden; 'ia-graft task commit' automatically stages and tracks changes inside the task worktree",
+    );
+  }
+
+  const directCheckoutOrBranch = gitSubcommandPattern(["checkout", "switch", "branch"]);
+  if (directCheckoutOrBranch.test(command)) {
+    return denied(
+      "direct 'git checkout/switch/branch' is forbidden; use 'ia-graft task new --id <TASK-ID> [--parent <PARENT-ID>]' to manage tasks or 'ia-graft task checkout' to test in main",
+    );
+  }
+
+  const directResetOrStash = gitSubcommandPattern(["reset", "clean", "stash"]);
+  if (directResetOrStash.test(command)) {
+    return denied(
+      "direct raw git state mutation ('git reset/clean/stash') is forbidden; work exclusively inside the isolated task worktree via ia-graft",
+    );
+  }
+
+  const directPush = gitSubcommandPattern(["push"]);
+  if (directPush.test(command)) {
+    return denied(
+      "direct 'git push' is forbidden; use 'ia-graft task done --id <TASK-ID> --title \"...\" --body \"...\"' to push and open/update the PR",
     );
   }
 
@@ -88,28 +128,18 @@ export function evaluateAgentGitCommand(command) {
   ]);
   if (historyRewriting.test(command)) {
     return denied(
-      "raw Git merge/history rewriting is forbidden; use ia-graft task sync only for the task's recorded base",
+      "raw Git merge/history rewriting is forbidden; use 'ia-graft task sync' only for the task's recorded base",
     );
   }
 
   if (/\bgh\s+pr\s+merge\b/i.test(command)) {
-    return denied("AI agents may prepare or open a pull request but must not merge it");
+    return denied("AI agents may prepare or open a pull request via 'ia-graft task done' but must not merge it (human merges only)");
   }
 
   const pullSegments = command.match(/\bgit(?:\.exe)?\s+pull\b[^;&|\r\n]*/gi) ?? [];
   for (const segment of pullSegments) {
     if (!/(?:^|\s)--ff-only(?:\s|$)/i.test(segment)) {
-      return denied("AI agents may run git pull only with --ff-only so it cannot create a merge commit");
-    }
-  }
-
-  const pushSegments = command.match(/\bgit(?:\.exe)?\s+push\b[^;&|\r\n]*/gi) ?? [];
-  for (const segment of pushSegments) {
-    if (/(?:^|\s)(?:-f|--force(?:-with-lease)?|--mirror|--all|--tags|--delete)(?:\s|$)/i.test(segment)) {
-      return denied("AI agents must not force, mirror, bulk, tag, or delete remote Git refs");
-    }
-    if (/(?:^|[\s:])(?:refs\/heads\/)?(?:main|master)(?=$|\s)/i.test(segment)) {
-      return denied("AI agents must never push to main or master");
+      return denied("AI agents may run git pull only with --ff-only so it cannot create a merge commit; prefer 'ia-graft task sync'");
     }
   }
 

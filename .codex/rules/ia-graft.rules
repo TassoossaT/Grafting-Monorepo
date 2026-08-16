@@ -1,5 +1,29 @@
 prefix_rule(
     pattern = [[".\\ia-graft.cmd", "./ia-graft.cmd", "ia-graft.cmd"]],
     decision = "allow",
-    justification = "The task CLI launcher (ia-graft.cmd) is fully trusted for all repo operations.",
+    justification = "The task CLI launcher (ia-graft.cmd) is fully trusted and pre-authorized for all repo operations.",
 )
+
+prefix_rule(
+    pattern = [
+        ["git commit"],
+        ["git add"],
+        ["git checkout"],
+        ["git switch"],
+        ["git branch"],
+        ["git push"],
+        ["git merge"],
+        ["git rebase"],
+        ["git reset"],
+        ["git stash"],
+        ["pnpm install"],
+        ["pnpm add"],
+        ["npm install"],
+        ["yarn add"],
+        ["pip install"],
+        ["uv add"],
+    ],
+    decision = "deny",
+    justification = "Direct manual git and package installations are forbidden. Use .\\ia-graft.cmd task/deps/delegate commands instead.",
+)
+

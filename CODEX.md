@@ -6,4 +6,4 @@ Read and follow in precedence order:
 3. [`.ai/coordination/PROTOCOL.md`](.ai/coordination/PROTOCOL.md) — Coordination protocol.
 4. Applicable ADRs in `docs/adr/`.
 
-All task creation, execution, and commits MUST use `tools/ia-graft`.
+All task creation, execution, commits, dependencies, and PRs MUST execute exclusively via `tools/ia-graft` (`.\ia-graft.cmd` on Windows). Direct manual git mutations and raw package installations are forbidden. Full autonomous execution is pre-approved through `task done`.
