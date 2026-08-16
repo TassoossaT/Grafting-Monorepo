@@ -94,21 +94,23 @@ export interface WallPiece {
 }
 
 /**
- * A rectangular `rows` x `cols` grid of uniform-size, welded cells --
- * shared interior walls, one per grid edge, plus a floor+ceiling per cell.
+ * A rectangular `width` x `depth` footprint partitioned into `roomCount`
+ * welded rooms of varied size (squarified-treemap sizing, deterministic
+ * per `seed`) -- shared interior walls, plus a floor+ceiling per room.
  * Generic on purpose (not house-specific): the app composition layer names
  * a particular use of this "a house," but this port only knows about a
- * grid of walled cells, the same way it only knows about "a wall," not "a
- * bedroom wall."
+ * footprint tiled into rooms, the same way it only knows about "a wall,"
+ * not "a bedroom wall."
  */
 export interface RoomGridLayout {
-  /** The grid's row-0/col-0 corner. */
+  /** The footprint's min-x/min-z corner. */
   readonly origin: ConstructionPosition;
-  readonly rows: number;
-  readonly cols: number;
-  readonly cellWidth: number;
-  readonly cellDepth: number;
+  readonly width: number;
+  readonly depth: number;
+  readonly roomCount: number;
   readonly wallHeight: number;
+  /** The same seed always reproduces the same room layout. */
+  readonly seed: number;
 }
 
 export interface GenerateRoomGridRequest {

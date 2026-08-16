@@ -110,8 +110,10 @@ function HouseStampFields(props: {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Linhas", params.rows, 1, 4, 1, (rows) => onChange({ ...params, rows }))}
-      {sliderRow("Colunas", params.cols, 1, 4, 1, (cols) => onChange({ ...params, cols }))}
+      {sliderRow("Largura", params.width, 4, 24, 1, (width) => onChange({ ...params, width }))}
+      {sliderRow("Profundidade", params.depth, 4, 24, 1, (depth) => onChange({ ...params, depth }))}
+      {sliderRow("Número de Cômodos", params.roomCount, 1, 8, 1, (roomCount) => onChange({ ...params, roomCount }))}
+      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );
 }

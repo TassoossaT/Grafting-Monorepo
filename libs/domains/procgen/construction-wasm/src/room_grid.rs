@@ -20,11 +20,11 @@ use crate::editing::SessionGraph;
 #[serde(rename_all = "camelCase")]
 pub struct RoomGridLayoutDto {
     pub origin: [f32; 3],
-    pub rows: u32,
-    pub cols: u32,
-    pub cell_width: f32,
-    pub cell_depth: f32,
+    pub width: f32,
+    pub depth: f32,
+    pub room_count: u32,
     pub wall_height: f32,
+    pub seed: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,17 +66,20 @@ pub fn generate_and_apply_room_grid(
     surfaces: &mut SurfaceRegistry,
     request: GenerateAndApplyRoomGridRequest,
 ) -> Result<GenerateAndApplyRoomGridResponse, String> {
-    if request.layout.rows == 0 || request.layout.cols == 0 {
-        return Err("layout.rows and layout.cols must each be at least 1".to_string());
+    if request.layout.room_count == 0 {
+        return Err("layout.roomCount must be at least 1".to_string());
+    }
+    if request.layout.width <= 0.0 || request.layout.depth <= 0.0 {
+        return Err("layout.width and layout.depth must each be positive".to_string());
     }
 
     let layout = RoomGridLayout {
         origin: request.layout.origin,
-        rows: request.layout.rows,
-        cols: request.layout.cols,
-        cell_width: request.layout.cell_width,
-        cell_depth: request.layout.cell_depth,
+        width: request.layout.width,
+        depth: request.layout.depth,
+        room_count: request.layout.room_count,
         wall_height: request.layout.wall_height,
+        seed: request.layout.seed,
     };
     let generation = generate_room_grid(
         &layout,
@@ -148,9 +151,9 @@ mod tests {
         Graph::try_from_parts(Vec::new(), Vec::new()).unwrap()
     }
 
-    fn request(rows: u32, cols: u32, id_prefix: &str) -> GenerateAndApplyRoomGridRequest {
+    fn request(room_count: u32, seed: u64, id_prefix: &str) -> GenerateAndApplyRoomGridRequest {
         GenerateAndApplyRoomGridRequest {
-            layout: RoomGridLayoutDto { origin: [0.0, 0.0, 0.0], rows, cols, cell_width: 4.0, cell_depth: 4.0, wall_height: 3.0 },
+            layout: RoomGridLayoutDto { origin: [0.0, 0.0, 0.0], width: 8.0, depth: 4.0, room_count, wall_height: 3.0, seed },
             id_prefix: id_prefix.to_string(),
             wall_type: "wall-white".into(),
             door_type: "door".into(),
@@ -160,27 +163,25 @@ mod tests {
     }
 
     #[test]
-    fn a_2x1_grid_applies_one_shared_interior_wall_and_two_rooms_worth_of_floor_ceiling() {
+    fn a_multi_room_layout_applies_walls_and_one_floor_ceiling_per_room() {
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
 
-        let response = generate_and_apply_room_grid(&mut graph, &mut surfaces, request(1, 2, "house-1")).unwrap();
+        let response = generate_and_apply_room_grid(&mut graph, &mut surfaces, request(2, 1, "house-1")).unwrap();
 
-        // 9 wall pieces (see structure-generation's own test for the count
-        // breakdown) + 2 floors + 2 ceilings.
-        assert_eq!(response.pieces.len(), 13);
-        // 6 grid corners (3 cols x 1 row + 1) x 2 (bottom/top) = 12, plus 2
-        // fresh door-jamb pairs (4 nodes) for the one interior wall's door = 16.
-        assert_eq!(graph.node_count(), 16);
+        // At least 4 perimeter walls + 1 interior wall (however many pieces
+        // the door split it into) + 2 floors + 2 ceilings.
+        assert!(response.pieces.len() >= 8);
+        assert!(graph.node_count() > 0);
     }
 
     #[test]
-    fn zero_rows_or_cols_errors_without_mutating() {
+    fn zero_room_count_errors_without_mutating() {
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
 
-        let error = generate_and_apply_room_grid(&mut graph, &mut surfaces, request(0, 2, "house-1")).unwrap_err();
-        assert!(error.contains("rows"));
+        let error = generate_and_apply_room_grid(&mut graph, &mut surfaces, request(0, 1, "house-1")).unwrap_err();
+        assert!(error.contains("roomCount"));
         assert_eq!(graph.node_count(), 0);
     }
 

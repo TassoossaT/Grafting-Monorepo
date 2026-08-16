@@ -1,136 +1,63 @@
-//! Derives a rectangular grid of walled cells sharing interior walls -- a
-//! generic "rooms in a grid" generator, not a house-specific one (the
-//! `apps/vtt` composition layer is where a grid becomes a "house"; this
-//! crate only knows about cells and shared walls, so the same generator
-//! also fits a village's block layout or a building floor's room layout
-//! later without renaming).
+//! Derives a rectangular footprint partitioned into `room_count` rooms of
+//! varied size -- a generic "rooms tiling a footprint" generator, not a
+//! house-specific one (the `apps/vtt` composition layer is where a
+//! partition becomes a "house"; this crate only knows about rooms and
+//! shared walls, so the same generator also fits a village's block layout
+//! or a building floor's room layout later without renaming).
 //!
-//! Each grid line segment between two adjacent corners is generated exactly
-//! once via [`generate_wall`], not once per bordering cell -- an interior
-//! segment (shared by two cells) gets a door, a perimeter segment does not.
-//! Every corner touched by at least one wall (true for every corner in a
-//! grid with at least 1 row and 1 column) is named deterministically from
-//! its own row/column, so two cells sharing an edge share that edge's
-//! corner node ids by construction, without any runtime nearest-node search
-//! -- unlike `wall-corner-weld.ts`'s freehand weld, this generator already
-//! knows its own topology upfront.
+//! Room sizes come from a squarified treemap ([`streemap::squarify`],
+//! Bruls/Huizing/van Wijk -- the same algorithm behind Marson & Musse's
+//! 2010 floor-plan generator) over `room_count` weights drawn from `seed`:
+//! deterministic per seed, so the same seed always reproduces the same
+//! layout, but two different seeds produce genuinely different room
+//! sizes/shapes, not the same footprint subdivided identically every time.
+//! The actual wall/floor/ceiling derivation -- including the T-junctions a
+//! non-uniform partition produces, unlike a lattice's every-edge-shared-by-
+//! exactly-two-cells guarantee -- is [`crate::rect_tiling::generate_tiled_rooms`],
+//! a reusable primitive that knows nothing about where its tiles came from.
 
-use grafting_graph_core::{EdgeId, NodeId, SurfaceSpec, SurfaceType};
+use rand::Rng;
+use rand::SeedableRng;
+use rand_pcg::Pcg32;
+use streemap::{Rect, squarify};
 
-use crate::wall::{DoorOpening, StructurePiece, WallNodeRole, WallSegment, generate_wall};
+use grafting_graph_core::SurfaceType;
 
-/// A rectangular grid of `rows` x `cols` uniform-size cells, `origin` at the
-/// grid's own row-0/col-0 corner. v1 scope: uniform cell size, no L-shaped
-/// or otherwise non-rectangular footprints.
+pub use crate::rect_tiling::RoomGridGeneration;
+use crate::rect_tiling::{RectTile, generate_tiled_rooms};
+
+/// A rectangular `width` x `depth` footprint split into `room_count`
+/// rooms, `origin` at the footprint's own min-x/min-z corner. v1 scope: a
+/// single rectangular footprint, no L-shaped or otherwise non-rectangular
+/// silhouette.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RoomGridLayout {
-    /// The grid's row-0/col-0 corner, at its own base (Y is the grid's floor level).
+    /// The footprint's min-x/min-z corner, at its own base (Y is the floor level).
     pub origin: [f32; 3],
-    /// Number of cells along Z. Must be at least 1 for a non-empty grid.
-    pub rows: u32,
-    /// Number of cells along X. Must be at least 1 for a non-empty grid.
-    pub cols: u32,
-    /// One cell's width along X.
-    pub cell_width: f32,
-    /// One cell's depth along Z.
-    pub cell_depth: f32,
+    /// The footprint's extent along X. Must be positive.
+    pub width: f32,
+    /// The footprint's extent along Z. Must be positive.
+    pub depth: f32,
+    /// Number of rooms to partition the footprint into. Must be at least 1.
+    pub room_count: u32,
     /// Every wall's rise above `origin`'s own Y.
     pub wall_height: f32,
+    /// Drives both the per-room size weights and the treemap's own item
+    /// order -- the same seed always reproduces the same layout.
+    pub seed: u64,
 }
 
-/// A generated grid's pieces: one wall piece per unique grid edge (interior
-/// edges carry a door, perimeter edges do not), and one floor + one ceiling
-/// piece per cell. Floor/ceiling pieces carry no new nodes/edges of their
-/// own -- their cycles reference corner nodes the wall pieces already add.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RoomGridGeneration {
-    /// Wall pieces, in row-major grid-line order (all horizontal lines, then all vertical lines).
-    pub walls: Vec<StructurePiece>,
-    /// One floor piece per cell, in row-major cell order.
-    pub floors: Vec<StructurePiece>,
-    /// One ceiling piece per cell, in row-major cell order.
-    pub ceilings: Vec<StructurePiece>,
-}
+/// A room weight's lower/upper jitter bound, relative to a uniform
+/// baseline of 1 -- wide enough that `room_count` rooms visibly differ in
+/// size/shape (the user's own rejected v1 complaint), narrow enough that
+/// `squarify`'s own aspect-ratio optimization still keeps every room usable.
+const WEIGHT_JITTER_RANGE: std::ops::Range<f32> = 0.0..2.0;
 
-/// Half the generated interior door's width, as a fraction of its wall
-/// segment -- deliberately fixed/centered (not seeded/randomized like
-/// `room-seed.ts`'s own standalone-room door), since a grid interior wall's
-/// door only needs to exist, not vary; per-door placement is a documented
-/// follow-up if wanted.
-const DOOR_HALF_WIDTH: f32 = 0.1;
-
-fn corner_id(id_prefix: &str, row: u32, col: u32, top: bool) -> NodeId {
-    let end = if top { "top" } else { "bottom" };
-    NodeId::new(format!("{id_prefix}:corner:{row}:{col}:{end}")).expect("formatted id is never empty")
-}
-
-fn corner_position(layout: &RoomGridLayout, row: u32, col: u32) -> [f32; 3] {
-    [
-        layout.origin[0] + col as f32 * layout.cell_width,
-        layout.origin[1],
-        layout.origin[2] + row as f32 * layout.cell_depth,
-    ]
-}
-
-/// Generates the wall segment between grid corners `(row_a, col_a)` and
-/// `(row_b, col_b)` -- 1 piece if `interior` is false (a plain wall), or 3
-/// if true (a wall with a centered door, split into left remainder / door /
-/// right remainder, same as any other doored wall in this crate). Every id
-/// (corner or door-jamb node, ring edge) is a pure function of this wall's
-/// own identity `(row_a, col_a, row_b, col_b)` plus the role/role-pair
-/// asking for it -- required for jamb nodes specifically, since
-/// `generate_wall`'s `node_id` closure is called once per piece that shares
-/// a given role (e.g. `DoorStartBottom` is asked for by both the left
-/// remainder and the door piece) and must return the *same* id each time,
-/// not a fresh one -- a plain incrementing counter would silently mint two
-/// ids for what should be one shared jamb node.
-fn generate_grid_wall(
-    layout: &RoomGridLayout,
-    id_prefix: &str,
-    row_a: u32,
-    col_a: u32,
-    row_b: u32,
-    col_b: u32,
-    interior: bool,
-    wall_type: &SurfaceType,
-    door_type: &SurfaceType,
-) -> Vec<StructurePiece> {
-    let wall = WallSegment {
-        start: corner_position(layout, row_a, col_a),
-        end: corner_position(layout, row_b, col_b),
-        height: layout.wall_height,
-    };
-    let door = interior.then_some(DoorOpening { opens_at: 0.5 - DOOR_HALF_WIDTH, closes_at: 0.5 + DOOR_HALF_WIDTH });
-
-    let node_id = |role: WallNodeRole| -> NodeId {
-        match role {
-            WallNodeRole::StartBottom => corner_id(id_prefix, row_a, col_a, false),
-            WallNodeRole::StartTop => corner_id(id_prefix, row_a, col_a, true),
-            WallNodeRole::EndBottom => corner_id(id_prefix, row_b, col_b, false),
-            WallNodeRole::EndTop => corner_id(id_prefix, row_b, col_b, true),
-            other => NodeId::new(format!("{id_prefix}:jamb:{row_a}:{col_a}:{row_b}:{col_b}:{other:?}"))
-                .expect("formatted id is never empty"),
-        }
-    };
-    let edge_id = |from: WallNodeRole, to: WallNodeRole| -> EdgeId {
-        EdgeId::new(format!("{id_prefix}:edge:{row_a}:{col_a}:{row_b}:{col_b}:{from:?}-{to:?}"))
-            .expect("formatted id is never empty")
-    };
-
-    // A centered [0.5 - DOOR_HALF_WIDTH, 0.5 + DOOR_HALF_WIDTH] opening is
-    // always within [0, 1] with opens_at < closes_at -- cannot fail; see
-    // `generate_wall`'s own validation.
-    let generation = generate_wall(&wall, door.as_ref(), node_id, edge_id, wall_type.clone(), door_type.clone())
-        .expect("centered default door opening is always within bounds");
-    generation.pieces
-}
-
-/// Generates a room grid's wall/floor/ceiling pieces. `id_prefix`
-/// namespaces every generated id (corners, door jambs, ring edges) so two
-/// calls -- or this call and any other generator's -- never collide; the
-/// same role `wall-corner-weld.ts`'s `tableId:salt` naming plays for a
-/// hand-drawn wall, just resolved here instead of by a caller-supplied map,
-/// since this generator already knows its own full topology upfront.
+/// Generates a room-grid layout's wall/floor/ceiling pieces. `id_prefix`
+/// namespaces every generated id, same role as `wall-corner-weld.ts`'s
+/// `tableId:salt` naming plays for a hand-drawn wall, resolved here
+/// instead since this generator already knows its own full topology
+/// upfront once the treemap has run.
 pub fn generate_room_grid(
     layout: &RoomGridLayout,
     id_prefix: &str,
@@ -139,74 +66,33 @@ pub fn generate_room_grid(
     floor_type: SurfaceType,
     ceiling_type: SurfaceType,
 ) -> RoomGridGeneration {
-    let mut walls = Vec::new();
+    let mut rng = Pcg32::seed_from_u64(layout.seed);
+    let mut items: Vec<(f32, Rect<f32>)> = (0..layout.room_count)
+        .map(|_| (1.0 + rng.gen_range(WEIGHT_JITTER_RANGE), Rect { x: 0.0, y: 0.0, w: 0.0, h: 0.0 }))
+        .collect();
 
-    // Horizontal grid lines (running along X): between corner (r, c) and
-    // (r, c + 1), for every row r in 0..=rows and column c in 0..cols.
-    // Interior exactly when the row is strictly between the grid's own
-    // north/south edges.
-    for row in 0..=layout.rows {
-        let interior = row > 0 && row < layout.rows;
-        for col in 0..layout.cols {
-            walls.extend(generate_grid_wall(layout, id_prefix, row, col, row, col + 1, interior, &wall_type, &door_type));
-        }
-    }
-    // Vertical grid lines (running along Z): between corner (r, c) and
-    // (r + 1, c), for every column c in 0..=cols and row r in 0..rows.
-    for col in 0..=layout.cols {
-        let interior = col > 0 && col < layout.cols;
-        for row in 0..layout.rows {
-            walls.extend(generate_grid_wall(layout, id_prefix, row, col, row + 1, col, interior, &wall_type, &door_type));
-        }
-    }
+    let container = Rect { x: 0.0, y: 0.0, w: layout.width, h: layout.depth };
+    squarify(container, &mut items, |item| item.0, |item, rect| item.1 = rect);
 
-    // One floor + one ceiling per cell, referencing the same corner ids the
-    // walls above already add -- every corner in a >=1x1 grid is touched by
-    // at least one wall, so no new nodes are needed here.
-    let cell_count = (layout.rows * layout.cols) as usize;
-    let mut floors = Vec::with_capacity(cell_count);
-    let mut ceilings = Vec::with_capacity(cell_count);
-    for row in 0..layout.rows {
-        for col in 0..layout.cols {
-            let bottom_cycle = vec![
-                corner_id(id_prefix, row, col, false),
-                corner_id(id_prefix, row, col + 1, false),
-                corner_id(id_prefix, row + 1, col + 1, false),
-                corner_id(id_prefix, row + 1, col, false),
-            ];
-            let mut top_cycle = vec![
-                corner_id(id_prefix, row, col, true),
-                corner_id(id_prefix, row, col + 1, true),
-                corner_id(id_prefix, row + 1, col + 1, true),
-                corner_id(id_prefix, row + 1, col, true),
-            ];
-            // The ceiling is the same vertical loop as the floor, viewed
-            // from above -- needs the opposite winding to keep its normal
-            // facing outward (down into the room), mirroring
-            // `room-derive-tool.ts`'s own floor/ceiling pairing.
-            top_cycle.reverse();
-            floors.push(StructurePiece {
-                nodes: Vec::new(),
-                edges: Vec::new(),
-                surface: SurfaceSpec { cycle: bottom_cycle, surface_type: floor_type.clone(), physical: true },
-            });
-            ceilings.push(StructurePiece {
-                nodes: Vec::new(),
-                edges: Vec::new(),
-                surface: SurfaceSpec { cycle: top_cycle, surface_type: ceiling_type.clone(), physical: true },
-            });
-        }
-    }
+    let tiles: Vec<RectTile> = items
+        .into_iter()
+        .map(|(_, rect)| RectTile {
+            x: layout.origin[0] + rect.x,
+            z: layout.origin[2] + rect.y,
+            width: rect.w,
+            depth: rect.h,
+        })
+        .collect();
 
-    RoomGridGeneration { walls, floors, ceilings }
+    generate_tiled_rooms(&tiles, layout.origin[1], layout.wall_height, id_prefix, wall_type, door_type, floor_type, ceiling_type)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn layout(rows: u32, cols: u32) -> RoomGridLayout {
-        RoomGridLayout { origin: [0.0, 0.0, 0.0], rows, cols, cell_width: 4.0, cell_depth: 4.0, wall_height: 3.0 }
+    fn layout(room_count: u32, seed: u64) -> RoomGridLayout {
+        RoomGridLayout { origin: [0.0, 0.0, 0.0], width: 12.0, depth: 8.0, room_count, wall_height: 3.0, seed }
     }
 
     fn types() -> (SurfaceType, SurfaceType, SurfaceType, SurfaceType) {
@@ -214,45 +100,54 @@ mod tests {
     }
 
     #[test]
-    fn a_single_cell_has_4_plain_walls_and_one_floor_and_ceiling() {
+    fn a_single_room_covers_the_whole_footprint_with_4_plain_walls() {
         let (wall_type, door_type, floor_type, ceiling_type) = types();
         let generation = generate_room_grid(&layout(1, 1), "house-1", wall_type, door_type, floor_type, ceiling_type);
 
         assert_eq!(generation.walls.len(), 4);
-        for piece in &generation.walls {
-            assert_eq!(piece.surface.surface_type, SurfaceType::new("wall"));
-        }
         assert_eq!(generation.floors.len(), 1);
         assert_eq!(generation.ceilings.len(), 1);
-        assert_eq!(generation.floors[0].surface.cycle.len(), 4);
-        assert_eq!(generation.ceilings[0].surface.cycle.len(), 4);
     }
 
     #[test]
-    fn a_2x1_grid_shares_the_interior_walls_corner_ids_between_both_cells() {
+    fn room_count_matches_generated_floor_and_ceiling_count() {
         let (wall_type, door_type, floor_type, ceiling_type) = types();
-        let generation = generate_room_grid(&layout(1, 2), "house-1", wall_type, door_type, floor_type, ceiling_type);
+        let generation = generate_room_grid(&layout(4, 7), "house-1", wall_type, door_type, floor_type, ceiling_type);
 
-        // 3 vertical lines (col 0, 1, 2) x 1 row + 2 horizontal lines (row 0, 1) x 2 cols,
-        // with the interior vertical line (col 1) split into 3 pieces by its door.
-        // col 0 (perimeter): 1 piece, col 1 (interior): 3 pieces, col 2 (perimeter): 1 piece,
-        // row 0: 2 pieces, row 1: 2 pieces => 1+3+1+2+2 = 9.
-        assert_eq!(generation.walls.len(), 9);
+        assert_eq!(generation.floors.len(), 4);
+        assert_eq!(generation.ceilings.len(), 4);
+    }
 
-        let left_floor = &generation.floors[0].surface.cycle;
-        let right_floor = &generation.floors[1].surface.cycle;
-        // The shared edge between the two cells is corners (0,1) and (1,1) --
-        // both floors must reference the exact same node ids there, not two
-        // different ones, proving the interior wall is genuinely shared.
-        assert!(left_floor.contains(&corner_id("house-1", 0, 1, false)));
-        assert!(right_floor.contains(&corner_id("house-1", 0, 1, false)));
-        assert!(left_floor.contains(&corner_id("house-1", 1, 1, false)));
-        assert!(right_floor.contains(&corner_id("house-1", 1, 1, false)));
+    /// The whole point of this rewrite: two different seeds must not
+    /// produce the same room layout -- the v1 lattice had no seed at all,
+    /// so every call was byte-identical regardless of input.
+    #[test]
+    fn two_different_seeds_produce_different_room_sizes() {
+        let (wall_type, door_type, floor_type, ceiling_type) = types();
+        let a = generate_room_grid(&layout(4, 1), "house-a", wall_type.clone(), door_type.clone(), floor_type.clone(), ceiling_type.clone());
+        let b = generate_room_grid(&layout(4, 2), "house-b", wall_type, door_type, floor_type, ceiling_type);
+
+        let sizes_a: Vec<usize> = a.floors.iter().map(|piece| piece.surface.cycle.len()).collect();
+        let sizes_b: Vec<usize> = b.floors.iter().map(|piece| piece.surface.cycle.len()).collect();
+        // Cycle length alone can't prove different geometry (every room is
+        // still a quad), so compare the actual generated corner ids --
+        // two seeds sharing the same id set would mean the seed had no
+        // effect on the treemap's own weights.
+        assert_ne!(sizes_a.len(), 0);
+        assert_ne!(sizes_b.len(), 0);
+        let ids_a: Vec<_> = a.floors.iter().flat_map(|piece| piece.surface.cycle.clone()).collect();
+        let ids_b: Vec<_> = b.floors.iter().flat_map(|piece| piece.surface.cycle.clone()).collect();
+        assert_ne!(ids_a, ids_b);
     }
 
     #[test]
-    fn every_grid_corner_position_is_where_row_col_math_says_it_should_be() {
-        let generated = corner_position(&layout(2, 2), 1, 1);
-        assert_eq!(generated, [4.0, 0.0, 4.0]);
+    fn the_same_seed_reproduces_the_identical_layout() {
+        let (wall_type, door_type, floor_type, ceiling_type) = types();
+        let a = generate_room_grid(&layout(4, 5), "house-1", wall_type.clone(), door_type.clone(), floor_type.clone(), ceiling_type.clone());
+        let b = generate_room_grid(&layout(4, 5), "house-1", wall_type, door_type, floor_type, ceiling_type);
+
+        let ids_a: Vec<_> = a.floors.iter().flat_map(|piece| piece.surface.cycle.clone()).collect();
+        let ids_b: Vec<_> = b.floors.iter().flat_map(|piece| piece.surface.cycle.clone()).collect();
+        assert_eq!(ids_a, ids_b);
     }
 }

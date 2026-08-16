@@ -9,6 +9,7 @@
 
 #![deny(missing_docs)]
 
+mod rect_tiling;
 mod room_grid;
 mod wall;
 
