@@ -5,6 +5,10 @@ export { lerp, mulberry32 } from "./seeded-random.ts";
 // build this app's toolbars/panels on the shared atoms instead of hand-rolled
 // buttons/chips/panels.
 export {
+  ActionDock,
+  type ActionDockItem,
+  type ActionDockProps,
+  type ActionDockSubItem,
   Button,
   type ButtonProps,
   Card,

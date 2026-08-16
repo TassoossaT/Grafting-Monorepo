@@ -17,6 +17,7 @@ import {
 } from "@/composition/tabletop";
 import { StatusBadge } from "@/ui";
 import {
+  ConstructionDock,
   ConstructionHotbar,
   SettingsDrawer,
   ToolRail,
@@ -75,6 +76,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const historyState = history.getState();
   const current = useSyncExternalStore(
@@ -199,22 +201,36 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <span>| Modo: {TOOL_LABEL[tool]}</span>
         </div>
 
-          <ToolRail
-            tool={tool}
-            onToolChange={setTool}
-            canUndo={historyState.canUndo}
-            canRedo={historyState.canRedo}
-            onUndo={handleUndo}
-            onRedo={handleRedo}
-            snapToGrid={snapToGrid}
-            onSnapToGridChange={setSnapToGrid}
-          />
+        <ToolRail
+          tool={tool}
+          onToolChange={setTool}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          snapToGrid={snapToGrid}
+          onSnapToGridChange={setSnapToGrid}
+        />
 
-        <ConstructionHotbar ready={current.status === "ready"} activeTool={tool} onToolChange={setTool} />
+        <ConstructionDock
+          ready={current.status === "ready"}
+          activeTool={tool}
+          onToolChange={setTool}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          snapToGrid={snapToGrid}
+          onSnapToGridChange={setSnapToGrid}
+          onToggleSettings={() => setSettingsOpen((prev) => !prev)}
+          settingsOpen={settingsOpen}
+        />
 
         {/* Right drawer -- settings & inspector, collapsed by default. Owns
             its own open state and handle (see `SlidingPanel`). */}
         <SettingsDrawer
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
           selectedNodeInfo={selectedNodeInfo}
           activeTool={tool}
           toolParams={toolParams}

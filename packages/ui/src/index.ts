@@ -33,6 +33,13 @@ export {
 } from "./organisms/data-table.js";
 
 export {
+  ActionDock,
+  type ActionDockItem,
+  type ActionDockProps,
+  type ActionDockSubItem,
+} from "./organisms/action-dock.js";
+
+export {
   FloatButtonTree,
   type FloatButtonTreeBranch,
   type FloatButtonTreeLeaf,
