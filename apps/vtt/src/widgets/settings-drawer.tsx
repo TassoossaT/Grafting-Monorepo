@@ -21,6 +21,8 @@ export interface SettingsDrawerProps {
   readonly toolParams: ToolParamsByTool;
   readonly onToolParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
   readonly tokenCount: number;
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -32,10 +34,12 @@ export interface SettingsDrawerProps {
  * product-specific content.
  */
 export function SettingsDrawer(props: SettingsDrawerProps) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isOpen = props.open ?? uncontrolledOpen;
+  const setOpen = props.onOpenChange ?? setUncontrolledOpen;
 
   return (
-    <SlidingPanel open={open} onOpenChange={setOpen} edge="right" width={PANEL_WIDTH}>
+    <SlidingPanel open={isOpen} onOpenChange={setOpen} edge="right" width={PANEL_WIDTH}>
       <span className="gm-panel-card-title" style={{ padding: "0.75rem 1rem 0" }}>
         Configurações
       </span>

@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  ActionDock,
   Card,
   Collapse,
   DataTable,
@@ -30,6 +31,7 @@ import { createReactViewHandle } from "../dist/hosts/mount-react-view.js";
 test("exports only the deliberate Grafting component surface", async () => {
   const ui = await import("../dist/index.js");
   assert.deepEqual(Object.keys(ui).sort(), [
+    "ActionDock",
     "Button",
     "Card",
     "Collapse",
@@ -101,22 +103,21 @@ test("slides a SlidingPanel fully off its anchored edge when closed and back whe
   const closedMarkup = renderToStaticMarkup(
     createElement(
       SlidingPanel,
-      { open: false, onOpenChange: () => {}, edge: "right", width: 280, title: "Configurações" },
-      createElement("span", null, "Content"),
+      { open: false, onOpenChange: () => {}, edge: "right", width: 280 },
+      createElement("span", null, "Configurações"),
     ),
   );
   const openMarkup = renderToStaticMarkup(
     createElement(
       SlidingPanel,
-      { open: true, onOpenChange: () => {}, edge: "right", width: 280, title: "Configurações" },
-      createElement("span", null, "Content"),
+      { open: true, onOpenChange: () => {}, edge: "right", width: 280 },
+      createElement("span", null, "Configurações"),
     ),
   );
 
   assert.match(closedMarkup, /transform:translateX\(280px\)/);
   assert.match(openMarkup, /transform:translateX\(0px\)/);
   assert.match(closedMarkup, /Configurações/);
-  assert.match(closedMarkup, /Content/);
 });
 
 test("fuses a SlidingPanel's EdgeHandle to the edge opposite its screen anchor, sized by EDGE_HANDLE_SIZE", () => {
@@ -525,3 +526,43 @@ test("arranges caller-owned panels on a vendor-neutral dashboard grid", () => {
   assert.match(markup, /Graph canvas/);
   assert.match(markup, /Entity list/);
 });
+
+test("renders ActionDock with primary construction verbs and expandable sub-items", () => {
+  const markup = renderToStaticMarkup(
+    createElement(ActionDock, {
+      ariaLabel: "Barra de Construção",
+      items: [
+        {
+          key: "building",
+          label: "Edifício",
+          icon: "🏠",
+          active: true,
+          shortcut: "B",
+          subItems: [
+            { key: "rect", label: "Retangular", active: true, shortcut: "1" },
+            { key: "tower", label: "Torre", active: false, shortcut: "2" },
+          ],
+        },
+        {
+          key: "wall",
+          label: "Muro",
+          icon: "🧱",
+          shortcut: "W",
+        },
+      ],
+      leadingAccessories: createElement("button", { type: "button" }, "Undo"),
+      trailingAccessories: createElement("button", { type: "button" }, "Snap"),
+    }),
+  );
+
+  assert.match(markup, /aria-label="Barra de Construção"/);
+  assert.match(markup, /role="toolbar"/);
+  assert.match(markup, /Edifício/);
+  assert.match(markup, /Muro/);
+  assert.match(markup, /aria-label="Variações de Edifício"/);
+  assert.match(markup, /Retangular/);
+  assert.match(markup, /Torre/);
+  assert.match(markup, /Undo/);
+  assert.match(markup, /Snap/);
+});
+

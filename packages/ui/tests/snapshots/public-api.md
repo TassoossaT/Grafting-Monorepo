@@ -771,7 +771,7 @@ export interface FloatButtonGroupProps {
 export declare function FloatButtonGroup(props: FloatButtonGroupProps): ReactElement;
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
-/** Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed, dragged open/closed by a handle fused to its own edge. */
+/** Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed. */
 export interface SlidingPanelProps {
     /** Whether the panel is currently open. */
     readonly open: boolean;
@@ -781,31 +781,23 @@ export interface SlidingPanelProps {
     readonly edge: "left" | "right";
     /** Panel width in pixels. */
     readonly width: number;
-    /** Header text shown at the top of the panel's content area. */
-    readonly title: string;
-    /** The panel's own content, below the title. */
+    /** The panel's own content. */
     readonly children: ReactNode;
     /** Stacking order for the panel's own fixed container. @default 20 */
     readonly zIndex?: number;
-    /** Optional caller-owned class name for the panel's own container. */
+    /** Caller-owned class name for the panel's own container (use this for background, shadows, borders). */
     readonly className?: string;
-    /** Optional caller-owned inline style, merged onto the panel's own container. */
+    /** Caller-owned inline style, merged onto the panel's own container. */
     readonly style?: CSSProperties;
+    /** Tooltip/Aria label for the handle when the panel is open. @default "Fechar" */
+    readonly handleOpenLabel?: string;
+    /** Tooltip/Aria label for the handle when the panel is closed. @default "Abrir" */
+    readonly handleCloseLabel?: string;
 }
 /**
- * A panel fixed to one edge of the screen that slides fully off-screen when
+ * A generic panel fixed to one edge of the screen that slides fully off-screen when
  * closed and back into view when open, with an {@link EdgeHandle} fused to
- * its edge as the drag/toggle control -- the handle is a child of the
- * panel's own transformed element, so it visually travels with the slide
- * animation instead of sitting at a fixed screen position while the panel
- * moves independently underneath it. The handle can also be dragged: while
- * pressed, the panel tracks the pointer 1:1 (no transition), and on release
- * it snaps to whichever side (open/closed) it crossed the midpoint toward.
- *
- * Not built on `Drawer` (this package's own, wrapping Ant Design's): that
- * component's portal/motion internals give no seam to attach external
- * content that moves with its animated edge, which is the entire point of
- * this molecule.
+ * its edge as the drag/toggle control.
  *
  * @layer molecule
  * @status stable
@@ -913,6 +905,78 @@ export interface DataTableProps<Row extends object> {
  * @status stable
  */
 export declare function DataTable<Row extends object>(props: DataTableProps<Row>): ReactElement;
+
+import type { CSSProperties, ReactElement, ReactNode } from "react";
+/** One sub-action or variant inside an active {@link ActionDockItem}. */
+export interface ActionDockSubItem {
+    /** Stable identity of the sub-item. */
+    readonly key: string;
+    /** Visible label or accessible title. */
+    readonly label: string;
+    /** Caller-rendered icon. */
+    readonly icon?: ReactNode;
+    /** Tooltip description. */
+    readonly tooltip?: string;
+    /** Keyboard shortcut hint (e.g. "1", "2", "Shift+W"). */
+    readonly shortcut?: string;
+    /** Whether this sub-item is currently active. */
+    readonly active?: boolean;
+    /** Whether this sub-item is disabled. */
+    readonly disabled?: boolean;
+    /** Invoked when this sub-item is clicked. */
+    readonly onClick?: () => void;
+}
+/** One primary category or tool action in the {@link ActionDock}. */
+export interface ActionDockItem {
+    /** Stable identity of the tool or category. */
+    readonly key: string;
+    /** Visible label or accessible title. */
+    readonly label: string;
+    /** Caller-rendered icon. */
+    readonly icon: ReactNode;
+    /** Tooltip description. */
+    readonly tooltip?: string;
+    /** Keyboard shortcut hint (e.g. "B", "W", "P", "T"). */
+    readonly shortcut?: string;
+    /** Whether this tool/category is currently active. */
+    readonly active?: boolean;
+    /** Whether this item is non-interactive. */
+    readonly disabled?: boolean;
+    /** Invoked when this item is clicked. */
+    readonly onClick?: () => void;
+    /** Optional sub-tools or variations revealed when this category is active. */
+    readonly subItems?: readonly ActionDockSubItem[];
+}
+/** Public props for the {@link ActionDock} bottom toolbar organism. */
+export interface ActionDockProps {
+    /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
+    readonly ariaLabel?: string;
+    /** Primary construction verbs / categories in display order. */
+    readonly items: readonly ActionDockItem[];
+    /** Optional leading actions (e.g. undo, redo, camera navigation). */
+    readonly leadingAccessories?: ReactNode;
+    /** Optional trailing actions (e.g. grid snap toggle, settings drawer toggle). */
+    readonly trailingAccessories?: ReactNode;
+    /** Outline style for the dock buttons. @default "rounded" */
+    readonly shape?: "rounded" | "square";
+    /** Optional caller-owned class name. */
+    readonly className?: string;
+    /** Optional inline style override. */
+    readonly style?: CSSProperties;
+}
+/**
+ * A minimalist, glassmorphic bottom action dock inspired by Tiny Glade and
+ * modern creative sandboxes.
+ *
+ * It houses the primary verbs of construction in a centered horizontal strip.
+ * When an active category defines `subItems` (e.g. Rectangular vs. Cylindrical
+ * building volume, Straight vs. Curved walls), a floating sub-dock expands
+ * smoothly above the primary dock.
+ *
+ * @layer organism
+ * @status stable
+ */
+export declare function ActionDock(props: ActionDockProps): ReactElement;
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** How a branch's own submenu opens. */

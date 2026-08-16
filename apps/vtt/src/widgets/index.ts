@@ -1,5 +1,6 @@
 export { ToolRail, type EditTool, type ToolRailProps } from "./tool-rail.tsx";
 export { ConstructionHotbar, type ConstructionHotbarProps } from "./construction-hotbar.tsx";
+export { ConstructionDock, type ConstructionDockProps } from "./construction-dock.tsx";
 export { SettingsDrawer, type SelectedNodeInfo, type SettingsDrawerProps } from "./settings-drawer.tsx";
 export { ConstructionToolParamsPanel, type ConstructionToolParamsPanelProps } from "./construction-tool-params-panel.tsx";
 export { useKeyboardShortcuts, type KeyboardShortcutsOptions } from "./use-keyboard-shortcuts.ts";
