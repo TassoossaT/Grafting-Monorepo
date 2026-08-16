@@ -16,14 +16,14 @@
 //! filtered out of both the add and remove sets) and only genuinely new or
 //! genuinely stale pieces are touched.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use grafting_graph_core::{Edge, EdgeId, Node, NodeId, SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{SurfaceKey, SurfaceRegistry, SurfaceType};
 use grafting_procgen_structure_generation::{CellCoord, generate_cell_partition};
 
-use crate::dto::surface_key_to_wire;
+use crate::diff_apply::diff_and_apply;
 use crate::editing::SessionGraph;
 
 #[derive(Debug, Deserialize)]
@@ -110,7 +110,6 @@ pub fn generate_and_apply_cell_partition(
         SurfaceType::new(request.ceiling_type),
     );
     let all_pieces: Vec<_> = generation.walls.into_iter().chain(generation.floors.into_iter()).chain(generation.ceilings.into_iter()).collect();
-    let new_keys: HashSet<SurfaceKey> = all_pieces.iter().map(|piece| SurfaceKey::from_cycle(&piece.surface.cycle)).collect();
 
     // Every previously-known surface fully inside this structure's own
     // bounding box -- the same position-based scoping
@@ -127,66 +126,19 @@ pub fn generate_and_apply_cell_partition(
         .cloned()
         .collect();
 
-    let to_remove: Vec<SurfaceKey> = old_keys_in_scope.difference(&new_keys).cloned().collect();
-    let to_add: Vec<_> = all_pieces.into_iter().filter(|piece| !old_keys_in_scope.contains(&SurfaceKey::from_cycle(&piece.surface.cycle))).collect();
+    let outcome = diff_and_apply(graph, surfaces, &old_keys_in_scope, all_pieces, |node| in_box(node.data()))?;
 
-    let mut removed_surface_keys = Vec::with_capacity(to_remove.len());
-    for key in &to_remove {
-        surfaces.remove_surface(key).map_err(|error| error.to_string())?;
-        removed_surface_keys.push(surface_key_to_wire(key));
-    }
-
-    // Dedup nodes/edges across every kept piece before mutating -- a
-    // corner or jamb shared by more than one piece must only be added
-    // once, and one already present from a prior tick (or a neighboring
-    // cell's own piece) is reused, never re-added.
-    let mut unique_nodes: HashMap<NodeId, Node<[f32; 3]>> = HashMap::new();
-    let mut unique_edges: HashMap<EdgeId, Edge<()>> = HashMap::new();
-    for piece in &to_add {
-        for node in &piece.nodes {
-            unique_nodes.entry(node.id().clone()).or_insert_with(|| node.clone());
-        }
-        for edge in &piece.edges {
-            unique_edges.entry(edge.id().clone()).or_insert_with(|| edge.clone());
-        }
-    }
-    for (id, node) in &unique_nodes {
-        if graph.node(id).is_none() {
-            graph.add_node(node.clone()).map_err(|error| error.to_string())?;
-        }
-    }
-    for (id, edge) in &unique_edges {
-        if graph.edge(id).is_none() {
-            graph.add_edge(edge.clone()).map_err(|error| error.to_string())?;
-        }
-    }
-
-    let mut added_surface_keys = Vec::with_capacity(to_add.len());
-    for piece in to_add {
-        let key = surfaces.add_surface(graph, piece.surface.cycle, piece.surface.surface_type, piece.surface.physical).map_err(|error| error.to_string())?;
-        added_surface_keys.push(surface_key_to_wire(&key));
-    }
-
-    // Orphan cleanup, same as `room_removal::remove_room`: any node inside
-    // the box no longer referenced by any surface (a removed run's own
-    // private jamb nodes, most commonly) is deleted.
-    let snapshot = graph.snapshot();
-    let box_node_ids: Vec<NodeId> = snapshot.nodes().iter().filter(|node| in_box(node.data())).map(|node| node.id().clone()).collect();
-    let mut removed_node_ids = Vec::new();
-    for id in &box_node_ids {
-        if surfaces.surfaces_referencing(id).next().is_none() {
-            graph.remove_node(id).map_err(|error| error.to_string())?;
-            removed_node_ids.push(id.as_str().to_owned());
-        }
-    }
-
-    Ok(GenerateAndApplyCellPartitionResponse { added_surface_keys, removed_surface_keys, removed_node_ids })
+    Ok(GenerateAndApplyCellPartitionResponse {
+        added_surface_keys: outcome.added_surface_keys,
+        removed_surface_keys: outcome.removed_surface_keys,
+        removed_node_ids: outcome.removed_node_ids,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use grafting_graph_core::Graph;
+    use grafting_graph_core::{Graph, NodeId};
 
     fn empty_session() -> (SessionGraph, SurfaceRegistry, HashSet<SurfaceKey>) {
         (Graph::try_from_parts(Vec::new(), Vec::new()).unwrap(), SurfaceRegistry::new(), HashSet::new())

@@ -34,6 +34,7 @@ use rand_pcg::Pcg32;
 
 use grafting_graph_core::{EdgeId, Node, NodeId, SurfaceSpec, SurfaceType};
 
+use crate::ids::corner_id;
 use crate::wall::{DoorOpening, StructurePiece, WallNodeRole, WallSegment, generate_wall};
 
 /// A generated cell partition's pieces: one wall piece per maximal wall
@@ -68,11 +69,6 @@ const DOOR_HALF_WIDTH: f32 = 0.1;
 /// borders two different rooms -- a sliver is too narrow for a sensible
 /// opening, so it stays a plain wall.
 const MIN_DOOR_SEGMENT_WIDTH: f32 = 1.0;
-
-fn corner_id(id_prefix: &str, x: f32, z: f32, top: bool) -> NodeId {
-    let end = if top { "top" } else { "bottom" };
-    NodeId::new(format!("{id_prefix}:corner:{:.3}:{:.3}:{end}", x as f64, z as f64)).expect("formatted id is never empty")
-}
 
 fn neighbors(cell: CellCoord) -> [CellCoord; 4] {
     [
