@@ -9,8 +9,10 @@
 
 #![deny(missing_docs)]
 
+mod room_grid;
 mod wall;
 
+pub use room_grid::{RoomGridGeneration, RoomGridLayout, generate_room_grid};
 pub use wall::{
     DoorOpening, StructureGenerationError, StructurePiece, WallGeneration, WallNodeRole,
     WallSegment, generate_wall,

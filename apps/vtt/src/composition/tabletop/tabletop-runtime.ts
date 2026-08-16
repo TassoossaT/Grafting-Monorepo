@@ -24,11 +24,13 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  GenerateRoomGridRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
+  RoomGridPiece,
   ScenePickResult,
   SceneRenderMetrics,
   SceneRenderPort,
@@ -96,6 +98,12 @@ export interface TabletopRuntime {
     causeId: string,
   ): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[];
+  /** Generates a rectangular grid of walled, welded rooms (walls, doors, floors, ceilings) through the real engine and folds every piece into the running map -- all grid layout/id math happens on the Rust side, see `ConstructionSessionPort.generateRoomGrid`. */
+  generateRoomGrid(
+    request: GenerateRoomGridRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly RoomGridPiece[];
   /**
    * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
    * hexagon's worth) through the construction session's existing generic
@@ -521,6 +529,19 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("generating a wall");
 
     const pieces = this.#construction.generateWall(request);
+    this.#applyConstructionMutation(
+      pieces.map((piece) => piece.surfaceKey),
+      origin,
+      causeId,
+      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
+    );
+    return pieces;
+  }
+
+  generateRoomGrid(request: GenerateRoomGridRequest, origin: ChangeOrigin, causeId: string): readonly RoomGridPiece[] {
+    this.#requireReady("generating a room grid");
+
+    const pieces = this.#construction.generateRoomGrid(request);
     this.#applyConstructionMutation(
       pieces.map((piece) => piece.surfaceKey),
       origin,

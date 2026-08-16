@@ -13,6 +13,7 @@ export type ConstructionToolId =
   | "wall-brush"
   | "room-stamp"
   | "room-derive"
+  | "house-stamp"
   | "irregular-terrain-stamp";
 
 export interface TerrainBrushParams {
@@ -61,6 +62,17 @@ export interface IrregularTerrainParams {
   readonly seed: number;
 }
 
+/**
+ * A rectangular grid of connected rooms, stamped in one commit -- all grid
+ * layout/weld math happens on the Rust side
+ * (`ConstructionSessionPort.generateRoomGrid`), this tool only picks where
+ * and how big.
+ */
+export interface HouseStampParams {
+  readonly rows: number;
+  readonly cols: number;
+}
+
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
@@ -70,6 +82,7 @@ export interface ToolParamsByTool {
   readonly "wall-brush": WallBrushParams;
   readonly "room-stamp": RoomStampParams;
   readonly "room-derive": NoToolParams;
+  readonly "house-stamp": HouseStampParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
 
@@ -82,6 +95,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
   "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
   "room-derive": Object.freeze({}),
+  "house-stamp": Object.freeze({ rows: 2, cols: 2 }),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,
     irregularity: 0.7,

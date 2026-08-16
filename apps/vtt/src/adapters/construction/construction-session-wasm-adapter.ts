@@ -15,8 +15,10 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  GenerateRoomGridRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
+  RoomGridPiece,
   SurfaceMeshResult,
   WallPiece,
 } from "@/ports";
@@ -181,6 +183,28 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       weldedNodeIds: request.weldedNodeIds ?? [],
     };
     const response = JSON.parse(this.#require().generate_and_apply_wall_json(JSON.stringify(wire))) as {
+      pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
+    };
+    return response.pieces;
+  }
+
+  generateRoomGrid(request: GenerateRoomGridRequest): readonly RoomGridPiece[] {
+    const wire = {
+      layout: {
+        origin: toWirePosition(request.layout.origin),
+        rows: request.layout.rows,
+        cols: request.layout.cols,
+        cellWidth: request.layout.cellWidth,
+        cellDepth: request.layout.cellDepth,
+        wallHeight: request.layout.wallHeight,
+      },
+      idPrefix: request.idPrefix,
+      wallType: request.wallType,
+      doorType: request.doorType,
+      floorType: request.floorType,
+      ceilingType: request.ceilingType,
+    };
+    const response = JSON.parse(this.#require().generate_and_apply_room_grid_json(JSON.stringify(wire))) as {
       pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
     };
     return response.pieces;

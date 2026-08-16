@@ -93,6 +93,39 @@ export interface WallPiece {
   readonly surfaceType: string;
 }
 
+/**
+ * A rectangular `rows` x `cols` grid of uniform-size, welded cells --
+ * shared interior walls, one per grid edge, plus a floor+ceiling per cell.
+ * Generic on purpose (not house-specific): the app composition layer names
+ * a particular use of this "a house," but this port only knows about a
+ * grid of walled cells, the same way it only knows about "a wall," not "a
+ * bedroom wall."
+ */
+export interface RoomGridLayout {
+  /** The grid's row-0/col-0 corner. */
+  readonly origin: ConstructionPosition;
+  readonly rows: number;
+  readonly cols: number;
+  readonly cellWidth: number;
+  readonly cellDepth: number;
+  readonly wallHeight: number;
+}
+
+export interface GenerateRoomGridRequest {
+  readonly layout: RoomGridLayout;
+  /** Namespaces every id this call generates -- all grid math and id assignment happens on the Rust side, see `generate_room_grid`. */
+  readonly idPrefix: string;
+  readonly wallType: string;
+  readonly doorType: string;
+  readonly floorType: string;
+  readonly ceilingType: string;
+}
+
+export interface RoomGridPiece {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+}
+
 export interface SurfaceMeshResult {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
@@ -164,6 +197,7 @@ export interface ConstructionSessionPort {
   ): void;
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest): readonly WallPiece[];
+  generateRoomGrid(request: GenerateRoomGridRequest): readonly RoomGridPiece[];
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
