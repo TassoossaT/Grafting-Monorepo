@@ -2,9 +2,10 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey, ConstructionSurfaceSpec } from "@/ports";
 
-import { buildGenerateWallOperation, type WallCornerRole } from "../default-map-seed.ts";
+import { buildGenerateWallOperation } from "../default-map-seed.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
 import { segmentBetween } from "./preview-shapes.ts";
+import { type ExistingWallNode, weldCornerOverrides } from "./wall-corner-weld.ts";
 
 /** Fixed wall height for a brush-drawn segment -- matches `room-seed.ts`'s own generated-room wall height range. */
 const WALL_HEIGHT = 3;
@@ -17,16 +18,14 @@ const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 
  * problem: if both walls' corner nodes are the *same* `NodeId`, the two flat
  * planes already meet exactly, for free, by the same graph-identity
  * principle `irregular-terrain-tool.ts`'s own weld already relies on. This
- * is the E7.3 "recognize shared edges/corners" mechanism: how close (3D --
- * unlike terrain's XZ-only weld, a wall's top and bottom must not cross-weld)
- * a new corner must land to an existing node before reusing its id instead
- * of minting a fresh one.
+ * is the E7.3 "recognize shared edges/corners" mechanism -- corner welding
+ * itself lives in `wall-corner-weld.ts`, shared with `house-seed.ts`.
  *
  * Two cases are handled: a new wall's *endpoint* landing near an existing
- * corner welds onto it directly (`weldCornerOverrides`, below); a new wall
- * *crossing through the middle* of an existing wall's span instead splits
- * that existing wall in two via `splitSurface`, inserting a fresh shared
- * node pair at the crossing point (`findNearestWallCrossing`/
+ * corner welds onto it directly (`weldCornerOverrides`, imported); a new
+ * wall *crossing through the middle* of an existing wall's span instead
+ * splits that existing wall in two via `splitSurface`, inserting a fresh
+ * shared node pair at the crossing point (`findNearestWallCrossing`/
  * `splitCrossedWall`, further down) -- then the new wall is drawn as two
  * segments meeting at that same pair, welding onto it the ordinary way.
  *
@@ -37,56 +36,6 @@ const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 
  * crossing search, since it does not care whether the *new* wall continues
  * past the crossing or the gesture happened to end there.
  */
-const WALL_WELD_EPSILON = 0.5;
-
-interface ExistingWallNode {
-  readonly id: ConstructionNodeId;
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-}
-
-function nearestExistingCorner(
-  point: ConstructionPosition,
-  existing: readonly ExistingWallNode[],
-): ConstructionNodeId | undefined {
-  let best: ExistingWallNode | undefined;
-  let bestDistanceSq = WALL_WELD_EPSILON * WALL_WELD_EPSILON;
-  for (const candidate of existing) {
-    const dx = candidate.x - point.x;
-    const dy = candidate.y - point.y;
-    const dz = candidate.z - point.z;
-    const distanceSq = dx * dx + dy * dy + dz * dz;
-    if (distanceSq <= bestDistanceSq) {
-      best = candidate;
-      bestDistanceSq = distanceSq;
-    }
-  }
-  return best?.id;
-}
-
-function weldCornerOverrides(
-  ctx: ToolContext,
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-): Partial<Record<WallCornerRole, ConstructionNodeId>> {
-  const existing: readonly ExistingWallNode[] = [...ctx.runtime.getSnapshot().map.nodePositions.values()].map(
-    (entry) => ({ id: entry.nodeRef, x: entry.position.x, y: entry.position.y, z: entry.position.z }),
-  );
-  const startTop = { x: start.x, y: start.y + WALL_HEIGHT, z: start.z };
-  const endTop = { x: end.x, y: end.y + WALL_HEIGHT, z: end.z };
-
-  const overrides: Partial<Record<WallCornerRole, ConstructionNodeId>> = {};
-  const startBottom = nearestExistingCorner(start, existing);
-  if (startBottom !== undefined) overrides.startBottom = startBottom;
-  const topOfStart = nearestExistingCorner(startTop, existing);
-  if (topOfStart !== undefined) overrides.startTop = topOfStart;
-  const endBottom = nearestExistingCorner(end, existing);
-  if (endBottom !== undefined) overrides.endBottom = endBottom;
-  const topOfEnd = nearestExistingCorner(endTop, existing);
-  if (topOfEnd !== undefined) overrides.endTop = topOfEnd;
-  return overrides;
-}
 
 /**
  * Two vertical posts (a node pair sharing one XZ, one at the base and one
@@ -270,7 +219,7 @@ function commitWallSegment(
   end: ConstructionPosition,
   params: WallBrushParams,
 ): void {
-  const cornerOverrides = weldCornerOverrides(ctx, start, end);
+  const cornerOverrides = weldCornerOverrides(ctx, start, end, WALL_HEIGHT);
   const operation = buildGenerateWallOperation(
     ctx.tableId,
     `brush-wall-${sequence}`,

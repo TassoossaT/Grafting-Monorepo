@@ -16,6 +16,7 @@ use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh,
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::mesh;
+use crate::room_grid;
 use crate::terrain;
 use crate::wall;
 
@@ -206,6 +207,19 @@ impl ConstructionSession {
     pub fn generate_and_apply_wall_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
         let response = wall::generate_and_apply_wall(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        for piece in &response.pieces {
+            self.remember(&piece.surface_key);
+        }
+        serialize(&response)
+    }
+
+    /// Generates a rectangular grid of walled, welded rooms (walls, doors,
+    /// floors, ceilings) and applies every piece. See
+    /// `room_grid::generate_and_apply_room_grid`.
+    pub fn generate_and_apply_room_grid_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            room_grid::generate_and_apply_room_grid(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
         for piece in &response.pieces {
             self.remember(&piece.surface_key);
         }

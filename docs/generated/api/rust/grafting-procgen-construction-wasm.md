@@ -30,6 +30,12 @@ Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
 
 Duplicates a surface. See `editing::apply_duplicate_surface`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_room_grid_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Generates a rectangular grid of walled, welded rooms (walls, doors,
+floors, ceilings) and applies every piece. See
+`room_grid::generate_and_apply_room_grid`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_terrain_cell_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Generates one terrain cell's surface and applies it. See

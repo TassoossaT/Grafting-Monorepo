@@ -3,6 +3,7 @@
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   ConstructionToolId,
+  HouseStampParams,
   IrregularTerrainParams,
   RoomStampParams,
   TerrainBrushParams,
@@ -102,6 +103,19 @@ function RoomStampFields(props: {
   );
 }
 
+function HouseStampFields(props: {
+  readonly params: HouseStampParams;
+  readonly onChange: (next: HouseStampParams) => void;
+}) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      {sliderRow("Linhas", params.rows, 1, 4, 1, (rows) => onChange({ ...params, rows }))}
+      {sliderRow("Colunas", params.cols, 1, 4, 1, (cols) => onChange({ ...params, cols }))}
+    </div>
+  );
+}
+
 function IrregularTerrainFields(props: {
   readonly params: IrregularTerrainParams;
   readonly onChange: (next: IrregularTerrainParams) => void;
@@ -142,6 +156,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede",
   "room-stamp": "Parâmetros: Sala",
+  "house-stamp": "Parâmetros: Casa",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -161,8 +176,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Terreno, Parede, Sala ou Terreno Irregular) no hotbar para ajustar
-          seus parâmetros.
+          Selecione uma ferramenta de construção (Terreno, Parede, Sala, Casa ou Terreno Irregular) no hotbar para
+          ajustar seus parâmetros.
         </p>
       </Card>
     );
@@ -181,6 +196,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "room-stamp" ? (
         <RoomStampFields params={params["room-stamp"]} onChange={(next) => onParamsChange("room-stamp", next)} />
+      ) : activeTool === "house-stamp" ? (
+        <HouseStampFields params={params["house-stamp"]} onChange={(next) => onParamsChange("house-stamp", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

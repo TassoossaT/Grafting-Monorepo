@@ -11,6 +11,15 @@ role via `node_id`/`edge_id` in [`generate_wall`], and lets adjacent
 pieces agree on a shared jamb node's identity without this crate
 inventing one.
 
+### `pub fn grafting_procgen_structure_generation::generate_room_grid(layout: &grafting_procgen_structure_generation::RoomGridLayout, id_prefix: &str, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType, floor_type: grafting_graph_core::surface::SurfaceType, ceiling_type: grafting_graph_core::surface::SurfaceType) -> grafting_procgen_structure_generation::RoomGridGeneration`
+
+Generates a room grid's wall/floor/ceiling pieces. `id_prefix`
+namespaces every generated id (corners, door jambs, ring edges) so two
+calls -- or this call and any other generator's -- never collide; the
+same role `wall-corner-weld.ts`'s `tableId:salt` naming plays for a
+hand-drawn wall, just resolved here instead of by a caller-supplied map,
+since this generator already knows its own full topology upfront.
+
 ### `pub fn grafting_procgen_structure_generation::generate_wall(wall: &grafting_procgen_structure_generation::WallSegment, door: core::option::Option<&grafting_procgen_structure_generation::DoorOpening>, node_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::NodeId, edge_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole, grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::EdgeId, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType) -> core::result::Result<grafting_procgen_structure_generation::WallGeneration, grafting_procgen_structure_generation::StructureGenerationError>`
 
 Derives a wall's construction-surface node cycle(s), splitting around a
@@ -27,6 +36,42 @@ Fraction along the centerline where the opening ends.
 ### `pub grafting_procgen_structure_generation::DoorOpening::opens_at: f32`
 
 Fraction along the centerline where the opening begins.
+
+### `pub grafting_procgen_structure_generation::RoomGridGeneration::ceilings: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
+
+One ceiling piece per cell, in row-major cell order.
+
+### `pub grafting_procgen_structure_generation::RoomGridGeneration::floors: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
+
+One floor piece per cell, in row-major cell order.
+
+### `pub grafting_procgen_structure_generation::RoomGridGeneration::walls: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
+
+Wall pieces, in row-major grid-line order (all horizontal lines, then all vertical lines).
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::cell_depth: f32`
+
+One cell's depth along Z.
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::cell_width: f32`
+
+One cell's width along X.
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::cols: u32`
+
+Number of cells along X. Must be at least 1 for a non-empty grid.
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::origin: [f32; 3]`
+
+The grid's row-0/col-0 corner, at its own base (Y is the grid's floor level).
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::rows: u32`
+
+Number of cells along Z. Must be at least 1 for a non-empty grid.
+
+### `pub grafting_procgen_structure_generation::RoomGridLayout::wall_height: f32`
+
+Every wall's rise above `origin`'s own Y.
 
 ### `pub grafting_procgen_structure_generation::StructureGenerationError::InvalidDoorOpening`
 
@@ -119,6 +164,19 @@ centerline. `opens_at` must be less than `closes_at`, both within
 `[0, 1]`. V1: the opening spans the wall's full height -- no lintel
 piece above it. A partial-height opening is a deliberate, documented
 follow-up.
+
+### `pub struct grafting_procgen_structure_generation::RoomGridGeneration`
+
+A generated grid's pieces: one wall piece per unique grid edge (interior
+edges carry a door, perimeter edges do not), and one floor + one ceiling
+piece per cell. Floor/ceiling pieces carry no new nodes/edges of their
+own -- their cycles reference corner nodes the wall pieces already add.
+
+### `pub struct grafting_procgen_structure_generation::RoomGridLayout`
+
+A rectangular grid of `rows` x `cols` uniform-size cells, `origin` at the
+grid's own row-0/col-0 corner. v1 scope: uniform cell size, no L-shaped
+or otherwise non-rectangular footprints.
 
 ### `pub struct grafting_procgen_structure_generation::StructurePiece`
 
