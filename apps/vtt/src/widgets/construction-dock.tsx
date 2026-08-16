@@ -47,14 +47,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
     settingsOpen,
   } = props;
 
-  // Active category detection
-  const isBuildingActive =
-    activeTool === "house-brush" ||
-    activeTool === "room-stamp" ||
-    activeTool === "room-derive";
+  // Active category and sub-tool detection
+  const isHouseBrushActive = activeTool === "house-brush";
+  const isRoomStampActive = activeTool === "room-stamp";
+  const isRoomDeriveActive = activeTool === "room-derive";
+  const isBuildingChildActive = isHouseBrushActive || isRoomStampActive || isRoomDeriveActive;
 
-  const isTerrainActive =
-    activeTool === "terrain-brush" || activeTool === "irregular-terrain-stamp";
+  const isTerrainBrushActive = activeTool === "terrain-brush";
+  const isIrregularTerrainActive = activeTool === "irregular-terrain-stamp";
+  const isTerrainChildActive = isTerrainBrushActive || isIrregularTerrainActive;
 
   const isWallActive = activeTool === "wall-brush";
   const isDemolishActive = activeTool === "house-room-delete";
@@ -65,7 +66,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
       label: "Edifícios",
       icon: "🏠",
       tooltip: "Edifícios & Casas procedurais",
-      active: isBuildingActive,
+      active: isHouseBrushActive,
+      childActive: isBuildingChildActive,
       disabled: !ready,
       onClick: () => onToolChange("house-brush"),
       subItems: [
@@ -73,9 +75,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
           key: "house-brush",
           label: "Pintar Casa",
           icon: "🏠",
-          tooltip: "Pintar Casa (arraste continuamente, divide em cômodos)",
+          tooltip: "Pintar Casa (arraste continuamente)",
           shortcut: "H",
-          active: activeTool === "house-brush",
+          active: isHouseBrushActive,
           disabled: !ready,
           onClick: () => onToolChange("house-brush"),
         },
@@ -83,9 +85,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
           key: "room-stamp",
           label: "Carimbo de Sala",
           icon: "◻",
-          tooltip: "Carimbo de Sala (clique para gerar sala pronta)",
+          tooltip: "Carimbo de Sala pronta",
           shortcut: "R",
-          active: activeTool === "room-stamp",
+          active: isRoomStampActive,
           disabled: !ready,
           onClick: () => onToolChange("room-stamp"),
         },
@@ -93,8 +95,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
           key: "room-derive",
           label: "Derivar Sala",
           icon: "📐",
-          tooltip: "Derivar Sala (clique dentro de paredes fechadas)",
-          active: activeTool === "room-derive",
+          tooltip: "Derivar Sala de paredes fechadas",
+          active: isRoomDeriveActive,
           disabled: !ready,
           onClick: () => onToolChange("room-derive"),
         },
@@ -104,7 +106,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "wall",
       label: "Muros",
       icon: "🧱",
-      tooltip: "Muros e Cercas livres (arraste para desenhar)",
+      tooltip: "Muros e Cercas livres",
       shortcut: "P",
       active: isWallActive,
       disabled: !ready,
@@ -114,30 +116,31 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "openings",
       label: "Aberturas",
       icon: "🚪",
-      tooltip: "Portas & Janelas contextuais em paredes",
-      disabled: true, // Upcoming procedural opening tool
+      tooltip: "Portas & Janelas",
+      disabled: true,
     },
     {
       key: "stairs",
       label: "Escadas",
       icon: "🪜",
-      tooltip: "Escadas entre desníveis de terreno e pisos",
-      disabled: true, // Upcoming stairs tool
+      tooltip: "Escadas e Desníveis",
+      disabled: true,
     },
     {
       key: "paths",
       label: "Caminhos",
       icon: "🛤️",
-      tooltip: "Caminhos de terra/pedra que geram arcos em muros",
-      disabled: true, // Upcoming path spline tool
+      tooltip: "Caminhos e Arcos em Muros",
+      disabled: true,
     },
     {
       key: "terrain",
       label: "Terreno",
       icon: "⛰️",
-      tooltip: "Escultura de Terreno e Elevação",
+      tooltip: "Escultura de Terreno",
       shortcut: "T",
-      active: isTerrainActive,
+      active: isTerrainBrushActive,
+      childActive: isTerrainChildActive,
       disabled: !ready,
       onClick: () => onToolChange("terrain-brush"),
       subItems: [
@@ -145,9 +148,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
           key: "terrain-brush",
           label: "Pincel Circular",
           icon: "⚪",
-          tooltip: "Pincel de Terreno Contínuo (tecla T)",
+          tooltip: "Pincel de Terreno (tecla T)",
           shortcut: "T",
-          active: activeTool === "terrain-brush",
+          active: isTerrainBrushActive,
           disabled: !ready,
           onClick: () => onToolChange("terrain-brush"),
         },
@@ -155,9 +158,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
           key: "irregular-terrain-stamp",
           label: "Terreno Irregular",
           icon: "◆",
-          tooltip: "Pincel de Terreno Hex/Irregular (tecla I)",
+          tooltip: "Pincel de Terreno Hex (tecla I)",
           shortcut: "I",
-          active: activeTool === "irregular-terrain-stamp",
+          active: isIrregularTerrainActive,
           disabled: !ready,
           onClick: () => onToolChange("irregular-terrain-stamp"),
         },
@@ -167,14 +170,14 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "foliage",
       label: "Vegetação",
       icon: "🌲",
-      tooltip: "Pincel de Flora, Arbustos e Adornos",
-      disabled: true, // Upcoming foliage brush
+      tooltip: "Pincel de Flora e Vegetação",
+      disabled: true,
     },
     {
       key: "palette",
       label: "Paleta",
       icon: "🎨",
-      tooltip: "Estilos, Materiais e Temas Arquitetônicos",
+      tooltip: "Estilos, Materiais e Temas",
       active: settingsOpen,
       onClick: onToggleSettings,
     },
@@ -182,174 +185,27 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "demolish",
       label: "Demolir",
       icon: "🔨",
-      tooltip: "Apagar cômodos ou elementos selecionados",
+      tooltip: "Apagar cômodos ou elementos",
       active: isDemolishActive,
       disabled: !ready,
       onClick: () => onToolChange("house-room-delete"),
     },
   ];
 
-  const leadingAccessories = (
-    <>
-      <button
-        type="button"
-        onClick={() => onToolChange("navigate")}
-        title="Navegar / Pan (tecla N)"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2rem",
-          height: "2rem",
-          border: activeTool === "navigate" ? "1px solid #72d69e" : "1px solid transparent",
-          borderRadius: "9999px",
-          background: activeTool === "navigate" ? "rgba(114, 214, 158, 0.16)" : "transparent",
-          color: activeTool === "navigate" ? "#72d69e" : "#94a3b8",
-          cursor: "pointer",
-          fontSize: "0.85rem",
-          fontWeight: 700,
-          transition: "all 0.15s ease",
-        }}
-      >
-        N
-      </button>
-
-      <button
-        type="button"
-        onClick={() => onToolChange("move-node")}
-        title="Mover Nó 3D / Vértice (tecla M)"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2rem",
-          height: "2rem",
-          border: activeTool === "move-node" ? "1px solid #72d69e" : "1px solid transparent",
-          borderRadius: "9999px",
-          background: activeTool === "move-node" ? "rgba(114, 214, 158, 0.16)" : "transparent",
-          color: activeTool === "move-node" ? "#72d69e" : "#94a3b8",
-          cursor: "pointer",
-          fontSize: "0.85rem",
-          fontWeight: 700,
-          transition: "all 0.15s ease",
-        }}
-      >
-        M
-      </button>
-
-      <button
-        type="button"
-        disabled={!canUndo}
-        onClick={onUndo}
-        title="Desfazer (Ctrl+Z)"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2rem",
-          height: "2rem",
-          border: "1px solid transparent",
-          borderRadius: "9999px",
-          background: "transparent",
-          color: "#94a3b8",
-          cursor: canUndo ? "pointer" : "not-allowed",
-          opacity: canUndo ? 1 : 0.35,
-          fontSize: "1rem",
-          transition: "all 0.15s ease",
-        }}
-      >
-        ↶
-      </button>
-
-      <button
-        type="button"
-        disabled={!canRedo}
-        onClick={onRedo}
-        title="Refazer (Ctrl+Y)"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2rem",
-          height: "2rem",
-          border: "1px solid transparent",
-          borderRadius: "9999px",
-          background: "transparent",
-          color: "#94a3b8",
-          cursor: canRedo ? "pointer" : "not-allowed",
-          opacity: canRedo ? 1 : 0.35,
-          fontSize: "1rem",
-          transition: "all 0.15s ease",
-        }}
-      >
-        ↷
-      </button>
-    </>
-  );
-
-  const trailingAccessories = (
-    <>
-      <button
-        type="button"
-        onClick={() => onSnapToGridChange(!snapToGrid)}
-        title={snapToGrid ? "Ímã do Grid: Ativado (tecla G)" : "Ímã do Grid: Desativado (tecla G)"}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "2rem",
-          height: "2rem",
-          border: snapToGrid ? "1px solid #72d69e" : "1px solid transparent",
-          borderRadius: "9999px",
-          background: snapToGrid ? "rgba(114, 214, 158, 0.16)" : "transparent",
-          color: snapToGrid ? "#72d69e" : "#94a3b8",
-          cursor: "pointer",
-          fontSize: "0.95rem",
-          transition: "all 0.15s ease",
-        }}
-      >
-        🧲
-      </button>
-
-      {onToggleSettings && (
-        <button
-          type="button"
-          onClick={onToggleSettings}
-          title="Abrir Painel de Parâmetros e Configurações"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "2rem",
-            height: "2rem",
-            border: settingsOpen ? "1px solid #72d69e" : "1px solid transparent",
-            borderRadius: "9999px",
-            background: settingsOpen ? "rgba(114, 214, 158, 0.16)" : "transparent",
-            color: settingsOpen ? "#72d69e" : "#94a3b8",
-            cursor: "pointer",
-            fontSize: "0.95rem",
-            transition: "all 0.15s ease",
-          }}
-        >
-          ⚙️
-        </button>
-      )}
-    </>
-  );
-
   return (
-    <ActionDock
-      ariaLabel="Barra de Ferramentas de Construção Tiny Glade"
-      items={items}
-      leadingAccessories={leadingAccessories}
-      trailingAccessories={trailingAccessories}
+    <div
       style={{
         position: "absolute",
+        bottom: "1.25rem",
         left: "50%",
-        bottom: "0.85rem",
         transform: "translateX(-50%)",
-        zIndex: 25,
+        zIndex: 15,
       }}
-    />
+    >
+      <ActionDock
+        ariaLabel="Menu de Construção Tiny Glade"
+        items={items}
+      />
+    </div>
   );
 }
