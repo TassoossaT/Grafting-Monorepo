@@ -9,52 +9,26 @@ not pre-populate speculative ones.
 
 ## Open
 
-- **Task-worktree dependency symlinks break `next dev --turbo` module
-  resolution for some transitive packages.** Discovered 2026-08-14 on
-  `VTT-CONSTRUCTION-GRID` trying to browser-verify a change to
-  `apps/vtt`: `packages/ui/node_modules/rete-connection-plugin` (a real
-  transitive dependency `packages/ui/package.json` declares, needed by its
-  `canvas/graph` module which `apps/vtt`'s barrel import pulls in even
-  though `apps/vtt` itself only uses `createHeightfieldCanvas`) is a symlink
-  into the *main repo's* `node_modules/.ia-graft-task-deps/<taskId>/...`
-  cache, outside the task worktree entirely — Turbopack's dev server fails
-  to resolve it (`Module not found: Can't resolve 'rete-connection-plugin'`)
-  even though the file genuinely exists at that path and `tsc --noEmit`
-  resolves it fine. Setting `turbopack.root` explicitly made it *worse*
-  (`next/package.json` itself unresolvable — `next` is linked the same
-  symlinked way), confirming this is general to the linking scheme, not one
-  package. Root cause not fully isolated (unclear whether Turbopack refuses
-  to follow symlinks that resolve outside its inferred root, or something
-  narrower); not fixed here — reverted the `next.config.mjs` attempt rather
-  than guess further, and verified this task's actual change via
-  `tsc --noEmit` + `node --test` only, no live browser check. Worth
-  isolating properly since it silently blocks the project's own
-  "browser-verify before done" convention for any task-worktree touching
-  `apps/vtt` (or any other Next.js app) whose dependency graph reaches a
-  package with this symlink shape.
-- **No commit-message fix/amend path.** `task commit --input
-  '{"taskId","message"}'` (`task-commands.ts`, `taskCommit`) always creates
-  a new commit; there is no `--amend` or `task commit --fix-message`
-  equivalent. Discovered 2026-08-11 on `GRAPH-STORAGE-BENCH`: a
-  CLI-input-shape probe (`{"message":"placeholder"}`) committed for real
-  instead of just validating the shape, leaving a wrong message with no
-  CLI-native way to correct it — the fallback was a manual, user-authorized
-  one-off `git commit --amend` exception. Two independent fixes would have
-  prevented needing the exception: (a) `task commit` supporting `--amend`
-  (or a separate `task commit --fix-message`) for the still-unpushed,
-  current-HEAD case; (b) a `--dry-run`/`--check` flag on `task commit` for
-  exactly this "does the CLI accept this input shape" probe, so testing
-  input shape never risks a real commit.
+*(No open CLI gaps at this time).*
 
 ## Resolved (kept for history, do not re-add)
 
+- **Task-worktree dependency symlinks in Turbopack / Next.js.**
+  Investigated and resolved 2026-08-16 in task `IA-GRAFT-TURBOPACK-SYMLINKS`.
+  Root cause isolated:
+  1. *Missing gitignored build artifacts in fresh worktrees*: Workspace packages (`@grafting/ui`, `@grafting/render-3d`, `@grafting/procgen-*-wasm`) export from `dist/` or `pkg/` (`./dist/index.js`, `./pkg/...`). In freshly created worktrees, these gitignored outputs are not yet compiled; running `next build` / `next dev --turbo` before compiling workspace dependencies caused module resolution failures that surfaced as missing packages or missing transitive dependencies (`rete-connection-plugin`).
+  2. *Turbopack root security boundary*: Turbopack restricts module compilation to its inferred workspace root. When `turbopack.root` was manually set to `.worktrees/<taskId>`, Turbopack resolved symlinks/junctions to external dependencies (e.g. `next`, `antd`, `react`) pointing into the outer repository's `node_modules` (or `.ia-graft-task-deps`), detecting them as outside `turbopack.root` and throwing `next/package.json not found`. Leaving `turbopack.root` unset allows Next.js to automatically infer the monorepo root (`Grafting Monorepo`), which encompasses both the outer `node_modules` and `.worktrees/<taskId>`.
+  3. *Validation*: Verified both `apps/vtt` and `apps/architecture-studio` build cleanly (`next build` with Turbopack) and run live (`next dev --hostname 127.0.0.1 --port 4512`) returning HTTP 200 on dynamic routes (`/table/demo`) in task worktrees.
+- **Commit amend and dry-run support in `task commit`.**
+  `task commit --amend` allows correcting the unpushed HEAD commit message or author without creating extra commits. `task commit --dry-run` (and `--check`) validates input shape and previews changes without mutating git state.
+  Resolved 2026-08-16 in task `IA-GRAFT-COMMIT-AMEND-DRYRUN`.
 - **CLI-native cross-package workspace dependencies and lockfile updates.**
   `task deps --install --update-lockfile` (and `task deps --update-lockfile`) runs
   pnpm with `--no-frozen-lockfile`, recomputes the lockfile hash, and updates the
   managed overlay marker. `task deps --add <pkg>@<range> [--workspace <name>] [--dev]`
   edits `package.json` and updates dependencies and lockfile together in one step.
   Resolved 2026-08-16 in task `IA-GRAFT-DEPS-UPDATE-LOCKFILE`.
-- Branch-aware `task new` resume, `task checkout --restore` (test a task
+- **Branch-aware `task new` resume, `task checkout --restore` (test a task
   branch in the main checkout without merging), Windows-safe `task cleanup
   --force`, and `task done`/`checkout` resolving the real default branch via
   `resolveDefaultBranch()` instead of assuming `main` — all present in
