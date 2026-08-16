@@ -45,30 +45,62 @@ export interface ActionDockItem {
 
 /** Public props for the {@link ActionDock} bottom toolbar organism. */
 export interface ActionDockProps {
-  /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
+  /** Accessible name for the toolbar region. @default "Barra de ferramentas de construcao" */
   readonly ariaLabel?: string;
   /** Primary construction verbs / categories in display order. */
   readonly items: readonly ActionDockItem[];
-  /** Optional leading actions (e.g. undo, redo, camera navigation). */
+  /**
+   * Optional leading accessories rendered as individual floating pills
+   * (e.g. undo/redo, camera navigation).
+   */
   readonly leadingAccessories?: ReactNode;
-  /** Optional trailing actions (e.g. grid snap toggle, settings drawer toggle). */
+  /**
+   * Optional trailing accessories rendered as individual floating pills
+   * (e.g. grid snap toggle, settings drawer toggle).
+   */
   readonly trailingAccessories?: ReactNode;
-  /** Outline style for the dock buttons. @default "rounded" */
-  readonly shape?: "rounded" | "square";
-  /** Optional caller-owned class name. */
+  /** Optional caller-owned class name applied to the outer wrapper. */
   readonly className?: string;
-  /** Optional inline style override. */
+  /** Optional inline style override for the outer wrapper. */
   readonly style?: CSSProperties;
 }
 
+const PILL_BASE: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "9999px",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  background: "rgba(12, 18, 32, 0.72)",
+  border: "1px solid rgba(255, 255, 255, 0.10)",
+  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.38)",
+  transition: "all 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
+  cursor: "pointer",
+  userSelect: "none",
+};
+
+const PILL_ACTIVE: CSSProperties = {
+  background: "rgba(114, 214, 158, 0.16)",
+  border: "1px solid rgba(114, 214, 158, 0.55)",
+  color: "#72d69e",
+};
+
+const PILL_HOVER: CSSProperties = {
+  background: "rgba(255, 255, 255, 0.09)",
+  border: "1px solid rgba(255, 255, 255, 0.18)",
+  color: "#f8fafc",
+  transform: "translateY(-2px)",
+  boxShadow: "0 8px 28px rgba(0, 0, 0, 0.48)",
+};
+
 /**
- * A minimalist, glassmorphic bottom action dock inspired by Tiny Glade and
- * modern creative sandboxes.
+ * A floating bottom action dock inspired by Tiny Glade construction UI.
  *
- * It houses the primary verbs of construction in a centered horizontal strip.
- * When an active category defines `subItems` (e.g. Rectangular vs. Cylindrical
- * building volume, Straight vs. Curved walls), a floating sub-dock expands
- * smoothly above the primary dock.
+ * Each primary verb is an independent, floating pill with no shared background
+ * container. Pills hover directly above the canvas with a soft glassmorphic
+ * treatment per-pill. When an active category defines subItems, a compact
+ * sub-pill row expands smoothly above that item.
  *
  * @layer organism
  * @status stable
@@ -79,18 +111,15 @@ export function ActionDock(props: ActionDockProps): ReactElement {
     items,
     leadingAccessories,
     trailingAccessories,
-    shape = "rounded",
     className,
     style,
   } = props;
 
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
-  // Find the active item that has sub-items to expand
-  const activeWithSubItems = items.find((item) => item.active && item.subItems && item.subItems.length > 0);
-
-  const borderRadius = shape === "rounded" ? "9999px" : "0.5rem";
-  const itemRadius = shape === "rounded" ? "9999px" : "0.375rem";
+  const activeWithSubItems = items.find(
+    (item) => item.active && item.subItems && item.subItems.length > 0,
+  );
 
   return (
     <div
@@ -108,190 +137,206 @@ export function ActionDock(props: ActionDockProps): ReactElement {
         ...style,
       }}
     >
-      {/* Expandable Sub-Item Pill Bar (appears smoothly above the primary dock) */}
-      {activeWithSubItems && activeWithSubItems.subItems && (
-        <div
-          role="group"
-          aria-label={`Variações de ${activeWithSubItems.label}`}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.25rem",
-            padding: "0.25rem 0.4rem",
-            borderRadius,
-            background: "rgba(15, 23, 42, 0.9)",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(14px)",
-            animation: "actionDockSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
-          }}
-        >
-          {activeWithSubItems.subItems.map((subItem) => {
-            const isSubActive = subItem.active === true;
-            return (
-              <button
-                key={subItem.key}
-                type="button"
-                disabled={subItem.disabled}
-                onClick={subItem.onClick}
-                title={subItem.tooltip ?? subItem.label}
-                aria-pressed={isSubActive}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  padding: "0.3rem 0.6rem",
-                  border: isSubActive ? "1px solid #72d69e" : "1px solid transparent",
-                  borderRadius: itemRadius,
-                  background: isSubActive ? "rgba(114, 214, 158, 0.16)" : "transparent",
-                  color: isSubActive ? "#72d69e" : "#cbd5e1",
-                  fontSize: "0.75rem",
-                  fontWeight: isSubActive ? 600 : 500,
-                  cursor: subItem.disabled ? "not-allowed" : "pointer",
-                  opacity: subItem.disabled ? 0.4 : 1,
-                  transition: "all 0.15s ease",
-                }}
-              >
-                {subItem.icon && <span style={{ fontSize: "0.9rem", lineHeight: 1 }}>{subItem.icon}</span>}
-                <span>{subItem.label}</span>
-                {subItem.shortcut && (
-                  <kbd
-                    style={{
-                      fontSize: "0.65rem",
-                      padding: "0.1rem 0.3rem",
-                      borderRadius: "0.25rem",
-                      background: "rgba(255, 255, 255, 0.08)",
-                      color: "#94a3b8",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {subItem.shortcut}
-                  </kbd>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {activeWithSubItems?.subItems && (
+        <SubPillRow
+          groupLabel={activeWithSubItems.label}
+          subItems={activeWithSubItems.subItems}
+        />
       )}
-
-      {/* Main Primary Dock */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.35rem",
-          padding: "0.35rem 0.5rem",
-          borderRadius,
-          background: "rgba(15, 23, 42, 0.82)",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "0 12px 32px rgba(0, 0, 0, 0.45)",
-          backdropFilter: "blur(14px)",
+          display: "inline-flex",
+          alignItems: "flex-end",
+          gap: "0.45rem",
         }}
       >
-        {/* Leading accessories (e.g. Undo/Redo or Navigation) */}
         {leadingAccessories && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
               {leadingAccessories}
             </div>
-            <div
-              style={{
-                width: "1px",
-                height: "1.5rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                margin: "0 0.2rem",
-              }}
-            />
+            <div style={{ width: "0.35rem" }} />
           </>
         )}
-
-        {/* Primary Verbs */}
-        <div style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-          {items.map((item) => {
-            const isActive = item.active === true;
-            const isHovered = hoveredKey === item.key;
-
-            return (
-              <button
-                key={item.key}
-                type="button"
-                disabled={item.disabled}
-                onClick={item.onClick}
-                onMouseEnter={() => setHoveredKey(item.key)}
-                onMouseLeave={() => setHoveredKey(null)}
-                title={item.tooltip ?? item.label}
-                aria-pressed={isActive}
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.2rem",
-                  minWidth: "3.4rem",
-                  padding: "0.45rem 0.5rem",
-                  border: isActive ? "1px solid #72d69e" : isHovered ? "1px solid rgba(255, 255, 255, 0.2)" : "1px solid transparent",
-                  borderRadius: itemRadius,
-                  background: isActive
-                    ? "rgba(114, 214, 158, 0.14)"
-                    : isHovered
-                    ? "rgba(255, 255, 255, 0.06)"
-                    : "transparent",
-                  color: isActive ? "#72d69e" : isHovered ? "#f8fafc" : "#cbd5e1",
-                  cursor: item.disabled ? "not-allowed" : "pointer",
-                  opacity: item.disabled ? 0.35 : 1,
-                  transition: "all 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
-                  transform: isActive || isHovered ? "translateY(-1px)" : "none",
-                }}
-              >
-                <div style={{ fontSize: "1.2rem", lineHeight: 1 }}>{item.icon}</div>
-                <span
-                  style={{
-                    fontSize: "0.68rem",
-                    fontWeight: isActive ? 600 : 500,
-                    letterSpacing: "0.01em",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label}
-                </span>
-
-                {item.shortcut && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: "0.2rem",
-                      right: "0.25rem",
-                      fontSize: "0.55rem",
-                      color: isActive ? "#72d69e" : "#64748b",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {item.shortcut}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Trailing accessories (e.g. Grid Snap, Palette, Settings) */}
+        {items.map((item) => {
+          const isActive = item.active === true;
+          const isHovered = hoveredKey === item.key;
+          return (
+            <PrimaryPill
+              key={item.key}
+              item={item}
+              isActive={isActive}
+              isHovered={isHovered}
+              onMouseEnter={() => setHoveredKey(item.key)}
+              onMouseLeave={() => setHoveredKey(null)}
+            />
+          );
+        })}
         {trailingAccessories && (
           <>
-            <div
-              style={{
-                width: "1px",
-                height: "1.5rem",
-                background: "rgba(255, 255, 255, 0.1)",
-                margin: "0 0.2rem",
-              }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <div style={{ width: "0.35rem" }} />
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
               {trailingAccessories}
             </div>
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+interface PrimaryPillProps {
+  item: ActionDockItem;
+  isActive: boolean;
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}
+
+function PrimaryPill({
+  item,
+  isActive,
+  isHovered,
+  onMouseEnter,
+  onMouseLeave,
+}: PrimaryPillProps): ReactElement {
+  const dynamicStyle: CSSProperties = isActive
+    ? PILL_ACTIVE
+    : isHovered
+      ? PILL_HOVER
+      : { color: "#b0bdcc" };
+
+  return (
+    <button
+      type="button"
+      disabled={item.disabled}
+      onClick={item.onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      title={item.tooltip ?? item.label}
+      aria-pressed={isActive}
+      style={{
+        ...PILL_BASE,
+        ...dynamicStyle,
+        position: "relative",
+        flexDirection: "column",
+        gap: "0.18rem",
+        padding: "0.5rem 0.7rem",
+        minWidth: "3.2rem",
+        opacity: item.disabled ? 0.35 : 1,
+        cursor: item.disabled ? "not-allowed" : "pointer",
+        boxShadow: isActive
+          ? "0 4px 24px rgba(114, 214, 158, 0.22), 0 2px 8px rgba(0,0,0,0.3)"
+          : isHovered
+            ? "0 8px 28px rgba(0, 0, 0, 0.48)"
+            : "0 4px 20px rgba(0, 0, 0, 0.38)",
+      }}
+    >
+      <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>{item.icon}</span>
+      <span
+        style={{
+          fontSize: "0.65rem",
+          fontWeight: isActive ? 600 : 500,
+          letterSpacing: "0.02em",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {item.label}
+      </span>
+      {item.shortcut && (
+        <span
+          style={{
+            position: "absolute",
+            top: "0.18rem",
+            right: "0.22rem",
+            fontSize: "0.5rem",
+            fontWeight: 700,
+            color: isActive ? "#72d69e" : "rgba(255,255,255,0.28)",
+            letterSpacing: "0.01em",
+          }}
+        >
+          {item.shortcut}
+        </span>
+      )}
+    </button>
+  );
+}
+
+interface SubPillRowProps {
+  groupLabel: string;
+  subItems: readonly ActionDockSubItem[];
+}
+
+function SubPillRow({ groupLabel, subItems }: SubPillRowProps): ReactElement {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  return (
+    <div
+      role="group"
+      aria-label={`Variações de ${groupLabel}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.3rem",
+        animation: "actionDockSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
+    >
+      {subItems.map((subItem) => {
+        const isSubActive = subItem.active === true;
+        const isSubHovered = hoveredKey === subItem.key;
+        const dynamicStyle: CSSProperties = isSubActive
+          ? PILL_ACTIVE
+          : isSubHovered
+            ? PILL_HOVER
+            : { color: "#9aacbe" };
+
+        return (
+          <button
+            key={subItem.key}
+            type="button"
+            disabled={subItem.disabled}
+            onClick={subItem.onClick}
+            onMouseEnter={() => setHoveredKey(subItem.key)}
+            onMouseLeave={() => setHoveredKey(null)}
+            title={subItem.tooltip ?? subItem.label}
+            aria-pressed={isSubActive}
+            style={{
+              ...PILL_BASE,
+              ...dynamicStyle,
+              flexDirection: "row",
+              gap: "0.3rem",
+              padding: "0.3rem 0.6rem",
+              fontSize: "0.72rem",
+              fontWeight: isSubActive ? 600 : 500,
+              opacity: subItem.disabled ? 0.35 : 1,
+              cursor: subItem.disabled ? "not-allowed" : "pointer",
+              boxShadow: isSubActive
+                ? "0 4px 20px rgba(114, 214, 158, 0.2), 0 2px 8px rgba(0,0,0,0.3)"
+                : "0 4px 16px rgba(0, 0, 0, 0.32)",
+            }}
+          >
+            {subItem.icon && (
+              <span style={{ fontSize: "0.85rem", lineHeight: 1 }}>{subItem.icon}</span>
+            )}
+            <span>{subItem.label}</span>
+            {subItem.shortcut && (
+              <kbd
+                style={{
+                  fontSize: "0.6rem",
+                  padding: "0.08rem 0.28rem",
+                  borderRadius: "0.25rem",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: "rgba(255,255,255,0.35)",
+                  fontFamily: "inherit",
+                  border: "none",
+                }}
+              >
+                {subItem.shortcut}
+              </kbd>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

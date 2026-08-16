@@ -949,29 +949,32 @@ export interface ActionDockItem {
 }
 /** Public props for the {@link ActionDock} bottom toolbar organism. */
 export interface ActionDockProps {
-    /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
+    /** Accessible name for the toolbar region. @default "Barra de ferramentas de construcao" */
     readonly ariaLabel?: string;
     /** Primary construction verbs / categories in display order. */
     readonly items: readonly ActionDockItem[];
-    /** Optional leading actions (e.g. undo, redo, camera navigation). */
+    /**
+     * Optional leading accessories rendered as individual floating pills
+     * (e.g. undo/redo, camera navigation).
+     */
     readonly leadingAccessories?: ReactNode;
-    /** Optional trailing actions (e.g. grid snap toggle, settings drawer toggle). */
+    /**
+     * Optional trailing accessories rendered as individual floating pills
+     * (e.g. grid snap toggle, settings drawer toggle).
+     */
     readonly trailingAccessories?: ReactNode;
-    /** Outline style for the dock buttons. @default "rounded" */
-    readonly shape?: "rounded" | "square";
-    /** Optional caller-owned class name. */
+    /** Optional caller-owned class name applied to the outer wrapper. */
     readonly className?: string;
-    /** Optional inline style override. */
+    /** Optional inline style override for the outer wrapper. */
     readonly style?: CSSProperties;
 }
 /**
- * A minimalist, glassmorphic bottom action dock inspired by Tiny Glade and
- * modern creative sandboxes.
+ * A floating bottom action dock inspired by Tiny Glade construction UI.
  *
- * It houses the primary verbs of construction in a centered horizontal strip.
- * When an active category defines `subItems` (e.g. Rectangular vs. Cylindrical
- * building volume, Straight vs. Curved walls), a floating sub-dock expands
- * smoothly above the primary dock.
+ * Each primary verb is an independent, floating pill with no shared background
+ * container. Pills hover directly above the canvas with a soft glassmorphic
+ * treatment per-pill. When an active category defines subItems, a compact
+ * sub-pill row expands smoothly above that item.
  *
  * @layer organism
  * @status stable
