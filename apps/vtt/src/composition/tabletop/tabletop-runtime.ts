@@ -24,9 +24,12 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  GenerateRoomAdditionRequest,
   GenerateRoomGridRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
+  RemoveRoomOutcome,
+  RemoveRoomRequest,
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
@@ -104,6 +107,14 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): readonly RoomGridPiece[];
+  /** Welds one new room onto pre-existing geometry wherever `request.weldCandidates` names it -- "Adicionar Cômodo." See `ConstructionSessionPort.generateRoomAddition`. */
+  generateRoomAddition(
+    request: GenerateRoomAdditionRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): readonly RoomGridPiece[];
+  /** Removes a whole room, preserving (door-stripped) any side still shared with a standing neighbor -- "Apagar Cômodo." See `ConstructionSessionPort.removeRoom`. */
+  removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome;
   /**
    * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
    * hexagon's worth) through the construction session's existing generic
@@ -368,6 +379,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
+  /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed now that `removeRoom` is the first mutation to ever delete a node outright. */
+  #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
+    const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
+    this.#nodeHandleRevisions.delete(nodeId);
+    this.#render.applyConfirmed({
+      type: "node-handle-removed",
+      origin,
+      causeId,
+      runtimeGeneration: generation,
+      dependency: { layer: "handles", scopeId: nodeId, revision },
+      nodeId,
+    });
+  }
+
   /** Upserts every surface key that just changed (or is brand new) into `map`, using its freshly re-derived mesh for shape/type/physical. Shared by every mutation that reports which surfaces it touched. */
   #foldAffectedSurfaces(
     map: MapProjection,
@@ -549,6 +574,41 @@ export class AppTabletopRuntime implements TabletopRuntime {
       (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
     return pieces;
+  }
+
+  generateRoomAddition(request: GenerateRoomAdditionRequest, origin: ChangeOrigin, causeId: string): readonly RoomGridPiece[] {
+    this.#requireReady("adding a room");
+
+    const pieces = this.#construction.generateRoomAddition(request);
+    this.#applyConstructionMutation(
+      pieces.map((piece) => piece.surfaceKey),
+      origin,
+      causeId,
+      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
+    );
+    return pieces;
+  }
+
+  removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome {
+    this.#requireReady("removing a room");
+
+    const outcome = this.#construction.removeRoom(request);
+    this.#applyConstructionMutation(outcome.preservedSurfaceKeys, origin, causeId, (map) => {
+      let next = map;
+      for (const removedKey of outcome.removedSurfaceKeys) {
+        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+        const previous = next.byId.get(surfaceRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
+      }
+      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+      for (const nodeId of outcome.removedNodeIds) {
+        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      }
+      return next;
+    });
+    return outcome;
   }
 
   applyIrregularTerrainPatch(

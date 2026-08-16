@@ -43,7 +43,8 @@ export type MapProjectionDelta =
       readonly nodeRef: NodeRef;
       readonly position: NodePosition;
       readonly revision: number;
-    };
+    }
+  | { readonly type: "node-removed"; readonly nodeRef: NodeRef };
 
 /**
  * Derives a stable {@link SurfaceRef} from a surface's canonical node-set
@@ -176,6 +177,13 @@ export function applyMapProjectionDelta(
     const byId = new Map(current.byId);
     byId.delete(delta.surfaceRef);
     return Object.freeze({ byId, nodePositions: current.nodePositions, revision: current.revision + 1 });
+  }
+
+  if (delta.type === "node-removed") {
+    if (!current.nodePositions.has(delta.nodeRef)) return current;
+    const nodePositions = new Map(current.nodePositions);
+    nodePositions.delete(delta.nodeRef);
+    return Object.freeze({ byId: current.byId, nodePositions, revision: current.revision + 1 });
   }
 
   const surface = createSurfaceProjection(delta.surface);

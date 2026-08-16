@@ -84,7 +84,7 @@ pub fn generate_room_grid(
         })
         .collect();
 
-    generate_tiled_rooms(&tiles, layout.origin[1], layout.wall_height, id_prefix, wall_type, door_type, floor_type, ceiling_type)
+    generate_tiled_rooms(&tiles, layout.origin[1], layout.wall_height, id_prefix, wall_type, door_type, floor_type, ceiling_type, |_, _, _| None)
 }
 
 #[cfg(test)]

@@ -16,7 +16,9 @@ use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh,
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::mesh;
+use crate::room_addition;
 use crate::room_grid;
+use crate::room_removal;
 use crate::terrain;
 use crate::wall;
 
@@ -222,6 +224,36 @@ impl ConstructionSession {
             room_grid::generate_and_apply_room_grid(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
         for piece in &response.pieces {
             self.remember(&piece.surface_key);
+        }
+        serialize(&response)
+    }
+
+    /// Generates one new room's wall/floor/ceiling pieces, welding onto
+    /// pre-existing geometry wherever a `weldCandidates` entry names it,
+    /// and applies every piece. See
+    /// `room_addition::generate_and_apply_room_addition`.
+    pub fn generate_and_apply_room_addition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = room_addition::generate_and_apply_room_addition(&mut self.graph, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
+        for piece in &response.pieces {
+            self.remember(&piece.surface_key);
+        }
+        serialize(&response)
+    }
+
+    /// Removes a whole room (floor, ceiling, every bounding wall),
+    /// preserving and door-stripping any side still shared with a
+    /// standing neighbor. See `room_removal::remove_room`.
+    pub fn remove_room_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = room_removal::remove_room(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
+            .map_err(to_js_error)?;
+        for key in &response.removed_surface_keys {
+            self.forget(key);
+        }
+        for key in &response.preserved_surface_keys {
+            self.remember(key);
         }
         serialize(&response)
     }

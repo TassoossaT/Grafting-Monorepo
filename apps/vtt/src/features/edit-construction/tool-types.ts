@@ -14,6 +14,8 @@ export type ConstructionToolId =
   | "room-stamp"
   | "room-derive"
   | "house-stamp"
+  | "house-room-add"
+  | "house-room-delete"
   | "irregular-terrain-stamp";
 
 export interface TerrainBrushParams {
@@ -75,6 +77,17 @@ export interface HouseStampParams {
   readonly seed: number;
 }
 
+/**
+ * One new room's minimum footprint, dragged out and welded onto whatever
+ * existing geometry it touches -- "Adicionar Cômodo." `width`/`depth` are
+ * a floor, not a fixed size: a drag longer than either just grows the
+ * room past it (`house-room-add-tool.ts`'s `tileFromDrag`).
+ */
+export interface HouseRoomAddParams {
+  readonly width: number;
+  readonly depth: number;
+}
+
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
@@ -85,6 +98,8 @@ export interface ToolParamsByTool {
   readonly "room-stamp": RoomStampParams;
   readonly "room-derive": NoToolParams;
   readonly "house-stamp": HouseStampParams;
+  readonly "house-room-add": HouseRoomAddParams;
+  readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
 
@@ -98,6 +113,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
   "room-derive": Object.freeze({}),
   "house-stamp": Object.freeze({ width: 12, depth: 8, roomCount: 4, seed: 1 }),
+  "house-room-add": Object.freeze({ width: 4, depth: 4 }),
+  "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,
     irregularity: 0.7,

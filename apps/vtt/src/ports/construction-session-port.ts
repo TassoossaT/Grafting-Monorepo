@@ -128,6 +128,49 @@ export interface RoomGridPiece {
   readonly surfaceType: string;
 }
 
+/** One new room's own footprint, in the tiling's ground plane -- see `RoomGridLayout`'s doc for the `x`/`z`/`width`/`depth` convention. */
+export interface RoomAdditionTile {
+  readonly x: number;
+  readonly z: number;
+  readonly width: number;
+  readonly depth: number;
+}
+
+/** A corner this new room's own geometry should weld onto instead of minting a fresh id -- the "Adicionar Cômodo" tool's live-query result, mirroring `GenerateWallRequest.weldedNodeIds` but reported by position (`x`/`z`/`top`) rather than by role, since a room has no fixed role vocabulary the way a wall's 4 corners do. */
+export interface RoomAdditionWeldCandidate {
+  readonly x: number;
+  readonly z: number;
+  readonly top: boolean;
+  readonly nodeId: ConstructionNodeId;
+}
+
+export interface GenerateRoomAdditionRequest {
+  readonly tile: RoomAdditionTile;
+  readonly originY: number;
+  readonly wallHeight: number;
+  /** Namespaces every id this call mints fresh -- welded corners keep their own pre-existing id instead. */
+  readonly idPrefix: string;
+  readonly wallType: string;
+  readonly doorType: string;
+  readonly floorType: string;
+  readonly ceilingType: string;
+  readonly weldCandidates?: readonly RoomAdditionWeldCandidate[];
+}
+
+export interface RemoveRoomRequest {
+  /** The room's own floor corner ids, in cycle order -- e.g. `findEnclosingRoom`'s result for a click inside the room. */
+  readonly bottomCycle: readonly ConstructionNodeId[];
+  readonly topCycle: readonly ConstructionNodeId[];
+  /** Surface type for a preserved, door-stripped side's fresh plain-wall replacement. */
+  readonly wallType: string;
+}
+
+export interface RemoveRoomOutcome {
+  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly preservedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedNodeIds: readonly ConstructionNodeId[];
+}
+
 export interface SurfaceMeshResult {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
@@ -200,6 +243,8 @@ export interface ConstructionSessionPort {
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest): readonly WallPiece[];
   generateRoomGrid(request: GenerateRoomGridRequest): readonly RoomGridPiece[];
+  generateRoomAddition(request: GenerateRoomAdditionRequest): readonly RoomGridPiece[];
+  removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome;
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
