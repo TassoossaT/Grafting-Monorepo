@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 /** One sub-action or variant inside an active {@link ActionDockItem}. */
@@ -272,15 +272,20 @@ function SubButtonRow({ subItems }: { subItems: readonly ActionDockSubItem[] }):
       role="group"
       aria-label="Variações de ferramenta"
       style={{
+        position: "absolute",
+        bottom: "calc(100% + 0.4rem)",
+        left: "50%",
+        transform: "translateX(-50%)",
         display: "inline-flex",
-        flexDirection: "column",
+        flexDirection: "row",
         alignItems: "center",
-        gap: "0.25rem",
-        marginBottom: "0.3rem",
+        gap: "0.3rem",
+        zIndex: 30,
+        whiteSpace: "nowrap",
         animation: "actionDockSlideUp 0.16s cubic-bezier(0.16,1,0.3,1)",
       }}
     >
-      {[...subItems].reverse().map((subItem) => (
+      {subItems.map((subItem) => (
         <SubButton key={subItem.key} subItem={subItem} />
       ))}
     </div>
@@ -308,14 +313,15 @@ function SubButton({ subItem }: { subItem: ActionDockSubItem }): ReactElement {
       style={{
         ...BTN_IDLE,
         ...btnStyle,
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "0.12rem",
+        gap: "0.15rem",
         width: BTN_SIZE,
-        minHeight: "2.2rem",
-        padding: "0.18rem 0.3rem",
+        height: BTN_SIZE,
+        padding: "0.2rem",
         borderRadius: BTN_RADIUS,
         cursor: subItem.disabled ? "not-allowed" : "pointer",
         opacity: subItem.disabled ? 0.35 : 1,
@@ -326,11 +332,11 @@ function SubButton({ subItem }: { subItem: ActionDockSubItem }): ReactElement {
       }}
     >
       {subItem.icon && (
-        <span style={{ fontSize: "0.9rem", lineHeight: 1 }}>{subItem.icon}</span>
+        <span style={{ fontSize: "1rem", lineHeight: 1 }}>{subItem.icon}</span>
       )}
       <span
         style={{
-          fontSize: "0.55rem",
+          fontSize: "0.58rem",
           fontWeight: 600,
           letterSpacing: "0.02em",
           whiteSpace: "nowrap",
@@ -342,8 +348,11 @@ function SubButton({ subItem }: { subItem: ActionDockSubItem }): ReactElement {
       {subItem.shortcut && (
         <span
           style={{
+            position: "absolute",
+            top: "0.15rem",
+            right: "0.2rem",
             fontSize: "0.48rem",
-            color: "rgba(255,255,255,0.3)",
+            color: isActive ? "#a8d4ff" : "rgba(255,255,255,0.3)",
             fontWeight: 700,
           }}
         >
