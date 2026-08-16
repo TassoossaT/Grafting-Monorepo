@@ -1,5 +1,9 @@
-//! Derives `ADR-0022` construction-surface node cycles for walls and door
-//! openings from centerline generation parameters.
+//! Generic geometry primitives behind `ADR-0022` construction surfaces:
+//! extruding a path into vertical panels, capping a closed boundary, and
+//! finding regions/boundaries in a set of grid cells. No product concept
+//! (wall, door, room, terrain cell) is known here -- see
+//! `docs/adr/ADR-0022-wall-representation-free-geometry.md`'s "Structure
+//! clouds and the generation/orchestration split."
 //!
 //! This crate produces plain data only -- new nodes, new edges, and
 //! [`grafting_graph_core::SurfaceSpec`]s -- and never mutates a
@@ -9,14 +13,11 @@
 
 #![deny(missing_docs)]
 
-mod cell_partition;
+mod boundary;
+mod extrusion;
 mod ids;
-mod wall;
-mod wall_path;
+mod region_partition;
 
-pub use cell_partition::{CellCoord, RoomGridGeneration, generate_cell_partition};
-pub use wall::{
-    DoorOpening, StructureGenerationError, StructurePiece, WallGeneration, WallNodeRole,
-    WallSegment, generate_wall,
-};
-pub use wall_path::{ArcBulge, EdgeCurvature, PathEdge, WallPathError, WallPathGeneration, generate_wall_path};
+pub use boundary::cap_boundary;
+pub use extrusion::{ArcBulge, EdgeCurvature, EdgeNotch, ExtrusionError, PathEdge, StructurePiece, extrude_path};
+pub use region_partition::{Axis, BoundaryRun, CellCoord, Region, boundary_runs, partition_cells_into_regions};
