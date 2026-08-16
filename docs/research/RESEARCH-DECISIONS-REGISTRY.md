@@ -303,3 +303,15 @@ Full reasoning: `docs/research/vtt-rules-and-character-system-options.md`
 | Foundry `pf2e` system | Code Apache-2.0, content under a Foundry Gaming LLC/Paizo partnership | Reference only — content licensing unverified for third-party reuse | Code license is clean; the content permission is specific to that partnership and may not transfer — verify directly against Paizo's own OGL/CUP terms before relying on its content |
 | Foundry GURPS community systems (e.g. `crnormand/gurps`) | Steve Jackson Games Online Policy (personal use only) | Discarded for content reuse | **Not a real open-source license** — corrects an initial owner assumption that "free on GitHub" meant safe to reuse; risky for a closed-source commercial product |
 | Foundry core patterns (Active Effects, Combat/Combatant, DataModel/`template.json`, VisionSource) | N/A — documented API concepts, not code (Foundry core itself is proprietary) | Reference only (concept) | Same treatment as Sylves/Townscaper: safe to study the documented pattern and reimplement fresh in Rust; no code or copyrighted content is touched, so no third-party-attribution entry is needed |
+
+## VTT reactive construction and Tiny Glade-inspired UI interaction model
+
+Full reasoning: `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md` and `docs/research/vtt-tiny-glade-open-source-ecosystem.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| Tiny Glade (Pounce Light) | Commercial / Proprietary | Reference only — UX benchmark | Core reference for gridless reactive construction, bottom dock toolbar, contextual 3D handles, and spatial chemistry matrix; reimagined here with first-class procedural terrain and Rust graph authority |
+| Aedifex | MIT | Reference only | Web-based Three.js/TypeScript architectural editor; study for wall snapping, door attachment, and zone bounding UX |
+| ProcTHOR | Apache-2.0 | Reference only | Rules for semantically plausible room-type distributions and collision-aware furniture placement |
+| `streemap` | MIT OR Apache-2.0 | Standby, **top pick** | Squarified treemap subdivision for varied room floor plans; compiles clean to `wasm32-unknown-unknown` |
+
