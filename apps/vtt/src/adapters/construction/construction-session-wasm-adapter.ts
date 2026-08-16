@@ -18,12 +18,25 @@ import type {
   ConstructionSurfaceSpec,
   GenerateCellPartitionRequest,
   GenerateTerrainCellRequest,
+  GenerateWallPathRequest,
   GenerateWallRequest,
   RemoveRoomOutcome,
   RemoveRoomRequest,
   SurfaceMeshResult,
+  WallPathOutcome,
   WallPiece,
 } from "@/ports";
+
+function curvatureToWire(curvature: "straight" | "arc-left" | "arc-right"): string {
+  switch (curvature) {
+    case "straight":
+      return "straight";
+    case "arc-left":
+      return "arcLeft";
+    case "arc-right":
+      return "arcRight";
+  }
+}
 
 type WirePosition = readonly [number, number, number];
 
@@ -213,6 +226,34 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       addedSurfaceKeys: response.addedSurfaceKeys,
       removedSurfaceKeys: response.removedSurfaceKeys,
       removedNodeIds: response.removedNodeIds,
+    };
+  }
+
+  generateWallPath(request: GenerateWallPathRequest): WallPathOutcome {
+    const wire = {
+      edges: request.edges.map((edge) => ({
+        start: toWirePosition(edge.start),
+        end: toWirePosition(edge.end),
+        curvature: curvatureToWire(edge.curvature),
+      })),
+      wallHeight: request.wallHeight,
+      arcFacets: request.arcFacets,
+      idPrefix: request.idPrefix,
+      wallType: request.wallType,
+      floorType: request.floorType,
+      ceilingType: request.ceilingType,
+    };
+    const response = JSON.parse(this.#require().generate_and_apply_wall_path_json(JSON.stringify(wire))) as {
+      addedSurfaceKeys: readonly (readonly string[])[];
+      removedSurfaceKeys: readonly (readonly string[])[];
+      removedNodeIds: readonly string[];
+      closed: boolean;
+    };
+    return {
+      addedSurfaceKeys: response.addedSurfaceKeys,
+      removedSurfaceKeys: response.removedSurfaceKeys,
+      removedNodeIds: response.removedNodeIds,
+      closed: response.closed,
     };
   }
 
