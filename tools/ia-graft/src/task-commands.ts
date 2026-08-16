@@ -115,12 +115,24 @@ export interface TaskCommitInput {
   files?: string[];
   coAuthors?: string[];
   agent?: string;
+  amend?: boolean;
+  dryRun?: boolean;
+  check?: boolean;
 }
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
 export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.message) return fail("message is required");
+  const messageWithCoAuthors = formatCommitMessageWithCoAuthors(input.message, input.coAuthors, input.agent);
+  if (input.dryRun || input.check) {
+    return {
+      ok: true as const,
+      dryRun: true as const,
+      formattedMessage: messageWithCoAuthors,
+      amend: input.amend ?? false,
+    };
+  }
   const client = new GitClient(repoRoot);
   const session = await client.openSession(input.taskId);
   const unmerged = await session.unmergedPaths();
@@ -129,9 +141,8 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   const remaining = await session.unmergedPaths();
   if (remaining.length > 0) return { ok: false as const, error: "unresolved merge conflicts remain", conflicts: remaining };
-  const messageWithCoAuthors = formatCommitMessageWithCoAuthors(input.message, input.coAuthors, input.agent);
-  await session.commit(messageWithCoAuthors);
-  return { ok: true as const };
+  await session.commit(messageWithCoAuthors, input.amend);
+  return { ok: true as const, amended: input.amend ?? false };
 }
 
 export interface TaskTestInput {

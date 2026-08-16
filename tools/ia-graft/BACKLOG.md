@@ -32,22 +32,13 @@ not pre-populate speculative ones.
   "browser-verify before done" convention for any task-worktree touching
   `apps/vtt` (or any other Next.js app) whose dependency graph reaches a
   package with this symlink shape.
-- **No commit-message fix/amend path.** `task commit --input
-  '{"taskId","message"}'` (`task-commands.ts`, `taskCommit`) always creates
-  a new commit; there is no `--amend` or `task commit --fix-message`
-  equivalent. Discovered 2026-08-11 on `GRAPH-STORAGE-BENCH`: a
-  CLI-input-shape probe (`{"message":"placeholder"}`) committed for real
-  instead of just validating the shape, leaving a wrong message with no
-  CLI-native way to correct it — the fallback was a manual, user-authorized
-  one-off `git commit --amend` exception. Two independent fixes would have
-  prevented needing the exception: (a) `task commit` supporting `--amend`
-  (or a separate `task commit --fix-message`) for the still-unpushed,
-  current-HEAD case; (b) a `--dry-run`/`--check` flag on `task commit` for
-  exactly this "does the CLI accept this input shape" probe, so testing
-  input shape never risks a real commit.
-
 ## Resolved (kept for history, do not re-add)
 
+- **CLI-native commit amend and dry-run validation.** `task commit --amend` amends
+  the previous commit on the task branch without creating redundant commits.
+  `task commit --dry-run` (or `--check`) validates taskId, commit message, and
+  author resolution without executing git operations or modifying the tree.
+  Resolved 2026-08-16 in task `IA-GRAFT-COMMIT-AMEND-DRYRUN`.
 - **CLI-native cross-package workspace dependencies and lockfile updates.**
   `task deps --install --update-lockfile` (and `task deps --update-lockfile`) runs
   pnpm with `--no-frozen-lockfile`, recomputes the lockfile hash, and updates the

@@ -230,6 +230,68 @@ test("taskCommit appends Co-authored-by trailers when coAuthors or agent is spec
   assert.match(fullLog, /Co-authored-by: Codex <codex@openai\.com>/);
 });
 
+test("taskCommit with dryRun: true validates input shape without creating a commit or staging files", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "DRYRUN-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "DRYRUN-TASK");
+  await writeFile(join(worktree, "uncommitted.txt"), "not yet committed\n", "utf8");
+
+  const headBefore = execFileSync("git", ["rev-parse", "HEAD"], { cwd: worktree }).toString().trim();
+
+  const dryResult = await taskCommit(root, {
+    taskId: "DRYRUN-TASK",
+    message: "feat: dry run probe",
+    agent: "gemini",
+    dryRun: true,
+  });
+
+  assert.equal(dryResult.ok, true);
+  if (!dryResult.ok) return;
+  assert.equal(dryResult.dryRun, true);
+  assert.match(dryResult.formattedMessage ?? "", /feat: dry run probe/);
+  assert.match(dryResult.formattedMessage ?? "", /Co-authored-by: Gemini/);
+
+  const headAfter = execFileSync("git", ["rev-parse", "HEAD"], { cwd: worktree }).toString().trim();
+  assert.equal(headBefore, headAfter);
+
+  const status = execFileSync("git", ["status", "--short"], { cwd: worktree }).toString();
+  assert.match(status, /\?\? uncommitted\.txt/);
+});
+
+test("taskCommit with amend: true amends the previous commit and message without extra commits", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "AMEND-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "AMEND-TASK");
+  await writeFile(join(worktree, "first.txt"), "first\n", "utf8");
+
+  const firstResult = await taskCommit(root, { taskId: "AMEND-TASK", message: "placeholder typo message" });
+  assert.equal(firstResult.ok, true);
+
+  const firstHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: worktree }).toString().trim();
+  const firstLog = execFileSync("git", ["log", "-1", "--pretty=%s"], { cwd: worktree }).toString().trim();
+  assert.equal(firstLog, "placeholder typo message");
+
+  await writeFile(join(worktree, "second.txt"), "second\n", "utf8");
+  const amendResult = await taskCommit(root, {
+    taskId: "AMEND-TASK",
+    message: "feat: corrected commit message",
+    amend: true,
+  });
+  assert.equal(amendResult.ok, true);
+  if (!amendResult.ok) return;
+  assert.equal(amendResult.amended, true);
+
+  const amendedLog = execFileSync("git", ["log", "-1", "--pretty=%s"], { cwd: worktree }).toString().trim();
+  assert.equal(amendedLog, "feat: corrected commit message");
+
+  const commitCount = execFileSync("git", ["rev-list", "--count", "main..HEAD"], { cwd: worktree }).toString().trim();
+  assert.equal(commitCount, "1");
+
+  const show = execFileSync("git", ["show", "--name-only", "--pretty="], { cwd: worktree }).toString();
+  assert.match(show, /first\.txt/);
+  assert.match(show, /second\.txt/);
+});
+
 test("taskSweep reports empty results when there is no .worktrees directory yet", async () => {
   const root = await makeRoot();
   const result = await taskSweep(root);
