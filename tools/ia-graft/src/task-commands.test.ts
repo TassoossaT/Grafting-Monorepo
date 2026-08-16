@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, remoteBranchDeletionPlan } from "./git-client.ts";
+import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, parseDependencySpec, remoteBranchDeletionPlan } from "./git-client.ts";
 import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
@@ -773,4 +773,90 @@ test("taskResume resolves state recovery context", async () => {
   assert.ok(Array.isArray(result.dirtyFiles));
   assert.ok(Array.isArray(result.affectedFiles));
 });
+
+test("parseDependencySpec correctly parses scoped and plain dependencies", () => {
+  assert.deepEqual(parseDependencySpec("@grafting/ui@workspace:*"), { name: "@grafting/ui", version: "workspace:*" });
+  assert.deepEqual(parseDependencySpec("@scope/pkg@^1.2.3"), { name: "@scope/pkg", version: "^1.2.3" });
+  assert.deepEqual(parseDependencySpec("@grafting/ui"), { name: "@grafting/ui", version: "*" });
+  assert.deepEqual(parseDependencySpec("lodash@^4.17.21"), { name: "lodash", version: "^4.17.21" });
+  assert.deepEqual(parseDependencySpec("lodash"), { name: "lodash", version: "*" });
+  assert.deepEqual(parseDependencySpec("\"@grafting/ui\": \"workspace:*\""), { name: "@grafting/ui", version: "workspace:*" });
+  assert.throws(() => parseDependencySpec("@invalidscoped"), /invalid scoped package/);
+});
+
+test("task deps --install --update-lockfile and task deps --add materialize updated dependencies and lockfile", async () => {
+  const root = await makeRepoWithBareRemote();
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({
+      private: true,
+      name: "root",
+      dependencies: {},
+    }),
+    "utf8",
+  );
+  await writeFile(join(root, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n", "utf8");
+
+  await mkdir(join(root, "packages", "lib"), { recursive: true });
+  await writeFile(
+    join(root, "packages", "lib", "package.json"),
+    JSON.stringify({ name: "@scope/lib", version: "1.0.0", main: "index.js" }),
+    "utf8",
+  );
+  await writeFile(join(root, "packages", "lib", "index.js"), "module.exports = 'lib-v1';\n", "utf8");
+
+  await mkdir(join(root, "packages", "app"), { recursive: true });
+  await writeFile(
+    join(root, "packages", "app", "package.json"),
+    JSON.stringify({ name: "@scope/app", version: "1.0.0", dependencies: {} }),
+    "utf8",
+  );
+
+  runPnpm(["install", "--dir", root, "--lockfile-only", "--ignore-scripts"], root);
+  execFileSync("git", ["add", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", "packages"], { cwd: root });
+  execFileSync("git", ["commit", "-m", "add base workspace"], { cwd: root });
+  await rm(join(root, "node_modules"), { recursive: true, force: true });
+
+  const created = await taskNew(root, { taskId: "UPDATE-LOCKFILE-TASK", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+
+  const worktree = join(root, ".worktrees", "UPDATE-LOCKFILE-TASK");
+
+  // Test task deps --add <pkg> --workspace <workspace>
+  const added = await taskDependencies(root, {
+    taskId: "UPDATE-LOCKFILE-TASK",
+    add: "@scope/lib@workspace:*",
+    workspace: "packages/app",
+  });
+  assert.equal(added.ok, true);
+  if (!added.ok) return;
+  assert.equal(added.materialized, true);
+  assert.equal(added.updatedLockfile, true);
+  assert.deepEqual(added.addedDependency, {
+    targetFile: "packages/app/package.json",
+    name: "@scope/lib",
+    version: "workspace:*",
+    dev: false,
+  });
+
+  const appPkg = JSON.parse(await readFile(join(worktree, "packages", "app", "package.json"), "utf8"));
+  assert.equal(appPkg.dependencies["@scope/lib"], "workspace:*");
+
+  // Test task deps --install --update-lockfile after manual package.json edit
+  const rootPkg = JSON.parse(await readFile(join(worktree, "package.json"), "utf8"));
+  rootPkg.dependencies["@scope/lib"] = "workspace:*";
+  await writeFile(join(worktree, "package.json"), JSON.stringify(rootPkg, null, 2), "utf8");
+
+  const manualUpdated = await taskDependencies(root, {
+    taskId: "UPDATE-LOCKFILE-TASK",
+    install: true,
+    updateLockfile: true,
+  });
+  assert.equal(manualUpdated.ok, true);
+  if (!manualUpdated.ok) return;
+  assert.equal(manualUpdated.materialized, true);
+  assert.equal(manualUpdated.updatedLockfile, true);
+});
+
 

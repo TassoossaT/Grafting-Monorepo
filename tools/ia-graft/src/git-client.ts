@@ -54,7 +54,17 @@ export interface DependencyPreparation {
     lockfileHash?: string;
     workspaceConfigHash?: string;
     virtualStore?: string;
+    updatedLockfile?: boolean;
+    addedDependency?: { targetFile: string; name: string; version: string; dev: boolean };
     reason?: string;
+}
+
+export interface PrepareTaskDependenciesOptions {
+    install?: boolean;
+    updateLockfile?: boolean;
+    add?: string;
+    workspace?: string;
+    dev?: boolean;
 }
 
 interface DependencyOverlayMarker {
@@ -402,13 +412,122 @@ async function executePnpm(args: string[], cwd: string): Promise<void> {
     await execFileAsync('pnpm', args, options);
 }
 
-async function materializeTaskDependencies(repoPath: string, worktreePath: string, taskId: string): Promise<DependencyPreparation> {
+export function parseDependencySpec(dep: string): { name: string; version: string } {
+    let trimmed = dep.trim();
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+        trimmed = trimmed.slice(1, -1).trim();
+    }
+    // Handle key-value format e.g. '"@scope/pkg": "1.0.0"' or '@scope/pkg: workspace:*'
+    if (trimmed.includes(':') && (trimmed.includes('":') || trimmed.includes("':") || trimmed.includes(': '))) {
+        const colonIndex = trimmed.indexOf(':');
+        const namePart = trimmed.slice(0, colonIndex).replace(/['"]/g, '').trim();
+        const versionPart = trimmed.slice(colonIndex + 1).replace(/['"]/g, '').trim();
+        if (namePart && !namePart.includes(' ')) {
+            if (namePart.startsWith('@') && !namePart.includes('/')) {
+                throw new Error(`invalid scoped package dependency: ${namePart}`);
+            }
+            return { name: namePart, version: versionPart || '*' };
+        }
+    }
+    if (trimmed.startsWith('@')) {
+        const slashIndex = trimmed.indexOf('/');
+        if (slashIndex === -1) throw new Error(`invalid scoped package dependency: ${trimmed}`);
+        const atIndex = trimmed.indexOf('@', slashIndex);
+        if (atIndex === -1) {
+            return { name: trimmed, version: '*' };
+        }
+        return { name: trimmed.slice(0, atIndex), version: trimmed.slice(atIndex + 1) };
+    }
+    const atIndex = trimmed.indexOf('@');
+    if (atIndex === -1) {
+        return { name: trimmed, version: '*' };
+    }
+    return { name: trimmed.slice(0, atIndex), version: trimmed.slice(atIndex + 1) };
+}
+
+async function findWorkspacePackageJson(worktreePath: string, workspace?: string): Promise<string> {
+    if (!workspace) {
+        const rootPkg = path.join(worktreePath, 'package.json');
+        if (await pathExists(rootPkg)) return rootPkg;
+        throw new Error('no root package.json found in worktree');
+    }
+    const directPath = path.join(worktreePath, workspace, 'package.json');
+    if (await pathExists(directPath)) return directPath;
+    const directFile = path.join(worktreePath, workspace);
+    if (workspace.endsWith('package.json') && await pathExists(directFile)) return directFile;
+
+    const matches: string[] = [];
+    async function scanDir(currentDir: string, depth: number): Promise<void> {
+        if (depth > 4) return;
+        let entries: string[];
+        try {
+            entries = await fs.readdir(currentDir);
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (entry === 'node_modules' || entry === '.git' || entry === 'dist' || entry === 'target' || entry === '.worktrees') continue;
+            const fullPath = path.join(currentDir, entry);
+            try {
+                const stat = await fs.lstat(fullPath);
+                if (stat.isDirectory()) {
+                    const pkgPath = path.join(fullPath, 'package.json');
+                    if (await pathExists(pkgPath)) {
+                        try {
+                            const content = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
+                            if (content.name === workspace) {
+                                matches.push(pkgPath);
+                            }
+                        } catch {}
+                    }
+                    await scanDir(fullPath, depth + 1);
+                }
+            } catch {
+                continue;
+            }
+        }
+    }
+    await scanDir(worktreePath, 0);
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) throw new Error(`multiple packages matched workspace name '${workspace}': ${matches.join(', ')}`);
+    throw new Error(`workspace package not found for '${workspace}' in worktree`);
+}
+
+async function addDependencyToPackageJson(
+    worktreePath: string,
+    dependency: string,
+    workspace?: string,
+    dev?: boolean,
+): Promise<{ targetFile: string; name: string; version: string; dev: boolean }> {
+    const parsed = parseDependencySpec(dependency);
+    const targetFile = await findWorkspacePackageJson(worktreePath, workspace);
+    const content = JSON.parse(await fs.readFile(targetFile, 'utf8'));
+    const section = dev ? 'devDependencies' : 'dependencies';
+    if (!content[section] || typeof content[section] !== 'object') {
+        content[section] = {};
+    }
+    content[section][parsed.name] = parsed.version;
+    await fs.writeFile(targetFile, JSON.stringify(content, null, 2) + '\n', 'utf8');
+    return { targetFile: path.relative(worktreePath, targetFile).replaceAll('\\', '/'), name: parsed.name, version: parsed.version, dev: Boolean(dev) };
+}
+
+async function materializeTaskDependencies(
+    repoPath: string,
+    worktreePath: string,
+    taskId: string,
+    options: PrepareTaskDependenciesOptions = {},
+): Promise<DependencyPreparation> {
+    let addedDependency: { targetFile: string; name: string; version: string; dev: boolean } | undefined;
+    if (options.add) {
+        addedDependency = await addDependencyToPackageJson(worktreePath, options.add, options.workspace, options.dev);
+    }
+    const updateLockfile = Boolean(options.updateLockfile || options.add);
     const lockfilePath = path.join(worktreePath, 'pnpm-lock.yaml');
     const workspaceConfigPath = path.join(worktreePath, 'pnpm-workspace.yaml');
     if (!await pathExists(lockfilePath) || !await pathExists(workspaceConfigPath)) {
         throw new Error('task requires pnpm-lock.yaml and pnpm-workspace.yaml to materialize');
     }
-    const lockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+    const initialLockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
     const workspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
     const cacheRoot = dependencyCachePath(repoPath, taskId);
     assertSafeDependencyCachePath(repoPath, cacheRoot);
@@ -418,14 +537,17 @@ async function materializeTaskDependencies(repoPath: string, worktreePath: strin
     }
     await fs.mkdir(cacheRoot, { recursive: true });
     await fs.writeFile(cacheMarker, JSON.stringify({ version: 1, taskId, source: repoPath }));
-    const virtualStorePath = path.join(cacheRoot, lockfileHash, '.pnpm');
+    const virtualStorePath = path.join(cacheRoot, initialLockfileHash, '.pnpm');
 
     await unlinkTaskDependencies(worktreePath);
     try {
-        await executePnpm([
-            'install', '--dir', worktreePath, '--frozen-lockfile', '--ignore-scripts', '--prefer-offline',
+        const pnpmArgs = [
+            'install', '--dir', worktreePath,
+            updateLockfile ? '--no-frozen-lockfile' : '--frozen-lockfile',
+            '--ignore-scripts', '--prefer-offline',
             '--virtual-store-dir', virtualStorePath, '--reporter', 'append-only',
-        ], repoPath);
+        ];
+        await executePnpm(pnpmArgs, repoPath);
     } catch (error) {
         // A failed pnpm run may leave a partial node_modules. Mark only the
         // directories created by this invocation, remove them through the
@@ -442,6 +564,22 @@ async function materializeTaskDependencies(repoPath: string, worktreePath: strin
         throw new Error(`pnpm dependency materialization failed: ${summary}`);
     }
 
+    const finalLockfileHash = createHash('sha256').update(await fs.readFile(lockfilePath)).digest('hex');
+    const finalWorkspaceConfigHash = createHash('sha256').update(await fs.readFile(workspaceConfigPath)).digest('hex');
+    let finalVirtualStorePath = virtualStorePath;
+    if (finalLockfileHash !== initialLockfileHash) {
+        const newVirtualStoreDir = path.join(cacheRoot, finalLockfileHash);
+        const oldVirtualStoreDir = path.join(cacheRoot, initialLockfileHash);
+        if (await pathExists(oldVirtualStoreDir) && !await pathExists(newVirtualStoreDir)) {
+            try {
+                await fs.rename(oldVirtualStoreDir, newVirtualStoreDir);
+                finalVirtualStorePath = path.join(newVirtualStoreDir, '.pnpm');
+            } catch {
+                // If rename fails (e.g. busy on Windows), keep original path
+            }
+        }
+    }
+
     const relativeDirs = await findNodeModulesDirs(worktreePath);
     const counts = { workspaceLinks: 0, externalLinks: 0, copiedFiles: 0 };
     for (const rel of relativeDirs) {
@@ -450,13 +588,13 @@ async function materializeTaskDependencies(repoPath: string, worktreePath: strin
             await countDependencyEntry(worktreePath, path.join(nodeModules, entry), counts);
         }
     }
-    const virtualStore = path.relative(repoPath, virtualStorePath);
+    const virtualStore = path.relative(repoPath, finalVirtualStorePath);
     const marker: DependencyOverlayMarker = {
         version: 3,
         source: repoPath,
         materialized: true,
-        lockfileHash,
-        workspaceConfigHash,
+        lockfileHash: finalLockfileHash,
+        workspaceConfigHash: finalWorkspaceConfigHash,
         virtualStore,
         ...counts,
     };
@@ -469,9 +607,11 @@ async function materializeTaskDependencies(repoPath: string, worktreePath: strin
         overlays: relativeDirs.length,
         ...counts,
         materialized: true,
-        lockfileHash,
-        workspaceConfigHash,
+        lockfileHash: finalLockfileHash,
+        workspaceConfigHash: finalWorkspaceConfigHash,
         virtualStore,
+        updatedLockfile: finalLockfileHash !== initialLockfileHash,
+        ...(addedDependency ? { addedDependency } : {}),
     };
 }
 
@@ -1301,13 +1441,14 @@ export class GitClient {
         } catch { return false; }
     }
 
-    async prepareTaskDependencies(taskId: string, options: { install?: boolean } = {}): Promise<DependencyPreparation> {
+    async prepareTaskDependencies(taskId: string, options: PrepareTaskDependenciesOptions = {}): Promise<DependencyPreparation> {
         const status = await this.taskStatus(taskId);
         if (status.checkoutMode !== 'worktree' || status.issues.length > 0) {
             throw new Error(`task worktree is not healthy: ${status.issues.join('; ') || status.checkoutMode}`);
         }
-        return options.install
-            ? materializeTaskDependencies(this.repoPath, status.worktreePath, taskId)
+        const shouldInstall = options.install || Boolean(options.updateLockfile) || Boolean(options.add);
+        return shouldInstall
+            ? materializeTaskDependencies(this.repoPath, status.worktreePath, taskId, options)
             : prepareDependencyOverlays(this.repoPath, status.worktreePath, false);
     }
 

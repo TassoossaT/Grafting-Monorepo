@@ -94,9 +94,16 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
       ? { taskId, command: commands[0], keepGoing: argv.includes("--keep-going") }
       : { taskId, commands, keepGoing: argv.includes("--keep-going") };
   }
-  if (subcommand === "sync") return { taskId, fetch: argv.includes("--fetch"), abort: argv.includes("--abort") };
-  if (subcommand === "deps") return { taskId, install: argv.includes("--install") };
-  if (subcommand === "done") return { taskId, title: readValue(argv, "--title"), body: readValue(argv, "--body"), base: readValue(argv, "--base") };
+  if (subcommand === "deps") {
+    return {
+      taskId,
+      install: argv.includes("--install"),
+      updateLockfile: argv.includes("--update-lockfile") || argv.includes("--update"),
+      add: readValue(argv, "--add") ?? readValue(argv, "--pkg"),
+      workspace: readValue(argv, "--workspace") ?? readValue(argv, "--filter"),
+      dev: argv.includes("--dev") || argv.includes("-D"),
+    };
+  }
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
