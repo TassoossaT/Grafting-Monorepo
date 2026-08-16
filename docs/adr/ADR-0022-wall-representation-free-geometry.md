@@ -5,7 +5,8 @@
 - Original decision date: 2026-08-08 (free-geometry model — superseded below)
 - Revision date: 2026-08-10; general deletion-repair algorithm added
   2026-08-12; terrain/structure seam resolved 2026-08-12; structure-cloud
-  layer and generation/orchestration split added 2026-08-16
+  layer and generation/orchestration split added 2026-08-16; cloud
+  connectivity/reclassification semantics clarified 2026-08-16
 - Record: DEC-060
 - Supersedes: this document's own 2026-08-08 decision, in place, at the
   owner's explicit direction ("não tem problema em reescrever ela
@@ -243,6 +244,38 @@ component of a thousand. This is the unit generation and editing operate
 on — never an individual `Surface` in isolation, and never a whole domain's
 worth of surfaces at once regardless of connectivity.
 
+**Clarified 2026-08-16 — graph connectivity never depends on `type`, and
+merging/splitting clouds is the same query, not a separate algorithm.** Two
+`Surface`s sharing a node stay connected in the graph regardless of what
+either's `type` is; changing a `Surface`'s `type` (see the independent
+attribute-edit rule above) never severs or creates a graph edge. What
+changes is only which cloud-query result that `Surface` now falls into:
+
+- **Merge** (e.g. two separately drawn terrain patches, later welded where
+  a new stroke's node lands on the other's existing node): no explicit
+  merge step exists. The moment a shared node exists, the *next* time
+  anyone queries "what cloud does this `Surface` belong to," the walk
+  crosses into the other patch, because the graph now connects them. The
+  cloud query is agnostic to *why* the graph changed — a new node, a welded
+  node, a reclassified `type` — it always just reflects current state.
+- **Split-by-reclassification** (e.g. carving a dirt path through one
+  terrain cloud by rewriting `type: "terrain"` → `type: "path"` on a
+  sub-strip of `Surface`s): the underlying graph is untouched and stays one
+  connected mesh — the terrain on either side of the new path is still
+  physically continuous through the path's own nodes. What splits is the
+  *same-type* cloud query: querying from either remaining terrain edge no
+  longer walks across the reclassified strip (different `type`), so it
+  resolves to its own smaller terrain cloud, and the reclassified strip
+  resolves to a new path cloud — again, no cloud data structure was
+  mutated, only the `Surface.type` values the query reads.
+- **Seams are meaningful, not incidental.** Because the graph connection
+  across a cloud boundary survives, a cloud can be asked for its own
+  boundary nodes/edges that touch a *different* `type`'s cloud — e.g. the
+  terrain/path seam above. This is reserved for later use (a blended
+  transition texture at that exact seam, rather than a hard edge) — not
+  designed here, but the connectivity this decision keeps intact is what
+  makes it possible at all.
+
 **Rust knows shapes and mechanics, never product `type`.** Concretely, two
 kinds of Rust function, cleanly separated, replacing the fused
 `generate_and_apply_*` shape:
@@ -279,6 +312,21 @@ extrusion/capping), it is achieved by generic shape math in Rust plus
 product meaning living entirely in the front's own preset/parameter
 resolution.
 
+**Reclassifying `type` is a front-side workflow that pairs with a
+generator call, not just a label edit.** The graph layer's own
+independence (a `Surface.type` edit touches no node and forces no mesh
+recompute, per the rule above) is still exactly true — nothing at the
+graph/mesh layer reacts automatically to a `type` change. But the front is
+expected to *pair* a reclassification with calling that new `type`'s own
+pattern generator over the reclassified `Surface`s' current node positions,
+applying the result through the ordinary `Move` operation — e.g. a "path"
+preset's generator might compute slightly sunken Y values for the
+reclassified strip's nodes, or only reshape its edge nodes, or flatten it
+uniformly. This is not a new mechanism: it is one more pattern-generator
+call (parameters, here including "the nodes already at these positions,"
+in; target positions out) applied through the same generic `Move`, exactly
+like every other generation path in this section.
+
 **Editing dispatches by cloud, not by individual surface.** An edit-mode
 action resolves which cloud a clicked/selected `Surface` belongs to (the
 same connected-component-by-`type` query cloud orchestration already needs
@@ -306,13 +354,18 @@ per-`Surface` special case, and never a Rust-side distinction between them.
   authored against any node of ours. How an imported wall becomes a node
   set — ad hoc nodes created purely to host it, or some other bridge — is
   not designed here.
-- **Cloud membership: on-demand query vs. maintained index.** This document
-  decides a cloud is derived, not stored, but not whether "find the
-  connected component of same-`type` surfaces containing this one" is
-  recomputed from scratch each call (like `room-lookup.ts`'s
-  `findEnclosingRoom` already does for one specific shape) or backed by an
-  incrementally maintained adjacency index once cloud sizes make a full
-  walk too slow. A measurement question, not decided here.
+- **Cloud membership: on-demand query vs. maintained index.** ~~This
+  document decides a cloud is derived, not stored, but not whether "find
+  the connected component of same-`type` surfaces containing this one" is
+  recomputed from scratch each call...~~ **Narrowed 2026-08-16**: there is
+  no separate merge/split algorithm to design — see "graph connectivity
+  never depends on `type`" above, merging and splitting are both just the
+  same connected-component query re-run against a graph/type-set that
+  changed. What remains genuinely open is only performance: recompute from
+  scratch each call (like `room-lookup.ts`'s `findEnclosingRoom` already
+  does for one specific shape) versus an incrementally maintained
+  adjacency/Union-Find index once cloud sizes make a full walk too slow. A
+  measurement question, not decided here.
 - **Concrete Rust module/function boundaries for the split.** This decision
   says pattern generators and cloud orchestration must separate; it does
   not design the actual function signatures, which existing modules
