@@ -745,4 +745,194 @@ h1 {
   gap: 0.25rem;
 }
 
+/* ==========================================================================
+   Tiny Glade In-Canvas Contextual Property Popover
+   ========================================================================== */
+
+.vtt-in-canvas-popover {
+  position: absolute;
+  top: 4.5rem;
+  right: 1.25rem;
+  width: 17rem;
+  background: rgba(16, 22, 34, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.85rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  z-index: 50;
+  color: #f1f5f9;
+  animation: inCanvasPopoverFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+}
+
+@keyframes inCanvasPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.vtt-in-canvas-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.5rem;
+}
+
+.vtt-in-canvas-popover__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vtt-in-canvas-popover__icon {
+  font-size: 0.95rem;
+}
+
+.vtt-in-canvas-popover__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
+}
+
+.vtt-in-canvas-popover__close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.vtt-in-canvas-popover__close:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+
+.vtt-in-canvas-popover__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vtt-in-canvas-popover__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vtt-in-canvas-popover__field-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.vtt-in-canvas-popover__field-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: monospace;
+  color: #60a5fa;
+}
+
+.vtt-in-canvas-popover__stepper-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vtt-in-canvas-popover__step-btn {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vtt-in-canvas-popover__step-btn:hover {
+  background: rgba(96, 165, 250, 0.25);
+  border-color: rgba(96, 165, 250, 0.50);
+  color: #ffffff;
+}
+
+.vtt-in-canvas-popover__slider {
+  flex: 1;
+  accent-color: #60a5fa;
+  cursor: pointer;
+}
+
+.vtt-in-canvas-popover__chips {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.vtt-in-canvas-popover__chip {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #cbd5e1;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vtt-in-canvas-popover__chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.vtt-in-canvas-popover__chip--active {
+  background: rgba(96, 165, 250, 0.20);
+  border-color: rgba(96, 165, 250, 0.60);
+  color: #93c5fd;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.25);
+}
+
+.vtt-in-canvas-popover__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 0.4rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vtt-in-canvas-popover__coord {
+  font-size: 0.62rem;
+  font-family: monospace;
+  color: #64748b;
+}
+
+
 

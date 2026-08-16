@@ -167,7 +167,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       kind: HEIGHT_GIZMO_STEM_VISUAL_KIND,
       describe: (params) => ({
         geometry: { shape: "segments", positions: params.positions },
-        material: { surface: "line", color: 0x50b0ff, opacity: 0.75 },
+        material: { surface: "line", color: 0x2d2724, opacity: 0.35 },
         pickable: false,
       }),
       equals: (left, right) => left.positions === right.positions,
@@ -404,11 +404,15 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       data?.entity === "construction-node-handle" && typeof data.nodeId === "string"
         ? data.nodeId
         : undefined;
+    const secondaryNodeId =
+      data?.entity === "construction-node-handle" && typeof data.secondaryNodeId === "string"
+        ? data.secondaryNodeId
+        : undefined;
     const axis =
       data?.entity === "construction-node-handle" && data.axis !== undefined
         ? data.axis
         : undefined;
-    return { point: result.point, nodeId, axis };
+    return { point: result.point, nodeId, secondaryNodeId, axis };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor): void {

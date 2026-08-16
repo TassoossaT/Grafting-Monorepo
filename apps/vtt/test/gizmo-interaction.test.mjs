@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 
 import { moveNodeTool } from "../src/composition/tabletop/tools/move-node-tool.ts";
@@ -90,4 +90,35 @@ test("moveNodeTool with xz-planar axis constrains manipulation to horizontal pla
     from: { x: 5, y: 2.0, z: 8 },
     to: { x: 9, y: 2.0, z: 14 },
   });
+});
+
+test("moveNodeTool with edge height gizmo (secondaryNodeId) adjusts elevation of both edge endpoints", () => {
+  const { ctx, moved, history } = createMockContext();
+
+  const startSample = {
+    point: { x: 2, y: 1.0, z: 4 },
+    nodeId: "wall-node-a",
+    secondaryNodeId: "wall-node-b",
+    axis: "y-height",
+  };
+
+  const moveSample = {
+    point: { x: 2, y: 3.5, z: 4 },
+    nodeId: "wall-node-a",
+    secondaryNodeId: "wall-node-b",
+    axis: "y-height",
+  };
+
+  moveNodeTool.onPointerDown(ctx, startSample, {});
+  moveNodeTool.onPointerMove(ctx, { start: startSample, current: moveSample }, {});
+
+  // Both node A and node B must be moved to height 3.5m
+  assert.equal(moved.length, 2);
+  assert.equal(moved[0].nodeId, "wall-node-a");
+  assert.deepEqual(moved[0].position, { x: 2, y: 3.5, z: 4 });
+  assert.equal(moved[1].nodeId, "wall-node-b");
+  assert.deepEqual(moved[1].position, { x: 2, y: 3.5, z: 4 });
+
+  moveNodeTool.onPointerUp(ctx, { start: startSample, current: moveSample }, {});
+  assert.equal(history.getState().canUndo, true);
 });

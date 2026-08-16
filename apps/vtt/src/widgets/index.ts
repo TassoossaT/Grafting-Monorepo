@@ -3,6 +3,7 @@ export { ConstructionHotbar, type ConstructionHotbarProps } from "./construction
 export { ConstructionDock, type ConstructionDockProps } from "./construction-dock.tsx";
 export { SettingsDrawer, type SelectedNodeInfo, type SettingsDrawerProps } from "./settings-drawer.tsx";
 export { ConstructionToolParamsPanel, type ConstructionToolParamsPanelProps } from "./construction-tool-params-panel.tsx";
+export { InCanvasPropertyPopover, type InCanvasPropertyPopoverProps } from "./in-canvas-property-popover.tsx";
 export { useKeyboardShortcuts, type KeyboardShortcutsOptions } from "./use-keyboard-shortcuts.ts";
 
 // Re-exported (widgets/ may import features/ directly, see

@@ -38,12 +38,32 @@ export const moveNodeTool: ConstructionTool<"move-node"> = {
     if (gesture.start.nodeId === undefined) return;
     const targetPoint = resolveConstrainedPoint(gesture.start, gesture.current);
     ctx.reportSelection({ id: gesture.start.nodeId, point: targetPoint });
-    ctx.runtime.moveNode(gesture.start.nodeId, targetPoint, "local", `drag:${gesture.start.nodeId}`);
+
+    if (gesture.start.secondaryNodeId !== undefined && gesture.start.axis === "y-height") {
+      const deltaY = targetPoint.y - gesture.start.point.y;
+      const p1: ConstructionPosition = {
+        x: gesture.start.point.x,
+        y: Math.max(0, gesture.start.point.y + deltaY),
+        z: gesture.start.point.z,
+      };
+      const p2: ConstructionPosition = {
+        x: gesture.start.point.x,
+        y: Math.max(0, gesture.start.point.y + deltaY),
+        z: gesture.start.point.z,
+      };
+      ctx.runtime.moveNode(gesture.start.nodeId, p1, "local", `drag:${gesture.start.nodeId}`);
+      ctx.runtime.moveNode(gesture.start.secondaryNodeId, p2, "local", `drag:${gesture.start.secondaryNodeId}`);
+    } else {
+      ctx.runtime.moveNode(gesture.start.nodeId, targetPoint, "local", `drag:${gesture.start.nodeId}`);
+    }
   },
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture): void {
     if (gesture.start.nodeId === undefined) return;
     const targetPoint = resolveConstrainedPoint(gesture.start, gesture.current);
     ctx.history.record({ nodeId: gesture.start.nodeId, from: gesture.start.point, to: targetPoint });
+    if (gesture.start.secondaryNodeId !== undefined && gesture.start.axis === "y-height") {
+      ctx.history.record({ nodeId: gesture.start.secondaryNodeId, from: gesture.start.point, to: targetPoint });
+    }
   },
 };

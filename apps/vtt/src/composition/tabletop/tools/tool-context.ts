@@ -8,6 +8,7 @@ import type { TabletopRuntime } from "../tabletop-runtime.ts";
 export interface PointerSample {
   readonly point: ConstructionPosition;
   readonly nodeId?: string;
+  readonly secondaryNodeId?: string;
   readonly axis?: "y-height" | "xz-planar" | "all";
 }
 

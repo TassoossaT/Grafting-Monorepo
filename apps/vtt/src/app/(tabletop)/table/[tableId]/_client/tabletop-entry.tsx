@@ -19,6 +19,7 @@ import { StatusBadge } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
+  InCanvasPropertyPopover,
   SettingsDrawer,
   ToolRail,
   useKeyboardShortcuts,
@@ -125,6 +126,22 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
       setToolParams((previous) => ({ ...previous, [toolId]: next }));
     },
     [],
+  );
+
+  const handlePopoverHeightChange = useCallback(
+    (nextY: number) => {
+      if (selectedNodeInfo === null) return;
+      const targetPoint = {
+        x: selectedNodeInfo.point.x,
+        y: nextY,
+        z: selectedNodeInfo.point.z,
+      };
+      runtime.moveNode(selectedNodeInfo.id, targetPoint, "local", `property:${selectedNodeInfo.id}`);
+      history.record({ nodeId: selectedNodeInfo.id, from: selectedNodeInfo.point, to: targetPoint });
+      setSelectedNodeInfo({ id: selectedNodeInfo.id, point: targetPoint });
+      forceHistoryUpdate((value) => value + 1);
+    },
+    [selectedNodeInfo, runtime, history],
   );
 
   const pointerHandlers = useConstructionPointer({
@@ -236,6 +253,13 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           toolParams={toolParams}
           onToolParamsChange={handleToolParamsChange}
           tokenCount={current.tokens.byId.size}
+        />
+
+        {/* Tiny Glade in-canvas contextual property popover */}
+        <InCanvasPropertyPopover
+          selectedNodeInfo={selectedNodeInfo}
+          onHeightChange={handlePopoverHeightChange}
+          onClose={() => setSelectedNodeInfo(null)}
         />
       </section>
 
