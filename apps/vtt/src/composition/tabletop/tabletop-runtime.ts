@@ -220,6 +220,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #render: SceneRenderPort;
   readonly #construction: ConstructionSessionPort;
   readonly #terrainNoise: TerrainNoisePort;
+  readonly #seedDefaultMapOnStart: boolean;
   /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
   readonly #chunkRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
@@ -233,6 +234,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     construction: ConstructionSessionPort,
     terrainNoise: TerrainNoisePort,
     initialTokens: readonly TokenProjection[] = [],
+    seedDefaultMap = false,
   ) {
     const normalizedTableId = tableId.trim();
     if (normalizedTableId.length === 0) {
@@ -243,6 +245,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#render = render;
     this.#construction = construction;
     this.#terrainNoise = terrainNoise;
+    this.#seedDefaultMapOnStart = seedDefaultMap;
     this.#snapshot = snapshot(
       this.#tableId,
       "idle",
@@ -278,7 +281,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       );
     }
 
-    const map = this.#seedDefaultMap(generation);
+    const map = this.#seedDefaultMapOnStart ? this.#seedDefaultMap(generation) : createMapProjection();
     this.#snapshot = snapshot(
       this.#tableId,
       this.#snapshot.status,

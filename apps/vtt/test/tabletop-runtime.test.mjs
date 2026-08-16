@@ -1,9 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createTabletopRuntime } from "../src/composition/tabletop/index.ts";
+import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
 import { createTokenProjection } from "../src/entities/token/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+
+function createFakeTerrainNoisePort() {
+  return {
+    async start() {},
+    async dispose() {},
+  };
+}
+
+function createTabletopRuntime(options) {
+  return new AppTabletopRuntime(
+    options.tableId,
+    options.renderPort,
+    options.constructionPort,
+    options.terrainNoisePort ?? createFakeTerrainNoisePort(),
+    options.initialTokens ?? [],
+    options.seedDefaultMap ?? false,
+  );
+}
 
 function createFakeRenderPort() {
   const changes = [];
@@ -173,7 +191,8 @@ test("keeps a cached immutable snapshot and publishes lifecycle transitions", as
   assert.equal(runtime.getSnapshot(), initial);
   assert.equal(initial.tableId, "table-1");
   assert.equal(initial.status, "idle");
-  assert.equal(initial.tokens.byId.size, 1);
+  assert.equal(initial.tokens.byId.size, 0);
+  assert.equal(initial.map.byId.size, 0);
   assert.equal(Object.isFrozen(initial), true);
 
   const observed = [];
@@ -181,15 +200,31 @@ test("keeps a cached immutable snapshot and publishes lifecycle transitions", as
 
   await runtime.start();
   assert.deepEqual(observed, ["starting", "ready"]);
-  assert.equal(runtime.getSnapshot().revision, 2);
   assert.equal(runtime.getSnapshot().status, "ready");
   await assert.rejects(runtime.start(), /already ready/);
 });
 
-test("starting a table seeds a generated terrain cell and wall through the construction port", async () => {
+test("by default, starting a tabletop runtime initializes a clean, empty board", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-clean",
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  await runtime.start();
+
+  const snapshot = runtime.getSnapshot();
+  assert.equal(snapshot.tokens.byId.size, 0, "no hardcoded tokens on fresh board");
+  assert.equal(snapshot.map.byId.size, 0, "no hardcoded terrain or walls on fresh board");
+  assert.equal(snapshot.map.nodePositions.size, 0);
+});
+
+test("starting a table with seedDefaultMap seeds a generated terrain cell and wall through the construction port", async () => {
   const renderPort = createFakeRenderPort();
   const runtime = createTabletopRuntime({
     tableId: "table-map",
+    seedDefaultMap: true,
     renderPort,
     constructionPort: createFakeConstructionPort(),
   });
@@ -210,9 +245,10 @@ test("starting a table seeds a generated terrain cell and wall through the const
   assert.ok(mapChanges[0].chunk.mesh.positions.length > 0, "the seeded chunk carries real mesh data");
 });
 
-test("starting a table also seeds every node's position from the construction port", async () => {
+test("starting a table with seedDefaultMap also seeds every node's position from the construction port", async () => {
   const runtime = createTabletopRuntime({
     tableId: "table-nodes",
+    seedDefaultMap: true,
     renderPort: createFakeRenderPort(),
     constructionPort: createFakeConstructionPort(),
   });
@@ -230,6 +266,7 @@ test("moving a node updates its position and re-uploads the map chunk it belongs
   const renderPort = createFakeRenderPort();
   const runtime = createTabletopRuntime({
     tableId: "table-move-node",
+    seedDefaultMap: true,
     renderPort,
     constructionPort: createFakeConstructionPort(),
   });
@@ -256,6 +293,7 @@ test("moving a node bumps the revision of every surface the engine reports as af
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-affected-surfaces",
+    seedDefaultMap: true,
     renderPort: createFakeRenderPort(),
     constructionPort,
   });
@@ -276,6 +314,7 @@ test("moving a node removes a chunk that no longer has any surface in it", async
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-chunk-removal",
+    seedDefaultMap: true,
     renderPort,
     constructionPort,
   });

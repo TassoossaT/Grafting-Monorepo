@@ -11,6 +11,8 @@ import { AppTabletopRuntime, type TabletopRuntime } from "./tabletop-runtime.ts"
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
   readonly initialTokens?: readonly TokenProjection[];
+  /** When true, seeds one demo terrain cell and wall upon start. Defaults to false (clean board). */
+  readonly seedDefaultMap?: boolean;
   readonly renderPort?: SceneRenderPort;
   readonly constructionPort?: ConstructionSessionPort;
   readonly terrainNoisePort?: TerrainNoisePort;
@@ -20,26 +22,13 @@ export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
 ): TabletopRuntime {
   const tableId = input.tableId.trim();
-  const initialTokens =
-    input.initialTokens ??
-    [
-      createTokenProjection({
-        id: `${tableId}:guide`,
-        sceneId: `${tableId}:scene`,
-        position: { x: 0, y: 1.15, z: 0 },
-        appearance: {
-          label: "Guide token",
-          color: 0x72d69e,
-          size: 1.7,
-        },
-        revision: 1,
-      }),
-    ];
+  const initialTokens = input.initialTokens ?? [];
   return new AppTabletopRuntime(
     tableId,
     input.renderPort ?? createRender3dSceneAdapter(),
     input.constructionPort ?? createConstructionSessionAdapter(),
     input.terrainNoisePort ?? createTerrainNoiseAdapter(),
     initialTokens,
+    input.seedDefaultMap ?? false,
   );
 }
