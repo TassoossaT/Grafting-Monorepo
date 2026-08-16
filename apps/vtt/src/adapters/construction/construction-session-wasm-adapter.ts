@@ -192,11 +192,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const wire = {
       layout: {
         origin: toWirePosition(request.layout.origin),
-        rows: request.layout.rows,
-        cols: request.layout.cols,
-        cellWidth: request.layout.cellWidth,
-        cellDepth: request.layout.cellDepth,
+        width: request.layout.width,
+        depth: request.layout.depth,
+        roomCount: request.layout.roomCount,
         wallHeight: request.layout.wallHeight,
+        seed: request.layout.seed,
       },
       idPrefix: request.idPrefix,
       wallType: request.wallType,
