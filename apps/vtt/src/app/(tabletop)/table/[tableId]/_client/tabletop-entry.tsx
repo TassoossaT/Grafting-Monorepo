@@ -50,8 +50,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "wall-brush": "Pincel de Parede",
   "room-stamp": "Carimbo de Sala",
   "room-derive": "Derivar Sala",
-  "house-stamp": "Carimbo de Casa",
-  "house-room-add": "Adicionar Cômodo",
+  "house-brush": "Pintar Casa",
   "house-room-delete": "Apagar Cômodo",
   "irregular-terrain-stamp": "Terreno Irregular",
 };

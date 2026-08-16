@@ -450,7 +450,6 @@ dependencies = [
  "grafting-graph-core",
  "rand 0.8.7",
  "rand_pcg",
- "streemap",
 ]
 
 [[package]]
@@ -1079,15 +1078,6 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
-
-[[package]]
-name = "streemap"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f17f303a9ec55e27e92d11c78e30d029f0dc97e80f8323c97e63aab901116329"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "syn"

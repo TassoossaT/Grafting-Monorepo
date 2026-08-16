@@ -11,24 +11,13 @@ role via `node_id`/`edge_id` in [`generate_wall`], and lets adjacent
 pieces agree on a shared jamb node's identity without this crate
 inventing one.
 
-### `pub fn grafting_procgen_structure_generation::generate_room_grid(layout: &grafting_procgen_structure_generation::RoomGridLayout, id_prefix: &str, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType, floor_type: grafting_graph_core::surface::SurfaceType, ceiling_type: grafting_graph_core::surface::SurfaceType) -> grafting_procgen_structure_generation::RoomGridGeneration`
+### `pub fn grafting_procgen_structure_generation::generate_cell_partition(cells: &[grafting_procgen_structure_generation::CellCoord], cell_size: f32, origin: [f32; 3], wall_height: f32, max_room_cells: usize, seed: u64, id_prefix: &str, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType, floor_type: grafting_graph_core::surface::SurfaceType, ceiling_type: grafting_graph_core::surface::SurfaceType) -> grafting_procgen_structure_generation::RoomGridGeneration`
 
-Generates a room-grid layout's wall/floor/ceiling pieces. `id_prefix`
-namespaces every generated id, same role as `wall-corner-weld.ts`'s
-`tableId:salt` naming plays for a hand-drawn wall, resolved here
-instead since this generator already knows its own full topology
-upfront once the treemap has run.
-
-### `pub fn grafting_procgen_structure_generation::generate_tiled_rooms(tiles: &[grafting_procgen_structure_generation::RectTile], origin_y: f32, wall_height: f32, id_prefix: &str, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType, floor_type: grafting_graph_core::surface::SurfaceType, ceiling_type: grafting_graph_core::surface::SurfaceType, corner_override: impl core::ops::function::Fn(f32, f32, bool) -> core::option::Option<grafting_graph_core::model::NodeId>) -> grafting_procgen_structure_generation::RoomGridGeneration`
-
-Derives every tile's wall/floor/ceiling pieces: one wall piece per
-maximal run along every interior or perimeter line the tiling
-produces (see the module doc for why a run can be shorter than a
-whole tile edge), and one floor + one ceiling per tile. `corner_override`
-lets a caller weld specific corners onto pre-existing node ids instead
-of this crate's own position-derived default -- see
-[`resolve_corner_id`]. Pass `|_, _, _| None` for the common case (a
-fresh, unwelded tiling, e.g. `room_grid`'s whole-footprint generation).
+Generates every painted cell's floor/ceiling and every wall run needed
+between/around them. `cells` may repeat and may be in any order --
+deduplicated internally. Empty input produces an empty generation.
+`max_room_cells` is clamped to at least 1. See the module doc for the
+three ways this differs from a fixed-rectangle generator.
 
 ### `pub fn grafting_procgen_structure_generation::generate_wall(wall: &grafting_procgen_structure_generation::WallSegment, door: core::option::Option<&grafting_procgen_structure_generation::DoorOpening>, node_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::NodeId, edge_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole, grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::EdgeId, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType) -> core::result::Result<grafting_procgen_structure_generation::WallGeneration, grafting_procgen_structure_generation::StructureGenerationError>`
 
@@ -39,6 +28,14 @@ matching `grafting_graph_core::construction::duplicate_surface`'s own
 principle. Validates `door` (if any) before constructing anything, so a
 rejected call leaves nothing behind.
 
+### `pub grafting_procgen_structure_generation::CellCoord::x: i32`
+
+Grid column.
+
+### `pub grafting_procgen_structure_generation::CellCoord::z: i32`
+
+Grid row.
+
 ### `pub grafting_procgen_structure_generation::DoorOpening::closes_at: f32`
 
 Fraction along the centerline where the opening ends.
@@ -47,58 +44,17 @@ Fraction along the centerline where the opening ends.
 
 Fraction along the centerline where the opening begins.
 
-### `pub grafting_procgen_structure_generation::RectTile::depth: f32`
-
-This tile's extent along Z.
-
-### `pub grafting_procgen_structure_generation::RectTile::width: f32`
-
-This tile's extent along X.
-
-### `pub grafting_procgen_structure_generation::RectTile::x: f32`
-
-This tile's minimum corner along X.
-
-### `pub grafting_procgen_structure_generation::RectTile::z: f32`
-
-This tile's minimum corner along Z.
-
 ### `pub grafting_procgen_structure_generation::RoomGridGeneration::ceilings: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
 
-One ceiling piece per tile, in input order.
+One ceiling piece per painted cell.
 
 ### `pub grafting_procgen_structure_generation::RoomGridGeneration::floors: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
 
-One floor piece per tile, in input order.
+One floor piece per painted cell.
 
 ### `pub grafting_procgen_structure_generation::RoomGridGeneration::walls: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
 
-Wall pieces, in sweep order (all vertical lines, then all horizontal lines).
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::depth: f32`
-
-The footprint's extent along Z. Must be positive.
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::origin: [f32; 3]`
-
-The footprint's min-x/min-z corner, at its own base (Y is the floor level).
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::room_count: u32`
-
-Number of rooms to partition the footprint into. Must be at least 1.
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::seed: u64`
-
-Drives both the per-room size weights and the treemap's own item
-order -- the same seed always reproduces the same layout.
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::wall_height: f32`
-
-Every wall's rise above `origin`'s own Y.
-
-### `pub grafting_procgen_structure_generation::RoomGridLayout::width: f32`
-
-The footprint's extent along X. Must be positive.
+Wall pieces, no fixed order.
 
 ### `pub grafting_procgen_structure_generation::StructureGenerationError::InvalidDoorOpening`
 
@@ -184,6 +140,13 @@ This crate produces plain data only -- new nodes, new edges, and
 itself. Applying that data to a live graph, whether as a first creation
 or as an edit against prior state, is a caller concern.
 
+### `pub struct grafting_procgen_structure_generation::CellCoord`
+
+One cell's grid coordinates -- not world units. Ord'd lexicographically
+(x then z) so every collection built from a set of these has a
+deterministic iteration order, which is what makes
+[`generate_cell_partition`] a pure function of its input cell set alone.
+
 ### `pub struct grafting_procgen_structure_generation::DoorOpening`
 
 A door opening cut into a [`WallSegment`], as fractions along its
@@ -192,27 +155,10 @@ centerline. `opens_at` must be less than `closes_at`, both within
 piece above it. A partial-height opening is a deliberate, documented
 follow-up.
 
-### `pub struct grafting_procgen_structure_generation::RectTile`
-
-One rectangular room's footprint, in the tiling's own ground plane
-(`x`/`z`, matching every other generator in this crate). `width` runs
-along `x`, `depth` runs along `z`. Must not overlap any other tile in
-the same call, and the full set must tile its bounding footprint with
-no gaps -- both are the caller's responsibility (e.g. `streemap`'s own
-contract), not validated here.
-
 ### `pub struct grafting_procgen_structure_generation::RoomGridGeneration`
 
-A generated tiling's pieces: one wall piece per maximal wall run (see
-the module doc for why a run can be shorter than a whole tile edge),
-and one floor + one ceiling piece per tile.
-
-### `pub struct grafting_procgen_structure_generation::RoomGridLayout`
-
-A rectangular `width` x `depth` footprint split into `room_count`
-rooms, `origin` at the footprint's own min-x/min-z corner. v1 scope: a
-single rectangular footprint, no L-shaped or otherwise non-rectangular
-silhouette.
+A generated cell partition's pieces: one wall piece per maximal wall
+run, one floor + one ceiling piece per painted cell.
 
 ### `pub struct grafting_procgen_structure_generation::StructurePiece`
 

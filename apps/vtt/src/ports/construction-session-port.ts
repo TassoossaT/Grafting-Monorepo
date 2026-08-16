@@ -94,28 +94,42 @@ export interface WallPiece {
 }
 
 /**
- * A rectangular `width` x `depth` footprint partitioned into `roomCount`
- * welded rooms of varied size (squarified-treemap sizing, deterministic
- * per `seed`) -- shared interior walls, plus a floor+ceiling per room.
- * Generic on purpose (not house-specific): the app composition layer names
- * a particular use of this "a house," but this port only knows about a
- * footprint tiled into rooms, the same way it only knows about "a wall,"
- * not "a bedroom wall."
+ * One grid cell in a {@link GenerateCellPartitionRequest}'s own local grid
+ * -- not world units (multiply by `cellSize` and offset by `origin` to get
+ * a world position). Generic on purpose (not house-specific): the app
+ * composition layer names a particular use of this "a house," but this
+ * port only knows about painted cells partitioned into rooms, the same way
+ * it only knows about "a wall," not "a bedroom wall."
  */
-export interface RoomGridLayout {
-  /** The footprint's min-x/min-z corner. */
+export interface CellCoordinate {
+  readonly x: number;
+  readonly z: number;
+}
+
+/**
+ * One tick of a continuous room-painting brush: the stroke's *whole*
+ * current accumulated cell set (not just what changed since the last
+ * tick), regenerated and diffed against whatever this structure already
+ * holds every call -- see `cell_partition`'s own doc for why a full resend
+ * is required and, since unchanged geometry's id never changes, cheap.
+ */
+export interface GenerateCellPartitionRequest {
+  readonly cells: readonly CellCoordinate[];
+  readonly cellSize: number;
   readonly origin: ConstructionPosition;
-  readonly width: number;
-  readonly depth: number;
-  readonly roomCount: number;
   readonly wallHeight: number;
-  /** The same seed always reproduces the same room layout. */
+  /** A connected region larger than this gets auto-split into more than one room. */
+  readonly maxRoomCells: number;
+  /** The same seed always reproduces the same split layout for the same cell set. */
   readonly seed: number;
-}
-
-export interface GenerateRoomGridRequest {
-  readonly layout: RoomGridLayout;
-  /** Namespaces every id this call generates -- all grid math and id assignment happens on the Rust side, see `generate_room_grid`. */
+  /**
+   * Namespaces every id this call derives. Unlike this port's other
+   * generators (fresh per call), this must stay the SAME fixed value
+   * across every tick of one structure, and across separate strokes
+   * painting the same physical structure later -- that stability is what
+   * lets repainting the same cells be a no-op instead of minting
+   * duplicate geometry.
+   */
   readonly idPrefix: string;
   readonly wallType: string;
   readonly doorType: string;
@@ -123,38 +137,10 @@ export interface GenerateRoomGridRequest {
   readonly ceilingType: string;
 }
 
-export interface RoomGridPiece {
-  readonly surfaceKey: ConstructionSurfaceKey;
-  readonly surfaceType: string;
-}
-
-/** One new room's own footprint, in the tiling's ground plane -- see `RoomGridLayout`'s doc for the `x`/`z`/`width`/`depth` convention. */
-export interface RoomAdditionTile {
-  readonly x: number;
-  readonly z: number;
-  readonly width: number;
-  readonly depth: number;
-}
-
-/** A corner this new room's own geometry should weld onto instead of minting a fresh id -- the "Adicionar Cômodo" tool's live-query result, mirroring `GenerateWallRequest.weldedNodeIds` but reported by position (`x`/`z`/`top`) rather than by role, since a room has no fixed role vocabulary the way a wall's 4 corners do. */
-export interface RoomAdditionWeldCandidate {
-  readonly x: number;
-  readonly z: number;
-  readonly top: boolean;
-  readonly nodeId: ConstructionNodeId;
-}
-
-export interface GenerateRoomAdditionRequest {
-  readonly tile: RoomAdditionTile;
-  readonly originY: number;
-  readonly wallHeight: number;
-  /** Namespaces every id this call mints fresh -- welded corners keep their own pre-existing id instead. */
-  readonly idPrefix: string;
-  readonly wallType: string;
-  readonly doorType: string;
-  readonly floorType: string;
-  readonly ceilingType: string;
-  readonly weldCandidates?: readonly RoomAdditionWeldCandidate[];
+export interface CellPartitionOutcome {
+  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
 export interface RemoveRoomRequest {
@@ -242,8 +228,7 @@ export interface ConstructionSessionPort {
   ): void;
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   generateWall(request: GenerateWallRequest): readonly WallPiece[];
-  generateRoomGrid(request: GenerateRoomGridRequest): readonly RoomGridPiece[];
-  generateRoomAddition(request: GenerateRoomAdditionRequest): readonly RoomGridPiece[];
+  generateCellPartition(request: GenerateCellPartitionRequest): CellPartitionOutcome;
   removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome;
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;

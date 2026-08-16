@@ -30,18 +30,12 @@ Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
 
 Duplicates a surface. See `editing::apply_duplicate_surface`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_room_addition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_cell_partition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Generates one new room's wall/floor/ceiling pieces, welding onto
-pre-existing geometry wherever a `weldCandidates` entry names it,
-and applies every piece. See
-`room_addition::generate_and_apply_room_addition`.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_room_grid_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Generates a rectangular grid of walled, welded rooms (walls, doors,
-floors, ceilings) and applies every piece. See
-`room_grid::generate_and_apply_room_grid`.
+Regenerates a painted cell set's whole partition (walls, doors,
+floors, ceilings) and applies only the difference against whatever
+this structure already holds -- the "Pintar Casa" tool's per-tick
+commit. See `cell_partition::generate_and_apply_cell_partition`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_terrain_cell_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
