@@ -3,9 +3,9 @@
 //! every generator in this crate relies on to weld shared corners (two
 //! adjacent cells, a straight run meeting an arc, a repainted stroke)
 //! without any generator knowing about any other. Shared here so
-//! `cell_partition` and `wall_path` mint byte-identical ids for the same
-//! world position under the same `id_prefix`, instead of each keeping its
-//! own copy that could silently drift apart.
+//! `boundary` and `extrusion` mint byte-identical ids for the same world
+//! position under the same `id_prefix`, instead of each keeping its own
+//! copy that could silently drift apart.
 
 use grafting_graph_core::NodeId;
 
