@@ -10,10 +10,13 @@
 #![deny(missing_docs)]
 
 mod cell_partition;
+mod ids;
 mod wall;
+mod wall_path;
 
 pub use cell_partition::{CellCoord, RoomGridGeneration, generate_cell_partition};
 pub use wall::{
     DoorOpening, StructureGenerationError, StructurePiece, WallGeneration, WallNodeRole,
     WallSegment, generate_wall,
 };
+pub use wall_path::{ArcBulge, EdgeCurvature, PathEdge, WallPathError, WallPathGeneration, generate_wall_path};

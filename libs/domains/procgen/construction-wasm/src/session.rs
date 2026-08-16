@@ -20,6 +20,7 @@ use crate::mesh;
 use crate::room_removal;
 use crate::terrain;
 use crate::wall;
+use crate::wall_path;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json).map_err(|error| JsValue::from_str(&format!("invalid request JSON: {error}")))
@@ -221,6 +222,25 @@ impl ConstructionSession {
     pub fn generate_and_apply_cell_partition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
         let response = cell_partition::generate_and_apply_cell_partition(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
+            .map_err(to_js_error)?;
+        for key in &response.removed_surface_keys {
+            self.forget(key);
+        }
+        for key in &response.added_surface_keys {
+            self.remember(key);
+        }
+        serialize(&response)
+    }
+
+    /// Regenerates a continuous wall-brush stroke's whole path (straight
+    /// and semicircular-arc edges) and applies only the difference against
+    /// whatever this structure already holds -- the free-form wall brush's
+    /// per-tick commit. Once the path closes into a loop, a floor and
+    /// ceiling are included too. See
+    /// `wall_path::generate_and_apply_wall_path`.
+    pub fn generate_and_apply_wall_path_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = wall_path::generate_and_apply_wall_path(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request)
             .map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);

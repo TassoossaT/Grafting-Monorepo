@@ -47,6 +47,15 @@ Generates one terrain cell's surface and applies it. See
 Generates a wall's (and its door's) surface pieces and applies them.
 See `wall::generate_and_apply_wall`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_wall_path_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Regenerates a continuous wall-brush stroke's whole path (straight
+and semicircular-arc edges) and applies only the difference against
+whatever this structure already holds -- the free-form wall brush's
+per-tick commit. Once the path closes into a loop, a floor and
+ceiling are included too. See
+`wall_path::generate_and_apply_wall_path`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::into_abi(self) -> Self::Abi`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::is_none(abi: &Self::Abi) -> bool`
