@@ -244,11 +244,26 @@ export async function taskDoctor(repoRoot: string, input: { taskId: string }) {
   return { ok: true as const, healthy, dependenciesReady, ...diagnosis, recommendedAction };
 }
 
-export async function taskDependencies(repoRoot: string, input: { taskId: string; install?: boolean }) {
+export interface TaskDependenciesInput {
+  taskId: string;
+  install?: boolean;
+  updateLockfile?: boolean;
+  add?: string;
+  workspace?: string;
+  dev?: boolean;
+}
+
+export async function taskDependencies(repoRoot: string, input: TaskDependenciesInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   return {
     ok: true as const,
-    ...(await new GitClient(repoRoot).prepareTaskDependencies(input.taskId, { install: input.install })),
+    ...(await new GitClient(repoRoot).prepareTaskDependencies(input.taskId, {
+      install: input.install,
+      updateLockfile: input.updateLockfile,
+      add: input.add,
+      workspace: input.workspace,
+      dev: input.dev,
+    })),
   };
 }
 
