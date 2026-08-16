@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useRef, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 /** One sub-action or variant inside an active {@link ActionDockItem}. */
@@ -35,27 +35,29 @@ export interface ActionDockItem {
   readonly shortcut?: string;
   /** Whether this tool/category is currently active. */
   readonly active?: boolean;
+  /** Whether any child sub-item of this item is active. */
+  readonly childActive?: boolean;
   /** Whether this item is non-interactive. */
   readonly disabled?: boolean;
   /** Invoked when this item is clicked. */
   readonly onClick?: () => void;
-  /** Optional sub-tools or variations revealed when this category is active. */
+  /** Optional sub-tools revealed above this button when it is active. */
   readonly subItems?: readonly ActionDockSubItem[];
 }
 
 /** Public props for the {@link ActionDock} bottom toolbar organism. */
 export interface ActionDockProps {
-  /** Accessible name for the toolbar region. @default "Barra de ferramentas de construcao" */
+  /** Accessible name for the toolbar region. */
   readonly ariaLabel?: string;
   /** Primary construction verbs / categories in display order. */
   readonly items: readonly ActionDockItem[];
   /**
-   * Optional leading accessories rendered as individual floating pills
+   * Optional leading accessories rendered as floating icon buttons
    * (e.g. undo/redo, camera navigation).
    */
   readonly leadingAccessories?: ReactNode;
   /**
-   * Optional trailing accessories rendered as individual floating pills
+   * Optional trailing accessories rendered as floating icon buttons
    * (e.g. grid snap toggle, settings drawer toggle).
    */
   readonly trailingAccessories?: ReactNode;
@@ -65,42 +67,13 @@ export interface ActionDockProps {
   readonly style?: CSSProperties;
 }
 
-const PILL_BASE: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderRadius: "9999px",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  background: "rgba(12, 18, 32, 0.72)",
-  border: "1px solid rgba(255, 255, 255, 0.10)",
-  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.38)",
-  transition: "all 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
-  cursor: "pointer",
-  userSelect: "none",
-};
-
-const PILL_ACTIVE: CSSProperties = {
-  background: "rgba(114, 214, 158, 0.16)",
-  border: "1px solid rgba(114, 214, 158, 0.55)",
-  color: "#72d69e",
-};
-
-const PILL_HOVER: CSSProperties = {
-  background: "rgba(255, 255, 255, 0.09)",
-  border: "1px solid rgba(255, 255, 255, 0.18)",
-  color: "#f8fafc",
-  transform: "translateY(-2px)",
-  boxShadow: "0 8px 28px rgba(0, 0, 0, 0.48)",
-};
-
 /**
  * A floating bottom action dock inspired by Tiny Glade construction UI.
  *
- * Each primary verb is an independent, floating pill with no shared background
- * container. Pills hover directly above the canvas with a soft glassmorphic
- * treatment per-pill. When an active category defines subItems, a compact
- * sub-pill row expands smoothly above that item.
+ * Buttons are compact squares with a sketch/drawn aesthetic and a small
+ * border-radius. Sub-tools expand upward directly above the parent button
+ * (not centered). The parent button color changes when any child is active.
+ * Each button is an independent floating element with no shared container.
  *
  * @layer organism
  * @status stable
@@ -115,228 +88,268 @@ export function ActionDock(props: ActionDockProps): ReactElement {
     style,
   } = props;
 
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-
-  const activeWithSubItems = items.find(
-    (item) => item.active && item.subItems && item.subItems.length > 0,
-  );
-
   return (
     <div
       role="toolbar"
       aria-label={ariaLabel}
       className={className}
       style={{
-        position: "relative",
         display: "inline-flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "0.5rem",
-        zIndex: 20,
+        alignItems: "flex-end",
+        gap: "0.3rem",
         userSelect: "none",
         ...style,
       }}
     >
-      {activeWithSubItems?.subItems && (
-        <SubPillRow
-          groupLabel={activeWithSubItems.label}
-          subItems={activeWithSubItems.subItems}
-        />
+      {leadingAccessories && (
+        <>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+            {leadingAccessories}
+          </div>
+          <div style={{ width: "0.5rem" }} />
+        </>
       )}
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "flex-end",
-          gap: "0.45rem",
-        }}
-      >
-        {leadingAccessories && (
-          <>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-              {leadingAccessories}
-            </div>
-            <div style={{ width: "0.35rem" }} />
-          </>
-        )}
-        {items.map((item) => {
-          const isActive = item.active === true;
-          const isHovered = hoveredKey === item.key;
-          return (
-            <PrimaryPill
-              key={item.key}
-              item={item}
-              isActive={isActive}
-              isHovered={isHovered}
-              onMouseEnter={() => setHoveredKey(item.key)}
-              onMouseLeave={() => setHoveredKey(null)}
-            />
-          );
-        })}
-        {trailingAccessories && (
-          <>
-            <div style={{ width: "0.35rem" }} />
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-              {trailingAccessories}
-            </div>
-          </>
-        )}
-      </div>
+
+      {items.map((item) => (
+        <PrimaryButton key={item.key} item={item} />
+      ))}
+
+      {trailingAccessories && (
+        <>
+          <div style={{ width: "0.5rem" }} />
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+            {trailingAccessories}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-interface PrimaryPillProps {
-  item: ActionDockItem;
-  isActive: boolean;
-  isHovered: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
+// ─── Shared constants ─────────────────────────────────────────────────────────
+
+/** Tiny Glade-style: compact square with sketch feel, small radius */
+const BTN_SIZE = "2.6rem";
+const BTN_RADIUS = "0.45rem";
+
+const BTN_IDLE: CSSProperties = {
+  background: "rgba(18, 24, 38, 0.78)",
+  border: "1.5px solid rgba(255,255,255,0.13)",
+  color: "rgba(200,210,225,0.75)",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)",
+};
+
+const BTN_HOVER: CSSProperties = {
+  background: "rgba(34, 44, 64, 0.88)",
+  border: "1.5px solid rgba(255,255,255,0.22)",
+  color: "#e8f0fb",
+  boxShadow: "0 4px 16px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.10)",
+  transform: "translateY(-2px) scale(1.06)",
+};
+
+/** Self/direct active: tool is this item */
+const BTN_ACTIVE: CSSProperties = {
+  background: "rgba(90, 160, 240, 0.22)",
+  border: "1.5px solid rgba(120, 180, 255, 0.60)",
+  color: "#8ec8ff",
+  boxShadow: "0 2px 14px rgba(100,160,255,0.28), inset 0 1px 0 rgba(255,255,255,0.10)",
+};
+
+/** Child active: one of this item's sub-tools is the current tool */
+const BTN_CHILD_ACTIVE: CSSProperties = {
+  background: "rgba(60, 120, 200, 0.18)",
+  border: "1.5px solid rgba(100, 160, 240, 0.45)",
+  color: "#7ab8f5",
+  boxShadow: "0 2px 10px rgba(80,130,220,0.22), inset 0 1px 0 rgba(255,255,255,0.06)",
+};
+
+const SUB_BTN_ACTIVE: CSSProperties = {
+  background: "rgba(90, 160, 240, 0.28)",
+  border: "1.5px solid rgba(120, 180, 255, 0.65)",
+  color: "#a8d4ff",
+  boxShadow: "0 2px 12px rgba(100,160,255,0.3)",
+};
+
+const TRANSITION = "background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s cubic-bezier(0.16,1,0.3,1)";
+
+// ─── PrimaryButton ────────────────────────────────────────────────────────────
+
+function PrimaryButton({ item }: { item: ActionDockItem }): ReactElement {
+  const [hovered, setHovered] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const hasSubItems = (item.subItems?.length ?? 0) > 0;
+  const isActive = item.active === true;
+  const isChildActive = item.childActive === true;
+  const showSub = hasSubItems && (isActive || isChildActive);
+
+  let btnStyle: CSSProperties;
+  if (isActive) btnStyle = BTN_ACTIVE;
+  else if (isChildActive) btnStyle = BTN_CHILD_ACTIVE;
+  else if (hovered) btnStyle = BTN_HOVER;
+  else btnStyle = BTN_IDLE;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      {/* Sub-items — expand upward directly above this button */}
+      {showSub && item.subItems && (
+        <SubButtonRow subItems={item.subItems} />
+      )}
+
+      <button
+        ref={btnRef}
+        type="button"
+        disabled={item.disabled}
+        onClick={item.onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title={item.tooltip ?? item.label}
+        aria-pressed={isActive || isChildActive}
+        style={{
+          ...BTN_IDLE,
+          ...btnStyle,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.15rem",
+          width: BTN_SIZE,
+          height: BTN_SIZE,
+          padding: "0.2rem",
+          borderRadius: BTN_RADIUS,
+          cursor: item.disabled ? "not-allowed" : "pointer",
+          opacity: item.disabled ? 0.35 : 1,
+          transition: TRANSITION,
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          position: "relative",
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: "1.05rem", lineHeight: 1 }}>{item.icon}</span>
+        <span
+          style={{
+            fontSize: "0.6rem",
+            fontWeight: 600,
+            letterSpacing: "0.03em",
+            whiteSpace: "nowrap",
+            lineHeight: 1,
+          }}
+        >
+          {item.label}
+        </span>
+        {item.shortcut && (
+          <span
+            style={{
+              position: "absolute",
+              top: "0.15rem",
+              right: "0.2rem",
+              fontSize: "0.48rem",
+              fontWeight: 700,
+              color: isActive ? "#8ec8ff" : "rgba(255,255,255,0.25)",
+            }}
+          >
+            {item.shortcut}
+          </span>
+        )}
+      </button>
+    </div>
+  );
 }
 
-function PrimaryPill({
-  item,
-  isActive,
-  isHovered,
-  onMouseEnter,
-  onMouseLeave,
-}: PrimaryPillProps): ReactElement {
-  const dynamicStyle: CSSProperties = isActive
-    ? PILL_ACTIVE
-    : isHovered
-      ? PILL_HOVER
-      : { color: "#b0bdcc" };
+// ─── SubButtonRow ─────────────────────────────────────────────────────────────
+
+function SubButtonRow({ subItems }: { subItems: readonly ActionDockSubItem[] }): ReactElement {
+  return (
+    <div
+      role="group"
+      aria-label="Variações de ferramenta"
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "0.25rem",
+        marginBottom: "0.3rem",
+        animation: "actionDockSlideUp 0.16s cubic-bezier(0.16,1,0.3,1)",
+      }}
+    >
+      {[...subItems].reverse().map((subItem) => (
+        <SubButton key={subItem.key} subItem={subItem} />
+      ))}
+    </div>
+  );
+}
+
+function SubButton({ subItem }: { subItem: ActionDockSubItem }): ReactElement {
+  const [hovered, setHovered] = useState(false);
+  const isActive = subItem.active === true;
+
+  let btnStyle: CSSProperties;
+  if (isActive) btnStyle = SUB_BTN_ACTIVE;
+  else if (hovered) btnStyle = BTN_HOVER;
+  else btnStyle = BTN_IDLE;
 
   return (
     <button
       type="button"
-      disabled={item.disabled}
-      onClick={item.onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      title={item.tooltip ?? item.label}
+      disabled={subItem.disabled}
+      onClick={subItem.onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={subItem.tooltip ?? subItem.label}
       aria-pressed={isActive}
       style={{
-        ...PILL_BASE,
-        ...dynamicStyle,
-        position: "relative",
+        ...BTN_IDLE,
+        ...btnStyle,
+        display: "flex",
         flexDirection: "column",
-        gap: "0.18rem",
-        padding: "0.5rem 0.7rem",
-        minWidth: "3.2rem",
-        opacity: item.disabled ? 0.35 : 1,
-        cursor: item.disabled ? "not-allowed" : "pointer",
-        boxShadow: isActive
-          ? "0 4px 24px rgba(114, 214, 158, 0.22), 0 2px 8px rgba(0,0,0,0.3)"
-          : isHovered
-            ? "0 8px 28px rgba(0, 0, 0, 0.48)"
-            : "0 4px 20px rgba(0, 0, 0, 0.38)",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.12rem",
+        width: BTN_SIZE,
+        minHeight: "2.2rem",
+        padding: "0.18rem 0.3rem",
+        borderRadius: BTN_RADIUS,
+        cursor: subItem.disabled ? "not-allowed" : "pointer",
+        opacity: subItem.disabled ? 0.35 : 1,
+        transition: TRANSITION,
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        flexShrink: 0,
       }}
     >
-      <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>{item.icon}</span>
+      {subItem.icon && (
+        <span style={{ fontSize: "0.9rem", lineHeight: 1 }}>{subItem.icon}</span>
+      )}
       <span
         style={{
-          fontSize: "0.65rem",
-          fontWeight: isActive ? 600 : 500,
+          fontSize: "0.55rem",
+          fontWeight: 600,
           letterSpacing: "0.02em",
           whiteSpace: "nowrap",
+          lineHeight: 1,
         }}
       >
-        {item.label}
+        {subItem.label}
       </span>
-      {item.shortcut && (
+      {subItem.shortcut && (
         <span
           style={{
-            position: "absolute",
-            top: "0.18rem",
-            right: "0.22rem",
-            fontSize: "0.5rem",
+            fontSize: "0.48rem",
+            color: "rgba(255,255,255,0.3)",
             fontWeight: 700,
-            color: isActive ? "#72d69e" : "rgba(255,255,255,0.28)",
-            letterSpacing: "0.01em",
           }}
         >
-          {item.shortcut}
+          {subItem.shortcut}
         </span>
       )}
     </button>
-  );
-}
-
-interface SubPillRowProps {
-  groupLabel: string;
-  subItems: readonly ActionDockSubItem[];
-}
-
-function SubPillRow({ groupLabel, subItems }: SubPillRowProps): ReactElement {
-  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-
-  return (
-    <div
-      role="group"
-      aria-label={`Variações de ${groupLabel}`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "0.3rem",
-        animation: "actionDockSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
-      }}
-    >
-      {subItems.map((subItem) => {
-        const isSubActive = subItem.active === true;
-        const isSubHovered = hoveredKey === subItem.key;
-        const dynamicStyle: CSSProperties = isSubActive
-          ? PILL_ACTIVE
-          : isSubHovered
-            ? PILL_HOVER
-            : { color: "#9aacbe" };
-
-        return (
-          <button
-            key={subItem.key}
-            type="button"
-            disabled={subItem.disabled}
-            onClick={subItem.onClick}
-            onMouseEnter={() => setHoveredKey(subItem.key)}
-            onMouseLeave={() => setHoveredKey(null)}
-            title={subItem.tooltip ?? subItem.label}
-            aria-pressed={isSubActive}
-            style={{
-              ...PILL_BASE,
-              ...dynamicStyle,
-              flexDirection: "row",
-              gap: "0.3rem",
-              padding: "0.3rem 0.6rem",
-              fontSize: "0.72rem",
-              fontWeight: isSubActive ? 600 : 500,
-              opacity: subItem.disabled ? 0.35 : 1,
-              cursor: subItem.disabled ? "not-allowed" : "pointer",
-              boxShadow: isSubActive
-                ? "0 4px 20px rgba(114, 214, 158, 0.2), 0 2px 8px rgba(0,0,0,0.3)"
-                : "0 4px 16px rgba(0, 0, 0, 0.32)",
-            }}
-          >
-            {subItem.icon && (
-              <span style={{ fontSize: "0.85rem", lineHeight: 1 }}>{subItem.icon}</span>
-            )}
-            <span>{subItem.label}</span>
-            {subItem.shortcut && (
-              <kbd
-                style={{
-                  fontSize: "0.6rem",
-                  padding: "0.08rem 0.28rem",
-                  borderRadius: "0.25rem",
-                  background: "rgba(255, 255, 255, 0.08)",
-                  color: "rgba(255,255,255,0.35)",
-                  fontFamily: "inherit",
-                  border: "none",
-                }}
-              >
-                {subItem.shortcut}
-              </kbd>
-            )}
-          </button>
-        );
-      })}
-    </div>
   );
 }

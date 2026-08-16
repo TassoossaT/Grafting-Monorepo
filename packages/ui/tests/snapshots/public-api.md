@@ -940,26 +940,28 @@ export interface ActionDockItem {
     readonly shortcut?: string;
     /** Whether this tool/category is currently active. */
     readonly active?: boolean;
+    /** Whether any child sub-item of this item is active. */
+    readonly childActive?: boolean;
     /** Whether this item is non-interactive. */
     readonly disabled?: boolean;
     /** Invoked when this item is clicked. */
     readonly onClick?: () => void;
-    /** Optional sub-tools or variations revealed when this category is active. */
+    /** Optional sub-tools revealed above this button when it is active. */
     readonly subItems?: readonly ActionDockSubItem[];
 }
 /** Public props for the {@link ActionDock} bottom toolbar organism. */
 export interface ActionDockProps {
-    /** Accessible name for the toolbar region. @default "Barra de ferramentas de construcao" */
+    /** Accessible name for the toolbar region. */
     readonly ariaLabel?: string;
     /** Primary construction verbs / categories in display order. */
     readonly items: readonly ActionDockItem[];
     /**
-     * Optional leading accessories rendered as individual floating pills
+     * Optional leading accessories rendered as floating icon buttons
      * (e.g. undo/redo, camera navigation).
      */
     readonly leadingAccessories?: ReactNode;
     /**
-     * Optional trailing accessories rendered as individual floating pills
+     * Optional trailing accessories rendered as floating icon buttons
      * (e.g. grid snap toggle, settings drawer toggle).
      */
     readonly trailingAccessories?: ReactNode;
@@ -971,10 +973,10 @@ export interface ActionDockProps {
 /**
  * A floating bottom action dock inspired by Tiny Glade construction UI.
  *
- * Each primary verb is an independent, floating pill with no shared background
- * container. Pills hover directly above the canvas with a soft glassmorphic
- * treatment per-pill. When an active category defines subItems, a compact
- * sub-pill row expands smoothly above that item.
+ * Buttons are compact squares with a sketch/drawn aesthetic and a small
+ * border-radius. Sub-tools expand upward directly above the parent button
+ * (not centered). The parent button color changes when any child is active.
+ * Each button is an independent floating element with no shared container.
  *
  * @layer organism
  * @status stable

@@ -201,6 +201,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <span>| Modo: {TOOL_LABEL[tool]}</span>
         </div>
 
+        <ToolRail
+          tool={tool}
+          onToolChange={setTool}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          snapToGrid={snapToGrid}
+          onSnapToGridChange={setSnapToGrid}
+        />
+
         <ConstructionDock
           ready={current.status === "ready"}
           activeTool={tool}

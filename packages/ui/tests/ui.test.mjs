@@ -559,7 +559,7 @@ test("renders ActionDock with primary construction verbs and expandable sub-item
   assert.match(markup, /role="toolbar"/);
   assert.match(markup, /Edifício/);
   assert.match(markup, /Muro/);
-  assert.match(markup, /aria-label="Variações de Edifício"/);
+  assert.match(markup, /Variações de ferramenta/);
   assert.match(markup, /Retangular/);
   assert.match(markup, /Torre/);
   assert.match(markup, /Undo/);
