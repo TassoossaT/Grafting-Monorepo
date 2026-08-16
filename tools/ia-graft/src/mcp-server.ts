@@ -58,6 +58,8 @@ const TOOLS = [
         taskId: { type: "string", description: "Target task ID" },
         message: { type: "string", description: "Conventional commit message" },
         files: { type: "array", items: { type: "string" }, description: "Optional subset of files to commit" },
+        amend: { type: "boolean", description: "Amend previous commit" },
+        dryRun: { type: "boolean", description: "Validate input without making a commit" },
       },
       required: ["taskId", "message"],
     },
@@ -139,6 +141,8 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
             taskId: String(args.taskId),
             message: String(args.message),
             files: Array.isArray(args.files) ? (args.files as string[]) : undefined,
+            amend: typeof args.amend === "boolean" ? args.amend : undefined,
+            dryRun: typeof args.dryRun === "boolean" ? args.dryRun : typeof args.check === "boolean" ? args.check : undefined,
           });
         } else if (toolName === "graft_task_test") {
           toolResult = await taskTest(repoRoot, {

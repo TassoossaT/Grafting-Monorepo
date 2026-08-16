@@ -86,6 +86,8 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
       files: readValues(argv, "--file"),
       coAuthors: readValues(argv, "--co-author"),
       agent: readValue(argv, "--agent"),
+      amend: argv.includes("--amend"),
+      dryRun: argv.includes("--dry-run") || argv.includes("--check"),
     };
   }
   if (subcommand === "test") {

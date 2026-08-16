@@ -823,13 +823,18 @@ export class GitWorktreeSession {
     /**
      * Commits the staged changes to the worktree's branch.
      * @param message The commit message.
+     * @param amend Whether to amend the previous commit.
      */
-    async commit(message: string): Promise<void> {
+    async commit(message: string, amend?: boolean): Promise<void> {
         // The -m flag can be tricky with special characters. Using a temporary file is safer.
         const tempMsgFile = path.join(this.worktreePath, `.git_commit_msg_${randomBytes(8).toString('hex')}`);
         await fs.writeFile(tempMsgFile, message);
         try {
-            await executeGit(['commit', '-F', tempMsgFile], this.worktreePath);
+            const commitArgs = ['commit', '-F', tempMsgFile];
+            if (amend) {
+                commitArgs.push('--amend');
+            }
+            await executeGit(commitArgs, this.worktreePath);
             await executeGit(['config', '--unset', `branch.${this.branchName}.ia-graft-sync-source`], this.worktreePath).catch(() => undefined);
         } finally {
             await fs.unlink(tempMsgFile);
