@@ -925,6 +925,8 @@ export interface ActionDockSubItem {
     readonly disabled?: boolean;
     /** Invoked when this sub-item is clicked. */
     readonly onClick?: () => void;
+    /** Optional caller-owned class name. */
+    readonly className?: string;
 }
 /** One primary category or tool action in the {@link ActionDock}. */
 export interface ActionDockItem {
@@ -948,22 +950,18 @@ export interface ActionDockItem {
     readonly onClick?: () => void;
     /** Optional sub-tools revealed above this button when it is active. */
     readonly subItems?: readonly ActionDockSubItem[];
+    /** Optional caller-owned class name. */
+    readonly className?: string;
 }
-/** Public props for the {@link ActionDock} bottom toolbar organism. */
+/** Public inputs for the generic {@link ActionDock} bottom toolbar organism. */
 export interface ActionDockProps {
-    /** Accessible name for the toolbar region. */
+    /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
     readonly ariaLabel?: string;
     /** Primary construction verbs / categories in display order. */
     readonly items: readonly ActionDockItem[];
-    /**
-     * Optional leading accessories rendered as floating icon buttons
-     * (e.g. undo/redo, camera navigation).
-     */
+    /** Optional leading accessories rendered alongside the items. */
     readonly leadingAccessories?: ReactNode;
-    /**
-     * Optional trailing accessories rendered as floating icon buttons
-     * (e.g. grid snap toggle, settings drawer toggle).
-     */
+    /** Optional trailing accessories rendered alongside the items. */
     readonly trailingAccessories?: ReactNode;
     /** Optional caller-owned class name applied to the outer wrapper. */
     readonly className?: string;
@@ -971,12 +969,14 @@ export interface ActionDockProps {
     readonly style?: CSSProperties;
 }
 /**
- * A floating bottom action dock inspired by Tiny Glade construction UI.
+ * A generic bottom action dock organism.
  *
- * Buttons are compact squares with a sketch/drawn aesthetic and a small
- * border-radius. Sub-tools expand upward directly above the parent button
- * (not centered). The parent button color changes when any child is active.
- * Each button is an independent floating element with no shared container.
+ * Renders an accessible toolbar of primary actions with optional expandable
+ * sub-action rows positioned horizontally above active items.
+ *
+ * All visual identity (theming, colors, glassmorphism, sketch styles) is owned
+ * by the consuming application via CSS classes (`.grafting-action-dock`,
+ * `.grafting-action-dock__item`, etc.).
  *
  * @layer organism
  * @status stable

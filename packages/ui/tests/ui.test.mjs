@@ -557,6 +557,9 @@ test("renders ActionDock with primary construction verbs and expandable sub-item
 
   assert.match(markup, /aria-label="Barra de Construção"/);
   assert.match(markup, /role="toolbar"/);
+  assert.match(markup, /class="[^"]*grafting-action-dock/);
+  assert.match(markup, /class="[^"]*grafting-action-dock__item/);
+  assert.match(markup, /data-active="true"/);
   assert.match(markup, /Edifício/);
   assert.match(markup, /Muro/);
   assert.match(markup, /Variações de ferramenta/);

@@ -604,12 +604,145 @@ h1 {
 @keyframes actionDockSlideUp {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateX(-50%) translateY(6px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(-50%) translateY(0) scale(1);
   }
+}
+
+/* ─── Tiny Glade Action Dock (VTT Bottom Construction Menu) ──────────────── */
+
+.grafting-action-dock {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  user-select: none;
+  z-index: 20;
+}
+
+.grafting-action-dock__items {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.grafting-action-dock__item-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.grafting-action-dock__sub-items {
+  position: absolute;
+  bottom: calc(100% + 0.4rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+  z-index: 30;
+  white-space: nowrap;
+  animation: actionDockSlideUp 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.grafting-action-dock__item,
+.grafting-action-dock__sub-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0.2rem;
+  border-radius: 0.45rem;
+  background: rgba(18, 24, 38, 0.78);
+  border: 1.5px solid rgba(255, 255, 255, 0.13);
+  color: rgba(200, 210, 225, 0.75);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.grafting-action-dock__item:hover:not(:disabled),
+.grafting-action-dock__sub-item:hover:not(:disabled) {
+  background: rgba(34, 44, 64, 0.88);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #e8f0fb;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  transform: translateY(-2px) scale(1.06);
+}
+
+.grafting-action-dock__item[data-active="true"],
+.grafting-action-dock__sub-item[data-active="true"] {
+  background: rgba(90, 160, 240, 0.22);
+  border-color: rgba(120, 180, 255, 0.60);
+  color: #8ec8ff;
+  box-shadow: 0 2px 14px rgba(100, 160, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.grafting-action-dock__item[data-child-active="true"] {
+  background: rgba(60, 120, 200, 0.18);
+  border-color: rgba(100, 160, 240, 0.45);
+  color: #7ab8f5;
+  box-shadow: 0 2px 10px rgba(80, 130, 220, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.grafting-action-dock__item:disabled,
+.grafting-action-dock__sub-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.grafting-action-dock__icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.grafting-action-dock__sub-item .grafting-action-dock__icon {
+  font-size: 1rem;
+}
+
+.grafting-action-dock__label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.grafting-action-dock__sub-item .grafting-action-dock__label {
+  font-size: 0.58rem;
+}
+
+.grafting-action-dock__shortcut {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.2rem;
+  font-size: 0.48rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.25);
+  line-height: 1;
+}
+
+.grafting-action-dock__item[data-active="true"] .grafting-action-dock__shortcut,
+.grafting-action-dock__sub-item[data-active="true"] .grafting-action-dock__shortcut {
+  color: #8ec8ff;
+}
+
+.grafting-action-dock__accessories {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 
