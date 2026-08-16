@@ -13,6 +13,7 @@ mod rect_tiling;
 mod room_grid;
 mod wall;
 
+pub use rect_tiling::{RectTile, generate_tiled_rooms};
 pub use room_grid::{RoomGridGeneration, RoomGridLayout, generate_room_grid};
 pub use wall::{
     DoorOpening, StructureGenerationError, StructurePiece, WallGeneration, WallNodeRole,

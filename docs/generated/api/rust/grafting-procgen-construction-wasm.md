@@ -30,6 +30,13 @@ Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
 
 Duplicates a surface. See `editing::apply_duplicate_surface`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_room_addition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Generates one new room's wall/floor/ceiling pieces, welding onto
+pre-existing geometry wherever a `weldCandidates` entry names it,
+and applies every piece. See
+`room_addition::generate_and_apply_room_addition`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_room_grid_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Generates a rectangular grid of walled, welded rooms (walls, doors,
@@ -63,6 +70,12 @@ Moves a node. See `editing::apply_move_node`.
 Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_room_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Removes a whole room (floor, ceiling, every bounding wall),
+preserving and door-stripping any side still shared with a
+standing neighbor. See `room_removal::remove_room`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_terrain_mesh(&mut self, width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<(), wasm_bindgen::JsValue>`
 

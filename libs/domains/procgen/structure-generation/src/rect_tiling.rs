@@ -83,6 +83,19 @@ fn corner_id(id_prefix: &str, x: f32, z: f32, top: bool) -> NodeId {
         .expect("formatted id is never empty")
 }
 
+/// Resolves one corner's id: `corner_override` first (a caller-supplied
+/// weld -- e.g. `VTT-HOUSE-INCREMENTAL-EDIT`'s room-addition welding a new
+/// tile's touching corners onto whatever nodes already exist at those
+/// positions), the default position-derived id otherwise. Keeping the
+/// override keyed on `(x, z, top)` rather than on the id this function
+/// would otherwise produce means a caller never has to replicate this
+/// crate's own id-formatting convention -- it only ever deals in
+/// positions and pre-existing ids, the same shape `wall-corner-weld.ts`'s
+/// live node query already produces.
+fn resolve_corner_id(id_prefix: &str, x: f32, z: f32, top: bool, corner_override: &impl Fn(f32, f32, bool) -> Option<NodeId>) -> NodeId {
+    corner_override(x, z, top).unwrap_or_else(|| corner_id(id_prefix, x, z, top))
+}
+
 fn corner_position(origin_y: f32, x: f32, z: f32) -> [f32; 3] {
     [x, origin_y, z]
 }
@@ -156,6 +169,7 @@ fn generate_run_wall(
     interior: bool,
     wall_type: &SurfaceType,
     door_type: &SurfaceType,
+    corner_override: &impl Fn(f32, f32, bool) -> Option<NodeId>,
 ) -> Vec<StructurePiece> {
     let wall = WallSegment { start, end, height: wall_height };
     let long_enough_for_a_door = (to - from).abs() >= MIN_DOOR_SEGMENT_WIDTH;
@@ -164,10 +178,10 @@ fn generate_run_wall(
 
     let node_id = |role: WallNodeRole| -> NodeId {
         match role {
-            WallNodeRole::StartBottom => corner_id(id_prefix, start[0], start[2], false),
-            WallNodeRole::StartTop => corner_id(id_prefix, start[0], start[2], true),
-            WallNodeRole::EndBottom => corner_id(id_prefix, end[0], end[2], false),
-            WallNodeRole::EndTop => corner_id(id_prefix, end[0], end[2], true),
+            WallNodeRole::StartBottom => resolve_corner_id(id_prefix, start[0], start[2], false, corner_override),
+            WallNodeRole::StartTop => resolve_corner_id(id_prefix, start[0], start[2], true, corner_override),
+            WallNodeRole::EndBottom => resolve_corner_id(id_prefix, end[0], end[2], false, corner_override),
+            WallNodeRole::EndTop => resolve_corner_id(id_prefix, end[0], end[2], true, corner_override),
             other => NodeId::new(format!(
                 "{id_prefix}:jamb:{line_axis}:{line_coordinate:.3}:{from:.3}:{to:.3}:{other:?}"
             ))
@@ -189,7 +203,11 @@ fn generate_run_wall(
 /// Derives every tile's wall/floor/ceiling pieces: one wall piece per
 /// maximal run along every interior or perimeter line the tiling
 /// produces (see the module doc for why a run can be shorter than a
-/// whole tile edge), and one floor + one ceiling per tile.
+/// whole tile edge), and one floor + one ceiling per tile. `corner_override`
+/// lets a caller weld specific corners onto pre-existing node ids instead
+/// of this crate's own position-derived default -- see
+/// [`resolve_corner_id`]. Pass `|_, _, _| None` for the common case (a
+/// fresh, unwelded tiling, e.g. `room_grid`'s whole-footprint generation).
 pub fn generate_tiled_rooms(
     tiles: &[RectTile],
     origin_y: f32,
@@ -199,6 +217,7 @@ pub fn generate_tiled_rooms(
     door_type: SurfaceType,
     floor_type: SurfaceType,
     ceiling_type: SurfaceType,
+    corner_override: impl Fn(f32, f32, bool) -> Option<NodeId>,
 ) -> RoomGridGeneration {
     let mut walls = Vec::new();
 
@@ -230,6 +249,7 @@ pub fn generate_tiled_rooms(
                 interior,
                 &wall_type,
                 &door_type,
+                &corner_override,
             ));
         }
     }
@@ -262,6 +282,7 @@ pub fn generate_tiled_rooms(
                 interior,
                 &wall_type,
                 &door_type,
+                &corner_override,
             ));
         }
     }
@@ -270,16 +291,16 @@ pub fn generate_tiled_rooms(
     let mut ceilings = Vec::with_capacity(tiles.len());
     for tile in tiles {
         let bottom_cycle = vec![
-            corner_id(id_prefix, tile.x, tile.z, false),
-            corner_id(id_prefix, tile.x1(), tile.z, false),
-            corner_id(id_prefix, tile.x1(), tile.z1(), false),
-            corner_id(id_prefix, tile.x, tile.z1(), false),
+            resolve_corner_id(id_prefix, tile.x, tile.z, false, &corner_override),
+            resolve_corner_id(id_prefix, tile.x1(), tile.z, false, &corner_override),
+            resolve_corner_id(id_prefix, tile.x1(), tile.z1(), false, &corner_override),
+            resolve_corner_id(id_prefix, tile.x, tile.z1(), false, &corner_override),
         ];
         let mut top_cycle = vec![
-            corner_id(id_prefix, tile.x, tile.z, true),
-            corner_id(id_prefix, tile.x1(), tile.z, true),
-            corner_id(id_prefix, tile.x1(), tile.z1(), true),
-            corner_id(id_prefix, tile.x, tile.z1(), true),
+            resolve_corner_id(id_prefix, tile.x, tile.z, true, &corner_override),
+            resolve_corner_id(id_prefix, tile.x1(), tile.z, true, &corner_override),
+            resolve_corner_id(id_prefix, tile.x1(), tile.z1(), true, &corner_override),
+            resolve_corner_id(id_prefix, tile.x, tile.z1(), true, &corner_override),
         ];
         top_cycle.reverse();
         floors.push(StructurePiece {
@@ -309,7 +330,7 @@ mod tests {
     fn a_single_tile_has_4_plain_walls_and_one_floor_and_ceiling() {
         let (wall_type, door_type, floor_type, ceiling_type) = types();
         let tiles = [RectTile { x: 0.0, z: 0.0, width: 4.0, depth: 4.0 }];
-        let generation = generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type);
+        let generation = generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type, |_, _, _| None);
 
         assert_eq!(generation.walls.len(), 4);
         assert_eq!(generation.floors.len(), 1);
@@ -324,7 +345,7 @@ mod tests {
             RectTile { x: 4.0, z: 0.0, width: 4.0, depth: 4.0 },
         ];
         let generation =
-            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type);
+            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type, |_, _, _| None);
 
         let left_floor = &generation.floors[0].surface.cycle;
         let right_floor = &generation.floors[1].surface.cycle;
@@ -352,7 +373,7 @@ mod tests {
             RectTile { x: 4.0, z: 4.0, width: 4.0, depth: 4.0 },
         ];
         let generation =
-            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type);
+            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type, |_, _, _| None);
 
         // The shared line at x=4 must split into two wall runs at z=4 --
         // the wide tile's own rectangle has no corner there (its corners
@@ -375,7 +396,7 @@ mod tests {
             RectTile { x: 4.0, z: 0.0, width: 4.0, depth: 0.5 },
         ];
         let generation =
-            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type);
+            generate_tiled_rooms(&tiles, 0.0, 3.0, "house-1", wall_type, door_type, floor_type, ceiling_type, |_, _, _| None);
         assert!(generation.walls.iter().all(|piece| piece.surface.surface_type != SurfaceType::new("door")));
     }
 }

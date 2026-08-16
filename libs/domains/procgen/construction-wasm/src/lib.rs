@@ -6,7 +6,9 @@
 mod dto;
 mod editing;
 mod mesh;
+mod room_addition;
 mod room_grid;
+mod room_removal;
 mod session;
 mod terrain;
 mod wall;

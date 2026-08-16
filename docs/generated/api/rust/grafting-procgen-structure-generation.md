@@ -19,6 +19,17 @@ namespaces every generated id, same role as `wall-corner-weld.ts`'s
 instead since this generator already knows its own full topology
 upfront once the treemap has run.
 
+### `pub fn grafting_procgen_structure_generation::generate_tiled_rooms(tiles: &[grafting_procgen_structure_generation::RectTile], origin_y: f32, wall_height: f32, id_prefix: &str, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType, floor_type: grafting_graph_core::surface::SurfaceType, ceiling_type: grafting_graph_core::surface::SurfaceType, corner_override: impl core::ops::function::Fn(f32, f32, bool) -> core::option::Option<grafting_graph_core::model::NodeId>) -> grafting_procgen_structure_generation::RoomGridGeneration`
+
+Derives every tile's wall/floor/ceiling pieces: one wall piece per
+maximal run along every interior or perimeter line the tiling
+produces (see the module doc for why a run can be shorter than a
+whole tile edge), and one floor + one ceiling per tile. `corner_override`
+lets a caller weld specific corners onto pre-existing node ids instead
+of this crate's own position-derived default -- see
+[`resolve_corner_id`]. Pass `|_, _, _| None` for the common case (a
+fresh, unwelded tiling, e.g. `room_grid`'s whole-footprint generation).
+
 ### `pub fn grafting_procgen_structure_generation::generate_wall(wall: &grafting_procgen_structure_generation::WallSegment, door: core::option::Option<&grafting_procgen_structure_generation::DoorOpening>, node_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::NodeId, edge_id: impl core::ops::function::Fn(grafting_procgen_structure_generation::WallNodeRole, grafting_procgen_structure_generation::WallNodeRole) -> grafting_graph_core::model::EdgeId, wall_type: grafting_graph_core::surface::SurfaceType, door_type: grafting_graph_core::surface::SurfaceType) -> core::result::Result<grafting_procgen_structure_generation::WallGeneration, grafting_procgen_structure_generation::StructureGenerationError>`
 
 Derives a wall's construction-surface node cycle(s), splitting around a
@@ -35,6 +46,22 @@ Fraction along the centerline where the opening ends.
 ### `pub grafting_procgen_structure_generation::DoorOpening::opens_at: f32`
 
 Fraction along the centerline where the opening begins.
+
+### `pub grafting_procgen_structure_generation::RectTile::depth: f32`
+
+This tile's extent along Z.
+
+### `pub grafting_procgen_structure_generation::RectTile::width: f32`
+
+This tile's extent along X.
+
+### `pub grafting_procgen_structure_generation::RectTile::x: f32`
+
+This tile's minimum corner along X.
+
+### `pub grafting_procgen_structure_generation::RectTile::z: f32`
+
+This tile's minimum corner along Z.
 
 ### `pub grafting_procgen_structure_generation::RoomGridGeneration::ceilings: alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>`
 
@@ -164,6 +191,15 @@ centerline. `opens_at` must be less than `closes_at`, both within
 `[0, 1]`. V1: the opening spans the wall's full height -- no lintel
 piece above it. A partial-height opening is a deliberate, documented
 follow-up.
+
+### `pub struct grafting_procgen_structure_generation::RectTile`
+
+One rectangular room's footprint, in the tiling's own ground plane
+(`x`/`z`, matching every other generator in this crate). `width` runs
+along `x`, `depth` runs along `z`. Must not overlap any other tile in
+the same call, and the full set must tile its bounding footprint with
+no gaps -- both are the caller's responsibility (e.g. `streemap`'s own
+contract), not validated here.
 
 ### `pub struct grafting_procgen_structure_generation::RoomGridGeneration`
 

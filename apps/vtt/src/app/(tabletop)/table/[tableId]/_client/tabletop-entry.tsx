@@ -51,6 +51,8 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "room-stamp": "Carimbo de Sala",
   "room-derive": "Derivar Sala",
   "house-stamp": "Carimbo de Casa",
+  "house-room-add": "Adicionar Cômodo",
+  "house-room-delete": "Apagar Cômodo",
   "irregular-terrain-stamp": "Terreno Irregular",
 };
 

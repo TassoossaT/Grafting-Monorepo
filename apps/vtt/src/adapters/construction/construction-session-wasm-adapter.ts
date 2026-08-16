@@ -15,9 +15,12 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  GenerateRoomAdditionRequest,
   GenerateRoomGridRequest,
   GenerateTerrainCellRequest,
   GenerateWallRequest,
+  RemoveRoomOutcome,
+  RemoveRoomRequest,
   RoomGridPiece,
   SurfaceMeshResult,
   WallPiece,
@@ -208,6 +211,38 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
     };
     return response.pieces;
+  }
+
+  generateRoomAddition(request: GenerateRoomAdditionRequest): readonly RoomGridPiece[] {
+    const wire = {
+      tile: request.tile,
+      originY: request.originY,
+      wallHeight: request.wallHeight,
+      idPrefix: request.idPrefix,
+      wallType: request.wallType,
+      doorType: request.doorType,
+      floorType: request.floorType,
+      ceilingType: request.ceilingType,
+      weldCandidates: request.weldCandidates ?? [],
+    };
+    const response = JSON.parse(this.#require().generate_and_apply_room_addition_json(JSON.stringify(wire))) as {
+      pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
+    };
+    return response.pieces;
+  }
+
+  removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome {
+    const wire = { bottomCycle: request.bottomCycle, topCycle: request.topCycle, wallType: request.wallType };
+    const response = JSON.parse(this.#require().remove_room_json(JSON.stringify(wire))) as {
+      removedSurfaceKeys: readonly (readonly string[])[];
+      preservedSurfaceKeys: readonly (readonly string[])[];
+      removedNodeIds: readonly string[];
+    };
+    return {
+      removedSurfaceKeys: response.removedSurfaceKeys,
+      preservedSurfaceKeys: response.preservedSurfaceKeys,
+      removedNodeIds: response.removedNodeIds,
+    };
   }
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult {
