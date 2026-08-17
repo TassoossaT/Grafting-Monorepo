@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   cellsInPolygon,
-  isCapSurface,
   isRedundantPerimeterWall,
 } from "../src/composition/tabletop/tools/interior-partition.ts";
 
@@ -44,22 +43,6 @@ test("cellsInPolygon excludes cells outside an irregular (non-rectangular) polyg
   const keys = new Set(cells.map((cell) => `${cell.x},${cell.z}`));
   assert.ok(!keys.has("1,1"), "the missing quadrant's own cell must not be included");
   assert.equal(keys.size, 3);
-});
-
-test("isCapSurface is true only when every node shares one Y", () => {
-  const ctx = contextWith([
-    ["floor:a", { position: { x: 0, y: 0, z: 0 } }],
-    ["floor:b", { position: { x: 2, y: 0, z: 0 } }],
-    ["floor:c", { position: { x: 2, y: 0, z: 2 } }],
-    ["floor:d", { position: { x: 0, y: 0, z: 2 } }],
-    ["wall:a-bottom", { position: { x: 0, y: 0, z: 0 } }],
-    ["wall:b-bottom", { position: { x: 2, y: 0, z: 0 } }],
-    ["wall:b-top", { position: { x: 2, y: 3, z: 0 } }],
-    ["wall:a-top", { position: { x: 0, y: 3, z: 0 } }],
-  ]);
-
-  assert.equal(isCapSurface(ctx, ["floor:a", "floor:b", "floor:c", "floor:d"]), true);
-  assert.equal(isCapSurface(ctx, ["wall:a-bottom", "wall:b-bottom", "wall:b-top", "wall:a-top"]), false);
 });
 
 test("isRedundantPerimeterWall keeps a genuine interior partition that spans wall-to-wall", () => {

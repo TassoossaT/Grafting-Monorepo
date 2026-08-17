@@ -2,7 +2,7 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { InteriorGenerateParams } from "@/features/edit-construction";
 
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
-import { cellsInPolygon, idPrefixForRoom, isCapSurface, isRedundantPerimeterWall } from "./interior-partition.ts";
+import { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall } from "./interior-partition.ts";
 import { findEnclosingRoom } from "./room-lookup.ts";
 import { WALL_HEIGHT } from "./wall-shared.ts";
 
@@ -23,27 +23,35 @@ const BOUNDARY_DUPLICATE_TOLERANCE_CELLS = 0.5;
 
 /**
  * One click inside an already-enclosed space (any shape, any number of
- * sides -- `findEnclosingRoom`'s own wall-follower algorithm) rasterizes
- * that footprint into a `cellSize` grid and hands it to
- * `generateRegionPartition` -- the same region-partition Rust algorithm
- * the retired "Pintar Casa" brush drove one painted cell at a time, now
- * driven by one click over an already-drawn footprint instead. A region
- * larger than `maxRegionCells` auto-splits into more than one room; the
- * same footprint reproduces the same layout for a given `seed`, so
- * clicking again after changing `seed`/`maxRegionCells` regenerates a
- * different one in place (see `idPrefixForRoom`). Every generated cap
- * (floor/ceiling) and every wall panel that only duplicates the room's own
- * existing boundary gets stripped back out client-side afterward -- see
- * `interior-partition.ts`'s own `isCapSurface`/`isRedundantPerimeterWall`
- * docs -- leaving only the genuine interior partition walls. A click
- * outside any enclosed space is a plain no-op.
+ * sides -- `findEnclosingRoom`'s own wall-follower algorithm, `"largest"`
+ * preference so a click still resolves to the structure's own outermost
+ * boundary even after it has already been subdivided once, not whatever
+ * smaller cell the click happens to land in) rasterizes that footprint
+ * into a `cellSize` grid and hands it to `generateRegionPartition` -- the
+ * same region-partition Rust algorithm the retired "Pintar Casa" brush
+ * drove one painted cell at a time, now driven by one click over an
+ * already-drawn footprint instead. A region larger than `maxRegionCells`
+ * auto-splits into more than one room; the same footprint reproduces the
+ * same layout for a given `seed` (see `idPrefixForRoom`), so clicking the
+ * same structure again after changing `seed`/`maxRegionCells` regenerates
+ * a different layout in place rather than stacking a duplicate. The
+ * engine's own floor/ceiling caps are NOT implemented as a front concept
+ * yet, but are not suppressed here either (`generate_and_apply_region_partition`
+ * has no opt-out for them -- see `apps/vtt/notes/0008-region-partition-needs-rework.md`,
+ * which is the tracked follow-up, not a job for this tool to patch around).
+ * Only wall panels that merely duplicate the room's own existing boundary
+ * (the algorithm always redraws its own outer perimeter, a rectilinear
+ * approximation of a possibly non-rectangular real boundary) get stripped
+ * back out client-side -- see `isRedundantPerimeterWall`'s own doc
+ * (`interior-partition.ts`). A click outside any enclosed space is a plain
+ * no-op.
  */
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   id: "interior-wall",
   defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
 
   onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
-    const room = findEnclosingRoom(ctx, sample.point);
+    const room = findEnclosingRoom(ctx, sample.point, "largest");
     if (room === undefined) return;
 
     const firstCorner = room.bottomCycle[0];
@@ -71,7 +79,7 @@ export const interiorWallTool: ConstructionTool<"interior-wall"> = {
 
     const tolerance = params.cellSize * BOUNDARY_DUPLICATE_TOLERANCE_CELLS;
     for (const surfaceKey of outcome.addedSurfaceKeys) {
-      if (!isCapSurface(ctx, surfaceKey) && !isRedundantPerimeterWall(ctx, surfaceKey, room.polygon, tolerance)) continue;
+      if (!isRedundantPerimeterWall(ctx, surfaceKey, room.polygon, tolerance)) continue;
       ctx.runtime.removeSurface({ surfaceKey }, "local", `${ctx.tableId}:interior-strip:${ctx.nextSequence()}`);
     }
   },

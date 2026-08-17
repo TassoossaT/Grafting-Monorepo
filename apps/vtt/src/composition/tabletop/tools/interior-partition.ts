@@ -82,15 +82,6 @@ export function idPrefixForRoom(tableId: string, bottomCycle: readonly Construct
   return `${tableId}:interior:${hashString([...bottomCycle].sort().join("|"))}`;
 }
 
-/** True if every one of `surfaceKey`'s nodes shares the same Y -- a cap (floor/ceiling), never a wall (whose 4 nodes always split 2-and-2 between a bottom and top Y). No floor/ceiling exists in this tool's scope yet, so any cap the engine generated gets stripped back out. */
-export function isCapSurface(ctx: ToolContext, surfaceKey: readonly ConstructionNodeId[]): boolean {
-  const map = ctx.runtime.getSnapshot().map;
-  const ys = surfaceKey.map((id) => map.nodePositions.get(id)?.position.y);
-  const [first, ...rest] = ys;
-  if (first === undefined) return false;
-  return rest.every((y) => y !== undefined && Math.abs(y - first) < 1e-3);
-}
-
 /**
  * True if a wall panel's own midpoint (between its two vertical posts, not
  * its 4 individual corners) sits within `tolerance` of the room's own true
