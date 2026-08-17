@@ -13,7 +13,6 @@ use wasm_bindgen::prelude::*;
 
 use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType};
 
-use crate::boundary_delete;
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::generation;
@@ -100,6 +99,23 @@ impl ConstructionSession {
         let response = editing::add_surface(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
         self.remember(&response.surface_key);
         serialize(&response)
+    }
+
+    /// Unregisters a surface outright -- no hole-repair, no cascading. See
+    /// `editing::remove_surface`.
+    pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue> {
+        let request: editing::RemoveSurfaceRequest = parse(request_json)?;
+        let key = request.surface_key.clone();
+        editing::remove_surface(&mut self.surfaces, request).map_err(to_js_error)?;
+        self.forget(&key);
+        Ok(())
+    }
+
+    /// Removes an edge outright -- no repair, no cascading. See
+    /// `editing::remove_edge`.
+    pub fn remove_edge_json(&mut self, request_json: &str) -> Result<(), JsValue> {
+        let request = parse(request_json)?;
+        editing::remove_edge(&mut self.graph, request).map_err(to_js_error)
     }
 
     // ---- The five construction.rs operations ----
@@ -252,21 +268,6 @@ impl ConstructionSession {
             self.forget(key);
         }
         for key in &response.added_surface_keys {
-            self.remember(key);
-        }
-        serialize(&response)
-    }
-
-    /// Removes a whole closed boundary (floor, ceiling, every bounding
-    /// side), preserving and notch-stripping any side still shared with a
-    /// standing neighbor. See `boundary_delete::delete_boundary`.
-    pub fn delete_boundary_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = boundary_delete::delete_boundary(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
-        for key in &response.removed_surface_keys {
-            self.forget(key);
-        }
-        for key in &response.preserved_surface_keys {
             self.remember(key);
         }
         serialize(&response)

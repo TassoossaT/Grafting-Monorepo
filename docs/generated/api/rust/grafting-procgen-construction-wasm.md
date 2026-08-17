@@ -24,12 +24,6 @@ The connected component of same-`type` surfaces reachable from
 `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
 `geometry::connected_component`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_boundary_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Removes a whole closed boundary (floor, ceiling, every bounding
-side), preserving and notch-stripping any side still shared with a
-standing neighbor. See `boundary_delete::delete_boundary`.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_node_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
@@ -91,6 +85,16 @@ Moves a node. See `editing::apply_move_node`.
 Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Removes an edge outright -- no repair, no cascading. See
+`editing::remove_edge`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Unregisters a surface outright -- no hole-repair, no cascading. See
+`editing::remove_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_terrain_mesh(&mut self, width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
