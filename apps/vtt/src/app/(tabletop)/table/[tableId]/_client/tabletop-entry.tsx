@@ -49,9 +49,6 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "move-node": "Arrastar Node 3D",
   "terrain-brush": "Pincel de Terreno",
   "wall-brush": "Pincel de Parede",
-  "room-stamp": "Carimbo de Sala",
-  "room-derive": "Derivar Sala",
-  "house-brush": "Pintar Casa",
   "house-room-delete": "Apagar Cômodo",
   "irregular-terrain-stamp": "Terreno Irregular",
 };

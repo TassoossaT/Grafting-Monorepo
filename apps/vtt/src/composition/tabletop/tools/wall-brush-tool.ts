@@ -4,23 +4,11 @@ import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
-/** Fixed wall height for a brush-drawn segment -- matches `room-seed.ts`'s own generated-room wall height range. */
+/** Fixed wall height for a brush-drawn segment. */
 const WALL_HEIGHT = 3;
 const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
 /** No curved edges from this tool yet -- reserved for a future arc-drawing gesture. Ignored by the engine while every edge is `"straight"`. */
 const ARC_FACETS = 12;
-/**
- * How close (XZ) a new click must land to the path's own first point before
- * it counts as closing the loop instead of extending it -- world units, half
- * a grid cell (`construction-grid-scene-item.ts`'s `MINOR_CELL_SIZE`).
- */
-const CLOSE_DISTANCE = 0.5;
-
-function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
-  const dx = a.x - b.x;
-  const dz = a.z - b.z;
-  return Math.hypot(dx, dz);
-}
 
 function pathEdges(points: readonly ConstructionPosition[]): readonly PathEdgeSpec[] {
   const edges: PathEdgeSpec[] = [];
@@ -35,20 +23,19 @@ function pathEdges(points: readonly ConstructionPosition[]): readonly PathEdgeSp
 
 /**
  * The in-progress pen stroke's own accumulated corner points -- lives for as
- * long as the wall-brush tool keeps drawing one continuous structure, the
- * same "dies with the gesture, cheap full resend" lifetime
- * `house-brush-tool.ts`'s own `activeSession` uses, except here the gesture
- * is a chain of clicks (`onClick`), not a drag.
+ * long as the wall-brush tool keeps drawing one continuous structure, dying
+ * only when the gesture itself ends (there is no forced closure -- see this
+ * tool's own doc).
  */
 let activePath: ConstructionPosition[] | undefined;
 
 /**
- * A single stable prefix for every wall-brush structure on this table --
- * unlike `house-brush-tool.ts`'s cell-grid ids, a wall path's corner ids are
- * derived purely from XZ position (`generate_wall_path`'s own doc), so two
- * separate loops sharing this one prefix still weld together for free
- * wherever their corners happen to coincide, without either loop needing to
- * know about the other -- "ligar casas" (E7's own wording) comes for free.
+ * A single stable prefix for every wall-brush structure on this table -- a
+ * wall's corner ids are derived purely from XZ position (`extrude_path`'s
+ * own doc), so two separate strokes sharing this one prefix still weld
+ * together for free wherever their corners happen to coincide, without
+ * either stroke needing to know about the other -- "ligar casas" (E7's own
+ * wording) comes for free.
  */
 function idPrefixFor(ctx: ToolContext): string {
   return `${ctx.tableId}:wall-brush`;
@@ -72,19 +59,14 @@ function commitPath(ctx: ToolContext, points: readonly ConstructionPosition[], p
 }
 
 /**
- * Click to place each corner of a continuous wall -- straight segments for
- * now (see `ARC_FACETS`'s own doc). Clicking back near the loop's own first
- * corner closes it, but closure gets no floor/ceiling of its own here: a
- * cap isn't implemented yet, and `generateBoundaryCap`'s own point-in-polygon
- * scoping has no surface-type filter -- capping this same `idPrefix` would
- * scope in every wall panel whose corners sit on the polygon's own boundary
- * (true for every panel this stroke just drew) and delete them as
- * "no longer part of the cap's own diff." A future cap step needs its own
- * scoping fix (or `generateRegionPartition`'s already-atomic wall+floor+ceiling
- * diff) before this tool can call it safely. Every tick resends the whole
- * path so far (`GeneratePathExtrusionRequest`'s own doc on why that's
- * cheap), so a stroke abandoned mid-loop leaves exactly the open fence it
- * already drew, nothing more.
+ * Click to place each corner of a wall -- straight segments for now (see
+ * `ARC_FACETS`'s own doc). Free-form on purpose: there is no notion of
+ * "closing a structure" here at all -- every click just extends the current
+ * stroke by one more segment, forever, and there is no floor/ceiling cap of
+ * any kind (not implemented yet; see `generateBoundaryCap`'s own doc for
+ * why bolting one onto this tool isn't safe today anyway). Every tick
+ * resends the whole path so far (`GeneratePathExtrusionRequest`'s own doc
+ * on why that's cheap).
  */
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
@@ -118,11 +100,10 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
     // whole stroke as `InconsistentBaseline`.
     const first = activePath[0];
     const point: ConstructionPosition = first === undefined ? sample.point : { ...sample.point, y: first.y };
-    const closing = first !== undefined && activePath.length >= 3 && xzDistance(point, first) <= CLOSE_DISTANCE;
-    const nextPoints = closing && first !== undefined ? [...activePath, first] : [...activePath, point];
+    const nextPoints = [...activePath, point];
 
     commitPath(ctx, nextPoints, params);
 
-    activePath = closing ? undefined : nextPoints;
+    activePath = nextPoints;
   },
 };

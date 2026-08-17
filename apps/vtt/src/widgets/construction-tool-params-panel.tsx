@@ -3,9 +3,7 @@
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   ConstructionToolId,
-  HouseBrushParams,
   IrregularTerrainParams,
-  RoomStampParams,
   TerrainBrushParams,
   ToolParamsByTool,
   WallBrushParams,
@@ -90,33 +88,6 @@ function WallBrushFields(props: {
   );
 }
 
-function RoomStampFields(props: {
-  readonly params: RoomStampParams;
-  readonly onChange: (next: RoomStampParams) => void;
-}) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Grau de construção", params.complexity, 0, 1, 0.05, (complexity) => onChange({ ...params, complexity }))}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
-    </div>
-  );
-}
-
-function HouseBrushFields(props: {
-  readonly params: HouseBrushParams;
-  readonly onChange: (next: HouseBrushParams) => void;
-}) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      {sliderRow("Tamanho da célula", params.cellSize, 1.5, 4, 0.5, (cellSize) => onChange({ ...params, cellSize }))}
-      {sliderRow("Máx. células por cômodo", params.maxRoomCells, 2, 16, 1, (maxRoomCells) => onChange({ ...params, maxRoomCells }))}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
-    </div>
-  );
-}
-
 function IrregularTerrainFields(props: {
   readonly params: IrregularTerrainParams;
   readonly onChange: (next: IrregularTerrainParams) => void;
@@ -156,8 +127,6 @@ function IrregularTerrainFields(props: {
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede",
-  "room-stamp": "Parâmetros: Sala",
-  "house-brush": "Parâmetros: Pintar Casa",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -177,8 +146,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Terreno, Parede, Sala, Pintar/Apagar Cômodo ou Terreno Irregular)
-          no hotbar para ajustar seus parâmetros.
+          Selecione uma ferramenta de construção (Terreno, Parede, Apagar Cômodo ou Terreno Irregular) no hotbar
+          para ajustar seus parâmetros.
         </p>
       </Card>
     );
@@ -195,10 +164,6 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         />
       ) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
-      ) : activeTool === "room-stamp" ? (
-        <RoomStampFields params={params["room-stamp"]} onChange={(next) => onParamsChange("room-stamp", next)} />
-      ) : activeTool === "house-brush" ? (
-        <HouseBrushFields params={params["house-brush"]} onChange={(next) => onParamsChange("house-brush", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

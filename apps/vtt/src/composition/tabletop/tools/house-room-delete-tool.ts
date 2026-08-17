@@ -4,10 +4,13 @@ import type { ConstructionTool, PointerSample, ToolContext } from "./tool-contex
 import { findEnclosingRoom, type DerivedRoom } from "./room-lookup.ts";
 
 /**
- * Every surface key belonging to `room`: its floor, its ceiling, and each
- * bounding wall panel (one per consecutive pair of `bottomCycle` corners,
- * plus that pair's own `topCycle` counterparts). There is no dedicated
- * "delete a room" primitive in the construction engine -- see
+ * Every bounding wall panel's surface key for `room` (one per consecutive
+ * pair of `bottomCycle` corners, plus that pair's own `topCycle`
+ * counterparts). No floor/ceiling key here -- nothing generates those yet
+ * (see `wall-brush-tool.ts`'s own note on why closing a loop caps
+ * nothing), and `removeSurface` throws on an unknown key, so including one
+ * would abort this whole click before any wall got removed. There is no
+ * dedicated "delete a room" primitive in the construction engine -- see
  * `editing::remove_surface`'s own doc -- so this is exactly the
  * composition the front is expected to do: know which surfaces make up
  * the room it just found, then remove each one outright. A wall panel
@@ -18,7 +21,7 @@ import { findEnclosingRoom, type DerivedRoom } from "./room-lookup.ts";
  * plain, unnotched room is this tool's only exercised path so far.
  */
 function roomSurfaceKeys(room: DerivedRoom): readonly ConstructionSurfaceKey[] {
-  const keys: ConstructionSurfaceKey[] = [room.bottomCycle, room.topCycle];
+  const keys: ConstructionSurfaceKey[] = [];
   for (let index = 0; index < room.bottomCycle.length; index += 1) {
     const nextIndex = (index + 1) % room.bottomCycle.length;
     const bottomA = room.bottomCycle[index];
@@ -32,13 +35,12 @@ function roomSurfaceKeys(room: DerivedRoom): readonly ConstructionSurfaceKey[] {
 }
 
 /**
- * Click inside a room and remove it whole -- floor, ceiling, and every
- * bounding wall. Reuses `findEnclosingRoom` (extracted from
- * `room-derive-tool.ts`) to turn a click into the room's own corner loop,
- * then removes each surface that loop implies through the engine's raw
- * `removeSurface` primitive -- one call per surface, no composite
- * "delete a room" call anywhere in the stack. See `roomSurfaceKeys`'s own
- * doc for what "every surface" covers.
+ * Click inside a room and remove every wall bounding it. Reuses
+ * `findEnclosingRoom` (`room-lookup.ts`) to turn a click into the room's
+ * own corner loop, then removes each wall panel that loop implies through
+ * the engine's raw `removeSurface` primitive -- one call per surface, no
+ * composite "delete a room" call anywhere in the stack. See
+ * `roomSurfaceKeys`'s own doc for what "every wall" covers.
  */
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   id: "house-room-delete",

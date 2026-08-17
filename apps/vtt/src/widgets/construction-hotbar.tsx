@@ -11,15 +11,12 @@ export interface ConstructionHotbarProps {
 
 const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
   { id: "terrain-brush", icon: "T", tooltip: "Pincel de Terreno (tecla T)" },
-  { id: "wall-brush", icon: "W", tooltip: "Pincel de Parede (arraste para desenhar, tecla P)" },
-  { id: "room-stamp", icon: "R", tooltip: "Carimbo de Sala (clique para gerar, tecla R)" },
-  { id: "room-derive", icon: "◻", tooltip: "Derivar Sala (clique dentro de paredes já fechadas)" },
+  { id: "wall-brush", icon: "W", tooltip: "Pincel de Parede (clique livremente, tecla P)" },
   { id: "irregular-terrain-stamp", icon: "◆", tooltip: "Pincel de Terreno Irregular (clique ou arraste, tecla I)" },
 ];
 
-/** The "Casa" branch's own children -- "Pintar Casa" replaced the old `house-stamp`/`house-room-add` pair with one continuous brush that decides itself whether to grow, split, or start a new room. */
+/** The "Casa" branch's own children. */
 const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "house-brush", icon: "H", tooltip: "Pintar Casa (arraste continuamente, o algoritmo divide em cômodos sozinho)" },
   { id: "house-room-delete", icon: "−", tooltip: "Apagar Cômodo (clique dentro de um cômodo)" },
   { id: "move-node", icon: "◇", tooltip: "Expandir Cômodo (arraste um canto -- mesma ferramenta de mover nó)" },
 ];

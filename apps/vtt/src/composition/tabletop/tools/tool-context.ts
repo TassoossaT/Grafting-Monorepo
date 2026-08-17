@@ -30,7 +30,7 @@ export interface ToolContext {
 /**
  * One construction tool's behavior, generic over its own parameter shape.
  * Every hook is optional -- a tool implements only the lifecycle stages it
- * actually uses (e.g. `room-stamp-tool.ts` has no `onPointerUp`, it commits
+ * actually uses (a click-only tool has no `onPointerUp`, it commits
  * on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
  * only caller and never branches on `id` -- it just invokes whichever hook
  * the active tool defines.
