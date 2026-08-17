@@ -18,6 +18,12 @@ Every currently-known surface's triangulated mesh, in stable key
 order -- the one bootstrap call a renderer uses to draw everything
 already in the session. See `mesh::all_surface_meshes`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cloud_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+The connected component of same-`type` surfaces reachable from
+`seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
+`geometry::connected_component`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_node_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
@@ -30,31 +36,37 @@ Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
 
 Duplicates a surface. See `editing::apply_duplicate_surface`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_cell_partition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Regenerates a painted cell set's whole partition (walls, doors,
-floors, ceilings) and applies only the difference against whatever
-this structure already holds -- the "Pintar Casa" tool's per-tick
-commit. See `cell_partition::generate_and_apply_cell_partition`.
+Regenerates one closed boundary's cap (a floor, a ceiling, or any
+other flat or per-vertex-height polygon) and applies only the
+difference against whatever this structure already holds. See
+`generation::generate_and_apply_boundary_cap`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_path_extrusion_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Regenerates a path's whole panel geometry (straight and
+semicircular-arc edges, with an optional single-edge notch) and
+applies only the difference against whatever this structure already
+holds -- the free-form path/wall brush's per-tick commit, and the
+generic replacement for a one-shot wall-with-door generation. Never
+generates a floor/ceiling itself. See
+`generation::generate_and_apply_path_extrusion`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_region_partition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Regenerates a painted cell set's whole region partition (every
+region's own per-cell floor/ceiling, and a wall -- notched where a
+run borders a different region -- along every boundary run) and
+applies only the difference against whatever this structure already
+holds -- the "Pintar Casa" tool's per-tick commit, and (once a
+wall-brush stroke's path closes) the wall-brush's own closure
+commit. See `generation::generate_and_apply_region_partition`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_terrain_cell_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Generates one terrain cell's surface and applies it. See
 `terrain::generate_and_apply_terrain_cell`.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_wall_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Generates a wall's (and its door's) surface pieces and applies them.
-See `wall::generate_and_apply_wall`.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_wall_path_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Regenerates a continuous wall-brush stroke's whole path (straight
-and semicircular-arc edges) and applies only the difference against
-whatever this structure already holds -- the free-form wall brush's
-per-tick commit. Once the path closes into a loop, a floor and
-ceiling are included too. See
-`wall_path::generate_and_apply_wall_path`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::into_abi(self) -> Self::Abi`
 
@@ -74,11 +86,15 @@ Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_room_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
-Removes a whole room (floor, ceiling, every bounding wall),
-preserving and door-stripping any side still shared with a
-standing neighbor. See `room_removal::remove_room`.
+Removes an edge outright -- no repair, no cascading. See
+`editing::remove_edge`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Unregisters a surface outright -- no hole-repair, no cascading. See
+`editing::remove_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_terrain_mesh(&mut self, width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<(), wasm_bindgen::JsValue>`
 

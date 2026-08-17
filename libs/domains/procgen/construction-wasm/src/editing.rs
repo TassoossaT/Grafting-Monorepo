@@ -108,6 +108,40 @@ pub fn add_surface(
     Ok(SurfaceKeyResponse { surface_key: surface_key_to_wire(&key) })
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveSurfaceRequest {
+    pub surface_key: Vec<String>,
+}
+
+/// Unregisters a surface outright -- no hole-repair, no cascading. A
+/// caller composing a bigger removal (an enclosed region, a whole
+/// structure) calls this once per surface it already knows belongs to
+/// that removal; there is no dedicated "delete a room" primitive in this
+/// crate, because that is nothing more than this operation applied to a
+/// caller-known set of surfaces plus [`remove_edge`]/`construction::delete_node`
+/// for whatever nodes end up unreferenced.
+pub fn remove_surface(surfaces: &mut SurfaceRegistry, request: RemoveSurfaceRequest) -> Result<(), String> {
+    let key = surface_key_from_wire(&request.surface_key)?;
+    surfaces.remove_surface(&key).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveEdgeRequest {
+    pub edge_id: String,
+}
+
+/// Removes an edge outright -- no repair, no cascading. See
+/// [`remove_surface`]'s own doc: this and `construction::delete_node` are
+/// the raw primitives a caller composes any bigger removal from.
+pub fn remove_edge(graph: &mut SessionGraph, request: RemoveEdgeRequest) -> Result<(), String> {
+    let id = EdgeId::new(request.edge_id).map_err(|error| error.to_string())?;
+    graph.remove_edge(&id).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 // ---- The five construction.rs operations ----
 
 #[derive(Debug, Deserialize)]
@@ -304,6 +338,52 @@ mod tests {
         let mut key = response.surface_key;
         key.sort();
         assert_eq!(key, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    }
+
+    #[test]
+    fn remove_surface_unregisters_it_without_touching_the_graph() {
+        let mut graph = empty_graph();
+        add(&mut graph, "a", [0.0, 0.0, 0.0]);
+        add(&mut graph, "b", [1.0, 0.0, 0.0]);
+        add(&mut graph, "c", [0.0, 1.0, 0.0]);
+        edge(&mut graph, "ab", "a", "b");
+        edge(&mut graph, "bc", "b", "c");
+        edge(&mut graph, "ca", "c", "a");
+        let mut surfaces = SurfaceRegistry::new();
+        add_surface(&graph, &mut surfaces, SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "wall".into(), physical: true }).unwrap();
+
+        remove_surface(&mut surfaces, RemoveSurfaceRequest { surface_key: vec!["a".into(), "b".into(), "c".into()] }).unwrap();
+
+        assert!(surfaces.surfaces_referencing(&NodeId::new("a").unwrap()).next().is_none());
+        assert!(graph.node(&NodeId::new("a").unwrap()).is_some(), "removing a surface never touches its nodes");
+    }
+
+    #[test]
+    fn remove_surface_rejects_an_unknown_key() {
+        let mut surfaces = SurfaceRegistry::new();
+        let error = remove_surface(&mut surfaces, RemoveSurfaceRequest { surface_key: vec!["missing".into()] }).unwrap_err();
+        assert!(!error.is_empty());
+    }
+
+    #[test]
+    fn remove_edge_removes_it_without_touching_its_endpoints() {
+        let mut graph = empty_graph();
+        add(&mut graph, "a", [0.0, 0.0, 0.0]);
+        add(&mut graph, "b", [1.0, 0.0, 0.0]);
+        edge(&mut graph, "ab", "a", "b");
+
+        remove_edge(&mut graph, RemoveEdgeRequest { edge_id: "ab".into() }).unwrap();
+
+        assert!(graph.edge(&EdgeId::new("ab").unwrap()).is_none());
+        assert!(graph.node(&NodeId::new("a").unwrap()).is_some());
+        assert!(graph.node(&NodeId::new("b").unwrap()).is_some());
+    }
+
+    #[test]
+    fn remove_edge_rejects_an_unknown_id() {
+        let mut graph = empty_graph();
+        let error = remove_edge(&mut graph, RemoveEdgeRequest { edge_id: "missing".into() }).unwrap_err();
+        assert!(!error.is_empty());
     }
 
     #[test]
