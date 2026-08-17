@@ -17,9 +17,16 @@
 //! An arc edge never gets intermediate *path* vertices of its own -- it
 //! stays one [`PathEdge`] with an [`EdgeCurvature::Semicircle`] tag, the
 //! same way a straight run stays one edge regardless of length. The
-//! `arc_facets` tessellation this module derives from that one edge is a
-//! meshing detail (position-derived corner nodes), never fed back into the
-//! caller's own path/control-point model.
+//! `arc_facets` tessellation this module derives from that one edge stays a
+//! meshing detail too: a curved edge extrudes into exactly one
+//! [`StructurePiece`] (an `2 * (arc_facets + 1)`-node ring), never one piece
+//! per facet -- every downstream consumer (a redundant-perimeter filter, a
+//! wall-follower tracing a room's own boundary, a notch, `removeSurface`)
+//! already treats "one wall run" as one `Surface`, and slicing a curve into
+//! many separate small `Surface`s made every one of those boundaries a seam
+//! a caller could observe (and mis-treat as its own opening or its own
+//! candidate for redundant-duplicate stripping) instead of the curve
+//! reading as the single object it visually is.
 //!
 //! Every corner this module mints is position-derived via
 //! [`crate::ids::corner_id`], the same helper [`crate::region_partition`]
@@ -195,13 +202,13 @@ fn validate(edges: &[PathEdge], arc_facets: usize) -> Result<(), ExtrusionError>
     Ok(())
 }
 
-/// Tessellates one semicircular edge into `arc_facets` straight chords,
-/// `(from, to)` pairs covering `start` to `end` in order. The first pair's
-/// `from` and the last pair's `to` are forced to the exact input
-/// `start`/`end` (not just approximately equal after the trig round-trip),
-/// so a tessellated arc's own endpoints weld byte-identically with
-/// whatever straight edge or other arc shares that same path vertex.
-fn tessellate_semicircle(start: [f32; 3], end: [f32; 3], bulge: ArcBulge, arc_facets: usize) -> Vec<([f32; 3], [f32; 3])> {
+/// Tessellates one semicircular edge into the `arc_facets + 1` points of its
+/// own polyline, `start` to `end` in order. The first and last points are
+/// forced to the exact input `start`/`end` (not just approximately equal
+/// after the trig round-trip), so a tessellated arc's own endpoints weld
+/// byte-identically with whatever straight edge or other arc shares that
+/// same path vertex.
+fn tessellate_semicircle_points(start: [f32; 3], end: [f32; 3], bulge: ArcBulge, arc_facets: usize) -> Vec<[f32; 3]> {
     let y = start[1];
     let (sx, sz) = (start[0], start[2]);
     let (ex, ez) = (end[0], end[2]);
@@ -231,15 +238,7 @@ fn tessellate_semicircle(start: [f32; 3], end: [f32; 3], bulge: ArcBulge, arc_fa
         let z = mz + radius * theta.cos() * uz + sign * radius * theta.sin() * nz;
         points.push([x, y, z]);
     }
-
-    points.windows(2).map(|pair| (pair[0], pair[1])).collect()
-}
-
-fn straight_sub_segments(edge: &PathEdge, arc_facets: usize) -> Vec<([f32; 3], [f32; 3])> {
-    match edge.curvature {
-        EdgeCurvature::Straight => vec![(edge.start, edge.end)],
-        EdgeCurvature::Semicircle(bulge) => tessellate_semicircle(edge.start, edge.end, bulge, arc_facets),
-    }
+    points
 }
 
 /// One flat panel between `from` and `to` (both at the path's baseline Y),
@@ -262,6 +261,36 @@ fn quad_piece(id_prefix: &str, from: [f32; 3], to: [f32; 3], height: f32, surfac
         edges.push(Edge::new(edge_id, ids[index].clone(), ids[next].clone(), ()));
     }
     StructurePiece { nodes, edges, surface: SurfaceSpec { cycle: ids.to_vec(), surface_type, physical: true } }
+}
+
+/// One curved panel spanning every point of an already-tessellated polyline
+/// (`points[0]` through `points[points.len() - 1]`, both at the path's
+/// baseline Y), rising `height` above it -- the ring generalization of
+/// [`quad_piece`] (a straight edge's two-point polyline *is* the
+/// `points.len() == 2` case of this same construction: bottom row in order,
+/// top row reversed, so the two share one winding convention). One
+/// `StructurePiece`, one `Surface`, regardless of how many facets the arc
+/// was tessellated into -- see this module's own top-level doc for why that
+/// matters to every other tool that treats "one wall run" as "one
+/// `Surface`."
+fn ring_piece(id_prefix: &str, points: &[[f32; 3]], height: f32, surface_type: SurfaceType) -> StructurePiece {
+    let bottom_ids: Vec<_> = points.iter().map(|point| corner_id(id_prefix, point[0], point[2], false)).collect();
+    let top_ids: Vec<_> = points.iter().map(|point| corner_id(id_prefix, point[0], point[2], true)).collect();
+
+    let mut ids = bottom_ids.clone();
+    ids.extend(top_ids.iter().rev().cloned());
+
+    let mut nodes: Vec<Node<[f32; 3]>> = Vec::with_capacity(ids.len());
+    nodes.extend(bottom_ids.iter().cloned().zip(points.iter().copied()).map(|(id, point)| Node::new(id, point)));
+    nodes.extend(top_ids.iter().cloned().zip(points.iter().copied()).rev().map(|(id, point)| Node::new(id, [point[0], point[1] + height, point[2]])));
+
+    let mut edges = Vec::with_capacity(ids.len());
+    for index in 0..ids.len() {
+        let next = (index + 1) % ids.len();
+        let edge_id = EdgeId::new(format!("{}:{}", ids[index].as_str(), ids[next].as_str())).expect("formatted id is never empty");
+        edges.push(Edge::new(edge_id, ids[index].clone(), ids[next].clone(), ()));
+    }
+    StructurePiece { nodes, edges, surface: SurfaceSpec { cycle: ids, surface_type, physical: true } }
 }
 
 fn position_along(edge: &PathEdge, fraction: f32) -> [f32; 3] {
@@ -331,11 +360,16 @@ pub fn extrude_path(
         return Ok(notched_pieces(id_prefix, &edges[0], height, notch, surface_type));
     }
 
-    let mut pieces = Vec::new();
+    let mut pieces = Vec::with_capacity(edges.len());
     for edge in edges {
-        for (from, to) in straight_sub_segments(edge, arc_facets) {
-            pieces.push(quad_piece(id_prefix, from, to, height, surface_type.clone()));
-        }
+        let piece = match edge.curvature {
+            EdgeCurvature::Straight => quad_piece(id_prefix, edge.start, edge.end, height, surface_type.clone()),
+            EdgeCurvature::Semicircle(bulge) => {
+                let points = tessellate_semicircle_points(edge.start, edge.end, bulge, arc_facets);
+                ring_piece(id_prefix, &points, height, surface_type.clone())
+            }
+        };
+        pieces.push(piece);
     }
     Ok(pieces)
 }
@@ -388,12 +422,33 @@ mod tests {
     }
 
     #[test]
-    fn a_semicircle_edge_tessellates_into_arc_facets_pieces_with_endpoints_snapped_exactly() {
+    fn a_semicircle_edge_extrudes_into_one_ring_piece_with_endpoints_snapped_exactly() {
         let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: EdgeCurvature::Semicircle(ArcBulge::Left) }];
         let pieces = extrude_path(&edges, 3.0, None, 6, "arc-1", surface_type()).unwrap();
-        assert_eq!(pieces.len(), 6);
-        assert_eq!(*pieces[0].nodes[0].data(), [0.0, 0.0, 0.0]);
-        assert_eq!(*pieces.last().unwrap().nodes[1].data(), [4.0, 0.0, 0.0]);
+        assert_eq!(pieces.len(), 1, "one curved edge must extrude into exactly one Surface, not one per facet");
+        let piece = &pieces[0];
+        // 6 facets -> 7 points on the bottom ring, 7 mirrored on top -> 14 nodes total.
+        assert_eq!(piece.nodes.len(), 14);
+        assert_eq!(*piece.nodes[0].data(), [0.0, 0.0, 0.0], "the ring's first bottom node is the edge's own start");
+        assert_eq!(*piece.nodes[6].data(), [4.0, 0.0, 0.0], "the ring's last bottom node is the edge's own end");
+        assert_eq!(*piece.nodes[7].data(), [4.0, 3.0, 0.0], "the top ring starts back at the end, mirrored at height");
+        assert_eq!(*piece.nodes[13].data(), [0.0, 3.0, 0.0], "the top ring closes back at the start, mirrored at height");
+    }
+
+    /// A curved edge chained after a straight one in the same multi-edge
+    /// path still extrudes into two separate pieces (one per edge) -- the
+    /// single-`Surface`-per-curve fix only collapses a curve's own internal
+    /// facets, it does not fuse distinct edges of one path together.
+    #[test]
+    fn a_straight_edge_followed_by_a_curve_extrudes_into_two_pieces() {
+        let edges = [
+            straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]),
+            PathEdge { start: [4.0, 0.0, 0.0], end: [4.0, 0.0, 4.0], curvature: EdgeCurvature::Semicircle(ArcBulge::Left) },
+        ];
+        let pieces = extrude_path(&edges, 3.0, None, 4, "mixed-1", surface_type()).unwrap();
+        assert_eq!(pieces.len(), 2);
+        assert_eq!(pieces[0].nodes.len(), 4);
+        assert_eq!(pieces[1].nodes.len(), 10);
     }
 
     #[test]
