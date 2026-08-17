@@ -12,6 +12,7 @@ mod construction;
 mod layout;
 mod model;
 mod surface;
+mod transformation_plan;
 
 pub use construction::{
     ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceSpec, delete_node, duplicate_surface,
@@ -24,3 +25,7 @@ pub use model::{
 };
 pub use surface::{ArcBulge, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
 
+pub use transformation_plan::{
+    IdentityDelta, LocalInvalidationScope, PlanIdentityKind, TransformationPlan,
+    TransformationPlanFailure,
+};

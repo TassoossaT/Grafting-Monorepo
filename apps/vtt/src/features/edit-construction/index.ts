@@ -29,3 +29,13 @@ export type {
   TowerStampParams,
   WallBrushParams,
 } from "./tool-types.ts";
+export { createPathBrushEffect } from "./surface-edit-contract.ts";
+export type {
+  BrushGestureRegion,
+  BrushGestureSample,
+  BrushShape,
+  PathBrushEffect,
+  PathFormationParameters,
+  SurfaceEditModeDefinition,
+  SurfaceEditTargetScope,
+} from "./surface-edit-contract.ts";

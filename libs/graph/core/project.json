@@ -69,6 +69,7 @@
         "{projectRoot}/src/lib.rs",
         "{projectRoot}/src/layout.rs",
         "{projectRoot}/src/model.rs",
+        "{projectRoot}/src/transformation_plan.rs",
         "{projectRoot}/tests/public_api_contract.rs",
         "{projectRoot}/tests/public_api_snapshot.rs",
         "{projectRoot}/tests/snapshots/public-api.txt",

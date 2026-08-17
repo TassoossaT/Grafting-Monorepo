@@ -8,6 +8,24 @@ Documentation policy: `#![deny(missing_docs)]`
 
 ```text
 pub mod grafting_graph_core
+pub enum grafting_graph_core::ArcBulge
+pub grafting_graph_core::ArcBulge::Left
+pub grafting_graph_core::ArcBulge::Right
+impl core::clone::Clone for grafting_graph_core::ArcBulge
+pub fn grafting_graph_core::ArcBulge::clone(&self) -> grafting_graph_core::ArcBulge
+impl core::cmp::Eq for grafting_graph_core::ArcBulge
+impl core::cmp::PartialEq for grafting_graph_core::ArcBulge
+pub fn grafting_graph_core::ArcBulge::eq(&self, other: &grafting_graph_core::ArcBulge) -> bool
+impl core::fmt::Debug for grafting_graph_core::ArcBulge
+pub fn grafting_graph_core::ArcBulge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::ArcBulge
+impl core::marker::StructuralPartialEq for grafting_graph_core::ArcBulge
+impl core::marker::Freeze for grafting_graph_core::ArcBulge
+impl core::marker::Send for grafting_graph_core::ArcBulge
+impl core::marker::Sync for grafting_graph_core::ArcBulge
+impl core::marker::Unpin for grafting_graph_core::ArcBulge
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::ArcBulge
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::ArcBulge
 pub enum grafting_graph_core::ConstructionError
 pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
 pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
@@ -144,6 +162,25 @@ impl core::marker::Sync for grafting_graph_core::LayoutError
 impl core::marker::Unpin for grafting_graph_core::LayoutError
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LayoutError
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LayoutError
+pub enum grafting_graph_core::PlanIdentityKind
+pub grafting_graph_core::PlanIdentityKind::Edge
+pub grafting_graph_core::PlanIdentityKind::Node
+pub grafting_graph_core::PlanIdentityKind::Surface
+impl core::clone::Clone for grafting_graph_core::PlanIdentityKind
+pub fn grafting_graph_core::PlanIdentityKind::clone(&self) -> grafting_graph_core::PlanIdentityKind
+impl core::cmp::Eq for grafting_graph_core::PlanIdentityKind
+impl core::cmp::PartialEq for grafting_graph_core::PlanIdentityKind
+pub fn grafting_graph_core::PlanIdentityKind::eq(&self, other: &grafting_graph_core::PlanIdentityKind) -> bool
+impl core::fmt::Debug for grafting_graph_core::PlanIdentityKind
+pub fn grafting_graph_core::PlanIdentityKind::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::PlanIdentityKind
+impl core::marker::StructuralPartialEq for grafting_graph_core::PlanIdentityKind
+impl core::marker::Freeze for grafting_graph_core::PlanIdentityKind
+impl core::marker::Send for grafting_graph_core::PlanIdentityKind
+impl core::marker::Sync for grafting_graph_core::PlanIdentityKind
+impl core::marker::Unpin for grafting_graph_core::PlanIdentityKind
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::PlanIdentityKind
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::PlanIdentityKind
 pub enum grafting_graph_core::SurfaceError
 pub grafting_graph_core::SurfaceError::DuplicateSurface
 pub grafting_graph_core::SurfaceError::DuplicateSurface::key: grafting_graph_core::SurfaceKey
@@ -171,6 +208,25 @@ impl core::marker::Sync for grafting_graph_core::SurfaceError
 impl core::marker::Unpin for grafting_graph_core::SurfaceError
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceError
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceError
+pub enum grafting_graph_core::TransformationPlanFailure
+pub grafting_graph_core::TransformationPlanFailure::EmptyInvalidationScope
+pub grafting_graph_core::TransformationPlanFailure::NoChanges
+pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates
+pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates::kind: grafting_graph_core::PlanIdentityKind
+impl core::clone::Clone for grafting_graph_core::TransformationPlanFailure
+pub fn grafting_graph_core::TransformationPlanFailure::clone(&self) -> grafting_graph_core::TransformationPlanFailure
+impl core::cmp::Eq for grafting_graph_core::TransformationPlanFailure
+impl core::cmp::PartialEq for grafting_graph_core::TransformationPlanFailure
+pub fn grafting_graph_core::TransformationPlanFailure::eq(&self, other: &grafting_graph_core::TransformationPlanFailure) -> bool
+impl core::fmt::Debug for grafting_graph_core::TransformationPlanFailure
+pub fn grafting_graph_core::TransformationPlanFailure::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::TransformationPlanFailure
+impl core::marker::Freeze for grafting_graph_core::TransformationPlanFailure
+impl core::marker::Send for grafting_graph_core::TransformationPlanFailure
+impl core::marker::Sync for grafting_graph_core::TransformationPlanFailure
+impl core::marker::Unpin for grafting_graph_core::TransformationPlanFailure
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::TransformationPlanFailure
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::TransformationPlanFailure
 pub struct grafting_graph_core::DeleteOutcome<N>
 pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>
 pub grafting_graph_core::DeleteOutcome::removed_node: grafting_graph_core::Node<N>
@@ -332,6 +388,28 @@ impl core::marker::Sync for grafting_graph_core::GroupedGridOptions
 impl core::marker::Unpin for grafting_graph_core::GroupedGridOptions
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::GroupedGridOptions
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::GroupedGridOptions
+pub struct grafting_graph_core::IdentityDelta<I>
+impl<I: core::cmp::Ord> grafting_graph_core::IdentityDelta<I>
+pub fn grafting_graph_core::IdentityDelta<I>::created(&self) -> &alloc::collections::btree::set::BTreeSet<I>
+pub fn grafting_graph_core::IdentityDelta<I>::is_empty(&self) -> bool
+pub fn grafting_graph_core::IdentityDelta<I>::new(kind: grafting_graph_core::PlanIdentityKind, created: alloc::collections::btree::set::BTreeSet<I>, preserved: alloc::collections::btree::set::BTreeSet<I>, replaced: alloc::collections::btree::set::BTreeSet<I>, removed: alloc::collections::btree::set::BTreeSet<I>) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>
+pub fn grafting_graph_core::IdentityDelta<I>::preserved(&self) -> &alloc::collections::btree::set::BTreeSet<I>
+pub fn grafting_graph_core::IdentityDelta<I>::removed(&self) -> &alloc::collections::btree::set::BTreeSet<I>
+pub fn grafting_graph_core::IdentityDelta<I>::replaced(&self) -> &alloc::collections::btree::set::BTreeSet<I>
+impl<I: core::clone::Clone> core::clone::Clone for grafting_graph_core::IdentityDelta<I>
+pub fn grafting_graph_core::IdentityDelta<I>::clone(&self) -> grafting_graph_core::IdentityDelta<I>
+impl<I: core::cmp::Eq> core::cmp::Eq for grafting_graph_core::IdentityDelta<I>
+impl<I: core::cmp::PartialEq> core::cmp::PartialEq for grafting_graph_core::IdentityDelta<I>
+pub fn grafting_graph_core::IdentityDelta<I>::eq(&self, other: &grafting_graph_core::IdentityDelta<I>) -> bool
+impl<I: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::IdentityDelta<I>
+pub fn grafting_graph_core::IdentityDelta<I>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<I> core::marker::StructuralPartialEq for grafting_graph_core::IdentityDelta<I>
+impl<I> core::marker::Freeze for grafting_graph_core::IdentityDelta<I>
+impl<I> core::marker::Send for grafting_graph_core::IdentityDelta<I> where I: core::marker::Send
+impl<I> core::marker::Sync for grafting_graph_core::IdentityDelta<I> where I: core::marker::Sync
+impl<I> core::marker::Unpin for grafting_graph_core::IdentityDelta<I>
+impl<I> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::IdentityDelta<I> where I: core::panic::unwind_safe::RefUnwindSafe
+impl<I> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::IdentityDelta<I> where I: core::panic::unwind_safe::RefUnwindSafe
 pub struct grafting_graph_core::LayoutPosition
 impl grafting_graph_core::LayoutPosition
 pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId
@@ -371,6 +449,29 @@ impl core::marker::Sync for grafting_graph_core::LayoutSnapshot
 impl core::marker::Unpin for grafting_graph_core::LayoutSnapshot
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LayoutSnapshot
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LayoutSnapshot
+pub struct grafting_graph_core::LocalInvalidationScope
+impl grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::LocalInvalidationScope::changed_surfaces(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>
+pub fn grafting_graph_core::LocalInvalidationScope::direct_dependencies(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>
+pub fn grafting_graph_core::LocalInvalidationScope::is_empty(&self) -> bool
+pub fn grafting_graph_core::LocalInvalidationScope::new(changed_surfaces: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, topology_repair_neighbors: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, direct_dependencies: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>) -> Self
+pub fn grafting_graph_core::LocalInvalidationScope::topology_repair_neighbors(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>
+impl core::clone::Clone for grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::LocalInvalidationScope::clone(&self) -> grafting_graph_core::LocalInvalidationScope
+impl core::cmp::Eq for grafting_graph_core::LocalInvalidationScope
+impl core::cmp::PartialEq for grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::LocalInvalidationScope::eq(&self, other: &grafting_graph_core::LocalInvalidationScope) -> bool
+impl core::default::Default for grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::LocalInvalidationScope::default() -> grafting_graph_core::LocalInvalidationScope
+impl core::fmt::Debug for grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::LocalInvalidationScope::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::LocalInvalidationScope
+impl core::marker::Freeze for grafting_graph_core::LocalInvalidationScope
+impl core::marker::Send for grafting_graph_core::LocalInvalidationScope
+impl core::marker::Sync for grafting_graph_core::LocalInvalidationScope
+impl core::marker::Unpin for grafting_graph_core::LocalInvalidationScope
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::LocalInvalidationScope
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::LocalInvalidationScope
 pub struct grafting_graph_core::Node<N>
 impl<N> grafting_graph_core::Node<N>
 pub fn grafting_graph_core::Node<N>::data(&self) -> &N
@@ -446,12 +547,12 @@ impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::PrismGridM
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::PrismGridMesh
 pub struct grafting_graph_core::Surface
 impl grafting_graph_core::Surface
+pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>
 pub fn grafting_graph_core::Surface::cycle(&self) -> &[grafting_graph_core::NodeId]
 pub fn grafting_graph_core::Surface::physical(&self) -> bool
 pub fn grafting_graph_core::Surface::surface_type(&self) -> &grafting_graph_core::SurfaceType
 impl core::clone::Clone for grafting_graph_core::Surface
 pub fn grafting_graph_core::Surface::clone(&self) -> grafting_graph_core::Surface
-impl core::cmp::Eq for grafting_graph_core::Surface
 impl core::cmp::PartialEq for grafting_graph_core::Surface
 pub fn grafting_graph_core::Surface::eq(&self, other: &grafting_graph_core::Surface) -> bool
 impl core::fmt::Debug for grafting_graph_core::Surface
@@ -463,6 +564,24 @@ impl core::marker::Sync for grafting_graph_core::Surface
 impl core::marker::Unpin for grafting_graph_core::Surface
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::Surface
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::Surface
+pub struct grafting_graph_core::SurfaceCurvature
+pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge
+pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]
+pub grafting_graph_core::SurfaceCurvature::facets: usize
+impl core::clone::Clone for grafting_graph_core::SurfaceCurvature
+pub fn grafting_graph_core::SurfaceCurvature::clone(&self) -> grafting_graph_core::SurfaceCurvature
+impl core::cmp::PartialEq for grafting_graph_core::SurfaceCurvature
+pub fn grafting_graph_core::SurfaceCurvature::eq(&self, other: &grafting_graph_core::SurfaceCurvature) -> bool
+impl core::fmt::Debug for grafting_graph_core::SurfaceCurvature
+pub fn grafting_graph_core::SurfaceCurvature::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::SurfaceCurvature
+impl core::marker::StructuralPartialEq for grafting_graph_core::SurfaceCurvature
+impl core::marker::Freeze for grafting_graph_core::SurfaceCurvature
+impl core::marker::Send for grafting_graph_core::SurfaceCurvature
+impl core::marker::Sync for grafting_graph_core::SurfaceCurvature
+impl core::marker::Unpin for grafting_graph_core::SurfaceCurvature
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceCurvature
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceCurvature
 pub struct grafting_graph_core::SurfaceKey(_)
 impl grafting_graph_core::SurfaceKey
 pub fn grafting_graph_core::SurfaceKey::from_cycle(cycle: &[grafting_graph_core::NodeId]) -> Self
@@ -492,6 +611,7 @@ impl grafting_graph_core::SurfaceRegistry
 pub fn grafting_graph_core::SurfaceRegistry::add_surface<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, cycle: alloc::vec::Vec<grafting_graph_core::NodeId>, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::new() -> Self
 pub fn grafting_graph_core::SurfaceRegistry::remove_surface(&mut self, key: &grafting_graph_core::SurfaceKey) -> core::result::Result<grafting_graph_core::Surface, grafting_graph_core::SurfaceError>
+pub fn grafting_graph_core::SurfaceRegistry::set_curvature(&mut self, key: &grafting_graph_core::SurfaceKey, curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>) -> core::result::Result<(), grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::set_type(&mut self, key: &grafting_graph_core::SurfaceKey, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::surface(&self, key: &grafting_graph_core::SurfaceKey) -> core::option::Option<&grafting_graph_core::Surface>
@@ -507,12 +627,12 @@ impl core::marker::Unpin for grafting_graph_core::SurfaceRegistry
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceRegistry
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceRegistry
 pub struct grafting_graph_core::SurfaceSpec
+pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>
 pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>
 pub grafting_graph_core::SurfaceSpec::physical: bool
 pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType
 impl core::clone::Clone for grafting_graph_core::SurfaceSpec
 pub fn grafting_graph_core::SurfaceSpec::clone(&self) -> grafting_graph_core::SurfaceSpec
-impl core::cmp::Eq for grafting_graph_core::SurfaceSpec
 impl core::cmp::PartialEq for grafting_graph_core::SurfaceSpec
 pub fn grafting_graph_core::SurfaceSpec::eq(&self, other: &grafting_graph_core::SurfaceSpec) -> bool
 impl core::fmt::Debug for grafting_graph_core::SurfaceSpec
@@ -552,6 +672,27 @@ impl core::marker::Sync for grafting_graph_core::SurfaceType
 impl core::marker::Unpin for grafting_graph_core::SurfaceType
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceType
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceType
+pub struct grafting_graph_core::TransformationPlan
+impl grafting_graph_core::TransformationPlan
+pub fn grafting_graph_core::TransformationPlan::edge_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>
+pub fn grafting_graph_core::TransformationPlan::invalidation(&self) -> &grafting_graph_core::LocalInvalidationScope
+pub fn grafting_graph_core::TransformationPlan::new(node_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>, edge_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>, surface_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>, invalidation: grafting_graph_core::LocalInvalidationScope) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>
+pub fn grafting_graph_core::TransformationPlan::node_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>
+pub fn grafting_graph_core::TransformationPlan::surface_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>
+impl core::clone::Clone for grafting_graph_core::TransformationPlan
+pub fn grafting_graph_core::TransformationPlan::clone(&self) -> grafting_graph_core::TransformationPlan
+impl core::cmp::Eq for grafting_graph_core::TransformationPlan
+impl core::cmp::PartialEq for grafting_graph_core::TransformationPlan
+pub fn grafting_graph_core::TransformationPlan::eq(&self, other: &grafting_graph_core::TransformationPlan) -> bool
+impl core::fmt::Debug for grafting_graph_core::TransformationPlan
+pub fn grafting_graph_core::TransformationPlan::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::TransformationPlan
+impl core::marker::Freeze for grafting_graph_core::TransformationPlan
+impl core::marker::Send for grafting_graph_core::TransformationPlan
+impl core::marker::Sync for grafting_graph_core::TransformationPlan
+impl core::marker::Unpin for grafting_graph_core::TransformationPlan
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::TransformationPlan
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::TransformationPlan
 pub trait grafting_graph_core::GraphOps<N, E>
 pub fn grafting_graph_core::GraphOps::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>
 pub fn grafting_graph_core::GraphOps::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>
@@ -575,6 +716,13 @@ pub fn grafting_graph_core::split_surface<N, E>(graph: &grafting_graph_core::Gra
 
 Generic domain-agnostic primitive role for graph formation.
 
+### `pub enum grafting_graph_core::ArcBulge`
+
+Which side of the chord (walking from an arc's own start to its end) it
+bulges toward -- see [`SurfaceCurvature`]'s own doc for what this
+disambiguates and why it is the one piece of information a center point
+alone can never supply.
+
 ### `pub enum grafting_graph_core::ConstructionError`
 
 Structural error from a domain-level construction operation -- either
@@ -592,9 +740,18 @@ Failure to construct a stable graph identifier.
 
 Invalid input or arithmetic failure from the grouped-grid heuristic.
 
+### `pub enum grafting_graph_core::PlanIdentityKind`
+
+The identity category whose states overlap in an invalid plan.
+
 ### `pub enum grafting_graph_core::SurfaceError`
 
 Structural error from surface registration or lookup.
+
+### `pub enum grafting_graph_core::TransformationPlanFailure`
+
+A planning failure. No variant applies a mutation or represents a partial
+result: callers must leave the confirmed graph and surface registry intact.
 
 ### `pub fn grafting_graph_core::Edge<E>::data(&self) -> &E`
 
@@ -739,6 +896,30 @@ Nodes sorted by stable node identity.
 
 Creates validated grouped-grid dimensions.
 
+### `pub fn grafting_graph_core::IdentityDelta<I>::created(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities newly introduced by the plan.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::is_empty(&self) -> bool`
+
+Whether this category has no lifecycle changes.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::new(kind: grafting_graph_core::PlanIdentityKind, created: alloc::collections::btree::set::BTreeSet<I>, preserved: alloc::collections::btree::set::BTreeSet<I>, replaced: alloc::collections::btree::set::BTreeSet<I>, removed: alloc::collections::btree::set::BTreeSet<I>) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
+
+Validates mutually exclusive identity lifecycle states.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::preserved(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities retained because they still connect unaffected geometry.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::removed(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities removed by the plan.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::replaced(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities superseded inside the remodeled region.
+
 ### `pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId`
 
 Stable node identity associated with this position.
@@ -766,6 +947,26 @@ Positions sorted by stable node identity.
 ### `pub fn grafting_graph_core::LayoutSnapshot::width(&self) -> u32`
 
 Width required to contain every position and the configured padding.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::changed_surfaces(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Surfaces directly changed by the plan.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::direct_dependencies(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Direct transformer dependencies, excluding unrelated clouds.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::is_empty(&self) -> bool`
+
+Whether the plan identifies no local refresh work.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::new(changed_surfaces: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, topology_repair_neighbors: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, direct_dependencies: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>) -> Self`
+
+Creates a local invalidation scope without scanning unrelated clouds.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::topology_repair_neighbors(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Adjacent surfaces inspected for topology repair or fragment cleanup.
 
 ### `pub fn grafting_graph_core::Node<N>::data(&self) -> &N`
 
@@ -805,6 +1006,11 @@ Total number of cells in the mesh.
 
 Constructs a grid of width x height x layers cells with 6-slot connectivity.
 
+### `pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>`
+
+This surface's own curvature, if any -- see [`SurfaceCurvature`]'s
+own doc.
+
 ### `pub fn grafting_graph_core::Surface::cycle(&self) -> &[grafting_graph_core::NodeId]`
 
 Nodes forming this surface's cycle, in mesh-derivation order.
@@ -842,6 +1048,13 @@ Creates an empty registry.
 
 Removes a surface by its node-set identity, returning it.
 
+### `pub fn grafting_graph_core::SurfaceRegistry::set_curvature(&mut self, key: &grafting_graph_core::SurfaceKey, curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates a surface's curvature (see [`SurfaceCurvature`]'s own doc).
+Touches no node and no cycle, for the same reason as
+[`set_type`](Self::set_type) -- a curved wall's own graph topology
+never encodes its curve, only this attribute does.
+
 ### `pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
 
 Updates a surface's `physical` flag. Touches no node and no cycle,
@@ -870,6 +1083,26 @@ Returns the identifier text.
 ### `pub fn grafting_graph_core::SurfaceType::new(value: impl core::convert::Into<alloc::string::String>) -> Self`
 
 Creates a surface-type identifier from caller-chosen text.
+
+### `pub fn grafting_graph_core::TransformationPlan::edge_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>`
+
+Edge lifecycle changes.
+
+### `pub fn grafting_graph_core::TransformationPlan::invalidation(&self) -> &grafting_graph_core::LocalInvalidationScope`
+
+Local derived-state refresh scope.
+
+### `pub fn grafting_graph_core::TransformationPlan::new(node_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>, edge_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>, surface_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>, invalidation: grafting_graph_core::LocalInvalidationScope) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
+
+Creates a plan only when it has structural changes and a local refresh scope.
+
+### `pub fn grafting_graph_core::TransformationPlan::node_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>`
+
+Node lifecycle changes.
+
+### `pub fn grafting_graph_core::TransformationPlan::surface_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>`
+
+Surface lifecycle changes.
 
 ### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
 
@@ -945,6 +1178,14 @@ geometry, this crate does not compute it. `key` must already be
 registered; both halves are validated, and checked not to collide with
 *each other*, before `key` is removed -- a failure never leaves the
 original surface gone with only one (or neither) half registered.
+
+### `pub grafting_graph_core::ArcBulge::Left`
+
+Bulges toward the chord's left side, facing from the arc's own start to its end.
+
+### `pub grafting_graph_core::ArcBulge::Right`
+
+Bulges toward the chord's right side, facing from the arc's own start to its end.
 
 ### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch`
 
@@ -1150,6 +1391,18 @@ A grouping edge identity was not present in the graph.
 
 Missing grouping edge identity.
 
+### `pub grafting_graph_core::PlanIdentityKind::Edge`
+
+Stable graph-edge identities.
+
+### `pub grafting_graph_core::PlanIdentityKind::Node`
+
+Stable graph-node identities.
+
+### `pub grafting_graph_core::PlanIdentityKind::Surface`
+
+Surface identities derived from their node sets.
+
 ### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
 
 8 corner vertex indices per cell [V0..V7].
@@ -1179,6 +1432,23 @@ Flat list of 3D vertex positions [x, y, z] for corners across all layers.
 
 Width of the grid in cells.
 
+### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
+
+Which of the two arcs a shared center and two endpoints could
+describe -- see this struct's own doc.
+
+### `pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]`
+
+The arc's own center, in the same XZ plane as the surface's corners.
+
+### `pub grafting_graph_core::SurfaceCurvature::facets: usize`
+
+How many straight chords a mesh generator should tessellate this arc
+into -- decided once, by whoever generated this surface, and
+persisted here so re-triangulating later (a page reload, a cache
+miss) always reproduces the same mesh without needing the original
+generation request again.
+
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 
 Two surfaces cannot share the exact same node-set identity.
@@ -1207,6 +1477,11 @@ A query or update referenced a surface that is not registered.
 
 Identity that could not be resolved.
 
+### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
+
+The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
+own doc.
+
 ### `pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>`
 
 Nodes forming the new surface's cycle, in mesh-derivation order.
@@ -1218,6 +1493,22 @@ Whether the new surface blocks movement or acts as ground.
 ### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
 
 The new surface's open, extensible type identifier.
+
+### `pub grafting_graph_core::TransformationPlanFailure::EmptyInvalidationScope`
+
+A non-empty plan must describe the local surface scope it invalidates.
+
+### `pub grafting_graph_core::TransformationPlanFailure::NoChanges`
+
+A no-op must not become a committed operation.
+
+### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates`
+
+One identity appeared in more than one lifecycle state.
+
+### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates::kind: grafting_graph_core::PlanIdentityKind`
+
+The category containing the duplicate lifecycle entry.
 
 ### `pub mod grafting_graph_core`
 
@@ -1260,6 +1551,10 @@ Immutable, deterministically ordered graph data safe to pass to adapters.
 
 Caller-controlled dimensions for the deterministic grouped-grid heuristic.
 
+### `pub struct grafting_graph_core::IdentityDelta<I>`
+
+Deterministic lifecycle classification for one kind of stable identity.
+
 ### `pub struct grafting_graph_core::LayoutPosition`
 
 Position assigned to one stable node by a graph layout snapshot.
@@ -1267,6 +1562,10 @@ Position assigned to one stable node by a graph layout snapshot.
 ### `pub struct grafting_graph_core::LayoutSnapshot`
 
 Immutable deterministic output from a grouped-grid layout operation.
+
+### `pub struct grafting_graph_core::LocalInvalidationScope`
+
+The surface scope a successful local transformation requires consumers to refresh.
 
 ### `pub struct grafting_graph_core::Node<N>`
 
@@ -1286,6 +1585,31 @@ A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 The semantic record `ADR-0022` defines: `{ type, physical, mesh }` minus
 `mesh`, which is derived on demand by the caller from [`cycle`](Self::cycle)
 and a [`Graph`]'s current node positions, not stored here.
+
+### `pub struct grafting_graph_core::SurfaceCurvature`
+
+A surface's optional curvature: this surface's own boundary is not a
+flat polygon but has (at least) one true circular arc in it, fully
+determined by an edge's own two endpoints plus `center` -- radius is
+`center`'s distance to either endpoint (validated equal by the caller
+deriving this), and `bulge` is the one remaining bit of information no
+arrangement of points can supply on its own: which of the two arcs a
+shared center and two endpoints could describe (the "short way" or the
+"long way" around) is a discrete choice, not a continuous coordinate.
+Together, `(start, end, center, bulge)` is the minimal complete
+description of an arbitrary circular-arc segment.
+
+Deliberately **not** used to mint extra graph nodes -- a curved wall's
+own cycle stays exactly its flat corners (4, for a simple wall panel),
+the same as a straight one. `curvature` is metadata a mesh generator
+(`grafting-procgen-surface-mesh`) reads at render/re-triangulation time
+to tessellate the true curve, not something baked into the graph's own
+topology -- see `grafting_procgen_structure_generation::extrusion`'s own
+doc for why minting one graph node per tessellated facet was the wrong
+call (every downstream consumer that treats "one wall run" as "one
+`Surface`" -- redundant-duplicate detection, a room's own wall-follower,
+T-junction splitting -- got extra internal seams to mis-treat as
+boundaries).
 
 ### `pub struct grafting_graph_core::SurfaceKey(_)`
 
@@ -1318,6 +1642,10 @@ Deliberately not a fixed/closed enum -- the same mistake already
 corrected for `map_state.fbs`'s `BoundaryKind` (`ADR-0022`,
 `DEC-052`/`ADR-0014`'s "no product concept hardcoded into
 infrastructure").
+
+### `pub struct grafting_graph_core::TransformationPlan`
+
+A validated, data-only batch describing one future atomic transformation.
 
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
