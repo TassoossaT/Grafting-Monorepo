@@ -22,10 +22,10 @@ export interface ConstructionDockProps {
  * and `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
  *
  * Houses the 8 core construction verbs in a centered, glassmorphic dock:
- * 1. 🏠 Edifícios (Pincel Livre, Linha Reta, Gerar Interiores -- three ways
- *    to place the same kind of wall segment: free-form drag, exact
- *    point-to-point, and point-to-point gated to only work inside an
- *    already-enclosed space)
+ * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- manual free-form/exact
+ *    point-to-point walls; Gerar Interiores -- one click inside an
+ *    already-enclosed space auto-generates its interior partition via the
+ *    same region-partition algorithm the retired "Pintar Casa" brush used)
  * 2. 🚪 Aberturas (Portas & Janelas)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
@@ -98,8 +98,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
         {
           key: "interior-wall",
           label: "Gerar Interiores",
-          icon: "🚧",
-          tooltip: "Gerar Interiores (clique de um ponto a outro, só dentro de um local já fechado)",
+          icon: "🧩",
+          tooltip: "Gerar Interiores (clique dentro de um local já fechado para calcular os cômodos automaticamente)",
           active: isInteriorWallActive,
           disabled: !ready,
           onClick: () => onToolChange("interior-wall"),

@@ -26,9 +26,32 @@ export interface TerrainBrushParams {
   readonly seed: number;
 }
 
-/** Shared by all three wall tools -- `wall-brush` (free-form drag), `wall-line` (click point-to-point for an exact straight run), and `interior-wall` (the same click-to-click shape, gated to only work inside an already-enclosed space) -- since they only differ in how/where they resolve a path's points, not in what a segment is made of. */
+/** Shared by `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- they only differ in how they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
+}
+
+/**
+ * One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
+ * own wall-follower algorithm, not limited to rectangles) rasterizes that
+ * space into a `cellSize` grid and hands it to the same region-partition
+ * algorithm `ConstructionSessionPort.generateRegionPartition` already
+ * exposes (the Rust side the retired "Pintar Casa" brush used to drive one
+ * cell at a time) -- see `composition/tabletop/tools/interior-wall-tool.ts`.
+ * A region larger than `maxRegionCells` auto-splits into more than one
+ * room, so the same enclosed footprint can regenerate into a different
+ * layout just by changing `seed`/`maxRegionCells`. No floor/ceiling
+ * (not implemented yet) -- only the generated cap surfaces are stripped
+ * back out client-side after the engine call.
+ */
+export interface InteriorGenerateParams {
+  readonly wallType: "wall-white" | "wall-gray";
+  /** World-space side length of one grid cell. */
+  readonly cellSize: number;
+  /** A connected region larger than this many cells gets auto-split into more than one room. */
+  readonly maxRegionCells: number;
+  /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
+  readonly seed: number;
 }
 
 /**
@@ -63,7 +86,7 @@ export interface ToolParamsByTool {
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
-  readonly "interior-wall": WallBrushParams;
+  readonly "interior-wall": InteriorGenerateParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -76,7 +99,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
-  "interior-wall": Object.freeze({ wallType: "wall-white" }),
+  "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

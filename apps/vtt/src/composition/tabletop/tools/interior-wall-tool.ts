@@ -1,74 +1,78 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
-import type { WallBrushParams } from "@/features/edit-construction";
-import type { ConstructionPosition } from "@/ports";
+import type { InteriorGenerateParams } from "@/features/edit-construction";
 
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
+import { cellsInPolygon, idPrefixForRoom, isCapSurface, isRedundantPerimeterWall } from "./interior-partition.ts";
 import { findEnclosingRoom } from "./room-lookup.ts";
-import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing } from "./wall-shared.ts";
+import { WALL_HEIGHT } from "./wall-shared.ts";
 
-/** Same two-click, never-chains anchor shape as `wall-line-tool.ts` -- see that file's own doc. */
-let anchor: ConstructionPosition | undefined;
+const FLOOR_TYPE = "floor";
+const CEILING_TYPE = "ceiling";
+const NOTCH_TYPE = "door";
+/**
+ * How many cell-widths a generated wall panel may sit from the enclosing
+ * room's own true (arbitrary-shape) boundary and still count as a redundant
+ * copy of that boundary, not a genuine interior partition -- the region-
+ * partition algorithm always redraws a wall along a cell set's own outer
+ * perimeter too, and that perimeter is only a rectilinear approximation of
+ * the room's real (possibly non-axis-aligned) boundary, which the exterior
+ * wall tools already built. Filtered back out client-side after the engine
+ * call; see `isRedundantPerimeterWall`'s own doc (`interior-partition.ts`).
+ */
+const BOUNDARY_DUPLICATE_TOLERANCE_CELLS = 0.5;
 
 /**
- * Click-to-click straight interior walls, gated to only start inside an
- * already-enclosed exterior: the first click of a pair is accepted only if
- * `findEnclosingRoom` (`room-lookup.ts`) finds a closed wall loop
- * containing it -- any shape, any number of sides, nothing hardcoded about
- * "4 walls" (that lookup's own wall-follower algorithm handles an
- * arbitrary polygon already). A click outside any enclosure is a plain
- * no-op: it neither plants an anchor nor clears one already pending, so a
- * stray miss doesn't throw away progress.
- *
- * The second click is NOT independently re-checked against the same
- * enclosure -- once already drawing from inside, its natural endpoint is
- * either another interior point or exactly on the boundary wall itself (a
- * T-junction), and a boundary point sits ambiguously on the polygon's own
- * edge for a plain point-in-polygon test. `resolveWallCrossing` still runs
- * on both clicks, so a segment ending on an exterior (or another interior)
- * wall welds onto it, same as `wall-line-tool.ts`.
- *
- * Otherwise identical to `wall-line-tool.ts`: always exactly two clicks per
- * segment, never chains, no floor/ceiling generated (not implemented yet).
+ * One click inside an already-enclosed space (any shape, any number of
+ * sides -- `findEnclosingRoom`'s own wall-follower algorithm) rasterizes
+ * that footprint into a `cellSize` grid and hands it to
+ * `generateRegionPartition` -- the same region-partition Rust algorithm
+ * the retired "Pintar Casa" brush drove one painted cell at a time, now
+ * driven by one click over an already-drawn footprint instead. A region
+ * larger than `maxRegionCells` auto-splits into more than one room; the
+ * same footprint reproduces the same layout for a given `seed`, so
+ * clicking again after changing `seed`/`maxRegionCells` regenerates a
+ * different one in place (see `idPrefixForRoom`). Every generated cap
+ * (floor/ceiling) and every wall panel that only duplicates the room's own
+ * existing boundary gets stripped back out client-side afterward -- see
+ * `interior-partition.ts`'s own `isCapSurface`/`isRedundantPerimeterWall`
+ * docs -- leaving only the genuine interior partition walls. A click
+ * outside any enclosed space is a plain no-op.
  */
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   id: "interior-wall",
   defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
 
-  previewFor(gesture: ToolGesture, params: WallBrushParams) {
-    if (anchor === undefined) return undefined;
-    return {
-      kind: "segments",
-      color: WALL_COLOR[params.wallType],
-      opacity: 0.7,
-      positions: Float32Array.from([
-        anchor.x, anchor.y, anchor.z,
-        gesture.current.point.x, gesture.current.point.y, gesture.current.point.z,
-      ]),
-    };
-  },
+  onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
+    const room = findEnclosingRoom(ctx, sample.point);
+    if (room === undefined) return;
 
-  onClick(ctx: ToolContext, sample: PointerSample, params: WallBrushParams): void {
-    if (anchor === undefined) {
-      if (findEnclosingRoom(ctx, sample.point) === undefined) return;
-      anchor = resolveWallCrossing(ctx, sample.point, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
-      return;
-    }
+    const firstCorner = room.bottomCycle[0];
+    const baselineY = (firstCorner !== undefined ? ctx.runtime.getSnapshot().map.nodePositions.get(firstCorner)?.position.y : undefined) ?? sample.point.y;
+    const { cells, origin } = cellsInPolygon(room.polygon, params.cellSize);
+    if (cells.length === 0) return;
 
-    const pinned = pinnedToBaseline(anchor, sample.point);
-    const end = resolveWallCrossing(ctx, pinned, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
-    const sequence = ctx.nextSequence();
-    ctx.runtime.generatePathExtrusion(
+    const outcome = ctx.runtime.generateRegionPartition(
       {
-        edges: [{ start: anchor, end, curvature: "straight" }],
-        height: WALL_HEIGHT,
-        arcFacets: 1,
-        idPrefix: idPrefixFor(ctx),
-        surfaceType: params.wallType,
+        cells,
+        cellSize: params.cellSize,
+        origin: { x: origin.x, y: baselineY, z: origin.z },
+        wallHeight: WALL_HEIGHT,
+        maxRegionCells: params.maxRegionCells,
+        seed: params.seed,
+        idPrefix: idPrefixForRoom(ctx.tableId, room.bottomCycle),
+        wallType: params.wallType,
+        notchType: NOTCH_TYPE,
+        floorType: FLOOR_TYPE,
+        ceilingType: CEILING_TYPE,
       },
       "local",
-      `${ctx.tableId}:interior-wall:${sequence}`,
+      `${ctx.tableId}:interior:${ctx.nextSequence()}`,
     );
 
-    anchor = undefined;
+    const tolerance = params.cellSize * BOUNDARY_DUPLICATE_TOLERANCE_CELLS;
+    for (const surfaceKey of outcome.addedSurfaceKeys) {
+      if (!isCapSurface(ctx, surfaceKey) && !isRedundantPerimeterWall(ctx, surfaceKey, room.polygon, tolerance)) continue;
+      ctx.runtime.removeSurface({ surfaceKey }, "local", `${ctx.tableId}:interior-strip:${ctx.nextSequence()}`);
+    }
   },
 };
