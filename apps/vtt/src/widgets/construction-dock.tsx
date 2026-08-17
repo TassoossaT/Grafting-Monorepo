@@ -25,7 +25,9 @@ export interface ConstructionDockProps {
  * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- manual free-form/exact
  *    point-to-point walls; Gerar Interiores -- one click inside an
  *    already-enclosed space auto-generates its interior partition via the
- *    same region-partition algorithm the retired "Pintar Casa" brush used)
+ *    same region-partition algorithm the retired "Pintar Casa" brush used;
+ *    Torre -- one click stamps a closed circular footprint at a known
+ *    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
  * 2. 🚪 Aberturas (Portas & Janelas)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
@@ -61,7 +63,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
   const isInteriorWallActive = activeTool === "interior-wall";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive;
+  const isTowerStampActive = activeTool === "tower-stamp";
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive;
   const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
@@ -103,6 +106,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
           active: isInteriorWallActive,
           disabled: !ready,
           onClick: () => onToolChange("interior-wall"),
+        },
+        {
+          key: "tower-stamp",
+          label: "Torre",
+          icon: "🗼",
+          tooltip: "Torre (clique para carimbar um contorno circular de raio conhecido)",
+          active: isTowerStampActive,
+          disabled: !ready,
+          onClick: () => onToolChange("tower-stamp"),
         },
       ],
     },

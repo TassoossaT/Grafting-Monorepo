@@ -7,8 +7,10 @@ import type {
   IrregularTerrainParams,
   TerrainBrushParams,
   ToolParamsByTool,
+  TowerStampParams,
   WallBrushParams,
 } from "@/features/edit-construction";
+import { TOWER_RADIUS_PRESETS } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
@@ -116,6 +118,49 @@ function InteriorGenerateFields(props: {
   );
 }
 
+const TOWER_RADIUS_LABELS: Readonly<Record<(typeof TOWER_RADIUS_PRESETS)[number], string>> = {
+  [TOWER_RADIUS_PRESETS[0]]: "Pequena",
+  [TOWER_RADIUS_PRESETS[1]]: "Média",
+  [TOWER_RADIUS_PRESETS[2]]: "Grande",
+};
+
+/** Radius is a closed preset catalog, not a slider -- see `TowerStampParams`'s own doc on why a tower's geometry must stay one of a few known sizes. */
+function TowerStampFields(props: {
+  readonly params: TowerStampParams;
+  readonly onChange: (next: TowerStampParams) => void;
+}) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <div className="gm-material-grid">
+        <SelectableChip
+          label="Bloco Branco"
+          swatchColor="#e2e8f0"
+          selected={params.wallType === "wall-white"}
+          onSelect={() => onChange({ ...params, wallType: "wall-white" })}
+        />
+        <SelectableChip
+          label="Bloco Cinza"
+          swatchColor="#64748b"
+          selected={params.wallType === "wall-gray"}
+          onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
+        />
+      </div>
+      <div className="gm-material-grid">
+        {TOWER_RADIUS_PRESETS.map((radius) => (
+          <SelectableChip
+            key={radius}
+            label={TOWER_RADIUS_LABELS[radius]}
+            swatchColor="#94a3b8"
+            selected={params.radius === radius}
+            onSelect={() => onChange({ ...params, radius })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function IrregularTerrainFields(props: {
   readonly params: IrregularTerrainParams;
   readonly onChange: (next: IrregularTerrainParams) => void;
@@ -157,6 +202,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
+  "tower-stamp": "Parâmetros: Torre",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -198,6 +244,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : activeTool === "interior-wall" ? (
         <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
+      ) : activeTool === "tower-stamp" ? (
+        <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

@@ -51,6 +51,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
   "interior-wall": "Gerar Interiores",
+  "tower-stamp": "Torre",
   "house-room-delete": "Apagar Cômodo",
   "irregular-terrain-stamp": "Terreno Irregular",
 };
