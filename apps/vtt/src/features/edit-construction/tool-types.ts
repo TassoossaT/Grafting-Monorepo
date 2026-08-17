@@ -12,6 +12,7 @@ export type ConstructionToolId =
   | "terrain-brush"
   | "wall-brush"
   | "wall-line"
+  | "interior-wall"
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
@@ -25,7 +26,7 @@ export interface TerrainBrushParams {
   readonly seed: number;
 }
 
-/** Shared by both wall tools -- `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- since they only differ in how they resolve a path's points, not in what a segment is made of. */
+/** Shared by all three wall tools -- `wall-brush` (free-form drag), `wall-line` (click point-to-point for an exact straight run), and `interior-wall` (the same click-to-click shape, gated to only work inside an already-enclosed space) -- since they only differ in how/where they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
 }
@@ -62,6 +63,7 @@ export interface ToolParamsByTool {
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
+  readonly "interior-wall": WallBrushParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -74,6 +76,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
+  "interior-wall": Object.freeze({ wallType: "wall-white" }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

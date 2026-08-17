@@ -1,5 +1,5 @@
 import type { WallBrushParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
+import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
 
 import type { ToolContext } from "./tool-context.ts";
 
@@ -8,6 +8,8 @@ const WALL_SURFACE_TYPES = new Set(["wall-white", "wall-gray"]);
 const CROSSING_TOLERANCE = 0.15;
 /** How close (as a fraction of the wall's own length) a point may get to either of that wall's own corners and still count as a genuine mid-span crossing -- any closer and it's really just landing near a corner, which position-derived ids already weld for free without splitting anything. */
 const CROSSING_END_MARGIN = 0.3;
+/** Perpendicular distance (world units) within which a click counts as picking a wall panel directly, for `findWallSurfaceAt` -- a bit more forgiving than {@link CROSSING_TOLERANCE} since this is a deliberate click on the panel itself, not a drawing snap, and (unlike crossing detection) there is no exclusion near a panel's own corners -- picking right at a corner should still delete whichever panel is closest. */
+const WALL_PICK_TOLERANCE = 0.2;
 
 /** Fixed wall height for a brush/line-drawn segment, shared by both wall tools. */
 export const WALL_HEIGHT = 3;
@@ -170,4 +172,21 @@ export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPositio
     return bottomPos;
   }
   return point;
+}
+
+/**
+ * The wall panel whose own centerline `point` lands closest to (XZ only,
+ * within {@link WALL_PICK_TOLERANCE}), or `undefined` if none qualify --
+ * `house-room-delete-tool.ts`'s single-surface delete: a click that lands
+ * directly on a wall removes just that one panel, distinct from a click on
+ * open floor inside a room, which removes every wall bounding it instead.
+ */
+export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined {
+  let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
+  for (const span of wallSpans(ctx)) {
+    const { perp } = projectOntoSegment(point, span.a, span.b);
+    if (perp > WALL_PICK_TOLERANCE) continue;
+    if (best === undefined || perp < best.perp) best = { surfaceKey: span.surfaceKey, perp };
+  }
+  return best?.surfaceKey;
 }

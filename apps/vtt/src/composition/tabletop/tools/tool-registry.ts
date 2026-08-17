@@ -2,6 +2,7 @@ import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
 import { houseRoomDeleteTool } from "./house-room-delete-tool.ts";
+import { interiorWallTool } from "./interior-wall-tool.ts";
 import { irregularTerrainTool } from "./irregular-terrain-tool.ts";
 import { moveNodeTool } from "./move-node-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
@@ -20,6 +21,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "terrain-brush": terrainBrushTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
+  "interior-wall": interiorWallTool,
   "house-room-delete": houseRoomDeleteTool,
   "irregular-terrain-stamp": irregularTerrainTool,
 };
