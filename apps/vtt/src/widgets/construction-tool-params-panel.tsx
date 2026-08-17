@@ -83,7 +83,6 @@ function WallBrushFields(props: {
           onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
         />
       </div>
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );
 }

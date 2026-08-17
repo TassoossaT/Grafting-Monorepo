@@ -3,7 +3,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
-import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline } from "./wall-shared.ts";
+import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing } from "./wall-shared.ts";
 
 /**
  * The pending first click of the current two-click line, or `undefined`
@@ -24,6 +24,9 @@ let anchor: ConstructionPosition | undefined;
  * welds onto a free-form stroke (or another straight run) wherever their
  * corners happen to coincide -- welding is still automatic by position,
  * this tool just never *assumes* the next line continues from the last.
+ * Either click landing on the side of an existing wall (not near one of its
+ * own corners) splits it and snaps that click onto the split, forming a
+ * T-junction -- see `resolveWallCrossing`'s own doc.
  */
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
@@ -44,11 +47,12 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
 
   onClick(ctx: ToolContext, sample: PointerSample, params: WallBrushParams): void {
     if (anchor === undefined) {
-      anchor = sample.point;
+      anchor = resolveWallCrossing(ctx, sample.point, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
       return;
     }
 
-    const end = pinnedToBaseline(anchor, sample.point);
+    const pinned = pinnedToBaseline(anchor, sample.point);
+    const end = resolveWallCrossing(ctx, pinned, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
     const sequence = ctx.nextSequence();
     ctx.runtime.generatePathExtrusion(
       {

@@ -3,7 +3,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
-import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, xzDistance } from "./wall-shared.ts";
+import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing, xzDistance } from "./wall-shared.ts";
 
 /** No curved edges from this tool yet -- reserved for a future arc-drawing gesture. Ignored by the engine while every edge is `"straight"`. */
 const ARC_FACETS = 12;
@@ -51,13 +51,21 @@ function commitPath(ctx: ToolContext, points: readonly ConstructionPosition[], p
   );
 }
 
-/** Appends `point` to `path` and commits, if it's at least {@link MIN_SEGMENT_LENGTH} past the path's own last corner; otherwise a no-op (still mid-tiny-move, nothing new to draw). */
+/**
+ * Appends `point` to `path` and commits, if it's at least
+ * {@link MIN_SEGMENT_LENGTH} past the path's own last corner; otherwise a
+ * no-op (still mid-tiny-move, nothing new to draw). Every accepted point
+ * passes through `resolveWallCrossing` first -- landing on the side of an
+ * existing wall splits it and snaps this corner onto the split, forming a
+ * T-junction (see that function's own doc).
+ */
 function extend(ctx: ToolContext, path: readonly ConstructionPosition[], rawPoint: ConstructionPosition, params: WallBrushParams): readonly ConstructionPosition[] {
   const first = path[0];
-  const point = first === undefined ? rawPoint : pinnedToBaseline(first, rawPoint);
+  const pinned = first === undefined ? rawPoint : pinnedToBaseline(first, rawPoint);
   const last = path[path.length - 1];
-  if (last !== undefined && xzDistance(point, last) < MIN_SEGMENT_LENGTH) return path;
+  if (last !== undefined && xzDistance(pinned, last) < MIN_SEGMENT_LENGTH) return path;
 
+  const point = resolveWallCrossing(ctx, pinned, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
   const nextPath = [...path, point];
   commitPath(ctx, nextPath, params);
   return nextPath;
@@ -73,8 +81,11 @@ function extend(ctx: ToolContext, path: readonly ConstructionPosition[], rawPoin
  * floor/ceiling cap of any kind (not implemented yet; see
  * `generateBoundaryCap`'s own doc for why bolting one onto this tool isn't
  * safe today anyway). Every tick resends the whole path so far
- * (`GeneratePathExtrusionRequest`'s own doc on why that's cheap). See
- * `wall-line-tool.ts` for the exact-point-to-point counterpart.
+ * (`GeneratePathExtrusionRequest`'s own doc on why that's cheap). Landing on
+ * the side of an existing wall (not near one of its own corners) splits it
+ * and welds this stroke's corner onto the split, forming a T-junction --
+ * see `resolveWallCrossing`'s own doc. See `wall-line-tool.ts` for the
+ * exact-point-to-point counterpart.
  */
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
@@ -96,8 +107,8 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
     return { kind: "segments", color: WALL_COLOR[params.wallType], opacity: 0.7, positions: Float32Array.from([...committed, ...ghost]) };
   },
 
-  onPointerDown(_ctx: ToolContext, sample: PointerSample): void {
-    activePath = [sample.point];
+  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+    activePath = [resolveWallCrossing(ctx, sample.point, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`)];
   },
 
   // The dispatcher throttles how often this fires during an active drag, so

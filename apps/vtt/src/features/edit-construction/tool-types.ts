@@ -28,7 +28,6 @@ export interface TerrainBrushParams {
 /** Shared by both wall tools -- `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- since they only differ in how they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
-  readonly seed: number;
 }
 
 /**
@@ -73,8 +72,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
-  "wall-line": Object.freeze({ wallType: "wall-white", seed: 1 }),
+  "wall-brush": Object.freeze({ wallType: "wall-white" }),
+  "wall-line": Object.freeze({ wallType: "wall-white" }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,
