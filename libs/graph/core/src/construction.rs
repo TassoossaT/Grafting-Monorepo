@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 
-use crate::{Edge, EdgeId, Graph, GraphError, Node, NodeId, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
+use crate::{Edge, EdgeId, Graph, GraphError, Node, NodeId, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
 
 /// Structural error from a domain-level construction operation -- either
 /// the graph mutation or the surface bookkeeping it coordinates can fail.
@@ -238,7 +238,7 @@ fn simple_cycle_order(induced: &HashMap<NodeId, BTreeSet<NodeId>>, component: &B
 /// surface as one step of a larger operation ([`merge_surfaces`],
 /// [`split_surface`]) rather than standalone via
 /// [`SurfaceRegistry::add_surface`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceSpec {
     /// Nodes forming the new surface's cycle, in mesh-derivation order.
     pub cycle: Vec<NodeId>,
@@ -246,6 +246,9 @@ pub struct SurfaceSpec {
     pub surface_type: SurfaceType,
     /// Whether the new surface blocks movement or acts as ground.
     pub physical: bool,
+    /// The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
+    /// own doc.
+    pub curvature: Option<SurfaceCurvature>,
 }
 
 /// Validates a candidate new surface without registering it: non-empty
@@ -302,9 +305,11 @@ pub fn merge_surfaces<N, E>(
 
     surfaces.remove_surface(a).expect("checked above");
     surfaces.remove_surface(b).expect("checked above");
-    Ok(surfaces
+    let key = surfaces
         .add_surface(graph, merged.cycle, merged.surface_type, merged.physical)
-        .expect("pre-validated by validate_new_surface"))
+        .expect("pre-validated by validate_new_surface");
+    surfaces.set_curvature(&key, merged.curvature).expect("just registered above");
+    Ok(key)
 }
 
 /// Divides one existing surface into two new surfaces, per `ADR-0022`'s
@@ -334,9 +339,11 @@ pub fn split_surface<N, E>(
     let first_registered = surfaces
         .add_surface(graph, first.cycle, first.surface_type, first.physical)
         .expect("pre-validated by validate_new_surface");
+    surfaces.set_curvature(&first_registered, first.curvature).expect("just registered above");
     let second_registered = surfaces
         .add_surface(graph, second.cycle, second.surface_type, second.physical)
         .expect("pre-validated by validate_new_surface");
+    surfaces.set_curvature(&second_registered, second.curvature).expect("just registered above");
     Ok((first_registered, second_registered))
 }
 
@@ -645,6 +652,7 @@ mod tests {
             cycle: nodes.iter().map(|name| nid(name)).collect(),
             surface_type: SurfaceType::new(surface_type),
             physical,
+            curvature: None,
         }
     }
 

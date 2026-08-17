@@ -81,11 +81,22 @@ export interface DiffOutcome {
   readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
-/** One straight or semicircular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints, never a free parameter. */
+/** One straight or circular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints plus `includedAngle`, never a free parameter. */
 export interface PathEdgeSpec {
   readonly start: ConstructionPosition;
   readonly end: ConstructionPosition;
   readonly curvature: "straight" | "arc-left" | "arc-right";
+  /**
+   * The arc's own swept angle, in radians -- ignored for `"straight"`.
+   * Omit for a true semicircle (`Math.PI`), the only shape wall-brush's own
+   * curve-fitting (`path-fitting.ts`) ever detects; a caller building a
+   * closed shape from 3+ arcs (a full circle, most commonly -- see
+   * `tower-geometry.ts`) supplies a smaller angle so no two arcs share the
+   * same endpoint pair (which two true semicircles closing the same circle
+   * always would, since a curved edge's own corner ids are purely
+   * position-derived).
+   */
+  readonly includedAngle?: number;
 }
 
 /** A single opening cut into a one-straight-edge path -- see `extrude_path`'s own scoping of this. */

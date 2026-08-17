@@ -138,7 +138,7 @@ fn two_adjacent_cells_sharing_a_node_id_can_be_merged() {
         &mut surfaces,
         &key0,
         &key1,
-        grafting_graph_core::SurfaceSpec { cycle: merged_cycle, surface_type: SurfaceType::new("terrain"), physical: true },
+        grafting_graph_core::SurfaceSpec { cycle: merged_cycle, surface_type: SurfaceType::new("terrain"), physical: true, curvature: None },
     )
     .unwrap();
     assert!(surfaces.surface(&merged).is_some());

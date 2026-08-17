@@ -27,7 +27,7 @@ pub fn cap_boundary(points: &[[f32; 3]], id_prefix: &str, surface_type: SurfaceT
         ids.reverse();
         nodes.reverse();
     }
-    StructurePiece { nodes, edges: Vec::new(), surface: SurfaceSpec { cycle: ids, surface_type, physical: true } }
+    StructurePiece { nodes, edges: Vec::new(), surface: SurfaceSpec { cycle: ids, surface_type, physical: true, curvature: None } }
 }
 
 #[cfg(test)]

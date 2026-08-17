@@ -10,8 +10,25 @@
 //! support ("a hexagon, an irregular outline"), so triangulation uses the
 //! `earcut` crate (ear-clipping, handles concave simple polygons) rather
 //! than a fan, which only triangulates convex/star-shaped rings correctly.
+//!
+//! A curved `Surface` (see [`grafting_graph_core::SurfaceCurvature`]) keeps
+//! exactly 4 graph-cycle corners, the same as a straight one -- the actual
+//! arc only exists here, tessellated into a strip of quads right before
+//! triangulation, never persisted back onto the graph. This is the one
+//! place `SurfaceCurvature`'s `facets` is ever read.
+//!
+//! That strip is built directly (a triangle per half of each tessellated
+//! quad segment), **not** by flattening the curve into one many-point ring
+//! and handing it to `earcut` -- a curved wall's mesh is a section of a
+//! cylinder, so its vertices do not lie on one flat plane, and `earcut`'s
+//! own 3D-to-2D projection assumes (near-)planarity. Folding a real curve
+//! onto that best-fit plane self-intersects in 2D for anything but the
+//! shallowest arc, producing triangles that visibly cut across the surface
+//! instead of following it.
 
 use earcut::{utils3d, Earcut};
+
+use grafting_graph_core::{ArcBulge, SurfaceCurvature};
 
 /// A triangulated mesh derived from one surface's node cycle. Vertices stay
 /// in the caller-supplied cycle order (no Steiner points are introduced for
@@ -26,10 +43,20 @@ pub struct TriangulatedMesh {
 
 /// Triangulates a simple (hole-free) polygon given by `positions` -- an
 /// ordered ring, e.g. `Surface::cycle()`'s node ids resolved to their
-/// current graph positions. Returns `None` for fewer than 3 positions or a
-/// degenerate (collinear/zero-area) ring; both are states a caller may see
-/// transiently mid-edit, not error conditions to propagate.
-pub fn triangulate_surface(positions: &[[f32; 3]]) -> Option<TriangulatedMesh> {
+/// current graph positions. When `curvature` is given and `positions` is
+/// exactly the 4-corner shape [`crate`]'s own doc describes (bottom start,
+/// bottom end, top end, top start), the two curved edges are tessellated
+/// into a many-point ring first, per `curvature.facets`. Returns `None` for
+/// fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
+/// are states a caller may see transiently mid-edit, not error conditions
+/// to propagate.
+pub fn triangulate_surface(positions: &[[f32; 3]], curvature: Option<SurfaceCurvature>) -> Option<TriangulatedMesh> {
+    if let Some(curvature) = curvature {
+        if positions.len() == 4 {
+            return triangulate_curved_quad(positions, curvature);
+        }
+    }
+
     if positions.len() < 3 {
         return None;
     }
@@ -52,6 +79,118 @@ pub fn triangulate_surface(positions: &[[f32; 3]]) -> Option<TriangulatedMesh> {
         normals: vec![normal; positions.len()],
         indices,
     })
+}
+
+/// Triangulates a curved quad (see [`crate`]'s own doc for the 4-corner
+/// shape) as a ruled strip: the bottom edge's own tessellated arc paired
+/// with the same arc mirrored at the top's own height, two triangles per
+/// facet between consecutive pairs. Each triangle's own normal is the real
+/// cross product of its own edges (not an idealized "radially outward"
+/// formula), so it stays correct regardless of which way `curvature.bulge`
+/// faces. `None` only if `curvature.facets` is degenerate enough that
+/// [`tessellate_arc`] returns fewer than 2 points (already rejected
+/// upstream by `extrude_path`'s own `arc_facets >= 2` check, so this is
+/// unreachable through the normal generation path, not a state a caller
+/// needs to handle specially).
+fn triangulate_curved_quad(positions: &[[f32; 3]], curvature: SurfaceCurvature) -> Option<TriangulatedMesh> {
+    let (bottom_start, bottom_end, top_end, top_start) = (positions[0], positions[1], positions[2], positions[3]);
+
+    let bottom_arc = tessellate_arc(bottom_start, bottom_end, curvature.center, curvature.bulge, curvature.facets);
+    let mut top_arc: Vec<[f32; 3]> = bottom_arc.iter().map(|point| [point[0], top_end[1], point[2]]).collect();
+    if let Some(first) = top_arc.first_mut() {
+        *first = top_start;
+    }
+    if let Some(last) = top_arc.last_mut() {
+        *last = top_end;
+    }
+
+    let count = bottom_arc.len();
+    if count < 2 {
+        return None;
+    }
+
+    let mut out_positions = Vec::with_capacity(count * 2);
+    for index in 0..count {
+        out_positions.push(bottom_arc[index]);
+        out_positions.push(top_arc[index]);
+    }
+
+    let mut normals = vec![[0.0, 0.0, 1.0]; out_positions.len()];
+    let mut indices = Vec::with_capacity((count - 1) * 6);
+    for index in 0..count - 1 {
+        let bottom_a = index * 2;
+        let top_a = bottom_a + 1;
+        let bottom_b = bottom_a + 2;
+        let top_b = bottom_a + 3;
+
+        let facet_normal = unit_normal(cross(sub(out_positions[bottom_b], out_positions[bottom_a]), sub(out_positions[top_a], out_positions[bottom_a])));
+        for vertex in [bottom_a, top_a, bottom_b, top_b] {
+            normals[vertex] = facet_normal;
+        }
+
+        indices.extend_from_slice(&[bottom_a as u32, bottom_b as u32, top_a as u32, top_a as u32, bottom_b as u32, top_b as u32]);
+    }
+
+    Some(TriangulatedMesh { positions: out_positions, normals, indices })
+}
+
+fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
+    let length = (vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]).sqrt();
+    if length <= f32::EPSILON {
+        return [0.0, 0.0, 1.0];
+    }
+    [vector[0] / length, vector[1] / length, vector[2] / length]
+}
+
+/// Tessellates one circular-arc edge into the `facets + 1` points of its own
+/// polyline, `start` to `end` in order, around `center` (in the same XZ
+/// plane as `start`/`end`). The first and last points are forced to the
+/// exact input `start`/`end` (not just approximately equal after the trig
+/// round-trip), so a tessellated arc's own endpoints weld byte-identically
+/// with whatever straight edge or other arc shares that same corner.
+///
+/// General to any circular arc, not only a semicircle: the arc's own swept
+/// angle is not a separate stored input (matching
+/// `grafting_graph_core::SurfaceCurvature`'s own doc that `(start, end,
+/// center, bulge)` is a curved edge's complete description) -- it is
+/// recovered from `center`'s own offset off the chord, via the same
+/// apothem relationship `grafting_procgen_structure_generation::extrusion`'s
+/// own `arc_center` uses to place `center` in the first place.
+fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBulge, facets: usize) -> Vec<[f32; 3]> {
+    let y = start[1];
+    let (sx, sz) = (start[0], start[2]);
+    let (ex, ez) = (end[0], end[2]);
+    let (mx, mz) = (center[0], center[1]);
+    let chord_length = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt();
+    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2)).sqrt();
+    let (ux, uz) = ((ex - sx) / chord_length, (ez - sz) / chord_length);
+    let (nx, nz) = (-uz, ux);
+    let sign: f32 = match bulge {
+        ArcBulge::Left => 1.0,
+        ArcBulge::Right => -1.0,
+    };
+
+    let (midx, midz) = ((sx + ex) / 2.0, (sz + ez) / 2.0);
+    let apothem = -sign * ((mx - midx) * nx + (mz - midz) * nz);
+    let included_angle = 2.0 * (chord_length / 2.0).atan2(apothem);
+
+    let mut points: Vec<[f32; 3]> = Vec::with_capacity(facets + 1);
+    for step in 0..=facets {
+        if step == 0 {
+            points.push(start);
+            continue;
+        }
+        if step == facets {
+            points.push(end);
+            continue;
+        }
+        let t = step as f32 / facets as f32;
+        let theta = std::f32::consts::FRAC_PI_2 + included_angle * (0.5 - t);
+        let x = mx + radius * theta.cos() * ux + sign * radius * theta.sin() * nx;
+        let z = mz + radius * theta.cos() * uz + sign * radius * theta.sin() * nz;
+        points.push([x, y, z]);
+    }
+    points
 }
 
 /// Flat face normal for shading: the first non-degenerate cross product
@@ -88,20 +227,20 @@ mod tests {
 
     #[test]
     fn fewer_than_three_positions_is_none() {
-        assert_eq!(triangulate_surface(&[]), None);
-        assert_eq!(triangulate_surface(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]), None);
+        assert_eq!(triangulate_surface(&[], None), None);
+        assert_eq!(triangulate_surface(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], None), None);
     }
 
     #[test]
     fn collinear_positions_are_none() {
         let collinear = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
-        assert_eq!(triangulate_surface(&collinear), None);
+        assert_eq!(triangulate_surface(&collinear, None), None);
     }
 
     #[test]
     fn triangle_produces_one_face() {
         let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let mesh = triangulate_surface(&triangle).expect("valid triangle");
+        let mesh = triangulate_surface(&triangle, None).expect("valid triangle");
         assert_eq!(mesh.positions, triangle);
         assert_eq!(mesh.normals.len(), 3);
         assert_eq!(mesh.indices.len(), 3);
@@ -119,7 +258,7 @@ mod tests {
             [1.0, 1.0, 0.0],
             [0.0, 1.0, 0.0],
         ];
-        let mesh = triangulate_surface(&quad).expect("valid quad");
+        let mesh = triangulate_surface(&quad, None).expect("valid quad");
         assert_eq!(mesh.positions, quad);
         assert_eq!(mesh.indices.len(), 6, "two triangles = six indices");
         for normal in &mesh.normals {
@@ -143,12 +282,93 @@ mod tests {
             [1.0, 2.0, 0.0],
             [0.0, 2.0, 0.0],
         ];
-        let mesh = triangulate_surface(&hexagon).expect("valid concave hexagon");
+        let mesh = triangulate_surface(&hexagon, None).expect("valid concave hexagon");
         assert_eq!(mesh.positions, hexagon);
         // A simple hexagon triangulates into exactly 4 triangles (n - 2).
         assert_eq!(mesh.indices.len(), 12);
         for index in &mesh.indices {
             assert!((*index as usize) < hexagon.len());
         }
+    }
+
+    #[test]
+    fn a_curved_quads_four_corners_tessellate_into_a_bottom_top_strip() {
+        // Same 4-corner shape `extrusion.rs::quad_piece` mints for a
+        // semicircle edge: bottom start, bottom end, top end, top start.
+        let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
+        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left, facets: 6 };
+        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
+        // 6 facets -> 7 bottom/top pairs -> 14 positions total, interleaved bottom then top per pair.
+        assert_eq!(mesh.positions.len(), 14);
+        assert_eq!(mesh.positions[0], [0.0, 0.0, 0.0], "first pair's bottom is the edge's own start");
+        assert_eq!(mesh.positions[1], [0.0, 3.0, 0.0], "first pair's top is directly above the start");
+        assert_eq!(mesh.positions[12], [4.0, 0.0, 0.0], "last pair's bottom is the edge's own end");
+        assert_eq!(mesh.positions[13], [4.0, 3.0, 0.0], "last pair's top is directly above the end");
+        // 6 facets -> 6 quad segments -> 12 triangles -> 36 indices, none out of range.
+        assert_eq!(mesh.indices.len(), 36);
+        for index in &mesh.indices {
+            assert!((*index as usize) < mesh.positions.len());
+        }
+        assert_eq!(mesh.normals.len(), mesh.positions.len());
+        for normal in &mesh.normals {
+            let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+            assert!((length - 1.0).abs() < 1e-4, "normal not unit length: {normal:?}");
+        }
+    }
+
+    /// A minor (< 180°) arc, whose own `center` is off the chord (the exact
+    /// case a semicircle-only formula could never place correctly -- see
+    /// `extrusion.rs::arc_center`'s own doc) tessellates its own midpoint at
+    /// the correct radius from `center`, not the chord's own midpoint.
+    #[test]
+    fn a_minor_arc_tessellates_through_its_own_true_circle() {
+        // A regular triangle inscribed in a radius-2 circle centered at the
+        // origin: one 120° edge from (2,0) to (-1, 1.7320508), bulging Right
+        // (see `extrusion.rs`'s own matching test for the derivation).
+        let bottom = [2.0, 0.0, 0.0];
+        let end = [-1.0, 0.0, 1.7320508];
+        let corners = [bottom, end, [end[0], 3.0, end[2]], [bottom[0], 3.0, bottom[2]]];
+        let curvature = SurfaceCurvature { center: [0.0, 0.0], bulge: ArcBulge::Right, facets: 12 };
+        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
+
+        // The midpoint pair (facets=12 -> index 6 of 0..=12) must sit on the
+        // true circle: distance 2 from the origin, not from the chord.
+        let midpoint_bottom = mesh.positions[6 * 2];
+        let distance_from_center = (midpoint_bottom[0].powi(2) + midpoint_bottom[2].powi(2)).sqrt();
+        assert!((distance_from_center - 2.0).abs() < 1e-3, "expected the true circle's own radius (2.0), got {distance_from_center}");
+
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
+            let area = cross(sub(mesh.positions[b], mesh.positions[a]), sub(mesh.positions[c], mesh.positions[a]));
+            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
+            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
+        }
+    }
+
+    /// Every triangle in a curved quad's own strip must be a real,
+    /// non-degenerate triangle (nonzero area) -- the regression case for the
+    /// old earcut-on-a-flattened-ring approach, which could fold the strip
+    /// onto itself and emit triangles that visibly cut across the surface.
+    #[test]
+    fn every_triangle_in_a_curved_strip_has_nonzero_area() {
+        let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
+        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left, facets: 16 };
+        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
+            let edge_ab = sub(mesh.positions[b], mesh.positions[a]);
+            let edge_ac = sub(mesh.positions[c], mesh.positions[a]);
+            let area = cross(edge_ab, edge_ac);
+            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
+            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
+        }
+    }
+
+    #[test]
+    fn curvature_is_ignored_when_positions_are_not_a_four_corner_quad() {
+        let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let curvature = SurfaceCurvature { center: [0.5, 0.0], bulge: ArcBulge::Left, facets: 4 };
+        let mesh = triangulate_surface(&triangle, Some(curvature)).expect("valid triangle");
+        assert_eq!(mesh.positions, triangle, "curvature only applies to the 4-corner quad shape a curved edge mints");
     }
 }

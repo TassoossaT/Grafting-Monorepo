@@ -57,7 +57,7 @@ fn a_door_and_its_adjoining_wall_remainder_can_be_merged() {
         &mut surfaces,
         &wall_key,
         &door_key,
-        SurfaceSpec { cycle: merged_cycle, surface_type: SurfaceType::new("wall"), physical: true },
+        SurfaceSpec { cycle: merged_cycle, surface_type: SurfaceType::new("wall"), physical: true, curvature: None },
     )
     .unwrap();
 

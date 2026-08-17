@@ -1,31 +1,55 @@
 import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
 
-/**
- * The two points diametrically opposite `center` at `radius`, east and west
- * -- a full circle is exactly two `"arc-left"` semicircle edges chained
- * east-to-west-to-east: each edge's own "left" side flips with its own
- * direction of travel (`extrusion.rs`'s own `ArcBulge` doc), so the same
- * curvature tag on both edges naturally traces the *opposite* halves of the
- * circle instead of retracing the same one -- no `"arc-right"` needed.
- */
-export function diameterPoints(center: ConstructionPosition, radius: number): { readonly east: ConstructionPosition; readonly west: ConstructionPosition } {
-  return {
-    east: { x: center.x + radius, y: center.y, z: center.z },
-    west: { x: center.x - radius, y: center.y, z: center.z },
-  };
-}
-
-/** The exact two committed edges one tower stamp sends to `generatePathExtrusion` -- see `tower-stamp-tool.ts`'s own doc. */
-export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
-  const { east, west } = diameterPoints(center, radius);
-  return [
-    { start: east, end: west, curvature: "arc-left" },
-    { start: west, end: east, curvature: "arc-left" },
-  ];
-}
+/** How many arcs one tower stamp's own circle is built from -- see {@link circleEdges}'s own doc for why this can never be 2. */
+const CIRCLE_SEGMENTS = 4;
 
 function pointOnCircle(center: ConstructionPosition, radius: number, angle: number): ConstructionPosition {
   return { x: center.x + radius * Math.cos(angle), y: center.y, z: center.z + radius * Math.sin(angle) };
+}
+
+/**
+ * {@link CIRCLE_SEGMENTS} points evenly spaced around the circle, starting
+ * due east and proceeding counterclockwise (increasing angle, matching
+ * {@link previewOutline}'s own convention).
+ */
+function circlePoints(center: ConstructionPosition, radius: number): readonly ConstructionPosition[] {
+  const points: ConstructionPosition[] = [];
+  for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
+    points.push(pointOnCircle(center, radius, (step / CIRCLE_SEGMENTS) * Math.PI * 2));
+  }
+  return points;
+}
+
+/**
+ * The {@link CIRCLE_SEGMENTS} committed edges one tower stamp sends to
+ * `generatePathExtrusion` -- a full circle built from {@link CIRCLE_SEGMENTS}
+ * true circular arcs, **never exactly 2** true semicircles: two semicircle
+ * edges closing the same circle share both their own endpoints, and a
+ * curved edge's own 4 corner nodes are purely position-derived
+ * (`extrusion.rs`'s own `corner_id`), so both would mint the identical node
+ * set and collide on one `grafting_graph_core::SurfaceKey` -- the engine
+ * silently keeps only the first and drops the second, which read as "only
+ * half the circle draws." {@link CIRCLE_SEGMENTS} arcs of `2*PI /
+ * CIRCLE_SEGMENTS` each keep every edge's own corner pair unique. Each arc
+ * is tagged `"arc-right"`, not `"arc-left"` -- for points generated in
+ * increasing-angle (counterclockwise) order, `"arc-right"` is the tag whose
+ * own true circle center actually lands back on `center` (verified in
+ * `extrusion.rs`'s and `generation.rs`'s own matching tests); `"arc-left"`
+ * would still produce 4 valid, non-colliding surfaces (this tag only
+ * affects which side of the chord the arc bulges toward, not corner
+ * identity), just not the circle actually requested.
+ */
+export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
+  const points = circlePoints(center, radius);
+  const includedAngle = (Math.PI * 2) / CIRCLE_SEGMENTS;
+  const edges: PathEdgeSpec[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    if (start === undefined || end === undefined) continue;
+    edges.push({ start, end, curvature: "arc-right", includedAngle });
+  }
+  return edges;
 }
 
 /**

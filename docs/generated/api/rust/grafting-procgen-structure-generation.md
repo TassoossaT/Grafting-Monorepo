@@ -1,23 +1,16 @@
 # grafting-procgen-structure-generation
 
-### `pub enum grafting_procgen_structure_generation::ArcBulge`
-
-Which side of the chord (walking from an edge's `start` to its `end`) a
-[`EdgeCurvature::Semicircle`] bulges toward. Which literal side "left"
-lands on depends only on `start`/`end`'s own order -- callers drawing a
-stroke in a consistent direction get a consistent, predictable bulge.
-
 ### `pub enum grafting_procgen_structure_generation::Axis`
 
 Which grid axis a [`BoundaryRun`] runs perpendicular to.
 
 ### `pub enum grafting_procgen_structure_generation::EdgeCurvature`
 
-A [`PathEdge`]'s shape. `Semicircle`'s radius and center are always
-fully determined by the edge's own `start`/`end` (radius is half the
-chord length, center is the chord's midpoint) -- there is no separate
-radius or control-point parameter to keep this from ever generating a
-self-intersecting or otherwise "crooked" curve.
+A [`PathEdge`]'s shape. `Arc`'s radius and center are always fully
+determined by the edge's own `start`/`end` plus its own
+`included_angle` -- there is no separate radius or control-point
+parameter to keep this from ever generating a self-intersecting or
+otherwise "crooked" curve.
 
 ### `pub enum grafting_procgen_structure_generation::ExtrusionError`
 
@@ -72,14 +65,6 @@ asks for "never merge cells at all," one region per cell (a terrain
 painter's own use, as opposed to a room painter's `max_region_cells > 1`).
 Empty input produces no regions.
 
-### `pub grafting_procgen_structure_generation::ArcBulge::Left`
-
-Bulges toward the chord's left side, facing from `start` to `end`.
-
-### `pub grafting_procgen_structure_generation::ArcBulge::Right`
-
-Bulges toward the chord's right side, facing from `start` to `end`.
-
 ### `pub grafting_procgen_structure_generation::Axis::X`
 
 A vertical line at a fixed grid-x.
@@ -116,10 +101,24 @@ Grid column.
 
 Grid row.
 
-### `pub grafting_procgen_structure_generation::EdgeCurvature::Semicircle(grafting_procgen_structure_generation::ArcBulge)`
+### `pub grafting_procgen_structure_generation::EdgeCurvature::Arc`
 
-A true semicircle between the edge's two endpoints -- radius and
-center are fully determined by them, only the bulge side varies.
+A true circular arc between the edge's two endpoints -- radius and
+center are fully determined by them plus `included_angle`; `bulge`
+is only which of the two arcs sharing that chord and angle is meant.
+
+### `pub grafting_procgen_structure_generation::EdgeCurvature::Arc::bulge: grafting_graph_core::surface::ArcBulge`
+
+Which side of the chord this arc bulges toward, facing from
+`start` to `end` -- see [`ArcBulge`]'s own doc.
+
+### `pub grafting_procgen_structure_generation::EdgeCurvature::Arc::included_angle: f32`
+
+The arc's own swept angle, in radians, strictly between `0` and
+`2 * PI`. `PI` is a true semicircle (the only shape this module
+supported before arcs of arbitrary angle were needed to compose
+closed shapes from 3+ arcs -- see this module's own top-level
+doc).
 
 ### `pub grafting_procgen_structure_generation::EdgeCurvature::Straight`
 
@@ -168,6 +167,19 @@ baseline (`edges[0].start[1]`).
 
 The edge whose own Y breaks the shared baseline.
 
+### `pub grafting_procgen_structure_generation::ExtrusionError::InvalidIncludedAngle`
+
+An `Arc` edge's own `included_angle` is not strictly between `0` and
+`2 * PI`.
+
+### `pub grafting_procgen_structure_generation::ExtrusionError::InvalidIncludedAngle::included_angle: f32`
+
+The offending value that was supplied.
+
+### `pub grafting_procgen_structure_generation::ExtrusionError::InvalidIncludedAngle::index: usize`
+
+The edge whose own angle is out of range.
+
 ### `pub grafting_procgen_structure_generation::ExtrusionError::InvalidNotch`
 
 `notch`'s fractions were outside `[0, 1]`, or `starts_at` was not
@@ -188,7 +200,7 @@ see this module's own doc on the v1 notch scope.
 
 ### `pub grafting_procgen_structure_generation::ExtrusionError::TooFewArcFacets`
 
-A `Semicircle` edge is present but `arc_facets` is fewer than 2.
+An `Arc` edge is present but `arc_facets` is fewer than 2.
 
 ### `pub grafting_procgen_structure_generation::ExtrusionError::TooFewArcFacets::arc_facets: usize`
 
@@ -282,3 +294,5 @@ sub-segments) are emitted by every piece whose cycle includes them,
 under the same [`NodeId`] (position-derived, via `corner_id`) -- a
 caller applying more than one piece to a live graph is responsible for
 not re-adding an id already present.
+
+### `pub use grafting_procgen_structure_generation::ArcBulge`

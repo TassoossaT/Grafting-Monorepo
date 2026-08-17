@@ -1,12 +1,16 @@
 # grafting-procgen-surface-mesh
 
-### `pub fn grafting_procgen_surface_mesh::triangulate_surface(positions: &[[f32; 3]]) -> core::option::Option<grafting_procgen_surface_mesh::TriangulatedMesh>`
+### `pub fn grafting_procgen_surface_mesh::triangulate_surface(positions: &[[f32; 3]], curvature: core::option::Option<grafting_graph_core::surface::SurfaceCurvature>) -> core::option::Option<grafting_procgen_surface_mesh::TriangulatedMesh>`
 
 Triangulates a simple (hole-free) polygon given by `positions` -- an
 ordered ring, e.g. `Surface::cycle()`'s node ids resolved to their
-current graph positions. Returns `None` for fewer than 3 positions or a
-degenerate (collinear/zero-area) ring; both are states a caller may see
-transiently mid-edit, not error conditions to propagate.
+current graph positions. When `curvature` is given and `positions` is
+exactly the 4-corner shape [`crate`]'s own doc describes (bottom start,
+bottom end, top end, top start), the two curved edges are tessellated
+into a many-point ring first, per `curvature.facets`. Returns `None` for
+fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
+are states a caller may see transiently mid-edit, not error conditions
+to propagate.
 
 ### `pub grafting_procgen_surface_mesh::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 
@@ -28,6 +32,21 @@ already use for generation-only crates.
 support ("a hexagon, an irregular outline"), so triangulation uses the
 `earcut` crate (ear-clipping, handles concave simple polygons) rather
 than a fan, which only triangulates convex/star-shaped rings correctly.
+
+A curved `Surface` (see [`grafting_graph_core::SurfaceCurvature`]) keeps
+exactly 4 graph-cycle corners, the same as a straight one -- the actual
+arc only exists here, tessellated into a strip of quads right before
+triangulation, never persisted back onto the graph. This is the one
+place `SurfaceCurvature`'s `facets` is ever read.
+
+That strip is built directly (a triangle per half of each tessellated
+quad segment), **not** by flattening the curve into one many-point ring
+and handing it to `earcut` -- a curved wall's mesh is a section of a
+cylinder, so its vertices do not lie on one flat plane, and `earcut`'s
+own 3D-to-2D projection assumes (near-)planarity. Folding a real curve
+onto that best-fit plane self-intersects in 2D for anything but the
+shallowest arc, producing triangles that visibly cut across the surface
+instead of following it.
 
 ### `pub struct grafting_procgen_surface_mesh::TriangulatedMesh`
 

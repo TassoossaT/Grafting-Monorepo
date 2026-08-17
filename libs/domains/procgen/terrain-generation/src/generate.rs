@@ -123,7 +123,7 @@ pub fn generate_terrain_cell_surface(
     Ok(TerrainCellGeneration {
         nodes,
         edges,
-        surface: SurfaceSpec { cycle, surface_type, physical: true },
+        surface: SurfaceSpec { cycle, surface_type, physical: true, curvature: None },
     })
 }
 
