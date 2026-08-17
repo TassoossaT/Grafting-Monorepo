@@ -5,23 +5,24 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
 import { circleEdges, previewOutline } from "./tower-geometry.ts";
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor } from "./wall-shared.ts";
 
-/** How many straight chords the *preview* ghost's circle outline uses -- a rendering-only approximation, never fed to the engine (the committed geometry is two true semicircle edges, not a facetted polygon). */
+/** How many straight chords the *preview* ghost's circle outline uses -- a rendering-only approximation, never fed to the engine (the committed geometry is 4 true circular arcs, not a facetted polygon). */
 const PREVIEW_SEGMENTS = 24;
-/** How many straight chords each committed semicircle edge tessellates into -- see `extrusion.rs`'s own doc on why the edge itself stays exactly one `Surface` regardless of this. */
-const ARC_FACETS = 16;
+/** How many straight chords each committed quarter-arc edge tessellates into -- see `extrusion.rs`'s own doc on why the edge itself stays exactly one `Surface` regardless of this. 4 arcs * 8 facets keeps roughly the same total resolution the old 2-semicircle design's 2*16 had. */
+const ARC_FACETS = 8;
 
 /**
  * One click stamps a closed circular wall footprint at a known radius (one
  * of {@link TOWER_RADIUS_PRESETS}, never a freehand drag) -- the "buildings
  * get known geometry" half of the owner's own split between this and the
  * free-form brush's own curve-fitting (`wall-brush-tool.ts`,
- * `path-fitting.ts`). Committed as exactly two `"arc-left"` semicircle
- * edges ({@link circleEdges}, `tower-geometry.ts`), so the footprint reaches
- * the graph as two true-circle `Surface`s (per `extrusion.rs`'s
- * one-`Surface`-per-curved-edge fix), not a polygon approximation. Shares
- * the same wall id-prefix (`idPrefixFor`) every other wall tool uses, so a
- * tower stamped against an existing structure still welds by position
- * wherever its own circle happens to touch it.
+ * `path-fitting.ts`). Committed as exactly 4 `"arc-right"` quarter-circle
+ * edges ({@link circleEdges}, `tower-geometry.ts`) -- not 2 semicircles,
+ * which would mint the identical 4 corner nodes for both and collide on one
+ * `SurfaceKey` (see `circleEdges`'s own doc) -- so the footprint reaches the
+ * graph as 4 distinct true-circle `Surface`s, not a polygon approximation.
+ * Shares the same wall id-prefix (`idPrefixFor`) every other wall tool
+ * uses, so a tower stamped against an existing structure still welds by
+ * position wherever its own circle happens to touch it.
  */
 export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   id: "tower-stamp",

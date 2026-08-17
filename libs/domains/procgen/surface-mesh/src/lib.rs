@@ -148,6 +148,14 @@ fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
 /// exact input `start`/`end` (not just approximately equal after the trig
 /// round-trip), so a tessellated arc's own endpoints weld byte-identically
 /// with whatever straight edge or other arc shares that same corner.
+///
+/// General to any circular arc, not only a semicircle: the arc's own swept
+/// angle is not a separate stored input (matching
+/// `grafting_graph_core::SurfaceCurvature`'s own doc that `(start, end,
+/// center, bulge)` is a curved edge's complete description) -- it is
+/// recovered from `center`'s own offset off the chord, via the same
+/// apothem relationship `grafting_procgen_structure_generation::extrusion`'s
+/// own `arc_center` uses to place `center` in the first place.
 fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBulge, facets: usize) -> Vec<[f32; 3]> {
     let y = start[1];
     let (sx, sz) = (start[0], start[2]);
@@ -162,6 +170,10 @@ fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBu
         ArcBulge::Right => -1.0,
     };
 
+    let (midx, midz) = ((sx + ex) / 2.0, (sz + ez) / 2.0);
+    let apothem = -sign * ((mx - midx) * nx + (mz - midz) * nz);
+    let included_angle = 2.0 * (chord_length / 2.0).atan2(apothem);
+
     let mut points: Vec<[f32; 3]> = Vec::with_capacity(facets + 1);
     for step in 0..=facets {
         if step == 0 {
@@ -173,7 +185,7 @@ fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBu
             continue;
         }
         let t = step as f32 / facets as f32;
-        let theta = std::f32::consts::PI * (1.0 - t);
+        let theta = std::f32::consts::FRAC_PI_2 + included_angle * (0.5 - t);
         let x = mx + radius * theta.cos() * ux + sign * radius * theta.sin() * nx;
         let z = mz + radius * theta.cos() * uz + sign * radius * theta.sin() * nz;
         points.push([x, y, z]);
@@ -301,6 +313,35 @@ mod tests {
         for normal in &mesh.normals {
             let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
             assert!((length - 1.0).abs() < 1e-4, "normal not unit length: {normal:?}");
+        }
+    }
+
+    /// A minor (< 180°) arc, whose own `center` is off the chord (the exact
+    /// case a semicircle-only formula could never place correctly -- see
+    /// `extrusion.rs::arc_center`'s own doc) tessellates its own midpoint at
+    /// the correct radius from `center`, not the chord's own midpoint.
+    #[test]
+    fn a_minor_arc_tessellates_through_its_own_true_circle() {
+        // A regular triangle inscribed in a radius-2 circle centered at the
+        // origin: one 120° edge from (2,0) to (-1, 1.7320508), bulging Right
+        // (see `extrusion.rs`'s own matching test for the derivation).
+        let bottom = [2.0, 0.0, 0.0];
+        let end = [-1.0, 0.0, 1.7320508];
+        let corners = [bottom, end, [end[0], 3.0, end[2]], [bottom[0], 3.0, bottom[2]]];
+        let curvature = SurfaceCurvature { center: [0.0, 0.0], bulge: ArcBulge::Right, facets: 12 };
+        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
+
+        // The midpoint pair (facets=12 -> index 6 of 0..=12) must sit on the
+        // true circle: distance 2 from the origin, not from the chord.
+        let midpoint_bottom = mesh.positions[6 * 2];
+        let distance_from_center = (midpoint_bottom[0].powi(2) + midpoint_bottom[2].powi(2)).sqrt();
+        assert!((distance_from_center - 2.0).abs() < 1e-3, "expected the true circle's own radius (2.0), got {distance_from_center}");
+
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
+            let area = cross(sub(mesh.positions[b], mesh.positions[a]), sub(mesh.positions[c], mesh.positions[a]));
+            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
+            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
         }
     }
 

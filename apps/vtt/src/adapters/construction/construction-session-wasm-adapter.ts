@@ -189,6 +189,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
         start: toWirePosition(edge.start),
         end: toWirePosition(edge.end),
         curvature: curvatureToWire(edge.curvature),
+        includedAngle: edge.includedAngle,
       })),
       height: request.height,
       arcFacets: request.arcFacets,
