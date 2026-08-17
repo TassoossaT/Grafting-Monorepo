@@ -6,9 +6,18 @@ import { circleEdges, previewOutline } from "./tower-geometry.ts";
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor } from "./wall-shared.ts";
 
 /** How many straight chords the *preview* ghost's circle outline uses -- a rendering-only approximation, never fed to the engine (the committed geometry is two true semicircle edges, not a facetted polygon). */
-const PREVIEW_SEGMENTS = 24;
-/** How many straight chords each committed semicircle edge tessellates into -- see `extrusion.rs`'s own doc on why the edge itself stays exactly one `Surface` regardless of this. */
-const ARC_FACETS = 16;
+const PREVIEW_SEGMENTS = 48;
+/**
+ * How many straight chords each committed semicircle edge tessellates into
+ * -- see `extrusion.rs`'s own doc on why the edge itself stays exactly one
+ * `Surface` regardless of this; only the mesh's own visual smoothness
+ * scales with it. A tower is a small, bounded, one-shot stamp (unlike
+ * `wall-brush-tool.ts`'s own `ARC_FACETS`, which trades resolution for cost
+ * on every tick of a live drag) -- there is no reason to keep it low, so
+ * this is high enough that a full circle (2 * `ARC_FACETS` facets) reads as
+ * round, not as a visible polygon.
+ */
+const ARC_FACETS = 48;
 
 /**
  * One click stamps a closed circular wall footprint at a known radius (one
