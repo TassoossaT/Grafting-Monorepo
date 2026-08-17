@@ -19,6 +19,7 @@ export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState }
 export { DEFAULT_TOOL_PARAMS } from "./tool-types.ts";
 export type {
   ConstructionToolId,
+  InteriorGenerateParams,
   IrregularTerrainParams,
   NoToolParams,
   PreviewDescriptor,

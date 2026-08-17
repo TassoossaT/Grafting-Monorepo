@@ -137,23 +137,34 @@ export interface DerivedRoom {
 }
 
 /**
- * The smallest closed wall loop containing `click`, or `undefined` if no
- * enclosed area was found there. Algorithm: every wall is an edge between
- * its two bottom corner nodes (`wallSpans`). Tracing a planar graph's
- * faces from a directed edge by always continuing to the next neighbour
- * (sorted by angle) immediately after the reverse of the edge just
- * arrived on is the standard "wall-follower" construction for extracting
- * bounded regions from a straight-line graph -- but getting its
- * clockwise/counter-clockwise convention right by construction is easy to
- * get backwards. Rather than rely on that, this tries *both* directions
- * of every wall as a starting edge, keeps whichever closed loops actually
- * contain the click point (point-in-polygon), and picks the smallest one
- * -- correct regardless of winding convention, and "smallest enclosing
- * loop" is also just the right answer if rooms are ever nested. Robust to
- * a T-junction on one side (the loop just gets an extra colinear vertex
+ * The smallest (or, with `preference: "largest"`, the largest) closed wall
+ * loop containing `click`, or `undefined` if no enclosed area was found
+ * there. Algorithm: every wall is an edge between its two bottom corner
+ * nodes (`wallSpans`). Tracing a planar graph's faces from a directed edge
+ * by always continuing to the next neighbour (sorted by angle) immediately
+ * after the reverse of the edge just arrived on is the standard
+ * "wall-follower" construction for extracting bounded regions from a
+ * straight-line graph -- but getting its clockwise/counter-clockwise
+ * convention right by construction is easy to get backwards. Rather than
+ * rely on that, this tries *both* directions of every wall as a starting
+ * edge and keeps whichever closed loops actually contain the click point
+ * (point-in-polygon) -- correct regardless of winding convention. Robust
+ * to a T-junction on one side (the loop just gets an extra colinear vertex
  * there, which doesn't change area/containment).
+ *
+ * `preference` picks which of those candidate loops to return when more
+ * than one contains the click (nested rooms, or a room already subdivided
+ * by interior walls): `"smallest"` (the default -- right for
+ * `house-room-delete-tool.ts`'s "Apagar Cômodo," which must only ever
+ * touch the one room actually clicked) picks the innermost. `"largest"` is
+ * right for `interior-wall-tool.ts`'s "Gerar Interiores": a click inside a
+ * room it already subdivided must still resolve to that structure's own
+ * *outermost* boundary, not whatever smaller cell the click happens to
+ * land in after a prior generation -- otherwise regenerating (e.g. after
+ * changing the seed) only ever re-subdivides an already-subdivided sliver
+ * instead of the whole footprint again.
  */
-export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition): DerivedRoom | undefined {
+export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
   const spans = wallSpans(ctx);
   if (spans.length === 0) return undefined;
 
@@ -182,7 +193,8 @@ export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition)
       if (!pointInPolygon(clickXz, polygon)) continue;
       const area = polygonArea(polygon);
       if (area < 1e-6) continue;
-      if (best === undefined || area < best.area) best = { loop, polygon, area };
+      const better = best === undefined || (preference === "smallest" ? area < best.area : area > best.area);
+      if (better) best = { loop, polygon, area };
     }
   }
   if (best === undefined) return undefined;

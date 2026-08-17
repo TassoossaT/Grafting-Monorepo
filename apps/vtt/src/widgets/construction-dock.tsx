@@ -22,8 +22,10 @@ export interface ConstructionDockProps {
  * and `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
  *
  * Houses the 8 core construction verbs in a centered, glassmorphic dock:
- * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- two ways to place the same
- *    kind of wall segment, free-form drag vs. exact point-to-point)
+ * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- manual free-form/exact
+ *    point-to-point walls; Gerar Interiores -- one click inside an
+ *    already-enclosed space auto-generates its interior partition via the
+ *    same region-partition algorithm the retired "Pintar Casa" brush used)
  * 2. 🚪 Aberturas (Portas & Janelas)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
@@ -58,7 +60,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
-  const isWallChildActive = isWallBrushActive || isWallLineActive;
+  const isInteriorWallActive = activeTool === "interior-wall";
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive;
   const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
@@ -91,6 +94,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
           active: isWallLineActive,
           disabled: !ready,
           onClick: () => onToolChange("wall-line"),
+        },
+        {
+          key: "interior-wall",
+          label: "Gerar Interiores",
+          icon: "🧩",
+          tooltip: "Gerar Interiores (clique dentro de um local já fechado para calcular os cômodos automaticamente)",
+          active: isInteriorWallActive,
+          disabled: !ready,
+          onClick: () => onToolChange("interior-wall"),
         },
       ],
     },
