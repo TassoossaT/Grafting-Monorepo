@@ -2,6 +2,7 @@ import type { ConstructionSurfaceKey } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
 import { findEnclosingRoom, type DerivedRoom } from "./room-lookup.ts";
+import { findWallSurfaceAt } from "./wall-shared.ts";
 
 /**
  * Every bounding wall panel's surface key for `room` (one per consecutive
@@ -35,18 +36,27 @@ function roomSurfaceKeys(room: DerivedRoom): readonly ConstructionSurfaceKey[] {
 }
 
 /**
- * Click inside a room and remove every wall bounding it. Reuses
- * `findEnclosingRoom` (`room-lookup.ts`) to turn a click into the room's
- * own corner loop, then removes each wall panel that loop implies through
- * the engine's raw `removeSurface` primitive -- one call per surface, no
- * composite "delete a room" call anywhere in the stack. See
- * `roomSurfaceKeys`'s own doc for what "every wall" covers.
+ * Two behaviors, picked by what the click actually landed on: a click
+ * directly on a wall panel (within `findWallSurfaceAt`'s own tolerance)
+ * removes just that one surface -- the raw `removeSurface` primitive,
+ * nothing else touched. A click anywhere else inside an enclosed room
+ * removes every wall bounding it, via `findEnclosingRoom` (`room-lookup.ts`)
+ * turning the click into the room's own corner loop and
+ * {@link roomSurfaceKeys} turning that loop into one `removeSurface` call
+ * per wall -- no composite "delete a room" call anywhere in the stack. A
+ * click that hits neither (open exterior space) is a no-op.
  */
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   id: "house-room-delete",
   defaultParams: () => ({}),
 
   onClick(ctx: ToolContext, sample: PointerSample): void {
+    const directHit = findWallSurfaceAt(ctx, sample.point);
+    if (directHit !== undefined) {
+      ctx.runtime.removeSurface({ surfaceKey: directHit }, "local", `${ctx.tableId}:demolish-surface:${ctx.nextSequence()}`);
+      return;
+    }
+
     const found = findEnclosingRoom(ctx, sample.point);
     if (found === undefined) return;
 

@@ -3,6 +3,7 @@
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   ConstructionToolId,
+  InteriorGenerateParams,
   IrregularTerrainParams,
   TerrainBrushParams,
   ToolParamsByTool,
@@ -87,6 +88,34 @@ function WallBrushFields(props: {
   );
 }
 
+function InteriorGenerateFields(props: {
+  readonly params: InteriorGenerateParams;
+  readonly onChange: (next: InteriorGenerateParams) => void;
+}) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <div className="gm-material-grid">
+        <SelectableChip
+          label="Bloco Branco"
+          swatchColor="#e2e8f0"
+          selected={params.wallType === "wall-white"}
+          onSelect={() => onChange({ ...params, wallType: "wall-white" })}
+        />
+        <SelectableChip
+          label="Bloco Cinza"
+          swatchColor="#64748b"
+          selected={params.wallType === "wall-gray"}
+          onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
+        />
+      </div>
+      {sliderRow("Tamanho da célula", params.cellSize, 1.5, 4, 0.5, (cellSize) => onChange({ ...params, cellSize }))}
+      {sliderRow("Máx. células por cômodo", params.maxRegionCells, 2, 16, 1, (maxRegionCells) => onChange({ ...params, maxRegionCells }))}
+      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
+    </div>
+  );
+}
+
 function IrregularTerrainFields(props: {
   readonly params: IrregularTerrainParams;
   readonly onChange: (next: IrregularTerrainParams) => void;
@@ -127,6 +156,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
+  "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -166,6 +196,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
+      ) : activeTool === "interior-wall" ? (
+        <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

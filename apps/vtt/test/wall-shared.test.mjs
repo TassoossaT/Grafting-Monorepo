@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveWallCrossing } from "../src/composition/tabletop/tools/wall-shared.ts";
+import { findWallSurfaceAt, resolveWallCrossing } from "../src/composition/tabletop/tools/wall-shared.ts";
 
 const TABLE_ID = "table-1";
 
@@ -100,4 +100,35 @@ test("a point with no wall panels on the table is left alone", () => {
 
   assert.deepEqual(resolved, { x: 2, y: 0, z: 0 });
   assert.equal(splitCalls.length, 0);
+});
+
+test("findWallSurfaceAt returns the panel a point lands directly on, even near its own corner", () => {
+  const { ctx } = contextFor(wallMap());
+
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 1.5, z: 0 }), ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"]);
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 0.05, y: 0, z: 0 }), ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"]);
+});
+
+test("findWallSurfaceAt returns undefined for a point off every wall's centerline", () => {
+  const { ctx } = contextFor(wallMap());
+
+  assert.equal(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 5 }), undefined);
+});
+
+test("findWallSurfaceAt picks the closest panel when more than one qualifies", () => {
+  const map = wallMap();
+  map.byId.set("wall-2", {
+    surfaceRef: "wall-2",
+    orderedNodeRefs: ["w2:a-bottom", "w2:b-bottom", "w2:b-top", "w2:a-top"],
+    type: "wall-white",
+    physical: true,
+    revision: 1,
+  });
+  map.nodePositions.set("w2:a-bottom", { nodeRef: "w2:a-bottom", position: { x: 0, y: 0, z: 0.1 }, revision: 1 });
+  map.nodePositions.set("w2:a-top", { nodeRef: "w2:a-top", position: { x: 0, y: 3, z: 0.1 }, revision: 1 });
+  map.nodePositions.set("w2:b-bottom", { nodeRef: "w2:b-bottom", position: { x: 4, y: 0, z: 0.1 }, revision: 1 });
+  map.nodePositions.set("w2:b-top", { nodeRef: "w2:b-top", position: { x: 4, y: 3, z: 0.1 }, revision: 1 });
+  const { ctx } = contextFor(map);
+
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 0.06 }), ["w2:a-bottom", "w2:b-bottom", "w2:b-top", "w2:a-top"]);
 });
