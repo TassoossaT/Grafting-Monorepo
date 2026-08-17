@@ -58,15 +58,13 @@ function commitPath(ctx: ToolContext, points: readonly ConstructionPosition[], p
   const edges = pathEdges(points);
   if (edges.length === 0) return;
   const sequence = ctx.nextSequence();
-  ctx.runtime.generateWallPath(
+  ctx.runtime.generatePathExtrusion(
     {
       edges,
-      wallHeight: WALL_HEIGHT,
+      height: WALL_HEIGHT,
       arcFacets: ARC_FACETS,
       idPrefix: idPrefixFor(ctx),
-      wallType: params.wallType,
-      floorType: "floor",
-      ceilingType: "ceiling",
+      surfaceType: params.wallType,
     },
     "local",
     `${ctx.tableId}:wall-brush:${sequence}`,
@@ -74,14 +72,44 @@ function commitPath(ctx: ToolContext, points: readonly ConstructionPosition[], p
 }
 
 /**
+ * Caps a just-closed loop's own footprint with a flat floor + ceiling,
+ * via `generateBoundaryCap` -- `generatePathExtrusion` never generates a
+ * cap itself (`ADR-0022`'s generation/orchestration split). `points`
+ * already forms a closed polygon (its last entry repeats the first), so
+ * this reuses it directly rather than rasterizing it into grid cells and
+ * routing through `generateRegionPartition`'s auto-subdivision -- a
+ * closed wall-brush loop always becomes exactly one room for now; the
+ * subdivide-on-close behavior `region_partition` supports is `house-brush-tool.ts`'s
+ * own path (whole cell grid painted at once), not this pointwise pen.
+ */
+function commitClosure(ctx: ToolContext, points: readonly ConstructionPosition[]): void {
+  const first = points[0];
+  if (first === undefined) return;
+  const idPrefix = idPrefixFor(ctx);
+  const bottom = points.map((point) => ({ x: point.x, y: first.y, z: point.z }));
+  const top = points.map((point) => ({ x: point.x, y: first.y + WALL_HEIGHT, z: point.z }));
+  const sequence = ctx.nextSequence();
+  ctx.runtime.generateBoundaryCap(
+    { points: bottom, idPrefix, surfaceType: "floor", top: false },
+    "local",
+    `${ctx.tableId}:wall-brush:${sequence}:floor`,
+  );
+  ctx.runtime.generateBoundaryCap(
+    { points: top, idPrefix, surfaceType: "ceiling", top: true },
+    "local",
+    `${ctx.tableId}:wall-brush:${sequence}:ceiling`,
+  );
+}
+
+/**
  * Click to place each corner of a continuous wall -- straight segments for
  * now (see `ARC_FACETS`'s own doc). Clicking back near the loop's own first
- * corner closes it: the same call that draws the closing segment also gets
- * a floor + ceiling back from the engine, for free (`generate_wall_path`'s
- * own closure detection) -- no separate "derive room" click needed. Every
- * tick resends the whole path so far (`GenerateWallPathRequest`'s own doc
- * on why that's cheap), so a stroke abandoned mid-loop leaves exactly the
- * open fence it already drew, nothing more.
+ * corner closes it: the closing segment's own `generatePathExtrusion` call
+ * lands first, then {@link commitClosure} caps the now-closed footprint
+ * with a floor + ceiling -- no separate "derive room" click needed. Every
+ * tick resends the whole path so far (`GeneratePathExtrusionRequest`'s own
+ * doc on why that's cheap), so a stroke abandoned mid-loop leaves exactly
+ * the open fence it already drew, nothing more.
  */
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
@@ -104,18 +132,22 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: WallBrushParams): void {
-    const point = sample.point;
-
     if (activePath === undefined) {
-      activePath = [point];
+      activePath = [sample.point];
       return;
     }
 
+    // Every corner shares the stroke's own first point's Y -- a later hover
+    // sample landing on a different surface (a step, a sloped terrain tile)
+    // must not desync the path's baseline, or `extrude_path` rejects the
+    // whole stroke as `InconsistentBaseline`.
     const first = activePath[0];
+    const point: ConstructionPosition = first === undefined ? sample.point : { ...sample.point, y: first.y };
     const closing = first !== undefined && activePath.length >= 3 && xzDistance(point, first) <= CLOSE_DISTANCE;
     const nextPoints = closing && first !== undefined ? [...activePath, first] : [...activePath, point];
 
     commitPath(ctx, nextPoints, params);
+    if (closing) commitClosure(ctx, nextPoints);
 
     activePath = closing ? undefined : nextPoints;
   },

@@ -17,20 +17,23 @@ import type {
   AffectedSurfaces,
   CameraControlHandle,
   CameraControlOptions,
-  CellPartitionOutcome,
   ChangeOrigin,
+  CloudOutcome,
+  CloudRequest,
   ConfirmedTokenRenderChange,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  GenerateCellPartitionRequest,
+  DeleteNodeOutcome,
+  DiffOutcome,
+  GenerateBoundaryCapRequest,
+  GeneratePathExtrusionRequest,
+  GenerateRegionPartitionRequest,
   GenerateTerrainCellRequest,
-  GenerateWallPathRequest,
-  GenerateWallRequest,
-  RemoveRoomOutcome,
-  RemoveRoomRequest,
+  RemoveEdgeRequest,
+  RemoveSurfaceRequest,
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
@@ -39,8 +42,6 @@ import type {
   SceneRenderPort,
   SurfaceMeshResult,
   TerrainNoisePort,
-  WallPathOutcome,
-  WallPiece,
 } from "@/ports";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
@@ -101,34 +102,45 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionSurfaceKey;
-  generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[];
   /**
-   * One tick of the continuous "Pintar Casa" brush: regenerates the whole
-   * painted structure's partition from `request.cells` and applies only
-   * the difference against what already exists -- walls/floors/ceilings
-   * can be added AND removed in the same call (a split moving, two rooms
-   * merging). See `ConstructionSessionPort.generateCellPartition`.
+   * One tick of a continuous path-brush pen (wall, fence, any other
+   * extruded panel run): regenerates the whole drawn path's straight/arc
+   * geometry from `request.edges` and applies only the difference against
+   * what already exists. Never generates a floor/ceiling itself -- see
+   * {@link generateBoundaryCap}/{@link generateRegionPartition}. See
+   * `ConstructionSessionPort.generatePathExtrusion`.
    */
-  generateCellPartition(
-    request: GenerateCellPartitionRequest,
+  generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
+  /** One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`. */
+  generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
+  /**
+   * One tick of a continuous cell-painting brush ("Pintar Casa," a
+   * wall-brush stroke's closure): regenerates the whole painted cell
+   * set's region partition and applies only the difference against what
+   * already exists -- walls/floors/ceilings can be added AND removed in
+   * the same call (a split moving, two regions merging). See
+   * `ConstructionSessionPort.generateRegionPartition`.
+   */
+  generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
+  /** Unregisters a surface outright -- no hole-repair, no cascading. A caller composing a bigger removal (e.g. "Apagar Cômodo") calls this once per surface it already knows belongs to that removal. See `ConstructionSessionPort.removeSurface`. */
+  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void;
+  /** Removes an edge outright -- no repair, no cascading. See `ConstructionSessionPort.removeEdge`. */
+  removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void;
+  /** Deletes a node and repairs the hole it leaves. See `ConstructionSessionPort.deleteNode`. */
+  deleteNode(
+    nodeId: ConstructionNodeId,
+    capSurfaceType: string,
+    capPhysical: boolean,
     origin: ChangeOrigin,
     causeId: string,
-  ): CellPartitionOutcome;
-  /**
-   * One tick of the continuous wall-brush pen: regenerates the whole
-   * drawn path's straight/arc geometry from `request.edges` and applies
-   * only the difference against what already exists -- once the path
-   * closes back on itself, a floor + ceiling appear in the same call, no
-   * separate room-derive step. See `ConstructionSessionPort.generateWallPath`.
-   */
-  generateWallPath(request: GenerateWallPathRequest, origin: ChangeOrigin, causeId: string): WallPathOutcome;
-  /** Removes a whole room, preserving (door-stripped) any side still shared with a standing neighbor -- "Apagar Cômodo." See `ConstructionSessionPort.removeRoom`. */
-  removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome;
+  ): DeleteNodeOutcome;
+  /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
+  cloudFor(request: CloudRequest): CloudOutcome;
   /**
    * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
    * hexagon's worth) through the construction session's existing generic
    * `addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-   * like `generateTerrainCell`/`generateWall` do. No new Rust/Wasm surface --
+   * like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
    * `ConstructionSessionPort.addNode`/`addSurface` already exist.
    */
   applyIrregularTerrainPatch(
@@ -313,13 +325,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
     this.#construction.setTerrainMesh(TERRAIN_GRID_WIDTH, TERRAIN_GRID_HEIGHT, TERRAIN_GRID_LAYERS, "surface", 0, 0);
     const terrainKey = this.#construction.generateTerrainCell(terrainCell.payload);
-    const wallPieces = this.#construction.generateWall(wall.payload);
+    const wallOutcome = this.#construction.generatePathExtrusion(wall.payload);
 
     const meshes = this.#construction.getAllSurfaceMeshes();
     const causeId = `table-load:${this.#tableId}`;
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
 
-    const surfaceKeys = [terrainKey, ...wallPieces.map((piece) => piece.surfaceKey)];
+    const surfaceKeys = [terrainKey, ...wallOutcome.addedSurfaceKeys];
     let map = this.#foldAffectedSurfaces(createMapProjection(), surfaceKeys, meshes);
     map = this.#foldDiscoveredNodePositions(map, "programmatic", causeId, generation);
     return map;
@@ -391,7 +403,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed now that `removeRoom` is the first mutation to ever delete a node outright. */
+  /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
     this.#nodeHandleRevisions.delete(nodeId);
@@ -470,7 +482,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /**
    * Requires a ready runtime for a construction mutation, naming the caller's
-   * own action in the error so `moveNode`/`generateTerrainCell`/`generateWall`
+   * own action in the error so `moveNode`/`generateTerrainCell`/`generatePathExtrusion`
    * each keep a distinct, readable message despite sharing this guard.
    */
   #requireReady(action: string): void {
@@ -561,24 +573,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return surfaceKey;
   }
 
-  /** Generates one more wall (and its door) through the real engine and folds every piece into the running map. */
-  generateWall(request: GenerateWallRequest, origin: ChangeOrigin, causeId: string): readonly WallPiece[] {
-    this.#requireReady("generating a wall");
-
-    const pieces = this.#construction.generateWall(request);
-    this.#applyConstructionMutation(
-      pieces.map((piece) => piece.surfaceKey),
-      origin,
-      causeId,
-      (map) => this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return pieces;
-  }
-
-  generateCellPartition(request: GenerateCellPartitionRequest, origin: ChangeOrigin, causeId: string): CellPartitionOutcome {
-    this.#requireReady("painting a house");
-
-    const outcome = this.#construction.generateCellPartition(request);
+  /** Shared by every `generate*` mutation: folds `outcome`'s added/removed surfaces and removed nodes into the running map. */
+  #foldDiffOutcome(outcome: DiffOutcome, origin: ChangeOrigin, causeId: string): void {
     this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
       let next = map;
       for (const removedKey of outcome.removedSurfaceKeys) {
@@ -594,14 +590,62 @@ export class AppTabletopRuntime implements TabletopRuntime {
       }
       return next;
     });
+  }
+
+  generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
+    this.#requireReady("drawing a path");
+
+    const outcome = this.#construction.generatePathExtrusion(request);
+    this.#foldDiffOutcome(outcome, origin, causeId);
     return outcome;
   }
 
-  generateWallPath(request: GenerateWallPathRequest, origin: ChangeOrigin, causeId: string): WallPathOutcome {
-    this.#requireReady("drawing a wall path");
+  generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
+    this.#requireReady("capping a boundary");
 
-    const outcome = this.#construction.generateWallPath(request);
-    this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
+    const outcome = this.#construction.generateBoundaryCap(request);
+    this.#foldDiffOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
+    this.#requireReady("painting a region");
+
+    const outcome = this.#construction.generateRegionPartition(request);
+    this.#foldDiffOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void {
+    this.#requireReady("removing a surface");
+
+    this.#construction.removeSurface(request);
+    this.#applyConstructionMutation([], origin, causeId, (map) => {
+      const surfaceRef = surfaceRefFromNodeSet(request.surfaceKey);
+      const previous = map.byId.get(surfaceRef);
+      if (previous === undefined) return map;
+      return applyMapProjectionDelta(map, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
+    });
+  }
+
+  removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void {
+    this.#requireReady("removing an edge");
+
+    this.#construction.removeEdge(request);
+    this.#applyConstructionMutation([], origin, causeId, (map) => map);
+  }
+
+  deleteNode(
+    nodeId: ConstructionNodeId,
+    capSurfaceType: string,
+    capPhysical: boolean,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): DeleteNodeOutcome {
+    this.#requireReady("deleting a node");
+
+    const outcome = this.#construction.deleteNode(nodeId, capSurfaceType, capPhysical);
+    this.#applyConstructionMutation(outcome.cappingSurfaceKeys, origin, causeId, (map) => {
       let next = map;
       for (const removedKey of outcome.removedSurfaceKeys) {
         const surfaceRef = surfaceRefFromNodeSet(removedKey);
@@ -609,36 +653,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
         if (previous === undefined) continue;
         next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
       }
-      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-      for (const nodeId of outcome.removedNodeIds) {
-        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
-        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
-      }
-      return next;
+      next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+      this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
     });
     return outcome;
   }
 
-  removeRoom(request: RemoveRoomRequest, origin: ChangeOrigin, causeId: string): RemoveRoomOutcome {
-    this.#requireReady("removing a room");
-
-    const outcome = this.#construction.removeRoom(request);
-    this.#applyConstructionMutation(outcome.preservedSurfaceKeys, origin, causeId, (map) => {
-      let next = map;
-      for (const removedKey of outcome.removedSurfaceKeys) {
-        const surfaceRef = surfaceRefFromNodeSet(removedKey);
-        const previous = next.byId.get(surfaceRef);
-        if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
-      }
-      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-      for (const nodeId of outcome.removedNodeIds) {
-        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
-        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
-      }
-      return next;
-    });
-    return outcome;
+  cloudFor(request: CloudRequest): CloudOutcome {
+    this.#requireReady("querying a cloud");
+    return this.#construction.cloudFor(request);
   }
 
   applyIrregularTerrainPatch(

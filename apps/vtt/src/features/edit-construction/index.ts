@@ -1,13 +1,13 @@
 export {
+  createGeneratePathExtrusionOperation,
   createGenerateTerrainCellOperation,
-  createGenerateWallOperation,
   createMoveNodeOperation,
 } from "./construction-operations.ts";
 export type {
   ConstructionOperation,
   ConstructionOperationContext,
+  GeneratePathExtrusionOperation,
   GenerateTerrainCellOperation,
-  GenerateWallOperation,
   MoveNodeOperation,
   MoveNodePayload,
   OperationId,

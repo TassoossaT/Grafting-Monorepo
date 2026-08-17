@@ -88,22 +88,22 @@ interface BrushSession {
   readonly cells: Set<string>;
 }
 
-/** The current gesture's own accumulated cell set -- dies with the gesture, same lifetime as `irregular-terrain-tool.ts`'s own `activeSession`. Every tick resends the whole set (see `GenerateCellPartitionRequest`'s own doc for why that's cheap), so no state needs to survive past `onPointerUp`. */
+/** The current gesture's own accumulated cell set -- dies with the gesture, same lifetime as `irregular-terrain-tool.ts`'s own `activeSession`. Every tick resends the whole set (see `GenerateRegionPartitionRequest`'s own doc for why that's cheap), so no state needs to survive past `onPointerUp`. */
 let activeSession: BrushSession | undefined;
 
 function commit(ctx: ToolContext, session: BrushSession): void {
   const sequence = ctx.nextSequence();
-  ctx.runtime.generateCellPartition(
+  ctx.runtime.generateRegionPartition(
     {
       cells: [...session.cells].map(cellFromKey),
       cellSize: session.cellSize,
       origin: { x: 0, y: session.originY, z: 0 },
       wallHeight: WALL_HEIGHT,
-      maxRoomCells: session.maxRoomCells,
+      maxRegionCells: session.maxRoomCells,
       seed: session.seed,
       idPrefix: session.idPrefix,
       wallType: "wall-white",
-      doorType: "door",
+      notchType: "door",
       floorType: "floor",
       ceilingType: "ceiling",
     },
@@ -138,8 +138,8 @@ function paint(ctx: ToolContext, point: ConstructionPosition, params: HouseBrush
  * current room, splits into more, or starts a new one -- "Pintar Casa,"
  * replacing the old one-shot `house-stamp`/drag-a-fixed-rectangle
  * `house-room-add`. All partition/wall/id math happens on the Rust side
- * (`ConstructionSessionPort.generateCellPartition` ->
- * `grafting_procgen_construction_wasm::cell_partition::generate_and_apply_cell_partition`);
+ * (`ConstructionSessionPort.generateRegionPartition` ->
+ * `grafting_procgen_construction_wasm::generation::generate_and_apply_region_partition`);
  * this tool only resolves which cell the pointer is over and which cells
  * an existing structure nearby already owns.
  */

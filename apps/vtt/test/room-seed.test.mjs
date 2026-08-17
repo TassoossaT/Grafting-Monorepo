@@ -27,29 +27,29 @@ test("buildGenerateRoomOperations forms a closed rectangle with exactly one door
   );
 
   // Each wall's end must be the next wall's start, closing the loop.
-  assert.deepEqual(south.payload.wall.end, east.payload.wall.start);
-  assert.deepEqual(east.payload.wall.end, north.payload.wall.start);
-  assert.deepEqual(north.payload.wall.end, west.payload.wall.start);
-  assert.deepEqual(west.payload.wall.end, south.payload.wall.start);
+  assert.deepEqual(south.payload.edges[0].end, east.payload.edges[0].start);
+  assert.deepEqual(east.payload.edges[0].end, north.payload.edges[0].start);
+  assert.deepEqual(north.payload.edges[0].end, west.payload.edges[0].start);
+  assert.deepEqual(west.payload.edges[0].end, south.payload.edges[0].start);
 
-  const withDoor = [south, east, north, west].filter((op) => op.payload.door !== undefined);
+  const withDoor = [south, east, north, west].filter((op) => op.payload.notch !== undefined);
   assert.equal(withDoor.length, 1);
   assert.equal(withDoor[0], south);
 
   // Every wall shares the variant's height and the requested wall/door type.
   for (const op of [south, east, north, west]) {
-    assert.equal(op.payload.wall.height, variant.height);
-    assert.equal(op.payload.wallType, "wall-white");
+    assert.equal(op.payload.height, variant.height);
+    assert.equal(op.payload.surfaceType, "wall-white");
   }
 });
 
-test("buildGenerateRoomOperations namespaces node/edge ids per side so 4 walls never collide", () => {
+test("buildGenerateRoomOperations namespaces id prefixes per side so 4 walls never collide", () => {
   const origin = { x: 0, y: 0, z: 0 };
   const variant = roomVariantForIndex(1);
   const operations = buildGenerateRoomOperations("table-1", "room-1", context("op-1"), origin, variant, "wall-white", "wall-white");
 
-  const allNodeIds = operations.flatMap((op) => Object.values(op.payload.nodeIds));
-  assert.equal(new Set(allNodeIds).size, allNodeIds.length);
+  const allIdPrefixes = operations.map((op) => op.payload.idPrefix);
+  assert.equal(new Set(allIdPrefixes).size, allIdPrefixes.length);
 
   const allOperationIds = operations.map((op) => op.operationId);
   assert.equal(new Set(allOperationIds).size, 4);
@@ -83,7 +83,7 @@ test("roomVariantForIndex keeps width/depth within the stride's bound and the do
     assert.ok(variant.width > 0 && variant.width <= MAX_ROOM_WIDTH, `width ${variant.width} out of bounds at index ${index}`);
     assert.ok(variant.depth > 0 && variant.depth <= MAX_ROOM_WIDTH, `depth ${variant.depth} out of bounds at index ${index}`);
     assert.ok(variant.height > 0, `height ${variant.height} out of bounds at index ${index}`);
-    assert.ok(variant.door.opensAt >= 0 && variant.door.opensAt < variant.door.closesAt, `door opening invalid at index ${index}`);
-    assert.ok(variant.door.closesAt <= 1, `door opening invalid at index ${index}`);
+    assert.ok(variant.door.startsAt >= 0 && variant.door.startsAt < variant.door.endsAt, `door opening invalid at index ${index}`);
+    assert.ok(variant.door.endsAt <= 1, `door opening invalid at index ${index}`);
   }
 });

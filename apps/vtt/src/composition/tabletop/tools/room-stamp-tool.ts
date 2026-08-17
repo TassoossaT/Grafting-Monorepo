@@ -55,7 +55,7 @@ export const roomStampTool: ConstructionTool<"room-stamp"> = {
       "door",
     );
     for (const operation of operations) {
-      ctx.runtime.generateWall(operation.payload, "local", operation.operationId);
+      ctx.runtime.generatePathExtrusion(operation.payload, "local", operation.operationId);
     }
   },
 };

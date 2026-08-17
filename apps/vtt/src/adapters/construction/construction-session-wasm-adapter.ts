@@ -10,21 +10,21 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
-  CellPartitionOutcome,
+  CloudOutcome,
+  CloudRequest,
   ConstructionNodeSnapshot,
   ConstructionPosition,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  GenerateCellPartitionRequest,
+  DiffOutcome,
+  GenerateBoundaryCapRequest,
+  GeneratePathExtrusionRequest,
+  GenerateRegionPartitionRequest,
   GenerateTerrainCellRequest,
-  GenerateWallPathRequest,
-  GenerateWallRequest,
-  RemoveRoomOutcome,
-  RemoveRoomRequest,
+  RemoveEdgeRequest,
+  RemoveSurfaceRequest,
   SurfaceMeshResult,
-  WallPathOutcome,
-  WallPiece,
 } from "@/ports";
 
 function curvatureToWire(curvature: "straight" | "arc-left" | "arc-right"): string {
@@ -183,90 +183,73 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return response.surfaceKey;
   }
 
-  generateWall(request: GenerateWallRequest): readonly WallPiece[] {
-    const wire = {
-      wall: {
-        start: toWirePosition(request.wall.start),
-        end: toWirePosition(request.wall.end),
-        height: request.wall.height,
-      },
-      door: request.door,
-      wallType: request.wallType,
-      doorType: request.doorType,
-      nodeIds: request.nodeIds,
-      edgeIds: request.edgeIds,
-      weldedNodeIds: request.weldedNodeIds ?? [],
-    };
-    const response = JSON.parse(this.#require().generate_and_apply_wall_json(JSON.stringify(wire))) as {
-      pieces: readonly { surfaceKey: readonly string[]; surfaceType: string }[];
-    };
-    return response.pieces;
-  }
-
-  generateCellPartition(request: GenerateCellPartitionRequest): CellPartitionOutcome {
-    const wire = {
-      cells: request.cells,
-      cellSize: request.cellSize,
-      origin: toWirePosition(request.origin),
-      wallHeight: request.wallHeight,
-      maxRoomCells: request.maxRoomCells,
-      seed: request.seed,
-      idPrefix: request.idPrefix,
-      wallType: request.wallType,
-      doorType: request.doorType,
-      floorType: request.floorType,
-      ceilingType: request.ceilingType,
-    };
-    const response = JSON.parse(this.#require().generate_and_apply_cell_partition_json(JSON.stringify(wire))) as {
-      addedSurfaceKeys: readonly (readonly string[])[];
-      removedSurfaceKeys: readonly (readonly string[])[];
-      removedNodeIds: readonly string[];
-    };
-    return {
-      addedSurfaceKeys: response.addedSurfaceKeys,
-      removedSurfaceKeys: response.removedSurfaceKeys,
-      removedNodeIds: response.removedNodeIds,
-    };
-  }
-
-  generateWallPath(request: GenerateWallPathRequest): WallPathOutcome {
+  generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome {
     const wire = {
       edges: request.edges.map((edge) => ({
         start: toWirePosition(edge.start),
         end: toWirePosition(edge.end),
         curvature: curvatureToWire(edge.curvature),
       })),
-      wallHeight: request.wallHeight,
+      height: request.height,
       arcFacets: request.arcFacets,
       idPrefix: request.idPrefix,
+      surfaceType: request.surfaceType,
+      notch: request.notch,
+    };
+    return this.#diffOutcome(this.#require().generate_and_apply_path_extrusion_json(JSON.stringify(wire)));
+  }
+
+  generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome {
+    const wire = {
+      points: request.points.map(toWirePosition),
+      idPrefix: request.idPrefix,
+      surfaceType: request.surfaceType,
+      top: request.top,
+    };
+    return this.#diffOutcome(this.#require().generate_and_apply_boundary_cap_json(JSON.stringify(wire)));
+  }
+
+  generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome {
+    const wire = {
+      cells: request.cells,
+      cellSize: request.cellSize,
+      origin: toWirePosition(request.origin),
+      wallHeight: request.wallHeight,
+      maxRegionCells: request.maxRegionCells,
+      seed: request.seed,
+      idPrefix: request.idPrefix,
       wallType: request.wallType,
+      notchType: request.notchType,
       floorType: request.floorType,
       ceilingType: request.ceilingType,
     };
-    const response = JSON.parse(this.#require().generate_and_apply_wall_path_json(JSON.stringify(wire))) as {
+    return this.#diffOutcome(this.#require().generate_and_apply_region_partition_json(JSON.stringify(wire)));
+  }
+
+  removeSurface(request: RemoveSurfaceRequest): void {
+    this.#require().remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey }));
+  }
+
+  removeEdge(request: RemoveEdgeRequest): void {
+    this.#require().remove_edge_json(JSON.stringify({ edgeId: request.edgeId }));
+  }
+
+  cloudFor(request: CloudRequest): CloudOutcome {
+    const response = JSON.parse(
+      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType })),
+    ) as { surfaceKeys: readonly (readonly string[])[] };
+    return { surfaceKeys: response.surfaceKeys };
+  }
+
+  #diffOutcome(responseJson: string): DiffOutcome {
+    const response = JSON.parse(responseJson) as {
       addedSurfaceKeys: readonly (readonly string[])[];
       removedSurfaceKeys: readonly (readonly string[])[];
       removedNodeIds: readonly string[];
-      closed: boolean;
     };
     return {
       addedSurfaceKeys: response.addedSurfaceKeys,
       removedSurfaceKeys: response.removedSurfaceKeys,
-      removedNodeIds: response.removedNodeIds,
-      closed: response.closed,
-    };
-  }
-
-  removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome {
-    const wire = { bottomCycle: request.bottomCycle, topCycle: request.topCycle, wallType: request.wallType };
-    const response = JSON.parse(this.#require().remove_room_json(JSON.stringify(wire))) as {
-      removedSurfaceKeys: readonly (readonly string[])[];
-      preservedSurfaceKeys: readonly (readonly string[])[];
-      removedNodeIds: readonly string[];
-    };
-    return {
-      removedSurfaceKeys: response.removedSurfaceKeys,
-      preservedSurfaceKeys: response.preservedSurfaceKeys,
       removedNodeIds: response.removedNodeIds,
     };
   }

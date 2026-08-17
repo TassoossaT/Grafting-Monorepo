@@ -123,9 +123,9 @@ function createFakeConstructionPort() {
       requireStarted();
       return FAKE_TERRAIN_SURFACE_KEY;
     },
-    generateWall() {
+    generatePathExtrusion() {
       requireStarted();
-      return [{ surfaceKey: FAKE_WALL_SURFACE_KEY, surfaceType: "wall" }];
+      return { addedSurfaceKeys: [FAKE_WALL_SURFACE_KEY], removedSurfaceKeys: [], removedNodeIds: [] };
     },
     getSurfaceMesh() {
       requireStarted();
@@ -364,7 +364,7 @@ test("generateTerrainCell folds the new surface and its nodes into the map", asy
   assert.deepEqual(map.nodePositions.get("fake:terrain2:n0").position, { x: 5, y: 0, z: 5 });
 });
 
-test("generateWall folds every returned piece into the map", async () => {
+test("generatePathExtrusion folds every added surface into the map", async () => {
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-generate-wall",
@@ -374,7 +374,7 @@ test("generateWall folds every returned piece into the map", async () => {
   await runtime.start();
 
   const pieceKey = ["fake:wall2:a", "fake:wall2:b"];
-  constructionPort.generateWall = () => [{ surfaceKey: pieceKey, surfaceType: "door" }];
+  constructionPort.generatePathExtrusion = () => ({ addedSurfaceKeys: [pieceKey], removedSurfaceKeys: [], removedNodeIds: [] });
   constructionPort.getAllSurfaceMeshes = () => [
     {
       surfaceKey: pieceKey,
@@ -388,8 +388,8 @@ test("generateWall folds every returned piece into the map", async () => {
     { id: "fake:wall2:b", position: { x: 8, y: 3, z: 0 } },
   ];
 
-  const pieces = runtime.generateWall({}, "local", "generate-2");
-  assert.deepEqual(pieces, [{ surfaceKey: pieceKey, surfaceType: "door" }]);
+  const outcome = runtime.generatePathExtrusion({}, "local", "generate-2");
+  assert.deepEqual(outcome, { addedSurfaceKeys: [pieceKey], removedSurfaceKeys: [], removedNodeIds: [] });
 
   const map = runtime.getSnapshot().map;
   const surfaceRef = surfaceRefFromNodeSet(pieceKey);
@@ -404,7 +404,7 @@ test("generating construction requires a ready tabletop runtime", async () => {
     constructionPort: createFakeConstructionPort(),
   });
   assert.throws(() => runtime.generateTerrainCell({}, "local", "c"), /ready/);
-  assert.throws(() => runtime.generateWall({}, "local", "c"), /ready/);
+  assert.throws(() => runtime.generatePathExtrusion({}, "local", "c"), /ready/);
 });
 
 test("moving a node requires a ready tabletop runtime", async () => {

@@ -1,8 +1,8 @@
 import { lerp, mulberry32 } from "../../ui/seeded-random.ts";
 
-import { buildGenerateWallOperation } from "./default-map-seed.ts";
-import type { ConstructionOperationContext, GenerateWallOperation } from "../../features/edit-construction/index.ts";
-import type { ConstructionPosition, DoorOpening } from "@/ports";
+import { buildGeneratePathExtrusionOperation } from "./default-map-seed.ts";
+import type { ConstructionOperationContext, GeneratePathExtrusionOperation } from "../../features/edit-construction/index.ts";
+import type { ConstructionPosition, EdgeNotchSpec } from "@/ports";
 
 /** A rectangular room's footprint in the XZ plane, walls rising along Y. */
 export interface RoomLayout {
@@ -17,7 +17,7 @@ export interface RoomVariant {
   readonly width: number;
   readonly depth: number;
   readonly height: number;
-  readonly door: DoorOpening;
+  readonly door: Omit<EdgeNotchSpec, "surfaceType">;
 }
 
 const MIN_ROOM_WIDTH = 4;
@@ -79,17 +79,17 @@ export function roomVariantForIndex(index: number): RoomVariant {
     width,
     depth,
     height,
-    door: { opensAt: doorCenter - DOOR_HALF_WIDTH, closesAt: doorCenter + DOOR_HALF_WIDTH },
+    door: { startsAt: doorCenter - DOOR_HALF_WIDTH, endsAt: doorCenter + DOOR_HALF_WIDTH },
   };
 }
 
 /**
- * Builds (but does not apply) the 4 `construction.generate-wall@1`
+ * Builds (but does not apply) the 4 `construction.generate-path-extrusion@1`
  * operations forming one rectangular room at `origin` shaped by `variant`:
  * 3 plain walls and one wall with `variant.door` cut into it (the south
  * wall, starting at `origin`), each with a `salt`-namespaced id set via
- * {@link buildGenerateWallOperation} so the 4 calls never collide with each
- * other or with any other generated geometry on the table.
+ * {@link buildGeneratePathExtrusionOperation} so the 4 calls never collide
+ * with each other or with any other generated geometry on the table.
  */
 export function buildGenerateRoomOperations(
   tableId: string,
@@ -99,7 +99,12 @@ export function buildGenerateRoomOperations(
   variant: RoomVariant,
   wallType: string,
   doorType: string,
-): readonly [GenerateWallOperation, GenerateWallOperation, GenerateWallOperation, GenerateWallOperation] {
+): readonly [
+  GeneratePathExtrusionOperation,
+  GeneratePathExtrusionOperation,
+  GeneratePathExtrusionOperation,
+  GeneratePathExtrusionOperation,
+] {
   const { width, depth, height, door } = variant;
   const sw: ConstructionPosition = origin;
   const se: ConstructionPosition = { x: origin.x + width, y: origin.y, z: origin.z };
@@ -107,14 +112,15 @@ export function buildGenerateRoomOperations(
   const nw: ConstructionPosition = { x: origin.x, y: origin.y, z: origin.z + depth };
 
   const wallOp = (side: string, start: ConstructionPosition, end: ConstructionPosition, hasDoor: boolean) =>
-    buildGenerateWallOperation(
+    buildGeneratePathExtrusionOperation(
       tableId,
       `${salt}:${side}`,
       { ...context, operationId: `${context.operationId}:${side}` },
-      { start, end, height },
-      hasDoor ? door : undefined,
+      [{ start, end, curvature: "straight" }],
+      height,
       wallType,
-      doorType,
+      1,
+      hasDoor ? { ...door, surfaceType: doorType } : undefined,
     );
 
   return [

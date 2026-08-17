@@ -65,7 +65,7 @@ export interface IrregularTerrainParams {
 
 /**
  * The continuous "Pintar Casa" brush: paint cells, and the Rust side
- * (`ConstructionSessionPort.generateCellPartition`) decides every tick
+ * (`ConstructionSessionPort.generateRegionPartition`) decides every tick
  * whether the painted region grows the current room, splits into more, or
  * starts a new one -- see `cell_partition`'s own doc for the algorithm.
  */
