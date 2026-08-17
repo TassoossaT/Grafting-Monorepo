@@ -21,16 +21,21 @@ export interface ConstructionDockProps {
  * The primary bottom ActionDock inspired by Tiny Glade's reactive construction model
  * and `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
  *
- * Houses the 9 core construction verbs in a centered, glassmorphic dock:
- * 1. 🏠 Edifícios (Pintar Casa, Carimbo de Sala, Derivar Sala, Expandir)
- * 2. 🧱 Muros & Cercas (Pincel de Parede)
- * 3. 🚪 Aberturas (Portas & Janelas)
- * 4. 🪜 Escadas (Conexão de elevações)
- * 5. 🛤️ Caminhos (Trilhas & química de portais)
- * 6. ⛰️ Terreno & Água (Pincel de Terreno, Terreno Irregular)
- * 7. 🌲 Vegetação (Adornos & Flora)
- * 8. 🎨 Estilo & Paleta (Materiais & Temas)
- * 9. 🔨 Demolir (Apagador de cômodos / elementos)
+ * Houses the 8 core construction verbs in a centered, glassmorphic dock:
+ * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- two ways to place the same
+ *    kind of wall segment, free-form drag vs. exact point-to-point)
+ * 2. 🚪 Aberturas (Portas & Janelas)
+ * 3. 🪜 Escadas (Conexão de elevações)
+ * 4. 🛤️ Caminhos (Trilhas & química de portais)
+ * 5. ⛰️ Terreno & Água (Pincel de Terreno, Terreno Irregular)
+ * 6. 🌲 Vegetação (Adornos & Flora)
+ * 7. 🎨 Estilo & Paleta (Materiais & Temas)
+ * 8. 🔨 Demolir (Apagador de cômodos / elementos)
+ *
+ * The former "Pintar Casa"/"Carimbo de Sala"/"Derivar Sala" cell-grid/stamp
+ * tools and the separate "Muros" branch are retired -- the owner flagged the
+ * whole cell-grid-room model as the wrong idea; "Edifícios" now means the
+ * wall tools, formerly their own "Muros" entry.
  */
 export function ConstructionDock(props: ConstructionDockProps) {
   const {
@@ -47,17 +52,13 @@ export function ConstructionDock(props: ConstructionDockProps) {
     settingsOpen,
   } = props;
 
-  // Active category and sub-tool detection
-  const isHouseBrushActive = activeTool === "house-brush";
-  const isRoomStampActive = activeTool === "room-stamp";
-  const isRoomDeriveActive = activeTool === "room-derive";
-  const isBuildingChildActive = isHouseBrushActive || isRoomStampActive || isRoomDeriveActive;
-
   const isTerrainBrushActive = activeTool === "terrain-brush";
   const isIrregularTerrainActive = activeTool === "irregular-terrain-stamp";
   const isTerrainChildActive = isTerrainBrushActive || isIrregularTerrainActive;
 
-  const isWallActive = activeTool === "wall-brush";
+  const isWallBrushActive = activeTool === "wall-brush";
+  const isWallLineActive = activeTool === "wall-line";
+  const isWallChildActive = isWallBrushActive || isWallLineActive;
   const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
@@ -65,52 +66,33 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "building",
       label: "Edifícios",
       icon: "🏠",
-      tooltip: "Edifícios & Casas procedurais",
-      active: isHouseBrushActive,
-      childActive: isBuildingChildActive,
-      disabled: !ready,
-      onClick: () => onToolChange("house-brush"),
-      subItems: [
-        {
-          key: "house-brush",
-          label: "Pintar Casa",
-          icon: "🏠",
-          tooltip: "Pintar Casa (arraste continuamente)",
-          shortcut: "H",
-          active: isHouseBrushActive,
-          disabled: !ready,
-          onClick: () => onToolChange("house-brush"),
-        },
-        {
-          key: "room-stamp",
-          label: "Carimbo de Sala",
-          icon: "◻",
-          tooltip: "Carimbo de Sala pronta",
-          shortcut: "R",
-          active: isRoomStampActive,
-          disabled: !ready,
-          onClick: () => onToolChange("room-stamp"),
-        },
-        {
-          key: "room-derive",
-          label: "Derivar Sala",
-          icon: "📐",
-          tooltip: "Derivar Sala de paredes fechadas",
-          active: isRoomDeriveActive,
-          disabled: !ready,
-          onClick: () => onToolChange("room-derive"),
-        },
-      ],
-    },
-    {
-      key: "wall",
-      label: "Muros",
-      icon: "🧱",
-      tooltip: "Muros e Cercas livres",
+      tooltip: "Edifícios (paredes)",
       shortcut: "P",
-      active: isWallActive,
+      active: isWallBrushActive,
+      childActive: isWallChildActive,
       disabled: !ready,
       onClick: () => onToolChange("wall-brush"),
+      subItems: [
+        {
+          key: "wall-brush",
+          label: "Pincel Livre",
+          icon: "🖌️",
+          tooltip: "Pincel Livre (arraste continuamente, tecla P)",
+          shortcut: "P",
+          active: isWallBrushActive,
+          disabled: !ready,
+          onClick: () => onToolChange("wall-brush"),
+        },
+        {
+          key: "wall-line",
+          label: "Linha Reta",
+          icon: "📏",
+          tooltip: "Linha Reta (clique de um ponto a outro)",
+          active: isWallLineActive,
+          disabled: !ready,
+          onClick: () => onToolChange("wall-line"),
+        },
+      ],
     },
     {
       key: "openings",

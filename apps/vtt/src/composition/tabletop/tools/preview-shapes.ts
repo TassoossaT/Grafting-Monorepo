@@ -37,7 +37,7 @@ export function segmentBetween(
   };
 }
 
-/** A filled ghost over an arbitrary rectangular footprint (not necessarily axis-aligned to `center`) -- a room-stamp's proposed outline. */
+/** A filled ghost over an arbitrary rectangular footprint (not necessarily axis-aligned to `center`) -- a stamped footprint's proposed outline. */
 export function footprintQuad(
   corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
   color: number,

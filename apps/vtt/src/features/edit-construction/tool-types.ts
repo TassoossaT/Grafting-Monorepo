@@ -11,9 +11,7 @@ export type ConstructionToolId =
   | "move-node"
   | "terrain-brush"
   | "wall-brush"
-  | "room-stamp"
-  | "room-derive"
-  | "house-brush"
+  | "wall-line"
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
@@ -27,16 +25,9 @@ export interface TerrainBrushParams {
   readonly seed: number;
 }
 
-/** Door generation is a separate concern from wall-brush for now -- see `room-seed.ts` for the still-valid case, a procedurally generated room's own doors. */
+/** Shared by both wall tools -- `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- since they only differ in how they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
-  readonly seed: number;
-}
-
-export interface RoomStampParams {
-  /** Drives footprint size/door placement variety, in `[0, 1]`. */
-  readonly complexity: number;
-  readonly seed: number;
 }
 
 /**
@@ -63,21 +54,6 @@ export interface IrregularTerrainParams {
   readonly seed: number;
 }
 
-/**
- * The continuous "Pintar Casa" brush: paint cells, and the Rust side
- * (`ConstructionSessionPort.generateCellPartition`) decides every tick
- * whether the painted region grows the current room, splits into more, or
- * starts a new one -- see `cell_partition`'s own doc for the algorithm.
- */
-export interface HouseBrushParams {
-  /** World-space side length of one grid cell. */
-  readonly cellSize: number;
-  /** A connected painted region larger than this many cells gets auto-split into more than one room. */
-  readonly maxRoomCells: number;
-  /** Drives the split layout's jitter -- the same cell set always reproduces the same rooms for a given seed. */
-  readonly seed: number;
-}
-
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
@@ -85,9 +61,7 @@ export interface ToolParamsByTool {
   readonly "move-node": NoToolParams;
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
-  readonly "room-stamp": RoomStampParams;
-  readonly "room-derive": NoToolParams;
-  readonly "house-brush": HouseBrushParams;
+  readonly "wall-line": WallBrushParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -98,10 +72,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
-  "room-stamp": Object.freeze({ complexity: 0.5, seed: 1 }),
-  "room-derive": Object.freeze({}),
-  "house-brush": Object.freeze({ cellSize: 2, maxRoomCells: 6, seed: 1 }),
+  "wall-brush": Object.freeze({ wallType: "wall-white" }),
+  "wall-line": Object.freeze({ wallType: "wall-white" }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

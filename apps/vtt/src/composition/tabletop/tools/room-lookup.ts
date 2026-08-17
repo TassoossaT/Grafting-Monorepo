@@ -3,13 +3,11 @@ import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
 import type { ToolContext } from "./tool-context.ts";
 
 /**
- * Finds the smallest closed wall loop containing a click point -- extracted
- * from `room-derive-tool.ts` once a second genuine call site
- * (`house-room-delete-tool.ts`, "Apagar Cômodo") needed the identical
- * lookup: given a point inside walls already on the table (hand-drawn or
- * `house-brush`-painted, both use `wall-white`/`wall-gray` surfaces),
- * derive the room boundary there. See {@link findEnclosingRoom}'s own doc
- * for the algorithm.
+ * Finds the smallest closed wall loop containing a click point -- used by
+ * `house-room-delete-tool.ts` ("Apagar Cômodo"): given a point inside
+ * hand-drawn walls already on the table (`wall-white`/`wall-gray`
+ * surfaces), derive the room boundary there. See {@link findEnclosingRoom}'s
+ * own doc for the algorithm.
  */
 interface Vec2 {
   readonly x: number;

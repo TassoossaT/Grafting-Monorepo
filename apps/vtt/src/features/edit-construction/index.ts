@@ -1,13 +1,13 @@
 export {
+  createGeneratePathExtrusionOperation,
   createGenerateTerrainCellOperation,
-  createGenerateWallOperation,
   createMoveNodeOperation,
 } from "./construction-operations.ts";
 export type {
   ConstructionOperation,
   ConstructionOperationContext,
+  GeneratePathExtrusionOperation,
   GenerateTerrainCellOperation,
-  GenerateWallOperation,
   MoveNodeOperation,
   MoveNodePayload,
   OperationId,
@@ -19,11 +19,9 @@ export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState }
 export { DEFAULT_TOOL_PARAMS } from "./tool-types.ts";
 export type {
   ConstructionToolId,
-  HouseBrushParams,
   IrregularTerrainParams,
   NoToolParams,
   PreviewDescriptor,
-  RoomStampParams,
   TerrainBrushParams,
   ToolParamsByTool,
   ToolParamsFor,

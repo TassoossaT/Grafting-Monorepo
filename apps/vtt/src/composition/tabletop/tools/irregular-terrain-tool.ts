@@ -9,7 +9,7 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  * PENDING (not scheduled): this whole file -- lattice generation, heightmap
  * sampling, and the weld/merge search in `revealNear` -- runs in TypeScript.
  * Everything else this app generates procedurally (`generateTerrainCell`,
- * `generateWall`) runs in Rust/WASM through `ConstructionSessionPort`; this
+ * `generatePathExtrusion`) runs in Rust/WASM through `ConstructionSessionPort`; this
  * tool is the one exception, because it was ported as-is from a JS lab
  * prototype (`apps/architecture-studio/src/vtt/irregular-grid.ts`) to reach
  * the real app fast rather than rewritten in Rust first.

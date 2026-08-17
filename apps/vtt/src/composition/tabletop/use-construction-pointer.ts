@@ -133,7 +133,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const params = toolParams[activeTool] as never;
 
       // Only tools that actually react to a drag capture the pointer --
-      // a click-only tool (room-stamp) leaves the native click gesture alone.
+      // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
         gestureRef.current = { pointerId: event.pointerId, start: sample, last: sample };
         event.currentTarget.setPointerCapture(event.pointerId);

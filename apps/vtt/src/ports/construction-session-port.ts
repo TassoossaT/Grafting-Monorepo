@@ -57,44 +57,8 @@ export interface GenerateTerrainCellRequest {
   ];
 }
 
-export interface WallSegment {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly height: number;
-}
-
-export interface DoorOpening {
-  readonly opensAt: number;
-  readonly closesAt: number;
-}
-
-export interface GenerateWallRequest {
-  readonly wall: WallSegment;
-  readonly door?: DoorOpening;
-  readonly wallType: string;
-  readonly doorType: string;
-  /** Keyed by wall-role wire name (e.g. `"startBottom"`). */
-  readonly nodeIds: Readonly<Record<string, ConstructionNodeId>>;
-  /** Keyed by directional role-pair wire name (e.g. `"startBottom->startTop"`). */
-  readonly edgeIds: Readonly<Record<string, ConstructionEdgeId>>;
-  /**
-   * `nodeIds` values (not role names) the caller asserts already exist --
-   * e.g. a wall corner welded onto an adjoining wall's endpoint
-   * (`VTT-WALL-CORNER-WELD`). The Rust side reuses these instead of
-   * creating a new node, and still requires every other id to be free.
-   * Omitted/empty means "no welds," matching every caller predating this
-   * field.
-   */
-  readonly weldedNodeIds?: readonly ConstructionNodeId[];
-}
-
-export interface WallPiece {
-  readonly surfaceKey: ConstructionSurfaceKey;
-  readonly surfaceType: string;
-}
-
 /**
- * One grid cell in a {@link GenerateCellPartitionRequest}'s own local grid
+ * One grid cell in a {@link GenerateRegionPartitionRequest}'s own local grid
  * -- not world units (multiply by `cellSize` and offset by `origin` to get
  * a world position). Generic on purpose (not house-specific): the app
  * composition layer names a particular use of this "a house," but this
@@ -107,89 +71,112 @@ export interface CellCoordinate {
 }
 
 /**
- * One tick of a continuous room-painting brush: the stroke's *whole*
- * current accumulated cell set (not just what changed since the last
- * tick), regenerated and diffed against whatever this structure already
- * holds every call -- see `cell_partition`'s own doc for why a full resend
- * is required and, since unchanged geometry's id never changes, cheap.
+ * Every `generate*` mutation shares this outcome shape: the whole
+ * request's geometry was regenerated and diffed against whatever this
+ * structure already held, and only the difference applied.
  */
-export interface GenerateCellPartitionRequest {
-  readonly cells: readonly CellCoordinate[];
-  readonly cellSize: number;
-  readonly origin: ConstructionPosition;
-  readonly wallHeight: number;
-  /** A connected region larger than this gets auto-split into more than one room. */
-  readonly maxRoomCells: number;
-  /** The same seed always reproduces the same split layout for the same cell set. */
-  readonly seed: number;
-  /**
-   * Namespaces every id this call derives. Unlike this port's other
-   * generators (fresh per call), this must stay the SAME fixed value
-   * across every tick of one structure, and across separate strokes
-   * painting the same physical structure later -- that stability is what
-   * lets repainting the same cells be a no-op instead of minting
-   * duplicate geometry.
-   */
-  readonly idPrefix: string;
-  readonly wallType: string;
-  readonly doorType: string;
-  readonly floorType: string;
-  readonly ceilingType: string;
-}
-
-export interface CellPartitionOutcome {
+export interface DiffOutcome {
   readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
-/** One straight or semicircular-arc edge of a drawn wall path -- see `grafting_procgen_structure_generation::wall_path`'s own doc for why a curve is always fully derived from its two endpoints, never a free parameter. */
+/** One straight or semicircular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints, never a free parameter. */
 export interface PathEdgeSpec {
   readonly start: ConstructionPosition;
   readonly end: ConstructionPosition;
   readonly curvature: "straight" | "arc-left" | "arc-right";
 }
 
+/** A single opening cut into a one-straight-edge path -- see `extrude_path`'s own scoping of this. */
+export interface EdgeNotchSpec {
+  readonly startsAt: number;
+  readonly endsAt: number;
+  readonly surfaceType: string;
+}
+
 /**
- * One tick of the continuous wall-brush pen: the stroke's *whole* current
- * accumulated path (not just what changed since the last tick), regenerated
- * and diffed against whatever this structure already holds every call --
- * same full-resend contract as {@link GenerateCellPartitionRequest}. Once
- * the last edge's end lands back on the first edge's start, the Rust side
- * derives a floor + ceiling for free -- no separate room-derive step.
+ * One tick of a continuous path-brush pen (wall, fence, any other
+ * extruded panel run): the stroke's *whole* current accumulated path (not
+ * just what changed since the last tick), regenerated and diffed against
+ * whatever this structure already holds every call. Never generates a
+ * floor/ceiling itself -- see {@link GenerateBoundaryCapRequest}/{@link
+ * GenerateRegionPartitionRequest} for that.
  */
-export interface GenerateWallPathRequest {
+export interface GeneratePathExtrusionRequest {
   readonly edges: readonly PathEdgeSpec[];
-  readonly wallHeight: number;
+  readonly height: number;
   /** How many straight chords approximate one arc edge. Ignored if every edge is straight. */
   readonly arcFacets: number;
-  /** Namespaces every id this call derives -- same stability contract as {@link GenerateCellPartitionRequest.idPrefix}. */
+  /**
+   * Namespaces every id this call derives. Must stay the SAME fixed value
+   * across every tick of one structure, and across separate strokes
+   * painting the same physical structure later -- that stability is what
+   * lets repainting the same path be a no-op instead of minting
+   * duplicate geometry.
+   */
+  readonly idPrefix: string;
+  readonly surfaceType: string;
+  /** Only valid when `edges` is exactly one straight edge. */
+  readonly notch?: EdgeNotchSpec;
+}
+
+/**
+ * One closed boundary of arbitrary 3D points becomes one capping surface
+ * (a floor, a ceiling, or any other flat or per-vertex-height polygon).
+ */
+export interface GenerateBoundaryCapRequest {
+  readonly points: readonly ConstructionPosition[];
+  readonly idPrefix: string;
+  readonly surfaceType: string;
+  readonly top: boolean;
+}
+
+/**
+ * One tick of a continuous cell-painting brush ("Pintar Casa," a
+ * wall-brush stroke's closure): the stroke's *whole* current accumulated
+ * cell set (not just what changed since the last tick), regenerated and
+ * diffed against whatever this structure already holds every call. Cells
+ * are auto-split into disjoint regions larger than `maxRegionCells`; every
+ * region gets its own per-cell floor/ceiling and a wall along every
+ * boundary run, notched where a run borders a neighboring region.
+ */
+export interface GenerateRegionPartitionRequest {
+  readonly cells: readonly CellCoordinate[];
+  readonly cellSize: number;
+  readonly origin: ConstructionPosition;
+  readonly wallHeight: number;
+  /** A connected region larger than this gets auto-split into more than one region. */
+  readonly maxRegionCells: number;
+  /** The same seed always reproduces the same split layout for the same cell set. */
+  readonly seed: number;
+  /** Namespaces every id this call derives -- same stability contract as {@link GeneratePathExtrusionRequest.idPrefix}. */
   readonly idPrefix: string;
   readonly wallType: string;
+  readonly notchType: string;
   readonly floorType: string;
   readonly ceilingType: string;
 }
 
-export interface WallPathOutcome {
-  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedNodeIds: readonly ConstructionNodeId[];
-  /** True once this call's own path closed into a room. */
-  readonly closed: boolean;
+export interface RemoveSurfaceRequest {
+  readonly surfaceKey: ConstructionSurfaceKey;
 }
 
-export interface RemoveRoomRequest {
-  /** The room's own floor corner ids, in cycle order -- e.g. `findEnclosingRoom`'s result for a click inside the room. */
-  readonly bottomCycle: readonly ConstructionNodeId[];
-  readonly topCycle: readonly ConstructionNodeId[];
-  /** Surface type for a preserved, door-stripped side's fresh plain-wall replacement. */
-  readonly wallType: string;
+export interface RemoveEdgeRequest {
+  readonly edgeId: ConstructionEdgeId;
 }
 
-export interface RemoveRoomOutcome {
-  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly preservedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedNodeIds: readonly ConstructionNodeId[];
+/**
+ * `ADR-0022`'s "cloud" query: the connected component of same-`type`
+ * surfaces reachable from `seed` by shared graph nodes.
+ */
+export interface CloudRequest {
+  readonly seed: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+}
+
+export interface CloudOutcome {
+  readonly surfaceKeys: readonly ConstructionSurfaceKey[];
 }
 
 export interface SurfaceMeshResult {
@@ -262,10 +249,15 @@ export interface ConstructionSessionPort {
     deformationZ: number,
   ): void;
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
-  generateWall(request: GenerateWallRequest): readonly WallPiece[];
-  generateCellPartition(request: GenerateCellPartitionRequest): CellPartitionOutcome;
-  generateWallPath(request: GenerateWallPathRequest): WallPathOutcome;
-  removeRoom(request: RemoveRoomRequest): RemoveRoomOutcome;
+  generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome;
+  generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome;
+  generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
+  /** Unregisters a surface outright -- no hole-repair, no cascading. */
+  removeSurface(request: RemoveSurfaceRequest): void;
+  /** Removes an edge outright -- no repair, no cascading. */
+  removeEdge(request: RemoveEdgeRequest): void;
+  /** `ADR-0022`'s "cloud" query. */
+  cloudFor(request: CloudRequest): CloudOutcome;
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */

@@ -1,8 +1,8 @@
 import type {
   ConstructionNodeId,
   ConstructionPosition,
+  GeneratePathExtrusionRequest,
   GenerateTerrainCellRequest,
-  GenerateWallRequest,
 } from "@/ports";
 
 export type OperationId = string;
@@ -28,13 +28,13 @@ export interface GenerateTerrainCellOperation {
   readonly payload: GenerateTerrainCellRequest;
 }
 
-export interface GenerateWallOperation {
+export interface GeneratePathExtrusionOperation {
   readonly operationId: OperationId;
   readonly tableId: string;
   readonly initiatedBy: ParticipantId;
-  readonly kind: "construction.generate-wall@1";
+  readonly kind: "construction.generate-path-extrusion@1";
   readonly expected: readonly RevisionPrecondition[];
-  readonly payload: GenerateWallRequest;
+  readonly payload: GeneratePathExtrusionRequest;
 }
 
 export interface MoveNodePayload {
@@ -51,7 +51,7 @@ export interface MoveNodeOperation {
   readonly payload: MoveNodePayload;
 }
 
-export type ConstructionOperation = GenerateTerrainCellOperation | GenerateWallOperation | MoveNodeOperation;
+export type ConstructionOperation = GenerateTerrainCellOperation | GeneratePathExtrusionOperation | MoveNodeOperation;
 
 function required(value: string, field: string): string {
   const normalized = value.trim();
@@ -85,15 +85,15 @@ export function createGenerateTerrainCellOperation(
   });
 }
 
-/** `construction.generate-wall@1`: same no-precondition shape as generate-terrain-cell. */
-export function createGenerateWallOperation(
-  payload: GenerateWallRequest,
+/** `construction.generate-path-extrusion@1`: same no-precondition shape as generate-terrain-cell. */
+export function createGeneratePathExtrusionOperation(
+  payload: GeneratePathExtrusionRequest,
   context: ConstructionOperationContext,
-): GenerateWallOperation {
+): GeneratePathExtrusionOperation {
   const normalized = operationContext(context);
   return Object.freeze({
     ...normalized,
-    kind: "construction.generate-wall@1",
+    kind: "construction.generate-path-extrusion@1",
     expected: Object.freeze([]),
     payload,
   });

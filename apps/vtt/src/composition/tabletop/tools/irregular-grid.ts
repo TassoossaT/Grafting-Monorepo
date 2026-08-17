@@ -28,7 +28,7 @@
  * not a shared package.
  *
  * PENDING (not scheduled): this stays TypeScript, unlike every other
- * procedural generator in the app (`generateTerrainCell`/`generateWall` are
+ * procedural generator in the app (`generateTerrainCell`/`generatePathExtrusion` are
  * Rust/WASM). See `irregular-terrain-tool.ts`'s own module doc for the port
  * plan -- this file's own share of it is close to a direct translation,
  * `apps/architecture-studio/test/irregular-grid.test.mjs` already specifies
