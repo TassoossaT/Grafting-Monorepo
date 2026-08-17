@@ -13,3 +13,4 @@ an ADR or by a design that makes it impossible, and then says so at the top.
 | [0002](0002-fog-of-war.md) | Fog of war: three states of knowledge, and what the engine must not preclude | design recorded, not implemented |
 | [0003](0003-map-render-pipeline.md) | Map render pipeline (`E3.5`): chunking, clip plane, and the still-missing surface-to-mesh derivation | implemented |
 | [0004](0004-map-product-model.md) | Map product model (`E3.6`): mesh triangulation crate, no Worker yet, full-ABI port, cycle-order gap | implemented |
+| [0008](0008-region-partition-needs-rework.md) | `region_partition`'s algorithm (cap opt-out, perimeter-redraw duplication, room-shape quality) needs a real study and rework | not started |
