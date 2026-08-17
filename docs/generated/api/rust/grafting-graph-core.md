@@ -4,6 +4,13 @@
 
 Generic domain-agnostic primitive role for graph formation.
 
+### `pub enum grafting_graph_core::ArcBulge`
+
+Which side of the chord (walking from an arc's own start to its end) it
+bulges toward -- see [`SurfaceCurvature`]'s own doc for what this
+disambiguates and why it is the one piece of information a center point
+alone can never supply.
+
 ### `pub enum grafting_graph_core::ConstructionError`
 
 Structural error from a domain-level construction operation -- either
@@ -264,6 +271,11 @@ Total number of cells in the mesh.
 
 Constructs a grid of width x height x layers cells with 6-slot connectivity.
 
+### `pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>`
+
+This surface's own curvature, if any -- see [`SurfaceCurvature`]'s
+own doc.
+
 ### `pub fn grafting_graph_core::Surface::cycle(&self) -> &[grafting_graph_core::NodeId]`
 
 Nodes forming this surface's cycle, in mesh-derivation order.
@@ -300,6 +312,13 @@ Creates an empty registry.
 ### `pub fn grafting_graph_core::SurfaceRegistry::remove_surface(&mut self, key: &grafting_graph_core::SurfaceKey) -> core::result::Result<grafting_graph_core::Surface, grafting_graph_core::SurfaceError>`
 
 Removes a surface by its node-set identity, returning it.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::set_curvature(&mut self, key: &grafting_graph_core::SurfaceKey, curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates a surface's curvature (see [`SurfaceCurvature`]'s own doc).
+Touches no node and no cycle, for the same reason as
+[`set_type`](Self::set_type) -- a curved wall's own graph topology
+never encodes its curve, only this attribute does.
 
 ### `pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
 
@@ -406,6 +425,14 @@ geometry, this crate does not compute it. `key` must already be
 registered; both halves are validated, and checked not to collide with
 *each other*, before `key` is removed -- a failure never leaves the
 original surface gone with only one (or neither) half registered.
+
+### `pub grafting_graph_core::ArcBulge::Left`
+
+Bulges toward the chord's left side, facing from the arc's own start to its end.
+
+### `pub grafting_graph_core::ArcBulge::Right`
+
+Bulges toward the chord's right side, facing from the arc's own start to its end.
 
 ### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch`
 
@@ -640,6 +667,23 @@ Flat list of 3D vertex positions [x, y, z] for corners across all layers.
 
 Width of the grid in cells.
 
+### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
+
+Which of the two arcs a shared center and two endpoints could
+describe -- see this struct's own doc.
+
+### `pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]`
+
+The arc's own center, in the same XZ plane as the surface's corners.
+
+### `pub grafting_graph_core::SurfaceCurvature::facets: usize`
+
+How many straight chords a mesh generator should tessellate this arc
+into -- decided once, by whoever generated this surface, and
+persisted here so re-triangulating later (a page reload, a cache
+miss) always reproduces the same mesh without needing the original
+generation request again.
+
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 
 Two surfaces cannot share the exact same node-set identity.
@@ -667,6 +711,11 @@ A query or update referenced a surface that is not registered.
 ### `pub grafting_graph_core::SurfaceError::UnknownSurface::key: grafting_graph_core::SurfaceKey`
 
 Identity that could not be resolved.
+
+### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
+
+The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
+own doc.
 
 ### `pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>`
 
@@ -747,6 +796,31 @@ A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 The semantic record `ADR-0022` defines: `{ type, physical, mesh }` minus
 `mesh`, which is derived on demand by the caller from [`cycle`](Self::cycle)
 and a [`Graph`]'s current node positions, not stored here.
+
+### `pub struct grafting_graph_core::SurfaceCurvature`
+
+A surface's optional curvature: this surface's own boundary is not a
+flat polygon but has (at least) one true circular arc in it, fully
+determined by an edge's own two endpoints plus `center` -- radius is
+`center`'s distance to either endpoint (validated equal by the caller
+deriving this), and `bulge` is the one remaining bit of information no
+arrangement of points can supply on its own: which of the two arcs a
+shared center and two endpoints could describe (the "short way" or the
+"long way" around) is a discrete choice, not a continuous coordinate.
+Together, `(start, end, center, bulge)` is the minimal complete
+description of an arbitrary circular-arc segment.
+
+Deliberately **not** used to mint extra graph nodes -- a curved wall's
+own cycle stays exactly its flat corners (4, for a simple wall panel),
+the same as a straight one. `curvature` is metadata a mesh generator
+(`grafting-procgen-surface-mesh`) reads at render/re-triangulation time
+to tessellate the true curve, not something baked into the graph's own
+topology -- see `grafting_procgen_structure_generation::extrusion`'s own
+doc for why minting one graph node per tessellated facet was the wrong
+call (every downstream consumer that treats "one wall run" as "one
+`Surface`" -- redundant-duplicate detection, a room's own wall-follower,
+T-junction splitting -- got extra internal seams to mis-treat as
+boundaries).
 
 ### `pub struct grafting_graph_core::SurfaceKey(_)`
 

@@ -86,7 +86,11 @@ pub fn diff_and_apply(
 
     let mut added_surface_keys = Vec::with_capacity(to_add.len());
     for piece in to_add {
+        let curvature = piece.surface.curvature;
         let key = surfaces.add_surface(graph, piece.surface.cycle, piece.surface.surface_type, piece.surface.physical).map_err(|error| error.to_string())?;
+        if curvature.is_some() {
+            surfaces.set_curvature(&key, curvature).map_err(|error| error.to_string())?;
+        }
         added_surface_keys.push(surface_key_to_wire(&key));
     }
 

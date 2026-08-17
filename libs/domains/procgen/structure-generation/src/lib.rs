@@ -19,5 +19,6 @@ mod ids;
 mod region_partition;
 
 pub use boundary::cap_boundary;
-pub use extrusion::{ArcBulge, EdgeCurvature, EdgeNotch, ExtrusionError, PathEdge, StructurePiece, extrude_path};
+pub use extrusion::{EdgeCurvature, EdgeNotch, ExtrusionError, PathEdge, StructurePiece, extrude_path};
+pub use grafting_graph_core::ArcBulge;
 pub use region_partition::{Axis, BoundaryRun, CellCoord, Region, boundary_runs, partition_cells_into_regions};

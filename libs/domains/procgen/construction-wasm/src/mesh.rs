@@ -41,7 +41,7 @@ fn mesh_dto_for(graph: &SessionGraph, surfaces: &SurfaceRegistry, key: &SurfaceK
         .iter()
         .map(|id| graph.node(id).map(|node| *node.data()))
         .collect::<Option<Vec<_>>>()?;
-    let mesh = triangulate_surface(&positions)?;
+    let mesh = triangulate_surface(&positions, surface.curvature())?;
     Some(SurfaceMeshDto {
         surface_key: surface_key_to_wire(key),
         surface_type: surface.surface_type().as_str().to_owned(),

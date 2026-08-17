@@ -3,10 +3,11 @@ name = "grafting-procgen-surface-mesh"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "Derives a triangulated mesh (positions/normals/indices) from a construction Surface's ordered node-cycle positions, per ADR-0022's 'mesh derives from a cycle' contract. Pure geometry, no dependency on grafting-graph-core's storage."
+description = "Derives a triangulated mesh (positions/normals/indices) from a construction Surface's ordered node-cycle positions, per ADR-0022's 'mesh derives from a cycle' contract. Pure geometry, no dependency on grafting-graph-core's storage -- only its ArcBulge/SurfaceCurvature value types."
 
 [lib]
 crate-type = ["rlib"]
 
 [dependencies]
 earcut = "0.4"
+grafting-graph-core = { path = "../../../graph/core" }

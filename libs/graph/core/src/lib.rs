@@ -22,5 +22,5 @@ pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
     IdentifierError, Node, NodeId, PrismGridMesh,
 };
-pub use surface::{Surface, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
+pub use surface::{ArcBulge, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
 

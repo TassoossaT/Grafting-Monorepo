@@ -1,12 +1,5 @@
 # grafting-procgen-structure-generation
 
-### `pub enum grafting_procgen_structure_generation::ArcBulge`
-
-Which side of the chord (walking from an edge's `start` to its `end`) a
-[`EdgeCurvature::Semicircle`] bulges toward. Which literal side "left"
-lands on depends only on `start`/`end`'s own order -- callers drawing a
-stroke in a consistent direction get a consistent, predictable bulge.
-
 ### `pub enum grafting_procgen_structure_generation::Axis`
 
 Which grid axis a [`BoundaryRun`] runs perpendicular to.
@@ -72,14 +65,6 @@ asks for "never merge cells at all," one region per cell (a terrain
 painter's own use, as opposed to a room painter's `max_region_cells > 1`).
 Empty input produces no regions.
 
-### `pub grafting_procgen_structure_generation::ArcBulge::Left`
-
-Bulges toward the chord's left side, facing from `start` to `end`.
-
-### `pub grafting_procgen_structure_generation::ArcBulge::Right`
-
-Bulges toward the chord's right side, facing from `start` to `end`.
-
 ### `pub grafting_procgen_structure_generation::Axis::X`
 
 A vertical line at a fixed grid-x.
@@ -116,7 +101,7 @@ Grid column.
 
 Grid row.
 
-### `pub grafting_procgen_structure_generation::EdgeCurvature::Semicircle(grafting_procgen_structure_generation::ArcBulge)`
+### `pub grafting_procgen_structure_generation::EdgeCurvature::Semicircle(grafting_graph_core::surface::ArcBulge)`
 
 A true semicircle between the edge's two endpoints -- radius and
 center are fully determined by them, only the bulge side varies.
@@ -282,3 +267,5 @@ sub-segments) are emitted by every piece whose cycle includes them,
 under the same [`NodeId`] (position-derived, via `corner_id`) -- a
 caller applying more than one piece to a live graph is responsible for
 not re-adding an id already present.
+
+### `pub use grafting_procgen_structure_generation::ArcBulge`

@@ -457,6 +457,7 @@ name = "grafting-procgen-surface-mesh"
 version = "0.0.0"
 dependencies = [
  "earcut",
+ "grafting-graph-core",
 ]
 
 [[package]]

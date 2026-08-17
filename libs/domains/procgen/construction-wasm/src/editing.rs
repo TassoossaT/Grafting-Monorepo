@@ -42,6 +42,7 @@ impl SurfaceSpecDto {
             cycle: parse_cycle(self.cycle)?,
             surface_type: SurfaceType::new(self.surface_type),
             physical: self.physical,
+            curvature: None,
         })
     }
 }
