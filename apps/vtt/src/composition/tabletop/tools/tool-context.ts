@@ -4,10 +4,11 @@ import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
 
-/** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
+/** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. The optional axis identifies planar versus vertical gizmo manipulation. */
 export interface PointerSample {
   readonly point: ConstructionPosition;
   readonly nodeId?: string;
+  readonly axis?: "xz-planar" | "y-height";
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */

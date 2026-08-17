@@ -46,14 +46,27 @@ import {
   type MapChunkVisualParams,
 } from "./map-chunk-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
+import {
+  createMarkerTexture,
+  createNodeHandleTexture,
+  createNodeHeightHandleTexture,
+} from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
+  NODE_HEIGHT_HANDLE_VISUAL_KIND,
+  NODE_STEM_VISUAL_KIND,
   nodeHandleSceneItem,
   nodeHandleSceneItemId,
+  nodeHandleStemPositions,
+  nodeHandleStemSceneItem,
+  nodeHandleStemSceneItemId,
   nodeHandleTransform,
+  nodeHeightHandleSceneItem,
+  nodeHeightHandleSceneItemId,
+  nodeHeightHandleTransform,
   type NodeHandlePickData,
+  type NodeStemVisualParams,
 } from "./node-handle-scene-item.ts";
 import {
   TOKEN_LAYER_ID,
@@ -125,6 +138,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
 
     const texture = createMarkerTexture();
     const handleTexture = createNodeHandleTexture();
+    const heightHandleTexture = createNodeHeightHandleTexture();
     const registry = createVisualRegistry();
     registry.register<TokenVisualParams>({
       kind: TOKEN_VISUAL_KIND,
@@ -145,6 +159,23 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
       }),
       equals: () => true,
+    });
+    registry.register<Record<string, never>>({
+      kind: NODE_HEIGHT_HANDLE_VISUAL_KIND,
+      describe: () => ({
+        geometry: { shape: "sprite" },
+        material: { surface: "unlit", color: 0xffffff, texture: heightHandleTexture },
+      }),
+      equals: () => true,
+    });
+    registry.register<NodeStemVisualParams>({
+      kind: NODE_STEM_VISUAL_KIND,
+      describe: (params) => ({
+        geometry: { shape: "segments", positions: params.positions },
+        material: { surface: "line", color: 0xd9b45b, opacity: 0.72 },
+        pickable: false,
+      }),
+      equals: (left, right) => left.positions === right.positions,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -325,11 +356,15 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       this.#confirmedTokenChanges += 1;
     } else if (change.type === "node-handle-removed") {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
+      engine.scene.remove(nodeHeightHandleSceneItemId(change.nodeId), origin);
+      engine.scene.remove(nodeHandleStemSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
       if (previous === undefined) {
         engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+        engine.scene.put(nodeHeightHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+        engine.scene.put(nodeHandleStemSceneItem(change.handle.nodeId, change.handle.position), origin);
       } else if (
         previous.x !== change.handle.position.x ||
         previous.y !== change.handle.position.y ||
@@ -338,6 +373,16 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         engine.scene.setTransform(
           nodeHandleSceneItemId(change.handle.nodeId),
           nodeHandleTransform(change.handle.position),
+          origin,
+        );
+        engine.scene.setTransform(
+          nodeHeightHandleSceneItemId(change.handle.nodeId),
+          nodeHeightHandleTransform(change.handle.position),
+          origin,
+        );
+        engine.scene.setVisualParams(
+          nodeHandleStemSceneItemId(change.handle.nodeId),
+          { positions: nodeHandleStemPositions(change.handle.position) } satisfies NodeStemVisualParams,
           origin,
         );
       }
@@ -368,7 +413,11 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       data?.entity === "construction-node-handle" && typeof data.nodeId === "string"
         ? data.nodeId
         : undefined;
-    return { point: result.point, nodeId };
+    const axis =
+      data?.entity === "construction-node-handle" && typeof data.axis === "string"
+        ? data.axis
+        : undefined;
+    return { point: result.point, nodeId, axis };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor): void {

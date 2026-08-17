@@ -116,6 +116,7 @@ export type ConfirmedRenderChange =
 export interface ScenePickResult {
   readonly point: { readonly x: number; readonly y: number; readonly z: number };
   readonly nodeId?: string;
+  readonly axis?: "xz-planar" | "y-height";
 }
 
 /**

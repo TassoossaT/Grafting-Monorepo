@@ -11,9 +11,20 @@ export {
 } from "./map-chunk-scene-item.ts";
 export {
   NODE_HANDLE_LAYER_ID,
+  NODE_HANDLE_STEM_VISUAL_KIND,
   NODE_HANDLE_VISUAL_KIND,
+  NODE_HEIGHT_HANDLE_VISUAL_KIND,
+  NODE_STEM_VISUAL_KIND,
   nodeHandleSceneItem,
   nodeHandleSceneItemId,
+  nodeHandleStemPositions,
+  nodeHandleStemSceneItem,
+  nodeHandleStemSceneItemId,
   nodeHandleTransform,
+  nodeHeightGizmoSceneItems,
+  nodeHeightHandleSceneItem,
+  nodeHeightHandleSceneItemId,
+  nodeHeightHandleTransform,
   type NodeHandlePickData,
+  type NodeStemVisualParams,
 } from "./node-handle-scene-item.ts";
