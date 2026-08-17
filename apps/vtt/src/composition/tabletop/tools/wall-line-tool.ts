@@ -6,24 +6,24 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline } from "./wall-shared.ts";
 
 /**
- * The chain's own pending anchor -- the previous click's (already
- * baseline-pinned) point, or `undefined` before the first click of a new
- * chain. Lives only across clicks of the same unbroken chain; switching
- * tools and back starts a wholly new one.
+ * The pending first click of the current two-click line, or `undefined`
+ * before it. Cleared the instant a line commits -- a line is always exactly
+ * two clicks, never a chain: the second click's own point is never reused
+ * as a third click's anchor, so the next click after a commit is always a
+ * fresh, unrelated line's own first point.
  */
 let anchor: ConstructionPosition | undefined;
 
 /**
- * Click-to-click straight walls: the first click of a chain only plants
- * `anchor`, every click after that draws one exact straight segment from
- * `anchor` to the new click and commits it immediately -- no drag, no
- * accumulated-and-resent path (unlike `wall-brush-tool.ts`, one commit is
- * exactly one segment, since there is never more than one edge in flight).
- * The click just placed becomes the next segment's own anchor, so repeated
- * clicks keep chaining into a connected polyline of exact straight runs --
- * the precise counterpart to `wall-brush-tool.ts`'s free-form drag, sharing
- * its same wall height/color/id-prefix (`wall-shared.ts`) so a straight run
- * welds onto a free-form stroke wherever their corners coincide.
+ * Click-to-click straight walls, always exactly two clicks per line: the
+ * first click plants `anchor`, the second draws one exact straight segment
+ * from `anchor` to itself and commits immediately, then clears `anchor` --
+ * the third click starts an unrelated new line, not a continuation. The
+ * precise counterpart to `wall-brush-tool.ts`'s free-form drag, sharing its
+ * same wall height/color/id-prefix (`wall-shared.ts`) so a straight run
+ * welds onto a free-form stroke (or another straight run) wherever their
+ * corners happen to coincide -- welding is still automatic by position,
+ * this tool just never *assumes* the next line continues from the last.
  */
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
@@ -62,6 +62,6 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
       `${ctx.tableId}:wall-line:${sequence}`,
     );
 
-    anchor = end;
+    anchor = undefined;
   },
 };
