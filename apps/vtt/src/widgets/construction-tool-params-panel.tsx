@@ -126,7 +126,8 @@ function IrregularTerrainFields(props: {
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "terrain-brush": "Parâmetros: Terreno",
-  "wall-brush": "Parâmetros: Parede",
+  "wall-brush": "Parâmetros: Parede (Pincel Livre)",
+  "wall-line": "Parâmetros: Parede (Linha Reta)",
   "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
 };
 
@@ -164,6 +165,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         />
       ) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
+      ) : activeTool === "wall-line" ? (
+        <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : (
         <IrregularTerrainFields
           params={params["irregular-terrain-stamp"]}

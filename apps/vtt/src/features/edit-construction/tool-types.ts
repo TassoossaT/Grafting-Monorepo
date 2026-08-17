@@ -11,6 +11,7 @@ export type ConstructionToolId =
   | "move-node"
   | "terrain-brush"
   | "wall-brush"
+  | "wall-line"
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
@@ -24,7 +25,7 @@ export interface TerrainBrushParams {
   readonly seed: number;
 }
 
-/** Door generation is a separate concern from wall-brush for now -- see `room-seed.ts` for the still-valid case, a procedurally generated room's own doors. */
+/** Shared by both wall tools -- `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- since they only differ in how they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
   readonly seed: number;
@@ -61,6 +62,7 @@ export interface ToolParamsByTool {
   readonly "move-node": NoToolParams;
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
+  readonly "wall-line": WallBrushParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -72,6 +74,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "move-node": Object.freeze({}),
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white", seed: 1 }),
+  "wall-line": Object.freeze({ wallType: "wall-white", seed: 1 }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

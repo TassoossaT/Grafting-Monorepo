@@ -48,7 +48,8 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   navigate: "Navegação da Câmera",
   "move-node": "Arrastar Node 3D",
   "terrain-brush": "Pincel de Terreno",
-  "wall-brush": "Pincel de Parede",
+  "wall-brush": "Pincel de Parede (Livre)",
+  "wall-line": "Pincel de Parede (Linha Reta)",
   "house-room-delete": "Apagar Cômodo",
   "irregular-terrain-stamp": "Terreno Irregular",
 };

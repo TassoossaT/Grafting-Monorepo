@@ -22,7 +22,8 @@ export interface ConstructionDockProps {
  * and `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
  *
  * Houses the 8 core construction verbs in a centered, glassmorphic dock:
- * 1. 🏠 Edifícios (Pincel de Parede -- free-form, click-to-extend, no closure required)
+ * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- two ways to place the same
+ *    kind of wall segment, free-form drag vs. exact point-to-point)
  * 2. 🚪 Aberturas (Portas & Janelas)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
@@ -33,8 +34,8 @@ export interface ConstructionDockProps {
  *
  * The former "Pintar Casa"/"Carimbo de Sala"/"Derivar Sala" cell-grid/stamp
  * tools and the separate "Muros" branch are retired -- the owner flagged the
- * whole cell-grid-room model as the wrong idea; "Edifícios" now means
- * exactly the free-form wall brush, formerly its own "Muros" entry.
+ * whole cell-grid-room model as the wrong idea; "Edifícios" now means the
+ * wall tools, formerly their own "Muros" entry.
  */
 export function ConstructionDock(props: ConstructionDockProps) {
   const {
@@ -55,7 +56,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isIrregularTerrainActive = activeTool === "irregular-terrain-stamp";
   const isTerrainChildActive = isTerrainBrushActive || isIrregularTerrainActive;
 
-  const isWallActive = activeTool === "wall-brush";
+  const isWallBrushActive = activeTool === "wall-brush";
+  const isWallLineActive = activeTool === "wall-line";
+  const isWallChildActive = isWallBrushActive || isWallLineActive;
   const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
@@ -63,11 +66,33 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "building",
       label: "Edifícios",
       icon: "🏠",
-      tooltip: "Edifícios (Pincel de Parede livre)",
+      tooltip: "Edifícios (paredes)",
       shortcut: "P",
-      active: isWallActive,
+      active: isWallBrushActive,
+      childActive: isWallChildActive,
       disabled: !ready,
       onClick: () => onToolChange("wall-brush"),
+      subItems: [
+        {
+          key: "wall-brush",
+          label: "Pincel Livre",
+          icon: "🖌️",
+          tooltip: "Pincel Livre (arraste continuamente, tecla P)",
+          shortcut: "P",
+          active: isWallBrushActive,
+          disabled: !ready,
+          onClick: () => onToolChange("wall-brush"),
+        },
+        {
+          key: "wall-line",
+          label: "Linha Reta",
+          icon: "📏",
+          tooltip: "Linha Reta (clique de um ponto a outro)",
+          active: isWallLineActive,
+          disabled: !ready,
+          onClick: () => onToolChange("wall-line"),
+        },
+      ],
     },
     {
       key: "openings",
