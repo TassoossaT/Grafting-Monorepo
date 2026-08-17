@@ -1,18 +1,27 @@
-//! Extrudes a path of straight and semicircular-arc edges into vertical
-//! panel `Surface`s, with an optional single rectangular notch (a doorway,
-//! a gateway, a gap -- this crate names none of them) cut into it. Generic
-//! on purpose: the app composition layer decides what a particular path or
+//! Extrudes a path of straight and circular-arc edges into vertical panel
+//! `Surface`s, with an optional single rectangular notch (a doorway, a
+//! gateway, a gap -- this crate names none of them) cut into it. Generic on
+//! purpose: the app composition layer decides what a particular path or
 //! notch means; this crate only knows about edges, height, and an optional
 //! opening.
 //!
 //! Unlike [`crate::region_partition`]'s grid, a path vertex can sit
-//! anywhere, and a curved edge is always a true semicircle (radius and
-//! center are fully determined by its two endpoints, never a free
-//! parameter), not an arbitrary Bezier. That restriction is deliberate: a
-//! free-form curve control lets a careless stroke look crooked, while
-//! "straight, or a semicircle bulging one way or the other" is a small
-//! enough vocabulary that any stroke reads as intentional. See
+//! anywhere, and a curved edge is always a true circular arc (radius and
+//! center are fully determined by its two endpoints plus its own
+//! `included_angle`, never a free control point), not an arbitrary Bezier.
+//! That restriction is deliberate: a free-form curve control lets a careless
+//! stroke look crooked, while "straight, or a circular arc bulging one way
+//! or the other, of a known included angle" is a small enough vocabulary
+//! that any stroke reads as intentional. See
 //! `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
+//!
+//! A full circle cannot be built from exactly two true semicircle edges: both
+//! would mint the identical 4 corner nodes (`corner_id` is purely
+//! position-derived), colliding on one `grafting_graph_core::SurfaceKey` --
+//! a real, named limitation of that type's own node-set identity. Composing
+//! a circle (or any other closed arc shape) from 3+ arcs, each a genuine
+//! `included_angle` less than a full turn, keeps every edge's own corner
+//! pair unique instead.
 //!
 //! A curved edge extrudes into exactly the same four graph nodes a straight
 //! edge would (its own two endpoints, bottom and top) -- **never** one node
@@ -52,18 +61,29 @@ use crate::ids::corner_id;
 
 const EPS: f32 = 1e-3;
 
-/// A [`PathEdge`]'s shape. `Semicircle`'s radius and center are always
-/// fully determined by the edge's own `start`/`end` (radius is half the
-/// chord length, center is the chord's midpoint) -- there is no separate
-/// radius or control-point parameter to keep this from ever generating a
-/// self-intersecting or otherwise "crooked" curve.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A [`PathEdge`]'s shape. `Arc`'s radius and center are always fully
+/// determined by the edge's own `start`/`end` plus its own
+/// `included_angle` -- there is no separate radius or control-point
+/// parameter to keep this from ever generating a self-intersecting or
+/// otherwise "crooked" curve.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EdgeCurvature {
     /// A flat run between the edge's two endpoints.
     Straight,
-    /// A true semicircle between the edge's two endpoints -- radius and
-    /// center are fully determined by them, only the bulge side varies.
-    Semicircle(ArcBulge),
+    /// A true circular arc between the edge's two endpoints -- radius and
+    /// center are fully determined by them plus `included_angle`; `bulge`
+    /// is only which of the two arcs sharing that chord and angle is meant.
+    Arc {
+        /// Which side of the chord this arc bulges toward, facing from
+        /// `start` to `end` -- see [`ArcBulge`]'s own doc.
+        bulge: ArcBulge,
+        /// The arc's own swept angle, in radians, strictly between `0` and
+        /// `2 * PI`. `PI` is a true semicircle (the only shape this module
+        /// supported before arcs of arbitrary angle were needed to compose
+        /// closed shapes from 3+ arcs -- see this module's own top-level
+        /// doc).
+        included_angle: f32,
+    },
 }
 
 /// One edge of a path, at the path's own baseline Y. Every edge in one
@@ -132,10 +152,18 @@ pub enum ExtrusionError {
         /// The zero-length edge.
         index: usize,
     },
-    /// A `Semicircle` edge is present but `arc_facets` is fewer than 2.
+    /// An `Arc` edge is present but `arc_facets` is fewer than 2.
     TooFewArcFacets {
         /// The offending, too-low value that was supplied.
         arc_facets: usize,
+    },
+    /// An `Arc` edge's own `included_angle` is not strictly between `0` and
+    /// `2 * PI`.
+    InvalidIncludedAngle {
+        /// The edge whose own angle is out of range.
+        index: usize,
+        /// The offending value that was supplied.
+        included_angle: f32,
     },
     /// A notch was given but `edges` was not exactly one `Straight` edge --
     /// see this module's own doc on the v1 notch scope.
@@ -158,6 +186,7 @@ impl fmt::Display for ExtrusionError {
             Self::InconsistentBaseline { index } => write!(formatter, "edge {index} does not share the path's own baseline Y"),
             Self::DegenerateEdge { index } => write!(formatter, "edge {index} has zero length"),
             Self::TooFewArcFacets { arc_facets } => write!(formatter, "arc_facets ({arc_facets}) must be at least 2 to tessellate a curved edge"),
+            Self::InvalidIncludedAngle { index, included_angle } => write!(formatter, "edge {index}'s included_angle ({included_angle}) must be strictly between 0 and 2*PI"),
             Self::NotchRequiresSingleStraightEdge => write!(formatter, "a notch requires exactly one straight edge"),
             Self::InvalidNotch { starts_at, ends_at } => write!(formatter, "notch [{starts_at}, {ends_at}] must be within [0, 1] with starts_at < ends_at"),
         }
@@ -174,7 +203,7 @@ fn validate(edges: &[PathEdge], arc_facets: usize) -> Result<(), ExtrusionError>
     if edges.is_empty() {
         return Err(ExtrusionError::EmptyPath);
     }
-    if edges.iter().any(|edge| matches!(edge.curvature, EdgeCurvature::Semicircle(_))) && arc_facets < 2 {
+    if edges.iter().any(|edge| matches!(edge.curvature, EdgeCurvature::Arc { .. })) && arc_facets < 2 {
         return Err(ExtrusionError::TooFewArcFacets { arc_facets });
     }
     let baseline_y = edges[0].start[1];
@@ -188,8 +217,37 @@ fn validate(edges: &[PathEdge], arc_facets: usize) -> Result<(), ExtrusionError>
         if index > 0 && !xz_close(edges[index - 1].end, edge.start) {
             return Err(ExtrusionError::Discontinuous { index });
         }
+        if let EdgeCurvature::Arc { included_angle, .. } = edge.curvature {
+            if !(included_angle > 0.0 && included_angle < std::f32::consts::TAU) {
+                return Err(ExtrusionError::InvalidIncludedAngle { index, included_angle });
+            }
+        }
     }
     Ok(())
+}
+
+/// The true circle center for an arc between `start` and `end`, bulging
+/// toward `bulge`'s own side, sweeping exactly `included_angle` -- the
+/// chord's own midpoint, offset perpendicular to the chord by the arc's own
+/// apothem (`radius * cos(included_angle / 2)`, the signed distance from a
+/// chord to its circle's center). Reduces to the chord's own midpoint
+/// exactly at `included_angle == PI` (`cos(PI/2) == 0`), matching the
+/// semicircle-only formula this generalizes.
+fn arc_center(start: [f32; 3], end: [f32; 3], bulge: ArcBulge, included_angle: f32) -> [f32; 2] {
+    let (sx, sz) = (start[0], start[2]);
+    let (ex, ez) = (end[0], end[2]);
+    let chord_length = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt();
+    let half_angle = included_angle / 2.0;
+    let radius = chord_length / (2.0 * half_angle.sin());
+    let apothem = radius * half_angle.cos();
+    let (ux, uz) = ((ex - sx) / chord_length, (ez - sz) / chord_length);
+    let (nx, nz) = (-uz, ux);
+    let sign: f32 = match bulge {
+        ArcBulge::Left => 1.0,
+        ArcBulge::Right => -1.0,
+    };
+    let (mx, mz) = ((sx + ex) / 2.0, (sz + ez) / 2.0);
+    [mx - sign * apothem * nx, mz - sign * apothem * nz]
 }
 
 /// One flat or curved panel between `from` and `to` (both at the path's
@@ -288,8 +346,8 @@ pub fn extrude_path(
     for edge in edges {
         let piece = match edge.curvature {
             EdgeCurvature::Straight => quad_piece(id_prefix, edge.start, edge.end, height, surface_type.clone(), None),
-            EdgeCurvature::Semicircle(bulge) => {
-                let center = [(edge.start[0] + edge.end[0]) / 2.0, (edge.start[2] + edge.end[2]) / 2.0];
+            EdgeCurvature::Arc { bulge, included_angle } => {
+                let center = arc_center(edge.start, edge.end, bulge, included_angle);
                 let curvature = SurfaceCurvature { center, bulge, facets: arc_facets };
                 quad_piece(id_prefix, edge.start, edge.end, height, surface_type.clone(), Some(curvature))
             }
@@ -346,9 +404,13 @@ mod tests {
         assert_eq!(pieces.len(), 2);
     }
 
+    fn semicircle(bulge: ArcBulge) -> EdgeCurvature {
+        EdgeCurvature::Arc { bulge, included_angle: std::f32::consts::PI }
+    }
+
     #[test]
     fn a_semicircle_edge_extrudes_into_one_four_node_piece_with_curvature_metadata() {
-        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: EdgeCurvature::Semicircle(ArcBulge::Left) }];
+        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: semicircle(ArcBulge::Left) }];
         let pieces = extrude_path(&edges, 3.0, None, 6, "arc-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 1, "one curved edge must extrude into exactly one Surface");
         let piece = &pieces[0];
@@ -360,9 +422,30 @@ mod tests {
         assert_eq!(*piece.nodes[3].data(), [0.0, 3.0, 0.0], "the top corner above the start");
 
         let curvature = piece.surface.curvature.expect("a semicircle edge must attach curvature metadata");
-        assert_eq!(curvature.center, [2.0, 0.0], "center is the chord's own midpoint");
+        assert!((curvature.center[0] - 2.0).abs() < 1e-4 && curvature.center[1].abs() < 1e-4, "center is the chord's own midpoint, got {:?}", curvature.center);
         assert_eq!(curvature.bulge, ArcBulge::Left);
         assert_eq!(curvature.facets, 6, "facets persists the caller's own requested tessellation resolution");
+    }
+
+    /// A minor (< 180°) arc's own center is offset off the chord, not the
+    /// chord's own midpoint -- the case a semicircle-only formula could
+    /// never produce, and the whole reason `included_angle` exists: 3+ arcs
+    /// composing a closed shape (a circle, most commonly) need each one's
+    /// own corner pair to stay unique, which a semicircle-only vocabulary
+    /// can't do (see this module's own top-level doc).
+    #[test]
+    fn a_minor_arc_edge_offsets_its_own_center_off_the_chord() {
+        let edges = [PathEdge {
+            start: [2.0, 0.0, 0.0],
+            end: [-1.0, 0.0, 1.7320508],
+            curvature: EdgeCurvature::Arc { bulge: ArcBulge::Right, included_angle: std::f32::consts::TAU / 3.0 },
+        }];
+        let pieces = extrude_path(&edges, 3.0, None, 8, "circle-1", surface_type()).unwrap();
+        let curvature = pieces[0].surface.curvature.expect("an arc edge must attach curvature metadata");
+        // A regular triangle inscribed in a radius-2 circle centered at the
+        // origin -- this edge's own 120° arc must reconstruct that same center.
+        assert!(curvature.center[0].abs() < 1e-3, "expected center.x near 0, got {}", curvature.center[0]);
+        assert!(curvature.center[1].abs() < 1e-3, "expected center.z near 0, got {}", curvature.center[1]);
     }
 
     /// A curved edge chained after a straight one in the same multi-edge
@@ -372,7 +455,7 @@ mod tests {
     fn a_straight_edge_followed_by_a_curve_extrudes_into_two_pieces() {
         let edges = [
             straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]),
-            PathEdge { start: [4.0, 0.0, 0.0], end: [4.0, 0.0, 4.0], curvature: EdgeCurvature::Semicircle(ArcBulge::Left) },
+            PathEdge { start: [4.0, 0.0, 0.0], end: [4.0, 0.0, 4.0], curvature: semicircle(ArcBulge::Left) },
         ];
         let pieces = extrude_path(&edges, 3.0, None, 4, "mixed-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 2);
@@ -380,6 +463,13 @@ mod tests {
         assert_eq!(pieces[1].nodes.len(), 4);
         assert!(pieces[0].surface.curvature.is_none());
         assert!(pieces[1].surface.curvature.is_some());
+    }
+
+    #[test]
+    fn an_out_of_range_included_angle_is_rejected() {
+        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: EdgeCurvature::Arc { bulge: ArcBulge::Left, included_angle: 0.0 } }];
+        let error = extrude_path(&edges, 3.0, None, 8, "arc-1", surface_type()).unwrap_err();
+        assert_eq!(error, ExtrusionError::InvalidIncludedAngle { index: 0, included_angle: 0.0 });
     }
 
     #[test]
@@ -399,7 +489,7 @@ mod tests {
 
     #[test]
     fn a_semicircle_with_too_few_arc_facets_is_rejected() {
-        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: EdgeCurvature::Semicircle(ArcBulge::Left) }];
+        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: semicircle(ArcBulge::Left) }];
         let error = extrude_path(&edges, 3.0, None, 1, "arc-1", surface_type()).unwrap_err();
         assert_eq!(error, ExtrusionError::TooFewArcFacets { arc_facets: 1 });
     }

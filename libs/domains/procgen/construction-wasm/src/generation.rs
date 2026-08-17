@@ -43,6 +43,10 @@ use crate::geometry::point_in_or_on_polygon;
 
 // ---- Path extrusion ----
 
+fn default_included_angle() -> f32 {
+    std::f32::consts::PI
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PathEdgeDto {
@@ -50,13 +54,19 @@ pub struct PathEdgeDto {
     pub end: [f32; 3],
     /// One of `"straight"`, `"arcLeft"`, `"arcRight"`.
     pub curvature: String,
+    /// The arc's own swept angle in radians, for `"arcLeft"`/`"arcRight"` --
+    /// defaults to a true semicircle (`PI`) when omitted, so every existing
+    /// caller (wall-brush's own curve-fitting, which only ever detects
+    /// semicircles) needs no change. Ignored for `"straight"`.
+    #[serde(default = "default_included_angle")]
+    pub included_angle: f32,
 }
 
-fn parse_curvature(wire: &str) -> Result<EdgeCurvature, String> {
+fn parse_curvature(wire: &str, included_angle: f32) -> Result<EdgeCurvature, String> {
     match wire {
         "straight" => Ok(EdgeCurvature::Straight),
-        "arcLeft" => Ok(EdgeCurvature::Semicircle(ArcBulge::Left)),
-        "arcRight" => Ok(EdgeCurvature::Semicircle(ArcBulge::Right)),
+        "arcLeft" => Ok(EdgeCurvature::Arc { bulge: ArcBulge::Left, included_angle }),
+        "arcRight" => Ok(EdgeCurvature::Arc { bulge: ArcBulge::Right, included_angle }),
         other => Err(format!("unknown edge curvature: {other}")),
     }
 }
@@ -136,7 +146,7 @@ pub fn generate_and_apply_path_extrusion(
     let edges: Vec<PathEdge> = request
         .edges
         .iter()
-        .map(|dto| Ok(PathEdge { start: dto.start, end: dto.end, curvature: parse_curvature(&dto.curvature)? }))
+        .map(|dto| Ok(PathEdge { start: dto.start, end: dto.end, curvature: parse_curvature(&dto.curvature, dto.included_angle)? }))
         .collect::<Result<Vec<_>, String>>()?;
 
     let notch = request.notch.map(|dto| EdgeNotch { starts_at: dto.starts_at, ends_at: dto.ends_at, surface_type: SurfaceType::new(dto.surface_type) });
@@ -332,7 +342,48 @@ mod tests {
     // -- path extrusion --
 
     fn edge(start: [f32; 3], end: [f32; 3], curvature: &str) -> PathEdgeDto {
-        PathEdgeDto { start, end, curvature: curvature.to_string() }
+        PathEdgeDto { start, end, curvature: curvature.to_string(), included_angle: default_included_angle() }
+    }
+
+    fn arc_edge(start: [f32; 3], end: [f32; 3], curvature: &str, included_angle: f32) -> PathEdgeDto {
+        PathEdgeDto { start, end, curvature: curvature.to_string(), included_angle }
+    }
+
+    /// A full circle built from 2 true semicircles mints the identical 4
+    /// corner nodes for both (`corner_id` is purely position-derived), so
+    /// they collide on one `SurfaceKey` and the second is silently dropped
+    /// by `diff_and_apply`'s own duplicate-cycle dedup -- this was the
+    /// actual bug behind a rendered "half circle." 4 quarter-circle arcs
+    /// (each a distinct corner pair) must not have this problem.
+    #[test]
+    fn a_full_circle_from_four_quarter_arcs_adds_four_distinct_surfaces() {
+        let (mut graph, mut surfaces, known) = empty_session();
+        let quarter = std::f32::consts::FRAC_PI_2;
+        let east = [2.0, 0.0, 0.0];
+        let north = [0.0, 0.0, 2.0];
+        let west = [-2.0, 0.0, 0.0];
+        let south = [0.0, 0.0, -2.0];
+        let request = GenerateAndApplyPathExtrusionRequest {
+            edges: vec![
+                arc_edge(east, north, "arcRight", quarter),
+                arc_edge(north, west, "arcRight", quarter),
+                arc_edge(west, south, "arcRight", quarter),
+                arc_edge(south, east, "arcRight", quarter),
+            ],
+            height: 3.0,
+            arc_facets: 8,
+            id_prefix: "tower-1".into(),
+            surface_type: "wall".into(),
+            notch: None,
+        };
+        let response = generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request).unwrap();
+        assert_eq!(response.added_surface_keys.len(), 4, "all four quarter-arcs must register as distinct surfaces");
+
+        for wire_key in &response.added_surface_keys {
+            let key = SurfaceKey::from_cycle(&wire_key.iter().map(|id| NodeId::new(id.clone()).unwrap()).collect::<Vec<_>>());
+            let curvature = surfaces.surface(&key).unwrap().curvature().expect("each quarter-arc must carry curvature");
+            assert!(curvature.center[0].abs() < 1e-3 && curvature.center[1].abs() < 1e-3, "expected every quarter-arc's own true center at the origin, got {:?}", curvature.center);
+        }
     }
 
     #[test]

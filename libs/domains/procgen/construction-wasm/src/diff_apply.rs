@@ -51,7 +51,20 @@ pub fn diff_and_apply(
     let new_keys: HashSet<SurfaceKey> = all_pieces.iter().map(|piece| SurfaceKey::from_cycle(&piece.surface.cycle)).collect();
 
     let to_remove: Vec<SurfaceKey> = old_keys_in_scope.difference(&new_keys).cloned().collect();
-    let to_add: Vec<_> = all_pieces.into_iter().filter(|piece| !old_keys_in_scope.contains(&SurfaceKey::from_cycle(&piece.surface.cycle))).collect();
+    // A generator can legitimately emit the same cycle twice in one call
+    // (a free-form stroke fitted into two collinear edges that share both
+    // endpoints, most commonly) -- since ids are position-derived, that's
+    // the same `SurfaceKey` twice, not two distinct surfaces. Keep only the
+    // first occurrence, the same way `unique_nodes`/`unique_edges` below
+    // already dedupe within one call.
+    let mut seen_new_keys: HashSet<SurfaceKey> = HashSet::new();
+    let to_add: Vec<_> = all_pieces
+        .into_iter()
+        .filter(|piece| {
+            let key = SurfaceKey::from_cycle(&piece.surface.cycle);
+            !old_keys_in_scope.contains(&key) && seen_new_keys.insert(key)
+        })
+        .collect();
 
     let mut removed_surface_keys = Vec::with_capacity(to_remove.len());
     for key in &to_remove {
@@ -108,4 +121,36 @@ pub fn diff_and_apply(
     }
 
     Ok(DiffOutcome { added_surface_keys, removed_surface_keys, removed_node_ids })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use grafting_graph_core::{Graph, NodeId, SurfaceSpec, SurfaceType};
+
+    fn quad_piece(prefix: &str) -> StructurePiece {
+        let ids: Vec<NodeId> = ["a", "b", "c", "d"].iter().map(|suffix| NodeId::new(format!("{prefix}:{suffix}")).unwrap()).collect();
+        let positions: [[f32; 3]; 4] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]];
+        let nodes: Vec<Node<[f32; 3]>> = ids.iter().zip(positions).map(|(id, position)| Node::new(id.clone(), position)).collect();
+        let edges: Vec<Edge<()>> = (0..4)
+            .map(|index| {
+                let id = EdgeId::new(format!("{prefix}:edge{index}")).unwrap();
+                Edge::new(id, ids[index].clone(), ids[(index + 1) % 4].clone(), ())
+            })
+            .collect();
+        StructurePiece { nodes, edges, surface: SurfaceSpec { cycle: ids, surface_type: SurfaceType::new("wall"), physical: true, curvature: None } }
+    }
+
+    #[test]
+    fn a_generator_emitting_the_same_cycle_twice_in_one_call_adds_it_once() {
+        let mut graph: SessionGraph = Graph::try_from_parts(vec![], vec![]).unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+
+        // A stroke fitted into two collinear edges sharing both endpoints
+        // -- same node-derived ids twice, not two distinct surfaces.
+        let all_pieces = vec![quad_piece("wall"), quad_piece("wall")];
+
+        let outcome = diff_and_apply(&mut graph, &mut surfaces, &HashSet::new(), all_pieces, |_| true).unwrap();
+        assert_eq!(outcome.added_surface_keys.len(), 1, "the duplicate cycle must be added exactly once, not rejected as already existing");
+    }
 }
