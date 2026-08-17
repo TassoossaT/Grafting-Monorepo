@@ -13,6 +13,7 @@ export type ConstructionToolId =
   | "wall-brush"
   | "wall-line"
   | "interior-wall"
+  | "tower-stamp"
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
@@ -78,6 +79,23 @@ export interface IrregularTerrainParams {
   readonly seed: number;
 }
 
+/**
+ * A closed circular wall footprint, stamped in one click at a known radius
+ * -- not drawn. This is the "buildings get known geometry, never freehand
+ * curves" half of the owner's own split (free brush stays free for
+ * fences/paths; a building shape like a tower is a preset instead), see
+ * `composition/tabletop/tools/tower-stamp-tool.ts`. `radius` is
+ * deliberately restricted to {@link TOWER_RADIUS_PRESETS} -- a small,
+ * closed catalog, not a free numeric field -- so every tower on a table is
+ * one of a few known sizes a later room-generation pass (Note 0008) can
+ * reason about, not an arbitrary one a careless drag produced.
+ */
+export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
+export interface TowerStampParams {
+  readonly wallType: "wall-white" | "wall-gray";
+  readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
+}
+
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
@@ -87,6 +105,7 @@ export interface ToolParamsByTool {
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
   readonly "interior-wall": InteriorGenerateParams;
+  readonly "tower-stamp": TowerStampParams;
   readonly "house-room-delete": NoToolParams;
   readonly "irregular-terrain-stamp": IrregularTerrainParams;
 }
@@ -100,6 +119,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
+  "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
   "house-room-delete": Object.freeze({}),
   "irregular-terrain-stamp": Object.freeze({
     trianglesPerSide: 10,

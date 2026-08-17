@@ -7,6 +7,7 @@ import { irregularTerrainTool } from "./irregular-terrain-tool.ts";
 import { moveNodeTool } from "./move-node-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
 import { terrainBrushTool } from "./terrain-brush-tool.ts";
+import { towerStampTool } from "./tower-stamp-tool.ts";
 import { wallBrushTool } from "./wall-brush-tool.ts";
 import { wallLineTool } from "./wall-line-tool.ts";
 
@@ -22,6 +23,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
   "interior-wall": interiorWallTool,
+  "tower-stamp": towerStampTool,
   "house-room-delete": houseRoomDeleteTool,
   "irregular-terrain-stamp": irregularTerrainTool,
 };

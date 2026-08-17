@@ -16,7 +16,7 @@ export type {
 } from "./construction-operations.ts";
 export { createMoveNodeHistoryStack } from "./move-node-history.ts";
 export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState } from "./move-node-history.ts";
-export { DEFAULT_TOOL_PARAMS } from "./tool-types.ts";
+export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
 export type {
   ConstructionToolId,
   InteriorGenerateParams,
@@ -26,5 +26,6 @@ export type {
   TerrainBrushParams,
   ToolParamsByTool,
   ToolParamsFor,
+  TowerStampParams,
   WallBrushParams,
 } from "./tool-types.ts";
