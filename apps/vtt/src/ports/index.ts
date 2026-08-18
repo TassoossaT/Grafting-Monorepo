@@ -21,6 +21,8 @@ export type {
 export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
+  ApplyPathBrushOutcome,
+  ApplyPathBrushRequest,
   CellCoordinate,
   CloudOutcome,
   CloudRequest,
@@ -44,4 +46,6 @@ export type {
   RemoveSurfaceRequest,
   SplitSurfaceOutcome,
   SurfaceMeshResult,
+  SurfaceTransformationInvalidation,
+  TransformationIdentityDelta,
 } from "./construction-session-port.ts";

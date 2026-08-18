@@ -579,6 +579,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn applying_path_brush_replaces_terrain_through_the_wasm_boundary() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
+            )
+            .expect("terrain cell generates");
+
+        let response = session
+            .apply_path_brush_json(
+                r#"{"operationId":"path-1","center":[0.5,0.5],"radius":0.25,"depth":0.1,"sourceSurfaceType":"terrain","targetSurfaceType":"path"}"#,
+            )
+            .expect("path brush applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(
+            !parsed["surfaceIds"]["created"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "the transformation must report its created path surface: {parsed}"
+        );
+
+        let snapshot = session.snapshot_json().expect("snapshot succeeds");
+        assert!(
+            snapshot.contains("\"path\""),
+            "the new path must be visible in the session snapshot"
+        );
+    }
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();

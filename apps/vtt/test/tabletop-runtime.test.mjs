@@ -127,6 +127,15 @@ function createFakeConstructionPort() {
       requireStarted();
       return { addedSurfaceKeys: [FAKE_WALL_SURFACE_KEY], removedSurfaceKeys: [], removedNodeIds: [] };
     },
+    applyPathBrush() {
+      requireStarted();
+      return {
+        nodeIds: { created: [], preserved: [], replaced: [], removed: [] },
+        edgeIds: { created: [], preserved: [], replaced: [], removed: [] },
+        surfaceIds: { created: [], preserved: [], replaced: [], removed: [] },
+        invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
+      };
+    },
     getSurfaceMesh() {
       requireStarted();
       return {
@@ -397,6 +406,58 @@ test("generatePathExtrusion folds every added surface into the map", async () =>
   assert.equal(map.byId.get(surfaceRef).physical, false);
 });
 
+test("applyPathBrush folds atomic surface and node deltas into the map", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-path-brush",
+    seedDefaultMap: true,
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+
+  const pathKey = ["fake:path:a", "fake:path:b", "fake:path:c"];
+  constructionPort.applyPathBrush = () => ({
+    nodeIds: { created: ["fake:path:a", "fake:path:b", "fake:path:c"], preserved: [], replaced: [], removed: [] },
+    edgeIds: { created: ["fake:path:e0"], preserved: [], replaced: [], removed: [] },
+    surfaceIds: { created: [pathKey], preserved: [], replaced: [], removed: [FAKE_TERRAIN_SURFACE_KEY] },
+    invalidation: { changedSurfaces: [pathKey], topologyRepairNeighbors: [], directDependencies: [] },
+  });
+  constructionPort.getAllSurfaceMeshes = () => [
+    {
+      surfaceKey: pathKey,
+      surfaceType: "path",
+      physical: true,
+      mesh: {
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, -0.1, 1]),
+        normals: new Float32Array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    },
+  ];
+  constructionPort.getNodePositions = () => [
+    { id: "fake:path:a", position: { x: 0, y: 0, z: 0 } },
+    { id: "fake:path:b", position: { x: 1, y: 0, z: 0 } },
+    { id: "fake:path:c", position: { x: 0, y: -0.1, z: 1 } },
+  ];
+
+  const outcome = runtime.applyPathBrush(
+    {
+      operationId: "path-brush-1",
+      targetType: "path",
+      brushShape: { kind: "circle", radius: 0.25 },
+      brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }] },
+      parameters: { width: 0.5, depth: 0.1, falloff: 0.2, strength: 1 },
+    },
+    "local",
+  );
+
+  assert.deepEqual(outcome.surfaceIds.created, [pathKey]);
+  const map = runtime.getSnapshot().map;
+  assert.equal(map.byId.has(surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY)), false);
+  assert.equal(map.byId.get(surfaceRefFromNodeSet(pathKey)).type, "path");
+  assert.deepEqual(map.nodePositions.get("fake:path:c").position, { x: 0, y: -0.1, z: 1 });
+});
 test("generating construction requires a ready tabletop runtime", async () => {
   const runtime = createTabletopRuntime({
     tableId: "table-generate-not-ready",

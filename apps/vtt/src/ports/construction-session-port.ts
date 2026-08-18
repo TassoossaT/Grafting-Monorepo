@@ -81,6 +81,39 @@ export interface DiffOutcome {
   readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
+/** Identity lifecycle emitted by an atomic surface transformation. */
+export interface TransformationIdentityDelta<TIdentity> {
+  readonly created: readonly TIdentity[];
+  readonly preserved: readonly TIdentity[];
+  readonly replaced: readonly TIdentity[];
+  readonly removed: readonly TIdentity[];
+}
+
+/** Local derived-state refresh scope emitted by an atomic transformation. */
+export interface SurfaceTransformationInvalidation {
+  readonly changedSurfaces: readonly ConstructionSurfaceKey[];
+  readonly topologyRepairNeighbors: readonly ConstructionSurfaceKey[];
+  readonly directDependencies: readonly ConstructionSurfaceKey[];
+}
+
+/** One resolved circular terrain-to-path brush request. */
+export interface ApplyPathBrushRequest {
+  readonly operationId: string;
+  readonly center: ConstructionPosition;
+  readonly radius: number;
+  readonly depth: number;
+  readonly sourceSurfaceType: string;
+  readonly targetSurfaceType: string;
+}
+
+/** Result of one atomic terrain-to-path transformation. */
+export interface ApplyPathBrushOutcome {
+  readonly nodeIds: TransformationIdentityDelta<ConstructionNodeId>;
+  readonly edgeIds: TransformationIdentityDelta<ConstructionEdgeId>;
+  readonly surfaceIds: TransformationIdentityDelta<ConstructionSurfaceKey>;
+  readonly invalidation: SurfaceTransformationInvalidation;
+}
+
 /** One straight or circular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints plus `includedAngle`, never a free parameter. */
 export interface PathEdgeSpec {
   readonly start: ConstructionPosition;
@@ -260,6 +293,8 @@ export interface ConstructionSessionPort {
     deformationZ: number,
   ): void;
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
+  /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
+  applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
   generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome;
   generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;

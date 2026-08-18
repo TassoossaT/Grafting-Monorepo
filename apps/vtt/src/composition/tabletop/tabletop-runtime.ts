@@ -15,6 +15,7 @@ import {
 } from "../../entities/map/index.ts";
 import type {
   AffectedSurfaces,
+  ApplyPathBrushOutcome,
   CameraControlHandle,
   CameraControlOptions,
   ChangeOrigin,
@@ -43,6 +44,8 @@ import type {
   SurfaceMeshResult,
   TerrainNoisePort,
 } from "@/ports";
+
+import type { PathBrushEffect } from "../../features/edit-construction/index.ts";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
 
@@ -111,6 +114,8 @@ export interface TabletopRuntime {
    * `ConstructionSessionPort.generatePathExtrusion`.
    */
   generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
+  /** Confirms one circular terrain-to-path effect as a single atomic construction mutation. */
+  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome;
   /** One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`. */
   generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
   /**
@@ -573,6 +578,36 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return surfaceKey;
   }
 
+  /** Folds one Phase-C path-brush transformation without deriving topology in TypeScript. */
+  #foldPathBrushOutcome(outcome: ApplyPathBrushOutcome, origin: ChangeOrigin, causeId: string): void {
+    const changed = new Map<string, ConstructionSurfaceKey>();
+    for (const surfaceKey of [
+      ...outcome.surfaceIds.created,
+      ...outcome.surfaceIds.preserved,
+      ...outcome.surfaceIds.replaced,
+      ...outcome.invalidation.changedSurfaces,
+      ...outcome.invalidation.topologyRepairNeighbors,
+      ...outcome.invalidation.directDependencies,
+    ]) {
+      changed.set(surfaceRefFromNodeSet(surfaceKey), surfaceKey);
+    }
+
+    this.#applyConstructionMutation([...changed.values()], origin, causeId, (map) => {
+      let next = map;
+      for (const removedKey of outcome.surfaceIds.removed) {
+        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+        const previous = next.byId.get(surfaceRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
+      }
+      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+      for (const nodeId of outcome.nodeIds.removed) {
+        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      }
+      return next;
+    });
+  }
   /** Shared by every `generate*` mutation: folds `outcome`'s added/removed surfaces and removed nodes into the running map. */
   #foldDiffOutcome(outcome: DiffOutcome, origin: ChangeOrigin, causeId: string): void {
     this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
@@ -592,6 +627,27 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
+  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome {
+    this.#requireReady("applying a path brush");
+    if (effect.brushShape.kind !== "circle") {
+      throw new Error("the current path brush transformer supports only circular footprints");
+    }
+    if (effect.brushRegion.samples.length !== 1) {
+      throw new Error("the current path brush transformer accepts one confirmed footprint per operation");
+    }
+
+    const sample = effect.brushRegion.samples[0];
+    const outcome = this.#construction.applyPathBrush({
+      operationId: effect.operationId,
+      center: sample,
+      radius: effect.brushShape.radius,
+      depth: effect.parameters.depth,
+      sourceSurfaceType: "terrain",
+      targetSurfaceType: effect.targetType,
+    });
+    this.#foldPathBrushOutcome(outcome, origin, effect.operationId);
+    return outcome;
+  }
   generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
     this.#requireReady("drawing a path");
 
