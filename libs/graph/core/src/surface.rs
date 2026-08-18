@@ -109,12 +109,6 @@ pub struct SurfaceCurvature {
     /// Which of the two arcs a shared center and two endpoints could
     /// describe -- see this struct's own doc.
     pub bulge: ArcBulge,
-    /// How many straight chords a mesh generator should tessellate this arc
-    /// into -- decided once, by whoever generated this surface, and
-    /// persisted here so re-triangulating later (a page reload, a cache
-    /// miss) always reproduces the same mesh without needing the original
-    /// generation request again.
-    pub facets: usize,
 }
 
 /// The semantic record `ADR-0022` defines: `{ type, physical, mesh }` minus

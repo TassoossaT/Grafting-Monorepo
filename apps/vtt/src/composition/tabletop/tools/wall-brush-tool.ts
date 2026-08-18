@@ -7,7 +7,6 @@ import { fitPath } from "./path-fitting.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing, xzDistance } from "./wall-shared.ts";
 
-const ARC_FACETS = 12;
 /**
  * A new raw sample joins the stroke's own buffer only once it has moved
  * this far (XZ) from the last one -- without a floor, every `onPointerMove`
@@ -79,7 +78,6 @@ function commitFitted(ctx: ToolContext, path: readonly ConstructionPosition[], p
     {
       edges,
       height: WALL_HEIGHT,
-      arcFacets: ARC_FACETS,
       idPrefix: idPrefixFor(ctx),
       surfaceType: params.wallType,
     },

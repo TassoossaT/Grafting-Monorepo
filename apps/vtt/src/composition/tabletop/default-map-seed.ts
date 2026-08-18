@@ -21,13 +21,11 @@ export function buildGeneratePathExtrusionOperation(
   edges: readonly PathEdgeSpec[],
   height: number,
   surfaceType: string,
-  arcFacets: number,
   notch?: EdgeNotchSpec,
 ): GeneratePathExtrusionOperation {
   const payload: GeneratePathExtrusionRequest = {
     edges,
     height,
-    arcFacets,
     idPrefix: `${tableId}:${salt}:path`,
     surfaceType,
     notch,
@@ -102,7 +100,6 @@ export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMap
     [{ start: { x: 2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 4 }, curvature: "straight" }],
     3,
     "wall",
-    1,
   );
 
   return { terrainCell, wall };

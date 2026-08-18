@@ -788,7 +788,6 @@ impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::Surface
 pub struct grafting_graph_core::SurfaceCurvature
 pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge
 pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]
-pub grafting_graph_core::SurfaceCurvature::facets: usize
 impl core::clone::Clone for grafting_graph_core::SurfaceCurvature
 pub fn grafting_graph_core::SurfaceCurvature::clone(&self) -> grafting_graph_core::SurfaceCurvature
 impl core::cmp::PartialEq for grafting_graph_core::SurfaceCurvature
@@ -2006,14 +2005,6 @@ describe -- see this struct's own doc.
 ### `pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]`
 
 The arc's own center, in the same XZ plane as the surface's corners.
-
-### `pub grafting_graph_core::SurfaceCurvature::facets: usize`
-
-How many straight chords a mesh generator should tessellate this arc
-into -- decided once, by whoever generated this surface, and
-persisted here so re-triangulating later (a page reload, a cache
-miss) always reproduces the same mesh without needing the original
-generation request again.
 
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 

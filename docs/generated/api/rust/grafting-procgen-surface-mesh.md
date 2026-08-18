@@ -7,7 +7,7 @@ ordered ring, e.g. `Surface::cycle()`'s node ids resolved to their
 current graph positions. When `curvature` is given and `positions` is
 exactly the 4-corner shape [`crate`]'s own doc describes (bottom start,
 bottom end, top end, top start), the two curved edges are tessellated
-into a many-point ring first, per `curvature.facets`. Returns `None` for
+into a many-point ring first, at [`ARC_TESSELLATION_TOLERANCE`]. Returns `None` for
 fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
 are states a caller may see transiently mid-edit, not error conditions
 to propagate.
@@ -36,8 +36,10 @@ than a fan, which only triangulates convex/star-shaped rings correctly.
 A curved `Surface` (see [`grafting_graph_core::SurfaceCurvature`]) keeps
 exactly 4 graph-cycle corners, the same as a straight one -- the actual
 arc only exists here, tessellated into a strip of quads right before
-triangulation, never persisted back onto the graph. This is the one
-place `SurfaceCurvature`'s `facets` is ever read.
+triangulation, never persisted back onto the graph. Tessellation
+resolution is this crate's own fixed [`ARC_TESSELLATION_TOLERANCE`], not
+a value a caller supplies or the graph stores -- controlling render
+resolution is a rendering concern, not a construction-time one.
 
 That strip is built directly (a triangle per half of each tessellated
 quad segment), **not** by flattening the curve into one many-point ring

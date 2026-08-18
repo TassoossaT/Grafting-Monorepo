@@ -36,13 +36,12 @@ only picks which of a shared XZ position's two ids (top or bottom node)
 applies, so two calls at the same XZ under the same `id_prefix` weld
 automatically regardless of Y (`corner_id` never encodes Y itself).
 
-### `pub fn grafting_procgen_structure_generation::extrude_path(edges: &[grafting_procgen_structure_generation::PathEdge], height: f32, notch: core::option::Option<&grafting_procgen_structure_generation::EdgeNotch>, arc_facets: usize, id_prefix: &str, surface_type: grafting_graph_core::surface::SurfaceType) -> core::result::Result<alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>, grafting_procgen_structure_generation::ExtrusionError>`
+### `pub fn grafting_procgen_structure_generation::extrude_path(edges: &[grafting_procgen_structure_generation::PathEdge], height: f32, notch: core::option::Option<&grafting_procgen_structure_generation::EdgeNotch>, id_prefix: &str, surface_type: grafting_graph_core::surface::SurfaceType) -> core::result::Result<alloc::vec::Vec<grafting_procgen_structure_generation::StructurePiece>, grafting_procgen_structure_generation::ExtrusionError>`
 
 Extrudes `edges` into vertical panel pieces, cutting `notch` into them if
 given. Errors, leaving nothing behind, if `edges` is empty, doesn't
 chain continuously, doesn't share one baseline Y, contains a zero-length
-edge, has a curved edge with too few `arc_facets`, or `notch` is given
-against anything but a single straight edge.
+edge, or `notch` is given against anything but a single straight edge.
 
 `id_prefix` must stay the same fixed value across every tick of one
 stroke and across separate strokes extending the same physical
@@ -197,14 +196,6 @@ The notch's supplied start fraction.
 
 A notch was given but `edges` was not exactly one `Straight` edge --
 see this module's own doc on the v1 notch scope.
-
-### `pub grafting_procgen_structure_generation::ExtrusionError::TooFewArcFacets`
-
-An `Arc` edge is present but `arc_facets` is fewer than 2.
-
-### `pub grafting_procgen_structure_generation::ExtrusionError::TooFewArcFacets::arc_facets: usize`
-
-The offending, too-low value that was supplied.
 
 ### `pub grafting_procgen_structure_generation::PathEdge::curvature: grafting_procgen_structure_generation::EdgeCurvature`
 

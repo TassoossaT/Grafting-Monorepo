@@ -26,10 +26,11 @@
 //! A curved edge extrudes into exactly the same four graph nodes a straight
 //! edge would (its own two endpoints, bottom and top) -- **never** one node
 //! per tessellated facet. The curve itself becomes [`grafting_graph_core::SurfaceCurvature`]
-//! metadata (`center`, `bulge`, `facets`) attached to the resulting
-//! `Surface`; tessellating that into an actual polyline is entirely
-//! `grafting-procgen-surface-mesh`'s job at mesh-generation time, never
-//! this crate's. An earlier version of this module instead minted one graph
+//! metadata (`center`, `bulge`) attached to the resulting `Surface`;
+//! tessellating that into an actual polyline -- at whatever resolution
+//! rendering needs -- is entirely `grafting-procgen-surface-mesh`'s job at
+//! mesh-generation time, never this crate's, and never a caller-supplied
+//! resolution knob at generation time either. An earlier version of this module instead minted one graph
 //! node per tessellation facet (a ring piece) to get a single `Surface` out
 //! of a curve -- that fixed the "many small `Surface`s" symptom but kept
 //! the deeper defect: a curved wall's own graph topology still ballooned
@@ -152,11 +153,6 @@ pub enum ExtrusionError {
         /// The zero-length edge.
         index: usize,
     },
-    /// An `Arc` edge is present but `arc_facets` is fewer than 2.
-    TooFewArcFacets {
-        /// The offending, too-low value that was supplied.
-        arc_facets: usize,
-    },
     /// An `Arc` edge's own `included_angle` is not strictly between `0` and
     /// `2 * PI`.
     InvalidIncludedAngle {
@@ -185,7 +181,6 @@ impl fmt::Display for ExtrusionError {
             Self::Discontinuous { index } => write!(formatter, "edge {index} does not start where edge {} ends", index.saturating_sub(1)),
             Self::InconsistentBaseline { index } => write!(formatter, "edge {index} does not share the path's own baseline Y"),
             Self::DegenerateEdge { index } => write!(formatter, "edge {index} has zero length"),
-            Self::TooFewArcFacets { arc_facets } => write!(formatter, "arc_facets ({arc_facets}) must be at least 2 to tessellate a curved edge"),
             Self::InvalidIncludedAngle { index, included_angle } => write!(formatter, "edge {index}'s included_angle ({included_angle}) must be strictly between 0 and 2*PI"),
             Self::NotchRequiresSingleStraightEdge => write!(formatter, "a notch requires exactly one straight edge"),
             Self::InvalidNotch { starts_at, ends_at } => write!(formatter, "notch [{starts_at}, {ends_at}] must be within [0, 1] with starts_at < ends_at"),
@@ -199,12 +194,9 @@ fn xz_close(a: [f32; 3], b: [f32; 3]) -> bool {
     (a[0] - b[0]).abs() < EPS && (a[2] - b[2]).abs() < EPS
 }
 
-fn validate(edges: &[PathEdge], arc_facets: usize) -> Result<(), ExtrusionError> {
+fn validate(edges: &[PathEdge]) -> Result<(), ExtrusionError> {
     if edges.is_empty() {
         return Err(ExtrusionError::EmptyPath);
-    }
-    if edges.iter().any(|edge| matches!(edge.curvature, EdgeCurvature::Arc { .. })) && arc_facets < 2 {
-        return Err(ExtrusionError::TooFewArcFacets { arc_facets });
     }
     let baseline_y = edges[0].start[1];
     for (index, edge) in edges.iter().enumerate() {
@@ -313,8 +305,7 @@ fn notched_pieces(id_prefix: &str, edge: &PathEdge, height: f32, notch: &EdgeNot
 /// Extrudes `edges` into vertical panel pieces, cutting `notch` into them if
 /// given. Errors, leaving nothing behind, if `edges` is empty, doesn't
 /// chain continuously, doesn't share one baseline Y, contains a zero-length
-/// edge, has a curved edge with too few `arc_facets`, or `notch` is given
-/// against anything but a single straight edge.
+/// edge, or `notch` is given against anything but a single straight edge.
 ///
 /// `id_prefix` must stay the same fixed value across every tick of one
 /// stroke and across separate strokes extending the same physical
@@ -326,11 +317,10 @@ pub fn extrude_path(
     edges: &[PathEdge],
     height: f32,
     notch: Option<&EdgeNotch>,
-    arc_facets: usize,
     id_prefix: &str,
     surface_type: SurfaceType,
 ) -> Result<Vec<StructurePiece>, ExtrusionError> {
-    validate(edges, arc_facets)?;
+    validate(edges)?;
 
     if let Some(notch) = notch {
         if edges.len() != 1 || !matches!(edges[0].curvature, EdgeCurvature::Straight) {
@@ -348,7 +338,7 @@ pub fn extrude_path(
             EdgeCurvature::Straight => quad_piece(id_prefix, edge.start, edge.end, height, surface_type.clone(), None),
             EdgeCurvature::Arc { bulge, included_angle } => {
                 let center = arc_center(edge.start, edge.end, bulge, included_angle);
-                let curvature = SurfaceCurvature { center, bulge, facets: arc_facets };
+                let curvature = SurfaceCurvature { center, bulge };
                 quad_piece(id_prefix, edge.start, edge.end, height, surface_type.clone(), Some(curvature))
             }
         };
@@ -376,7 +366,7 @@ mod tests {
     #[test]
     fn a_single_straight_edge_extrudes_one_quad() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
-        let pieces = extrude_path(&edges, 3.0, None, 8, "wall-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "wall-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 1);
         let piece = &pieces[0];
         assert_eq!(*piece.nodes[0].data(), [0.0, 0.0, 0.0]);
@@ -391,7 +381,7 @@ mod tests {
     #[test]
     fn an_edge_running_along_z_keeps_top_and_bottom_on_distinct_axes() {
         let edges = [straight([2.0, 0.0, 0.0], [2.0, 0.0, 4.0])];
-        let pieces = extrude_path(&edges, 3.0, None, 8, "wall-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "wall-1", surface_type()).unwrap();
         let piece = &pieces[0];
         assert_eq!(*piece.nodes[2].data(), [2.0, 3.0, 4.0]);
         assert_eq!(*piece.nodes[3].data(), [2.0, 3.0, 0.0]);
@@ -400,7 +390,7 @@ mod tests {
     #[test]
     fn a_multi_edge_open_path_extrudes_one_quad_per_edge() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]), straight([4.0, 0.0, 0.0], [4.0, 0.0, 4.0])];
-        let pieces = extrude_path(&edges, 3.0, None, 8, "fence-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "fence-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 2);
     }
 
@@ -411,7 +401,7 @@ mod tests {
     #[test]
     fn a_semicircle_edge_extrudes_into_one_four_node_piece_with_curvature_metadata() {
         let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: semicircle(ArcBulge::Left) }];
-        let pieces = extrude_path(&edges, 3.0, None, 6, "arc-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "arc-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 1, "one curved edge must extrude into exactly one Surface");
         let piece = &pieces[0];
         // A curved edge keeps exactly the same 4 corners a straight edge would -- curvature never mints extra graph nodes.
@@ -424,7 +414,6 @@ mod tests {
         let curvature = piece.surface.curvature.expect("a semicircle edge must attach curvature metadata");
         assert!((curvature.center[0] - 2.0).abs() < 1e-4 && curvature.center[1].abs() < 1e-4, "center is the chord's own midpoint, got {:?}", curvature.center);
         assert_eq!(curvature.bulge, ArcBulge::Left);
-        assert_eq!(curvature.facets, 6, "facets persists the caller's own requested tessellation resolution");
     }
 
     /// A minor (< 180°) arc's own center is offset off the chord, not the
@@ -440,7 +429,7 @@ mod tests {
             end: [-1.0, 0.0, 1.7320508],
             curvature: EdgeCurvature::Arc { bulge: ArcBulge::Right, included_angle: std::f32::consts::TAU / 3.0 },
         }];
-        let pieces = extrude_path(&edges, 3.0, None, 8, "circle-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "circle-1", surface_type()).unwrap();
         let curvature = pieces[0].surface.curvature.expect("an arc edge must attach curvature metadata");
         // A regular triangle inscribed in a radius-2 circle centered at the
         // origin -- this edge's own 120° arc must reconstruct that same center.
@@ -457,7 +446,7 @@ mod tests {
             straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]),
             PathEdge { start: [4.0, 0.0, 0.0], end: [4.0, 0.0, 4.0], curvature: semicircle(ArcBulge::Left) },
         ];
-        let pieces = extrude_path(&edges, 3.0, None, 4, "mixed-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, None, "mixed-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 2);
         assert_eq!(pieces[0].nodes.len(), 4);
         assert_eq!(pieces[1].nodes.len(), 4);
@@ -468,37 +457,30 @@ mod tests {
     #[test]
     fn an_out_of_range_included_angle_is_rejected() {
         let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: EdgeCurvature::Arc { bulge: ArcBulge::Left, included_angle: 0.0 } }];
-        let error = extrude_path(&edges, 3.0, None, 8, "arc-1", surface_type()).unwrap_err();
+        let error = extrude_path(&edges, 3.0, None, "arc-1", surface_type()).unwrap_err();
         assert_eq!(error, ExtrusionError::InvalidIncludedAngle { index: 0, included_angle: 0.0 });
     }
 
     #[test]
     fn repainting_the_same_path_yields_identical_corner_ids() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
-        let a = extrude_path(&edges, 3.0, None, 8, "house-1", surface_type()).unwrap();
-        let b = extrude_path(&edges, 3.0, None, 8, "house-1", surface_type()).unwrap();
+        let a = extrude_path(&edges, 3.0, None, "house-1", surface_type()).unwrap();
+        let b = extrude_path(&edges, 3.0, None, "house-1", surface_type()).unwrap();
         assert_eq!(a[0].surface.cycle, b[0].surface.cycle);
     }
 
     #[test]
     fn a_discontinuous_path_is_rejected() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]), straight([9.0, 0.0, 0.0], [9.0, 0.0, 4.0])];
-        let error = extrude_path(&edges, 3.0, None, 8, "house-1", surface_type()).unwrap_err();
+        let error = extrude_path(&edges, 3.0, None, "house-1", surface_type()).unwrap_err();
         assert_eq!(error, ExtrusionError::Discontinuous { index: 1 });
-    }
-
-    #[test]
-    fn a_semicircle_with_too_few_arc_facets_is_rejected() {
-        let edges = [PathEdge { start: [0.0, 0.0, 0.0], end: [4.0, 0.0, 0.0], curvature: semicircle(ArcBulge::Left) }];
-        let error = extrude_path(&edges, 3.0, None, 1, "arc-1", surface_type()).unwrap_err();
-        assert_eq!(error, ExtrusionError::TooFewArcFacets { arc_facets: 1 });
     }
 
     #[test]
     fn an_interior_notch_generates_three_pieces_sharing_jamb_identity() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
         let notch = EdgeNotch { starts_at: 0.25, ends_at: 0.75, surface_type: notch_type() };
-        let pieces = extrude_path(&edges, 3.0, Some(&notch), 8, "wall-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, Some(&notch), "wall-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 3);
         assert_eq!(pieces[0].surface.surface_type, surface_type());
         assert_eq!(pieces[1].surface.surface_type, notch_type());
@@ -513,7 +495,7 @@ mod tests {
     fn a_notch_touching_the_start_generates_two_pieces() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
         let notch = EdgeNotch { starts_at: 0.0, ends_at: 0.5, surface_type: notch_type() };
-        let pieces = extrude_path(&edges, 3.0, Some(&notch), 8, "wall-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, Some(&notch), "wall-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 2);
         assert_eq!(pieces[0].surface.surface_type, notch_type());
         assert_eq!(pieces[1].surface.surface_type, surface_type());
@@ -523,7 +505,7 @@ mod tests {
     fn a_notch_spanning_the_whole_edge_generates_one_piece() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
         let notch = EdgeNotch { starts_at: 0.0, ends_at: 1.0, surface_type: notch_type() };
-        let pieces = extrude_path(&edges, 3.0, Some(&notch), 8, "wall-1", surface_type()).unwrap();
+        let pieces = extrude_path(&edges, 3.0, Some(&notch), "wall-1", surface_type()).unwrap();
         assert_eq!(pieces.len(), 1);
         assert_eq!(pieces[0].surface.surface_type, notch_type());
     }
@@ -532,7 +514,7 @@ mod tests {
     fn a_notch_on_a_multi_edge_path_is_rejected() {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0]), straight([4.0, 0.0, 0.0], [4.0, 0.0, 4.0])];
         let notch = EdgeNotch { starts_at: 0.25, ends_at: 0.75, surface_type: notch_type() };
-        let error = extrude_path(&edges, 3.0, Some(&notch), 8, "wall-1", surface_type()).unwrap_err();
+        let error = extrude_path(&edges, 3.0, Some(&notch), "wall-1", surface_type()).unwrap_err();
         assert_eq!(error, ExtrusionError::NotchRequiresSingleStraightEdge);
     }
 
@@ -541,7 +523,7 @@ mod tests {
         let edges = [straight([0.0, 0.0, 0.0], [4.0, 0.0, 0.0])];
         let inverted = EdgeNotch { starts_at: 0.7, ends_at: 0.2, surface_type: notch_type() };
         assert_eq!(
-            extrude_path(&edges, 3.0, Some(&inverted), 8, "wall-1", surface_type()).unwrap_err(),
+            extrude_path(&edges, 3.0, Some(&inverted), "wall-1", surface_type()).unwrap_err(),
             ExtrusionError::InvalidNotch { starts_at: 0.7, ends_at: 0.2 }
         );
     }

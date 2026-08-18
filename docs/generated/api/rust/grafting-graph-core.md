@@ -1081,14 +1081,6 @@ describe -- see this struct's own doc.
 
 The arc's own center, in the same XZ plane as the surface's corners.
 
-### `pub grafting_graph_core::SurfaceCurvature::facets: usize`
-
-How many straight chords a mesh generator should tessellate this arc
-into -- decided once, by whoever generated this surface, and
-persisted here so re-triangulating later (a page reload, a cache
-miss) always reproduces the same mesh without needing the original
-generation request again.
-
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 
 Two surfaces cannot share the exact same node-set identity.
