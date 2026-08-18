@@ -637,14 +637,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
 
     const sample = effect.brushRegion.samples[0];
-    const outcome = this.#construction.applyPathBrush({
+    const request = {
       operationId: effect.operationId,
       center: sample,
       radius: effect.brushShape.radius,
       depth: effect.parameters.depth,
-      sourceSurfaceType: "terrain",
       targetSurfaceType: effect.targetType,
-    });
+    };
+    let outcome: ApplyPathBrushOutcome;
+    try {
+      outcome = this.#construction.applyPathBrush({ ...request, sourceSurfaceType: "terrain" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("produced no semantic change")) throw error;
+      outcome = this.#construction.applyPathBrush({ ...request, sourceSurfaceType: "terrain-grass" });
+    }
     this.#foldPathBrushOutcome(outcome, origin, effect.operationId);
     return outcome;
   }
