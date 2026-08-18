@@ -461,6 +461,7 @@ export default function BenchClient() {
             <Button label="Fit" onClick={() => handleRef.current?.center()} />
             {selection === null ? null : <Button label="Delete selected" onClick={removeSelected} />}
             <Link href="/lab/vtt-brush">VTT Brush &rarr;</Link>
+            <Link href="/lab/surface-transformations">Surface plans &rarr;</Link>
           </span>
         </div>
         <Text
