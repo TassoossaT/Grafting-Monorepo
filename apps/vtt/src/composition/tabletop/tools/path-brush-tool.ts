@@ -2,7 +2,7 @@ import { createPathBrushEffect, DEFAULT_TOOL_PARAMS } from "@/features/edit-cons
 import type { PathBrushParams } from "@/features/edit-construction";
 
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
-import { quadAround } from "./preview-shapes.ts";
+import { circleOutline } from "./preview-shapes.ts";
 
 const PATH_PREVIEW_COLOR = 0xc084fc;
 
@@ -16,7 +16,7 @@ export const pathBrushTool: ConstructionTool<"path-brush"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
 
   previewFor(gesture: ToolGesture, params: PathBrushParams) {
-    return quadAround(gesture.current.point, params.radius, PATH_PREVIEW_COLOR, 0.45);
+    return circleOutline(gesture.current.point, params.radius, PATH_PREVIEW_COLOR, 0.75);
   },
 
   onClick(ctx: ToolContext, sample, params: PathBrushParams): void {

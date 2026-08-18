@@ -6,7 +6,7 @@ import type { ConstructionPosition, CornerHeightModule } from "@/ports";
 import { buildGenerateTerrainCellOperation } from "../default-map-seed.ts";
 import { TERRAIN_GRID_HEIGHT, TERRAIN_GRID_WIDTH } from "../tabletop-runtime.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
-import { quadAround } from "./preview-shapes.ts";
+import { circleOutline } from "./preview-shapes.ts";
 
 const TERRAIN_COLOR: Record<TerrainBrushParams["targetSurface"], number> = {
   terrain: 0x334155,
@@ -75,7 +75,7 @@ export const terrainBrushTool: ConstructionTool<"terrain-brush"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-brush"],
 
   previewFor(gesture: ToolGesture, params: TerrainBrushParams) {
-    return quadAround(gesture.current.point, params.radius, TERRAIN_COLOR[params.targetSurface]);
+    return circleOutline(gesture.current.point, params.radius, TERRAIN_COLOR[params.targetSurface]);
   },
 
   onPointerDown(ctx: ToolContext, sample, params: TerrainBrushParams): void {

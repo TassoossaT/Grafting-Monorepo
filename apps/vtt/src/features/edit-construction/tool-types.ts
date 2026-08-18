@@ -18,14 +18,17 @@ export type ConstructionToolId =
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
-export interface PathBrushParams {
+export interface CircularBrushParams {
+  /** World-space radius shared by the terrain and path brushes. */
+  readonly radius: number;
+}
+
+export interface PathBrushParams extends CircularBrushParams {
   readonly radius: number;
   readonly depth: number;
 }
 
-export interface TerrainBrushParams {
-  /** World-space brush radius -- how far one stroke sample reaches. */
-  readonly radius: number;
+export interface TerrainBrushParams extends CircularBrushParams {
   /** How strongly one pass changes the target, in `(0, 1]`. */
   readonly strength: number;
   readonly targetSurface: "terrain" | "terrain-grass";

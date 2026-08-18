@@ -51,3 +51,16 @@ export function footprintQuad(
   });
   return { kind: "quad", color, opacity, positions };
 }
+
+/** A renderer-neutral circular brush outline shared by terrain and surface transformations. */
+export function circleOutline(center: ConstructionPosition, radius: number, color: number, opacity = 0.7): PreviewDescriptor {
+  const segments = 24;
+  const positions = new Float32Array((segments + 1) * 3);
+  for (let index = 0; index <= segments; index += 1) {
+    const angle = (Math.PI * 2 * index) / segments;
+    positions[index * 3] = center.x + radius * Math.cos(angle);
+    positions[index * 3 + 1] = center.y;
+    positions[index * 3 + 2] = center.z + radius * Math.sin(angle);
+  }
+  return { kind: "segments", color, opacity, positions };
+}

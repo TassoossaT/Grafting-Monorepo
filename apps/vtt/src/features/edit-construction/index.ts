@@ -18,6 +18,7 @@ export { createMoveNodeHistoryStack } from "./move-node-history.ts";
 export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState } from "./move-node-history.ts";
 export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
 export type {
+  CircularBrushParams,
   ConstructionToolId,
   InteriorGenerateParams,
   IrregularTerrainParams,

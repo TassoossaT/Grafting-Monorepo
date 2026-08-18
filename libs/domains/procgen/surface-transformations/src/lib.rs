@@ -208,7 +208,29 @@ pub fn plan_path_brush(
                 &mut neighbors,
             );
         } else {
-            return Err(PathBrushFailure::CrossesSurfaceBoundary { key });
+            // A brush spanning adjacent terrain faces still has to produce one
+            // atomic result in the VTT. Until the domain owns exact circular
+            // clipping/stitching, promote every intersected convex face as a
+            // whole. Their original boundary nodes stay preserved, so shared
+            // seams remain connected and no client-side topology is invented.
+            let built = whole_face_path(&polygon, &key, &source_tag, request)?;
+            append_piece(
+                built,
+                surface.cycle(),
+                &key,
+                surfaces,
+                &mut nodes,
+                &mut edges,
+                &mut added_surfaces,
+                &mut created_nodes,
+                &mut preserved_nodes,
+                &mut created_edges,
+                &mut created_surface_keys,
+                &mut removed_surfaces,
+                &mut removed_surface_keys,
+                &mut changed,
+                &mut neighbors,
+            );
         }
     }
 
@@ -852,22 +874,20 @@ mod tests {
     }
 
     #[test]
-    fn rejected_cross_boundary_brush_leaves_confirmed_state_unchanged() {
+    fn cross_boundary_brush_replaces_the_intersected_face_atomically() {
         let mut graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let mut registry = SurfaceRegistry::new();
-        let original = add_face(&mut graph, &mut registry, "rollback", 0.0);
-        let before_nodes = graph.node_count();
-        let before_edges = graph.edge_count();
-        let error =
-            plan_path_brush(&graph, &registry, &request("rollback", [0.2, 1.0], 0.8)).unwrap_err();
-        assert_eq!(
-            error,
-            PathBrushFailure::CrossesSurfaceBoundary {
-                key: original.clone()
-            }
+        let original = add_face(&mut graph, &mut registry, "cross-face", 0.0);
+        let plan =
+            plan_path_brush(&graph, &registry, &request("cross-face", [0.2, 1.0], 0.8)).unwrap();
+        assert!(
+            plan.transformation
+                .surface_ids()
+                .removed()
+                .contains(&original)
         );
-        assert_eq!(graph.node_count(), before_nodes);
-        assert_eq!(graph.edge_count(), before_edges);
-        assert!(registry.surface(&original).is_some());
+        assert!(!plan.transformation.surface_ids().created().is_empty());
+        apply_surface_replacement_plan(&mut graph, &mut registry, plan).unwrap();
+        assert!(registry.surface(&original).is_none());
     }
 }
