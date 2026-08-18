@@ -9,6 +9,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
 mod construction;
+mod contour;
 mod layout;
 mod model;
 mod surface;
@@ -18,6 +19,11 @@ pub use construction::{
     ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceReplacementPlan, SurfaceSpec,
     apply_surface_replacement_plan, delete_node, duplicate_surface, merge_surfaces, move_node,
     split_surface,
+};
+pub use contour::{
+    ContourBounds, ContourEdge, ContourEdgeId, ContourError, ContourGeometry,
+    ContourIdentifierError, ContourLoop, ContourPoint, ContourTopology, OrientedEdgeUse,
+    RegionId, SurfaceRegion, straight_cycle_region,
 };
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{

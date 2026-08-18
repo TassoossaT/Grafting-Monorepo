@@ -67,8 +67,10 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/src/lib.rs",
+        "{projectRoot}/src/contour.rs",
         "{projectRoot}/src/layout.rs",
         "{projectRoot}/src/model.rs",
+        "{projectRoot}/src/surface.rs",
         "{projectRoot}/src/transformation_plan.rs",
         "{projectRoot}/tests/public_api_contract.rs",
         "{projectRoot}/tests/public_api_snapshot.rs",
