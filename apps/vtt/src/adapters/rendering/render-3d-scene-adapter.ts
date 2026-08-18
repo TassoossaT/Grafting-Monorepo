@@ -191,12 +191,25 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         params.filled
           ? {
               geometry: { shape: "mesh", data: { positions: params.positions, indices: params.indices ?? PREVIEW_QUAD_INDICES } },
-              material: { surface: "unlit", color: params.color, opacity: params.opacity, doubleSided: true },
+              material: {
+                surface: "unlit",
+                color: params.color,
+                opacity: params.opacity,
+                doubleSided: true,
+                depthTest: false,
+                depthWrite: false,
+              },
               pickable: false,
             }
           : {
               geometry: { shape: "segments", positions: params.positions },
-              material: { surface: "line", color: params.color, opacity: params.opacity },
+              material: {
+                surface: "line",
+                color: params.color,
+                opacity: params.opacity,
+                depthTest: false,
+                depthWrite: false,
+              },
               pickable: false,
             },
       equals: (left, right) =>

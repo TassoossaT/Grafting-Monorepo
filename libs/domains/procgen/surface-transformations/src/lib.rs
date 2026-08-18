@@ -8,6 +8,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
 mod clip;
+mod stroke;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -20,10 +21,14 @@ use grafting_graph_core::{
     TransformationPlan, TransformationPlanFailure,
 };
 use grafting_procgen_surface_mesh::triangulate_surface;
+use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
 
 const CIRCLE_SEGMENTS: usize = 16;
 const POSITION_SCALE: f32 = 10_000.0;
 const MIN_FRAGMENT_AREA_FACTOR: f32 = 0.0025;
+const STROKE_FIT_TOLERANCE_FACTOR: f32 = 0.1;
+const ARC_SWEEP_ERROR_FACTOR: f32 = 0.02;
+const LATTICE_CELL_RADIUS_FACTOR: f32 = 1.75;
 
 /// Renderer-neutral convex brush footprint shared by surface and terrain tools.
 #[derive(Debug, Clone, PartialEq)]
@@ -157,20 +162,20 @@ impl Error for PathBrushFailure {}
 
 /// Plans a continuous terrain-to-path transformation without mutating state.
 ///
-/// Arbitrary simple source polygons are triangulated through the canonical
-/// surface-mesh capability. Each triangle is partitioned against the swept
-/// circular footprint: external fragments retain the source type, internal
-/// fragments receive the target type and a shallow U-shaped profile. Shared
-/// cut positions are interned as one graph node, every replacement cycle has
-/// graph edges, and all samples are published as one replacement plan.
+/// The complete pointer batch is first fitted to straight lines and true arcs,
+/// so input frequency never controls graph density. Existing small terrain
+/// cells are retyped in place and their shared nodes receive the analytic
+/// U-shaped profile. Only a genuinely coarse source polygon is partitioned
+/// against the sweep; its cut positions are interned and all resulting changes
+/// are published as one atomic replacement plan.
 pub fn plan_path_brush(
     graph: &Graph<[f32; 3], ()>,
     surfaces: &SurfaceRegistry,
     request: &PathBrushRequest,
 ) -> Result<SurfaceReplacementPlan<[f32; 3], ()>, PathBrushFailure> {
     validate_request(request)?;
-    let footprints = resample_stroke(&request.samples, request.shape.extent() * 0.45);
-    let mut builder = ReplacementBuilder::new(graph, surfaces, request, &footprints);
+    let (sweep_regions, fitted_stroke) = compact_sweep(&request.shape, &request.samples);
+    let mut builder = ReplacementBuilder::new(graph, surfaces, request, &fitted_stroke);
 
     for key in surfaces.surface_keys() {
         let surface = surfaces
@@ -193,6 +198,16 @@ pub fn plan_path_brush(
                     .ok_or_else(|| PathBrushFailure::InvalidSourceSurface { key: key.clone() })
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if reusable_lattice_cell_is_touched(
+            &polygon,
+            &request.shape,
+            &sweep_regions,
+            &fitted_stroke,
+        ) {
+            builder.begin_surface(&key, surface.cycle());
+            builder.add_retyped_surface(polygon, &request.target_type)?;
+            continue;
+        }
         let positions = polygon
             .iter()
             .map(|vertex| vertex.position)
@@ -209,11 +224,10 @@ pub fn plan_path_brush(
                 polygon[triangle[2] as usize].clone(),
             ];
             let mut remaining = vec![outside];
-            for center in &footprints {
+            for footprint in &sweep_regions {
                 let mut next_remaining = Vec::new();
                 for fragment in remaining {
-                    let footprint = request.shape.footprint(*center);
-                    let (rejected, accepted) = partition_by_footprint(fragment, &footprint);
+                    let (rejected, accepted) = partition_by_footprint(fragment, footprint);
                     next_remaining.extend(rejected);
                     if let Some(accepted) = accepted {
                         target_fragments.push(accepted);
@@ -241,8 +255,9 @@ pub fn plan_path_brush(
                 builder.add_surface_fragment(fragment, &source_type)?;
             }
         }
-        for fragment in target_fragments {
-            builder.add_path_fragment(fragment)?;
+        let target_regions = merge_tiled_fragments(&target_fragments).unwrap_or(target_fragments);
+        for region in target_regions {
+            builder.add_path_fragment(region)?;
         }
     }
 
@@ -303,26 +318,107 @@ pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f3
     if samples.is_empty() || !shape.valid() || point.iter().any(|value| !value.is_finite()) {
         return false;
     }
-    resample_stroke(samples, shape.extent() * 0.45)
-        .into_iter()
-        .any(|center| point_in_footprint(point, &shape.footprint(center)))
+    let (regions, primitives) = compact_sweep(shape, samples);
+    stroke_contains_point(shape, &regions, &primitives, point)
 }
-fn resample_stroke(samples: &[[f32; 2]], maximum_spacing: f32) -> Vec<[f32; 2]> {
-    let mut output = vec![samples[0]];
-    for pair in samples.windows(2) {
-        let dx = pair[1][0] - pair[0][0];
-        let dz = pair[1][1] - pair[0][1];
-        let distance = (dx * dx + dz * dz).sqrt();
-        let steps = (distance / maximum_spacing).ceil().max(1.0) as usize;
-        for step in 1..=steps {
-            let t = step as f32 / steps as f32;
-            let point = [pair[0][0] + dx * t, pair[0][1] + dz * t];
-            if distance_sq(*output.last().expect("one sample"), point) > 0.000_000_1 {
-                output.push(point);
-            }
+
+fn compact_sweep(
+    shape: &BrushShape,
+    samples: &[[f32; 2]],
+) -> (Vec<Vec<[f32; 2]>>, Vec<StrokePrimitive>) {
+    let primitives = fit_stroke(samples, shape.extent() * STROKE_FIT_TOLERANCE_FACTOR);
+    let mut regions = Vec::new();
+
+    for primitive in &primitives {
+        let centers = primitive.tessellated_centers(shape.extent() * ARC_SWEEP_ERROR_FACTOR);
+        if centers.len() == 1 {
+            regions.push(shape.footprint(centers[0]));
+            continue;
+        }
+        for pair in centers.windows(2) {
+            let mut vertices = shape.footprint(pair[0]);
+            vertices.extend(shape.footprint(pair[1]));
+            regions.push(convex_hull(vertices));
         }
     }
-    output
+
+    (regions, primitives)
+}
+
+fn stroke_contains_point(
+    shape: &BrushShape,
+    regions: &[Vec<[f32; 2]>],
+    primitives: &[StrokePrimitive],
+    point: [f32; 2],
+) -> bool {
+    match shape {
+        BrushShape::Circle { radius } => distance_to_stroke(primitives, point) <= *radius,
+        BrushShape::Square { .. } | BrushShape::Hexagon { .. } => regions
+            .iter()
+            .any(|region| point_in_footprint(point, region)),
+    }
+}
+
+fn reusable_lattice_cell_is_touched(
+    polygon: &[ClipVertex],
+    shape: &BrushShape,
+    regions: &[Vec<[f32; 2]>],
+    primitives: &[StrokePrimitive],
+) -> bool {
+    if polygon.len() > 4 {
+        return false;
+    }
+    let count = polygon.len() as f32;
+    let centroid = polygon.iter().fold([0.0; 2], |sum, vertex| {
+        [sum[0] + vertex.position[0], sum[1] + vertex.position[2]]
+    });
+    let centroid = [centroid[0] / count, centroid[1] / count];
+    let maximum_radius = polygon
+        .iter()
+        .map(|vertex| distance_sq([vertex.position[0], vertex.position[2]], centroid).sqrt())
+        .fold(0.0, f32::max);
+
+    maximum_radius <= shape.extent() * LATTICE_CELL_RADIUS_FACTOR
+        && stroke_contains_point(shape, regions, primitives, centroid)
+}
+
+fn convex_hull(mut points: Vec<[f32; 2]>) -> Vec<[f32; 2]> {
+    points.sort_by(|left, right| {
+        left[0]
+            .total_cmp(&right[0])
+            .then_with(|| left[1].total_cmp(&right[1]))
+    });
+    points.dedup_by(|left, right| distance_sq(*left, *right) <= 0.000_000_1);
+    if points.len() <= 3 {
+        return points;
+    }
+
+    let cross = |origin: [f32; 2], first: [f32; 2], second: [f32; 2]| {
+        (first[0] - origin[0]) * (second[1] - origin[1])
+            - (first[1] - origin[1]) * (second[0] - origin[0])
+    };
+    let mut lower = Vec::new();
+    for point in &points {
+        while lower.len() >= 2
+            && cross(lower[lower.len() - 2], lower[lower.len() - 1], *point) <= 0.000_01
+        {
+            lower.pop();
+        }
+        lower.push(*point);
+    }
+    let mut upper = Vec::new();
+    for point in points.iter().rev() {
+        while upper.len() >= 2
+            && cross(upper[upper.len() - 2], upper[upper.len() - 1], *point) <= 0.000_01
+        {
+            upper.pop();
+        }
+        upper.push(*point);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -338,20 +434,80 @@ impl PositionKey {
     }
 }
 
+fn merge_tiled_fragments(fragments: &[Vec<ClipVertex>]) -> Option<Vec<Vec<ClipVertex>>> {
+    let mut boundary_edges: BTreeMap<(PositionKey, PositionKey), (ClipVertex, ClipVertex)> =
+        BTreeMap::new();
+
+    for fragment in fragments {
+        for (start, end) in fragment
+            .iter()
+            .zip(fragment.iter().cycle().skip(1))
+            .take(fragment.len())
+        {
+            let start_key = PositionKey::new(start.position);
+            let end_key = PositionKey::new(end.position);
+            let key = if start_key <= end_key {
+                (start_key, end_key)
+            } else {
+                (end_key, start_key)
+            };
+            if boundary_edges.remove(&key).is_none() {
+                boundary_edges.insert(key, (start.clone(), end.clone()));
+            }
+        }
+    }
+
+    let mut regions = Vec::new();
+    while let Some((_, (start, first_end))) = boundary_edges.pop_first() {
+        let start_key = PositionKey::new(start.position);
+        let mut region = vec![start];
+        let mut current = first_end;
+        let mut guard = 0usize;
+
+        while PositionKey::new(current.position) != start_key {
+            region.push(current.clone());
+            let current_key = PositionKey::new(current.position);
+            let next_key = boundary_edges.iter().find_map(|(key, (left, right))| {
+                (PositionKey::new(left.position) == current_key
+                    || PositionKey::new(right.position) == current_key)
+                    .then_some(*key)
+            })?;
+            let (left, right) = boundary_edges.remove(&next_key)?;
+            current = if PositionKey::new(left.position) == current_key {
+                right
+            } else {
+                left
+            };
+            guard += 1;
+            if guard > fragments.iter().map(Vec::len).sum() {
+                return None;
+            }
+        }
+
+        if region.len() >= 3 {
+            regions.push(region);
+        }
+    }
+
+    (!regions.is_empty()).then_some(regions)
+}
 struct ReplacementBuilder<'a> {
     graph: &'a Graph<[f32; 3], ()>,
     registry: &'a SurfaceRegistry,
     request: &'a PathBrushRequest,
-    footprints: &'a [[f32; 2]],
+    stroke: &'a [StrokePrimitive],
+    updated_nodes: BTreeMap<NodeId, [f32; 3]>,
     nodes: Vec<Node<[f32; 3]>>,
     edges: Vec<Edge<()>>,
     removed_surfaces: Vec<SurfaceKey>,
     added_surfaces: Vec<SurfaceSpec>,
     created_nodes: BTreeSet<NodeId>,
     preserved_nodes: BTreeSet<NodeId>,
+    replaced_nodes: BTreeSet<NodeId>,
     created_edges: BTreeSet<EdgeId>,
     preserved_edges: BTreeSet<EdgeId>,
     created_surface_keys: BTreeSet<SurfaceKey>,
+    replaced_surface_keys: BTreeSet<SurfaceKey>,
     removed_surface_keys: BTreeSet<SurfaceKey>,
     changed: BTreeSet<SurfaceKey>,
     neighbors: BTreeSet<SurfaceKey>,
@@ -366,7 +522,7 @@ impl<'a> ReplacementBuilder<'a> {
         graph: &'a Graph<[f32; 3], ()>,
         registry: &'a SurfaceRegistry,
         request: &'a PathBrushRequest,
-        footprints: &'a [[f32; 2]],
+        stroke: &'a [StrokePrimitive],
     ) -> Self {
         let edge_by_pair = graph
             .snapshot()
@@ -383,16 +539,19 @@ impl<'a> ReplacementBuilder<'a> {
             graph,
             registry,
             request,
-            footprints,
+            stroke,
+            updated_nodes: BTreeMap::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
             removed_surfaces: Vec::new(),
             added_surfaces: Vec::new(),
             created_nodes: BTreeSet::new(),
             preserved_nodes: BTreeSet::new(),
+            replaced_nodes: BTreeSet::new(),
             created_edges: BTreeSet::new(),
             preserved_edges: BTreeSet::new(),
             created_surface_keys: BTreeSet::new(),
+            replaced_surface_keys: BTreeSet::new(),
             removed_surface_keys: BTreeSet::new(),
             changed: BTreeSet::new(),
             neighbors: BTreeSet::new(),
@@ -423,6 +582,45 @@ impl<'a> ReplacementBuilder<'a> {
         self.changed.insert(key.clone());
     }
 
+    fn add_retyped_surface(
+        &mut self,
+        polygon: Vec<ClipVertex>,
+        surface_type: &SurfaceType,
+    ) -> Result<(), PathBrushFailure> {
+        let cycle = self.resolve_cycle(&polygon)?;
+        let key = SurfaceKey::from_cycle(&cycle);
+        self.add_cycle_edges(&cycle)?;
+        self.add_surface(cycle, surface_type);
+        self.created_surface_keys.remove(&key);
+        self.removed_surface_keys.remove(&key);
+        self.replaced_surface_keys.insert(key);
+        self.update_path_nodes(&polygon);
+        Ok(())
+    }
+
+    fn update_path_nodes(&mut self, polygon: &[ClipVertex]) {
+        for vertex in polygon {
+            let Some(id) = &vertex.id else {
+                continue;
+            };
+            let distance =
+                distance_to_stroke(self.stroke, [vertex.position[0], vertex.position[2]]);
+            if distance > self.request.shape.extent() {
+                continue;
+            }
+            let normalized = (distance / self.request.shape.extent()).clamp(0.0, 1.0);
+            let profile = 1.0 - normalized * normalized;
+            let mut position = vertex.position;
+            position[1] -= self.request.depth * profile;
+            self.updated_nodes
+                .entry(id.clone())
+                .and_modify(|existing| existing[1] = existing[1].min(position[1]))
+                .or_insert(position);
+            self.preserved_nodes.remove(id);
+            self.replaced_nodes.insert(id.clone());
+        }
+    }
+
     fn add_surface_fragment(
         &mut self,
         polygon: Vec<ClipVertex>,
@@ -446,11 +644,7 @@ impl<'a> ReplacementBuilder<'a> {
         });
         let count = polygon.len() as f32;
         center = [center[0] / count, center[1] / count, center[2] / count];
-        let distance = self
-            .footprints
-            .iter()
-            .map(|sample| distance_sq([center[0], center[2]], *sample).sqrt())
-            .fold(f32::INFINITY, f32::min);
+        let distance = distance_to_stroke(self.stroke, [center[0], center[2]]);
         let normalized = (distance / self.request.shape.extent()).clamp(0.0, 1.0);
         let profile = 1.0 - normalized * normalized;
         center[1] -= self.request.depth * profile;
@@ -570,7 +764,7 @@ impl<'a> ReplacementBuilder<'a> {
             PlanIdentityKind::Node,
             self.created_nodes,
             self.preserved_nodes,
-            BTreeSet::new(),
+            self.replaced_nodes,
             BTreeSet::new(),
         )
         .map_err(PathBrushFailure::Plan)?;
@@ -586,7 +780,7 @@ impl<'a> ReplacementBuilder<'a> {
             PlanIdentityKind::Surface,
             self.created_surface_keys,
             BTreeSet::new(),
-            BTreeSet::new(),
+            self.replaced_surface_keys,
             self.removed_surface_keys,
         )
         .map_err(PathBrushFailure::Plan)?;
@@ -596,6 +790,11 @@ impl<'a> ReplacementBuilder<'a> {
             .map_err(PathBrushFailure::Plan)?;
         Ok(SurfaceReplacementPlan {
             transformation,
+            updated_nodes: self
+                .updated_nodes
+                .into_iter()
+                .map(|(id, position)| Node::new(id, position))
+                .collect(),
             added_nodes: self.nodes,
             added_edges: self.edges,
             removed_surfaces: self.removed_surfaces,
@@ -690,6 +889,24 @@ mod tests {
         )
     }
 
+    fn add_unit_face(
+        graph: &mut Graph<[f32; 3], ()>,
+        registry: &mut SurfaceRegistry,
+        name: &str,
+    ) -> SurfaceKey {
+        add_polygon(
+            graph,
+            registry,
+            name,
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0],
+            ],
+        )
+    }
+
     fn request(operation_id: &str, samples: Vec<[f32; 2]>, radius: f32) -> PathBrushRequest {
         PathBrushRequest {
             operation_id: operation_id.into(),
@@ -776,25 +993,91 @@ mod tests {
     }
 
     #[test]
-    fn one_operation_sweeps_continuously_between_sparse_samples() {
+    fn coarse_face_fallback_is_independent_of_pointer_sample_density() {
         let mut graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let mut registry = SurfaceRegistry::new();
         add_face(&mut graph, &mut registry, "left", 0.0);
         add_face(&mut graph, &mut registry, "right", 2.0);
+        let sparse = plan_path_brush(
+            &graph,
+            &registry,
+            &request("sparse", vec![[0.25, 1.0], [3.75, 1.0]], 0.35),
+        )
+        .unwrap();
+        let dense_samples = (0..=200)
+            .map(|index| [0.25 + 3.5 * index as f32 / 200.0, 1.0])
+            .collect();
+        let dense =
+            plan_path_brush(&graph, &registry, &request("dense", dense_samples, 0.35)).unwrap();
+
+        assert_eq!(sparse.removed_surfaces.len(), 2);
+        assert_eq!(sparse.added_nodes.len(), dense.added_nodes.len());
+        assert_eq!(sparse.added_edges.len(), dense.added_edges.len());
+        assert_eq!(sparse.added_surfaces.len(), dense.added_surfaces.len());
+    }
+
+    #[test]
+    fn reuses_small_lattice_cells_without_publishing_new_topology() {
+        let mut graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut registry = SurfaceRegistry::new();
+        let original = add_unit_face(&mut graph, &mut registry, "lattice");
+        let initial_node_count = graph.snapshot().nodes().len();
+        let initial_edge_count = graph.snapshot().edges().len();
+        let initial_surface_count = registry.surface_keys().len();
+
         let plan = plan_path_brush(
             &graph,
             &registry,
-            &request("stroke", vec![[0.25, 1.0], [3.75, 1.0]], 0.35),
+            &request("lattice", vec![[0.5, 0.5]], 0.75),
         )
         .unwrap();
-        assert_eq!(plan.removed_surfaces.len(), 2);
+
+        assert!(plan.added_nodes.is_empty());
+        assert!(plan.added_edges.is_empty());
+        assert_eq!(plan.added_surfaces.len(), 1);
+        assert_eq!(plan.updated_nodes.len(), 4);
         assert!(
-            plan.added_surfaces
-                .iter()
-                .filter(|surface| surface.surface_type == SurfaceType::new("path"))
-                .count()
-                > CIRCLE_SEGMENTS
+            plan.transformation
+                .surface_ids()
+                .replaced()
+                .contains(&original)
         );
+        assert_eq!(plan.transformation.node_ids().replaced().len(), 4);
+
+        apply_surface_replacement_plan(&mut graph, &mut registry, plan).unwrap();
+        assert_eq!(graph.snapshot().nodes().len(), initial_node_count);
+        assert_eq!(graph.snapshot().edges().len(), initial_edge_count);
+        assert_eq!(registry.surface_keys().len(), initial_surface_count);
+        assert_eq!(
+            registry.surface(&original).unwrap().surface_type(),
+            &SurfaceType::new("path")
+        );
+        assert!(
+            graph
+                .snapshot()
+                .nodes()
+                .iter()
+                .all(|node| node.data()[1] < 0.0)
+        );
+    }
+
+    #[test]
+    fn dense_arc_reuses_the_lattice_instead_of_publishing_curve_facets() {
+        let mut graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut registry = SurfaceRegistry::new();
+        add_unit_face(&mut graph, &mut registry, "arc");
+        let samples = (0..=100)
+            .map(|index| {
+                let angle = std::f32::consts::FRAC_PI_2 * index as f32 / 100.0;
+                [angle.cos(), angle.sin()]
+            })
+            .collect();
+
+        let plan = plan_path_brush(&graph, &registry, &request("arc", samples, 0.75)).unwrap();
+
+        assert!(plan.added_nodes.is_empty());
+        assert!(plan.added_edges.is_empty());
+        assert_eq!(plan.added_surfaces.len(), 1);
     }
 
     #[test]

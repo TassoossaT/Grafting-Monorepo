@@ -637,6 +637,7 @@ pub grafting_graph_core::SurfaceReplacementPlan::added_nodes: alloc::vec::Vec<gr
 pub grafting_graph_core::SurfaceReplacementPlan::added_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceSpec>
 pub grafting_graph_core::SurfaceReplacementPlan::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>
 pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan
+pub grafting_graph_core::SurfaceReplacementPlan::updated_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>
 impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::SurfaceReplacementPlan<N, E>
 pub fn grafting_graph_core::SurfaceReplacementPlan<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<N, E> core::marker::Freeze for grafting_graph_core::SurfaceReplacementPlan<N, E>
@@ -1535,6 +1536,10 @@ Existing surfaces to remove before registering replacements.
 ### `pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan`
 
 Phase-A lifecycle and invalidation contract for this replacement.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::updated_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+Existing graph nodes whose payload changes while identity is preserved.
 
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 

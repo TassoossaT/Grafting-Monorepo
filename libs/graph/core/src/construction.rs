@@ -282,6 +282,8 @@ pub struct SurfaceSpec {
 pub struct SurfaceReplacementPlan<N, E> {
     /// Phase-A lifecycle and invalidation contract for this replacement.
     pub transformation: TransformationPlan,
+    /// Existing graph nodes whose payload changes while identity is preserved.
+    pub updated_nodes: Vec<Node<N>>,
     /// New graph nodes required by replacement surface cycles.
     pub added_nodes: Vec<Node<N>>,
     /// New graph edges required by replacement surface cycles.
@@ -308,6 +310,14 @@ pub fn apply_surface_replacement_plan<N: Clone, E: Clone>(
     let mut next_graph = graph.clone();
     let mut next_surfaces = surfaces.clone();
 
+    for node in plan.updated_nodes {
+        let id = node.id().clone();
+        let data = node.data().clone();
+        let current = next_graph
+            .node_mut(&id)
+            .ok_or_else(|| GraphError::UnknownNode { id: id.clone() })?;
+        *current.data_mut() = data;
+    }
     for node in plan.added_nodes {
         next_graph.add_node(node)?;
     }
@@ -1329,6 +1339,74 @@ mod tests {
         assert!(graph.node(&nid("c")).is_none());
     }
     #[test]
+    fn replacement_plan_updates_existing_node_payload_without_changing_identity() {
+        let mut graph: Graph<[f32; 3], ()> =
+            Graph::try_from_parts(vec![node("a"), node("b")], vec![]).unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+        let original = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("a"), nid("b")],
+                SurfaceType::new("terrain"),
+                true,
+            )
+            .unwrap();
+        let node_delta = IdentityDelta::new(
+            PlanIdentityKind::Node,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::from([nid("a")]),
+            BTreeSet::new(),
+        )
+        .unwrap();
+        let empty_edges = IdentityDelta::new(
+            PlanIdentityKind::Edge,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+        )
+        .unwrap();
+        let empty_surfaces = IdentityDelta::new(
+            PlanIdentityKind::Surface,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+        )
+        .unwrap();
+        let transformation = TransformationPlan::new(
+            node_delta,
+            empty_edges,
+            empty_surfaces,
+            LocalInvalidationScope::new(
+                BTreeSet::from([original.clone()]),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            ),
+        )
+        .unwrap();
+
+        let applied = apply_surface_replacement_plan(
+            &mut graph,
+            &mut surfaces,
+            SurfaceReplacementPlan {
+                transformation,
+                updated_nodes: vec![Node::new(nid("a"), [1.0, -0.25, 2.0])],
+                added_nodes: Vec::new(),
+                added_edges: Vec::new(),
+                removed_surfaces: Vec::new(),
+                added_surfaces: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(graph.node(&nid("a")).unwrap().data(), &[1.0, -0.25, 2.0]);
+        assert!(applied.node_ids().replaced().contains(&nid("a")));
+        assert!(surfaces.surface(&original).is_some());
+    }
+
+    #[test]
     fn replacement_plan_rolls_back_when_a_late_graph_record_is_invalid() {
         let mut graph = Graph::try_from_parts(vec![node("a"), node("b")], vec![]).unwrap();
         let mut surfaces = SurfaceRegistry::new();
@@ -1380,6 +1458,7 @@ mod tests {
             &mut surfaces,
             SurfaceReplacementPlan {
                 transformation,
+                updated_nodes: Vec::new(),
                 added_nodes: vec![node("new")],
                 added_edges: vec![Edge::new(
                     EdgeId::new("late").unwrap(),

@@ -12,12 +12,12 @@ Failure while building a path-brush replacement plan.
 
 Plans a continuous terrain-to-path transformation without mutating state.
 
-Arbitrary simple source polygons are triangulated through the canonical
-surface-mesh capability. Each triangle is partitioned against the swept
-circular footprint: external fragments retain the source type, internal
-fragments receive the target type and a shallow U-shaped profile. Shared
-cut positions are interned as one graph node, every replacement cycle has
-graph edges, and all samples are published as one replacement plan.
+The complete pointer batch is first fitted to straight lines and true arcs,
+so input frequency never controls graph density. Existing small terrain
+cells are retyped in place and their shared nodes receive the analytic
+U-shaped profile. Only a genuinely coarse source polygon is partitioned
+against the sweep; its cut positions are interned and all resulting changes
+are published as one atomic replacement plan.
 
 ### `pub fn grafting_procgen_surface_transformations::swept_brush_contains(shape: &grafting_procgen_surface_transformations::BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool`
 

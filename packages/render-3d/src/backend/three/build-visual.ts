@@ -178,6 +178,8 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
       color: material.color ?? 0xffffff,
       opacity: material.opacity ?? 1,
       transparent: texture !== null || (material.opacity ?? 1) < 1,
+      depthTest: material.depthTest ?? true,
+      depthWrite: material.depthWrite ?? true,
       map: texture,
       alphaTest: texture ? 0.01 : 0,
     });
@@ -189,6 +191,8 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
         color: material.color ?? 0xffffff,
         opacity: material.opacity ?? 1,
         transparent: (material.opacity ?? 1) < 1,
+        depthTest: material.depthTest ?? true,
+        depthWrite: material.depthWrite ?? true,
         metalness: material.metalness ?? 0,
         roughness: material.roughness ?? 1,
         flatShading: material.flatShading ?? false,
@@ -201,6 +205,8 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
         color: material.color ?? 0xffffff,
         opacity: material.opacity ?? 1,
         transparent: (material.opacity ?? 1) < 1,
+        depthTest: material.depthTest ?? true,
+        depthWrite: material.depthWrite ?? true,
         side: material.doubleSided === true ? THREE.DoubleSide : THREE.FrontSide,
         map: texture,
         clippingPlanes: material.clippable === true && clipPlane ? [clipPlane] : null,
@@ -210,12 +216,16 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
         color: material.color ?? 0xffffff,
         opacity: material.opacity ?? 1,
         transparent: (material.opacity ?? 1) < 1,
+        depthTest: material.depthTest ?? true,
+        depthWrite: material.depthWrite ?? true,
       });
     case "points":
       return new THREE.PointsMaterial({
         color: material.color ?? 0xffffff,
         opacity: material.opacity ?? 1,
         transparent: (material.opacity ?? 1) < 1,
+        depthTest: material.depthTest ?? true,
+        depthWrite: material.depthWrite ?? true,
         size: material.size ?? 1,
         sizeAttenuation: material.sizeAttenuation ?? true,
         map: texture,

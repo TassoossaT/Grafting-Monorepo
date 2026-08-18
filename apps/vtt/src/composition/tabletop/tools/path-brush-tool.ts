@@ -27,14 +27,15 @@ function commit(ctx: ToolContext, gesture: ToolGesture, params: PathBrushParams)
   const effect = effectFor(ctx, gesture, params, `${ctx.tableId}:path-brush:${sequence}`);
   try {
     const outcome = ctx.runtime.applyPathBrush(effect, "local");
-    if (outcome.surfaceIds.created.length === 0 && outcome.surfaceIds.removed.length === 0) {
+    const changedSurfaceCount = outcome.surfaceIds.created.length + outcome.surfaceIds.replaced.length;
+    if (changedSurfaceCount === 0 && outcome.surfaceIds.removed.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nenhum terreno elegível foi alterado." });
       return;
     }
     ctx.history.record({ kind: "path-brush", operationId: effect.operationId });
     ctx.reportFeedback({
       tone: "success",
-      message: `Caminho aplicado: ${outcome.surfaceIds.created.length} superfícies criadas, ${outcome.nodeIds.created.length} nós novos.`,
+      message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas, ${outcome.nodeIds.created.length} nós novos e ${outcome.nodeIds.replaced.length} atualizados.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
