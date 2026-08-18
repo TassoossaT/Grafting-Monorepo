@@ -16,6 +16,13 @@
     }
   },
   "targets": {
+    "compile": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/ui build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/package.json", "{projectRoot}/tsconfig.json", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    },
     "check": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/ui check" },
