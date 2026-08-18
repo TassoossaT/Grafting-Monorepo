@@ -291,6 +291,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
     await this.#construction.start();
+    this.#construction.setTerrainMesh(TERRAIN_GRID_WIDTH, TERRAIN_GRID_HEIGHT, TERRAIN_GRID_LAYERS, "surface", 0, 0);
     await this.#terrainNoise.start();
 
     if (generation !== this.#generation) return;
@@ -328,7 +329,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
    */
   #seedDefaultMap(generation: number): MapProjection {
     const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
-    this.#construction.setTerrainMesh(TERRAIN_GRID_WIDTH, TERRAIN_GRID_HEIGHT, TERRAIN_GRID_LAYERS, "surface", 0, 0);
     const terrainKey = this.#construction.generateTerrainCell(terrainCell.payload);
     const wallOutcome = this.#construction.generatePathExtrusion(wall.payload);
 

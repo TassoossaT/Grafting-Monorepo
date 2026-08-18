@@ -29,11 +29,6 @@ export const pathBrushTool: ConstructionTool<"path-brush"> = {
       },
       { operationId: `${ctx.tableId}:path-brush:${sequence}`, tableId: ctx.tableId, initiatedBy: "local" },
     );
-    try {
-      ctx.runtime.applyPathBrush(effect, "local");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("produced no semantic change")) throw error;
-    }
+    ctx.runtime.applyPathBrush(effect, "local");
   },
 };
