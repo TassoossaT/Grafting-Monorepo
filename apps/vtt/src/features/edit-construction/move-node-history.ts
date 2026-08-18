@@ -16,6 +16,14 @@ export interface MoveNodeHistoryEntry {
   readonly to: ConstructionPosition;
 }
 
+
+/** One confirmed path-brush stroke; the construction session owns its before/after checkpoints. */
+export interface PathBrushHistoryEntry {
+  readonly kind: "path-brush";
+  readonly operationId: string;
+}
+
+export type ConstructionHistoryEntry = MoveNodeHistoryEntry | PathBrushHistoryEntry;
 export interface MoveNodeHistoryState {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -23,31 +31,31 @@ export interface MoveNodeHistoryState {
 
 export interface MoveNodeHistoryStack {
   /** Records a completed move. Clears any redo history, per standard undo-stack semantics. */
-  record(entry: MoveNodeHistoryEntry): void;
+  record(entry: ConstructionHistoryEntry): void;
   /** Pops the most recent move and returns it for the caller to re-apply at `from`, or `undefined` if there is nothing to undo. */
-  undo(): MoveNodeHistoryEntry | undefined;
+  undo(): ConstructionHistoryEntry | undefined;
   /** Pops the most recently undone move and returns it for the caller to re-apply at `to`, or `undefined` if there is nothing to redo. */
-  redo(): MoveNodeHistoryEntry | undefined;
+  redo(): ConstructionHistoryEntry | undefined;
   getState(): MoveNodeHistoryState;
 }
 
 export function createMoveNodeHistoryStack(): MoveNodeHistoryStack {
-  let undoStack: MoveNodeHistoryEntry[] = [];
-  let redoStack: MoveNodeHistoryEntry[] = [];
+  let undoStack: ConstructionHistoryEntry[] = [];
+  let redoStack: ConstructionHistoryEntry[] = [];
 
   return {
-    record(entry: MoveNodeHistoryEntry): void {
+    record(entry: ConstructionHistoryEntry): void {
       undoStack = [...undoStack, entry];
       redoStack = [];
     },
-    undo(): MoveNodeHistoryEntry | undefined {
+    undo(): ConstructionHistoryEntry | undefined {
       const entry = undoStack.at(-1);
       if (entry === undefined) return undefined;
       undoStack = undoStack.slice(0, -1);
       redoStack = [...redoStack, entry];
       return entry;
     },
-    redo(): MoveNodeHistoryEntry | undefined {
+    redo(): ConstructionHistoryEntry | undefined {
       const entry = redoStack.at(-1);
       if (entry === undefined) return undefined;
       redoStack = redoStack.slice(0, -1);

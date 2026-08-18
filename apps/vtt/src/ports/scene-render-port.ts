@@ -1,6 +1,6 @@
 export type ChangeOrigin = "local" | "network" | "programmatic";
 export type RenderViewId = string;
-export type RenderLayerKey = "tokens" | "terrain" | "handles";
+export type RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks";
 
 export interface RenderDependencyRevision {
   readonly layer: RenderLayerKey;
@@ -60,6 +60,29 @@ export interface RenderMapChunk {
   readonly mesh: RenderMeshData;
 }
 
+
+export interface RenderSurfacePickTarget {
+  readonly surfaceRef: string;
+  readonly mesh: RenderMeshData;
+}
+
+export type ConfirmedSurfacePickRenderChange =
+  | {
+      readonly type: "surface-pick-target-upserted";
+      readonly origin: ChangeOrigin;
+      readonly causeId: string;
+      readonly runtimeGeneration: number;
+      readonly dependency: RenderDependencyRevision;
+      readonly target: RenderSurfacePickTarget;
+    }
+  | {
+      readonly type: "surface-pick-target-removed";
+      readonly origin: ChangeOrigin;
+      readonly causeId: string;
+      readonly runtimeGeneration: number;
+      readonly dependency: RenderDependencyRevision;
+      readonly surfaceRef: string;
+    };
 export type ConfirmedMapChunkRenderChange =
   | {
       readonly type: "map-chunk-upserted";
@@ -105,7 +128,8 @@ export type ConfirmedNodeHandleRenderChange =
 export type ConfirmedRenderChange =
   | ConfirmedTokenRenderChange
   | ConfirmedMapChunkRenderChange
-  | ConfirmedNodeHandleRenderChange;
+  | ConfirmedNodeHandleRenderChange
+  | ConfirmedSurfacePickRenderChange;
 
 /**
  * What a pointer position resolved to. `nodeId` is present only when the
@@ -116,6 +140,8 @@ export type ConfirmedRenderChange =
 export interface ScenePickResult {
   readonly point: { readonly x: number; readonly y: number; readonly z: number };
   readonly nodeId?: string;
+  /** Canonical surface identity when map geometry, rather than ground, was hit. */
+  readonly surfaceRef?: string;
 }
 
 /**
@@ -128,7 +154,8 @@ export interface ScenePickResult {
  */
 export type RenderPreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
-  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };
+  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
+  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number };
 
 export interface SceneRenderMetrics {
   readonly rendererCreates: number;

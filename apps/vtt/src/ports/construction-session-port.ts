@@ -96,13 +96,25 @@ export interface SurfaceTransformationInvalidation {
   readonly directDependencies: readonly ConstructionSurfaceKey[];
 }
 
-/** One resolved circular terrain-to-path brush request. */
+/** Renderer-neutral convex brush shape accepted by authoritative Rust brush queries. */
+export type ConstructionBrushShape =
+  | { readonly kind: "circle"; readonly radius: number }
+  | { readonly kind: "square"; readonly size: number; readonly rotationRadians: number }
+  | { readonly kind: "hexagon"; readonly radius: number; readonly rotationRadians: number };
+
+export interface ResolveBrushCellsRequest {
+  readonly samples: readonly ConstructionPosition[];
+  readonly brushShape: ConstructionBrushShape;
+  readonly width: number;
+  readonly height: number;
+}
+/** One resolved continuous convex terrain-to-path brush request. */
 export interface ApplyPathBrushRequest {
   readonly operationId: string;
-  readonly center: ConstructionPosition;
-  readonly radius: number;
+  readonly samples: readonly ConstructionPosition[];
+  readonly brushShape: ConstructionBrushShape;
   readonly depth: number;
-  readonly sourceSurfaceType: string;
+  readonly sourceSurfaceTypes: readonly string[];
   readonly targetSurfaceType: string;
 }
 
@@ -295,6 +307,14 @@ export interface ConstructionSessionPort {
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
   applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
+  /** Resolves grid cells through the same Rust sweep used by path clipping. */
+  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[];
+  /** Derives exact target meshes on cloned state; confirmed state is untouched. */
+  previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[];
+  /** Restores the confirmed state immediately before that path-brush operation. */
+  undoPathBrush(operationId: string): void;
+  /** Restores the confirmed state immediately after that undone path-brush operation. */
+  redoPathBrush(operationId: string): void;
   generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome;
   generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;

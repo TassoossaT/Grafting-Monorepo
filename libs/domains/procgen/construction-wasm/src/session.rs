@@ -37,6 +37,18 @@ fn to_js_error(message: String) -> JsValue {
     JsValue::from_str(&message)
 }
 
+#[derive(Clone)]
+struct ConstructionState {
+    graph: SessionGraph,
+    surfaces: SurfaceRegistry,
+    known_surfaces: HashSet<SurfaceKey>,
+}
+
+struct PathBrushHistoryEntry {
+    operation_id: String,
+    before: ConstructionState,
+    after: ConstructionState,
+}
 /// One live editing session: a `Graph<[f32; 3], ()>` + `SurfaceRegistry`,
 /// plus an optional `PrismGridMesh` terrain generation reads from. In-memory
 /// only -- gone when the tab/Worker closes; see this crate's `AGENTS.md` for
@@ -52,6 +64,8 @@ pub struct ConstructionSession {
     /// adding one would be a `grafting-graph-core` change, out of this
     /// crate's scope.
     known_surfaces: HashSet<SurfaceKey>,
+    path_brush_undo: Vec<PathBrushHistoryEntry>,
+    path_brush_redo: Vec<PathBrushHistoryEntry>,
 }
 
 impl Default for ConstructionSession {
@@ -72,6 +86,8 @@ impl ConstructionSession {
             surfaces: SurfaceRegistry::new(),
             terrain_mesh: None,
             known_surfaces: HashSet::new(),
+            path_brush_undo: Vec::new(),
+            path_brush_redo: Vec::new(),
         }
     }
 
@@ -231,11 +247,81 @@ impl ConstructionSession {
     /// forwards the resolved request to the domain transformer and publishes
     /// its already-atomic replacement plan.
     pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
+        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
+        let operation_id = request.operation_id.clone();
+        let before = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            known_surfaces: self.known_surfaces.clone(),
+        };
         let response = path_brush::apply_path_brush(&mut self.graph, &mut self.surfaces, request)
             .map_err(to_js_error)?;
         self.known_surfaces = self.surfaces.surface_keys().into_iter().collect();
+        let after = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            known_surfaces: self.known_surfaces.clone(),
+        };
+        self.path_brush_undo.push(PathBrushHistoryEntry {
+            operation_id,
+            before,
+            after,
+        });
+        self.path_brush_redo.clear();
         serialize(&response)
+    }
+
+    /// Resolves terrain-grid cells through the shared authoritative brush footprint.
+    pub fn resolve_brush_cells_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = path_brush::resolve_brush_cells(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+    /// Returns the exact target mesh for a path brush without mutating confirmed state.
+    pub fn preview_path_brush_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
+        let response = path_brush::preview_path_brush(&self.graph, &self.surfaces, request)
+            .map_err(to_js_error)?;
+        serialize(&response)
+    }
+    /// Restores the state immediately before the latest matching path-brush operation.
+    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.path_brush_undo.pop() else {
+            return Err(JsValue::from_str(
+                "no path brush operation is available to undo",
+            ));
+        };
+        if entry.operation_id != operation_id {
+            self.path_brush_undo.push(entry);
+            return Err(JsValue::from_str(
+                "path brush undo order does not match session history",
+            ));
+        }
+        self.graph = entry.before.graph.clone();
+        self.surfaces = entry.before.surfaces.clone();
+        self.known_surfaces = entry.before.known_surfaces.clone();
+        self.path_brush_redo.push(entry);
+        Ok(())
+    }
+
+    /// Restores the state immediately after the latest matching undone path-brush operation.
+    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.path_brush_redo.pop() else {
+            return Err(JsValue::from_str(
+                "no path brush operation is available to redo",
+            ));
+        };
+        if entry.operation_id != operation_id {
+            self.path_brush_redo.push(entry);
+            return Err(JsValue::from_str(
+                "path brush redo order does not match session history",
+            ));
+        }
+        self.graph = entry.after.graph.clone();
+        self.surfaces = entry.after.surfaces.clone();
+        self.known_surfaces = entry.after.known_surfaces.clone();
+        self.path_brush_undo.push(entry);
+        Ok(())
     }
     /// Generates one terrain cell's surface and applies it. See
     /// `terrain::generate_and_apply_terrain_cell`.
@@ -591,25 +677,38 @@ mod tests {
             )
             .expect("terrain cell generates");
 
+        let request = r#"{"operationId":"path-1","samples":[[0.5,0.5]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+        let before = session.snapshot_json().expect("snapshot before preview");
+        let preview = session
+            .preview_path_brush_json(request)
+            .expect("path preview succeeds");
+        assert!(preview.contains("\"path\""));
+        assert_eq!(
+            session.snapshot_json().unwrap(),
+            before,
+            "preview is non-mutating"
+        );
+
         let response = session
-            .apply_path_brush_json(
-                r#"{"operationId":"path-1","center":[0.5,0.5],"radius":0.25,"depth":0.1,"sourceSurfaceType":"terrain","targetSurfaceType":"path"}"#,
-            )
+            .apply_path_brush_json(request)
             .expect("path brush applies");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert!(
             !parsed["surfaceIds"]["created"]
                 .as_array()
                 .unwrap()
-                .is_empty(),
-            "the transformation must report its created path surface: {parsed}"
+                .is_empty()
         );
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
 
-        let snapshot = session.snapshot_json().expect("snapshot succeeds");
-        assert!(
-            snapshot.contains("\"path\""),
-            "the new path must be visible in the session snapshot"
-        );
+        session
+            .undo_path_brush("path-1")
+            .expect("whole stroke undoes");
+        assert_eq!(session.snapshot_json().unwrap(), before);
+        session
+            .redo_path_brush("path-1")
+            .expect("whole stroke redoes");
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
     }
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {

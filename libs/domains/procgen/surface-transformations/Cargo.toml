@@ -10,3 +10,4 @@ crate-type = ["rlib"]
 
 [dependencies]
 grafting-graph-core = { path = "../../../graph/core" }
+grafting-procgen-surface-mesh = { path = "../surface-mesh" }

@@ -18,25 +18,26 @@ export type ConstructionToolId =
   | "house-room-delete"
   | "irregular-terrain-stamp";
 
-export interface CircularBrushParams {
-  /** World-space radius shared by the terrain and path brushes. */
+export type BrushShapeKind = "circle" | "square" | "hexagon";
+
+export interface BrushShapeParams {
+  /** Convex footprint shared by terrain and path brushes. */
+  readonly shape: BrushShapeKind;
+  /** Circle/hexagon radius, or square half-size, in world units. */
   readonly radius: number;
+  /** Rotation around world Y; ignored by circles. */
+  readonly rotationDegrees: number;
 }
 
-export interface PathBrushParams extends CircularBrushParams {
-  readonly radius: number;
+export interface PathBrushParams extends BrushShapeParams {
   readonly depth: number;
 }
 
-export interface TerrainBrushParams extends CircularBrushParams {
-  /** How strongly one pass changes the target, in `(0, 1]`. */
+export interface TerrainBrushParams extends BrushShapeParams {
   readonly strength: number;
   readonly targetSurface: "terrain" | "terrain-grass";
-  /** Selects among deterministic shape/variant presets -- see `composition/tabletop/tools/terrain-brush-tool.ts`. */
   readonly seed: number;
 }
-
-/** Shared by `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- they only differ in how they resolve a path's points, not in what a segment is made of. */
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
 }
@@ -125,8 +126,8 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
-  "path-brush": Object.freeze({ radius: 0.25, depth: 0.1 }),
-  "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
+  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
+  "terrain-brush": Object.freeze({ shape: "circle", radius: 1, rotationDegrees: 0, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
@@ -152,4 +153,5 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
  */
 export type PreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
-  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };
+  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
+  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number };

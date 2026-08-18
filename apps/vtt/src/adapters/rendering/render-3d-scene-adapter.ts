@@ -45,6 +45,14 @@ import {
   mapChunkSceneItem,
   type MapChunkVisualParams,
 } from "./map-chunk-scene-item.ts";
+import {
+  MAP_SURFACE_PICK_LAYER_ID,
+  MAP_SURFACE_PICK_VISUAL_KIND,
+  mapSurfacePickSceneItem,
+  mapSurfacePickSceneItemId,
+  type MapSurfacePickData,
+  type MapSurfacePickVisualParams,
+} from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
 import { createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
 import {
@@ -157,6 +165,14 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       // and a new buffer is the caller's signal that the geometry changed.
       equals: (left, right) => left.mesh === right.mesh && left.color === right.color,
     });
+    registry.register<MapSurfacePickVisualParams>({
+      kind: MAP_SURFACE_PICK_VISUAL_KIND,
+      describe: (params) => ({
+        geometry: { shape: "mesh", data: params.mesh },
+        material: { surface: "unlit", color: 0xffffff, opacity: 0, doubleSided: true },
+      }),
+      equals: (left, right) => left.mesh === right.mesh,
+    });
     registry.register(gridVisual);
     registry.register<Record<string, never>>({
       kind: CONSTRUCTION_GROUND_VISUAL_KIND,
@@ -174,7 +190,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       describe: (params) =>
         params.filled
           ? {
-              geometry: { shape: "mesh", data: { positions: params.positions, indices: PREVIEW_QUAD_INDICES } },
+              geometry: { shape: "mesh", data: { positions: params.positions, indices: params.indices ?? PREVIEW_QUAD_INDICES } },
               material: { surface: "unlit", color: params.color, opacity: params.opacity, doubleSided: true },
               pickable: false,
             }
@@ -185,6 +201,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
             },
       equals: (left, right) =>
         left.positions === right.positions &&
+        left.indices === right.indices &&
         left.color === right.color &&
         left.opacity === right.opacity &&
         left.filled === right.filled,
@@ -204,7 +221,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     // geometry -- also never pickable, for the same reason the grid isn't.
     engine.scene.defineLayer({ id: CONSTRUCTION_GROUND_LAYER_ID, order: 0 }, "engine");
     engine.scene.defineLayer({ id: CONSTRUCTION_GRID_LAYER_ID, order: 5, pickable: false }, "engine");
-    engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10 }, "engine");
+    engine.scene.defineLayer({ id: MAP_LAYER_ID, order: 10, pickable: false }, "engine");
+    engine.scene.defineLayer({ id: MAP_SURFACE_PICK_LAYER_ID, order: 11 }, "engine");
     engine.scene.defineLayer({ id: NODE_HANDLE_LAYER_ID, order: 15 }, "engine");
     engine.scene.defineLayer({ id: TOKEN_LAYER_ID, order: 20 }, "engine");
     engine.scene.defineLayer({ id: CONSTRUCTION_PREVIEW_LAYER_ID, order: 25, pickable: false }, "engine");
@@ -239,6 +257,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         CONSTRUCTION_GROUND_LAYER_ID,
         CONSTRUCTION_GRID_LAYER_ID,
         MAP_LAYER_ID,
+        MAP_SURFACE_PICK_LAYER_ID,
         NODE_HANDLE_LAYER_ID,
         TOKEN_LAYER_ID,
         CONSTRUCTION_PREVIEW_LAYER_ID,
@@ -342,6 +361,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         );
       }
       this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
+    } else if (change.type === "surface-pick-target-removed") {
+      engine.scene.remove(mapSurfacePickSceneItemId(change.surfaceRef), origin);
+    } else if (change.type === "surface-pick-target-upserted") {
+      engine.scene.put(mapSurfacePickSceneItem(change.target.surfaceRef, change.target.mesh), origin);
     } else if (change.type === "map-chunk-removed") {
       engine.scene.remove(`map-chunk:${change.chunkId}`, origin);
     } else {
@@ -363,12 +386,16 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     const result = attached.view.pick(x, y);
     if (result === undefined) return undefined;
 
-    const data = result.data as Partial<NodeHandlePickData> | undefined;
+    const data = result.data as Partial<NodeHandlePickData> | Partial<MapSurfacePickData> | undefined;
     const nodeId =
       data?.entity === "construction-node-handle" && typeof data.nodeId === "string"
         ? data.nodeId
         : undefined;
-    return { point: result.point, nodeId };
+    const surfaceRef =
+      data?.entity === "map-surface-pick" && typeof data.surfaceRef === "string"
+        ? data.surfaceRef
+        : undefined;
+    return { point: result.point, nodeId, surfaceRef };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor): void {

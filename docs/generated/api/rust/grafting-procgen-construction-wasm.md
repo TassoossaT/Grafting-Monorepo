@@ -18,6 +18,12 @@ Every currently-known surface's triangulated mesh, in stable key
 order -- the one bootstrap call a renderer uses to draw everything
 already in the session. See `mesh::all_surface_meshes`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::apply_path_brush_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Applies one validated terrain-to-path brush operation. The session only
+forwards the resolved request to the domain transformer and publishes
+its already-atomic replacement plan.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cloud_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 The connected component of same-`type` surfaces reachable from
@@ -86,6 +92,14 @@ Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::preview_path_brush_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Returns the exact target mesh for a path brush without mutating confirmed state.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_path_brush(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Restores the state immediately after the latest matching undone path-brush operation.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Removes an edge outright -- no repair, no cascading. See
@@ -95,6 +109,10 @@ Removes an edge outright -- no repair, no cascading. See
 
 Unregisters a surface outright -- no hole-repair, no cascading. See
 `editing::remove_surface`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::resolve_brush_cells_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Resolves terrain-grid cells through the shared authoritative brush footprint.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_terrain_mesh(&mut self, width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
@@ -121,6 +139,10 @@ mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value_ref(value: &wasm_bindgen::JsValue) -> core::option::Option<Self>`
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::undo_path_brush(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Restores the state immediately before the latest matching path-brush operation.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::vector_into_abi(vector: alloc::boxed::Box<[grafting_procgen_construction_wasm::ConstructionSession]>) -> Self::Abi`
 

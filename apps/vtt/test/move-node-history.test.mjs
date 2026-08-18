@@ -61,3 +61,16 @@ test("getState reflects both stacks accurately across a full cycle", () => {
   stack.redo();
   assert.deepEqual(stack.getState(), { canUndo: true, canRedo: false });
 });
+test("path-brush operations share the semantic LIFO history with node moves", () => {
+  const stack = createMoveNodeHistoryStack();
+  const moved = entry("n0", { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+  const brush = { kind: "path-brush", operationId: "table-1:path-brush:1" };
+
+  stack.record(moved);
+  stack.record(brush);
+
+  assert.equal(stack.undo(), brush);
+  assert.equal(stack.undo(), moved);
+  assert.equal(stack.redo(), moved);
+  assert.equal(stack.redo(), brush);
+});

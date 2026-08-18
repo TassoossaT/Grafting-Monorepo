@@ -53,3 +53,8 @@ export function chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): read
   }
   return chunks;
 }
+
+/** Merges exact per-surface preview meshes into one renderer-neutral mesh descriptor. */
+export function mergeSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): RenderMeshData {
+  return mergeMeshChunks(surfaces.map((surface) => surface.mesh));
+}

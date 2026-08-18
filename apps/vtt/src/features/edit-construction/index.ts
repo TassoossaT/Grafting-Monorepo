@@ -15,10 +15,11 @@ export type {
   RevisionPrecondition,
 } from "./construction-operations.ts";
 export { createMoveNodeHistoryStack } from "./move-node-history.ts";
-export type { MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState } from "./move-node-history.ts";
+export type { ConstructionHistoryEntry, MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState, PathBrushHistoryEntry } from "./move-node-history.ts";
 export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
 export type {
-  CircularBrushParams,
+  BrushShapeKind,
+  BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
   IrregularTerrainParams,
@@ -41,3 +42,10 @@ export type {
   SurfaceEditModeDefinition,
   SurfaceEditTargetScope,
 } from "./surface-edit-contract.ts";
+
+export { resolveBrushShape } from "./brush-shape-params.ts";
+export {
+  PATH_BRUSH_SOURCE_SURFACE_TYPES,
+  SURFACE_EDIT_MODE_DEFINITIONS,
+  surfaceEditModeFor,
+} from "./surface-edit-mode-registry.ts";

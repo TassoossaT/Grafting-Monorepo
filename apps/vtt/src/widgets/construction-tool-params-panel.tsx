@@ -2,6 +2,7 @@
 
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
+  BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
   IrregularTerrainParams,
@@ -38,13 +39,36 @@ function sliderRow(label: string, value: number, min: number, max: number, step:
   );
 }
 
+function BrushShapeFields<Params extends BrushShapeParams>(props: {
+  readonly params: Params;
+  readonly radiusMin: number;
+  readonly radiusMax: number;
+  readonly onChange: (next: Params) => void;
+}) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <div className="gm-material-grid">
+        <SelectableChip label="Círculo" swatchColor="#c084fc" selected={params.shape === "circle"} onSelect={() => onChange({ ...params, shape: "circle" })} />
+        <SelectableChip label="Quadrado" swatchColor="#a78bfa" selected={params.shape === "square"} onSelect={() => onChange({ ...params, shape: "square" })} />
+        <SelectableChip label="Hexágono" swatchColor="#8b5cf6" selected={params.shape === "hexagon"} onSelect={() => onChange({ ...params, shape: "hexagon" })} />
+      </div>
+      {sliderRow(params.shape === "square" ? "Meio tamanho" : "Raio", params.radius, props.radiusMin, props.radiusMax, 0.05, (radius) => onChange({ ...params, radius }))}
+      {params.shape === "circle" ? null : sliderRow("Rotação", params.rotationDegrees, 0, 180, 5, (rotationDegrees) => onChange({ ...params, rotationDegrees }))}
+    </div>
+  );
+}
+
 function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;
-  return <div style={{ display: "grid", gap: "0.6rem" }}>
-    {sliderRow("Raio", params.radius, 0.1, 0.45, 0.05, (radius) => onChange({ ...params, radius }))}
-    {sliderRow("Profundidade", params.depth, 0.05, 0.4, 0.05, (depth) => onChange({ ...params, depth }))}
-  </div>;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <BrushShapeFields params={params} radiusMin={0.15} radiusMax={3} onChange={onChange} />
+      {sliderRow("Profundidade", params.depth, 0.05, 1.5, 0.05, (depth) => onChange({ ...params, depth }))}
+    </div>
+  );
 }
+
 function TerrainBrushFields(props: {
   readonly params: TerrainBrushParams;
   readonly onChange: (next: TerrainBrushParams) => void;
@@ -52,6 +76,7 @@ function TerrainBrushFields(props: {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
+      <BrushShapeFields params={params} radiusMin={0.5} radiusMax={4} onChange={onChange} />
       <div className="gm-material-grid">
         <SelectableChip
           label="Terreno"
@@ -66,7 +91,6 @@ function TerrainBrushFields(props: {
           onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
         />
       </div>
-      {sliderRow("Tamanho do pincel", params.radius, 0.5, 4, 0.25, (radius) => onChange({ ...params, radius }))}
       {sliderRow("Força", params.strength, 0.1, 1, 0.05, (strength) => onChange({ ...params, strength }))}
       {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>

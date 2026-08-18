@@ -9,6 +9,7 @@ export const CONSTRUCTION_PREVIEW_ITEM_ID = "construction-preview:active";
 
 export interface ConstructionPreviewVisualParams {
   readonly positions: Float32Array;
+  readonly indices?: Uint16Array | Uint32Array;
   readonly color: number;
   readonly opacity: number;
   readonly filled: boolean;
@@ -29,9 +30,10 @@ export function constructionPreviewSceneItem(
       kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
       params: {
         positions: descriptor.positions,
+        indices: descriptor.kind === "mesh" ? descriptor.indices : undefined,
         color: descriptor.color,
         opacity: descriptor.opacity ?? 0.5,
-        filled: descriptor.kind === "quad",
+        filled: descriptor.kind !== "segments",
       },
     },
     data: Object.freeze({ entity: "construction-preview" }),

@@ -1,4 +1,4 @@
-import { chunkSurfaceMeshes, CONSTRUCTION_GRID_EXTENT } from "../../adapters/rendering/index.ts";
+import { chunkSurfaceMeshes, CONSTRUCTION_GRID_EXTENT, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
   createTokenCollection,
@@ -35,6 +35,7 @@ import type {
   GenerateTerrainCellRequest,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
+  ResolveBrushCellsRequest,
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
@@ -45,7 +46,7 @@ import type {
   TerrainNoisePort,
 } from "@/ports";
 
-import type { PathBrushEffect } from "../../features/edit-construction/index.ts";
+import { PATH_BRUSH_SOURCE_SURFACE_TYPES, type PathBrushEffect } from "../../features/edit-construction/index.ts";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
 
@@ -100,6 +101,7 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): AffectedSurfaces;
+  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[];
   generateTerrainCell(
     request: GenerateTerrainCellRequest,
     origin: ChangeOrigin,
@@ -114,8 +116,11 @@ export interface TabletopRuntime {
    * `ConstructionSessionPort.generatePathExtrusion`.
    */
   generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
-  /** Confirms one circular terrain-to-path effect as a single atomic construction mutation. */
+  /** Previews or confirms one swept convex terrain-to-path effect as a single atomic construction mutation. */
+  previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined;
   applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome;
+  undoPathBrush(operationId: string, origin: ChangeOrigin): void;
+  redoPathBrush(operationId: string, origin: ChangeOrigin): void;
   /** One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`. */
   generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
   /**
@@ -193,6 +198,15 @@ export interface TabletopRuntime {
   dispose(): Promise<void>;
 }
 
+function emptyPathBrushOutcome(): ApplyPathBrushOutcome {
+  const ids = { created: [], preserved: [], replaced: [], removed: [] } as const;
+  return {
+    nodeIds: ids,
+    edgeIds: ids,
+    surfaceIds: ids,
+    invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
+  };
+}
 function snapshot(
   tableId: string,
   status: TabletopRuntimeStatus,
@@ -250,6 +264,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #seedDefaultMapOnStart: boolean;
   /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
   readonly #chunkRevisions = new Map<string, number>();
+  /** Last uploaded revision for each invisible per-surface pick proxy. */
+  readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
   #generation = 0;
@@ -335,6 +351,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const meshes = this.#construction.getAllSurfaceMeshes();
     const causeId = `table-load:${this.#tableId}`;
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
+    this.#uploadSurfacePickTargets(meshes, "programmatic", causeId, generation);
 
     const surfaceKeys = [terrainKey, ...wallOutcome.addedSurfaceKeys];
     let map = this.#foldAffectedSurfaces(createMapProjection(), surfaceKeys, meshes);
@@ -388,6 +405,42 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
   }
 
+  /** Keeps one invisible pick proxy per canonical surface while visual chunks remain batched. */
+  #uploadSurfacePickTargets(
+    meshes: readonly SurfaceMeshResult[],
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): void {
+    const nextRefs = new Set<string>();
+    for (const surface of meshes) {
+      const surfaceRef = surfaceRefFromNodeSet(surface.surfaceKey);
+      nextRefs.add(surfaceRef);
+      const revision = (this.#surfacePickRevisions.get(surfaceRef) ?? 0) + 1;
+      this.#surfacePickRevisions.set(surfaceRef, revision);
+      this.#render.applyConfirmed({
+        type: "surface-pick-target-upserted",
+        origin,
+        causeId,
+        runtimeGeneration: generation,
+        dependency: { layer: "surface-picks", scopeId: surfaceRef, revision },
+        target: { surfaceRef, mesh: surface.mesh },
+      });
+    }
+
+    for (const [surfaceRef, revision] of [...this.#surfacePickRevisions]) {
+      if (nextRefs.has(surfaceRef)) continue;
+      this.#render.applyConfirmed({
+        type: "surface-pick-target-removed",
+        origin,
+        causeId,
+        runtimeGeneration: generation,
+        dependency: { layer: "surface-picks", scopeId: surfaceRef, revision: revision + 1 },
+        surfaceRef,
+      });
+      this.#surfacePickRevisions.delete(surfaceRef);
+    }
+  }
   /** Uploads one node's pickable handle at its current position, mirroring `#uploadMapChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
   #uploadNodeHandle(
     nodeId: ConstructionNodeId,
@@ -514,6 +567,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): void {
     const meshes = this.#construction.getAllSurfaceMeshes();
     this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+    this.#uploadSurfacePickTargets(meshes, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
     map = foldNodePositions(map);
@@ -564,6 +618,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
    * distinct from {@link AppTabletopRuntime.#seedDefaultMap}'s one-time
    * bootstrap call.
    */
+  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[] {
+    this.#requireReady("resolving brush cells");
+    return this.#construction.resolveBrushCells(request);
+  }
+
   generateTerrainCell(
     request: GenerateTerrainCellRequest,
     origin: ChangeOrigin,
@@ -608,6 +667,32 @@ export class AppTabletopRuntime implements TabletopRuntime {
       return next;
     });
   }
+  /** Rebuilds projections after a session-owned semantic checkpoint restore. */
+  #refreshConstructionProjection(origin: ChangeOrigin, causeId: string): void {
+    const meshes = this.#construction.getAllSurfaceMeshes();
+    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
+    this.#uploadSurfacePickTargets(meshes, origin, causeId, this.#generation);
+
+    const liveNodes = new Set(this.#construction.getNodePositions().map((node) => node.id));
+    for (const nodeId of [...this.#nodeHandleRevisions.keys()]) {
+      if (!liveNodes.has(nodeId)) this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+    }
+
+    let map = this.#foldAffectedSurfaces(
+      createMapProjection(),
+      meshes.map((mesh) => mesh.surfaceKey),
+      meshes,
+    );
+    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
+    this.#snapshot = snapshot(
+      this.#tableId,
+      this.#snapshot.status,
+      this.#snapshot.revision + 1,
+      this.#snapshot.tokens,
+      map,
+    );
+    this.#notify();
+  }
   /** Shared by every `generate*` mutation: folds `outcome`'s added/removed surfaces and removed nodes into the running map. */
   #foldDiffOutcome(outcome: DiffOutcome, origin: ChangeOrigin, causeId: string): void {
     this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
@@ -627,33 +712,65 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome {
-    this.#requireReady("applying a path brush");
-    if (effect.brushShape.kind !== "circle") {
-      throw new Error("the current path brush transformer supports only circular footprints");
-    }
-    if (effect.brushRegion.samples.length !== 1) {
-      throw new Error("the current path brush transformer accepts one confirmed footprint per operation");
-    }
-
-    const sample = effect.brushRegion.samples[0];
+  previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined {
+    this.#requireReady("previewing a path brush");
+    if (effect.brushRegion.samples.length === 0) return undefined;
     const request = {
       operationId: effect.operationId,
-      center: sample,
-      radius: effect.brushShape.radius,
+      samples: effect.brushRegion.samples,
+      brushShape: effect.brushShape,
       depth: effect.parameters.depth,
       targetSurfaceType: effect.targetType,
+      sourceSurfaceTypes: PATH_BRUSH_SOURCE_SURFACE_TYPES,
     };
-    let outcome: ApplyPathBrushOutcome;
+    let surfaces: readonly SurfaceMeshResult[];
     try {
-      outcome = this.#construction.applyPathBrush({ ...request, sourceSurfaceType: "terrain" });
+      surfaces = this.#construction.previewPathBrush(request);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes("produced no semantic change")) throw error;
-      outcome = this.#construction.applyPathBrush({ ...request, sourceSurfaceType: "terrain-grass" });
+      return undefined;
+    }
+    if (surfaces.length === 0) return undefined;
+    const mesh = mergeSurfaceMeshes(surfaces);
+    if (mesh.indices === undefined) return undefined;
+    return { kind: "mesh", positions: mesh.positions, indices: mesh.indices, color: 0xc084fc, opacity: 0.5 };
+  }
+
+  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome {
+    this.#requireReady("applying a path brush");
+    if (effect.brushRegion.samples.length === 0) {
+      throw new Error("a confirmed path brush stroke requires at least one sample");
+    }
+    const request = {
+      operationId: effect.operationId,
+      samples: effect.brushRegion.samples,
+      brushShape: effect.brushShape,
+      depth: effect.parameters.depth,
+      targetSurfaceType: effect.targetType,
+      sourceSurfaceTypes: PATH_BRUSH_SOURCE_SURFACE_TYPES,
+    };
+    let outcome: ApplyPathBrushOutcome;
+    try {
+      outcome = this.#construction.applyPathBrush(request);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("produced no semantic change")) throw error;
+      return emptyPathBrushOutcome();
     }
     this.#foldPathBrushOutcome(outcome, origin, effect.operationId);
     return outcome;
+  }
+  undoPathBrush(operationId: string, origin: ChangeOrigin): void {
+    this.#requireReady("undoing a path brush");
+    this.#construction.undoPathBrush(operationId);
+    this.#refreshConstructionProjection(origin, `undo:${operationId}`);
+  }
+
+  redoPathBrush(operationId: string, origin: ChangeOrigin): void {
+    this.#requireReady("redoing a path brush");
+    this.#construction.redoPathBrush(operationId);
+    this.#refreshConstructionProjection(origin, `redo:${operationId}`);
   }
   generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
     this.#requireReady("drawing a path");

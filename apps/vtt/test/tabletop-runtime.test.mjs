@@ -136,6 +136,20 @@ function createFakeConstructionPort() {
         invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
       };
     },
+    resolveBrushCells() {
+      requireStarted();
+      return [];
+    },
+    previewPathBrush() {
+      requireStarted();
+      return [];
+    },
+    undoPathBrush() {
+      requireStarted();
+    },
+    redoPathBrush() {
+      requireStarted();
+    },
     getSurfaceMesh() {
       requireStarted();
       return {
@@ -586,4 +600,61 @@ test("rejects an empty table identity", () => {
       }),
     /must not be empty/,
   );
+});
+test("startup publishes one SurfaceRef pick proxy per semantic surface", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-surface-picks",
+    seedDefaultMap: true,
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  await runtime.start();
+
+  const targets = renderPort.changes
+    .filter((change) => change.type === "surface-pick-target-upserted")
+    .map((change) => change.target.surfaceRef)
+    .sort();
+  assert.deepEqual(targets, [
+    surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY),
+    surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY),
+  ].sort());
+});
+
+test("path preview uses the exact Rust mesh and mode-registry source policy", async () => {
+  const constructionPort = createFakeConstructionPort();
+  let received;
+  constructionPort.previewPathBrush = (request) => {
+    received = request;
+    return [{
+      surfaceKey: ["preview:a", "preview:b", "preview:c"],
+      surfaceType: "path",
+      physical: true,
+      mesh: {
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, -0.2, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    }];
+  };
+  const runtime = createTabletopRuntime({
+    tableId: "table-preview",
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+
+  const preview = runtime.previewPathBrush({
+    operationId: "preview-1",
+    targetType: "path",
+    brushShape: { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 },
+    brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }, { x: 2, y: 0, z: 0.5 }] },
+    parameters: { width: 1.5, depth: 0.2, falloff: 1, strength: 1 },
+  });
+
+  assert.equal(preview.kind, "mesh");
+  assert.deepEqual([...preview.indices], [0, 1, 2]);
+  assert.deepEqual(received.sourceSurfaceTypes, ["terrain", "terrain-grass"]);
+  assert.equal(received.samples.length, 2);
+  assert.deepEqual(received.brushShape, { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 });
 });

@@ -33,3 +33,5 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../
 
 export { useConstructionPointer } from "./use-construction-pointer.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
+
+export type { ConstructionToolFeedback } from "./tools/tool-context.ts";
