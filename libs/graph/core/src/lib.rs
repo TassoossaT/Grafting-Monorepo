@@ -15,15 +15,18 @@ mod surface;
 mod transformation_plan;
 
 pub use construction::{
-    ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceSpec, delete_node, duplicate_surface,
-    merge_surfaces, move_node, split_surface,
+    ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceReplacementPlan, SurfaceSpec,
+    apply_surface_replacement_plan, delete_node, duplicate_surface, merge_surfaces, move_node,
+    split_surface,
 };
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
     IdentifierError, Node, NodeId, PrismGridMesh,
 };
-pub use surface::{ArcBulge, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
+pub use surface::{
+    ArcBulge, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType,
+};
 
 pub use transformation_plan::{
     IdentityDelta, LocalInvalidationScope, PlanIdentityKind, TransformationPlan,

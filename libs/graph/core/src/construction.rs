@@ -6,7 +6,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 
-use crate::{Edge, EdgeId, Graph, GraphError, Node, NodeId, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType};
+use crate::{
+    Edge, EdgeId, Graph, GraphError, Node, NodeId, SurfaceCurvature, SurfaceError, SurfaceKey,
+    SurfaceRegistry, SurfaceType, TransformationPlan,
+};
 
 /// Structural error from a domain-level construction operation -- either
 /// the graph mutation or the surface bookkeeping it coordinates can fail.
@@ -38,7 +41,10 @@ impl fmt::Display for ConstructionError {
             Self::Graph(error) => write!(formatter, "{error}"),
             Self::Surface(error) => write!(formatter, "{error}"),
             Self::SameSurface { key } => {
-                write!(formatter, "expected two distinct surfaces, both were {key:?}")
+                write!(
+                    formatter,
+                    "expected two distinct surfaces, both were {key:?}"
+                )
             }
             Self::DuplicateCountMismatch { expected, actual } => write!(
                 formatter,
@@ -152,14 +158,19 @@ pub fn delete_node<N, E>(
             let (surface_type, physical) = cap_surface(&cycle);
             let key = SurfaceKey::from_cycle(&cycle);
             if surfaces.surface(&key).is_some() {
-                return Err(ConstructionError::Surface(SurfaceError::DuplicateSurface { key }));
+                return Err(ConstructionError::Surface(SurfaceError::DuplicateSurface {
+                    key,
+                }));
             }
             planned_caps.push((cycle, surface_type, physical));
         }
     }
 
     // Validated: commit the mutation.
-    let removed_surfaces = surfaces.surfaces_referencing(id).cloned().collect::<Vec<_>>();
+    let removed_surfaces = surfaces
+        .surfaces_referencing(id)
+        .cloned()
+        .collect::<Vec<_>>();
     for key in &removed_surfaces {
         surfaces
             .remove_surface(key)
@@ -171,7 +182,9 @@ pub fn delete_node<N, E>(
     for (cycle, surface_type, physical) in planned_caps {
         let key = surfaces
             .add_surface(graph, cycle, surface_type, physical)
-            .expect("pre-validated: cycle nodes exist, cycle is non-empty, identity does not collide");
+            .expect(
+                "pre-validated: cycle nodes exist, cycle is non-empty, identity does not collide",
+            );
         capping_surfaces.push(key);
     }
 
@@ -182,7 +195,10 @@ pub fn delete_node<N, E>(
     })
 }
 
-fn connected_component(induced: &HashMap<NodeId, BTreeSet<NodeId>>, start: &NodeId) -> BTreeSet<NodeId> {
+fn connected_component(
+    induced: &HashMap<NodeId, BTreeSet<NodeId>>,
+    start: &NodeId,
+) -> BTreeSet<NodeId> {
     let mut component = BTreeSet::new();
     let mut stack = vec![start.clone()];
     while let Some(current) = stack.pop() {
@@ -201,7 +217,10 @@ fn connected_component(induced: &HashMap<NodeId, BTreeSet<NodeId>>, start: &Node
 /// exactly one simple cycle) and returns it in traversal order. Returns
 /// `None` for a branch, an open path, or an isolated node -- anything that
 /// is not a clean, closed cycle.
-fn simple_cycle_order(induced: &HashMap<NodeId, BTreeSet<NodeId>>, component: &BTreeSet<NodeId>) -> Option<Vec<NodeId>> {
+fn simple_cycle_order(
+    induced: &HashMap<NodeId, BTreeSet<NodeId>>,
+    component: &BTreeSet<NodeId>,
+) -> Option<Vec<NodeId>> {
     if component.len() < 3 {
         return None;
     }
@@ -251,6 +270,63 @@ pub struct SurfaceSpec {
     pub curvature: Option<SurfaceCurvature>,
 }
 
+/// Generic replacement batch produced by a domain transformer.
+///
+/// The batch contains only graph records and semantic surface records. It has
+/// no product type branches or geometry interpretation: a caller computes the
+/// local cycles and supplies the already-validated [`TransformationPlan`].
+/// [`apply_surface_replacement_plan`] validates the entire replacement on a
+/// private graph/registry copy before publishing it, so callers never observe
+/// a partial surface transformation.
+#[derive(Debug)]
+pub struct SurfaceReplacementPlan<N, E> {
+    /// Phase-A lifecycle and invalidation contract for this replacement.
+    pub transformation: TransformationPlan,
+    /// New graph nodes required by replacement surface cycles.
+    pub added_nodes: Vec<Node<N>>,
+    /// New graph edges required by replacement surface cycles.
+    pub added_edges: Vec<Edge<E>>,
+    /// Existing surfaces to remove before registering replacements.
+    pub removed_surfaces: Vec<SurfaceKey>,
+    /// Replacement surfaces to register after the graph records exist.
+    pub added_surfaces: Vec<SurfaceSpec>,
+}
+
+/// Applies a complete local surface replacement atomically.
+///
+/// The generic graph capability owns transactionality; domain transformers own
+/// intersection, formation, and the cycles supplied in the batch. The current
+/// graph and registry are cloned, all mutations are attempted on the clone,
+/// and only a fully valid result replaces the confirmed state. This requires
+/// cloneable caller payloads but avoids exposing the graph backend or making a
+/// bridge reimplement partial-rollback logic.
+pub fn apply_surface_replacement_plan<N: Clone, E: Clone>(
+    graph: &mut Graph<N, E>,
+    surfaces: &mut SurfaceRegistry,
+    plan: SurfaceReplacementPlan<N, E>,
+) -> Result<TransformationPlan, ConstructionError> {
+    let mut next_graph = graph.clone();
+    let mut next_surfaces = surfaces.clone();
+
+    for node in plan.added_nodes {
+        next_graph.add_node(node)?;
+    }
+    for edge in plan.added_edges {
+        next_graph.add_edge(edge)?;
+    }
+    for key in &plan.removed_surfaces {
+        next_surfaces.remove_surface(key)?;
+    }
+    for spec in plan.added_surfaces {
+        let key =
+            next_surfaces.add_surface(&next_graph, spec.cycle, spec.surface_type, spec.physical)?;
+        next_surfaces.set_curvature(&key, spec.curvature)?;
+    }
+
+    *graph = next_graph;
+    *surfaces = next_surfaces;
+    Ok(plan.transformation)
+}
 /// Validates a candidate new surface without registering it: non-empty
 /// cycle, every node exists, and its node-set identity does not collide
 /// with an already-registered surface -- except a key listed in `exclude`,
@@ -308,7 +384,9 @@ pub fn merge_surfaces<N, E>(
     let key = surfaces
         .add_surface(graph, merged.cycle, merged.surface_type, merged.physical)
         .expect("pre-validated by validate_new_surface");
-    surfaces.set_curvature(&key, merged.curvature).expect("just registered above");
+    surfaces
+        .set_curvature(&key, merged.curvature)
+        .expect("just registered above");
     Ok(key)
 }
 
@@ -339,11 +417,15 @@ pub fn split_surface<N, E>(
     let first_registered = surfaces
         .add_surface(graph, first.cycle, first.surface_type, first.physical)
         .expect("pre-validated by validate_new_surface");
-    surfaces.set_curvature(&first_registered, first.curvature).expect("just registered above");
+    surfaces
+        .set_curvature(&first_registered, first.curvature)
+        .expect("just registered above");
     let second_registered = surfaces
         .add_surface(graph, second.cycle, second.surface_type, second.physical)
         .expect("pre-validated by validate_new_surface");
-    surfaces.set_curvature(&second_registered, second.curvature).expect("just registered above");
+    surfaces
+        .set_curvature(&second_registered, second.curvature)
+        .expect("just registered above");
     Ok((first_registered, second_registered))
 }
 
@@ -404,17 +486,27 @@ pub fn duplicate_surface<N, E>(
     let mut seen_node_ids = BTreeSet::new();
     for node in &duplicate.nodes {
         if graph.node(node.id()).is_some() || !seen_node_ids.insert(node.id().clone()) {
-            return Err(GraphError::DuplicateNode { id: node.id().clone() }.into());
+            return Err(GraphError::DuplicateNode {
+                id: node.id().clone(),
+            }
+            .into());
         }
     }
     let mut seen_edge_ids = BTreeSet::new();
     for (edge_id, _) in &duplicate.ring_edges {
         if graph.edge(edge_id).is_some() || !seen_edge_ids.insert(edge_id.clone()) {
-            return Err(GraphError::DuplicateEdge { id: edge_id.clone() }.into());
+            return Err(GraphError::DuplicateEdge {
+                id: edge_id.clone(),
+            }
+            .into());
         }
     }
 
-    let new_cycle: Vec<NodeId> = duplicate.nodes.iter().map(|node| node.id().clone()).collect();
+    let new_cycle: Vec<NodeId> = duplicate
+        .nodes
+        .iter()
+        .map(|node| node.id().clone())
+        .collect();
     let new_key = SurfaceKey::from_cycle(&new_cycle);
     if surfaces.surface(&new_key).is_some() {
         return Err(SurfaceError::DuplicateSurface { key: new_key }.into());
@@ -441,14 +533,24 @@ pub fn duplicate_surface<N, E>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Edge, EdgeId, Node};
+    use std::collections::BTreeSet;
+
+    use crate::{
+        Edge, EdgeId, IdentityDelta, LocalInvalidationScope, Node, PlanIdentityKind,
+        TransformationPlan,
+    };
 
     fn node(id: &str) -> Node<[f32; 3]> {
         Node::new(NodeId::new(id).unwrap(), [0.0, 0.0, 0.0])
     }
 
     fn undirected_edge(id: &str, a: &str, b: &str) -> Edge<()> {
-        Edge::new(EdgeId::new(id).unwrap(), NodeId::new(a).unwrap(), NodeId::new(b).unwrap(), ())
+        Edge::new(
+            EdgeId::new(id).unwrap(),
+            NodeId::new(a).unwrap(),
+            NodeId::new(b).unwrap(),
+            (),
+        )
     }
 
     fn nid(name: &str) -> NodeId {
@@ -480,13 +582,26 @@ mod tests {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
         let side_ta = surfaces
-            .add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true)
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
             .unwrap();
         let _unrelated = surfaces
-            .add_surface(&graph, vec![nid("b"), nid("c"), nid("d")], SurfaceType::new("wall"), true)
+            .add_surface(
+                &graph,
+                vec![nid("b"), nid("c"), nid("d")],
+                SurfaceType::new("wall"),
+                true,
+            )
             .unwrap();
 
-        let affected = move_node(&mut graph, &surfaces, &nid("tip"), |position| position[2] = 5.0).unwrap();
+        let affected = move_node(&mut graph, &surfaces, &nid("tip"), |position| {
+            position[2] = 5.0
+        })
+        .unwrap();
         assert_eq!(affected, vec![side_ta]);
         assert_eq!(graph.node(&nid("tip")).unwrap().data()[2], 5.0);
 
@@ -501,13 +616,44 @@ mod tests {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
         let side_faces = [
-            surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap(),
-            surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap(),
-            surfaces.add_surface(&graph, vec![nid("tip"), nid("c"), nid("d")], SurfaceType::new("wall"), true).unwrap(),
-            surfaces.add_surface(&graph, vec![nid("tip"), nid("d"), nid("a")], SurfaceType::new("wall"), true).unwrap(),
+            surfaces
+                .add_surface(
+                    &graph,
+                    vec![nid("tip"), nid("a"), nid("b")],
+                    SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
+            surfaces
+                .add_surface(
+                    &graph,
+                    vec![nid("tip"), nid("b"), nid("c")],
+                    SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
+            surfaces
+                .add_surface(
+                    &graph,
+                    vec![nid("tip"), nid("c"), nid("d")],
+                    SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
+            surfaces
+                .add_surface(
+                    &graph,
+                    vec![nid("tip"), nid("d"), nid("a")],
+                    SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
         ];
 
-        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| (SurfaceType::new("floor"), true)).unwrap();
+        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| {
+            (SurfaceType::new("floor"), true)
+        })
+        .unwrap();
 
         let mut removed = outcome.removed_surfaces.clone();
         removed.sort();
@@ -535,7 +681,17 @@ mod tests {
         // {e,f,g,h}, no edges between the two bases -- the exact case the
         // repository owner confirmed while specifying the algorithm.
         let mut graph = Graph::try_from_parts(
-            vec![node("tip"), node("a"), node("b"), node("c"), node("d"), node("e"), node("f"), node("g"), node("h")],
+            vec![
+                node("tip"),
+                node("a"),
+                node("b"),
+                node("c"),
+                node("d"),
+                node("e"),
+                node("f"),
+                node("g"),
+                node("h"),
+            ],
             vec![
                 undirected_edge("tip-a", "tip", "a"),
                 undirected_edge("tip-b", "tip", "b"),
@@ -558,20 +714,35 @@ mod tests {
         .unwrap();
         let mut surfaces = SurfaceRegistry::new();
 
-        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| (SurfaceType::new("floor"), true)).unwrap();
+        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| {
+            (SurfaceType::new("floor"), true)
+        })
+        .unwrap();
 
         assert_eq!(outcome.capping_surfaces.len(), 2);
         let mut capped_keys = outcome
             .capping_surfaces
             .iter()
-            .map(|key| surfaces.surface(key).unwrap().cycle().iter().cloned().collect::<BTreeSet<_>>())
+            .map(|key| {
+                surfaces
+                    .surface(key)
+                    .unwrap()
+                    .cycle()
+                    .iter()
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            })
             .collect::<Vec<_>>();
         capped_keys.sort_by_key(|set| set.iter().next().cloned());
         assert_eq!(
             capped_keys,
             vec![
-                [nid("a"), nid("b"), nid("c"), nid("d")].into_iter().collect(),
-                [nid("e"), nid("f"), nid("g"), nid("h")].into_iter().collect(),
+                [nid("a"), nid("b"), nid("c"), nid("d")]
+                    .into_iter()
+                    .collect(),
+                [nid("e"), nid("f"), nid("g"), nid("h")]
+                    .into_iter()
+                    .collect(),
             ]
         );
     }
@@ -583,7 +754,14 @@ mod tests {
         // "b" then has degree 3 in the induced subgraph (a, c, x), so no
         // clean cycle exists and nothing should be generated.
         let mut graph = Graph::try_from_parts(
-            vec![node("tip"), node("a"), node("b"), node("c"), node("d"), node("x")],
+            vec![
+                node("tip"),
+                node("a"),
+                node("b"),
+                node("c"),
+                node("d"),
+                node("x"),
+            ],
             vec![
                 undirected_edge("tip-a", "tip", "a"),
                 undirected_edge("tip-b", "tip", "b"),
@@ -600,7 +778,10 @@ mod tests {
         .unwrap();
         let mut surfaces = SurfaceRegistry::new();
 
-        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| (SurfaceType::new("floor"), true)).unwrap();
+        let outcome = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| {
+            (SurfaceType::new("floor"), true)
+        })
+        .unwrap();
 
         assert!(outcome.capping_surfaces.is_empty());
     }
@@ -610,31 +791,54 @@ mod tests {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
         let existing = surfaces
-            .add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true)
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
             .unwrap();
 
-        let error = delete_node(&mut graph, &mut surfaces, &nid("missing"), |_cycle| (SurfaceType::new("floor"), true))
-            .unwrap_err();
-        assert_eq!(error, ConstructionError::Graph(GraphError::UnknownNode { id: nid("missing") }));
+        let error = delete_node(&mut graph, &mut surfaces, &nid("missing"), |_cycle| {
+            (SurfaceType::new("floor"), true)
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ConstructionError::Graph(GraphError::UnknownNode { id: nid("missing") })
+        );
         assert!(graph.node(&nid("tip")).is_some());
         assert!(surfaces.surface(&existing).is_some());
     }
 
     #[test]
-    fn delete_node_rejects_a_cap_that_collides_with_an_unrelated_surface_without_mutating_anything() {
+    fn delete_node_rejects_a_cap_that_collides_with_an_unrelated_surface_without_mutating_anything()
+    {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
         // An unrelated, pre-existing surface that happens to occupy the
         // exact same node set the base cycle would need for its cap.
         let unrelated = surfaces
-            .add_surface(&graph, vec![nid("a"), nid("b"), nid("c"), nid("d")], SurfaceType::new("existing-floor"), true)
+            .add_surface(
+                &graph,
+                vec![nid("a"), nid("b"), nid("c"), nid("d")],
+                SurfaceType::new("existing-floor"),
+                true,
+            )
             .unwrap();
         let side = surfaces
-            .add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true)
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
             .unwrap();
 
-        let error = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| (SurfaceType::new("floor"), true))
-            .unwrap_err();
+        let error = delete_node(&mut graph, &mut surfaces, &nid("tip"), |_cycle| {
+            (SurfaceType::new("floor"), true)
+        })
+        .unwrap_err();
         assert_eq!(
             error,
             ConstructionError::Surface(SurfaceError::DuplicateSurface {
@@ -660,25 +864,63 @@ mod tests {
     fn merge_surfaces_unites_two_into_one() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side_ab = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
-        let side_bc = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
+        let side_ab = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
+        let side_bc = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("b"), nid("c")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
-        let merged_key = merge_surfaces(&graph, &mut surfaces, &side_ab, &side_bc, spec(&["tip", "a", "b", "c"], "merged-wall", true)).unwrap();
+        let merged_key = merge_surfaces(
+            &graph,
+            &mut surfaces,
+            &side_ab,
+            &side_bc,
+            spec(&["tip", "a", "b", "c"], "merged-wall", true),
+        )
+        .unwrap();
 
         assert!(surfaces.surface(&side_ab).is_none());
         assert!(surfaces.surface(&side_bc).is_none());
         let merged = surfaces.surface(&merged_key).unwrap();
         assert_eq!(merged.surface_type(), &SurfaceType::new("merged-wall"));
-        assert_eq!(SurfaceKey::from_cycle(merged.cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b"), nid("c")]));
+        assert_eq!(
+            SurfaceKey::from_cycle(merged.cycle()),
+            SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b"), nid("c")])
+        );
     }
 
     #[test]
     fn merge_surfaces_rejects_the_same_surface_twice() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
-        let error = merge_surfaces(&graph, &mut surfaces, &side, &side, spec(&["tip", "a", "b", "c"], "merged", true)).unwrap_err();
+        let error = merge_surfaces(
+            &graph,
+            &mut surfaces,
+            &side,
+            &side,
+            spec(&["tip", "a", "b", "c"], "merged", true),
+        )
+        .unwrap_err();
         assert_eq!(error, ConstructionError::SameSurface { key: side.clone() });
         assert!(surfaces.surface(&side).is_some());
     }
@@ -687,11 +929,28 @@ mod tests {
     fn merge_surfaces_rejects_unknown_operand_without_mutating_anything() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
         let missing = SurfaceKey::from_cycle(&[nid("tip"), nid("c"), nid("d")]);
 
-        let error = merge_surfaces(&graph, &mut surfaces, &side, &missing, spec(&["tip", "a", "b", "c"], "merged", true)).unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing }));
+        let error = merge_surfaces(
+            &graph,
+            &mut surfaces,
+            &side,
+            &missing,
+            spec(&["tip", "a", "b", "c"], "merged", true),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing })
+        );
         assert!(surfaces.surface(&side).is_some());
     }
 
@@ -699,12 +958,45 @@ mod tests {
     fn merge_surfaces_rejects_a_result_colliding_with_a_third_surface_without_mutating_anything() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side_ab = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
-        let side_bc = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
-        let unrelated = surfaces.add_surface(&graph, vec![nid("a"), nid("b"), nid("c"), nid("d")], SurfaceType::new("floor"), true).unwrap();
+        let side_ab = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
+        let side_bc = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("b"), nid("c")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
+        let unrelated = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("a"), nid("b"), nid("c"), nid("d")],
+                SurfaceType::new("floor"),
+                true,
+            )
+            .unwrap();
 
-        let error = merge_surfaces(&graph, &mut surfaces, &side_ab, &side_bc, spec(&["a", "b", "c", "d"], "merged", true)).unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::DuplicateSurface { key: unrelated.clone() }));
+        let error = merge_surfaces(
+            &graph,
+            &mut surfaces,
+            &side_ab,
+            &side_bc,
+            spec(&["a", "b", "c", "d"], "merged", true),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::DuplicateSurface {
+                key: unrelated.clone()
+            })
+        );
         assert!(surfaces.surface(&side_ab).is_some());
         assert!(surfaces.surface(&side_bc).is_some());
         assert!(surfaces.surface(&unrelated).is_some());
@@ -714,7 +1006,14 @@ mod tests {
     fn split_surface_divides_one_into_two() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
+        let merged = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b"), nid("c")],
+                SurfaceType::new("merged-wall"),
+                true,
+            )
+            .unwrap();
 
         let (first, second) = split_surface(
             &graph,
@@ -726,8 +1025,14 @@ mod tests {
         .unwrap();
 
         assert!(surfaces.surface(&merged).is_none());
-        assert_eq!(SurfaceKey::from_cycle(surfaces.surface(&first).unwrap().cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")]));
-        assert_eq!(SurfaceKey::from_cycle(surfaces.surface(&second).unwrap().cycle()), SurfaceKey::from_cycle(&[nid("tip"), nid("b"), nid("c")]));
+        assert_eq!(
+            SurfaceKey::from_cycle(surfaces.surface(&first).unwrap().cycle()),
+            SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")])
+        );
+        assert_eq!(
+            SurfaceKey::from_cycle(surfaces.surface(&second).unwrap().cycle()),
+            SurfaceKey::from_cycle(&[nid("tip"), nid("b"), nid("c")])
+        );
     }
 
     #[test]
@@ -736,15 +1041,32 @@ mod tests {
         let mut surfaces = SurfaceRegistry::new();
         let missing = SurfaceKey::from_cycle(&[nid("tip"), nid("a")]);
 
-        let error = split_surface(&graph, &mut surfaces, &missing, spec(&["tip", "a"], "wall", true), spec(&["b", "c"], "wall", true)).unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing }));
+        let error = split_surface(
+            &graph,
+            &mut surfaces,
+            &missing,
+            spec(&["tip", "a"], "wall", true),
+            spec(&["b", "c"], "wall", true),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing })
+        );
     }
 
     #[test]
     fn split_surface_rejects_two_halves_with_the_same_identity() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
+        let merged = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b"), nid("c")],
+                SurfaceType::new("merged-wall"),
+                true,
+            )
+            .unwrap();
 
         let error = split_surface(
             &graph,
@@ -754,7 +1076,12 @@ mod tests {
             spec(&["b", "a", "tip"], "wall", true),
         )
         .unwrap_err();
-        assert_eq!(error, ConstructionError::SameSurface { key: SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")]) });
+        assert_eq!(
+            error,
+            ConstructionError::SameSurface {
+                key: SurfaceKey::from_cycle(&[nid("tip"), nid("a"), nid("b")])
+            }
+        );
         // Nothing committed: the original surface is still there.
         assert!(surfaces.surface(&merged).is_some());
     }
@@ -763,8 +1090,22 @@ mod tests {
     fn split_surface_rejects_a_half_colliding_with_a_third_surface_without_mutating_anything() {
         let graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let merged = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b"), nid("c")], SurfaceType::new("merged-wall"), true).unwrap();
-        let unrelated = surfaces.add_surface(&graph, vec![nid("tip"), nid("b"), nid("c")], SurfaceType::new("wall"), true).unwrap();
+        let merged = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b"), nid("c")],
+                SurfaceType::new("merged-wall"),
+                true,
+            )
+            .unwrap();
+        let unrelated = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("b"), nid("c")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
         let error = split_surface(
             &graph,
@@ -774,15 +1115,30 @@ mod tests {
             spec(&["tip", "b", "c"], "wall", true),
         )
         .unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::DuplicateSurface { key: unrelated.clone() }));
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::DuplicateSurface {
+                key: unrelated.clone()
+            })
+        );
         assert!(surfaces.surface(&merged).is_some());
         assert!(surfaces.surface(&unrelated).is_some());
     }
 
-    fn duplicate_spec(nodes: &[(&str, [f32; 3])], edges: &[&str], surface_type: &str) -> DuplicateSpec<[f32; 3], ()> {
+    fn duplicate_spec(
+        nodes: &[(&str, [f32; 3])],
+        edges: &[&str],
+        surface_type: &str,
+    ) -> DuplicateSpec<[f32; 3], ()> {
         DuplicateSpec {
-            nodes: nodes.iter().map(|(id, position)| Node::new(nid(id), *position)).collect(),
-            ring_edges: edges.iter().map(|id| (EdgeId::new(*id).unwrap(), ())).collect(),
+            nodes: nodes
+                .iter()
+                .map(|(id, position)| Node::new(nid(id), *position))
+                .collect(),
+            ring_edges: edges
+                .iter()
+                .map(|id| (EdgeId::new(*id).unwrap(), ()))
+                .collect(),
             surface_type: SurfaceType::new(surface_type),
             physical: true,
         }
@@ -792,21 +1148,35 @@ mod tests {
     fn duplicate_surface_creates_new_nodes_a_ring_and_a_new_surface() {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
         let new_key = duplicate_surface(
             &mut graph,
             &mut surfaces,
             &side,
             duplicate_spec(
-                &[("tip2", [0.0, 0.0, 1.0]), ("a2", [1.0, 0.0, 1.0]), ("b2", [0.0, 1.0, 1.0])],
+                &[
+                    ("tip2", [0.0, 0.0, 1.0]),
+                    ("a2", [1.0, 0.0, 1.0]),
+                    ("b2", [0.0, 1.0, 1.0]),
+                ],
                 &["tip2-a2", "a2-b2", "b2-tip2"],
                 "wall",
             ),
         )
         .unwrap();
 
-        assert_eq!(SurfaceKey::from_cycle(surfaces.surface(&new_key).unwrap().cycle()), SurfaceKey::from_cycle(&[nid("tip2"), nid("a2"), nid("b2")]));
+        assert_eq!(
+            SurfaceKey::from_cycle(surfaces.surface(&new_key).unwrap().cycle()),
+            SurfaceKey::from_cycle(&[nid("tip2"), nid("a2"), nid("b2")])
+        );
         assert_eq!(graph.node(&nid("tip2")).unwrap().data(), &[0.0, 0.0, 1.0]);
         // The ring closes: tip2-a2, a2-b2, and the wrap-around b2-tip2.
         assert_eq!(graph.successors(&nid("tip2")).unwrap(), vec![nid("a2")]);
@@ -821,24 +1191,50 @@ mod tests {
         let mut surfaces = SurfaceRegistry::new();
         let missing = SurfaceKey::from_cycle(&[nid("tip"), nid("a")]);
 
-        let error = duplicate_surface(&mut graph, &mut surfaces, &missing, duplicate_spec(&[("x", [0.0, 0.0, 0.0])], &["x-x"], "wall")).unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing }));
+        let error = duplicate_surface(
+            &mut graph,
+            &mut surfaces,
+            &missing,
+            duplicate_spec(&[("x", [0.0, 0.0, 0.0])], &["x-x"], "wall"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::UnknownSurface { key: missing })
+        );
     }
 
     #[test]
     fn duplicate_surface_rejects_a_node_count_that_does_not_match_the_original_cycle() {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
         let error = duplicate_surface(
             &mut graph,
             &mut surfaces,
             &side,
-            duplicate_spec(&[("tip2", [0.0, 0.0, 1.0]), ("a2", [1.0, 0.0, 1.0])], &["tip2-a2", "a2-tip2"], "wall"),
+            duplicate_spec(
+                &[("tip2", [0.0, 0.0, 1.0]), ("a2", [1.0, 0.0, 1.0])],
+                &["tip2-a2", "a2-tip2"],
+                "wall",
+            ),
         )
         .unwrap_err();
-        assert_eq!(error, ConstructionError::DuplicateCountMismatch { expected: 3, actual: 2 });
+        assert_eq!(
+            error,
+            ConstructionError::DuplicateCountMismatch {
+                expected: 3,
+                actual: 2
+            }
+        );
         assert!(graph.node(&nid("tip2")).is_none());
     }
 
@@ -846,17 +1242,35 @@ mod tests {
     fn duplicate_surface_rejects_a_new_node_id_that_already_exists_without_mutating_anything() {
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a"), nid("b")], SurfaceType::new("wall"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a"), nid("b")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
         // "a" already exists in the graph.
         let error = duplicate_surface(
             &mut graph,
             &mut surfaces,
             &side,
-            duplicate_spec(&[("tip2", [0.0, 0.0, 1.0]), ("a", [1.0, 0.0, 1.0]), ("b2", [0.0, 1.0, 1.0])], &["e1", "e2", "e3"], "wall"),
+            duplicate_spec(
+                &[
+                    ("tip2", [0.0, 0.0, 1.0]),
+                    ("a", [1.0, 0.0, 1.0]),
+                    ("b2", [0.0, 1.0, 1.0]),
+                ],
+                &["e1", "e2", "e3"],
+                "wall",
+            ),
         )
         .unwrap_err();
-        assert_eq!(error, ConstructionError::Graph(GraphError::DuplicateNode { id: nid("a") }));
+        assert_eq!(
+            error,
+            ConstructionError::Graph(GraphError::DuplicateNode { id: nid("a") })
+        );
         assert!(graph.node(&nid("tip2")).is_none());
         assert!(surfaces.surface(&side).is_some());
     }
@@ -879,8 +1293,22 @@ mod tests {
         // itself is a good state to be in.
         let mut graph = pyramid();
         let mut surfaces = SurfaceRegistry::new();
-        let side = surfaces.add_surface(&graph, vec![nid("tip"), nid("a")], SurfaceType::new("wall"), true).unwrap();
-        let unrelated = surfaces.add_surface(&graph, vec![nid("c"), nid("d")], SurfaceType::new("floor"), true).unwrap();
+        let side = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("tip"), nid("a")],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
+        let unrelated = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("c"), nid("d")],
+                SurfaceType::new("floor"),
+                true,
+            )
+            .unwrap();
         graph.remove_node(&nid("c")).unwrap();
         graph.remove_node(&nid("d")).unwrap();
 
@@ -891,8 +1319,88 @@ mod tests {
             duplicate_spec(&[("c", [0.0; 3]), ("d", [0.0; 3])], &["e1", "e2"], "wall"),
         )
         .unwrap_err();
-        assert_eq!(error, ConstructionError::Surface(SurfaceError::DuplicateSurface { key: unrelated.clone() }));
+        assert_eq!(
+            error,
+            ConstructionError::Surface(SurfaceError::DuplicateSurface {
+                key: unrelated.clone()
+            })
+        );
         assert!(surfaces.surface(&side).is_some());
         assert!(graph.node(&nid("c")).is_none());
+    }
+    #[test]
+    fn replacement_plan_rolls_back_when_a_late_graph_record_is_invalid() {
+        let mut graph = Graph::try_from_parts(vec![node("a"), node("b")], vec![]).unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+        let original = surfaces
+            .add_surface(
+                &graph,
+                vec![nid("a"), nid("b")],
+                SurfaceType::new("terrain"),
+                true,
+            )
+            .unwrap();
+        let node_delta = IdentityDelta::new(
+            PlanIdentityKind::Node,
+            BTreeSet::from([nid("new")]),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+        )
+        .unwrap();
+        let edge_delta = IdentityDelta::new(
+            PlanIdentityKind::Edge,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+        )
+        .unwrap();
+        let surface_delta = IdentityDelta::new(
+            PlanIdentityKind::Surface,
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            BTreeSet::from([original.clone()]),
+        )
+        .unwrap();
+        let transformation = TransformationPlan::new(
+            node_delta,
+            edge_delta,
+            surface_delta,
+            LocalInvalidationScope::new(
+                BTreeSet::from([original.clone()]),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            ),
+        )
+        .unwrap();
+        let error = apply_surface_replacement_plan(
+            &mut graph,
+            &mut surfaces,
+            SurfaceReplacementPlan {
+                transformation,
+                added_nodes: vec![node("new")],
+                added_edges: vec![Edge::new(
+                    EdgeId::new("late").unwrap(),
+                    nid("new"),
+                    nid("missing"),
+                    (),
+                )],
+                removed_surfaces: vec![original.clone()],
+                added_surfaces: vec![],
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            ConstructionError::Graph(GraphError::MissingTarget {
+                edge: EdgeId::new("late").unwrap(),
+                target: nid("missing")
+            })
+        );
+        assert!(graph.node(&nid("new")).is_none());
+        assert!(surfaces.surface(&original).is_some());
     }
 }

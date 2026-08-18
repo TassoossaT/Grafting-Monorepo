@@ -1,0 +1,12 @@
+[package]
+name = "grafting-procgen-surface-transformations"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Deterministic local construction-surface transformations. Plans terrain-to-path topology and formation changes without mutating graph state."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+grafting-graph-core = { path = "../../../graph/core" }

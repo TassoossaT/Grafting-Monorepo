@@ -28,9 +28,18 @@ Failure to construct a stable graph identifier.
 
 Invalid input or arithmetic failure from the grouped-grid heuristic.
 
+### `pub enum grafting_graph_core::PlanIdentityKind`
+
+The identity category whose states overlap in an invalid plan.
+
 ### `pub enum grafting_graph_core::SurfaceError`
 
 Structural error from surface registration or lookup.
+
+### `pub enum grafting_graph_core::TransformationPlanFailure`
+
+A planning failure. No variant applies a mutation or represents a partial
+result: callers must leave the confirmed graph and surface registry intact.
 
 ### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self`
 
@@ -87,6 +96,8 @@ endpoint is not a node already present in the graph.
 ### `pub fn grafting_graph_core::Graph<N, E>::add_node(&mut self, node: grafting_graph_core::Node<N>) -> core::result::Result<(), grafting_graph_core::GraphError>`
 
 Inserts a new node. Errors if its identity is already used.
+
+### `pub fn grafting_graph_core::Graph<N, E>::clone(&self) -> grafting_graph_core::Graph<N, E>`
 
 ### `pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::EdgeId) -> core::option::Option<&grafting_graph_core::Edge<E>>`
 
@@ -197,6 +208,36 @@ Nodes sorted by stable node identity.
 
 Creates validated grouped-grid dimensions.
 
+### `pub fn grafting_graph_core::IdentityDelta<I>::clone(&self) -> grafting_graph_core::IdentityDelta<I>`
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::created(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities newly introduced by the plan.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::eq(&self, other: &grafting_graph_core::IdentityDelta<I>) -> bool`
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::is_empty(&self) -> bool`
+
+Whether this category has no lifecycle changes.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::new(kind: grafting_graph_core::PlanIdentityKind, created: alloc::collections::btree::set::BTreeSet<I>, preserved: alloc::collections::btree::set::BTreeSet<I>, replaced: alloc::collections::btree::set::BTreeSet<I>, removed: alloc::collections::btree::set::BTreeSet<I>) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
+
+Validates mutually exclusive identity lifecycle states.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::preserved(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities retained because they still connect unaffected geometry.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::removed(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities removed by the plan.
+
+### `pub fn grafting_graph_core::IdentityDelta<I>::replaced(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
+
+Identities superseded inside the remodeled region.
+
 ### `pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId`
 
 Stable node identity associated with this position.
@@ -224,6 +265,26 @@ Positions sorted by stable node identity.
 ### `pub fn grafting_graph_core::LayoutSnapshot::width(&self) -> u32`
 
 Width required to contain every position and the configured padding.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::changed_surfaces(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Surfaces directly changed by the plan.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::direct_dependencies(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Direct transformer dependencies, excluding unrelated clouds.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::is_empty(&self) -> bool`
+
+Whether the plan identifies no local refresh work.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::new(changed_surfaces: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, topology_repair_neighbors: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, direct_dependencies: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>) -> Self`
+
+Creates a local invalidation scope without scanning unrelated clouds.
+
+### `pub fn grafting_graph_core::LocalInvalidationScope::topology_repair_neighbors(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
+
+Adjacent surfaces inspected for topology repair or fragment cleanup.
 
 ### `pub fn grafting_graph_core::Node<N>::clone(&self) -> grafting_graph_core::Node<N>`
 
@@ -335,11 +396,21 @@ requires a mesh recompute.
 
 Looks up a surface by its node-set identity.
 
+### `pub fn grafting_graph_core::SurfaceRegistry::surface_keys(&self) -> alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Registered surface identities in deterministic identity order.
+
+The registry's internal storage is intentionally unordered. Callers
+that need to examine a local domain snapshot therefore start from this
+ordered list and resolve each record through [`surface`](Self::surface).
+
 ### `pub fn grafting_graph_core::SurfaceRegistry::surfaces_referencing(&self, node: &grafting_graph_core::NodeId) -> impl core::iter::traits::iterator::Iterator<Item = &grafting_graph_core::SurfaceKey>`
 
 Every surface referencing `node`, in deterministic identity order --
 the instant lookup `ADR-0022`'s `Move` operation needs to know which
 surfaces to recompute, without a full scan.
+
+### `pub fn grafting_graph_core::SurfaceReplacementPlan<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::SurfaceType::as_ref(&self) -> &str`
 
@@ -350,6 +421,37 @@ Returns the identifier text.
 ### `pub fn grafting_graph_core::SurfaceType::new(value: impl core::convert::Into<alloc::string::String>) -> Self`
 
 Creates a surface-type identifier from caller-chosen text.
+
+### `pub fn grafting_graph_core::TransformationPlan::edge_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>`
+
+Edge lifecycle changes.
+
+### `pub fn grafting_graph_core::TransformationPlan::invalidation(&self) -> &grafting_graph_core::LocalInvalidationScope`
+
+Local derived-state refresh scope.
+
+### `pub fn grafting_graph_core::TransformationPlan::new(node_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>, edge_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>, surface_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>, invalidation: grafting_graph_core::LocalInvalidationScope) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
+
+Creates a plan only when it has structural changes and a local refresh scope.
+
+### `pub fn grafting_graph_core::TransformationPlan::node_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>`
+
+Node lifecycle changes.
+
+### `pub fn grafting_graph_core::TransformationPlan::surface_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>`
+
+Surface lifecycle changes.
+
+### `pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>`
+
+Applies a complete local surface replacement atomically.
+
+The generic graph capability owns transactionality; domain transformers own
+intersection, formation, and the cycles supplied in the batch. The current
+graph and registry are cloned, all mutations are attempted on the clone,
+and only a fully valid result replaces the confirmed state. This requires
+cloneable caller payloads but avoids exposing the graph backend or making a
+bridge reimplement partial-rollback logic.
 
 ### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
 
@@ -638,6 +740,18 @@ A grouping edge identity was not present in the graph.
 
 Missing grouping edge identity.
 
+### `pub grafting_graph_core::PlanIdentityKind::Edge`
+
+Stable graph-edge identities.
+
+### `pub grafting_graph_core::PlanIdentityKind::Node`
+
+Stable graph-node identities.
+
+### `pub grafting_graph_core::PlanIdentityKind::Surface`
+
+Surface identities derived from their node sets.
+
 ### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
 
 8 corner vertex indices per cell [V0..V7].
@@ -712,6 +826,26 @@ A query or update referenced a surface that is not registered.
 
 Identity that could not be resolved.
 
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>`
+
+New graph edges required by replacement surface cycles.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+New graph nodes required by replacement surface cycles.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceSpec>`
+
+Replacement surfaces to register after the graph records exist.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Existing surfaces to remove before registering replacements.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan`
+
+Phase-A lifecycle and invalidation contract for this replacement.
+
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
@@ -728,6 +862,22 @@ Whether the new surface blocks movement or acts as ground.
 ### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
 
 The new surface's open, extensible type identifier.
+
+### `pub grafting_graph_core::TransformationPlanFailure::EmptyInvalidationScope`
+
+A non-empty plan must describe the local surface scope it invalidates.
+
+### `pub grafting_graph_core::TransformationPlanFailure::NoChanges`
+
+A no-op must not become a committed operation.
+
+### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates`
+
+One identity appeared in more than one lifecycle state.
+
+### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates::kind: grafting_graph_core::PlanIdentityKind`
+
+The category containing the duplicate lifecycle entry.
 
 ### `pub mod grafting_graph_core`
 
@@ -770,6 +920,10 @@ Immutable, deterministically ordered graph data safe to pass to adapters.
 
 Caller-controlled dimensions for the deterministic grouped-grid heuristic.
 
+### `pub struct grafting_graph_core::IdentityDelta<I>`
+
+Deterministic lifecycle classification for one kind of stable identity.
+
 ### `pub struct grafting_graph_core::LayoutPosition`
 
 Position assigned to one stable node by a graph layout snapshot.
@@ -777,6 +931,10 @@ Position assigned to one stable node by a graph layout snapshot.
 ### `pub struct grafting_graph_core::LayoutSnapshot`
 
 Immutable deterministic output from a grouped-grid layout operation.
+
+### `pub struct grafting_graph_core::LocalInvalidationScope`
+
+The surface scope a successful local transformation requires consumers to refresh.
 
 ### `pub struct grafting_graph_core::Node<N>`
 
@@ -838,6 +996,17 @@ Tracks every construction [`Surface`] and the reverse node -> surfaces
 index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
 which surfaces reference a given node, without a full scan.
 
+### `pub struct grafting_graph_core::SurfaceReplacementPlan<N, E>`
+
+Generic replacement batch produced by a domain transformer.
+
+The batch contains only graph records and semantic surface records. It has
+no product type branches or geometry interpretation: a caller computes the
+local cycles and supplies the already-validated [`TransformationPlan`].
+[`apply_surface_replacement_plan`] validates the entire replacement on a
+private graph/registry copy before publishing it, so callers never observe
+a partial surface transformation.
+
 ### `pub struct grafting_graph_core::SurfaceSpec`
 
 A surface's non-identity attributes, for operations that register a new
@@ -853,6 +1022,10 @@ Deliberately not a fixed/closed enum -- the same mistake already
 corrected for `map_state.fbs`'s `BoundaryKind` (`ADR-0022`,
 `DEC-052`/`ADR-0014`'s "no product concept hardcoded into
 infrastructure").
+
+### `pub struct grafting_graph_core::TransformationPlan`
+
+A validated, data-only batch describing one future atomic transformation.
 
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
