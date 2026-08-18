@@ -35,9 +35,16 @@ pub struct GenerateAndApplyTerrainCellRequest {
     pub edge_ids: Vec<String>,
 }
 
-fn fixed_ids<T>(ids: Vec<String>, what: &str, parse: impl Fn(String) -> Result<T, String>) -> Result<Vec<T>, String> {
+fn fixed_ids<T>(
+    ids: Vec<String>,
+    what: &str,
+    parse: impl Fn(String) -> Result<T, String>,
+) -> Result<Vec<T>, String> {
     if ids.len() != CORNER_COUNT {
-        return Err(format!("{what}: expected {CORNER_COUNT} ids, got {}", ids.len()));
+        return Err(format!(
+            "{what}: expected {CORNER_COUNT} ids, got {}",
+            ids.len()
+        ));
     }
     ids.into_iter().map(parse).collect()
 }
@@ -52,18 +59,31 @@ pub fn generate_and_apply_terrain_cell(
     mesh: Option<&PrismGridMesh>,
     request: GenerateAndApplyTerrainCellRequest,
 ) -> Result<SurfaceKeyResponse, String> {
-    let mesh = mesh.ok_or_else(|| "no terrain mesh set -- call set_terrain_mesh first".to_string())?;
+    let mesh =
+        mesh.ok_or_else(|| "no terrain mesh set -- call set_terrain_mesh first".to_string())?;
 
     let corner_heights: [f32; CORNER_COUNT] = request
         .module
         .corner_heights
         .clone()
         .try_into()
-        .map_err(|heights: Vec<f32>| format!("module.cornerHeights: expected {CORNER_COUNT} entries, got {}", heights.len()))?;
-    let module = CornerHeightModule { name: request.module.name, corner_heights };
+        .map_err(|heights: Vec<f32>| {
+            format!(
+                "module.cornerHeights: expected {CORNER_COUNT} entries, got {}",
+                heights.len()
+            )
+        })?;
+    let module = CornerHeightModule {
+        name: request.module.name,
+        corner_heights,
+    };
 
-    let node_ids = fixed_ids(request.node_ids, "nodeIds", |id| NodeId::new(id).map_err(|error| error.to_string()))?;
-    let edge_ids = fixed_ids(request.edge_ids, "edgeIds", |id| EdgeId::new(id).map_err(|error| error.to_string()))?;
+    let node_ids = fixed_ids(request.node_ids, "nodeIds", |id| {
+        NodeId::new(id).map_err(|error| error.to_string())
+    })?;
+    let edge_ids = fixed_ids(request.edge_ids, "edgeIds", |id| {
+        EdgeId::new(id).map_err(|error| error.to_string())
+    })?;
 
     let generation = generate_terrain_cell_surface(
         mesh,
@@ -92,13 +112,22 @@ pub fn generate_and_apply_terrain_cell(
         graph.add_node(node).expect("checked above: id is free");
     }
     for edge in generation.edges {
-        graph.add_edge(edge).expect("checked above: id is free, endpoints were just added");
+        graph
+            .add_edge(edge)
+            .expect("checked above: id is free, endpoints were just added");
     }
     let key = surfaces
-        .add_surface(graph, generation.surface.cycle, generation.surface.surface_type, generation.surface.physical)
+        .add_surface(
+            graph,
+            generation.surface.cycle,
+            generation.surface.surface_type,
+            generation.surface.physical,
+        )
         .expect("pre-validated: nodes exist (just added)");
 
-    Ok(SurfaceKeyResponse { surface_key: surface_key_to_wire(&key) })
+    Ok(SurfaceKeyResponse {
+        surface_key: surface_key_to_wire(&key),
+    })
 }
 
 #[cfg(test)]
@@ -111,7 +140,10 @@ mod tests {
     }
 
     fn flat_module() -> CornerHeightModuleDto {
-        CornerHeightModuleDto { name: "flat".into(), corner_heights: vec![1.0, 1.0, 1.0, 1.0] }
+        CornerHeightModuleDto {
+            name: "flat".into(),
+            corner_heights: vec![1.0, 1.0, 1.0, 1.0],
+        }
     }
 
     fn ids(cell: usize) -> (Vec<String>, Vec<String>) {
@@ -157,7 +189,13 @@ mod tests {
             &mut graph,
             &mut surfaces,
             None,
-            GenerateAndApplyTerrainCellRequest { cell: 0, module: flat_module(), surface_type: "terrain".into(), node_ids, edge_ids },
+            GenerateAndApplyTerrainCellRequest {
+                cell: 0,
+                module: flat_module(),
+                surface_type: "terrain".into(),
+                node_ids,
+                edge_ids,
+            },
         )
         .unwrap_err();
         assert!(error.contains("set_terrain_mesh"));
@@ -168,7 +206,12 @@ mod tests {
     fn errors_without_mutating_when_a_node_id_collides() {
         let mesh = PrismGridMesh::new(2, 2, 1, FormationInputs::default());
         let mut graph = empty_graph();
-        graph.add_node(grafting_graph_core::Node::new(NodeId::new("cell0-2").unwrap(), [0.0; 3])).unwrap();
+        graph
+            .add_node(grafting_graph_core::Node::new(
+                NodeId::new("cell0-2").unwrap(),
+                [0.0; 3],
+            ))
+            .unwrap();
         let mut surfaces = SurfaceRegistry::new();
         let (node_ids, edge_ids) = ids(0);
 
@@ -176,14 +219,25 @@ mod tests {
             &mut graph,
             &mut surfaces,
             Some(&mesh),
-            GenerateAndApplyTerrainCellRequest { cell: 0, module: flat_module(), surface_type: "terrain".into(), node_ids, edge_ids },
+            GenerateAndApplyTerrainCellRequest {
+                cell: 0,
+                module: flat_module(),
+                surface_type: "terrain".into(),
+                node_ids,
+                edge_ids,
+            },
         )
         .unwrap_err();
         assert!(error.contains("cell0-2"));
         // Nothing else was added -- the collision was caught before any commit.
         assert_eq!(graph.node_count(), 1);
         assert_eq!(graph.edge_count(), 0);
-        assert!(surfaces.surfaces_referencing(&NodeId::new("cell0-0").unwrap()).next().is_none());
+        assert!(
+            surfaces
+                .surfaces_referencing(&NodeId::new("cell0-0").unwrap())
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -192,13 +246,22 @@ mod tests {
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
         let (node_ids, edge_ids) = ids(0);
-        let bad_module = CornerHeightModuleDto { name: "bad".into(), corner_heights: vec![1.0, 1.0] };
+        let bad_module = CornerHeightModuleDto {
+            name: "bad".into(),
+            corner_heights: vec![1.0, 1.0],
+        };
 
         let error = generate_and_apply_terrain_cell(
             &mut graph,
             &mut surfaces,
             Some(&mesh),
-            GenerateAndApplyTerrainCellRequest { cell: 0, module: bad_module, surface_type: "terrain".into(), node_ids, edge_ids },
+            GenerateAndApplyTerrainCellRequest {
+                cell: 0,
+                module: bad_module,
+                surface_type: "terrain".into(),
+                node_ids,
+                edge_ids,
+            },
         )
         .unwrap_err();
         assert!(error.contains("cornerHeights"));

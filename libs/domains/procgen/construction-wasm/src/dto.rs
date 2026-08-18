@@ -17,7 +17,10 @@ pub fn surface_key_from_wire(ids: &[String]) -> Result<SurfaceKey, String> {
 /// Converts a [`SurfaceKey`] into a node-id array, in the key's own
 /// (sorted) iteration order.
 pub fn surface_key_to_wire(key: &SurfaceKey) -> Vec<String> {
-    key.nodes().iter().map(|id| id.as_str().to_owned()).collect()
+    key.nodes()
+        .iter()
+        .map(|id| id.as_str().to_owned())
+        .collect()
 }
 
 #[cfg(test)]
@@ -33,7 +36,10 @@ mod tests {
         let key = surface_key_from_wire(&["c".into(), "a".into(), "b".into()]).unwrap();
         let mut wire = surface_key_to_wire(&key);
         wire.sort();
-        assert_eq!(wire, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert_eq!(
+            wire,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
         assert_eq!(key, SurfaceKey::from_cycle(&[nid("a"), nid("b"), nid("c")]));
     }
 

@@ -69,24 +69,39 @@ fn on_segment(point: (f32, f32), a: (f32, f32), b: (f32, f32), eps: f32) -> bool
 /// "seams between different-type clouds stay connected but are not part
 /// of either cloud" rule -- crossing it is a follow-up (texture blending),
 /// not this query's job.
-pub(crate) fn connected_component(surfaces: &SurfaceRegistry, known_surfaces: &HashSet<SurfaceKey>, seed: &SurfaceKey, same_type: &SurfaceType) -> HashSet<SurfaceKey> {
+pub(crate) fn connected_component(
+    surfaces: &SurfaceRegistry,
+    known_surfaces: &HashSet<SurfaceKey>,
+    seed: &SurfaceKey,
+    same_type: &SurfaceType,
+) -> HashSet<SurfaceKey> {
     let mut visited: HashSet<SurfaceKey> = HashSet::new();
     let mut queue: VecDeque<SurfaceKey> = VecDeque::new();
 
-    let seed_matches = surfaces.surface(seed).map(|surface| surface.surface_type() == same_type).unwrap_or(false);
+    let seed_matches = surfaces
+        .surface(seed)
+        .map(|surface| surface.surface_type() == same_type)
+        .unwrap_or(false);
     if seed_matches && known_surfaces.contains(seed) {
         visited.insert(seed.clone());
         queue.push_back(seed.clone());
     }
 
     while let Some(current) = queue.pop_front() {
-        let cycle = surfaces.surface(&current).expect("every queued key was already confirmed to exist").cycle().to_vec();
+        let cycle = surfaces
+            .surface(&current)
+            .expect("every queued key was already confirmed to exist")
+            .cycle()
+            .to_vec();
         for node_id in &cycle {
             for candidate in surfaces.surfaces_referencing(node_id) {
                 if visited.contains(candidate) || !known_surfaces.contains(candidate) {
                     continue;
                 }
-                let matches = surfaces.surface(candidate).map(|surface| surface.surface_type() == same_type).unwrap_or(false);
+                let matches = surfaces
+                    .surface(candidate)
+                    .map(|surface| surface.surface_type() == same_type)
+                    .unwrap_or(false);
                 if matches {
                     visited.insert(candidate.clone());
                     queue.push_back(candidate.clone());
@@ -112,14 +127,34 @@ mod cloud_tests {
         let mut known = HashSet::new();
 
         for id in ["shared", "a2", "a3", "b2", "b3"] {
-            graph.add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3])).unwrap();
+            graph
+                .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
+                .unwrap();
         }
 
         let key_a = surfaces
-            .add_surface(&graph, vec![NodeId::new("shared").unwrap(), NodeId::new("a2").unwrap(), NodeId::new("a3").unwrap()], SurfaceType::new("terrain"), true)
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("shared").unwrap(),
+                    NodeId::new("a2").unwrap(),
+                    NodeId::new("a3").unwrap(),
+                ],
+                SurfaceType::new("terrain"),
+                true,
+            )
             .unwrap();
         let key_b = surfaces
-            .add_surface(&graph, vec![NodeId::new("shared").unwrap(), NodeId::new("b2").unwrap(), NodeId::new("b3").unwrap()], SurfaceType::new("terrain"), true)
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("shared").unwrap(),
+                    NodeId::new("b2").unwrap(),
+                    NodeId::new("b3").unwrap(),
+                ],
+                SurfaceType::new("terrain"),
+                true,
+            )
             .unwrap();
         known.insert(key_a.clone());
         known.insert(key_b.clone());
@@ -136,14 +171,34 @@ mod cloud_tests {
         let mut known = HashSet::new();
 
         for id in ["shared", "a2", "a3", "b2", "b3"] {
-            graph.add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3])).unwrap();
+            graph
+                .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
+                .unwrap();
         }
 
         let key_a = surfaces
-            .add_surface(&graph, vec![NodeId::new("shared").unwrap(), NodeId::new("a2").unwrap(), NodeId::new("a3").unwrap()], SurfaceType::new("terrain"), true)
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("shared").unwrap(),
+                    NodeId::new("a2").unwrap(),
+                    NodeId::new("a3").unwrap(),
+                ],
+                SurfaceType::new("terrain"),
+                true,
+            )
             .unwrap();
         let key_b = surfaces
-            .add_surface(&graph, vec![NodeId::new("shared").unwrap(), NodeId::new("b2").unwrap(), NodeId::new("b3").unwrap()], SurfaceType::new("path"), true)
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("shared").unwrap(),
+                    NodeId::new("b2").unwrap(),
+                    NodeId::new("b3").unwrap(),
+                ],
+                SurfaceType::new("path"),
+                true,
+            )
             .unwrap();
         known.insert(key_a.clone());
         known.insert(key_b.clone());
@@ -158,11 +213,25 @@ mod cloud_tests {
         let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let mut surfaces = SurfaceRegistry::new();
         for id in ["a", "b", "c"] {
-            graph.add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3])).unwrap();
+            graph
+                .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
+                .unwrap();
         }
-        let key = surfaces.add_surface(&graph, vec![NodeId::new("a").unwrap(), NodeId::new("b").unwrap(), NodeId::new("c").unwrap()], SurfaceType::new("wall"), true).unwrap();
+        let key = surfaces
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                ],
+                SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
-        let cloud = connected_component(&surfaces, &HashSet::new(), &key, &SurfaceType::new("wall"));
+        let cloud =
+            connected_component(&surfaces, &HashSet::new(), &key, &SurfaceType::new("wall"));
         assert!(cloud.is_empty());
     }
 }

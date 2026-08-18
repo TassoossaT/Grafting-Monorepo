@@ -34,7 +34,11 @@ pub struct SurfaceMeshRequest {
 /// removed from the graph without the surface being cleaned up, or the
 /// cycle is currently degenerate (e.g. mid-edit) -- all transient/absent
 /// states, not errors, matching `triangulate_surface`'s own `None` cases.
-fn mesh_dto_for(graph: &SessionGraph, surfaces: &SurfaceRegistry, key: &SurfaceKey) -> Option<SurfaceMeshDto> {
+fn mesh_dto_for(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    key: &SurfaceKey,
+) -> Option<SurfaceMeshDto> {
     let surface = surfaces.surface(key)?;
     let positions: Vec<[f32; 3]> = surface
         .cycle()
@@ -63,15 +67,22 @@ pub fn all_surface_meshes(
 ) -> Vec<SurfaceMeshDto> {
     let mut keys: Vec<&SurfaceKey> = known_surfaces.iter().collect();
     keys.sort();
-    keys.into_iter().filter_map(|key| mesh_dto_for(graph, surfaces, key)).collect()
+    keys.into_iter()
+        .filter_map(|key| mesh_dto_for(graph, surfaces, key))
+        .collect()
 }
 
 /// One surface's mesh, by key -- what a caller re-fetches for each entry in
 /// an operation's `affectedSurfaceKeys` after a mutation, instead of
 /// re-fetching everything via [`all_surface_meshes`].
-pub fn surface_mesh(graph: &SessionGraph, surfaces: &SurfaceRegistry, request: SurfaceMeshRequest) -> Result<SurfaceMeshDto, String> {
+pub fn surface_mesh(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    request: SurfaceMeshRequest,
+) -> Result<SurfaceMeshDto, String> {
     let key = crate::dto::surface_key_from_wire(&request.surface_key)?;
-    mesh_dto_for(graph, surfaces, &key).ok_or_else(|| format!("no mesh derivable for surface {key:?}"))
+    mesh_dto_for(graph, surfaces, &key)
+        .ok_or_else(|| format!("no mesh derivable for surface {key:?}"))
 }
 
 #[cfg(test)]
@@ -88,10 +99,30 @@ mod tests {
                 Node::new(NodeId::new("d").unwrap(), [0.0, 1.0, 0.0]),
             ],
             vec![
-                Edge::new(EdgeId::new("ab").unwrap(), NodeId::new("a").unwrap(), NodeId::new("b").unwrap(), ()),
-                Edge::new(EdgeId::new("bc").unwrap(), NodeId::new("b").unwrap(), NodeId::new("c").unwrap(), ()),
-                Edge::new(EdgeId::new("cd").unwrap(), NodeId::new("c").unwrap(), NodeId::new("d").unwrap(), ()),
-                Edge::new(EdgeId::new("da").unwrap(), NodeId::new("d").unwrap(), NodeId::new("a").unwrap(), ()),
+                Edge::new(
+                    EdgeId::new("ab").unwrap(),
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("bc").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("cd").unwrap(),
+                    NodeId::new("c").unwrap(),
+                    NodeId::new("d").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("da").unwrap(),
+                    NodeId::new("d").unwrap(),
+                    NodeId::new("a").unwrap(),
+                    (),
+                ),
             ],
         )
         .unwrap();
@@ -99,7 +130,12 @@ mod tests {
         let key = surfaces
             .add_surface(
                 &graph,
-                vec![NodeId::new("a").unwrap(), NodeId::new("b").unwrap(), NodeId::new("c").unwrap(), NodeId::new("d").unwrap()],
+                vec![
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                    NodeId::new("d").unwrap(),
+                ],
                 SurfaceType::new("floor"),
                 true,
             )
@@ -111,7 +147,14 @@ mod tests {
     #[test]
     fn surface_mesh_triangulates_a_registered_quad() {
         let (graph, surfaces, key) = quad_session();
-        let dto = surface_mesh(&graph, &surfaces, SurfaceMeshRequest { surface_key: surface_key_to_wire(&key) }).unwrap();
+        let dto = surface_mesh(
+            &graph,
+            &surfaces,
+            SurfaceMeshRequest {
+                surface_key: surface_key_to_wire(&key),
+            },
+        )
+        .unwrap();
         assert_eq!(dto.surface_type, "floor");
         assert!(dto.physical);
         assert_eq!(dto.positions.len(), 12, "4 vertices * 3 components");
@@ -121,8 +164,18 @@ mod tests {
     #[test]
     fn surface_mesh_rejects_an_unregistered_key() {
         let (graph, surfaces, _key) = quad_session();
-        let error = surface_mesh(&graph, &surfaces, SurfaceMeshRequest { surface_key: vec!["missing".into()] }).unwrap_err();
-        assert!(error.contains("no mesh derivable"), "unexpected error: {error}");
+        let error = surface_mesh(
+            &graph,
+            &surfaces,
+            SurfaceMeshRequest {
+                surface_key: vec!["missing".into()],
+            },
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("no mesh derivable"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
@@ -142,6 +195,10 @@ mod tests {
         known.insert(key);
         known.insert(SurfaceKey::from_cycle(&[NodeId::new("gone").unwrap()]));
         let meshes = all_surface_meshes(&graph, &surfaces, &known);
-        assert_eq!(meshes.len(), 1, "the stale/unknown key is skipped, not an error");
+        assert_eq!(
+            meshes.len(),
+            1,
+            "the stale/unknown key is skipped, not an error"
+        );
     }
 }

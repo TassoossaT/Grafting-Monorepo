@@ -48,7 +48,10 @@ pub fn diff_and_apply(
     all_pieces: Vec<StructurePiece>,
     node_in_scope: impl Fn(&Node<[f32; 3]>) -> bool,
 ) -> Result<DiffOutcome, String> {
-    let new_keys: HashSet<SurfaceKey> = all_pieces.iter().map(|piece| SurfaceKey::from_cycle(&piece.surface.cycle)).collect();
+    let new_keys: HashSet<SurfaceKey> = all_pieces
+        .iter()
+        .map(|piece| SurfaceKey::from_cycle(&piece.surface.cycle))
+        .collect();
 
     let to_remove: Vec<SurfaceKey> = old_keys_in_scope.difference(&new_keys).cloned().collect();
     // A generator can legitimately emit the same cycle twice in one call
@@ -68,7 +71,9 @@ pub fn diff_and_apply(
 
     let mut removed_surface_keys = Vec::with_capacity(to_remove.len());
     for key in &to_remove {
-        surfaces.remove_surface(key).map_err(|error| error.to_string())?;
+        surfaces
+            .remove_surface(key)
+            .map_err(|error| error.to_string())?;
         removed_surface_keys.push(surface_key_to_wire(key));
     }
 
@@ -80,29 +85,46 @@ pub fn diff_and_apply(
     let mut unique_edges: HashMap<EdgeId, Edge<()>> = HashMap::new();
     for piece in &to_add {
         for node in &piece.nodes {
-            unique_nodes.entry(node.id().clone()).or_insert_with(|| node.clone());
+            unique_nodes
+                .entry(node.id().clone())
+                .or_insert_with(|| node.clone());
         }
         for edge in &piece.edges {
-            unique_edges.entry(edge.id().clone()).or_insert_with(|| edge.clone());
+            unique_edges
+                .entry(edge.id().clone())
+                .or_insert_with(|| edge.clone());
         }
     }
     for (id, node) in &unique_nodes {
         if graph.node(id).is_none() {
-            graph.add_node(node.clone()).map_err(|error| error.to_string())?;
+            graph
+                .add_node(node.clone())
+                .map_err(|error| error.to_string())?;
         }
     }
     for (id, edge) in &unique_edges {
         if graph.edge(id).is_none() {
-            graph.add_edge(edge.clone()).map_err(|error| error.to_string())?;
+            graph
+                .add_edge(edge.clone())
+                .map_err(|error| error.to_string())?;
         }
     }
 
     let mut added_surface_keys = Vec::with_capacity(to_add.len());
     for piece in to_add {
         let curvature = piece.surface.curvature;
-        let key = surfaces.add_surface(graph, piece.surface.cycle, piece.surface.surface_type, piece.surface.physical).map_err(|error| error.to_string())?;
+        let key = surfaces
+            .add_surface(
+                graph,
+                piece.surface.cycle,
+                piece.surface.surface_type,
+                piece.surface.physical,
+            )
+            .map_err(|error| error.to_string())?;
         if curvature.is_some() {
-            surfaces.set_curvature(&key, curvature).map_err(|error| error.to_string())?;
+            surfaces
+                .set_curvature(&key, curvature)
+                .map_err(|error| error.to_string())?;
         }
         added_surface_keys.push(surface_key_to_wire(&key));
     }
@@ -111,7 +133,12 @@ pub fn diff_and_apply(
     // that no surface references anymore (a removed run's own private
     // jamb/facet nodes, most commonly) is deleted.
     let snapshot = graph.snapshot();
-    let scoped_node_ids: Vec<NodeId> = snapshot.nodes().iter().filter(|node| node_in_scope(node)).map(|node| node.id().clone()).collect();
+    let scoped_node_ids: Vec<NodeId> = snapshot
+        .nodes()
+        .iter()
+        .filter(|node| node_in_scope(node))
+        .map(|node| node.id().clone())
+        .collect();
     let mut removed_node_ids = Vec::new();
     for id in &scoped_node_ids {
         if surfaces.surfaces_referencing(id).next().is_none() {
@@ -120,7 +147,11 @@ pub fn diff_and_apply(
         }
     }
 
-    Ok(DiffOutcome { added_surface_keys, removed_surface_keys, removed_node_ids })
+    Ok(DiffOutcome {
+        added_surface_keys,
+        removed_surface_keys,
+        removed_node_ids,
+    })
 }
 
 #[cfg(test)]
@@ -129,16 +160,37 @@ mod tests {
     use grafting_graph_core::{Graph, NodeId, SurfaceSpec, SurfaceType};
 
     fn quad_piece(prefix: &str) -> StructurePiece {
-        let ids: Vec<NodeId> = ["a", "b", "c", "d"].iter().map(|suffix| NodeId::new(format!("{prefix}:{suffix}")).unwrap()).collect();
-        let positions: [[f32; 3]; 4] = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0]];
-        let nodes: Vec<Node<[f32; 3]>> = ids.iter().zip(positions).map(|(id, position)| Node::new(id.clone(), position)).collect();
+        let ids: Vec<NodeId> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|suffix| NodeId::new(format!("{prefix}:{suffix}")).unwrap())
+            .collect();
+        let positions: [[f32; 3]; 4] = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let nodes: Vec<Node<[f32; 3]>> = ids
+            .iter()
+            .zip(positions)
+            .map(|(id, position)| Node::new(id.clone(), position))
+            .collect();
         let edges: Vec<Edge<()>> = (0..4)
             .map(|index| {
                 let id = EdgeId::new(format!("{prefix}:edge{index}")).unwrap();
                 Edge::new(id, ids[index].clone(), ids[(index + 1) % 4].clone(), ())
             })
             .collect();
-        StructurePiece { nodes, edges, surface: SurfaceSpec { cycle: ids, surface_type: SurfaceType::new("wall"), physical: true, curvature: None } }
+        StructurePiece {
+            nodes,
+            edges,
+            surface: SurfaceSpec {
+                cycle: ids,
+                surface_type: SurfaceType::new("wall"),
+                physical: true,
+                curvature: None,
+            },
+        }
     }
 
     #[test]
@@ -150,7 +202,18 @@ mod tests {
         // -- same node-derived ids twice, not two distinct surfaces.
         let all_pieces = vec![quad_piece("wall"), quad_piece("wall")];
 
-        let outcome = diff_and_apply(&mut graph, &mut surfaces, &HashSet::new(), all_pieces, |_| true).unwrap();
-        assert_eq!(outcome.added_surface_keys.len(), 1, "the duplicate cycle must be added exactly once, not rejected as already existing");
+        let outcome = diff_and_apply(
+            &mut graph,
+            &mut surfaces,
+            &HashSet::new(),
+            all_pieces,
+            |_| true,
+        )
+        .unwrap();
+        assert_eq!(
+            outcome.added_surface_keys.len(),
+            1,
+            "the duplicate cycle must be added exactly once, not rejected as already existing"
+        );
     }
 }
