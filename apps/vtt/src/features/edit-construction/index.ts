@@ -21,6 +21,7 @@ export type {
   ConstructionToolId,
   InteriorGenerateParams,
   IrregularTerrainParams,
+  PathBrushParams,
   NoToolParams,
   PreviewDescriptor,
   TerrainBrushParams,

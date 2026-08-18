@@ -45,6 +45,7 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 }
 
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
+  "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "move-node": "Arrastar Node 3D",
   "terrain-brush": "Pincel de Terreno",

@@ -135,9 +135,11 @@ export function ConstructionDock(props: ConstructionDockProps) {
     {
       key: "paths",
       label: "Caminhos",
-      icon: "🛤️",
-      tooltip: "Caminhos e Arcos em Muros",
-      disabled: true,
+      icon: "⌁",
+      tooltip: "Pincel de Caminhos",
+      active: activeTool === "path-brush",
+      disabled: !ready,
+      onClick: () => onToolChange("path-brush"),
     },
     {
       key: "terrain",

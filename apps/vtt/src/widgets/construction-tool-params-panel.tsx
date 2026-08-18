@@ -5,6 +5,7 @@ import type {
   ConstructionToolId,
   InteriorGenerateParams,
   IrregularTerrainParams,
+  PathBrushParams,
   TerrainBrushParams,
   ToolParamsByTool,
   TowerStampParams,
@@ -37,6 +38,13 @@ function sliderRow(label: string, value: number, min: number, max: number, step:
   );
 }
 
+function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
+  const { params, onChange } = props;
+  return <div style={{ display: "grid", gap: "0.6rem" }}>
+    {sliderRow("Raio", params.radius, 0.1, 0.45, 0.05, (radius) => onChange({ ...params, radius }))}
+    {sliderRow("Profundidade", params.depth, 0.05, 0.4, 0.05, (depth) => onChange({ ...params, depth }))}
+  </div>;
+}
 function TerrainBrushFields(props: {
   readonly params: TerrainBrushParams;
   readonly onChange: (next: TerrainBrushParams) => void;
@@ -198,6 +206,7 @@ function IrregularTerrainFields(props: {
 }
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
+  "path-brush": "Parâmetros: Caminho",
   "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
@@ -233,7 +242,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     key: activeTool,
     header: label,
     content:
-      activeTool === "terrain-brush" ? (
+      activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "terrain-brush" ? (
         <TerrainBrushFields
           params={params["terrain-brush"]}
           onChange={(next) => onParamsChange("terrain-brush", next)}

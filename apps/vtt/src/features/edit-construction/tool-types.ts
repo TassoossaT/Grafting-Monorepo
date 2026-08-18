@@ -9,6 +9,7 @@
 export type ConstructionToolId =
   | "navigate"
   | "move-node"
+  | "path-brush"
   | "terrain-brush"
   | "wall-brush"
   | "wall-line"
@@ -16,6 +17,11 @@ export type ConstructionToolId =
   | "tower-stamp"
   | "house-room-delete"
   | "irregular-terrain-stamp";
+
+export interface PathBrushParams {
+  readonly radius: number;
+  readonly depth: number;
+}
 
 export interface TerrainBrushParams {
   /** World-space brush radius -- how far one stroke sample reaches. */
@@ -101,6 +107,7 @@ export type NoToolParams = Record<string, never>;
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
   readonly "move-node": NoToolParams;
+  readonly "path-brush": PathBrushParams;
   readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
@@ -115,6 +122,7 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
+  "path-brush": Object.freeze({ radius: 0.25, depth: 0.1 }),
   "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
