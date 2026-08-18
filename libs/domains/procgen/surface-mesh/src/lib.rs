@@ -14,8 +14,10 @@
 //! A curved `Surface` (see [`grafting_graph_core::SurfaceCurvature`]) keeps
 //! exactly 4 graph-cycle corners, the same as a straight one -- the actual
 //! arc only exists here, tessellated into a strip of quads right before
-//! triangulation, never persisted back onto the graph. This is the one
-//! place `SurfaceCurvature`'s `facets` is ever read.
+//! triangulation, never persisted back onto the graph. Tessellation
+//! resolution is this crate's own fixed [`ARC_TESSELLATION_TOLERANCE`], not
+//! a value a caller supplies or the graph stores -- controlling render
+//! resolution is a rendering concern, not a construction-time one.
 //!
 //! That strip is built directly (a triangle per half of each tessellated
 //! quad segment), **not** by flattening the curve into one many-point ring
@@ -29,6 +31,13 @@
 use earcut::{utils3d, Earcut};
 
 use grafting_graph_core::{ArcBulge, SurfaceCurvature};
+
+/// Maximum deviation, in world units, between a tessellated arc's chords and
+/// the true circle they approximate -- see this module's own top-level doc
+/// for why this is a fixed constant here rather than a caller-supplied
+/// value: nothing upstream of rendering has a legitimate reason to care
+/// about tessellation resolution.
+const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
 
 /// A triangulated mesh derived from one surface's node cycle. Vertices stay
 /// in the caller-supplied cycle order (no Steiner points are introduced for
@@ -46,7 +55,7 @@ pub struct TriangulatedMesh {
 /// current graph positions. When `curvature` is given and `positions` is
 /// exactly the 4-corner shape [`crate`]'s own doc describes (bottom start,
 /// bottom end, top end, top start), the two curved edges are tessellated
-/// into a many-point ring first, per `curvature.facets`. Returns `None` for
+/// into a many-point ring first, at [`ARC_TESSELLATION_TOLERANCE`]. Returns `None` for
 /// fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
 /// are states a caller may see transiently mid-edit, not error conditions
 /// to propagate.
@@ -87,15 +96,13 @@ pub fn triangulate_surface(positions: &[[f32; 3]], curvature: Option<SurfaceCurv
 /// facet between consecutive pairs. Each triangle's own normal is the real
 /// cross product of its own edges (not an idealized "radially outward"
 /// formula), so it stays correct regardless of which way `curvature.bulge`
-/// faces. `None` only if `curvature.facets` is degenerate enough that
-/// [`tessellate_arc`] returns fewer than 2 points (already rejected
-/// upstream by `extrude_path`'s own `arc_facets >= 2` check, so this is
-/// unreachable through the normal generation path, not a state a caller
-/// needs to handle specially).
+/// faces. `None` only if [`tessellate_arc`] returns fewer than 2 points --
+/// unreachable in practice, since [`ARC_TESSELLATION_TOLERANCE`] always
+/// yields at least a 2-point (start, end) polyline.
 fn triangulate_curved_quad(positions: &[[f32; 3]], curvature: SurfaceCurvature) -> Option<TriangulatedMesh> {
     let (bottom_start, bottom_end, top_end, top_start) = (positions[0], positions[1], positions[2], positions[3]);
 
-    let bottom_arc = tessellate_arc(bottom_start, bottom_end, curvature.center, curvature.bulge, curvature.facets);
+    let bottom_arc = tessellate_arc(bottom_start, bottom_end, curvature.center, curvature.bulge, ARC_TESSELLATION_TOLERANCE);
     let mut top_arc: Vec<[f32; 3]> = bottom_arc.iter().map(|point| [point[0], top_end[1], point[2]]).collect();
     if let Some(first) = top_arc.first_mut() {
         *first = top_start;
@@ -142,12 +149,15 @@ fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
     [vector[0] / length, vector[1] / length, vector[2] / length]
 }
 
-/// Tessellates one circular-arc edge into the `facets + 1` points of its own
-/// polyline, `start` to `end` in order, around `center` (in the same XZ
-/// plane as `start`/`end`). The first and last points are forced to the
-/// exact input `start`/`end` (not just approximately equal after the trig
-/// round-trip), so a tessellated arc's own endpoints weld byte-identically
-/// with whatever straight edge or other arc shares that same corner.
+/// Tessellates one circular-arc edge into a polyline, `start` to `end` in
+/// order, around `center` (in the same XZ plane as `start`/`end`). The
+/// facet count is derived from `tolerance` (the maximum allowed deviation,
+/// in world units, between a chord and the true circle) rather than being a
+/// caller-chosen input -- see this module's own top-level doc. The first
+/// and last points are forced to the exact input `start`/`end` (not just
+/// approximately equal after the trig round-trip), so a tessellated arc's
+/// own endpoints weld byte-identically with whatever straight edge or other
+/// arc shares that same corner.
 ///
 /// General to any circular arc, not only a semicircle: the arc's own swept
 /// angle is not a separate stored input (matching
@@ -156,13 +166,13 @@ fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
 /// recovered from `center`'s own offset off the chord, via the same
 /// apothem relationship `grafting_procgen_structure_generation::extrusion`'s
 /// own `arc_center` uses to place `center` in the first place.
-fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBulge, facets: usize) -> Vec<[f32; 3]> {
+fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBulge, tolerance: f32) -> Vec<[f32; 3]> {
     let y = start[1];
     let (sx, sz) = (start[0], start[2]);
     let (ex, ez) = (end[0], end[2]);
     let (mx, mz) = (center[0], center[1]);
     let chord_length = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt();
-    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2)).sqrt();
+    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2)).sqrt().max(f32::EPSILON);
     let (ux, uz) = ((ex - sx) / chord_length, (ez - sz) / chord_length);
     let (nx, nz) = (-uz, ux);
     let sign: f32 = match bulge {
@@ -173,6 +183,13 @@ fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBu
     let (midx, midz) = ((sx + ex) / 2.0, (sz + ez) / 2.0);
     let apothem = -sign * ((mx - midx) * nx + (mz - midz) * nz);
     let included_angle = 2.0 * (chord_length / 2.0).atan2(apothem);
+
+    // Max angular step such that a chord's own sagitta stays under `tolerance`.
+    let clamped_tolerance = tolerance.max(f32::EPSILON).min(radius);
+    let max_step = 2.0 * (1.0 - clamped_tolerance / radius).clamp(-1.0, 1.0).acos();
+    let facets = (included_angle.abs() / max_step.max(f32::EPSILON))
+        .ceil()
+        .max(1.0) as usize;
 
     let mut points: Vec<[f32; 3]> = Vec::with_capacity(facets + 1);
     for step in 0..=facets {
@@ -296,16 +313,18 @@ mod tests {
         // Same 4-corner shape `extrusion.rs::quad_piece` mints for a
         // semicircle edge: bottom start, bottom end, top end, top start.
         let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left, facets: 6 };
+        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
-        // 6 facets -> 7 bottom/top pairs -> 14 positions total, interleaved bottom then top per pair.
-        assert_eq!(mesh.positions.len(), 14);
+        // Interleaved bottom/top pairs -- always an even position count, at
+        // least the 2 pairs (4 points) a degenerate single-segment strip needs.
+        assert!(mesh.positions.len() >= 4 && mesh.positions.len() % 2 == 0);
+        let last = mesh.positions.len();
         assert_eq!(mesh.positions[0], [0.0, 0.0, 0.0], "first pair's bottom is the edge's own start");
         assert_eq!(mesh.positions[1], [0.0, 3.0, 0.0], "first pair's top is directly above the start");
-        assert_eq!(mesh.positions[12], [4.0, 0.0, 0.0], "last pair's bottom is the edge's own end");
-        assert_eq!(mesh.positions[13], [4.0, 3.0, 0.0], "last pair's top is directly above the end");
-        // 6 facets -> 6 quad segments -> 12 triangles -> 36 indices, none out of range.
-        assert_eq!(mesh.indices.len(), 36);
+        assert_eq!(mesh.positions[last - 2], [4.0, 0.0, 0.0], "last pair's bottom is the edge's own end");
+        assert_eq!(mesh.positions[last - 1], [4.0, 3.0, 0.0], "last pair's top is directly above the end");
+        // Two triangles (6 indices) per quad segment between consecutive pairs.
+        assert_eq!(mesh.indices.len(), (last / 2 - 1) * 6);
         for index in &mesh.indices {
             assert!((*index as usize) < mesh.positions.len());
         }
@@ -328,14 +347,15 @@ mod tests {
         let bottom = [2.0, 0.0, 0.0];
         let end = [-1.0, 0.0, 1.7320508];
         let corners = [bottom, end, [end[0], 3.0, end[2]], [bottom[0], 3.0, bottom[2]]];
-        let curvature = SurfaceCurvature { center: [0.0, 0.0], bulge: ArcBulge::Right, facets: 12 };
+        let curvature = SurfaceCurvature { center: [0.0, 0.0], bulge: ArcBulge::Right };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
 
-        // The midpoint pair (facets=12 -> index 6 of 0..=12) must sit on the
-        // true circle: distance 2 from the origin, not from the chord.
-        let midpoint_bottom = mesh.positions[6 * 2];
-        let distance_from_center = (midpoint_bottom[0].powi(2) + midpoint_bottom[2].powi(2)).sqrt();
-        assert!((distance_from_center - 2.0).abs() < 1e-3, "expected the true circle's own radius (2.0), got {distance_from_center}");
+        // Every bottom point (even indices) must sit on the true circle:
+        // distance 2 from the origin, not from the chord.
+        for bottom in mesh.positions.iter().step_by(2) {
+            let distance_from_center = (bottom[0].powi(2) + bottom[2].powi(2)).sqrt();
+            assert!((distance_from_center - 2.0).abs() < 1e-3, "expected the true circle's own radius (2.0), got {distance_from_center}");
+        }
 
         for triangle in mesh.indices.chunks_exact(3) {
             let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
@@ -352,7 +372,7 @@ mod tests {
     #[test]
     fn every_triangle_in_a_curved_strip_has_nonzero_area() {
         let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left, facets: 16 };
+        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
         for triangle in mesh.indices.chunks_exact(3) {
             let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
@@ -367,7 +387,7 @@ mod tests {
     #[test]
     fn curvature_is_ignored_when_positions_are_not_a_four_corner_quad() {
         let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [0.5, 0.0], bulge: ArcBulge::Left, facets: 4 };
+        let curvature = SurfaceCurvature { center: [0.5, 0.0], bulge: ArcBulge::Left };
         let mesh = triangulate_surface(&triangle, Some(curvature)).expect("valid triangle");
         assert_eq!(mesh.positions, triangle, "curvature only applies to the 4-corner quad shape a curved edge mints");
     }

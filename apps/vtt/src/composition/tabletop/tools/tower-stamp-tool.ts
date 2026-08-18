@@ -7,8 +7,6 @@ import { WALL_COLOR, WALL_HEIGHT, idPrefixFor } from "./wall-shared.ts";
 
 /** How many straight chords the *preview* ghost's circle outline uses -- a rendering-only approximation, never fed to the engine (the committed geometry is 4 true circular arcs, not a facetted polygon). */
 const PREVIEW_SEGMENTS = 24;
-/** How many straight chords each committed quarter-arc edge tessellates into -- see `extrusion.rs`'s own doc on why the edge itself stays exactly one `Surface` regardless of this. 4 arcs * 8 facets keeps roughly the same total resolution the old 2-semicircle design's 2*16 had. */
-const ARC_FACETS = 8;
 
 /**
  * One click stamps a closed circular wall footprint at a known radius (one
@@ -43,7 +41,6 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
       {
         edges,
         height: WALL_HEIGHT,
-        arcFacets: ARC_FACETS,
         idPrefix: idPrefixFor(ctx),
         surfaceType: params.wallType,
       },

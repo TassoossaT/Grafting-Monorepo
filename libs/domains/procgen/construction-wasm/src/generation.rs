@@ -93,9 +93,6 @@ pub struct GenerateAndApplyPathExtrusionRequest {
     /// other `generate_and_apply_*` request in this crate.
     pub edges: Vec<PathEdgeDto>,
     pub height: f32,
-    /// How many straight chords approximate one `arcLeft`/`arcRight` edge.
-    /// Ignored if every edge is `straight`.
-    pub arc_facets: usize,
     /// Namespaces every id this call derives -- must stay the same fixed
     /// value across every tick of one structure, and must vary per
     /// floor/level sharing a footprint. See
@@ -141,9 +138,9 @@ fn bounding_box_scope(pieces: &[StructurePiece]) -> impl Fn(&[f32; 3]) -> bool +
 /// Regenerates a path's whole panel geometry and diffs it against whatever
 /// this same structure already holds, applying only the difference.
 /// Errors, leaving nothing changed, if `edges` is empty or the path itself
-/// is invalid (discontinuous, degenerate, inconsistent baseline, too few
-/// `arcFacets` for a curved edge, or a notch on anything but a single
-/// straight edge) -- see `extrude_path`'s own errors.
+/// is invalid (discontinuous, degenerate, inconsistent baseline, or a notch
+/// on anything but a single straight edge) -- see `extrude_path`'s own
+/// errors.
 pub fn generate_and_apply_path_extrusion(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
@@ -176,7 +173,6 @@ pub fn generate_and_apply_path_extrusion(
         &edges,
         request.height,
         notch.as_ref(),
-        request.arc_facets,
         &request.id_prefix,
         SurfaceType::new(request.surface_type),
     )
@@ -417,7 +413,6 @@ pub fn generate_and_apply_region_partition(
             &[edge],
             request.wall_height,
             notch.as_ref(),
-            1,
             &request.id_prefix,
             wall_type.clone(),
         )
@@ -531,7 +526,6 @@ mod tests {
                 arc_edge(south, east, "arcRight", quarter),
             ],
             height: 3.0,
-            arc_facets: 8,
             id_prefix: "tower-1".into(),
             surface_type: "wall".into(),
             notch: None,
@@ -570,7 +564,6 @@ mod tests {
         let request = GenerateAndApplyPathExtrusionRequest {
             edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
             height: 3.0,
-            arc_facets: 6,
             id_prefix: "path-1".into(),
             surface_type: "wall".into(),
             notch: None,
@@ -587,7 +580,6 @@ mod tests {
         let request = || GenerateAndApplyPathExtrusionRequest {
             edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
             height: 3.0,
-            arc_facets: 6,
             id_prefix: "path-1".into(),
             surface_type: "wall".into(),
             notch: None,
@@ -614,7 +606,6 @@ mod tests {
         let request = GenerateAndApplyPathExtrusionRequest {
             edges: square,
             height: 3.0,
-            arc_facets: 6,
             id_prefix: "loop-1".into(),
             surface_type: "wall".into(),
             notch: None,
@@ -634,7 +625,6 @@ mod tests {
         let request = GenerateAndApplyPathExtrusionRequest {
             edges: vec![],
             height: 3.0,
-            arc_facets: 6,
             id_prefix: "path-1".into(),
             surface_type: "wall".into(),
             notch: None,

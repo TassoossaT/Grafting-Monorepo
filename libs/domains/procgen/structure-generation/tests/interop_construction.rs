@@ -28,7 +28,7 @@ fn wall_edge() -> [PathEdge; 1] {
 #[test]
 fn a_door_and_its_adjoining_wall_remainder_can_be_merged() {
     let notch = EdgeNotch { starts_at: 0.5, ends_at: 1.0, surface_type: SurfaceType::new("door") };
-    let pieces = extrude_path(&wall_edge(), 3.0, Some(&notch), 8, "interop-1", SurfaceType::new("wall")).unwrap();
+    let pieces = extrude_path(&wall_edge(), 3.0, Some(&notch), "interop-1", SurfaceType::new("wall")).unwrap();
     assert_eq!(pieces.len(), 2);
 
     let mut graph = Graph::try_from_parts(vec![], vec![]).unwrap();
@@ -69,7 +69,7 @@ fn a_door_and_its_adjoining_wall_remainder_can_be_merged() {
 #[test]
 fn moving_a_shared_jamb_node_reports_both_sibling_surfaces_affected() {
     let notch = EdgeNotch { starts_at: 0.25, ends_at: 0.75, surface_type: SurfaceType::new("door") };
-    let pieces = extrude_path(&wall_edge(), 3.0, Some(&notch), 8, "interop-2", SurfaceType::new("wall")).unwrap();
+    let pieces = extrude_path(&wall_edge(), 3.0, Some(&notch), "interop-2", SurfaceType::new("wall")).unwrap();
     assert_eq!(pieces.len(), 3);
 
     let jamb = pieces[0].nodes[1].id().clone();
@@ -89,7 +89,7 @@ fn moving_a_shared_jamb_node_reports_both_sibling_surfaces_affected() {
 
 #[test]
 fn deleting_a_non_shared_corner_leaves_an_accepted_hole() {
-    let pieces = extrude_path(&wall_edge(), 3.0, None, 8, "interop-3", SurfaceType::new("wall")).unwrap();
+    let pieces = extrude_path(&wall_edge(), 3.0, None, "interop-3", SurfaceType::new("wall")).unwrap();
     assert_eq!(pieces.len(), 1);
 
     let corner = pieces[0].nodes[0].id().clone();

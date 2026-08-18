@@ -162,8 +162,6 @@ export interface EdgeNotchSpec {
 export interface GeneratePathExtrusionRequest {
   readonly edges: readonly PathEdgeSpec[];
   readonly height: number;
-  /** How many straight chords approximate one arc edge. Ignored if every edge is straight. */
-  readonly arcFacets: number;
   /**
    * Namespaces every id this call derives. Must stay the SAME fixed value
    * across every tick of one structure, and across separate strokes

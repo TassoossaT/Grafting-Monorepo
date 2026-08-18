@@ -611,7 +611,6 @@ mod tests {
         let request = json!({
             "edges": [{"start": [2.0, 0.0, 0.0], "end": [2.0, 0.0, 4.0], "curvature": "straight"}],
             "height": 3.0,
-            "arcFacets": 6,
             "idPrefix": "z-wall-1",
             "surfaceType": "wall",
             "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
@@ -644,7 +643,6 @@ mod tests {
         let request = json!({
             "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
             "height": 3.0,
-            "arcFacets": 6,
             "idPrefix": "no-notch-1",
             "surfaceType": "wall",
         })
@@ -811,7 +809,6 @@ mod tests {
         let request = json!({
             "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
             "height": 3.0,
-            "arcFacets": 6,
             "idPrefix": "notched-1",
             "surfaceType": "wall",
             "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},

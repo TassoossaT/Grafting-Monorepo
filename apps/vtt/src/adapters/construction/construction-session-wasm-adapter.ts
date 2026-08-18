@@ -250,7 +250,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
         includedAngle: edge.includedAngle,
       })),
       height: request.height,
-      arcFacets: request.arcFacets,
       idPrefix: request.idPrefix,
       surfaceType: request.surfaceType,
       notch: request.notch,

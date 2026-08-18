@@ -61,7 +61,6 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
       {
         edges: [{ start: anchor, end, curvature: "straight" }],
         height: WALL_HEIGHT,
-        arcFacets: 1,
         idPrefix: idPrefixFor(ctx),
         surfaceType: params.wallType,
       },
