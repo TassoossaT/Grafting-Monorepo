@@ -16,6 +16,22 @@ alone can never supply.
 Structural error from a domain-level construction operation -- either
 the graph mutation or the surface bookkeeping it coordinates can fail.
 
+### `pub enum grafting_graph_core::ContourError`
+
+Structural error from contour edge or region registration.
+
+### `pub enum grafting_graph_core::ContourGeometry`
+
+An edge's explicit geometry between its two declared nodes.
+
+Deliberately closed to exactly these two kinds for now (line and true
+circular arc) -- Bezier and other curve families are a future extension,
+not implemented here; see this module's own doc for scope.
+
+### `pub enum grafting_graph_core::ContourIdentifierError`
+
+Failure to construct a stable contour identifier.
+
 ### `pub enum grafting_graph_core::GraphError`
 
 Structural or algorithm error returned through the Grafting graph contract.
@@ -44,6 +60,114 @@ result: callers must leave the confirmed graph and surface registry intact.
 ### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self`
 
 ### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self`
+
+### `pub fn grafting_graph_core::ContourEdge::bounds(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> grafting_graph_core::ContourBounds`
+
+Axis-aligned bounding box between `from` and `to`.
+
+### `pub fn grafting_graph_core::ContourEdge::closest_point(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, point: grafting_graph_core::ContourPoint) -> (f32, grafting_graph_core::ContourPoint)`
+
+The parameter `t` and position on this edge closest to `point`.
+
+### `pub fn grafting_graph_core::ContourEdge::end_node(&self) -> &grafting_graph_core::NodeId`
+
+The node this edge ends at, in its own declared direction.
+
+### `pub fn grafting_graph_core::ContourEdge::evaluate(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, t: f32) -> grafting_graph_core::ContourPoint`
+
+Position at parameter `t` in `0.0..=1.0`, walking from `from` to `to`
+(the caller's resolved positions for this edge's two endpoints, in
+the direction being evaluated).
+
+### `pub fn grafting_graph_core::ContourEdge::geometry(&self) -> &grafting_graph_core::ContourGeometry`
+
+This edge's geometry.
+
+### `pub fn grafting_graph_core::ContourEdge::id(&self) -> &grafting_graph_core::ContourEdgeId`
+
+This edge's stable identity.
+
+### `pub fn grafting_graph_core::ContourEdge::intersections(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, other: &grafting_graph_core::ContourEdge, other_from: grafting_graph_core::ContourPoint, other_to: grafting_graph_core::ContourPoint) -> alloc::vec::Vec<grafting_graph_core::ContourPoint>`
+
+Analytic intersection points between this edge and `other`, given
+both edges' resolved endpoint positions. Supports line-line,
+line-arc, and arc-arc pairs; returns points that lie within both
+edges' actual spans, not their full underlying line/circle.
+
+### `pub fn grafting_graph_core::ContourEdge::length(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> f32`
+
+Arc length (or straight length) between `from` and `to`.
+
+### `pub fn grafting_graph_core::ContourEdge::new(id: grafting_graph_core::ContourEdgeId, start_node: grafting_graph_core::NodeId, end_node: grafting_graph_core::NodeId, geometry: grafting_graph_core::ContourGeometry) -> Self`
+
+Creates a contour edge between two nodes with explicit geometry.
+
+### `pub fn grafting_graph_core::ContourEdge::reversed_geometry(&self) -> grafting_graph_core::ContourGeometry`
+
+This edge's geometry as seen when traversed in the opposite
+direction (end to start) -- the same physical curve, re-parameterized.
+Never mutates the edge; a loop that needs to walk this edge backward
+uses this alongside swapped endpoint positions.
+
+### `pub fn grafting_graph_core::ContourEdge::split(&self, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)`
+
+Splits this edge at `at` (assumed to lie on the curve) into two edges
+sharing a new node, preserving this edge's geometry description on
+both fragments -- a line stays a line, an arc keeps the same center
+and sweep direction (only its span shrinks).
+
+### `pub fn grafting_graph_core::ContourEdge::start_node(&self) -> &grafting_graph_core::NodeId`
+
+The node this edge starts from, in its own declared direction.
+
+### `pub fn grafting_graph_core::ContourEdge::tangent(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, t: f32) -> grafting_graph_core::ContourPoint`
+
+Unit tangent direction at parameter `t`, walking from `from` to `to`.
+
+### `pub fn grafting_graph_core::ContourEdge::tessellate(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, tolerance: f32) -> alloc::vec::Vec<grafting_graph_core::ContourPoint>`
+
+A polyline approximation of this edge, suitable only for rendering --
+the graph's own topology never stores this. `tolerance` bounds the
+maximum deviation (in world units) between the true curve and the
+returned chord segments.
+
+### `pub fn grafting_graph_core::ContourEdgeId::as_ref(&self) -> &str`
+
+### `pub fn grafting_graph_core::ContourEdgeId::as_str(&self) -> &str`
+
+Returns the identifier text.
+
+### `pub fn grafting_graph_core::ContourEdgeId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::ContourIdentifierError>`
+
+Creates a non-empty contour edge identifier.
+
+### `pub fn grafting_graph_core::ContourTopology::add_edge<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, edge: grafting_graph_core::ContourEdge) -> core::result::Result<grafting_graph_core::ContourEdgeId, grafting_graph_core::ContourError>`
+
+Registers a new contour edge, validated against `graph`.
+
+### `pub fn grafting_graph_core::ContourTopology::add_region(&mut self, id: grafting_graph_core::RegionId, outer_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>, holes: alloc::vec::Vec<grafting_graph_core::ContourLoop>) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>`
+
+Registers a new region from its outer loops and holes, validating
+loop closure and the non-manifold-edge rule against edges already
+registered via [`add_edge`](Self::add_edge). Rejects and leaves no
+partial state on any failure.
+
+### `pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>`
+
+Looks up a registered edge by identity.
+
+### `pub fn grafting_graph_core::ContourTopology::new() -> Self`
+
+Creates an empty topology.
+
+### `pub fn grafting_graph_core::ContourTopology::region(&self, id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::SurfaceRegion>`
+
+Looks up a registered region by identity.
+
+### `pub fn grafting_graph_core::ContourTopology::remove_region(&mut self, id: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::SurfaceRegion, grafting_graph_core::ContourError>`
+
+Removes a region, releasing its edge usages. Edges themselves stay
+registered (another region may still reference them).
 
 ### `pub fn grafting_graph_core::DeleteOutcome<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
@@ -324,6 +448,23 @@ Returns the stable identifier text.
 Creates a non-empty identifier without applying product-specific
 normalization rules.
 
+### `pub fn grafting_graph_core::OrientedEdgeUse::edge(&self) -> &grafting_graph_core::ContourEdgeId`
+
+The referenced edge's identity.
+
+### `pub fn grafting_graph_core::OrientedEdgeUse::forward(edge: grafting_graph_core::ContourEdgeId) -> Self`
+
+References `edge`, walked in its own declared direction.
+
+### `pub fn grafting_graph_core::OrientedEdgeUse::is_reversed(&self) -> bool`
+
+Whether this use walks the edge backward relative to its own
+declared direction.
+
+### `pub fn grafting_graph_core::OrientedEdgeUse::reversed(edge: grafting_graph_core::ContourEdgeId) -> Self`
+
+References `edge`, walked from its declared end to its declared start.
+
 ### `pub fn grafting_graph_core::PrismGridMesh::cell_count(&self) -> usize`
 
 Total number of cells in the mesh.
@@ -331,6 +472,16 @@ Total number of cells in the mesh.
 ### `pub fn grafting_graph_core::PrismGridMesh::new(width: u32, height: u32, layers: u32, inputs: grafting_graph_core::FormationInputs) -> Self`
 
 Constructs a grid of width x height x layers cells with 6-slot connectivity.
+
+### `pub fn grafting_graph_core::RegionId::as_ref(&self) -> &str`
+
+### `pub fn grafting_graph_core::RegionId::as_str(&self) -> &str`
+
+Returns the identifier text.
+
+### `pub fn grafting_graph_core::RegionId::new(value: impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, grafting_graph_core::ContourIdentifierError>`
+
+Creates a non-empty region identifier.
 
 ### `pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
@@ -358,6 +509,18 @@ Derives the order-independent identity of a node cycle.
 ### `pub fn grafting_graph_core::SurfaceKey::nodes(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>`
 
 Returns the node set this identity is derived from.
+
+### `pub fn grafting_graph_core::SurfaceRegion::holes(&self) -> &[grafting_graph_core::ContourLoop]`
+
+This region's holes.
+
+### `pub fn grafting_graph_core::SurfaceRegion::id(&self) -> &grafting_graph_core::RegionId`
+
+This region's stable identity.
+
+### `pub fn grafting_graph_core::SurfaceRegion::outer_loops(&self) -> &[grafting_graph_core::ContourLoop]`
+
+This region's outer boundary loops.
 
 ### `pub fn grafting_graph_core::SurfaceRegistry::add_surface<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, cycle: alloc::vec::Vec<grafting_graph_core::NodeId>, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceError>`
 
@@ -528,6 +691,18 @@ registered; both halves are validated, and checked not to collide with
 *each other*, before `key` is removed -- a failure never leaves the
 original surface gone with only one (or neither) half registered.
 
+### `pub fn grafting_graph_core::straight_cycle_region<N, E>(topology: &mut grafting_graph_core::ContourTopology, graph: &grafting_graph_core::Graph<N, E>, id: grafting_graph_core::RegionId, cycle: &[grafting_graph_core::NodeId]) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>`
+
+Builds a single-outer-loop, hole-free [`SurfaceRegion`] out of straight
+[`ContourGeometry::Line`] edges from an existing node cycle -- the
+migration bridge for a straight surface that used to be described only
+as [`Surface::cycle`](crate::Surface::cycle). Produces edge ids of the
+form `"{region_id}-{index}"`; callers that need stable, caller-chosen
+edge ids should build the loop directly instead.
+
+Registers the produced edges and region into `topology`, validated
+against `graph` exactly as any other region would be.
+
 ### `pub grafting_graph_core::ArcBulge::Left`
 
 Bulges toward the chord's left side, facing from the arc's own start to its end.
@@ -565,6 +740,122 @@ The identity that was supplied twice.
 ### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
 
 The underlying surface registry mutation failed.
+
+### `pub grafting_graph_core::ContourBounds::max: grafting_graph_core::ContourPoint`
+
+Maximum X and Z.
+
+### `pub grafting_graph_core::ContourBounds::min: grafting_graph_core::ContourPoint`
+
+Minimum X and Z.
+
+### `pub grafting_graph_core::ContourError::DuplicateEdge`
+
+Two edges cannot share the exact same identity.
+
+### `pub grafting_graph_core::ContourError::DuplicateEdge::id: grafting_graph_core::ContourEdgeId`
+
+Identity that already had a registered edge.
+
+### `pub grafting_graph_core::ContourError::DuplicateRegion`
+
+Two regions cannot share the exact same identity.
+
+### `pub grafting_graph_core::ContourError::DuplicateRegion::id: grafting_graph_core::RegionId`
+
+Identity that already had a registered region.
+
+### `pub grafting_graph_core::ContourError::EmptyLoop`
+
+A loop must reference at least one edge.
+
+### `pub grafting_graph_core::ContourError::NoOuterLoop`
+
+A region must declare at least one outer loop.
+
+### `pub grafting_graph_core::ContourError::NonManifoldEdge`
+
+An edge would be used more than twice across all registered regions,
+or twice in the same direction -- see this module's own doc: a
+shared boundary uses the same edge in opposite directions, at most
+once each.
+
+### `pub grafting_graph_core::ContourError::NonManifoldEdge::id: grafting_graph_core::ContourEdgeId`
+
+The edge whose usage would become invalid.
+
+### `pub grafting_graph_core::ContourError::OpenLoop`
+
+A loop is not closed: one edge use's end node does not match the
+next use's start node.
+
+### `pub grafting_graph_core::ContourError::OpenLoop::expected: grafting_graph_core::NodeId`
+
+Node the previous edge use ended at.
+
+### `pub grafting_graph_core::ContourError::OpenLoop::found: grafting_graph_core::NodeId`
+
+Node the next edge use actually starts at.
+
+### `pub grafting_graph_core::ContourError::UnknownEdge`
+
+A loop referenced an edge that is not registered.
+
+### `pub grafting_graph_core::ContourError::UnknownEdge::id: grafting_graph_core::ContourEdgeId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourError::UnknownEdgeIdentity`
+
+A query or update referenced an edge that is not registered.
+
+### `pub grafting_graph_core::ContourError::UnknownEdgeIdentity::id: grafting_graph_core::ContourEdgeId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourError::UnknownNode`
+
+An edge referenced a node the graph does not have.
+
+### `pub grafting_graph_core::ContourError::UnknownNode::id: grafting_graph_core::NodeId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourError::UnknownRegion`
+
+A query or update referenced a region that is not registered.
+
+### `pub grafting_graph_core::ContourError::UnknownRegion::id: grafting_graph_core::RegionId`
+
+Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourGeometry::CircularArc`
+
+A true circular arc between the edge's two endpoints, in the XZ
+plane. `center` plus either endpoint determines the radius; whether
+the arc sweeps clockwise or counter-clockwise from the edge's own
+start to its own end is the one bit no arrangement of points alone
+can supply.
+
+### `pub grafting_graph_core::ContourGeometry::CircularArc::center: grafting_graph_core::ContourPoint`
+
+The arc's center, in the same XZ plane as its endpoints.
+
+### `pub grafting_graph_core::ContourGeometry::CircularArc::clockwise: bool`
+
+Sweep direction from this edge's own start to its own end.
+
+### `pub grafting_graph_core::ContourGeometry::Line`
+
+A straight chord between the edge's two endpoints.
+
+### `pub grafting_graph_core::ContourIdentifierError::EmptyContourEdgeId`
+
+A contour edge identifier must contain at least one character.
+
+### `pub grafting_graph_core::ContourIdentifierError::EmptyRegionId`
+
+A region identifier must contain at least one character.
 
 ### `pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
 
@@ -790,14 +1081,6 @@ describe -- see this struct's own doc.
 
 The arc's own center, in the same XZ plane as the surface's corners.
 
-### `pub grafting_graph_core::SurfaceCurvature::facets: usize`
-
-How many straight chords a mesh generator should tessellate this arc
-into -- decided once, by whoever generated this surface, and
-persisted here so re-triangulating later (a page reload, a cache
-miss) always reproduces the same mesh without needing the original
-generation request again.
-
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 
 Two surfaces cannot share the exact same node-set identity.
@@ -888,6 +1171,32 @@ currently uses `petgraph` privately, but consumers cannot depend on that
 implementation detail. Presentation data remains in callers; calculation
 inputs belong in node or edge payloads and cross explicit contracts.
 
+### `pub struct grafting_graph_core::ContourBounds`
+
+An edge's 2D axis-aligned bounding box, in the XZ plane.
+
+### `pub struct grafting_graph_core::ContourEdge`
+
+An oriented curve between two graph nodes, with explicit geometry.
+
+Position data is resolved by the caller (mirroring [`Surface`](crate::Surface)'s
+own separation between topology and geometry) -- every method that needs
+an endpoint's actual location takes it as a parameter rather than storing
+it, since this crate does not interpret the opaque node payload `N`.
+
+### `pub struct grafting_graph_core::ContourEdgeId(_)`
+
+Stable identity of a [`ContourEdge`], independent of which node pair it
+currently spans.
+
+### `pub struct grafting_graph_core::ContourTopology`
+
+Tracks every registered [`ContourEdge`] and [`SurfaceRegion`], enforcing
+loop closure and the non-manifold-edge rule at registration time -- see
+[`ContourError::NonManifoldEdge`]. A region under active construction (a
+brush stroke mid-edit) is expected to stay unregistered, off-graph, until
+normalized; only a manifold result is ever submitted here.
+
 ### `pub struct grafting_graph_core::DeleteOutcome<N>`
 
 Outcome of [`delete_node`].
@@ -944,10 +1253,21 @@ A graph node with a stable identity and caller-chosen calculation payload.
 
 Stable Grafting node identity.
 
+### `pub struct grafting_graph_core::OrientedEdgeUse`
+
+A single edge-use inside a [`SurfaceRegion`] loop: which [`ContourEdge`]
+and whether it is walked in its own declared direction or reversed.
+
 ### `pub struct grafting_graph_core::PrismGridMesh`
 
 A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 (4 lateral, 1 bottom, 1 top), positions, and deformation inputs.
+
+### `pub struct grafting_graph_core::RegionId(_)`
+
+Stable identity of a [`SurfaceRegion`], independent of its node set --
+the replacement for [`SurfaceKey`](crate::SurfaceKey)'s node-set identity,
+which cannot distinguish two regions sharing nodes but differing edges.
 
 ### `pub struct grafting_graph_core::Surface`
 
@@ -989,6 +1309,14 @@ restating its geometry." Two surfaces cannot coexist on the exact same
 node set -- a real, named limitation of this v1, not an oversight; a
 second surface on the same footprint (e.g. a floor and a ceiling
 sharing one boundary) needs at least one differing node today.
+
+### `pub struct grafting_graph_core::SurfaceRegion`
+
+A region bounded by one or more outer loops and zero or more holes, all
+referencing shared [`ContourEdge`]s rather than restating geometry.
+
+A region's stable identity is its own [`RegionId`], never derived from
+its node set -- see this module's own doc.
 
 ### `pub struct grafting_graph_core::SurfaceRegistry`
 
@@ -1046,3 +1374,13 @@ Exists so a future storage backend (e.g. a deterministic backend, if
 multiplayer replay becomes a real requirement) is an additional
 implementation of this trait, not a rewrite of every algorithm already
 written against it.
+
+### `pub type grafting_graph_core::ContourLoop = alloc::vec::Vec<grafting_graph_core::OrientedEdgeUse>`
+
+An ordered, closed sequence of oriented edge uses -- one boundary of a
+[`SurfaceRegion`] (an outer loop or a hole).
+
+### `pub type grafting_graph_core::ContourPoint = [f32; 2]`
+
+A point in a surface's own XZ plane -- see this module's own doc for why
+contour geometry commits to XZ instead of an arbitrary 3D plane.
