@@ -9,6 +9,7 @@ mod editing;
 mod generation;
 mod geometry;
 mod mesh;
+mod path_brush;
 mod session;
 mod terrain;
 

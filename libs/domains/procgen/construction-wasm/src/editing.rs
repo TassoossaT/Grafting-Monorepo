@@ -104,9 +104,16 @@ pub fn add_surface(
 ) -> Result<SurfaceKeyResponse, String> {
     let cycle = parse_cycle(request.cycle)?;
     let key = surfaces
-        .add_surface(graph, cycle, SurfaceType::new(request.surface_type), request.physical)
+        .add_surface(
+            graph,
+            cycle,
+            SurfaceType::new(request.surface_type),
+            request.physical,
+        )
         .map_err(|error| error.to_string())?;
-    Ok(SurfaceKeyResponse { surface_key: surface_key_to_wire(&key) })
+    Ok(SurfaceKeyResponse {
+        surface_key: surface_key_to_wire(&key),
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,9 +129,14 @@ pub struct RemoveSurfaceRequest {
 /// crate, because that is nothing more than this operation applied to a
 /// caller-known set of surfaces plus [`remove_edge`]/`construction::delete_node`
 /// for whatever nodes end up unreferenced.
-pub fn remove_surface(surfaces: &mut SurfaceRegistry, request: RemoveSurfaceRequest) -> Result<(), String> {
+pub fn remove_surface(
+    surfaces: &mut SurfaceRegistry,
+    request: RemoveSurfaceRequest,
+) -> Result<(), String> {
     let key = surface_key_from_wire(&request.surface_key)?;
-    surfaces.remove_surface(&key).map_err(|error| error.to_string())?;
+    surfaces
+        .remove_surface(&key)
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -160,8 +172,10 @@ pub fn apply_move_node(
     request: MoveNodeRequest,
 ) -> Result<AffectedSurfacesResponse, String> {
     let id = parse_node_id(request.node_id)?;
-    let affected =
-        move_node(graph, surfaces, &id, |position| *position = request.position).map_err(|error| error.to_string())?;
+    let affected = move_node(graph, surfaces, &id, |position| {
+        *position = request.position
+    })
+    .map_err(|error| error.to_string())?;
     Ok(AffectedSurfacesResponse {
         affected_surface_keys: affected.iter().map(surface_key_to_wire).collect(),
     })
@@ -194,11 +208,21 @@ pub fn apply_delete_node(
     let id = parse_node_id(request.node_id)?;
     let cap_surface_type = SurfaceType::new(request.cap_surface_type);
     let cap_physical = request.cap_physical;
-    let outcome = delete_node(graph, surfaces, &id, move |_cycle| (cap_surface_type.clone(), cap_physical))
-        .map_err(|error| error.to_string())?;
+    let outcome = delete_node(graph, surfaces, &id, move |_cycle| {
+        (cap_surface_type.clone(), cap_physical)
+    })
+    .map_err(|error| error.to_string())?;
     Ok(DeleteNodeResponse {
-        removed_surface_keys: outcome.removed_surfaces.iter().map(surface_key_to_wire).collect(),
-        capping_surface_keys: outcome.capping_surfaces.iter().map(surface_key_to_wire).collect(),
+        removed_surface_keys: outcome
+            .removed_surfaces
+            .iter()
+            .map(surface_key_to_wire)
+            .collect(),
+        capping_surface_keys: outcome
+            .capping_surfaces
+            .iter()
+            .map(surface_key_to_wire)
+            .collect(),
     })
 }
 
@@ -220,7 +244,9 @@ pub fn apply_merge_surfaces(
     let b = surface_key_from_wire(&request.b)?;
     let merged = request.merged.into_spec()?;
     let key = merge_surfaces(graph, surfaces, &a, &b, merged).map_err(|error| error.to_string())?;
-    Ok(SurfaceKeyResponse { surface_key: surface_key_to_wire(&key) })
+    Ok(SurfaceKeyResponse {
+        surface_key: surface_key_to_wire(&key),
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,7 +273,8 @@ pub fn apply_split_surface(
     let key = surface_key_from_wire(&request.key)?;
     let first = request.first.into_spec()?;
     let second = request.second.into_spec()?;
-    let (first_key, second_key) = split_surface(graph, surfaces, &key, first, second).map_err(|error| error.to_string())?;
+    let (first_key, second_key) =
+        split_surface(graph, surfaces, &key, first, second).map_err(|error| error.to_string())?;
     Ok(SplitSurfaceResponse {
         first_key: surface_key_to_wire(&first_key),
         second_key: surface_key_to_wire(&second_key),
@@ -299,8 +326,11 @@ pub fn apply_duplicate_surface(
         surface_type: SurfaceType::new(request.surface_type),
         physical: request.physical,
     };
-    let new_key = duplicate_surface(graph, surfaces, &key, duplicate).map_err(|error| error.to_string())?;
-    Ok(SurfaceKeyResponse { surface_key: surface_key_to_wire(&new_key) })
+    let new_key =
+        duplicate_surface(graph, surfaces, &key, duplicate).map_err(|error| error.to_string())?;
+    Ok(SurfaceKeyResponse {
+        surface_key: surface_key_to_wire(&new_key),
+    })
 }
 
 #[cfg(test)]
@@ -312,11 +342,26 @@ mod tests {
     }
 
     fn add(graph: &mut SessionGraph, id: &str, position: [f32; 3]) {
-        add_node(graph, AddNodeRequest { id: id.to_string(), position }).unwrap();
+        add_node(
+            graph,
+            AddNodeRequest {
+                id: id.to_string(),
+                position,
+            },
+        )
+        .unwrap();
     }
 
     fn edge(graph: &mut SessionGraph, id: &str, a: &str, b: &str) {
-        add_edge(graph, AddEdgeRequest { id: id.to_string(), source: a.to_string(), target: b.to_string() }).unwrap();
+        add_edge(
+            graph,
+            AddEdgeRequest {
+                id: id.to_string(),
+                source: a.to_string(),
+                target: b.to_string(),
+            },
+        )
+        .unwrap();
     }
 
     #[test]
@@ -333,7 +378,11 @@ mod tests {
         let response = add_surface(
             &graph,
             &mut surfaces,
-            SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "wall".into(), physical: true },
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "b".into(), "c".into()],
+                surface_type: "wall".into(),
+                physical: true,
+            },
         )
         .unwrap();
         let mut key = response.surface_key;
@@ -351,18 +400,47 @@ mod tests {
         edge(&mut graph, "bc", "b", "c");
         edge(&mut graph, "ca", "c", "a");
         let mut surfaces = SurfaceRegistry::new();
-        add_surface(&graph, &mut surfaces, SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "wall".into(), physical: true }).unwrap();
+        add_surface(
+            &graph,
+            &mut surfaces,
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "b".into(), "c".into()],
+                surface_type: "wall".into(),
+                physical: true,
+            },
+        )
+        .unwrap();
 
-        remove_surface(&mut surfaces, RemoveSurfaceRequest { surface_key: vec!["a".into(), "b".into(), "c".into()] }).unwrap();
+        remove_surface(
+            &mut surfaces,
+            RemoveSurfaceRequest {
+                surface_key: vec!["a".into(), "b".into(), "c".into()],
+            },
+        )
+        .unwrap();
 
-        assert!(surfaces.surfaces_referencing(&NodeId::new("a").unwrap()).next().is_none());
-        assert!(graph.node(&NodeId::new("a").unwrap()).is_some(), "removing a surface never touches its nodes");
+        assert!(
+            surfaces
+                .surfaces_referencing(&NodeId::new("a").unwrap())
+                .next()
+                .is_none()
+        );
+        assert!(
+            graph.node(&NodeId::new("a").unwrap()).is_some(),
+            "removing a surface never touches its nodes"
+        );
     }
 
     #[test]
     fn remove_surface_rejects_an_unknown_key() {
         let mut surfaces = SurfaceRegistry::new();
-        let error = remove_surface(&mut surfaces, RemoveSurfaceRequest { surface_key: vec!["missing".into()] }).unwrap_err();
+        let error = remove_surface(
+            &mut surfaces,
+            RemoveSurfaceRequest {
+                surface_key: vec!["missing".into()],
+            },
+        )
+        .unwrap_err();
         assert!(!error.is_empty());
     }
 
@@ -373,7 +451,13 @@ mod tests {
         add(&mut graph, "b", [1.0, 0.0, 0.0]);
         edge(&mut graph, "ab", "a", "b");
 
-        remove_edge(&mut graph, RemoveEdgeRequest { edge_id: "ab".into() }).unwrap();
+        remove_edge(
+            &mut graph,
+            RemoveEdgeRequest {
+                edge_id: "ab".into(),
+            },
+        )
+        .unwrap();
 
         assert!(graph.edge(&EdgeId::new("ab").unwrap()).is_none());
         assert!(graph.node(&NodeId::new("a").unwrap()).is_some());
@@ -383,7 +467,13 @@ mod tests {
     #[test]
     fn remove_edge_rejects_an_unknown_id() {
         let mut graph = empty_graph();
-        let error = remove_edge(&mut graph, RemoveEdgeRequest { edge_id: "missing".into() }).unwrap_err();
+        let error = remove_edge(
+            &mut graph,
+            RemoveEdgeRequest {
+                edge_id: "missing".into(),
+            },
+        )
+        .unwrap_err();
         assert!(!error.is_empty());
     }
 
@@ -391,7 +481,14 @@ mod tests {
     fn add_node_rejects_a_duplicate_id() {
         let mut graph = empty_graph();
         add(&mut graph, "a", [0.0, 0.0, 0.0]);
-        let error = add_node(&mut graph, AddNodeRequest { id: "a".into(), position: [1.0, 1.0, 1.0] }).unwrap_err();
+        let error = add_node(
+            &mut graph,
+            AddNodeRequest {
+                id: "a".into(),
+                position: [1.0, 1.0, 1.0],
+            },
+        )
+        .unwrap_err();
         assert!(error.contains("duplicate"), "unexpected error: {error}");
     }
 
@@ -399,7 +496,15 @@ mod tests {
     fn add_edge_rejects_a_missing_endpoint() {
         let mut graph = empty_graph();
         add(&mut graph, "a", [0.0, 0.0, 0.0]);
-        let error = add_edge(&mut graph, AddEdgeRequest { id: "ab".into(), source: "a".into(), target: "missing".into() }).unwrap_err();
+        let error = add_edge(
+            &mut graph,
+            AddEdgeRequest {
+                id: "ab".into(),
+                source: "a".into(),
+                target: "missing".into(),
+            },
+        )
+        .unwrap_err();
         assert!(error.contains("missing"), "unexpected error: {error}");
     }
 
@@ -415,7 +520,11 @@ mod tests {
         let key = add_surface(
             &graph,
             &mut surfaces,
-            SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "wall".into(), physical: true },
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "b".into(), "c".into()],
+                surface_type: "wall".into(),
+                physical: true,
+            },
         )
         .unwrap()
         .surface_key;
@@ -425,17 +534,34 @@ mod tests {
     #[test]
     fn move_node_reports_the_referencing_surface() {
         let (mut graph, surfaces, _key) = triangle_with_surface();
-        let response =
-            apply_move_node(&mut graph, &surfaces, MoveNodeRequest { node_id: "a".into(), position: [9.0, 9.0, 9.0] }).unwrap();
+        let response = apply_move_node(
+            &mut graph,
+            &surfaces,
+            MoveNodeRequest {
+                node_id: "a".into(),
+                position: [9.0, 9.0, 9.0],
+            },
+        )
+        .unwrap();
         assert_eq!(response.affected_surface_keys.len(), 1);
-        assert_eq!(*graph.node(&NodeId::new("a").unwrap()).unwrap().data(), [9.0, 9.0, 9.0]);
+        assert_eq!(
+            *graph.node(&NodeId::new("a").unwrap()).unwrap().data(),
+            [9.0, 9.0, 9.0]
+        );
     }
 
     #[test]
     fn move_node_rejects_an_unknown_node() {
         let (mut graph, surfaces, _key) = triangle_with_surface();
-        let error =
-            apply_move_node(&mut graph, &surfaces, MoveNodeRequest { node_id: "missing".into(), position: [0.0; 3] }).unwrap_err();
+        let error = apply_move_node(
+            &mut graph,
+            &surfaces,
+            MoveNodeRequest {
+                node_id: "missing".into(),
+                position: [0.0; 3],
+            },
+        )
+        .unwrap_err();
         assert!(!error.is_empty());
     }
 
@@ -445,7 +571,11 @@ mod tests {
         let response = apply_delete_node(
             &mut graph,
             &mut surfaces,
-            DeleteNodeRequest { node_id: "a".into(), cap_surface_type: "floor".into(), cap_physical: true },
+            DeleteNodeRequest {
+                node_id: "a".into(),
+                cap_surface_type: "floor".into(),
+                cap_physical: true,
+            },
         )
         .unwrap();
         let mut removed = response.removed_surface_keys[0].clone();
@@ -460,15 +590,47 @@ mod tests {
     #[test]
     fn merge_surfaces_unites_two_adjacent_triangles() {
         let mut graph = empty_graph();
-        for (id, position) in [("a", [0.0, 0.0, 0.0]), ("b", [1.0, 0.0, 0.0]), ("c", [1.0, 1.0, 0.0]), ("d", [0.0, 1.0, 0.0])] {
+        for (id, position) in [
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [1.0, 1.0, 0.0]),
+            ("d", [0.0, 1.0, 0.0]),
+        ] {
             add(&mut graph, id, position);
         }
-        for (id, a, b) in [("ab", "a", "b"), ("bc", "b", "c"), ("ca", "c", "a"), ("ac", "a", "c"), ("cd", "c", "d"), ("da", "d", "a")] {
+        for (id, a, b) in [
+            ("ab", "a", "b"),
+            ("bc", "b", "c"),
+            ("ca", "c", "a"),
+            ("ac", "a", "c"),
+            ("cd", "c", "d"),
+            ("da", "d", "a"),
+        ] {
             edge(&mut graph, id, a, b);
         }
         let mut surfaces = SurfaceRegistry::new();
-        let side_abc = add_surface(&graph, &mut surfaces, SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "wall".into(), physical: true }).unwrap().surface_key;
-        let side_acd = add_surface(&graph, &mut surfaces, SurfaceSpecDto { cycle: vec!["a".into(), "c".into(), "d".into()], surface_type: "wall".into(), physical: true }).unwrap().surface_key;
+        let side_abc = add_surface(
+            &graph,
+            &mut surfaces,
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "b".into(), "c".into()],
+                surface_type: "wall".into(),
+                physical: true,
+            },
+        )
+        .unwrap()
+        .surface_key;
+        let side_acd = add_surface(
+            &graph,
+            &mut surfaces,
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "c".into(), "d".into()],
+                surface_type: "wall".into(),
+                physical: true,
+            },
+        )
+        .unwrap()
+        .surface_key;
 
         let response = apply_merge_surfaces(
             &graph,
@@ -476,34 +638,75 @@ mod tests {
             MergeSurfacesRequest {
                 a: side_abc,
                 b: side_acd,
-                merged: SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into(), "d".into()], surface_type: "floor".into(), physical: true },
+                merged: SurfaceSpecDto {
+                    cycle: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+                    surface_type: "floor".into(),
+                    physical: true,
+                },
             },
         )
         .unwrap();
         let mut merged = response.surface_key;
         merged.sort();
-        assert_eq!(merged, vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()]);
+        assert_eq!(
+            merged,
+            vec![
+                "a".to_string(),
+                "b".to_string(),
+                "c".to_string(),
+                "d".to_string()
+            ]
+        );
     }
 
     #[test]
     fn split_surface_divides_a_quad_into_two_triangles() {
         let mut graph = empty_graph();
-        for (id, position) in [("a", [0.0, 0.0, 0.0]), ("b", [1.0, 0.0, 0.0]), ("c", [1.0, 1.0, 0.0]), ("d", [0.0, 1.0, 0.0])] {
+        for (id, position) in [
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [1.0, 1.0, 0.0]),
+            ("d", [0.0, 1.0, 0.0]),
+        ] {
             add(&mut graph, id, position);
         }
-        for (id, a, b) in [("ab", "a", "b"), ("bc", "b", "c"), ("cd", "c", "d"), ("da", "d", "a"), ("ac", "a", "c")] {
+        for (id, a, b) in [
+            ("ab", "a", "b"),
+            ("bc", "b", "c"),
+            ("cd", "c", "d"),
+            ("da", "d", "a"),
+            ("ac", "a", "c"),
+        ] {
             edge(&mut graph, id, a, b);
         }
         let mut surfaces = SurfaceRegistry::new();
-        let quad = add_surface(&graph, &mut surfaces, SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into(), "d".into()], surface_type: "floor".into(), physical: true }).unwrap().surface_key;
+        let quad = add_surface(
+            &graph,
+            &mut surfaces,
+            SurfaceSpecDto {
+                cycle: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+                surface_type: "floor".into(),
+                physical: true,
+            },
+        )
+        .unwrap()
+        .surface_key;
 
         let response = apply_split_surface(
             &graph,
             &mut surfaces,
             SplitSurfaceRequest {
                 key: quad,
-                first: SurfaceSpecDto { cycle: vec!["a".into(), "b".into(), "c".into()], surface_type: "floor".into(), physical: true },
-                second: SurfaceSpecDto { cycle: vec!["a".into(), "c".into(), "d".into()], surface_type: "floor".into(), physical: true },
+                first: SurfaceSpecDto {
+                    cycle: vec!["a".into(), "b".into(), "c".into()],
+                    surface_type: "floor".into(),
+                    physical: true,
+                },
+                second: SurfaceSpecDto {
+                    cycle: vec!["a".into(), "c".into(), "d".into()],
+                    surface_type: "floor".into(),
+                    physical: true,
+                },
             },
         )
         .unwrap();
@@ -523,9 +726,18 @@ mod tests {
             DuplicateSurfaceRequest {
                 key,
                 nodes: vec![
-                    DuplicateNodeDto { id: "a2".into(), position: [0.0, 0.0, 1.0] },
-                    DuplicateNodeDto { id: "b2".into(), position: [1.0, 0.0, 1.0] },
-                    DuplicateNodeDto { id: "c2".into(), position: [0.0, 1.0, 1.0] },
+                    DuplicateNodeDto {
+                        id: "a2".into(),
+                        position: [0.0, 0.0, 1.0],
+                    },
+                    DuplicateNodeDto {
+                        id: "b2".into(),
+                        position: [1.0, 0.0, 1.0],
+                    },
+                    DuplicateNodeDto {
+                        id: "c2".into(),
+                        position: [0.0, 1.0, 1.0],
+                    },
                 ],
                 ring_edge_ids: vec!["a2-b2".into(), "b2-c2".into(), "c2-a2".into()],
                 surface_type: "wall".into(),
@@ -535,7 +747,10 @@ mod tests {
         .unwrap();
         let mut new_key = response.surface_key;
         new_key.sort();
-        assert_eq!(new_key, vec!["a2".to_string(), "b2".to_string(), "c2".to_string()]);
+        assert_eq!(
+            new_key,
+            vec!["a2".to_string(), "b2".to_string(), "c2".to_string()]
+        );
         assert!(graph.node(&NodeId::new("a2").unwrap()).is_some());
     }
 }

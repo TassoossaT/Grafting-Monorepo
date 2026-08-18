@@ -11,21 +11,26 @@ use std::collections::HashSet;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use grafting_graph_core::{FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{
+    FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType,
+};
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh;
+use crate::path_brush;
 use crate::terrain;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
-    serde_json::from_str(json).map_err(|error| JsValue::from_str(&format!("invalid request JSON: {error}")))
+    serde_json::from_str(json)
+        .map_err(|error| JsValue::from_str(&format!("invalid request JSON: {error}")))
 }
 
 fn serialize<T: Serialize>(value: &T) -> Result<String, JsValue> {
-    serde_json::to_string(value).map_err(|error| JsValue::from_str(&format!("failed to serialize response: {error}")))
+    serde_json::to_string(value)
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize response: {error}")))
 }
 
 fn to_js_error(message: String) -> JsValue {
@@ -62,7 +67,8 @@ impl ConstructionSession {
     pub fn new() -> ConstructionSession {
         console_error_panic_hook::set_once();
         ConstructionSession {
-            graph: Graph::try_from_parts(Vec::new(), Vec::new()).expect("an empty graph is always valid"),
+            graph: Graph::try_from_parts(Vec::new(), Vec::new())
+                .expect("an empty graph is always valid"),
             surfaces: SurfaceRegistry::new(),
             terrain_mesh: None,
             known_surfaces: HashSet::new(),
@@ -70,12 +76,14 @@ impl ConstructionSession {
     }
 
     fn remember(&mut self, wire_key: &[String]) {
-        let key = surface_key_from_wire(wire_key).expect("wire-formatted key was produced internally and must parse back");
+        let key = surface_key_from_wire(wire_key)
+            .expect("wire-formatted key was produced internally and must parse back");
         self.known_surfaces.insert(key);
     }
 
     fn forget(&mut self, wire_key: &[String]) {
-        let key = surface_key_from_wire(wire_key).expect("wire-formatted key was produced internally and must parse back");
+        let key = surface_key_from_wire(wire_key)
+            .expect("wire-formatted key was produced internally and must parse back");
         self.known_surfaces.remove(&key);
     }
 
@@ -96,7 +104,8 @@ impl ConstructionSession {
     /// Registers a brand-new surface. See `editing::add_surface`.
     pub fn add_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = editing::add_surface(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        let response =
+            editing::add_surface(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
         self.remember(&response.surface_key);
         serialize(&response)
     }
@@ -123,14 +132,16 @@ impl ConstructionSession {
     /// Moves a node. See `editing::apply_move_node`.
     pub fn move_node_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = editing::apply_move_node(&mut self.graph, &self.surfaces, request).map_err(to_js_error)?;
+        let response = editing::apply_move_node(&mut self.graph, &self.surfaces, request)
+            .map_err(to_js_error)?;
         serialize(&response)
     }
 
     /// Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
     pub fn delete_node_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = editing::apply_delete_node(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        let response = editing::apply_delete_node(&mut self.graph, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -145,7 +156,8 @@ impl ConstructionSession {
         let request: editing::MergeSurfacesRequest = parse(request_json)?;
         let a = request.a.clone();
         let b = request.b.clone();
-        let response = editing::apply_merge_surfaces(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        let response = editing::apply_merge_surfaces(&self.graph, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
         self.forget(&a);
         self.forget(&b);
         self.remember(&response.surface_key);
@@ -156,7 +168,8 @@ impl ConstructionSession {
     pub fn split_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: editing::SplitSurfaceRequest = parse(request_json)?;
         let original = request.key.clone();
-        let response = editing::apply_split_surface(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        let response = editing::apply_split_surface(&self.graph, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
         self.forget(&original);
         self.remember(&response.first_key);
         self.remember(&response.second_key);
@@ -166,7 +179,9 @@ impl ConstructionSession {
     /// Duplicates a surface. See `editing::apply_duplicate_surface`.
     pub fn duplicate_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = editing::apply_duplicate_surface(&mut self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
+        let response =
+            editing::apply_duplicate_surface(&mut self.graph, &mut self.surfaces, request)
+                .map_err(to_js_error)?;
         self.remember(&response.surface_key);
         serialize(&response)
     }
@@ -187,10 +202,14 @@ impl ConstructionSession {
         deformation_z: f32,
     ) -> Result<(), JsValue> {
         if width == 0 || height == 0 || layers == 0 {
-            return Err(JsValue::from_str("set_terrain_mesh: dimensions must be greater than 0"));
+            return Err(JsValue::from_str(
+                "set_terrain_mesh: dimensions must be greater than 0",
+            ));
         }
         if width > 512 || height > 512 || layers > 64 {
-            return Err(JsValue::from_str("set_terrain_mesh: grid size exceeds maximum limits"));
+            return Err(JsValue::from_str(
+                "set_terrain_mesh: grid size exceeds maximum limits",
+            ));
         }
         let primitive = match primitive_u8 {
             0 => GraphPrimitive::Passage,
@@ -208,13 +227,30 @@ impl ConstructionSession {
 
     // ---- Generate-and-apply ----
 
+    /// Applies one validated terrain-to-path brush operation. The session only
+    /// forwards the resolved request to the domain transformer and publishes
+    /// its already-atomic replacement plan.
+    pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = path_brush::apply_path_brush(&mut self.graph, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
+        self.known_surfaces = self.surfaces.surface_keys().into_iter().collect();
+        serialize(&response)
+    }
     /// Generates one terrain cell's surface and applies it. See
     /// `terrain::generate_and_apply_terrain_cell`.
-    pub fn generate_and_apply_terrain_cell_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    pub fn generate_and_apply_terrain_cell_json(
+        &mut self,
+        request_json: &str,
+    ) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
-            terrain::generate_and_apply_terrain_cell(&mut self.graph, &mut self.surfaces, self.terrain_mesh.as_ref(), request)
-                .map_err(to_js_error)?;
+        let response = terrain::generate_and_apply_terrain_cell(
+            &mut self.graph,
+            &mut self.surfaces,
+            self.terrain_mesh.as_ref(),
+            request,
+        )
+        .map_err(to_js_error)?;
         self.remember(&response.surface_key);
         serialize(&response)
     }
@@ -226,9 +262,18 @@ impl ConstructionSession {
     /// generic replacement for a one-shot wall-with-door generation. Never
     /// generates a floor/ceiling itself. See
     /// `generation::generate_and_apply_path_extrusion`.
-    pub fn generate_and_apply_path_extrusion_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    pub fn generate_and_apply_path_extrusion_json(
+        &mut self,
+        request_json: &str,
+    ) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = generation::generate_and_apply_path_extrusion(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
+        let response = generation::generate_and_apply_path_extrusion(
+            &mut self.graph,
+            &mut self.surfaces,
+            &self.known_surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -242,9 +287,18 @@ impl ConstructionSession {
     /// other flat or per-vertex-height polygon) and applies only the
     /// difference against whatever this structure already holds. See
     /// `generation::generate_and_apply_boundary_cap`.
-    pub fn generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    pub fn generate_and_apply_boundary_cap_json(
+        &mut self,
+        request_json: &str,
+    ) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = generation::generate_and_apply_boundary_cap(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
+        let response = generation::generate_and_apply_boundary_cap(
+            &mut self.graph,
+            &mut self.surfaces,
+            &self.known_surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -261,9 +315,18 @@ impl ConstructionSession {
     /// holds -- the "Pintar Casa" tool's per-tick commit, and (once a
     /// wall-brush stroke's path closes) the wall-brush's own closure
     /// commit. See `generation::generate_and_apply_region_partition`.
-    pub fn generate_and_apply_region_partition_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    pub fn generate_and_apply_region_partition_json(
+        &mut self,
+        request_json: &str,
+    ) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = generation::generate_and_apply_region_partition(&mut self.graph, &mut self.surfaces, &self.known_surfaces, request).map_err(to_js_error)?;
+        let response = generation::generate_and_apply_region_partition(
+            &mut self.graph,
+            &mut self.surfaces,
+            &self.known_surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
         for key in &response.removed_surface_keys {
             self.forget(key);
         }
@@ -281,7 +344,12 @@ impl ConstructionSession {
     pub fn cloud_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: CloudRequest = parse(request_json)?;
         let seed = surface_key_from_wire(&request.seed).map_err(to_js_error)?;
-        let cloud = connected_component(&self.surfaces, &self.known_surfaces, &seed, &SurfaceType::new(request.surface_type));
+        let cloud = connected_component(
+            &self.surfaces,
+            &self.known_surfaces,
+            &seed,
+            &SurfaceType::new(request.surface_type),
+        );
         let surface_keys: Vec<Vec<String>> = cloud.iter().map(surface_key_to_wire).collect();
         serialize(&CloudResponse { surface_keys })
     }
@@ -314,7 +382,10 @@ impl ConstructionSession {
         let nodes = snapshot
             .nodes()
             .iter()
-            .map(|node| NodeSnapshot { id: node.id().as_str().to_owned(), position: *node.data() })
+            .map(|node| NodeSnapshot {
+                id: node.id().as_str().to_owned(),
+                position: *node.data(),
+            })
             .collect();
         let edges = snapshot
             .edges()
@@ -336,7 +407,11 @@ impl ConstructionSession {
                 })
             })
             .collect();
-        serialize(&SnapshotResponse { nodes, edges, surfaces })
+        serialize(&SnapshotResponse {
+            nodes,
+            edges,
+            surfaces,
+        })
     }
 }
 
@@ -438,7 +513,9 @@ mod tests {
     #[test]
     fn generating_a_terrain_cell_then_a_z_running_wall_exposes_all_four_meshes() {
         let mut session = ConstructionSession::new();
-        session.set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
         session
             .generate_and_apply_terrain_cell_json(
                 r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["tn0","tn1","tn2","tn3"],"edgeIds":["te0","te1","te2","te3"]}"#,
@@ -454,11 +531,19 @@ mod tests {
             "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
         })
         .to_string();
-        session.generate_and_apply_path_extrusion_json(&request).expect("wall generates");
+        session
+            .generate_and_apply_path_extrusion_json(&request)
+            .expect("wall generates");
 
-        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("meshes always succeed");
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(meshes.len(), 4, "1 terrain + 3 wall/door pieces, every one triangulable");
+        assert_eq!(
+            meshes.len(),
+            4,
+            "1 terrain + 3 wall/door pieces, every one triangulable"
+        );
     }
 
     /// The TS adapter's `JSON.stringify` drops any key whose value is
@@ -479,14 +564,53 @@ mod tests {
         })
         .to_string();
 
-        let response = session.generate_and_apply_path_extrusion_json(&request).expect("wall generates");
+        let response = session
+            .generate_and_apply_path_extrusion_json(&request)
+            .expect("wall generates");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert_eq!(parsed["addedSurfaceKeys"].as_array().unwrap().len(), 1);
 
-        let snapshot: serde_json::Value = serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
-        assert_eq!(snapshot["nodes"].as_array().unwrap().len(), 4, "no-notch wall must be exactly 4 nodes: {snapshot}");
+        let snapshot: serde_json::Value =
+            serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
+        assert_eq!(
+            snapshot["nodes"].as_array().unwrap().len(),
+            4,
+            "no-notch wall must be exactly 4 nodes: {snapshot}"
+        );
     }
 
+    #[test]
+    fn applying_path_brush_replaces_terrain_through_the_wasm_boundary() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
+            )
+            .expect("terrain cell generates");
+
+        let response = session
+            .apply_path_brush_json(
+                r#"{"operationId":"path-1","center":[0.5,0.5],"radius":0.25,"depth":0.1,"sourceSurfaceType":"terrain","targetSurfaceType":"path"}"#,
+            )
+            .expect("path brush applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(
+            !parsed["surfaceIds"]["created"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "the transformation must report its created path surface: {parsed}"
+        );
+
+        let snapshot = session.snapshot_json().expect("snapshot succeeds");
+        assert!(
+            snapshot.contains("\"path\""),
+            "the new path must be visible in the session snapshot"
+        );
+    }
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();
@@ -508,11 +632,26 @@ mod tests {
     #[wasm_bindgen_test]
     fn merge_surfaces_updates_known_surfaces_so_the_snapshot_reflects_it() {
         let mut session = ConstructionSession::new();
-        session.add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#).unwrap();
-        session.add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#).unwrap();
-        session.add_node_json(r#"{"id":"c","position":[1.0,1.0,0.0]}"#).unwrap();
-        session.add_node_json(r#"{"id":"d","position":[0.0,1.0,0.0]}"#).unwrap();
-        for (id, a, b) in [("ab", "a", "b"), ("bc", "b", "c"), ("ca", "c", "a"), ("ac", "a", "c"), ("cd", "c", "d"), ("da", "d", "a")] {
+        session
+            .add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_node_json(r#"{"id":"c","position":[1.0,1.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_node_json(r#"{"id":"d","position":[0.0,1.0,0.0]}"#)
+            .unwrap();
+        for (id, a, b) in [
+            ("ab", "a", "b"),
+            ("bc", "b", "c"),
+            ("ca", "c", "a"),
+            ("ac", "a", "c"),
+            ("cd", "c", "d"),
+            ("da", "d", "a"),
+        ] {
             session
                 .add_edge_json(&format!(r#"{{"id":"{id}","source":"{a}","target":"{b}"}}"#))
                 .unwrap();
@@ -532,24 +671,39 @@ mod tests {
 
         let snapshot = session.snapshot_json().unwrap();
         assert!(snapshot.contains("\"floor\""));
-        assert!(!snapshot.contains("\"wall\""), "merged-away surfaces must not remain in the snapshot");
+        assert!(
+            !snapshot.contains("\"wall\""),
+            "merged-away surfaces must not remain in the snapshot"
+        );
     }
 
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_exposes_its_mesh() {
         let mut session = ConstructionSession::new();
-        session.set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
         session
             .generate_and_apply_terrain_cell_json(
                 r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
             )
             .expect("cell 0 generates");
 
-        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("meshes always succeed");
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
         assert_eq!(meshes.len(), 1);
-        assert_eq!(meshes[0]["positions"].as_array().unwrap().len(), 12, "4 vertices * 3 components");
-        assert_eq!(meshes[0]["indices"].as_array().unwrap().len(), 6, "2 triangles * 3 indices");
+        assert_eq!(
+            meshes[0]["positions"].as_array().unwrap().len(),
+            12,
+            "4 vertices * 3 components"
+        );
+        assert_eq!(
+            meshes[0]["indices"].as_array().unwrap().len(),
+            6,
+            "2 triangles * 3 indices"
+        );
     }
 
     #[wasm_bindgen_test]
@@ -565,25 +719,49 @@ mod tests {
         })
         .to_string();
 
-        session.generate_and_apply_path_extrusion_json(&request).expect("wall with notch generates");
+        session
+            .generate_and_apply_path_extrusion_json(&request)
+            .expect("wall with notch generates");
 
-        let meshes_json = session.all_surface_meshes_json().expect("meshes always succeed");
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("meshes always succeed");
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(meshes.len(), 3, "left remainder, door, right remainder = three sibling surfaces");
+        assert_eq!(
+            meshes.len(),
+            3,
+            "left remainder, door, right remainder = three sibling surfaces"
+        );
         for entry in &meshes {
-            assert_eq!(entry["indices"].as_array().unwrap().len(), 6, "each piece is a quad: two triangles");
+            assert_eq!(
+                entry["indices"].as_array().unwrap().len(),
+                6,
+                "each piece is a quad: two triangles"
+            );
         }
     }
 
     #[wasm_bindgen_test]
     fn moving_a_node_changes_its_surfaces_refetched_mesh() {
         let mut session = ConstructionSession::new();
-        session.add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#).unwrap();
-        session.add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#).unwrap();
-        session.add_node_json(r#"{"id":"c","position":[0.0,1.0,0.0]}"#).unwrap();
-        session.add_edge_json(r#"{"id":"ab","source":"a","target":"b"}"#).unwrap();
-        session.add_edge_json(r#"{"id":"bc","source":"b","target":"c"}"#).unwrap();
-        session.add_edge_json(r#"{"id":"ca","source":"c","target":"a"}"#).unwrap();
+        session
+            .add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_node_json(r#"{"id":"c","position":[0.0,1.0,0.0]}"#)
+            .unwrap();
+        session
+            .add_edge_json(r#"{"id":"ab","source":"a","target":"b"}"#)
+            .unwrap();
+        session
+            .add_edge_json(r#"{"id":"bc","source":"b","target":"c"}"#)
+            .unwrap();
+        session
+            .add_edge_json(r#"{"id":"ca","source":"c","target":"a"}"#)
+            .unwrap();
         session
             .add_surface_json(r#"{"cycle":["a","b","c"],"surfaceType":"wall","physical":true}"#)
             .unwrap();
@@ -600,13 +778,18 @@ mod tests {
             .surface_mesh_json(r#"{"surfaceKey":["a","b","c"]}"#)
             .expect("mesh exists after move");
 
-        assert_ne!(before, after, "moving a node must change its surface's refetched mesh");
+        assert_ne!(
+            before, after,
+            "moving a node must change its surface's refetched mesh"
+        );
     }
 
     #[wasm_bindgen_test]
     fn surface_mesh_json_rejects_an_unregistered_key() {
         let session = ConstructionSession::new();
-        let error = session.surface_mesh_json(r#"{"surfaceKey":["missing"]}"#).unwrap_err();
+        let error = session
+            .surface_mesh_json(r#"{"surfaceKey":["missing"]}"#)
+            .unwrap_err();
         assert!(error.as_string().unwrap().contains("no mesh derivable"));
     }
 }

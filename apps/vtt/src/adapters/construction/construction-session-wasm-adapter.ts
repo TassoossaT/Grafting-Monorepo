@@ -10,6 +10,8 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
+  ApplyPathBrushOutcome,
+  ApplyPathBrushRequest,
   CloudOutcome,
   CloudRequest,
   ConstructionNodeSnapshot,
@@ -183,6 +185,21 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return response.surfaceKey;
   }
 
+  applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome {
+    const wire = {
+      operationId: request.operationId,
+      center: [request.center.x, request.center.z],
+      radius: request.radius,
+      depth: request.depth,
+      sourceSurfaceType: request.sourceSurfaceType,
+      targetSurfaceType: request.targetSurfaceType,
+    };
+    const session = this.#require() as ConstructionSession & {
+      apply_path_brush_json(requestJson: string): string;
+    };
+    return this.#pathBrushOutcome(session.apply_path_brush_json(JSON.stringify(wire)));
+  }
+
   generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome {
     const wire = {
       edges: request.edges.map((edge) => ({
@@ -240,6 +257,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType })),
     ) as { surfaceKeys: readonly (readonly string[])[] };
     return { surfaceKeys: response.surfaceKeys };
+  }
+
+  #pathBrushOutcome(responseJson: string): ApplyPathBrushOutcome {
+    const response = JSON.parse(responseJson) as ApplyPathBrushOutcome;
+    return response;
   }
 
   #diffOutcome(responseJson: string): DiffOutcome {
