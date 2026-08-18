@@ -147,9 +147,7 @@ pub fn plan_path_brush(
                     .ok_or_else(|| PathBrushFailure::NonConvexSurface { key: key.clone() })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        if !is_convex(&polygon) {
-            return Err(PathBrushFailure::NonConvexSurface { key });
-        }
+        let convex = is_convex(&polygon);
 
         let inside_count = polygon
             .iter()
@@ -163,6 +161,28 @@ pub fn plan_path_brush(
             || point_in_convex_polygon(request.center, &polygon)
             || nearest < request.radius;
         if !intersects {
+            continue;
+        }
+        if !convex {
+            let source_tag = surface_tag(&key);
+            let built = whole_face_path(&polygon, &key, &source_tag, request)?;
+            append_piece(
+                built,
+                surface.cycle(),
+                &key,
+                surfaces,
+                &mut nodes,
+                &mut edges,
+                &mut added_surfaces,
+                &mut created_nodes,
+                &mut preserved_nodes,
+                &mut created_edges,
+                &mut created_surface_keys,
+                &mut removed_surfaces,
+                &mut removed_surface_keys,
+                &mut changed,
+                &mut neighbors,
+            );
             continue;
         }
 
