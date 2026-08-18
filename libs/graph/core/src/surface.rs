@@ -178,12 +178,18 @@ pub enum SurfaceError {
 impl fmt::Display for SurfaceError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EmptyCycle => formatter.write_str("a surface cycle must reference at least one node"),
-            Self::UnknownNode { id } => write!(formatter, "surface cycle references unknown node {id}"),
+            Self::EmptyCycle => {
+                formatter.write_str("a surface cycle must reference at least one node")
+            }
+            Self::UnknownNode { id } => {
+                write!(formatter, "surface cycle references unknown node {id}")
+            }
             Self::DuplicateSurface { key } => {
                 write!(formatter, "a surface already exists for node set {key:?}")
             }
-            Self::UnknownSurface { key } => write!(formatter, "unknown surface for node set {key:?}"),
+            Self::UnknownSurface { key } => {
+                write!(formatter, "unknown surface for node set {key:?}")
+            }
         }
     }
 }
@@ -193,7 +199,7 @@ impl Error for SurfaceError {}
 /// Tracks every construction [`Surface`] and the reverse node -> surfaces
 /// index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
 /// which surfaces reference a given node, without a full scan.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SurfaceRegistry {
     surfaces: HashMap<SurfaceKey, Surface>,
     by_node: HashMap<NodeId, BTreeSet<SurfaceKey>>,
@@ -229,7 +235,10 @@ impl SurfaceRegistry {
             return Err(SurfaceError::DuplicateSurface { key });
         }
         for id in &cycle {
-            self.by_node.entry(id.clone()).or_default().insert(key.clone());
+            self.by_node
+                .entry(id.clone())
+                .or_default()
+                .insert(key.clone());
         }
         self.surfaces.insert(
             key.clone(),
@@ -265,6 +274,16 @@ impl SurfaceRegistry {
         self.surfaces.get(key)
     }
 
+    /// Registered surface identities in deterministic identity order.
+    ///
+    /// The registry's internal storage is intentionally unordered. Callers
+    /// that need to examine a local domain snapshot therefore start from this
+    /// ordered list and resolve each record through [`surface`](Self::surface).
+    pub fn surface_keys(&self) -> Vec<SurfaceKey> {
+        let mut keys = self.surfaces.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        keys
+    }
     /// Every surface referencing `node`, in deterministic identity order --
     /// the instant lookup `ADR-0022`'s `Move` operation needs to know which
     /// surfaces to recompute, without a full scan.
@@ -275,7 +294,11 @@ impl SurfaceRegistry {
     /// Updates a surface's type. Touches no node and no cycle -- per
     /// `ADR-0022`, `type` is not derived from node positions, so this never
     /// requires a mesh recompute.
-    pub fn set_type(&mut self, key: &SurfaceKey, surface_type: SurfaceType) -> Result<(), SurfaceError> {
+    pub fn set_type(
+        &mut self,
+        key: &SurfaceKey,
+        surface_type: SurfaceType,
+    ) -> Result<(), SurfaceError> {
         let surface = self
             .surfaces
             .get_mut(key)
@@ -299,7 +322,11 @@ impl SurfaceRegistry {
     /// Touches no node and no cycle, for the same reason as
     /// [`set_type`](Self::set_type) -- a curved wall's own graph topology
     /// never encodes its curve, only this attribute does.
-    pub fn set_curvature(&mut self, key: &SurfaceKey, curvature: Option<SurfaceCurvature>) -> Result<(), SurfaceError> {
+    pub fn set_curvature(
+        &mut self,
+        key: &SurfaceKey,
+        curvature: Option<SurfaceCurvature>,
+    ) -> Result<(), SurfaceError> {
         let surface = self
             .surfaces
             .get_mut(key)
@@ -322,17 +349,40 @@ mod tests {
         Graph::try_from_parts(
             vec![node("a"), node("b"), node("c"), node("d")],
             vec![
-                Edge::new(EdgeId::new("ab").unwrap(), NodeId::new("a").unwrap(), NodeId::new("b").unwrap(), ()),
-                Edge::new(EdgeId::new("bc").unwrap(), NodeId::new("b").unwrap(), NodeId::new("c").unwrap(), ()),
-                Edge::new(EdgeId::new("cd").unwrap(), NodeId::new("c").unwrap(), NodeId::new("d").unwrap(), ()),
-                Edge::new(EdgeId::new("da").unwrap(), NodeId::new("d").unwrap(), NodeId::new("a").unwrap(), ()),
+                Edge::new(
+                    EdgeId::new("ab").unwrap(),
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("bc").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("cd").unwrap(),
+                    NodeId::new("c").unwrap(),
+                    NodeId::new("d").unwrap(),
+                    (),
+                ),
+                Edge::new(
+                    EdgeId::new("da").unwrap(),
+                    NodeId::new("d").unwrap(),
+                    NodeId::new("a").unwrap(),
+                    (),
+                ),
             ],
         )
         .unwrap()
     }
 
     fn ids(names: &[&str]) -> Vec<NodeId> {
-        names.iter().map(|name| NodeId::new(*name).unwrap()).collect()
+        names
+            .iter()
+            .map(|name| NodeId::new(*name).unwrap())
+            .collect()
     }
 
     #[test]
@@ -349,7 +399,12 @@ mod tests {
 
         assert_eq!(
             registry
-                .add_surface(&graph, ids(&["a", "missing"]), SurfaceType::new("wall"), true)
+                .add_surface(
+                    &graph,
+                    ids(&["a", "missing"]),
+                    SurfaceType::new("wall"),
+                    true
+                )
                 .unwrap_err(),
             SurfaceError::UnknownNode {
                 id: NodeId::new("missing").unwrap()
@@ -357,14 +412,27 @@ mod tests {
         );
 
         let key = registry
-            .add_surface(&graph, ids(&["a", "b", "c", "d"]), SurfaceType::new("floor"), true)
+            .add_surface(
+                &graph,
+                ids(&["a", "b", "c", "d"]),
+                SurfaceType::new("floor"),
+                true,
+            )
             .unwrap();
-        assert_eq!(key.nodes(), &ids(&["a", "b", "c", "d"]).into_iter().collect());
+        assert_eq!(
+            key.nodes(),
+            &ids(&["a", "b", "c", "d"]).into_iter().collect()
+        );
 
         // Same node set, different order: same identity, rejected as a duplicate.
         assert_eq!(
             registry
-                .add_surface(&graph, ids(&["c", "d", "a", "b"]), SurfaceType::new("floor"), true)
+                .add_surface(
+                    &graph,
+                    ids(&["c", "d", "a", "b"]),
+                    SurfaceType::new("floor"),
+                    true
+                )
                 .unwrap_err(),
             SurfaceError::DuplicateSurface { key }
         );
@@ -378,7 +446,12 @@ mod tests {
             .add_surface(&graph, ids(&["a", "b"]), SurfaceType::new("wall"), true)
             .unwrap();
         let floor = registry
-            .add_surface(&graph, ids(&["b", "c", "d", "a"]), SurfaceType::new("floor"), true)
+            .add_surface(
+                &graph,
+                ids(&["b", "c", "d", "a"]),
+                SurfaceType::new("floor"),
+                true,
+            )
             .unwrap();
 
         let mut referencing_a = registry
@@ -391,19 +464,25 @@ mod tests {
         assert_eq!(referencing_a, expected);
 
         assert_eq!(
-            registry.surfaces_referencing(&NodeId::new("c").unwrap()).collect::<Vec<_>>(),
+            registry
+                .surfaces_referencing(&NodeId::new("c").unwrap())
+                .collect::<Vec<_>>(),
             vec![&floor]
         );
 
         registry.remove_surface(&wall).unwrap();
         assert_eq!(
-            registry.surfaces_referencing(&NodeId::new("b").unwrap()).collect::<Vec<_>>(),
+            registry
+                .surfaces_referencing(&NodeId::new("b").unwrap())
+                .collect::<Vec<_>>(),
             vec![&floor]
         );
         // "a" was only referenced by the removed wall and the floor; still
         // referenced by the floor, so the reverse index entry survives.
         assert_eq!(
-            registry.surfaces_referencing(&NodeId::new("a").unwrap()).collect::<Vec<_>>(),
+            registry
+                .surfaces_referencing(&NodeId::new("a").unwrap())
+                .collect::<Vec<_>>(),
             vec![&floor]
         );
     }
@@ -413,7 +492,12 @@ mod tests {
         let graph = ring_graph();
         let mut registry = SurfaceRegistry::new();
         let key = registry
-            .add_surface(&graph, ids(&["a", "b", "c"]), SurfaceType::new("wall"), true)
+            .add_surface(
+                &graph,
+                ids(&["a", "b", "c"]),
+                SurfaceType::new("wall"),
+                true,
+            )
             .unwrap();
 
         registry.set_type(&key, SurfaceType::new("window")).unwrap();
@@ -426,7 +510,10 @@ mod tests {
 
         assert_eq!(
             registry
-                .set_type(&SurfaceKey::from_cycle(&ids(&["missing"])), SurfaceType::new("x"))
+                .set_type(
+                    &SurfaceKey::from_cycle(&ids(&["missing"])),
+                    SurfaceType::new("x")
+                )
                 .unwrap_err(),
             SurfaceError::UnknownSurface {
                 key: SurfaceKey::from_cycle(&ids(&["missing"]))

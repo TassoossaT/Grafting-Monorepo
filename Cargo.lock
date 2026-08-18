@@ -461,6 +461,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-procgen-surface-transformations"
+version = "0.0.0"
+dependencies = [
+ "grafting-graph-core",
+]
+
+[[package]]
 name = "grafting-procgen-terrain-generation"
 version = "0.0.0"
 dependencies = [

@@ -250,7 +250,7 @@ impl fmt::Display for GraphError {
 impl Error for GraphError {}
 
 /// Generic directed multigraph with private storage and deterministic queries.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Graph<N, E> {
     storage: StableDiGraph<Node<N>, Edge<E>>,
     node_indices: HashMap<NodeId, NodeIndex>,
@@ -685,7 +685,9 @@ mod tests {
                 .unwrap();
 
         assert_eq!(
-            graph.remove_edge(&EdgeId::new("missing").unwrap()).unwrap_err(),
+            graph
+                .remove_edge(&EdgeId::new("missing").unwrap())
+                .unwrap_err(),
             GraphError::UnknownEdge {
                 id: EdgeId::new("missing").unwrap()
             }
@@ -710,7 +712,9 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            graph.remove_node(&NodeId::new("missing").unwrap()).unwrap_err(),
+            graph
+                .remove_node(&NodeId::new("missing").unwrap())
+                .unwrap_err(),
             GraphError::UnknownNode {
                 id: NodeId::new("missing").unwrap()
             }
@@ -737,13 +741,12 @@ mod tests {
             Graph::<u32, ()>::try_from_parts(vec![Node::new(NodeId::new("a").unwrap(), 1)], vec![])
                 .unwrap();
 
-        assert!(
-            graph
-                .node_mut(&NodeId::new("missing").unwrap())
-                .is_none()
-        );
+        assert!(graph.node_mut(&NodeId::new("missing").unwrap()).is_none());
 
-        let payload = graph.node_mut(&NodeId::new("a").unwrap()).unwrap().data_mut();
+        let payload = graph
+            .node_mut(&NodeId::new("a").unwrap())
+            .unwrap()
+            .data_mut();
         *payload = 42;
         assert_eq!(*graph.node(&NodeId::new("a").unwrap()).unwrap().data(), 42);
     }
@@ -917,14 +920,18 @@ impl PrismGridMesh {
                     let mut pz = z_base;
 
                     if inputs.deformation_xy > 0.0 && x > 0 && x < width && y > 0 && y < height {
-                        let shift_x = (x as f32 * 1.3 + y as f32 * 0.7).sin() * 0.25 * inputs.deformation_xy;
-                        let shift_y = (x as f32 * 0.9 - y as f32 * 1.1).cos() * 0.25 * inputs.deformation_xy;
+                        let shift_x =
+                            (x as f32 * 1.3 + y as f32 * 0.7).sin() * 0.25 * inputs.deformation_xy;
+                        let shift_y =
+                            (x as f32 * 0.9 - y as f32 * 1.1).cos() * 0.25 * inputs.deformation_xy;
                         px += shift_x;
                         py += shift_y;
                     }
 
                     if inputs.deformation_z > 0.0 {
-                        let shift_z = (x as f32 * 0.8 + y as f32 * 1.2 + l as f32 * 0.5).sin() * 0.5 * inputs.deformation_z;
+                        let shift_z = (x as f32 * 0.8 + y as f32 * 1.2 + l as f32 * 0.5).sin()
+                            * 0.5
+                            * inputs.deformation_z;
                         pz += shift_z;
                     }
 
@@ -936,7 +943,6 @@ impl PrismGridMesh {
         let mut cell_corners = Vec::with_capacity(cell_count);
         let mut cell_neighbors = vec![u32::MAX; cell_count * 6];
         let cell_inputs = vec![inputs; cell_count];
-
 
         for l in 0..layers {
             for y in 0..height {
@@ -958,8 +964,8 @@ impl PrismGridMesh {
                     let v7 = next_layer_offset + (y + 1) * stride_xy + x;
 
                     cell_corners.push([
-                        v0 as u32, v1 as u32, v2 as u32, v3 as u32,
-                        v4 as u32, v5 as u32, v6 as u32, v7 as u32,
+                        v0 as u32, v1 as u32, v2 as u32, v3 as u32, v4 as u32, v5 as u32,
+                        v6 as u32, v7 as u32,
                     ]);
 
                     // Neighbors: [North(0), East(1), South(2), West(3), Bottom(4), Top(5)]
@@ -968,19 +974,24 @@ impl PrismGridMesh {
                         cell_neighbors[base_n] = (l * width * height + (y - 1) * width + x) as u32;
                     }
                     if x + 1 < width {
-                        cell_neighbors[base_n + 1] = (l * width * height + y * width + (x + 1)) as u32;
+                        cell_neighbors[base_n + 1] =
+                            (l * width * height + y * width + (x + 1)) as u32;
                     }
                     if y + 1 < height {
-                        cell_neighbors[base_n + 2] = (l * width * height + (y + 1) * width + x) as u32;
+                        cell_neighbors[base_n + 2] =
+                            (l * width * height + (y + 1) * width + x) as u32;
                     }
                     if x > 0 {
-                        cell_neighbors[base_n + 3] = (l * width * height + y * width + (x - 1)) as u32;
+                        cell_neighbors[base_n + 3] =
+                            (l * width * height + y * width + (x - 1)) as u32;
                     }
                     if l > 0 {
-                        cell_neighbors[base_n + 4] = ((l - 1) * width * height + y * width + x) as u32;
+                        cell_neighbors[base_n + 4] =
+                            ((l - 1) * width * height + y * width + x) as u32;
                     }
                     if l + 1 < layers {
-                        cell_neighbors[base_n + 5] = ((l + 1) * width * height + y * width + x) as u32;
+                        cell_neighbors[base_n + 5] =
+                            ((l + 1) * width * height + y * width + x) as u32;
                     }
                 }
             }
@@ -1002,4 +1013,3 @@ impl PrismGridMesh {
         (self.width * self.height * self.layers) as usize
     }
 }
-

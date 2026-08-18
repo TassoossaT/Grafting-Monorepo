@@ -343,6 +343,8 @@ pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::E
 pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>
 pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
 pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+impl<N: core::clone::Clone, E: core::clone::Clone> core::clone::Clone for grafting_graph_core::Graph<N, E>
+pub fn grafting_graph_core::Graph<N, E>::clone(&self) -> grafting_graph_core::Graph<N, E>
 impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::Graph<N, E>
 pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<N, E> core::marker::Freeze for grafting_graph_core::Graph<N, E>
@@ -615,7 +617,10 @@ pub fn grafting_graph_core::SurfaceRegistry::set_curvature(&mut self, key: &graf
 pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::set_type(&mut self, key: &grafting_graph_core::SurfaceKey, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>
 pub fn grafting_graph_core::SurfaceRegistry::surface(&self, key: &grafting_graph_core::SurfaceKey) -> core::option::Option<&grafting_graph_core::Surface>
+pub fn grafting_graph_core::SurfaceRegistry::surface_keys(&self) -> alloc::vec::Vec<grafting_graph_core::SurfaceKey>
 pub fn grafting_graph_core::SurfaceRegistry::surfaces_referencing(&self, node: &grafting_graph_core::NodeId) -> impl core::iter::traits::iterator::Iterator<Item = &grafting_graph_core::SurfaceKey>
+impl core::clone::Clone for grafting_graph_core::SurfaceRegistry
+pub fn grafting_graph_core::SurfaceRegistry::clone(&self) -> grafting_graph_core::SurfaceRegistry
 impl core::default::Default for grafting_graph_core::SurfaceRegistry
 pub fn grafting_graph_core::SurfaceRegistry::default() -> grafting_graph_core::SurfaceRegistry
 impl core::fmt::Debug for grafting_graph_core::SurfaceRegistry
@@ -626,6 +631,20 @@ impl core::marker::Sync for grafting_graph_core::SurfaceRegistry
 impl core::marker::Unpin for grafting_graph_core::SurfaceRegistry
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceRegistry
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceRegistry
+pub struct grafting_graph_core::SurfaceReplacementPlan<N, E>
+pub grafting_graph_core::SurfaceReplacementPlan::added_edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>
+pub grafting_graph_core::SurfaceReplacementPlan::added_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>
+pub grafting_graph_core::SurfaceReplacementPlan::added_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceSpec>
+pub grafting_graph_core::SurfaceReplacementPlan::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>
+pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan
+impl<N: core::fmt::Debug, E: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::SurfaceReplacementPlan<N, E>
+pub fn grafting_graph_core::SurfaceReplacementPlan<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<N, E> core::marker::Freeze for grafting_graph_core::SurfaceReplacementPlan<N, E>
+impl<N, E> core::marker::Send for grafting_graph_core::SurfaceReplacementPlan<N, E> where N: core::marker::Send, E: core::marker::Send
+impl<N, E> core::marker::Sync for grafting_graph_core::SurfaceReplacementPlan<N, E> where N: core::marker::Sync, E: core::marker::Sync
+impl<N, E> core::marker::Unpin for grafting_graph_core::SurfaceReplacementPlan<N, E> where N: core::marker::Unpin, E: core::marker::Unpin
+impl<N, E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::SurfaceReplacementPlan<N, E> where N: core::panic::unwind_safe::RefUnwindSafe, E: core::panic::unwind_safe::RefUnwindSafe
+impl<N, E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::SurfaceReplacementPlan<N, E> where N: core::panic::unwind_safe::UnwindSafe, E: core::panic::unwind_safe::UnwindSafe
 pub struct grafting_graph_core::SurfaceSpec
 pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>
 pub grafting_graph_core::SurfaceSpec::cycle: alloc::vec::Vec<grafting_graph_core::NodeId>
@@ -703,6 +722,7 @@ pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::E
 pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>
 pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
 pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>
 pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>
 pub fn grafting_graph_core::duplicate_surface<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, duplicate: grafting_graph_core::DuplicateSpec<N, E>) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>
 pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>
@@ -1070,6 +1090,14 @@ requires a mesh recompute.
 
 Looks up a surface by its node-set identity.
 
+### `pub fn grafting_graph_core::SurfaceRegistry::surface_keys(&self) -> alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Registered surface identities in deterministic identity order.
+
+The registry's internal storage is intentionally unordered. Callers
+that need to examine a local domain snapshot therefore start from this
+ordered list and resolve each record through [`surface`](Self::surface).
+
 ### `pub fn grafting_graph_core::SurfaceRegistry::surfaces_referencing(&self, node: &grafting_graph_core::NodeId) -> impl core::iter::traits::iterator::Iterator<Item = &grafting_graph_core::SurfaceKey>`
 
 Every surface referencing `node`, in deterministic identity order --
@@ -1103,6 +1131,17 @@ Node lifecycle changes.
 ### `pub fn grafting_graph_core::TransformationPlan::surface_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>`
 
 Surface lifecycle changes.
+
+### `pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>`
+
+Applies a complete local surface replacement atomically.
+
+The generic graph capability owns transactionality; domain transformers own
+intersection, formation, and the cycles supplied in the batch. The current
+graph and registry are cloned, all mutations are attempted on the clone,
+and only a fully valid result replaces the confirmed state. This requires
+cloneable caller payloads but avoids exposing the graph backend or making a
+bridge reimplement partial-rollback logic.
 
 ### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
 
@@ -1477,6 +1516,26 @@ A query or update referenced a surface that is not registered.
 
 Identity that could not be resolved.
 
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>`
+
+New graph edges required by replacement surface cycles.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+New graph nodes required by replacement surface cycles.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::added_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceSpec>`
+
+Replacement surfaces to register after the graph records exist.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+
+Existing surfaces to remove before registering replacements.
+
+### `pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan`
+
+Phase-A lifecycle and invalidation contract for this replacement.
+
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
@@ -1626,6 +1685,17 @@ sharing one boundary) needs at least one differing node today.
 Tracks every construction [`Surface`] and the reverse node -> surfaces
 index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
 which surfaces reference a given node, without a full scan.
+
+### `pub struct grafting_graph_core::SurfaceReplacementPlan<N, E>`
+
+Generic replacement batch produced by a domain transformer.
+
+The batch contains only graph records and semantic surface records. It has
+no product type branches or geometry interpretation: a caller computes the
+local cycles and supplies the already-validated [`TransformationPlan`].
+[`apply_surface_replacement_plan`] validates the entire replacement on a
+private graph/registry copy before publishing it, so callers never observe
+a partial surface transformation.
 
 ### `pub struct grafting_graph_core::SurfaceSpec`
 

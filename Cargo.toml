@@ -13,6 +13,7 @@ members = [
     "libs/domains/procgen/terrain-generation",
     "libs/domains/procgen/structure-generation",
     "libs/domains/procgen/surface-mesh",
+    "libs/domains/procgen/surface-transformations",
     "libs/domains/procgen/construction-wasm",
     "tools/rust-api-docgen",
 ]
