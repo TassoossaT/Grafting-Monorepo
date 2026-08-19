@@ -1,4 +1,4 @@
-import { chunkSurfaceMeshes, CONSTRUCTION_GRID_EXTENT, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
+import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
   createTokenCollection,
@@ -35,7 +35,6 @@ import type {
   GenerateTerrainCellRequest,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
-  RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
   ScenePickResult,
@@ -260,8 +259,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #construction: ConstructionSessionPort;
   readonly #terrainNoise: TerrainNoisePort;
   readonly #seedDefaultMapOnStart: boolean;
-  /** Last uploaded revision per `RenderMapChunk.chunkId`, so a re-chunk after an edit can tell which chunk ids fell out and must be removed. */
+  /** Last uploaded revision per `RenderMapChunk.chunkId`. */
   readonly #chunkRevisions = new Map<string, number>();
+  /** Every surface currently landing in each spatial chunk bucket, keyed by `chunkId` then `surfaceRef` -- the persistent membership `#syncSurfaceChunks` incrementally updates instead of re-deriving every chunk's buffer from the whole map on every edit. */
+  readonly #chunkMembers = new Map<string, Map<string, SurfaceMeshResult>>();
+  /** Reverse index of `#chunkMembers`: which chunk a given surface currently belongs to, so moving/removing it only touches its own (old and new) chunk. */
+  readonly #surfaceChunk = new Map<string, string>();
   /** Last uploaded revision for each invisible per-surface pick proxy. */
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
@@ -348,8 +351,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     const meshes = this.#construction.getAllSurfaceMeshes();
     const causeId = `table-load:${this.#tableId}`;
-    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), "programmatic", causeId, generation);
-    this.#uploadSurfacePickTargets(meshes, "programmatic", causeId, generation);
+    this.#fullResyncSurfaces(meshes, "programmatic", causeId, generation);
 
     const surfaceKeys = [terrainKey, ...wallOutcome.addedSurfaceKeys];
     let map = this.#foldAffectedSurfaces(createMapProjection(), surfaceKeys, meshes);
@@ -357,89 +359,155 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return map;
   }
 
-  /**
-   * Uploads every currently-chunked piece of map geometry and removes any
-   * previously-uploaded chunk id that no longer appears -- required because
-   * `chunkSurfaceMeshes` merges every surface landing in one spatial bucket
-   * into a single buffer per {@link SceneRenderPort.applyConfirmed} call, so
-   * a stale bucket cannot be corrected by re-uploading only the surface that
-   * moved out of it. Re-deriving and re-chunking every surface on each edit
-   * (rather than patching just the affected ones) is deliberately simple:
-   * nothing in this map's current scale needs finer-grained chunk diffing
-   * yet (`E1.1` found query/traversal cheap well past this map's size).
-   */
-  #uploadMapChunks(
-    chunks: readonly RenderMapChunk[],
+  /** Upserts one surface's invisible pick proxy. */
+  #upsertSurfacePickTarget(
+    surfaceRef: string,
+    mesh: SurfaceMeshResult,
     origin: ChangeOrigin,
     causeId: string,
     generation: number,
   ): void {
-    const nextChunkIds = new Set<string>();
-    for (const chunk of chunks) {
-      nextChunkIds.add(chunk.chunkId);
-      const revision = (this.#chunkRevisions.get(chunk.chunkId) ?? 0) + 1;
-      this.#chunkRevisions.set(chunk.chunkId, revision);
+    const revision = (this.#surfacePickRevisions.get(surfaceRef) ?? 0) + 1;
+    this.#surfacePickRevisions.set(surfaceRef, revision);
+    this.#render.applyConfirmed({
+      type: "surface-pick-target-upserted",
+      origin,
+      causeId,
+      runtimeGeneration: generation,
+      dependency: { layer: "surface-picks", scopeId: surfaceRef, revision },
+      target: { surfaceRef, mesh: mesh.mesh },
+    });
+  }
+
+  /** Removes one surface's invisible pick proxy, if it had one. */
+  #removeSurfacePickTarget(surfaceRef: string, origin: ChangeOrigin, causeId: string, generation: number): void {
+    const revision = this.#surfacePickRevisions.get(surfaceRef);
+    if (revision === undefined) return;
+    this.#render.applyConfirmed({
+      type: "surface-pick-target-removed",
+      origin,
+      causeId,
+      runtimeGeneration: generation,
+      dependency: { layer: "surface-picks", scopeId: surfaceRef, revision: revision + 1 },
+      surfaceRef,
+    });
+    this.#surfacePickRevisions.delete(surfaceRef);
+  }
+
+  /**
+   * Updates the chunked render layer and per-surface pick proxies for
+   * exactly `changedMeshes`/`removedSurfaceRefs` -- every other surface's
+   * chunk membership and buffer is left untouched. This used to re-derive
+   * *every* surface in the whole map (`getAllSurfaceMeshes()`) and re-chunk
+   * all of it on every single edit, diffing the result against what was
+   * uploaded last time to find removed chunk ids -- "deliberately simple"
+   * when the map was always small, but it means every mutation's cost (and
+   * its JSON round-trip across the WASM boundary) scaled with total map
+   * size, not with what actually changed. Worse, if that full round-trip
+   * ever came back incomplete for any reason (a real risk once a single
+   * mutation can produce hundreds of surfaces at once, e.g. a long
+   * terrain-sculpt drag), the diff read every surface missing from it as
+   * "removed" -- silently deleting untouched geometry elsewhere on the map.
+   *
+   * A chunk's render buffer is a merge of every surface currently landing in
+   * that spatial bucket (`chunkSurfaceMeshes`'s own doc explains why a
+   * partial buffer can't be patched surface-by-surface), so `#chunkMembers`
+   * tracks that membership persistently; only the *chunks* a change actually
+   * touched (gained a surface, lost one, or had one move between buckets)
+   * get re-merged and re-uploaded here -- everything else costs nothing.
+   */
+  #syncSurfaceChunks(
+    changedMeshes: readonly SurfaceMeshResult[],
+    removedSurfaceRefs: readonly string[],
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): void {
+    const dirtyChunkIds = new Set<string>();
+
+    for (const surfaceRef of removedSurfaceRefs) {
+      const oldChunkId = this.#surfaceChunk.get(surfaceRef);
+      if (oldChunkId !== undefined) {
+        this.#chunkMembers.get(oldChunkId)?.delete(surfaceRef);
+        this.#surfaceChunk.delete(surfaceRef);
+        dirtyChunkIds.add(oldChunkId);
+      }
+      this.#removeSurfacePickTarget(surfaceRef, origin, causeId, generation);
+    }
+
+    for (const mesh of changedMeshes) {
+      const surfaceRef = surfaceRefFromNodeSet(mesh.surfaceKey);
+      const newChunkId = chunkKeyForSurface(mesh);
+      const oldChunkId = this.#surfaceChunk.get(surfaceRef);
+      if (oldChunkId !== undefined && oldChunkId !== newChunkId) {
+        this.#chunkMembers.get(oldChunkId)?.delete(surfaceRef);
+        dirtyChunkIds.add(oldChunkId);
+      }
+      let bucket = this.#chunkMembers.get(newChunkId);
+      if (bucket === undefined) {
+        bucket = new Map();
+        this.#chunkMembers.set(newChunkId, bucket);
+      }
+      bucket.set(surfaceRef, mesh);
+      this.#surfaceChunk.set(surfaceRef, newChunkId);
+      dirtyChunkIds.add(newChunkId);
+
+      this.#upsertSurfacePickTarget(surfaceRef, mesh, origin, causeId, generation);
+    }
+
+    for (const chunkId of dirtyChunkIds) {
+      const bucket = this.#chunkMembers.get(chunkId);
+      const chunk = bucket === undefined ? undefined : mergeChunkBucket(chunkId, [...bucket.values()]);
+      if (chunk === undefined) {
+        this.#chunkMembers.delete(chunkId);
+        const revision = this.#chunkRevisions.get(chunkId);
+        if (revision === undefined) continue;
+        this.#render.applyConfirmed({
+          type: "map-chunk-removed",
+          origin,
+          causeId,
+          runtimeGeneration: generation,
+          dependency: { layer: "terrain", scopeId: chunkId, revision: revision + 1 },
+          chunkId,
+        });
+        this.#chunkRevisions.delete(chunkId);
+        continue;
+      }
+      const revision = (this.#chunkRevisions.get(chunkId) ?? 0) + 1;
+      this.#chunkRevisions.set(chunkId, revision);
       this.#render.applyConfirmed({
         type: "map-chunk-upserted",
         origin,
         causeId,
         runtimeGeneration: generation,
-        dependency: { layer: "terrain", scopeId: chunk.chunkId, revision },
+        dependency: { layer: "terrain", scopeId: chunkId, revision },
         chunk,
       });
     }
-
-    for (const [chunkId, revision] of [...this.#chunkRevisions]) {
-      if (nextChunkIds.has(chunkId)) continue;
-      this.#render.applyConfirmed({
-        type: "map-chunk-removed",
-        origin,
-        causeId,
-        runtimeGeneration: generation,
-        dependency: { layer: "terrain", scopeId: chunkId, revision: revision + 1 },
-        chunkId,
-      });
-      this.#chunkRevisions.delete(chunkId);
-    }
   }
 
-  /** Keeps one invisible pick proxy per canonical surface while visual chunks remain batched. */
-  #uploadSurfacePickTargets(
+  /**
+   * The only place `getAllSurfaceMeshes()` (a full re-derivation of the
+   * entire map) is still allowed to run -- when the actual set of changed
+   * surfaces genuinely isn't known (the initial load, or restoring an
+   * undo/redo checkpoint that may have touched an arbitrary, unenumerated
+   * set of surfaces). Diffs the fresh full list against `#surfaceChunk`'s
+   * own tracked membership to find what's now stale, then reuses
+   * {@link AppTabletopRuntime.#syncSurfaceChunks} so both paths update
+   * exactly the same persistent state.
+   */
+  #fullResyncSurfaces(
     meshes: readonly SurfaceMeshResult[],
     origin: ChangeOrigin,
     causeId: string,
     generation: number,
   ): void {
-    const nextRefs = new Set<string>();
-    for (const surface of meshes) {
-      const surfaceRef = surfaceRefFromNodeSet(surface.surfaceKey);
-      nextRefs.add(surfaceRef);
-      const revision = (this.#surfacePickRevisions.get(surfaceRef) ?? 0) + 1;
-      this.#surfacePickRevisions.set(surfaceRef, revision);
-      this.#render.applyConfirmed({
-        type: "surface-pick-target-upserted",
-        origin,
-        causeId,
-        runtimeGeneration: generation,
-        dependency: { layer: "surface-picks", scopeId: surfaceRef, revision },
-        target: { surfaceRef, mesh: surface.mesh },
-      });
-    }
-
-    for (const [surfaceRef, revision] of [...this.#surfacePickRevisions]) {
-      if (nextRefs.has(surfaceRef)) continue;
-      this.#render.applyConfirmed({
-        type: "surface-pick-target-removed",
-        origin,
-        causeId,
-        runtimeGeneration: generation,
-        dependency: { layer: "surface-picks", scopeId: surfaceRef, revision: revision + 1 },
-        surfaceRef,
-      });
-      this.#surfacePickRevisions.delete(surfaceRef);
-    }
+    const currentRefs = new Set(meshes.map((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey)));
+    const staleRefs = [...this.#surfaceChunk.keys()].filter((ref) => !currentRefs.has(ref));
+    this.#syncSurfaceChunks(meshes, staleRefs, origin, causeId, generation);
   }
-  /** Uploads one node's pickable handle at its current position, mirroring `#uploadMapChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
+
+  /** Uploads one node's pickable handle at its current position, mirroring `#syncSurfaceChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
   #uploadNodeHandle(
     nodeId: ConstructionNodeId,
     position: ConstructionPosition,
@@ -549,9 +617,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /**
    * The sequence every construction mutation shares once the engine call
-   * itself has already run: re-derive and re-upload every chunk (see
-   * {@link AppTabletopRuntime.#uploadMapChunks}), fold `surfaceKeys` into the
-   * cached `MapProjection`, let the caller fold in whatever node-position
+   * itself has already run: fetch only `surfaceKeys`'s own meshes and
+   * incrementally sync the chunked render layer for them plus
+   * `removedSurfaceRefs` (see
+   * {@link AppTabletopRuntime.#syncSurfaceChunks}), fold `surfaceKeys` into
+   * the cached `MapProjection`, let the caller fold in whatever node-position
    * change its own mutation implies (a full re-scan for a newly-generated
    * cell/wall, or a direct known-position fold for a move -- see
    * {@link AppTabletopRuntime.#foldDiscoveredNodePositions}'s own doc comment
@@ -559,13 +629,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
    */
   #applyConstructionMutation(
     surfaceKeys: readonly ConstructionSurfaceKey[],
+    removedSurfaceRefs: readonly string[],
     origin: ChangeOrigin,
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    const meshes = this.#construction.getAllSurfaceMeshes();
-    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
-    this.#uploadSurfacePickTargets(meshes, origin, causeId, this.#generation);
+    const meshes = surfaceKeys.map((surfaceKey) => this.#construction.getSurfaceMesh(surfaceKey));
+    this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
     map = foldNodePositions(map);
@@ -596,7 +666,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("moving a node");
 
     const affected = this.#construction.moveNode(nodeId, position);
-    this.#applyConstructionMutation(affected.affectedSurfaceKeys, origin, causeId, (map) => {
+    this.#applyConstructionMutation(affected.affectedSurfaceKeys, [], origin, causeId, (map) => {
       const previousNode = map.nodePositions.get(nodeId);
       const next = applyMapProjectionDelta(map, {
         type: "node-moved",
@@ -624,7 +694,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("generating terrain");
 
     const surfaceKey = this.#construction.generateTerrainCell(request);
-    this.#applyConstructionMutation([surfaceKey], origin, causeId, (map) =>
+    this.#applyConstructionMutation([surfaceKey], [], origin, causeId, (map) =>
       this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
     return surfaceKey;
@@ -644,10 +714,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       changed.set(surfaceRefFromNodeSet(surfaceKey), surfaceKey);
     }
 
-    this.#applyConstructionMutation([...changed.values()], origin, causeId, (map) => {
+    const removedRefs = outcome.surfaceIds.removed.map(surfaceRefFromNodeSet);
+    this.#applyConstructionMutation([...changed.values()], removedRefs, origin, causeId, (map) => {
       let next = map;
-      for (const removedKey of outcome.surfaceIds.removed) {
-        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+      for (const surfaceRef of removedRefs) {
         const previous = next.byId.get(surfaceRef);
         if (previous === undefined) continue;
         next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
@@ -660,11 +730,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       return next;
     });
   }
-  /** Rebuilds projections after a session-owned semantic checkpoint restore. */
+  /** Rebuilds projections after a session-owned semantic checkpoint restore -- the only place a full `getAllSurfaceMeshes()` re-derivation is still correct, since an undo/redo restore can touch an arbitrary, unenumerated set of surfaces. See {@link AppTabletopRuntime.#fullResyncSurfaces}. */
   #refreshConstructionProjection(origin: ChangeOrigin, causeId: string): void {
     const meshes = this.#construction.getAllSurfaceMeshes();
-    this.#uploadMapChunks(chunkSurfaceMeshes(meshes), origin, causeId, this.#generation);
-    this.#uploadSurfacePickTargets(meshes, origin, causeId, this.#generation);
+    this.#fullResyncSurfaces(meshes, origin, causeId, this.#generation);
 
     const liveNodes = new Set(this.#construction.getNodePositions().map((node) => node.id));
     for (const nodeId of [...this.#nodeHandleRevisions.keys()]) {
@@ -688,10 +757,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
   /** Shared by every `generate*` mutation: folds `outcome`'s added/removed surfaces and removed nodes into the running map. */
   #foldDiffOutcome(outcome: DiffOutcome, origin: ChangeOrigin, causeId: string): void {
-    this.#applyConstructionMutation(outcome.addedSurfaceKeys, origin, causeId, (map) => {
+    const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
+    this.#applyConstructionMutation(outcome.addedSurfaceKeys, removedRefs, origin, causeId, (map) => {
       let next = map;
-      for (const removedKey of outcome.removedSurfaceKeys) {
-        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+      for (const surfaceRef of removedRefs) {
         const previous = next.byId.get(surfaceRef);
         if (previous === undefined) continue;
         next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
@@ -793,8 +862,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("removing a surface");
 
     this.#construction.removeSurface(request);
-    this.#applyConstructionMutation([], origin, causeId, (map) => {
-      const surfaceRef = surfaceRefFromNodeSet(request.surfaceKey);
+    const surfaceRef = surfaceRefFromNodeSet(request.surfaceKey);
+    this.#applyConstructionMutation([], [surfaceRef], origin, causeId, (map) => {
       const previous = map.byId.get(surfaceRef);
       if (previous === undefined) return map;
       return applyMapProjectionDelta(map, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
@@ -805,7 +874,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("removing an edge");
 
     this.#construction.removeEdge(request);
-    this.#applyConstructionMutation([], origin, causeId, (map) => map);
+    this.#applyConstructionMutation([], [], origin, causeId, (map) => map);
   }
 
   deleteNode(
@@ -818,10 +887,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("deleting a node");
 
     const outcome = this.#construction.deleteNode(nodeId, capSurfaceType, capPhysical);
-    this.#applyConstructionMutation(outcome.cappingSurfaceKeys, origin, causeId, (map) => {
+    const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
+    this.#applyConstructionMutation(outcome.cappingSurfaceKeys, removedRefs, origin, causeId, (map) => {
       let next = map;
-      for (const removedKey of outcome.removedSurfaceKeys) {
-        const surfaceRef = surfaceRefFromNodeSet(removedKey);
+      for (const surfaceRef of removedRefs) {
         const previous = next.byId.get(surfaceRef);
         if (previous === undefined) continue;
         next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
@@ -872,7 +941,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       }
     }
 
-    this.#applyConstructionMutation(surfaceKeys, origin, causeId, (map) =>
+    this.#applyConstructionMutation(surfaceKeys, [], origin, causeId, (map) =>
       this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
     );
     return surfaceKeys;
@@ -900,7 +969,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       removedRefs.push(surfaceRefFromNodeSet(split.originalKey));
     }
 
-    this.#applyConstructionMutation(newKeys, origin, causeId, (map) => {
+    this.#applyConstructionMutation(newKeys, removedRefs, origin, causeId, (map) => {
       let next = map;
       for (const removedRef of removedRefs) {
         const previous = next.byId.get(removedRef);

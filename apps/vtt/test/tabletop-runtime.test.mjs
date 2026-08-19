@@ -146,10 +146,13 @@ function createFakeConstructionPort() {
     redoPathBrush() {
       requireStarted();
     },
-    getSurfaceMesh() {
+    getSurfaceMesh(surfaceKey) {
       requireStarted();
+      const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
+      const match = this.getAllSurfaceMeshes().find((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey) === surfaceRef);
+      if (match !== undefined) return match;
       return {
-        surfaceKey: ["fake:a", "fake:b", "fake:c"],
+        surfaceKey,
         surfaceType: "wall",
         physical: true,
         mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
@@ -283,19 +286,21 @@ test("starting a table with seedDefaultMap also seeds every node's position from
 
 test("moving a node updates its position and re-uploads the map chunk it belongs to", async () => {
   const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-move-node",
     seedDefaultMap: true,
     renderPort,
-    constructionPort: createFakeConstructionPort(),
+    constructionPort,
   });
   await runtime.start();
   const before = runtime.getSnapshot();
   const uploadsBefore = renderPort.changes.filter((change) => change.type === "map-chunk-upserted").length;
 
+  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
   const affected = runtime.moveNode("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-1");
 
-  assert.deepEqual(affected, { affectedSurfaceKeys: [] });
+  assert.deepEqual(affected, { affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
   const after = runtime.getSnapshot();
   assert.notEqual(after, before);
   const moved = after.map.nodePositions.get("fake:terrain:n0");
@@ -333,20 +338,82 @@ test("moving a node removes a chunk that no longer has any surface in it", async
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-chunk-removal",
-    seedDefaultMap: true,
     renderPort,
     constructionPort,
   });
   await runtime.start();
+  // No seeded wall here on purpose -- `seedDefaultMap` puts both the seeded
+  // terrain cell and wall in the same near-origin chunk, so moving only the
+  // terrain surface away would leave the wall still occupying that chunk
+  // and it would never actually empty out. `generateTerrainCell` alone puts
+  // exactly one surface in the chunk under test.
+  runtime.generateTerrainCell({}, "local", "seed-cell");
   const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
 
-  constructionPort.getAllSurfaceMeshes = () => [];
+  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
+  constructionPort.getSurfaceMesh = (surfaceKey) => ({
+    surfaceKey,
+    surfaceType: "terrain",
+    physical: true,
+    // Far enough from the seeded chunk to land in a different spatial bucket, so the old chunk ends up with zero members.
+    mesh: { positions: new Float32Array([500, 100, 500, 501, 100, 500, 501, 100, 501, 500, 100, 501]) },
+  });
   runtime.moveNode("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
 
   const removal = renderPort.changes.find(
     (change) => change.type === "map-chunk-removed" && change.chunkId === seededChunkId,
   );
   assert.ok(removal, "the vacated chunk must be removed, not left stale");
+});
+
+test("editing one surface never touches the render chunk of an unrelated, untouched surface", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-incremental-scope",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  // Two surfaces, deliberately far apart so they land in different spatial
+  // chunk buckets (`chunkKeyFor`'s own 8-unit bucket size).
+  const farKey = ["fake:far:n0", "fake:far:n1"];
+  const nearKey = ["fake:near:n0", "fake:near:n1"];
+  constructionPort.getSurfaceMesh = (surfaceKey) => {
+    if (surfaceRefFromNodeSet(surfaceKey) === surfaceRefFromNodeSet(farKey)) {
+      return {
+        surfaceKey: farKey,
+        surfaceType: "terrain",
+        physical: true,
+        mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
+      };
+    }
+    return {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+    };
+  };
+  constructionPort.generateTerrainCell = () => farKey;
+  runtime.generateTerrainCell({}, "local", "far-cell");
+  const farChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
+  const eventsBeforeSecondEdit = renderPort.changes.length;
+
+  // A second, unrelated surface elsewhere on the map -- this is the only
+  // thing this edit is allowed to touch.
+  constructionPort.generateTerrainCell = () => nearKey;
+  runtime.generateTerrainCell({}, "local", "near-cell");
+
+  const eventsForFarChunkSinceSecondEdit = renderPort.changes
+    .slice(eventsBeforeSecondEdit)
+    .filter((change) => "chunkId" in change ? change.chunkId === farChunkId : change.chunk?.chunkId === farChunkId);
+  assert.deepEqual(
+    eventsForFarChunkSinceSecondEdit,
+    [],
+    "an edit to a different surface must not re-upload or remove an unrelated chunk",
+  );
 });
 
 test("generateTerrainCell folds the new surface and its nodes into the map", async () => {

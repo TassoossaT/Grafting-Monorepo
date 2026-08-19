@@ -21,6 +21,23 @@ function centroidOf(mesh: RenderMeshData): Vec3 {
   return { x: x / vertexCount, y: y / vertexCount, z: z / vertexCount };
 }
 
+/** Which spatial chunk bucket one surface's mesh lands in -- shared by the full re-chunk below and `tabletop-runtime.ts`'s own incremental sync, so both agree on chunk membership. */
+export function chunkKeyForSurface(surface: SurfaceMeshResult): string {
+  return chunkKeyFor(centroidOf(surface.mesh));
+}
+
+/** Merges one spatial chunk's current member surfaces into the one `RenderMapChunk` buffer `SceneRenderPort.applyConfirmed` expects -- `undefined` for an empty bucket (the caller should remove the chunk instead of upserting it). See {@link chunkSurfaceMeshes}'s own doc for why a chunk is always a full re-merge of its members, never a per-surface patch. */
+export function mergeChunkBucket(chunkId: string, members: readonly SurfaceMeshResult[]): RenderMapChunk | undefined {
+  const [first] = members;
+  if (first === undefined) return undefined;
+  return {
+    chunkId,
+    surfaceType: first.surfaceType,
+    physical: first.physical,
+    mesh: mergeMeshChunks(members.map((surface) => surface.mesh)),
+  };
+}
+
 /**
  * Buckets triangulated construction surfaces into spatial chunks (via the
  * existing {@link chunkKeyFor}) and merges each bucket's meshes into one
@@ -34,7 +51,7 @@ function centroidOf(mesh: RenderMeshData): Vec3 {
 export function chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): readonly RenderMapChunk[] {
   const byChunk = new Map<string, SurfaceMeshResult[]>();
   for (const surface of surfaces) {
-    const chunkId = chunkKeyFor(centroidOf(surface.mesh));
+    const chunkId = chunkKeyForSurface(surface);
     const bucket = byChunk.get(chunkId);
     if (bucket === undefined) byChunk.set(chunkId, [surface]);
     else bucket.push(surface);
@@ -42,14 +59,8 @@ export function chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): read
 
   const chunks: RenderMapChunk[] = [];
   for (const [chunkId, bucket] of byChunk) {
-    const [first] = bucket;
-    if (first === undefined) continue;
-    chunks.push({
-      chunkId,
-      surfaceType: first.surfaceType,
-      physical: first.physical,
-      mesh: mergeMeshChunks(bucket.map((surface) => surface.mesh)),
-    });
+    const chunk = mergeChunkBucket(chunkId, bucket);
+    if (chunk !== undefined) chunks.push(chunk);
   }
   return chunks;
 }
