@@ -136,10 +136,6 @@ function createFakeConstructionPort() {
         invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
       };
     },
-    resolveBrushCells() {
-      requireStarted();
-      return [];
-    },
     previewPathBrush() {
       requireStarted();
       return [];

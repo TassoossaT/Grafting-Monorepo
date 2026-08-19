@@ -24,7 +24,7 @@ function outlineShapeFor(shape: BrushShape): BrushOutlineShape {
 }
 
 /** Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids {@link createBrushTool} can wire up. */
-export type BrushableToolId = "path-brush" | "terrain-brush";
+export type BrushableToolId = "path-brush";
 
 export interface BrushToolSpec<Id extends BrushableToolId> {
   readonly id: Id;

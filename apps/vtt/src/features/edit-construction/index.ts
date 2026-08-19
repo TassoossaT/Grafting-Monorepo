@@ -26,7 +26,6 @@ export type {
   PathBrushParams,
   NoToolParams,
   PreviewDescriptor,
-  TerrainBrushParams,
   ToolParamsByTool,
   ToolParamsFor,
   TowerStampParams,

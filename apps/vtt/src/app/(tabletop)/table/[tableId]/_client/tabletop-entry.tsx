@@ -49,7 +49,6 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "move-node": "Arrastar Node 3D",
-  "terrain-brush": "Pincel de Terreno",
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
   "interior-wall": "Gerar Interiores",

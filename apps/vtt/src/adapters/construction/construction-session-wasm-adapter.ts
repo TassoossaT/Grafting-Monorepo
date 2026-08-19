@@ -26,7 +26,6 @@ import type {
   GenerateTerrainCellRequest,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
-  ResolveBrushCellsRequest,
   SurfaceMeshResult,
 } from "@/ports";
 
@@ -201,22 +200,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#pathBrushOutcome(session.apply_path_brush_json(JSON.stringify(wire)));
   }
 
-  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[] {
-    const session = this.#require() as ConstructionSession & {
-      resolve_brush_cells_json(requestJson: string): string;
-    };
-    const response = JSON.parse(
-      session.resolve_brush_cells_json(
-        JSON.stringify({
-          samples: request.samples.map((sample) => [sample.x, sample.z]),
-          brushShape: request.brushShape,
-          width: request.width,
-          height: request.height,
-        }),
-      ),
-    ) as { readonly cells: readonly number[] };
-    return response.cells;
-  }
   previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[] {
     const wire = {
       operationId: request.operationId,

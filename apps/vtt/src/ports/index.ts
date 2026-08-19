@@ -46,7 +46,6 @@ export type {
   GenerateTerrainCellRequest,
   PathEdgeSpec,
   RemoveEdgeRequest,
-  ResolveBrushCellsRequest,
   RemoveSurfaceRequest,
   SplitSurfaceOutcome,
   SurfaceMeshResult,

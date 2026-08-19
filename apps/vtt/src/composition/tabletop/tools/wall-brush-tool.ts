@@ -31,7 +31,7 @@ const CORNER_EPSILON = 0.4;
 /**
  * The in-progress drag's own raw pointer samples (pinned to the stroke's
  * baseline Y, deduplicated by {@link RAW_SAMPLE_MIN_DISTANCE}) -- lives only
- * for the current press-drag-release gesture (like `terrain-brush-tool.ts`'s
+ * for the current press-drag-release gesture (like `irregular-terrain-tool.ts`'s
  * own `activeSession`), not across separate strokes. Lifting the pointer
  * always ends the stroke; pressing again starts a wholly new, independent
  * one. This is deliberately the *raw* stroke, not the committed corners --

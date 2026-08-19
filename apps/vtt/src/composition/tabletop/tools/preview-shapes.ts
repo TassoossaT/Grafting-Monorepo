@@ -1,7 +1,7 @@
 import type { PreviewDescriptor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
-/** A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- terrain-brush's reach, or a hover cursor. */
+/** A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- a hover cursor or stamp footprint. */
 export function quadAround(
   center: ConstructionPosition,
   halfExtent: number,

@@ -344,8 +344,8 @@ export const irregularTerrainTool: ConstructionTool<"irregular-terrain-stamp"> =
   },
 
   // Throttled by the dispatcher (`use-construction-pointer.ts`'s
-  // `MOVE_COMMIT_THROTTLE_MS`), same safety net `terrain-brush-tool.ts`
-  // already relies on for its own continuous painting.
+  // `MOVE_COMMIT_THROTTLE_MS`), the same safety net any continuous-drag
+  // tool relies on to avoid spamming a mutate call every raw pointer tick.
   onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: IrregularTerrainParams): void {
     if (activeSession === undefined) return;
     revealNear(ctx, activeSession, gesture.current.point, params);

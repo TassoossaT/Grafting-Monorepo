@@ -102,12 +102,6 @@ export type ConstructionBrushShape =
   | { readonly kind: "square"; readonly size: number; readonly rotationRadians: number }
   | { readonly kind: "hexagon"; readonly radius: number; readonly rotationRadians: number };
 
-export interface ResolveBrushCellsRequest {
-  readonly samples: readonly ConstructionPosition[];
-  readonly brushShape: ConstructionBrushShape;
-  readonly width: number;
-  readonly height: number;
-}
 /** One resolved continuous convex terrain-to-path brush request. */
 export interface ApplyPathBrushRequest {
   readonly operationId: string;
@@ -305,8 +299,6 @@ export interface ConstructionSessionPort {
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
   applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
-  /** Resolves grid cells through the same Rust sweep used by path clipping. */
-  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[];
   /** Derives exact target meshes on cloned state; confirmed state is untouched. */
   previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[];
   /** Restores the confirmed state immediately before that path-brush operation. */

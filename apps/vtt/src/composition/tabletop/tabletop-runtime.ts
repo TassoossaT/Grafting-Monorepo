@@ -35,7 +35,6 @@ import type {
   GenerateTerrainCellRequest,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
-  ResolveBrushCellsRequest,
   RenderMapChunk,
   RenderPreviewDescriptor,
   RenderViewId,
@@ -59,7 +58,7 @@ import { defaultMapSeed } from "./default-map-seed.ts";
  * parameter anywhere in `ConstructionSessionPort.setTerrainMesh`, so this
  * grid always starts at world `(0, 0)`, not centered like the visible
  * reference grid (`construction-grid-scene-item.ts`, `±CONSTRUCTION_GRID_EXTENT`).
- * `terrain-brush-tool.ts` clamps a click into this positive quadrant, so it
+ * `generateTerrainCell` callers clamp a click into this positive quadrant, so it
  * is sized to `CONSTRUCTION_GRID_EXTENT` on purpose: that makes the
  * buildable quadrant exactly the positive-X/positive-Z **half** of the
  * visible reference grid, not some arbitrary smaller area a player would
@@ -101,7 +100,6 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): AffectedSurfaces;
-  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[];
   generateTerrainCell(
     request: GenerateTerrainCellRequest,
     origin: ChangeOrigin,
@@ -618,11 +616,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
    * distinct from {@link AppTabletopRuntime.#seedDefaultMap}'s one-time
    * bootstrap call.
    */
-  resolveBrushCells(request: ResolveBrushCellsRequest): readonly number[] {
-    this.#requireReady("resolving brush cells");
-    return this.#construction.resolveBrushCells(request);
-  }
-
   generateTerrainCell(
     request: GenerateTerrainCellRequest,
     origin: ChangeOrigin,

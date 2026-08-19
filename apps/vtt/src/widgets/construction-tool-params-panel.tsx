@@ -7,7 +7,6 @@ import type {
   InteriorGenerateParams,
   IrregularTerrainParams,
   PathBrushParams,
-  TerrainBrushParams,
   ToolParamsByTool,
   TowerStampParams,
   WallBrushParams,
@@ -65,34 +64,6 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <BrushShapeFields params={params} radiusMin={0.15} radiusMax={3} onChange={onChange} />
       {sliderRow("Profundidade", params.depth, 0.05, 1.5, 0.05, (depth) => onChange({ ...params, depth }))}
-    </div>
-  );
-}
-
-function TerrainBrushFields(props: {
-  readonly params: TerrainBrushParams;
-  readonly onChange: (next: TerrainBrushParams) => void;
-}) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      <BrushShapeFields params={params} radiusMin={0.5} radiusMax={4} onChange={onChange} />
-      <div className="gm-material-grid">
-        <SelectableChip
-          label="Terreno"
-          swatchColor="#334155"
-          selected={params.targetSurface === "terrain"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain" })}
-        />
-        <SelectableChip
-          label="Grama"
-          swatchColor="#4a7a4a"
-          selected={params.targetSurface === "terrain-grass"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
-        />
-      </div>
-      {sliderRow("Força", params.strength, 0.1, 1, 0.05, (strength) => onChange({ ...params, strength }))}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );
 }
@@ -231,7 +202,6 @@ function IrregularTerrainFields(props: {
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "path-brush": "Parâmetros: Caminho",
-  "terrain-brush": "Parâmetros: Terreno",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
@@ -255,7 +225,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Terreno, Parede, Apagar Cômodo ou Terreno Irregular) no hotbar
+          Selecione uma ferramenta de construção (Caminho, Parede, Apagar Cômodo ou Terreno Irregular) no hotbar
           para ajustar seus parâmetros.
         </p>
       </Card>
@@ -266,12 +236,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     key: activeTool,
     header: label,
     content:
-      activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "terrain-brush" ? (
-        <TerrainBrushFields
-          params={params["terrain-brush"]}
-          onChange={(next) => onParamsChange("terrain-brush", next)}
-        />
-      ) : activeTool === "wall-brush" ? (
+      activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />

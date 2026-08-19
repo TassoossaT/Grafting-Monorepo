@@ -10,7 +10,6 @@ export type ConstructionToolId =
   | "navigate"
   | "move-node"
   | "path-brush"
-  | "terrain-brush"
   | "wall-brush"
   | "wall-line"
   | "interior-wall"
@@ -33,11 +32,6 @@ export interface PathBrushParams extends BrushShapeParams {
   readonly depth: number;
 }
 
-export interface TerrainBrushParams extends BrushShapeParams {
-  readonly strength: number;
-  readonly targetSurface: "terrain" | "terrain-grass";
-  readonly seed: number;
-}
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
 }
@@ -112,7 +106,6 @@ export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
   readonly "move-node": NoToolParams;
   readonly "path-brush": PathBrushParams;
-  readonly "terrain-brush": TerrainBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
   readonly "interior-wall": InteriorGenerateParams;
@@ -127,7 +120,6 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
   "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
-  "terrain-brush": Object.freeze({ shape: "circle", radius: 1, rotationDegrees: 0, strength: 0.6, targetSurface: "terrain", seed: 1 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
