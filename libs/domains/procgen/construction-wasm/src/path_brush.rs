@@ -220,17 +220,29 @@ fn apply_analytic_plan(
     request: &PathBrushRequest,
     plan: grafting_procgen_surface_transformations::AnalyticPathBrushPlan,
 ) -> Result<ApplyPathBrushResponse, String> {
-    let source_region = RegionId::new(format!("path-{}-terrain", request.operation_id))
-        .map_err(|error| error.to_string())?;
+    // A path is a structure like any other -- it doesn't need existing
+    // terrain underneath just to be committed, the same way terrain
+    // generation doesn't need anything pre-existing either. When the brush
+    // touched no eligible source surface, this simply skips the
+    // source-region half entirely and creates the target (path) region on
+    // its own; what would have been consumed stays empty.
+    let has_source = !plan.source_surface_keys().is_empty();
     let target_region = RegionId::new(format!("path-{}-target", request.operation_id))
         .map_err(|error| error.to_string())?;
-    let source_type = plan
-        .source_surface_keys()
-        .first()
-        .and_then(|key| surfaces.surface(key))
-        .ok_or("analytic path brush has no source surface")?
-        .surface_type()
-        .clone();
+    let source_region_and_type = if has_source {
+        let source_region = RegionId::new(format!("path-{}-terrain", request.operation_id))
+            .map_err(|error| error.to_string())?;
+        let source_type = plan
+            .source_surface_keys()
+            .first()
+            .and_then(|key| surfaces.surface(key))
+            .ok_or("analytic path brush has no source surface")?
+            .surface_type()
+            .clone();
+        Some((source_region, source_type))
+    } else {
+        None
+    };
 
     let mut source_loops = Vec::new();
     for (loop_index, boundary) in plan.source_boundaries().iter().enumerate() {
@@ -305,19 +317,24 @@ fn apply_analytic_plan(
             .map_err(|error| error.to_string())?;
         target_loop.push(OrientedEdgeUse::forward(contour_id));
     }
-    let source_hole = target_loop
-        .iter()
-        .rev()
-        .map(|use_| OrientedEdgeUse::reversed(use_.edge().clone()))
-        .collect();
-    topology
-        .add_region(source_region.clone(), source_loops, vec![source_hole])
-        .map_err(|error| error.to_string())?;
+    let mut created_surfaces = Vec::new();
+    if let Some((source_region, source_type)) = source_region_and_type {
+        let source_hole = target_loop
+            .iter()
+            .rev()
+            .map(|use_| OrientedEdgeUse::reversed(use_.edge().clone()))
+            .collect();
+        topology
+            .add_region(source_region.clone(), source_loops, vec![source_hole])
+            .map_err(|error| error.to_string())?;
+        surfaces
+            .add_region_surface(topology, source_region.clone(), source_type, true)
+            .map_err(|error| error.to_string())?;
+        known_regions.insert(source_region.clone());
+        created_surfaces.push(region_id_to_wire(&source_region));
+    }
     topology
         .add_region(target_region.clone(), vec![target_loop], Vec::new())
-        .map_err(|error| error.to_string())?;
-    surfaces
-        .add_region_surface(topology, source_region.clone(), source_type, true)
         .map_err(|error| error.to_string())?;
     surfaces
         .add_region_surface(
@@ -327,10 +344,10 @@ fn apply_analytic_plan(
             true,
         )
         .map_err(|error| error.to_string())?;
+    created_surfaces.push(region_id_to_wire(&target_region));
     for key in plan.source_surface_keys() {
         known_surfaces.remove(key);
     }
-    known_regions.insert(source_region.clone());
     known_regions.insert(target_region.clone());
 
     Ok(ApplyPathBrushResponse {
@@ -347,10 +364,7 @@ fn apply_analytic_plan(
             removed: Vec::new(),
         },
         surface_ids: SurfaceIdentityDeltaResponse {
-            created: vec![
-                region_id_to_wire(&source_region),
-                region_id_to_wire(&target_region),
-            ],
+            created: created_surfaces,
             preserved: Vec::new(),
             replaced: Vec::new(),
             removed: plan

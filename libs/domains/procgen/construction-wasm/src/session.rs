@@ -761,6 +761,34 @@ mod tests {
             .expect("whole stroke redoes");
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
     }
+
+    /// A path is a structure like any other -- committing one over an empty
+    /// session (no terrain, no surfaces at all) must succeed and create just
+    /// the path itself, not fail for lack of something to consume.
+    #[test]
+    fn applying_path_brush_with_no_terrain_at_all_still_creates_the_path() {
+        let mut session = ConstructionSession::new();
+        let request = r#"{"operationId":"path-empty","samples":[[0.0,0.0],[1.0,0.0]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+
+        let response = session
+            .apply_path_brush_json(request)
+            .expect("path brush applies with no terrain underneath");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            parsed["surfaceIds"]["created"].as_array().unwrap().len(),
+            1,
+            "only the target region is created, there is no source region to make"
+        );
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "nothing existed to remove"
+        );
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+    }
+
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();

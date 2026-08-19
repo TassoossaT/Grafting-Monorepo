@@ -42,7 +42,7 @@ export const pathBrushTool = createBrushTool<"path-brush">({
       const outcome = ctx.runtime.applyPathBrush(effect, "local");
       const changedSurfaceCount = outcome.surfaceIds.created.length + outcome.surfaceIds.replaced.length;
       if (changedSurfaceCount === 0 && outcome.surfaceIds.removed.length === 0) {
-        ctx.reportFeedback({ tone: "info", message: "Nenhum terreno elegível foi alterado." });
+        ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
         return;
       }
       ctx.history.record({ kind: "path-brush", operationId: effect.operationId });

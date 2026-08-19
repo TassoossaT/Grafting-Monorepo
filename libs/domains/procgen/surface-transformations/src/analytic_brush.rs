@@ -203,10 +203,11 @@ pub fn plan_analytic_path_brush(
             })
         })
         .collect::<Vec<_>>();
-    if source_surface_keys.is_empty() {
-        return Err(PathBrushFailure::NoChanges);
-    }
-
+    // A path can be painted with no eligible terrain underneath it at all --
+    // a path is a structure like any other, not one that needs pre-existing
+    // material to consume before it can even be drawn. `source_surface_keys`
+    // (and therefore `boundaries` below) staying empty is the ordinary,
+    // valid "nothing to consume" case, not a failure.
     let mut edges = BTreeMap::<(NodeId, NodeId), (NodeId, NodeId)>::new();
     for key in &source_surface_keys {
         let surface = surfaces
@@ -262,9 +263,6 @@ pub fn plan_analytic_path_brush(
         if boundary.len() >= 3 {
             boundaries.push(boundary);
         }
-    }
-    if boundaries.is_empty() {
-        return Err(PathBrushFailure::NoChanges);
     }
     Ok(AnalyticPathBrushPlan {
         source_surface_keys,
@@ -754,5 +752,30 @@ mod tests {
 
         assert_eq!(plan.source_surface_keys(), &[near_key]);
         assert!(!plan.source_surface_keys().contains(&far_key));
+    }
+
+    /// A path is a structure like any other -- it must be plannable with no
+    /// eligible terrain underneath it at all, the same way terrain
+    /// generation doesn't require anything pre-existing either. This used to
+    /// fail outright (`PathBrushFailure::NoChanges`) whenever there was
+    /// nothing to consume, treating "no terrain here" as an error instead of
+    /// the ordinary case it is.
+    #[test]
+    fn a_stroke_with_no_terrain_underneath_still_plans_a_target_only_contour() {
+        use grafting_graph_core::{Graph, SurfaceRegistry};
+
+        let graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let surfaces = SurfaceRegistry::new();
+
+        let plan = plan_analytic_path_brush(
+            &graph,
+            &surfaces,
+            &request(vec![[0.0, 0.0], [1.0, 0.0]], BrushShape::Circle { radius: 0.25 }),
+        )
+        .unwrap();
+
+        assert!(plan.source_surface_keys().is_empty());
+        assert!(plan.source_boundaries().is_empty());
+        assert!(!plan.target_contour().vertices().is_empty());
     }
 }
