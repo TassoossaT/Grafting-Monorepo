@@ -21,6 +21,18 @@ pub fn region_id_to_wire(id: &RegionId) -> Vec<String> {
     vec![REGION_SURFACE_KEY_PREFIX.into(), id.as_str().into()]
 }
 
+/// Recovers a [`RegionId`] from the wire marker [`region_id_to_wire`]
+/// produces, for callers (e.g. `session.rs`'s post-mutation bookkeeping)
+/// that received one back from a JSON response and need the real id again.
+pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String> {
+    match wire {
+        [prefix, id] if prefix == REGION_SURFACE_KEY_PREFIX => {
+            RegionId::new(id.clone()).map_err(|error| error.to_string())
+        }
+        _ => Err(format!("not a region wire key: {wire:?}")),
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceMeshDto {

@@ -1,7 +1,25 @@
 //! Shared wire-format conversion crossing the JSON boundary: `SurfaceKey`
-//! as a plain node-id array.
+//! as a plain node-id array, and a deterministic [`RegionId`] derived from
+//! a node cycle for every surface-creation path that has migrated to the
+//! analytic [`grafting_graph_core::SurfaceRegion`] model.
 
-use grafting_graph_core::{NodeId, SurfaceKey};
+use grafting_graph_core::{NodeId, RegionId, SurfaceKey};
+
+/// Derives a stable, reproducible [`RegionId`] from a node cycle, in the
+/// cycle's own order (unlike [`SurfaceKey::from_cycle`]'s order-independent
+/// set identity -- a region's loop is an oriented boundary, and every real
+/// generator in this crate already emits the same cycle order for the same
+/// geometry on repeat calls). This is what lets `diff_apply.rs`'s
+/// repaint-is-a-no-op behavior keep working unchanged after migrating off
+/// `SurfaceKey`: identical geometry across ticks still derives the exact
+/// same identity.
+pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String> {
+    if cycle.is_empty() {
+        return Err("a surface cycle must reference at least one node".to_string());
+    }
+    let joined = cycle.iter().map(NodeId::as_str).collect::<Vec<_>>().join("|");
+    RegionId::new(joined).map_err(|error| error.to_string())
+}
 
 /// Converts a node-id array into a [`SurfaceKey`]. Order does not matter --
 /// [`SurfaceKey::from_cycle`] collects into an unordered set -- but every id
