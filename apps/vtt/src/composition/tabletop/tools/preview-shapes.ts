@@ -1,3 +1,6 @@
+import earcut from "earcut";
+import { getStroke } from "perfect-freehand";
+
 import type { PreviewDescriptor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
@@ -89,57 +92,44 @@ export function brushStrokeOutline(
   }
   return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
 }
-interface HullPoint {
-  readonly x: number;
-  readonly z: number;
-  readonly y: number;
-}
-
-/** 2D convex hull (XZ plane, Andrew's monotone chain), carrying `y` along with each surviving point. Collinear/duplicate points are dropped, not just tolerated -- that's what keeps every downstream step (a fan from the centroid) provably non-self-intersecting. */
-function convexHullXZ(points: readonly ConstructionPosition[]): HullPoint[] {
-  const sorted = [...points].sort((a, b) => a.x - b.x || a.z - b.z);
-  const cross = (o: HullPoint, a: HullPoint, b: HullPoint): number => (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
-
-  const lower: HullPoint[] = [];
-  for (const point of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
-    lower.push(point);
+/** The original sample nearest `(x, z)` -- used to carry a plausible terrain height onto an outline point that perfect-freehand invented (it only ever works in 2D). */
+function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number {
+  let bestY = samples[0]?.y ?? 0;
+  let bestDistanceSq = Infinity;
+  for (const sample of samples) {
+    const dx = sample.x - x;
+    const dz = sample.z - z;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq < bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      bestY = sample.y;
+    }
   }
-  const upper: HullPoint[] = [];
-  for (let index = sorted.length - 1; index >= 0; index -= 1) {
-    const point = sorted[index];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
-    upper.push(point);
-  }
-  lower.pop();
-  upper.pop();
-  return [...lower, ...upper];
+  return bestY;
 }
 
 /**
  * A filled highlight of the whole area a brush of `shape` sweeps along
  * `samples`, start to end -- purely "this is the region that's about to be
  * affected," with no relation to whatever geometry a later backend call
- * actually produces for it. Every shape (circle/square/hexagon) is filled as
- * a rounded capsule of `shape.radius`, ignoring corners/rotation -- exact
- * enough to read as "this area," not a stand-in for the real result. Used as
- * every brush's default preview; a tool with a real result preview (e.g.
- * path-brush's analytic mesh) replaces it, this is only the fallback/ghost.
+ * actually produces for it. Every shape is filled as a rounded stroke of
+ * `shape.radius`, ignoring corners/rotation -- exact enough to read as "this
+ * area," not a stand-in for the real result. Used as every brush's default
+ * preview; a tool with a real result preview (e.g. path-brush's analytic
+ * mesh) replaces it, this is only the fallback/ghost.
  *
  * The render port draws this with depth-testing off (a ghost must never be
  * occluded), so any self-overlap in the mesh double-blends the translucent
- * fill and reads as darker little blocks -- worse the more pointer samples
- * there are. A ribbon built segment-by-segment self-intersects on the inside
- * of any turn tighter than `shape.radius`, which an ordinary hand-drawn
- * stroke hits often. So instead this takes the convex hull of `samples` and
- * expands it outward by `radius` (rounding each hull corner with an arc,
- * i.e. a Minkowski sum with a disc) -- a convex shape, fan-triangulated from
- * its own centroid, which by construction can never self-intersect. The
- * trade-off is coverage, not overlap: a sharply concave stroke (a tight
- * hook, a near-closed loop) reads as its own convex envelope, slightly wider
- * than the literal swept path -- deliberate, since "not exact but never
- * doubles up" is what actually reads as "one continuous brush," which a
- * mathematically exact but self-intersecting ribbon does not.
+ * fill and reads as darker little blocks. A hand-rolled offset-ribbon or
+ * convex-hull approximation either self-intersects on tight turns or fills
+ * across concave stretches of the stroke instead of following it -- both
+ * wrong for "show exactly where the brush passed." So this leans on the
+ * same two building blocks every whiteboard/drawing app (Excalidraw,
+ * tldraw) uses for freehand ink: `perfect-freehand`'s `getStroke` turns the
+ * raw samples into one simple outline polygon that actually follows the
+ * path (concave stretches included, not just the convex envelope), and
+ * `earcut` triangulates that polygon -- both handle the self-intersection
+ * and concavity problems generically instead of us re-deriving them here.
  */
 export function brushSweptRegionFill(
   samples: readonly ConstructionPosition[],
@@ -151,93 +141,45 @@ export function brushSweptRegionFill(
   if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
 
   const radius = shape.radius;
-  const positions: number[] = [];
-  const indices: number[] = [];
+  const outline = getStroke(
+    samples.map((sample) => [sample.x, sample.z]),
+    { size: radius * 2, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false, last: true },
+  );
 
-  const addDisc = (center: HullPoint) => {
-    const y = center.y + 0.03;
-    const base = positions.length / 3;
-    positions.push(center.x, y, center.z);
+  if (outline.length < 3) {
+    // Perfect-freehand needs a real path to build an outline from -- a
+    // stationary hover (one sample, `outline` empty/degenerate) still needs
+    // its own ghost, so fall back to a plain disc of the same radius.
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const y = first.y + 0.03;
+    positions.push(first.x, y, first.z);
     const segments = 24;
     for (let index = 0; index <= segments; index += 1) {
       const angle = (Math.PI * 2 * index) / segments;
-      positions.push(center.x + radius * Math.cos(angle), y, center.z + radius * Math.sin(angle));
+      positions.push(first.x + radius * Math.cos(angle), y, first.z + radius * Math.sin(angle));
     }
-    for (let index = 1; index <= segments; index += 1) indices.push(base, base + index, base + index + 1);
-  };
-
-  const hull = convexHullXZ(samples);
-  if (hull.length <= 1) {
-    addDisc(hull[0] ?? first);
-    return {
-      kind: "mesh",
-      color,
-      opacity,
-      positions: Float32Array.from(positions),
-      indices: Uint16Array.from(indices),
-    };
+    for (let index = 1; index <= segments; index += 1) indices.push(0, index, index + 1);
+    return { kind: "mesh", color, opacity, positions: Float32Array.from(positions), indices: Uint16Array.from(indices) };
   }
 
-  const outwardNormal = (from: HullPoint, to: HullPoint): { readonly x: number; readonly z: number } => {
-    const dx = to.x - from.x;
-    const dz = to.z - from.z;
-    const length = Math.hypot(dx, dz) || 1;
-    // Rotating a CCW polygon's edge direction by -90 deg points outward -- `convexHullXZ` always returns its points in CCW order.
-    return { x: dz / length, z: -dx / length };
-  };
+  const flat: number[] = [];
+  for (const [x, z] of outline) flat.push(x, z);
+  const triangleIndices = earcut(flat);
 
-  let centroidX = 0;
-  let centroidZ = 0;
-  let centroidY = 0;
-  for (const point of hull) {
-    centroidX += point.x;
-    centroidZ += point.z;
-    centroidY += point.y;
-  }
-  centroidX /= hull.length;
-  centroidZ /= hull.length;
-  centroidY /= hull.length;
-  const centroid: HullPoint = { x: centroidX, y: centroidY, z: centroidZ };
-
-  // One ring vertex per hull corner's rounding arc (plus the straight edges
-  // implied by consecutive corners sharing that edge's outward normal),
-  // walked in the same CCW order as the hull -- fan-triangulated from
-  // `centroid` below, which stays interior because the whole ring is convex.
-  const ring: HullPoint[] = [];
-  const ringCount = hull.length;
-  for (let index = 0; index < ringCount; index += 1) {
-    const previous = hull[(index - 1 + ringCount) % ringCount];
-    const current = hull[index];
-    const next = hull[(index + 1) % ringCount];
-    const normalIn = outwardNormal(previous, current);
-    const normalOut = outwardNormal(current, next);
-
-    let angleIn = Math.atan2(normalIn.z, normalIn.x);
-    let angleOut = Math.atan2(normalOut.z, normalOut.x);
-    while (angleOut < angleIn) angleOut += Math.PI * 2;
-
-    const cornerSteps = Math.max(1, Math.ceil(((angleOut - angleIn) / Math.PI) * 8));
-    for (let step = 0; step <= cornerSteps; step += 1) {
-      const angle = angleIn + ((angleOut - angleIn) * step) / cornerSteps;
-      ring.push({ x: current.x + radius * Math.cos(angle), y: current.y, z: current.z + radius * Math.sin(angle) });
-    }
-  }
-
-  const centroidBase = positions.length / 3;
-  positions.push(centroid.x, centroid.y + 0.03, centroid.z);
-  const ringBase = positions.length / 3;
-  for (const point of ring) positions.push(point.x, point.y + 0.03, point.z);
-  for (let index = 0; index < ring.length; index += 1) {
-    const next = (index + 1) % ring.length;
-    indices.push(centroidBase, ringBase + index, ringBase + next);
-  }
+  const positions = new Float32Array(outline.length * 3);
+  outline.forEach(([x, z], index) => {
+    positions[index * 3] = x;
+    positions[index * 3 + 1] = nearestSampleY(x, z, samples) + 0.03;
+    positions[index * 3 + 2] = z;
+  });
 
   return {
     kind: "mesh",
     color,
     opacity,
-    positions: Float32Array.from(positions),
-    indices: positions.length / 3 > 65535 ? Uint32Array.from(indices) : Uint16Array.from(indices),
+    positions,
+    indices: positions.length / 3 > 65535 ? Uint32Array.from(triangleIndices) : Uint16Array.from(triangleIndices),
   };
 }
 
