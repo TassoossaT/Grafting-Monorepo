@@ -30,8 +30,6 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
   previewColor(params: ToolParamsFor<Id>): number;
-  /** Domain-specific ghost when the generic stroke outline isn't enough (e.g. path-brush's real analytic preview mesh). `undefined` falls back to the generic outline. */
-  previewRegion?(region: BrushRegion, ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): PreviewDescriptor | undefined;
   /**
    * The only place domain semantics live: what the swept region means, and
    * which backend call applies it. Called exactly once, on pointer release,
@@ -47,8 +45,12 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
  * resolution, pointer batching (the dispatcher's own `gesture.samples`), the
  * generic filled-region preview, and the commit-once-per-gesture contract
  * all live here, once -- every brush shares this instead of reimplementing
- * it. Only `applyRegion` (and optionally `previewRegion`) differs between
- * brushes; the brush itself is the same for all of them.
+ * it, including the preview: what a brush stroke will do depends on what's
+ * underneath it, but that's `applyRegion`'s job to sort out at commit time
+ * (the same way terrain generation already varies its own outcome by
+ * region), not a reason for the preview itself to special-case one tool.
+ * Only `applyRegion` differs between brushes; the brush -- preview included
+ * -- is the same for all of them.
  */
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => ({
@@ -60,10 +62,8 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
     id: spec.id,
     defaultParams: spec.defaultParams,
 
-    previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined {
+    previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>): PreviewDescriptor | undefined {
       const region = regionFor(gesture, params);
-      const custom = spec.previewRegion?.(region, ctx, gesture, params);
-      if (custom !== undefined) return custom;
       return brushSweptRegionFill(region.samples, outlineShapeFor(region.shape), spec.previewColor(params));
     },
 

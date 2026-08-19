@@ -1,4 +1,4 @@
-import { createPathBrushEffect, DEFAULT_TOOL_PARAMS, surfaceEditModeFor } from "@/features/edit-construction";
+import { createPathBrushEffect, DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { PathBrushEffect, PathBrushParams } from "@/features/edit-construction";
 
 import type { ToolContext } from "./tool-context.ts";
@@ -18,40 +18,22 @@ function effectFor(ctx: ToolContext, region: BrushRegion, params: PathBrushParam
   );
 }
 
-/** Path-brush's own effect: the brush hands it a region, it decides that means "form a path here" and calls the analytic Rust plan for the whole region -- once, on preview and once more on commit, never incrementally. */
+/**
+ * Path-brush's own effect: the brush hands it a region, it decides that
+ * means "form a path here" and calls the analytic Rust plan for the whole
+ * region -- once, on commit, never incrementally. Preview is the plain
+ * generic swept-region outline every brush tool gets (no custom
+ * `previewRegion`) -- a path is a structure like any other, not a special
+ * case that needs to inspect what's underneath before it can even be
+ * drawn. What surface type ends up under the brush is something `applyRegion`
+ * (and the Rust plan it calls) sorts out at commit time, the same way
+ * terrain generation already does, not something the preview needs to
+ * pre-validate.
+ */
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewColor: () => PATH_PREVIEW_COLOR,
-
-  previewRegion(region, ctx, gesture, params) {
-    const surfaceRef = gesture.current.surfaceRef;
-    const surface = surfaceRef === undefined ? undefined : ctx.runtime.getSnapshot().map.byId.get(surfaceRef);
-    if (surface === undefined) {
-      ctx.reportFeedback({ tone: "info", message: "Posicione o pincel sobre uma superfície de terreno." });
-      return undefined;
-    }
-    const mode = surfaceEditModeFor(surface.type);
-    if (mode === undefined || !mode.effectKinds.includes("surface.path-brush@1")) {
-      ctx.reportFeedback({ tone: "info", message: `Superfície “${surface.type}” não possui modo de caminho.`, surfaceRef });
-      return undefined;
-    }
-
-    const previewEffect = effectFor(ctx, region, params, `${ctx.tableId}:path-brush-preview`);
-    try {
-      const preview = ctx.runtime.previewPathBrush(previewEffect);
-      ctx.reportFeedback({
-        tone: "info",
-        message: preview === undefined ? `Modo ${mode.label}: nenhuma alteração prevista.` : `Modo ${mode.label}: recorte, topologia e depressão previstos.`,
-        surfaceRef,
-      });
-      return preview;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      ctx.reportFeedback({ tone: "error", message: `Prévia indisponível: ${message}`, surfaceRef });
-      return undefined;
-    }
-  },
 
   applyRegion(region, ctx, params) {
     const sequence = ctx.nextSequence();
