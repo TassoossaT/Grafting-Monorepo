@@ -4,7 +4,7 @@ import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
 import type { BrushOutlineShape } from "./preview-shapes.ts";
-import { brushStrokeOutline } from "./preview-shapes.ts";
+import { brushSweptRegionFill } from "./preview-shapes.ts";
 
 /**
  * The one geometric fact a brush produces: its shape plus every sample the
@@ -45,7 +45,7 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
 /**
  * Wires a {@link BrushToolSpec} into a `ConstructionTool`. Shape/size/rotation
  * resolution, pointer batching (the dispatcher's own `gesture.samples`), the
- * generic stroke-outline preview, and the commit-once-per-gesture contract
+ * generic filled-region preview, and the commit-once-per-gesture contract
  * all live here, once -- every brush shares this instead of reimplementing
  * it. Only `applyRegion` (and optionally `previewRegion`) differs between
  * brushes; the brush itself is the same for all of them.
@@ -64,7 +64,7 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
       const region = regionFor(gesture, params);
       const custom = spec.previewRegion?.(region, ctx, gesture, params);
       if (custom !== undefined) return custom;
-      return brushStrokeOutline(region.samples, outlineShapeFor(region.shape), spec.previewColor(params));
+      return brushSweptRegionFill(region.samples, outlineShapeFor(region.shape), spec.previewColor(params));
     },
 
     // Presence of this hook makes the generic dispatcher capture and sample the drag; the region is only ever read on release.

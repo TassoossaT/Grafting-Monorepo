@@ -89,6 +89,74 @@ export function brushStrokeOutline(
   }
   return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
 }
+/**
+ * A filled highlight of the whole area a brush of `shape` sweeps along
+ * `samples`, start to end -- purely "this is the region that's about to be
+ * affected," with no relation to whatever geometry a later backend call
+ * actually produces for it. Every shape (circle/square/hexagon) is filled as
+ * a rounded capsule of `shape.radius`, ignoring corners/rotation -- exact
+ * enough to read as "this area," not a stand-in for the real result. Used as
+ * every brush's default preview; a tool with a real result preview (e.g.
+ * path-brush's analytic mesh) replaces it, this is only the fallback/ghost.
+ */
+export function brushSweptRegionFill(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.3,
+): PreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const first = samples[0];
+  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
+
+  const radius = shape.radius;
+  const y = first.y + 0.03;
+  const CAP_SEGMENTS = 24;
+
+  const addCap = (center: ConstructionPosition) => {
+    const base = positions.length / 3;
+    positions.push(center.x, y, center.z);
+    for (let index = 0; index <= CAP_SEGMENTS; index += 1) {
+      const angle = (Math.PI * 2 * index) / CAP_SEGMENTS;
+      positions.push(center.x + radius * Math.cos(angle), y, center.z + radius * Math.sin(angle));
+    }
+    for (let index = 1; index <= CAP_SEGMENTS; index += 1) {
+      indices.push(base, base + index, base + index + 1);
+    }
+  };
+
+  addCap(first);
+  if (samples.length > 1) addCap(samples[samples.length - 1]);
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const start = samples[index - 1];
+    const end = samples[index];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= Number.EPSILON) continue;
+    const offsetX = (-dz / length) * radius;
+    const offsetZ = (dx / length) * radius;
+    const base = positions.length / 3;
+    positions.push(
+      start.x + offsetX, y, start.z + offsetZ,
+      end.x + offsetX, y, end.z + offsetZ,
+      end.x - offsetX, y, end.z - offsetZ,
+      start.x - offsetX, y, start.z - offsetZ,
+    );
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+
+  return {
+    kind: "mesh",
+    color,
+    opacity,
+    positions: Float32Array.from(positions),
+    indices: positions.length / 3 > 65535 ? Uint32Array.from(indices) : Uint16Array.from(indices),
+  };
+}
+
 /** A renderer-neutral circular brush outline shared by terrain and surface transformations. */
 export function circleOutline(
   center: ConstructionPosition,
