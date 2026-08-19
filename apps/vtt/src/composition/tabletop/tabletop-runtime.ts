@@ -50,6 +50,18 @@ import { PATH_BRUSH_SOURCE_SURFACE_TYPES, type PathBrushEffect } from "../../fea
 import { defaultMapSeed } from "./default-map-seed.ts";
 
 /**
+ * A stroke must always be eligible to consume its own product type -- a
+ * path drawn over an earlier path's region is exactly as valid a merge
+ * target as terrain underneath it. Without this, a later stroke can never
+ * touch, cut, or remove what an earlier stroke of the same tool created.
+ */
+function pathBrushSourceSurfaceTypes(targetType: string): readonly string[] {
+  return PATH_BRUSH_SOURCE_SURFACE_TYPES.includes(targetType)
+    ? PATH_BRUSH_SOURCE_SURFACE_TYPES
+    : [...PATH_BRUSH_SOURCE_SURFACE_TYPES, targetType];
+}
+
+/**
  * The one `setTerrainMesh` grid declared per table (`ConstructionSessionPort`
  * requires exactly one call, before any `generateTerrainCell`). `cell`
  * addresses this grid by index (`z * width + x` for layer 0), and each
@@ -844,7 +856,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       brushShape: effect.brushShape,
       depth: effect.parameters.depth,
       targetSurfaceType: effect.targetType,
-      sourceSurfaceTypes: PATH_BRUSH_SOURCE_SURFACE_TYPES,
+      sourceSurfaceTypes: pathBrushSourceSurfaceTypes(effect.targetType),
     };
     let surfaces: readonly SurfaceMeshResult[];
     try {
@@ -871,7 +883,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       brushShape: effect.brushShape,
       depth: effect.parameters.depth,
       targetSurfaceType: effect.targetType,
-      sourceSurfaceTypes: PATH_BRUSH_SOURCE_SURFACE_TYPES,
+      sourceSurfaceTypes: pathBrushSourceSurfaceTypes(effect.targetType),
     };
     let outcome: ApplyPathBrushOutcome;
     try {

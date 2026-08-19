@@ -766,7 +766,7 @@ test("path preview uses the exact Rust mesh and mode-registry source policy", as
 
   assert.equal(preview.kind, "mesh");
   assert.deepEqual([...preview.indices], [0, 1, 2]);
-  assert.deepEqual(received.sourceSurfaceTypes, ["terrain", "terrain-grass"]);
+  assert.deepEqual(received.sourceSurfaceTypes, ["terrain", "terrain-grass", "path"]);
   assert.equal(received.samples.length, 2);
   assert.deepEqual(received.brushShape, { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 });
 });
