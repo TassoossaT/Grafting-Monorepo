@@ -6,11 +6,20 @@
 
 use serde::{Deserialize, Serialize};
 
-use grafting_graph_core::{SurfaceKey, SurfaceRegistry};
-use grafting_procgen_surface_mesh::triangulate_surface;
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceKey, SurfaceRegistry};
+use grafting_procgen_surface_mesh::{triangulate_region, triangulate_surface};
 
 use crate::dto::surface_key_to_wire;
 use crate::editing::SessionGraph;
+
+/// Reserved wire marker for a stable analytic-region identity.
+pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+
+/// Converts a stable analytic region id to the existing surface-key wire
+/// slot without changing legacy node-set callers.
+pub fn region_id_to_wire(id: &RegionId) -> Vec<String> {
+    vec![REGION_SURFACE_KEY_PREFIX.into(), id.as_str().into()]
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,12 +73,39 @@ pub fn all_surface_meshes(
     graph: &SessionGraph,
     surfaces: &SurfaceRegistry,
     known_surfaces: &std::collections::HashSet<SurfaceKey>,
+    topology: &ContourTopology,
+    known_regions: &std::collections::HashSet<RegionId>,
 ) -> Vec<SurfaceMeshDto> {
     let mut keys: Vec<&SurfaceKey> = known_surfaces.iter().collect();
     keys.sort();
-    keys.into_iter()
+    let mut meshes = keys
+        .into_iter()
         .filter_map(|key| mesh_dto_for(graph, surfaces, key))
-        .collect()
+        .collect::<Vec<_>>();
+    let mut regions = known_regions.iter().collect::<Vec<_>>();
+    regions.sort();
+    for region_id in regions {
+        let Some(region) = topology.region(region_id) else {
+            continue;
+        };
+        let Some(surface) = surfaces.region_surface(region_id) else {
+            continue;
+        };
+        let Some(region_meshes) = triangulate_region(topology, region, |id| {
+            graph.node(id).map(|node| *node.data())
+        }) else {
+            continue;
+        };
+        meshes.extend(region_meshes.into_iter().map(|mesh| SurfaceMeshDto {
+            surface_key: region_id_to_wire(region_id),
+            surface_type: surface.surface_type().as_str().to_owned(),
+            physical: surface.physical(),
+            positions: mesh.positions.into_iter().flatten().collect(),
+            normals: mesh.normals.into_iter().flatten().collect(),
+            indices: mesh.indices,
+        }));
+    }
+    meshes
 }
 
 /// One surface's mesh, by key -- what a caller re-fetches for each entry in
@@ -78,8 +114,36 @@ pub fn all_surface_meshes(
 pub fn surface_mesh(
     graph: &SessionGraph,
     surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
     request: SurfaceMeshRequest,
 ) -> Result<SurfaceMeshDto, String> {
+    if let [prefix, region_id] = request.surface_key.as_slice()
+        && prefix == REGION_SURFACE_KEY_PREFIX
+    {
+        let region_id = RegionId::new(region_id.clone()).map_err(|error| error.to_string())?;
+        let region = topology
+            .region(&region_id)
+            .ok_or_else(|| format!("unknown analytic region {region_id}"))?;
+        let surface = surfaces
+            .region_surface(&region_id)
+            .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
+        let meshes = triangulate_region(topology, region, |id| {
+            graph.node(id).map(|node| *node.data())
+        })
+        .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
+        let mesh = meshes
+            .into_iter()
+            .next()
+            .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
+        return Ok(SurfaceMeshDto {
+            surface_key: region_id_to_wire(&region_id),
+            surface_type: surface.surface_type().as_str().to_owned(),
+            physical: surface.physical(),
+            positions: mesh.positions.into_iter().flatten().collect(),
+            normals: mesh.normals.into_iter().flatten().collect(),
+            indices: mesh.indices,
+        });
+    }
     let key = crate::dto::surface_key_from_wire(&request.surface_key)?;
     mesh_dto_for(graph, surfaces, &key)
         .ok_or_else(|| format!("no mesh derivable for surface {key:?}"))
@@ -150,6 +214,7 @@ mod tests {
         let dto = surface_mesh(
             &graph,
             &surfaces,
+            &ContourTopology::new(),
             SurfaceMeshRequest {
                 surface_key: surface_key_to_wire(&key),
             },
@@ -167,6 +232,7 @@ mod tests {
         let error = surface_mesh(
             &graph,
             &surfaces,
+            &ContourTopology::new(),
             SurfaceMeshRequest {
                 surface_key: vec!["missing".into()],
             },
@@ -183,7 +249,13 @@ mod tests {
         let (graph, surfaces, key) = quad_session();
         let mut known = std::collections::HashSet::new();
         known.insert(key.clone());
-        let meshes = all_surface_meshes(&graph, &surfaces, &known);
+        let meshes = all_surface_meshes(
+            &graph,
+            &surfaces,
+            &known,
+            &ContourTopology::new(),
+            &std::collections::HashSet::new(),
+        );
         assert_eq!(meshes.len(), 1);
         assert_eq!(meshes[0].surface_key.len(), 4);
     }
@@ -194,7 +266,13 @@ mod tests {
         let mut known = std::collections::HashSet::new();
         known.insert(key);
         known.insert(SurfaceKey::from_cycle(&[NodeId::new("gone").unwrap()]));
-        let meshes = all_surface_meshes(&graph, &surfaces, &known);
+        let meshes = all_surface_meshes(
+            &graph,
+            &surfaces,
+            &known,
+            &ContourTopology::new(),
+            &std::collections::HashSet::new(),
+        );
         assert_eq!(
             meshes.len(),
             1,

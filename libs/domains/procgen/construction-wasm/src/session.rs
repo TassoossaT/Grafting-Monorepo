@@ -12,14 +12,15 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use grafting_graph_core::{
-    FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType,
+    ContourTopology, FormationInputs, Graph, GraphPrimitive, PrismGridMesh, RegionId, SurfaceKey,
+    SurfaceRegistry, SurfaceType,
 };
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::generation;
 use crate::geometry::connected_component;
-use crate::mesh;
+use crate::mesh::{self, region_id_to_wire};
 use crate::path_brush;
 use crate::terrain;
 
@@ -42,6 +43,8 @@ struct ConstructionState {
     graph: SessionGraph,
     surfaces: SurfaceRegistry,
     known_surfaces: HashSet<SurfaceKey>,
+    topology: ContourTopology,
+    known_regions: HashSet<RegionId>,
 }
 
 struct PathBrushHistoryEntry {
@@ -57,6 +60,7 @@ struct PathBrushHistoryEntry {
 pub struct ConstructionSession {
     graph: SessionGraph,
     surfaces: SurfaceRegistry,
+    topology: ContourTopology,
     terrain_mesh: Option<PrismGridMesh>,
     /// This crate's own bookkeeping of every surface key currently
     /// registered, purely so [`Self::snapshot_json`] can enumerate them --
@@ -64,6 +68,7 @@ pub struct ConstructionSession {
     /// adding one would be a `grafting-graph-core` change, out of this
     /// crate's scope.
     known_surfaces: HashSet<SurfaceKey>,
+    known_regions: HashSet<RegionId>,
     path_brush_undo: Vec<PathBrushHistoryEntry>,
     path_brush_redo: Vec<PathBrushHistoryEntry>,
 }
@@ -84,8 +89,10 @@ impl ConstructionSession {
             graph: Graph::try_from_parts(Vec::new(), Vec::new())
                 .expect("an empty graph is always valid"),
             surfaces: SurfaceRegistry::new(),
+            topology: ContourTopology::new(),
             terrain_mesh: None,
             known_surfaces: HashSet::new(),
+            known_regions: HashSet::new(),
             path_brush_undo: Vec::new(),
             path_brush_redo: Vec::new(),
         }
@@ -253,14 +260,24 @@ impl ConstructionSession {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
             known_surfaces: self.known_surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
         };
-        let response = path_brush::apply_path_brush(&mut self.graph, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
-        self.known_surfaces = self.surfaces.surface_keys().into_iter().collect();
+        let response = path_brush::apply_path_brush(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            &mut self.known_surfaces,
+            &mut self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
         let after = ConstructionState {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
             known_surfaces: self.known_surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
         };
         self.path_brush_undo.push(PathBrushHistoryEntry {
             operation_id,
@@ -280,8 +297,15 @@ impl ConstructionSession {
     /// Returns the exact target mesh for a path brush without mutating confirmed state.
     pub fn preview_path_brush_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
-        let response = path_brush::preview_path_brush(&self.graph, &self.surfaces, request)
-            .map_err(to_js_error)?;
+        let response = path_brush::preview_path_brush(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            &self.known_surfaces,
+            &self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
         serialize(&response)
     }
     /// Restores the state immediately before the latest matching path-brush operation.
@@ -300,6 +324,8 @@ impl ConstructionSession {
         self.graph = entry.before.graph.clone();
         self.surfaces = entry.before.surfaces.clone();
         self.known_surfaces = entry.before.known_surfaces.clone();
+        self.topology = entry.before.topology.clone();
+        self.known_regions = entry.before.known_regions.clone();
         self.path_brush_redo.push(entry);
         Ok(())
     }
@@ -320,6 +346,8 @@ impl ConstructionSession {
         self.graph = entry.after.graph.clone();
         self.surfaces = entry.after.surfaces.clone();
         self.known_surfaces = entry.after.known_surfaces.clone();
+        self.topology = entry.after.topology.clone();
+        self.known_regions = entry.after.known_regions.clone();
         self.path_brush_undo.push(entry);
         Ok(())
     }
@@ -446,7 +474,13 @@ impl ConstructionSession {
     /// order -- the one bootstrap call a renderer uses to draw everything
     /// already in the session. See `mesh::all_surface_meshes`.
     pub fn all_surface_meshes_json(&self) -> Result<String, JsValue> {
-        let meshes = mesh::all_surface_meshes(&self.graph, &self.surfaces, &self.known_surfaces);
+        let meshes = mesh::all_surface_meshes(
+            &self.graph,
+            &self.surfaces,
+            &self.known_surfaces,
+            &self.topology,
+            &self.known_regions,
+        );
         serialize(&meshes)
     }
 
@@ -455,7 +489,8 @@ impl ConstructionSession {
     /// mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
     pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let dto = mesh::surface_mesh(&self.graph, &self.surfaces, request).map_err(to_js_error)?;
+        let dto = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
+            .map_err(to_js_error)?;
         serialize(&dto)
     }
 
@@ -482,7 +517,7 @@ impl ConstructionSession {
                 target: edge.target().as_str().to_owned(),
             })
             .collect();
-        let surfaces = self
+        let mut surfaces = self
             .known_surfaces
             .iter()
             .filter_map(|key| {
@@ -492,7 +527,18 @@ impl ConstructionSession {
                     physical: surface.physical(),
                 })
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let mut region_ids = self.known_regions.iter().collect::<Vec<_>>();
+        region_ids.sort();
+        surfaces.extend(region_ids.into_iter().filter_map(|region_id| {
+            self.surfaces
+                .region_surface(region_id)
+                .map(|surface| SurfaceSnapshot {
+                    surface_key: region_id_to_wire(region_id),
+                    surface_type: surface.surface_type().as_str().to_owned(),
+                    physical: surface.physical(),
+                })
+        }));
         serialize(&SnapshotResponse {
             nodes,
             edges,
@@ -698,6 +744,11 @@ mod tests {
                 .is_empty()
         );
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
+
+        let meshes: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
 
         session
             .undo_path_brush("path-1")
