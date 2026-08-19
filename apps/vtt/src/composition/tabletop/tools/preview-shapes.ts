@@ -98,6 +98,16 @@ export function brushStrokeOutline(
  * enough to read as "this area," not a stand-in for the real result. Used as
  * every brush's default preview; a tool with a real result preview (e.g.
  * path-brush's analytic mesh) replaces it, this is only the fallback/ghost.
+ *
+ * Built as one continuous, non-overlapping triangle strip -- each interior
+ * sample's offset uses the *averaged* normal of its two adjacent segments
+ * (not each segment's own normal independently), so a curving/zigzagging
+ * stroke reads as one smooth ribbon instead of a chain of independently
+ * rotated little rectangles that overlap at every turn. That overlap used to
+ * double-blend the translucent fill wherever the stroke curved or the
+ * pointer produced closely-spaced samples -- reading as both "little
+ * squares" and "gets more intense with more passes." A single non-self-
+ * overlapping strip has neither problem: it is exactly the swept area, once.
  */
 export function brushSweptRegionFill(
   samples: readonly ConstructionPosition[],
@@ -111,10 +121,10 @@ export function brushSweptRegionFill(
   if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
 
   const radius = shape.radius;
-  const y = first.y + 0.03;
   const CAP_SEGMENTS = 24;
 
   const addCap = (center: ConstructionPosition) => {
+    const y = center.y + 0.03;
     const base = positions.length / 3;
     positions.push(center.x, y, center.z);
     for (let index = 0; index <= CAP_SEGMENTS; index += 1) {
@@ -127,25 +137,50 @@ export function brushSweptRegionFill(
   };
 
   addCap(first);
-  if (samples.length > 1) addCap(samples[samples.length - 1]);
+  const last = samples[samples.length - 1];
+  if (samples.length > 1 && last !== undefined) addCap(last);
 
-  for (let index = 1; index < samples.length; index += 1) {
-    const start = samples[index - 1];
-    const end = samples[index];
-    const dx = end.x - start.x;
-    const dz = end.z - start.z;
-    const length = Math.hypot(dx, dz);
-    if (length <= Number.EPSILON) continue;
-    const offsetX = (-dz / length) * radius;
-    const offsetZ = (dx / length) * radius;
-    const base = positions.length / 3;
-    positions.push(
-      start.x + offsetX, y, start.z + offsetZ,
-      end.x + offsetX, y, end.z + offsetZ,
-      end.x - offsetX, y, end.z - offsetZ,
-      start.x - offsetX, y, start.z - offsetZ,
-    );
-    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  if (samples.length > 1) {
+    // One unit normal per segment (perpendicular to that segment's own direction).
+    const segmentNormals: ({ readonly x: number; readonly z: number } | undefined)[] = [];
+    for (let index = 1; index < samples.length; index += 1) {
+      const dx = samples[index].x - samples[index - 1].x;
+      const dz = samples[index].z - samples[index - 1].z;
+      const length = Math.hypot(dx, dz);
+      segmentNormals.push(length <= Number.EPSILON ? undefined : { x: -dz / length, z: dx / length });
+    }
+
+    // Each vertex's normal is the average of its two adjacent segments' normals
+    // (just one segment's, at the stroke's own ends) -- this is what keeps the
+    // strip's two rails continuous through a turn instead of leaving a
+    // gap/overlap at every joint.
+    const normalAt = (index: number): { readonly x: number; readonly z: number } => {
+      const previous = segmentNormals[index - 1];
+      const next = segmentNormals[index];
+      if (previous === undefined) return next ?? { x: 0, z: 0 };
+      if (next === undefined) return previous;
+      const sx = previous.x + next.x;
+      const sz = previous.z + next.z;
+      const length = Math.hypot(sx, sz);
+      return length <= Number.EPSILON ? next : { x: sx / length, z: sz / length };
+    };
+
+    for (let index = 1; index < samples.length; index += 1) {
+      const startNormal = normalAt(index - 1);
+      const endNormal = normalAt(index);
+      const start = samples[index - 1];
+      const end = samples[index];
+      const startY = start.y + 0.03;
+      const endY = end.y + 0.03;
+      const base = positions.length / 3;
+      positions.push(
+        start.x + startNormal.x * radius, startY, start.z + startNormal.z * radius,
+        end.x + endNormal.x * radius, endY, end.z + endNormal.z * radius,
+        end.x - endNormal.x * radius, endY, end.z - endNormal.z * radius,
+        start.x - startNormal.x * radius, startY, start.z - startNormal.z * radius,
+      );
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
   }
 
   return {
