@@ -15,18 +15,31 @@
 //! This only works cheaply because every id a generator in this crate's
 //! sibling `grafting-procgen-structure-generation` produces is a pure
 //! function of world position -- repainting the same geometry across ticks
-//! or across separate calls always reproduces the exact same `SurfaceKey`s,
-//! so unchanged geometry costs nothing (its key is already in
-//! `old_keys_in_scope`, so it's filtered out of both the add and remove
-//! sets) and only genuinely new or genuinely stale pieces are touched.
+//! or across separate calls always reproduces the exact same [`RegionId`]
+//! (via [`region_id_from_cycle`]), so unchanged geometry costs nothing (its
+//! id is already in `old_ids_in_scope`, so it's filtered out of both the
+//! add and remove sets) and only genuinely new or genuinely stale pieces
+//! are touched.
+//!
+//! Every surface this module creates is an analytic
+//! [`grafting_graph_core::SurfaceRegion`], not a legacy
+//! [`grafting_graph_core::Surface`] -- see this crate's own migration
+//! notes. A piece with `surface.curvature` set (a curved wall/tower panel)
+//! gets its base and top rims built as true `ContourGeometry::CircularArc`
+//! edges instead of the legacy `SurfaceCurvature` decoration -- see
+//! [`arc_geometry_for_curvature`]'s own doc.
 
 use std::collections::{HashMap, HashSet};
 
-use grafting_graph_core::{Edge, EdgeId, Node, NodeId, SurfaceKey, SurfaceRegistry};
+use grafting_graph_core::{
+    ArcBulge, ContourEdge, ContourEdgeId, ContourGeometry, ContourTopology, Edge, EdgeId, Node,
+    NodeId, OrientedEdgeUse, RegionId, SurfaceCurvature, SurfaceRegistry, straight_cycle_region,
+};
 use grafting_procgen_structure_generation::StructurePiece;
 
-use crate::dto::surface_key_to_wire;
+use crate::dto::region_id_from_cycle;
 use crate::editing::SessionGraph;
+use crate::mesh::region_id_to_wire;
 
 /// What changed, in wire-ready form -- the same shape every
 /// `generate_and_apply_*` JSON response already uses.
@@ -36,45 +49,159 @@ pub struct DiffOutcome {
     pub removed_node_ids: Vec<String>,
 }
 
+/// The reference midpoint the OLD renderer (`grafting-procgen-surface-mesh`'s
+/// `tessellate_arc`) would have placed at `t=0.5` for this exact `(start,
+/// end, curvature)`: at `t=0.5` that function's own `theta = PI/2` term
+/// drops the `cos` component entirely, reducing to `center + sign*radius*normal`.
+/// [`SurfaceCurvature`] only stores `{center, bulge}` (no explicit swept
+/// angle), while [`ContourGeometry::CircularArc`] needs an explicit
+/// `clockwise` -- this picks whichever `clockwise` value reproduces the same
+/// reference midpoint the legacy renderer would have drawn, so migrating off
+/// `SurfaceCurvature` changes no visual output. Only used to pick a
+/// direction, never to tessellate anything here -- `ContourTopology`'s own
+/// tessellation runs later, at mesh-derivation time.
+fn arc_geometry_for_curvature(
+    start: [f32; 3],
+    end: [f32; 3],
+    curvature: SurfaceCurvature,
+) -> ContourGeometry {
+    let (sx, sz) = (start[0], start[2]);
+    let (ex, ez) = (end[0], end[2]);
+    let chord = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt().max(f32::EPSILON);
+    let (ux, uz) = ((ex - sx) / chord, (ez - sz) / chord);
+    let (nx, nz) = (-uz, ux);
+    let sign: f32 = match curvature.bulge {
+        ArcBulge::Left => 1.0,
+        ArcBulge::Right => -1.0,
+    };
+    let center = curvature.center;
+    let radius = ((sx - center[0]).powi(2) + (sz - center[1]).powi(2))
+        .sqrt()
+        .max(f32::EPSILON);
+    let reference_mid = [center[0] + sign * radius * nx, center[1] + sign * radius * nz];
+
+    let angle_of = |p: [f32; 2]| (p[1] - center[1]).atan2(p[0] - center[0]);
+    let sweep = |from: f32, to: f32, clockwise: bool| {
+        let tau = std::f32::consts::TAU;
+        (if clockwise { from - to } else { to - from }).rem_euclid(tau)
+    };
+    let midpoint_for = |clockwise: bool| {
+        let start_angle = angle_of([sx, sz]);
+        let end_angle = angle_of([ex, ez]);
+        let total = sweep(start_angle, end_angle, clockwise).max(f32::EPSILON);
+        let signed = if clockwise { -total } else { total };
+        let angle = start_angle + signed * 0.5;
+        [center[0] + radius * angle.cos(), center[1] + radius * angle.sin()]
+    };
+    let dist2 = |a: [f32; 2], b: [f32; 2]| (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2);
+    let clockwise = dist2(midpoint_for(true), reference_mid) < dist2(midpoint_for(false), reference_mid);
+    ContourGeometry::CircularArc { center, clockwise }
+}
+
+/// Registers one new surface's own loop of contour edges -- straight
+/// (`Line`) unless `curvature` is set, in which case a 4-corner cycle's
+/// base edge (index 0, `cycle[0] -> cycle[1]`) and top edge (index 2,
+/// `cycle[2] -> cycle[3]`) become `CircularArc`s sharing the same center --
+/// see `extrusion::quad_piece`'s own doc for why exactly those two edges of
+/// a curved panel share one arc (a vertical extrusion of a curved base has
+/// an identically-curved top rim, just offset in Y). The two vertical side
+/// edges (indices 1 and 3) always stay straight.
+fn register_region(
+    graph: &SessionGraph,
+    topology: &mut ContourTopology,
+    region_id: &RegionId,
+    cycle: &[NodeId],
+    curvature: Option<SurfaceCurvature>,
+) -> Result<(), String> {
+    let Some(curvature) = curvature else {
+        straight_cycle_region(topology, graph, region_id.clone(), cycle)
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    };
+    let positions: Vec<[f32; 3]> = cycle
+        .iter()
+        .map(|id| {
+            *graph
+                .node(id)
+                .expect("cycle nodes were already added to the graph")
+                .data()
+        })
+        .collect();
+    let base_geometry = arc_geometry_for_curvature(positions[0], positions[1], curvature);
+    let top_geometry = match base_geometry {
+        ContourGeometry::CircularArc { center, clockwise } => ContourGeometry::CircularArc {
+            center,
+            clockwise: !clockwise,
+        },
+        ContourGeometry::Line => ContourGeometry::Line,
+    };
+    let mut loop_ = Vec::with_capacity(cycle.len());
+    for index in 0..cycle.len() {
+        let start = cycle[index].clone();
+        let end = cycle[(index + 1) % cycle.len()].clone();
+        let geometry = if index == 0 {
+            base_geometry
+        } else if cycle.len() == 4 && index == 2 {
+            top_geometry
+        } else {
+            ContourGeometry::Line
+        };
+        let edge_id = ContourEdgeId::new(format!("{region_id}-{index}"))
+            .map_err(|error| error.to_string())?;
+        topology
+            .add_edge(graph, ContourEdge::new(edge_id.clone(), start, end, geometry))
+            .map_err(|error| error.to_string())?;
+        loop_.push(OrientedEdgeUse::forward(edge_id));
+    }
+    topology
+        .add_region(region_id.clone(), vec![loop_], Vec::new())
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// Diffs `all_pieces` (a generator's complete, freshly-derived output)
-/// against `old_keys_in_scope` (every previously-registered surface the
+/// against `old_ids_in_scope` (every previously-registered region the
 /// caller has already decided belongs to this same structure), applies
 /// only the difference, and sweeps any node `node_in_scope` still claims
-/// but no surface references anymore.
+/// but nothing -- neither a legacy `Surface` nor a surviving analytic
+/// region -- references anymore.
 pub fn diff_and_apply(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
-    old_keys_in_scope: &HashSet<SurfaceKey>,
+    topology: &mut ContourTopology,
+    old_ids_in_scope: &HashSet<RegionId>,
     all_pieces: Vec<StructurePiece>,
     node_in_scope: impl Fn(&Node<[f32; 3]>) -> bool,
 ) -> Result<DiffOutcome, String> {
-    let new_keys: HashSet<SurfaceKey> = all_pieces
+    let new_ids: HashSet<RegionId> = all_pieces
         .iter()
-        .map(|piece| SurfaceKey::from_cycle(&piece.surface.cycle))
-        .collect();
+        .map(|piece| region_id_from_cycle(&piece.surface.cycle))
+        .collect::<Result<_, _>>()?;
 
-    let to_remove: Vec<SurfaceKey> = old_keys_in_scope.difference(&new_keys).cloned().collect();
+    let to_remove: Vec<RegionId> = old_ids_in_scope.difference(&new_ids).cloned().collect();
     // A generator can legitimately emit the same cycle twice in one call
     // (a free-form stroke fitted into two collinear edges that share both
     // endpoints, most commonly) -- since ids are position-derived, that's
-    // the same `SurfaceKey` twice, not two distinct surfaces. Keep only the
+    // the same `RegionId` twice, not two distinct surfaces. Keep only the
     // first occurrence, the same way `unique_nodes`/`unique_edges` below
     // already dedupe within one call.
-    let mut seen_new_keys: HashSet<SurfaceKey> = HashSet::new();
+    let mut seen_new_ids: HashSet<RegionId> = HashSet::new();
     let to_add: Vec<_> = all_pieces
         .into_iter()
         .filter(|piece| {
-            let key = SurfaceKey::from_cycle(&piece.surface.cycle);
-            !old_keys_in_scope.contains(&key) && seen_new_keys.insert(key)
+            let id = region_id_from_cycle(&piece.surface.cycle)
+                .expect("already validated above while building new_ids");
+            !old_ids_in_scope.contains(&id) && seen_new_ids.insert(id)
         })
         .collect();
 
     let mut removed_surface_keys = Vec::with_capacity(to_remove.len());
-    for key in &to_remove {
+    for id in &to_remove {
+        topology.remove_region(id).map_err(|error| error.to_string())?;
         surfaces
-            .remove_surface(key)
+            .remove_region_surface(id)
             .map_err(|error| error.to_string())?;
-        removed_surface_keys.push(surface_key_to_wire(key));
+        removed_surface_keys.push(region_id_to_wire(id));
     }
 
     // Dedup nodes/edges across every kept piece before mutating -- a
@@ -112,26 +239,31 @@ pub fn diff_and_apply(
 
     let mut added_surface_keys = Vec::with_capacity(to_add.len());
     for piece in to_add {
-        let curvature = piece.surface.curvature;
-        let key = surfaces
-            .add_surface(
-                graph,
-                piece.surface.cycle,
+        let region_id = region_id_from_cycle(&piece.surface.cycle)?;
+        register_region(
+            graph,
+            topology,
+            &region_id,
+            &piece.surface.cycle,
+            piece.surface.curvature,
+        )?;
+        surfaces
+            .add_region_surface(
+                topology,
+                region_id.clone(),
                 piece.surface.surface_type,
                 piece.surface.physical,
             )
             .map_err(|error| error.to_string())?;
-        if curvature.is_some() {
-            surfaces
-                .set_curvature(&key, curvature)
-                .map_err(|error| error.to_string())?;
-        }
-        added_surface_keys.push(surface_key_to_wire(&key));
+        added_surface_keys.push(region_id_to_wire(&region_id));
     }
+    topology.prune_unused_edges();
 
     // Orphan cleanup: any node still claimed by the caller's own scope
-    // that no surface references anymore (a removed run's own private
-    // jamb/facet nodes, most commonly) is deleted.
+    // that nothing -- a legacy `Surface` or a surviving analytic region --
+    // references anymore (a removed run's own private jamb/facet nodes,
+    // most commonly) is deleted.
+    let nodes_in_use = topology.nodes_in_use();
     let snapshot = graph.snapshot();
     let scoped_node_ids: Vec<NodeId> = snapshot
         .nodes()
@@ -141,10 +273,12 @@ pub fn diff_and_apply(
         .collect();
     let mut removed_node_ids = Vec::new();
     for id in &scoped_node_ids {
-        if surfaces.surfaces_referencing(id).next().is_none() {
-            graph.remove_node(id).map_err(|error| error.to_string())?;
-            removed_node_ids.push(id.as_str().to_owned());
+        let still_used = surfaces.surfaces_referencing(id).next().is_some() || nodes_in_use.contains(id);
+        if still_used {
+            continue;
         }
+        graph.remove_node(id).map_err(|error| error.to_string())?;
+        removed_node_ids.push(id.as_str().to_owned());
     }
 
     Ok(DiffOutcome {
@@ -197,6 +331,7 @@ mod tests {
     fn a_generator_emitting_the_same_cycle_twice_in_one_call_adds_it_once() {
         let mut graph: SessionGraph = Graph::try_from_parts(vec![], vec![]).unwrap();
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
 
         // A stroke fitted into two collinear edges sharing both endpoints
         // -- same node-derived ids twice, not two distinct surfaces.
@@ -205,6 +340,7 @@ mod tests {
         let outcome = diff_and_apply(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &HashSet::new(),
             all_pieces,
             |_| true,

@@ -31,7 +31,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use grafting_graph_core::{SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_structure_generation::{
     ArcBulge, Axis, BoundaryRun, CellCoord, EdgeCurvature, EdgeNotch, PathEdge, StructurePiece,
     boundary_runs, cap_boundary, extrude_path, partition_cells_into_regions,
@@ -40,6 +40,52 @@ use grafting_procgen_structure_generation::{
 use crate::diff_apply::diff_and_apply;
 use crate::editing::SessionGraph;
 use crate::geometry::point_in_or_on_polygon;
+
+/// Whether every node touched by `region_id`'s own outer loops (and holes)
+/// satisfies `in_scope`, resolving each contour edge's endpoints through
+/// `graph`. A region with a node `graph` no longer has, or an id
+/// `topology` no longer knows, is never in scope -- the same "absent means
+/// out of scope" posture the legacy `surface.cycle()` walk this replaces
+/// already had.
+fn region_in_scope(
+    topology: &ContourTopology,
+    graph: &SessionGraph,
+    region_id: &RegionId,
+    in_scope: &impl Fn(&[f32; 3]) -> bool,
+) -> bool {
+    let Some(region) = topology.region(region_id) else {
+        return false;
+    };
+    for loop_ in region.outer_loops().iter().chain(region.holes().iter()) {
+        for use_ in loop_ {
+            let Some(edge) = topology.edge(use_.edge()) else {
+                return false;
+            };
+            for node_id in [edge.start_node(), edge.end_node()] {
+                let Some(node) = graph.node(node_id) else {
+                    return false;
+                };
+                if !in_scope(node.data()) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+fn regions_in_scope(
+    topology: &ContourTopology,
+    graph: &SessionGraph,
+    known_regions: &HashSet<RegionId>,
+    in_scope: &impl Fn(&[f32; 3]) -> bool,
+) -> HashSet<RegionId> {
+    known_regions
+        .iter()
+        .filter(|id| region_in_scope(topology, graph, id, in_scope))
+        .cloned()
+        .collect()
+}
 
 // ---- Path extrusion ----
 
@@ -144,7 +190,8 @@ fn bounding_box_scope(pieces: &[StructurePiece]) -> impl Fn(&[f32; 3]) -> bool +
 pub fn generate_and_apply_path_extrusion(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
-    known_surfaces: &HashSet<SurfaceKey>,
+    topology: &mut ContourTopology,
+    known_regions: &HashSet<RegionId>,
     request: GenerateAndApplyPathExtrusionRequest,
 ) -> Result<DiffResponse, String> {
     if request.edges.is_empty() {
@@ -179,25 +226,9 @@ pub fn generate_and_apply_path_extrusion(
     .map_err(|error| error.to_string())?;
 
     let in_scope = bounding_box_scope(&pieces);
-    let old_keys_in_scope: HashSet<SurfaceKey> = known_surfaces
-        .iter()
-        .filter(|key| {
-            surfaces
-                .surface(key)
-                .map(|surface| {
-                    surface.cycle().iter().all(|id| {
-                        graph
-                            .node(id)
-                            .map(|node| in_scope(node.data()))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
+    let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
 
-    let outcome = diff_and_apply(graph, surfaces, &old_keys_in_scope, pieces, |node| {
+    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, pieces, |node| {
         in_scope(node.data())
     })?;
     Ok(DiffResponse {
@@ -227,7 +258,8 @@ pub struct GenerateAndApplyBoundaryCapRequest {
 pub fn generate_and_apply_boundary_cap(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
-    known_surfaces: &HashSet<SurfaceKey>,
+    topology: &mut ContourTopology,
+    known_regions: &HashSet<RegionId>,
     request: GenerateAndApplyBoundaryCapRequest,
 ) -> Result<DiffResponse, String> {
     if request.points.len() < 3 {
@@ -248,25 +280,9 @@ pub fn generate_and_apply_boundary_cap(
     let in_scope =
         |position: &[f32; 3]| point_in_or_on_polygon((position[0], position[2]), &polygon);
 
-    let old_keys_in_scope: HashSet<SurfaceKey> = known_surfaces
-        .iter()
-        .filter(|key| {
-            surfaces
-                .surface(key)
-                .map(|surface| {
-                    surface.cycle().iter().all(|id| {
-                        graph
-                            .node(id)
-                            .map(|node| in_scope(node.data()))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
+    let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
 
-    let outcome = diff_and_apply(graph, surfaces, &old_keys_in_scope, vec![piece], |node| {
+    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, vec![piece], |node| {
         in_scope(node.data())
     })?;
     Ok(DiffResponse {
@@ -355,7 +371,8 @@ fn cell_world_points(cell: &CellCoord, cell_size: f32, origin: [f32; 3]) -> [[f3
 pub fn generate_and_apply_region_partition(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
-    known_surfaces: &HashSet<SurfaceKey>,
+    topology: &mut ContourTopology,
+    known_regions: &HashSet<RegionId>,
     request: GenerateAndApplyRegionPartitionRequest,
 ) -> Result<DiffResponse, String> {
     if request.cells.is_empty() {
@@ -421,25 +438,9 @@ pub fn generate_and_apply_region_partition(
     }
 
     let in_scope = bounding_box_scope(&all_pieces);
-    let old_keys_in_scope: HashSet<SurfaceKey> = known_surfaces
-        .iter()
-        .filter(|key| {
-            surfaces
-                .surface(key)
-                .map(|surface| {
-                    surface.cycle().iter().all(|id| {
-                        graph
-                            .node(id)
-                            .map(|node| in_scope(node.data()))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
+    let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
 
-    let outcome = diff_and_apply(graph, surfaces, &old_keys_in_scope, all_pieces, |node| {
+    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, all_pieces, |node| {
         in_scope(node.data())
     })?;
     Ok(DiffResponse {
@@ -452,30 +453,23 @@ pub fn generate_and_apply_region_partition(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use grafting_graph_core::{Graph, NodeId};
+    use grafting_graph_core::{ContourGeometry, Graph};
 
-    fn empty_session() -> (SessionGraph, SurfaceRegistry, HashSet<SurfaceKey>) {
+    fn empty_session() -> (SessionGraph, SurfaceRegistry, ContourTopology, HashSet<RegionId>) {
         (
             Graph::try_from_parts(Vec::new(), Vec::new()).unwrap(),
             SurfaceRegistry::new(),
+            ContourTopology::new(),
             HashSet::new(),
         )
     }
 
-    fn track(known: &mut HashSet<SurfaceKey>, response: &DiffResponse) {
-        for key in &response.removed_surface_keys {
-            known.remove(&SurfaceKey::from_cycle(
-                &key.iter()
-                    .map(|id| NodeId::new(id.clone()).unwrap())
-                    .collect::<Vec<_>>(),
-            ));
+    fn track(known: &mut HashSet<RegionId>, response: &DiffResponse) {
+        for wire_key in &response.removed_surface_keys {
+            known.remove(&crate::mesh::region_id_from_wire(wire_key).unwrap());
         }
-        for key in &response.added_surface_keys {
-            known.insert(SurfaceKey::from_cycle(
-                &key.iter()
-                    .map(|id| NodeId::new(id.clone()).unwrap())
-                    .collect::<Vec<_>>(),
-            ));
+        for wire_key in &response.added_surface_keys {
+            known.insert(crate::mesh::region_id_from_wire(wire_key).unwrap());
         }
     }
 
@@ -506,13 +500,13 @@ mod tests {
 
     /// A full circle built from 2 true semicircles mints the identical 4
     /// corner nodes for both (`corner_id` is purely position-derived), so
-    /// they collide on one `SurfaceKey` and the second is silently dropped
+    /// they collide on one `RegionId` and the second is silently dropped
     /// by `diff_and_apply`'s own duplicate-cycle dedup -- this was the
     /// actual bug behind a rendered "half circle." 4 quarter-circle arcs
     /// (each a distinct corner pair) must not have this problem.
     #[test]
     fn a_full_circle_from_four_quarter_arcs_adds_four_distinct_surfaces() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let quarter = std::f32::consts::FRAC_PI_2;
         let east = [2.0, 0.0, 0.0];
         let north = [0.0, 0.0, 2.0];
@@ -530,8 +524,14 @@ mod tests {
             surface_type: "wall".into(),
             notch: None,
         };
-        let response =
-            generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request).unwrap();
+        let response = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap();
         assert_eq!(
             response.added_surface_keys.len(),
             4,
@@ -539,28 +539,24 @@ mod tests {
         );
 
         for wire_key in &response.added_surface_keys {
-            let key = SurfaceKey::from_cycle(
-                &wire_key
-                    .iter()
-                    .map(|id| NodeId::new(id.clone()).unwrap())
-                    .collect::<Vec<_>>(),
-            );
-            let curvature = surfaces
-                .surface(&key)
-                .unwrap()
-                .curvature()
-                .expect("each quarter-arc must carry curvature");
+            let region_id = crate::mesh::region_id_from_wire(wire_key).unwrap();
+            let region = topology.region(&region_id).unwrap();
+            let base_use = &region.outer_loops()[0][0];
+            let base_edge = topology.edge(base_use.edge()).unwrap();
+            let center = match base_edge.geometry() {
+                ContourGeometry::CircularArc { center, .. } => *center,
+                ContourGeometry::Line => panic!("each quarter-arc's base edge must be a CircularArc"),
+            };
             assert!(
-                curvature.center[0].abs() < 1e-3 && curvature.center[1].abs() < 1e-3,
-                "expected every quarter-arc's own true center at the origin, got {:?}",
-                curvature.center
+                center[0].abs() < 1e-3 && center[1].abs() < 1e-3,
+                "expected every quarter-arc's own true center at the origin, got {center:?}"
             );
         }
     }
 
     #[test]
     fn a_single_straight_edge_produces_one_panel() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let request = GenerateAndApplyPathExtrusionRequest {
             edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
             height: 3.0,
@@ -568,15 +564,21 @@ mod tests {
             surface_type: "wall".into(),
             notch: None,
         };
-        let response =
-            generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request).unwrap();
+        let response = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap();
         assert_eq!(response.added_surface_keys.len(), 1);
         assert_eq!(graph.node_count(), 4);
     }
 
     #[test]
     fn repainting_the_identical_path_is_a_no_op() {
-        let (mut graph, mut surfaces, mut known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, mut known) = empty_session();
         let request = || GenerateAndApplyPathExtrusionRequest {
             edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
             height: 3.0,
@@ -584,19 +586,30 @@ mod tests {
             surface_type: "wall".into(),
             notch: None,
         };
-        let first = generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request())
-            .unwrap();
+        let first = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request(),
+        )
+        .unwrap();
         track(&mut known, &first);
-        let second =
-            generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request())
-                .unwrap();
+        let second = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request(),
+        )
+        .unwrap();
         assert!(second.added_surface_keys.is_empty());
         assert!(second.removed_surface_keys.is_empty());
     }
 
     #[test]
     fn a_closed_loop_never_produces_a_cap() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let square = vec![
             edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight"),
             edge([4.0, 0.0, 0.0], [4.0, 0.0, 4.0], "straight"),
@@ -610,8 +623,14 @@ mod tests {
             surface_type: "wall".into(),
             notch: None,
         };
-        let response =
-            generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request).unwrap();
+        let response = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap();
         assert_eq!(
             response.added_surface_keys.len(),
             4,
@@ -621,7 +640,7 @@ mod tests {
 
     #[test]
     fn empty_edges_errors_without_mutating() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let request = GenerateAndApplyPathExtrusionRequest {
             edges: vec![],
             height: 3.0,
@@ -629,8 +648,14 @@ mod tests {
             surface_type: "wall".into(),
             notch: None,
         };
-        let error = generate_and_apply_path_extrusion(&mut graph, &mut surfaces, &known, request)
-            .unwrap_err();
+        let error = generate_and_apply_path_extrusion(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap_err();
         assert!(error.contains("edges"));
         assert_eq!(graph.node_count(), 0);
     }
@@ -639,7 +664,7 @@ mod tests {
 
     #[test]
     fn a_flat_quad_caps_into_one_surface() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let request = GenerateAndApplyBoundaryCapRequest {
             points: vec![
                 [0.0, 1.0, 0.0],
@@ -651,23 +676,35 @@ mod tests {
             surface_type: "floor".into(),
             top: false,
         };
-        let response =
-            generate_and_apply_boundary_cap(&mut graph, &mut surfaces, &known, request).unwrap();
+        let response = generate_and_apply_boundary_cap(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap();
         assert_eq!(response.added_surface_keys.len(), 1);
         assert_eq!(graph.node_count(), 4);
     }
 
     #[test]
     fn too_few_points_errors_without_mutating() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let request = GenerateAndApplyBoundaryCapRequest {
             points: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
             id_prefix: "cap-1".into(),
             surface_type: "floor".into(),
             top: false,
         };
-        let error = generate_and_apply_boundary_cap(&mut graph, &mut surfaces, &known, request)
-            .unwrap_err();
+        let error = generate_and_apply_boundary_cap(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &known,
+            request,
+        )
+        .unwrap_err();
         assert!(error.contains("points"));
         assert_eq!(graph.node_count(), 0);
     }
@@ -698,10 +735,11 @@ mod tests {
 
     #[test]
     fn a_single_cell_gets_four_walls_and_a_floor_and_ceiling() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let response = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![(0, 0)], 6),
         )
@@ -711,10 +749,11 @@ mod tests {
 
     #[test]
     fn repainting_the_same_cell_is_a_no_op() {
-        let (mut graph, mut surfaces, mut known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, mut known) = empty_session();
         let first = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![(0, 0)], 6),
         )
@@ -723,6 +762,7 @@ mod tests {
         let second = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![(0, 0)], 6),
         )
@@ -733,10 +773,11 @@ mod tests {
 
     #[test]
     fn growing_past_the_threshold_splits_with_a_notch_between_the_halves() {
-        let (mut graph, mut surfaces, mut known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, mut known) = empty_session();
         let first = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![(0, 0), (1, 0)], 2),
         )
@@ -744,9 +785,9 @@ mod tests {
         track(&mut known, &first);
         let doors_before = known
             .iter()
-            .filter(|key| {
+            .filter(|id| {
                 surfaces
-                    .surface(key)
+                    .region_surface(id)
                     .map(|s| s.surface_type().as_str() == "door")
                     .unwrap_or(false)
             })
@@ -756,6 +797,7 @@ mod tests {
         let second = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![(0, 0), (1, 0), (2, 0)], 2),
         )
@@ -763,9 +805,9 @@ mod tests {
         track(&mut known, &second);
         let doors_after = known
             .iter()
-            .filter(|key| {
+            .filter(|id| {
                 surfaces
-                    .surface(key)
+                    .region_surface(id)
                     .map(|s| s.surface_type().as_str() == "door")
                     .unwrap_or(false)
             })
@@ -778,10 +820,11 @@ mod tests {
 
     #[test]
     fn empty_cells_errors_without_mutating() {
-        let (mut graph, mut surfaces, known) = empty_session();
+        let (mut graph, mut surfaces, mut topology, known) = empty_session();
         let error = generate_and_apply_region_partition(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             &known,
             region_request(vec![], 6),
         )

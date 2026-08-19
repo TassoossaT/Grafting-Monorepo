@@ -8,11 +8,13 @@
 use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::{
-    DuplicateSpec, Edge, EdgeId, Graph, Node, NodeId, SurfaceRegistry, SurfaceSpec, SurfaceType,
-    delete_node, duplicate_surface, merge_surfaces, move_node, split_surface,
+    ContourTopology, DuplicateSpec, Edge, EdgeId, Graph, Node, NodeId, RegionId, SurfaceRegistry,
+    SurfaceSpec, SurfaceType, delete_node, duplicate_surface, merge_surfaces, move_node,
+    split_surface, straight_cycle_region,
 };
 
-use crate::dto::{surface_key_from_wire, surface_key_to_wire};
+use crate::dto::{region_id_from_cycle, surface_key_from_wire, surface_key_to_wire};
+use crate::mesh::region_id_to_wire;
 
 /// The concrete graph payload every construction-wasm session uses -- bare
 /// 3D position, no edge payload -- matching `construction.rs`'s own
@@ -96,23 +98,32 @@ pub fn add_edge(graph: &mut SessionGraph, request: AddEdgeRequest) -> Result<(),
         .map_err(|error| error.to_string())
 }
 
-/// Registers a brand-new surface over already-existing nodes.
+/// Registers a brand-new surface over already-existing nodes, as an
+/// analytic [`grafting_graph_core::SurfaceRegion`] of `Line` edges (via
+/// [`straight_cycle_region`]) rather than a legacy [`grafting_graph_core::Surface`]
+/// -- see this crate's own migration notes. The returned wire key is the
+/// `["@region", id]` marker `mesh::surface_mesh` already understands, not a
+/// plain node-id array.
 pub fn add_surface(
     graph: &SessionGraph,
     surfaces: &mut SurfaceRegistry,
+    topology: &mut ContourTopology,
     request: SurfaceSpecDto,
 ) -> Result<SurfaceKeyResponse, String> {
     let cycle = parse_cycle(request.cycle)?;
-    let key = surfaces
-        .add_surface(
-            graph,
-            cycle,
+    let region_id: RegionId = region_id_from_cycle(&cycle)?;
+    straight_cycle_region(topology, graph, region_id.clone(), &cycle)
+        .map_err(|error| error.to_string())?;
+    surfaces
+        .add_region_surface(
+            topology,
+            region_id.clone(),
             SurfaceType::new(request.surface_type),
             request.physical,
         )
         .map_err(|error| error.to_string())?;
     Ok(SurfaceKeyResponse {
-        surface_key: surface_key_to_wire(&key),
+        surface_key: region_id_to_wire(&region_id),
     })
 }
 
@@ -375,9 +386,11 @@ mod tests {
         edge(&mut graph, "ca", "c", "a");
 
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
         let response = add_surface(
             &graph,
             &mut surfaces,
+            &mut topology,
             SurfaceSpecDto {
                 cycle: vec!["a".into(), "b".into(), "c".into()],
                 surface_type: "wall".into(),
@@ -385,11 +398,19 @@ mod tests {
             },
         )
         .unwrap();
-        let mut key = response.surface_key;
-        key.sort();
-        assert_eq!(key, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert_eq!(
+            response.surface_key[0], "@region",
+            "add_surface now registers an analytic region, not a legacy node-set key"
+        );
+        let region_id = RegionId::new(response.surface_key[1].clone()).unwrap();
+        assert!(topology.region(&region_id).is_some());
+        assert!(surfaces.region_surface(&region_id).is_some());
     }
 
+    /// `remove_surface` itself is explicitly out of migration scope -- it
+    /// still operates on the legacy `SurfaceKey` model, so this fixture
+    /// bypasses the now-migrated `add_surface` wrapper and registers a
+    /// legacy `Surface` directly via `SurfaceRegistry::add_surface`.
     #[test]
     fn remove_surface_unregisters_it_without_touching_the_graph() {
         let mut graph = empty_graph();
@@ -400,16 +421,18 @@ mod tests {
         edge(&mut graph, "bc", "b", "c");
         edge(&mut graph, "ca", "c", "a");
         let mut surfaces = SurfaceRegistry::new();
-        add_surface(
-            &graph,
-            &mut surfaces,
-            SurfaceSpecDto {
-                cycle: vec!["a".into(), "b".into(), "c".into()],
-                surface_type: "wall".into(),
-                physical: true,
-            },
-        )
-        .unwrap();
+        surfaces
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                ],
+                grafting_graph_core::SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
 
         remove_surface(
             &mut surfaces,
@@ -508,6 +531,10 @@ mod tests {
         assert!(error.contains("missing"), "unexpected error: {error}");
     }
 
+    /// The five `ADR-0022` edit operations below are explicitly out of this
+    /// migration's scope and still operate on the legacy `SurfaceKey`
+    /// model, so this fixture bypasses the now-migrated `add_surface`
+    /// wrapper and registers a legacy `Surface` directly.
     fn triangle_with_surface() -> (SessionGraph, SurfaceRegistry, Vec<String>) {
         let mut graph = empty_graph();
         add(&mut graph, "a", [0.0, 0.0, 0.0]);
@@ -517,17 +544,19 @@ mod tests {
         edge(&mut graph, "bc", "b", "c");
         edge(&mut graph, "ca", "c", "a");
         let mut surfaces = SurfaceRegistry::new();
-        let key = add_surface(
-            &graph,
-            &mut surfaces,
-            SurfaceSpecDto {
-                cycle: vec!["a".into(), "b".into(), "c".into()],
-                surface_type: "wall".into(),
-                physical: true,
-            },
-        )
-        .unwrap()
-        .surface_key;
+        let key = surfaces
+            .add_surface(
+                &graph,
+                vec![
+                    NodeId::new("a").unwrap(),
+                    NodeId::new("b").unwrap(),
+                    NodeId::new("c").unwrap(),
+                ],
+                grafting_graph_core::SurfaceType::new("wall"),
+                true,
+            )
+            .unwrap();
+        let key = surface_key_to_wire(&key);
         (graph, surfaces, key)
     }
 
@@ -609,28 +638,34 @@ mod tests {
             edge(&mut graph, id, a, b);
         }
         let mut surfaces = SurfaceRegistry::new();
-        let side_abc = add_surface(
-            &graph,
-            &mut surfaces,
-            SurfaceSpecDto {
-                cycle: vec!["a".into(), "b".into(), "c".into()],
-                surface_type: "wall".into(),
-                physical: true,
-            },
-        )
-        .unwrap()
-        .surface_key;
-        let side_acd = add_surface(
-            &graph,
-            &mut surfaces,
-            SurfaceSpecDto {
-                cycle: vec!["a".into(), "c".into(), "d".into()],
-                surface_type: "wall".into(),
-                physical: true,
-            },
-        )
-        .unwrap()
-        .surface_key;
+        let side_abc = surface_key_to_wire(
+            &surfaces
+                .add_surface(
+                    &graph,
+                    vec![
+                        NodeId::new("a").unwrap(),
+                        NodeId::new("b").unwrap(),
+                        NodeId::new("c").unwrap(),
+                    ],
+                    grafting_graph_core::SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
+        );
+        let side_acd = surface_key_to_wire(
+            &surfaces
+                .add_surface(
+                    &graph,
+                    vec![
+                        NodeId::new("a").unwrap(),
+                        NodeId::new("c").unwrap(),
+                        NodeId::new("d").unwrap(),
+                    ],
+                    grafting_graph_core::SurfaceType::new("wall"),
+                    true,
+                )
+                .unwrap(),
+        );
 
         let response = apply_merge_surfaces(
             &graph,
@@ -680,17 +715,21 @@ mod tests {
             edge(&mut graph, id, a, b);
         }
         let mut surfaces = SurfaceRegistry::new();
-        let quad = add_surface(
-            &graph,
-            &mut surfaces,
-            SurfaceSpecDto {
-                cycle: vec!["a".into(), "b".into(), "c".into(), "d".into()],
-                surface_type: "floor".into(),
-                physical: true,
-            },
-        )
-        .unwrap()
-        .surface_key;
+        let quad = surface_key_to_wire(
+            &surfaces
+                .add_surface(
+                    &graph,
+                    vec![
+                        NodeId::new("a").unwrap(),
+                        NodeId::new("b").unwrap(),
+                        NodeId::new("c").unwrap(),
+                        NodeId::new("d").unwrap(),
+                    ],
+                    grafting_graph_core::SurfaceType::new("floor"),
+                    true,
+                )
+                .unwrap(),
+        );
 
         let response = apply_split_surface(
             &graph,

@@ -206,10 +206,20 @@ fn triangulate_contour_loops<'a>(
         hole_indices.push(positions.len() as u32);
         positions.extend(hole.iter().copied());
     }
-    let projected = positions
-        .iter()
-        .map(|point| [point[0], point[2]])
-        .collect::<Vec<_>>();
+    // A region's own contour geometry (`ContourGeometry::CircularArc`) is
+    // always authored in the XZ plane (see `grafting_graph_core::contour`'s
+    // own "spatial policy" doc), but the *surface* it bounds is not -- a
+    // vertical wall or tower panel has constant X or Z and only varies in
+    // Y, which a naive `[x, z]` drop projects onto a degenerate
+    // (near-zero-area) line. `project3d_to_2d` derives the ring's own
+    // best-fit plane instead, the same general projection
+    // `triangulate_surface`'s own flat (non-curved) path already uses --
+    // for an XZ-planar region (terrain, a path-brush stroke) that best-fit
+    // plane so happens to already be XZ, so this changes no existing output.
+    let mut projected: Vec<[f32; 2]> = Vec::new();
+    if !utils3d::project3d_to_2d(&positions, positions.len(), &mut projected) {
+        return None;
+    }
     let mut earcut = Earcut::new();
     let mut indices = Vec::new();
     earcut.earcut(projected, &hole_indices, &mut indices);

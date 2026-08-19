@@ -124,12 +124,19 @@ impl ConstructionSession {
         editing::add_edge(&mut self.graph, request).map_err(to_js_error)
     }
 
-    /// Registers a brand-new surface. See `editing::add_surface`.
+    /// Registers a brand-new surface, as an analytic region. See
+    /// `editing::add_surface`.
     pub fn add_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
-            editing::add_surface(&self.graph, &mut self.surfaces, request).map_err(to_js_error)?;
-        self.remember(&response.surface_key);
+        let response = editing::add_surface(
+            &self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            request,
+        )
+        .map_err(to_js_error)?;
+        let region_id = mesh::region_id_from_wire(&response.surface_key).map_err(to_js_error)?;
+        self.known_regions.insert(region_id);
         serialize(&response)
     }
 
@@ -361,11 +368,13 @@ impl ConstructionSession {
         let response = terrain::generate_and_apply_terrain_cell(
             &mut self.graph,
             &mut self.surfaces,
+            &mut self.topology,
             self.terrain_mesh.as_ref(),
             request,
         )
         .map_err(to_js_error)?;
-        self.remember(&response.surface_key);
+        let region_id = mesh::region_id_from_wire(&response.surface_key).map_err(to_js_error)?;
+        self.known_regions.insert(region_id);
         serialize(&response)
     }
 
@@ -384,15 +393,18 @@ impl ConstructionSession {
         let response = generation::generate_and_apply_path_extrusion(
             &mut self.graph,
             &mut self.surfaces,
-            &self.known_surfaces,
+            &mut self.topology,
+            &self.known_regions,
             request,
         )
         .map_err(to_js_error)?;
-        for key in &response.removed_surface_keys {
-            self.forget(key);
+        for wire_key in &response.removed_surface_keys {
+            self.known_regions
+                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
-        for key in &response.added_surface_keys {
-            self.remember(key);
+        for wire_key in &response.added_surface_keys {
+            self.known_regions
+                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
         serialize(&response)
     }
@@ -409,15 +421,18 @@ impl ConstructionSession {
         let response = generation::generate_and_apply_boundary_cap(
             &mut self.graph,
             &mut self.surfaces,
-            &self.known_surfaces,
+            &mut self.topology,
+            &self.known_regions,
             request,
         )
         .map_err(to_js_error)?;
-        for key in &response.removed_surface_keys {
-            self.forget(key);
+        for wire_key in &response.removed_surface_keys {
+            self.known_regions
+                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
-        for key in &response.added_surface_keys {
-            self.remember(key);
+        for wire_key in &response.added_surface_keys {
+            self.known_regions
+                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
         serialize(&response)
     }
@@ -437,15 +452,18 @@ impl ConstructionSession {
         let response = generation::generate_and_apply_region_partition(
             &mut self.graph,
             &mut self.surfaces,
-            &self.known_surfaces,
+            &mut self.topology,
+            &self.known_regions,
             request,
         )
         .map_err(to_js_error)?;
-        for key in &response.removed_surface_keys {
-            self.forget(key);
+        for wire_key in &response.removed_surface_keys {
+            self.known_regions
+                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
-        for key in &response.added_surface_keys {
-            self.remember(key);
+        for wire_key in &response.added_surface_keys {
+            self.known_regions
+                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
         }
         serialize(&response)
     }
@@ -1306,53 +1324,15 @@ mod tests {
         assert!(error.as_string().unwrap().contains("invalid request JSON"));
     }
 
-    #[wasm_bindgen_test]
-    fn merge_surfaces_updates_known_surfaces_so_the_snapshot_reflects_it() {
-        let mut session = ConstructionSession::new();
-        session
-            .add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_node_json(r#"{"id":"c","position":[1.0,1.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_node_json(r#"{"id":"d","position":[0.0,1.0,0.0]}"#)
-            .unwrap();
-        for (id, a, b) in [
-            ("ab", "a", "b"),
-            ("bc", "b", "c"),
-            ("ca", "c", "a"),
-            ("ac", "a", "c"),
-            ("cd", "c", "d"),
-            ("da", "d", "a"),
-        ] {
-            session
-                .add_edge_json(&format!(r#"{{"id":"{id}","source":"{a}","target":"{b}"}}"#))
-                .unwrap();
-        }
-        session
-            .add_surface_json(r#"{"cycle":["a","b","c"],"surfaceType":"wall","physical":true}"#)
-            .unwrap();
-        session
-            .add_surface_json(r#"{"cycle":["a","c","d"],"surfaceType":"wall","physical":true}"#)
-            .unwrap();
-
-        session
-            .merge_surfaces_json(
-                r#"{"a":["a","b","c"],"b":["a","c","d"],"merged":{"cycle":["a","b","c","d"],"surfaceType":"floor","physical":true}}"#,
-            )
-            .expect("merge succeeds");
-
-        let snapshot = session.snapshot_json().unwrap();
-        assert!(snapshot.contains("\"floor\""));
-        assert!(
-            !snapshot.contains("\"wall\""),
-            "merged-away surfaces must not remain in the snapshot"
-        );
-    }
+    // `merge_surfaces_json` (an ADR-0022 edit operation explicitly out of
+    // this migration's scope) still only operates on legacy `SurfaceKey`
+    // surfaces, but `add_surface_json` now always registers an analytic
+    // region -- there is no longer a public JSON path that creates a
+    // legacy `Surface` for it to merge, so this integration test cannot be
+    // expressed through `ConstructionSession` anymore. The underlying
+    // merge behavior stays fully covered by `editing.rs`'s own
+    // `merge_surfaces_unites_two_adjacent_triangles`, which builds its
+    // legacy fixture directly via `SurfaceRegistry::add_surface`.
 
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_exposes_its_mesh() {
@@ -1417,48 +1397,12 @@ mod tests {
         }
     }
 
-    #[wasm_bindgen_test]
-    fn moving_a_node_changes_its_surfaces_refetched_mesh() {
-        let mut session = ConstructionSession::new();
-        session
-            .add_node_json(r#"{"id":"a","position":[0.0,0.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_node_json(r#"{"id":"b","position":[1.0,0.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_node_json(r#"{"id":"c","position":[0.0,1.0,0.0]}"#)
-            .unwrap();
-        session
-            .add_edge_json(r#"{"id":"ab","source":"a","target":"b"}"#)
-            .unwrap();
-        session
-            .add_edge_json(r#"{"id":"bc","source":"b","target":"c"}"#)
-            .unwrap();
-        session
-            .add_edge_json(r#"{"id":"ca","source":"c","target":"a"}"#)
-            .unwrap();
-        session
-            .add_surface_json(r#"{"cycle":["a","b","c"],"surfaceType":"wall","physical":true}"#)
-            .unwrap();
-
-        let before = session
-            .surface_mesh_json(r#"{"surfaceKey":["a","b","c"]}"#)
-            .expect("mesh exists before move");
-
-        session
-            .move_node_json(r#"{"nodeId":"a","position":[5.0,5.0,5.0]}"#)
-            .expect("move succeeds");
-
-        let after = session
-            .surface_mesh_json(r#"{"surfaceKey":["a","b","c"]}"#)
-            .expect("mesh exists after move");
-
-        assert_ne!(
-            before, after,
-            "moving a node must change its surface's refetched mesh"
-        );
-    }
+    // `move_node_json` (also out of migration scope) likewise only reports
+    // legacy `SurfaceKey` surfaces as affected, and `add_surface_json` no
+    // longer creates one -- same reasoning as the removed merge test above.
+    // `editing.rs`'s own `move_node_reports_the_referencing_surface`
+    // (built on a direct `SurfaceRegistry::add_surface` fixture) keeps this
+    // covered at the Rust level.
 
     #[wasm_bindgen_test]
     fn surface_mesh_json_rejects_an_unregistered_key() {

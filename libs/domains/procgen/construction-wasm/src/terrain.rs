@@ -8,11 +8,15 @@
 
 use serde::Deserialize;
 
-use grafting_graph_core::{EdgeId, NodeId, PrismGridMesh, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{
+    ContourTopology, EdgeId, NodeId, PrismGridMesh, SurfaceRegistry, SurfaceType,
+    straight_cycle_region,
+};
 use grafting_procgen_terrain_generation::{CornerHeightModule, generate_terrain_cell_surface};
 
-use crate::dto::surface_key_to_wire;
+use crate::dto::region_id_from_cycle;
 use crate::editing::{SessionGraph, SurfaceKeyResponse};
+use crate::mesh::region_id_to_wire;
 
 const CORNER_COUNT: usize = 4;
 
@@ -56,6 +60,7 @@ fn fixed_ids<T>(
 pub fn generate_and_apply_terrain_cell(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
+    topology: &mut ContourTopology,
     mesh: Option<&PrismGridMesh>,
     request: GenerateAndApplyTerrainCellRequest,
 ) -> Result<SurfaceKeyResponse, String> {
@@ -116,17 +121,21 @@ pub fn generate_and_apply_terrain_cell(
             .add_edge(edge)
             .expect("checked above: id is free, endpoints were just added");
     }
-    let key = surfaces
-        .add_surface(
-            graph,
-            generation.surface.cycle,
+    let region_id = region_id_from_cycle(&generation.surface.cycle)
+        .expect("pre-validated: cycle is non-empty");
+    straight_cycle_region(topology, graph, region_id.clone(), &generation.surface.cycle)
+        .expect("pre-validated: nodes exist (just added)");
+    surfaces
+        .add_region_surface(
+            topology,
+            region_id.clone(),
             generation.surface.surface_type,
             generation.surface.physical,
         )
-        .expect("pre-validated: nodes exist (just added)");
+        .expect("pre-validated: nodes exist (just added), region freshly minted");
 
     Ok(SurfaceKeyResponse {
-        surface_key: surface_key_to_wire(&key),
+        surface_key: region_id_to_wire(&region_id),
     })
 }
 
@@ -158,11 +167,13 @@ mod tests {
         let mesh = PrismGridMesh::new(2, 2, 1, FormationInputs::default());
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
         let (node_ids, edge_ids) = ids(0);
 
         let response = generate_and_apply_terrain_cell(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             Some(&mesh),
             GenerateAndApplyTerrainCellRequest {
                 cell: 0,
@@ -174,7 +185,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(response.surface_key.len(), 4);
+        assert_eq!(
+            response.surface_key[0], "@region",
+            "terrain cell creation now registers an analytic region"
+        );
         assert_eq!(graph.node_count(), 4);
         assert_eq!(graph.edge_count(), 4);
     }
@@ -183,11 +197,13 @@ mod tests {
     fn errors_without_mutating_when_no_mesh_is_set() {
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
         let (node_ids, edge_ids) = ids(0);
 
         let error = generate_and_apply_terrain_cell(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             None,
             GenerateAndApplyTerrainCellRequest {
                 cell: 0,
@@ -213,11 +229,13 @@ mod tests {
             ))
             .unwrap();
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
         let (node_ids, edge_ids) = ids(0);
 
         let error = generate_and_apply_terrain_cell(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             Some(&mesh),
             GenerateAndApplyTerrainCellRequest {
                 cell: 0,
@@ -245,6 +263,7 @@ mod tests {
         let mesh = PrismGridMesh::new(2, 2, 1, FormationInputs::default());
         let mut graph = empty_graph();
         let mut surfaces = SurfaceRegistry::new();
+        let mut topology = ContourTopology::new();
         let (node_ids, edge_ids) = ids(0);
         let bad_module = CornerHeightModuleDto {
             name: "bad".into(),
@@ -254,6 +273,7 @@ mod tests {
         let error = generate_and_apply_terrain_cell(
             &mut graph,
             &mut surfaces,
+            &mut topology,
             Some(&mesh),
             GenerateAndApplyTerrainCellRequest {
                 cell: 0,
