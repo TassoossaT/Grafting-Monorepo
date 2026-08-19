@@ -35,6 +35,14 @@ pub struct RegionMergeOutcome {
     pub consumed_surface_keys: Vec<SurfaceKey>,
     /// Every existing analytic region this merge consumed and removed.
     pub consumed_region_ids: Vec<RegionId>,
+    /// Every node this merge deleted outright because nothing -- no
+    /// surviving surface, no surviving region -- still referenced it once
+    /// every consumed item was retired. A node a surviving remainder's own
+    /// boundary reused is never in here; only genuine orphans are.
+    pub removed_node_ids: Vec<NodeId>,
+    /// Every generic graph edge cascaded away by `removed_node_ids`' own
+    /// deletion (an edge cannot outlive both its endpoints).
+    pub removed_edge_ids: Vec<EdgeId>,
 }
 
 /// Applies `plan` (see `RegionMergePlan`'s own doc): destroys every surface
@@ -168,27 +176,76 @@ pub fn apply_region_merge(
         .map_err(|error| error.to_string())?;
     known_regions.insert(new_region.clone());
 
+    // Every node a consumed surface or region touched -- resolved *before*
+    // that item is actually retired, since a plain `Surface`/`SurfaceRegion`
+    // only exists long enough to read its own cycle/loops back out of the
+    // removal call itself.
+    let mut candidate_nodes = HashSet::<NodeId>::new();
+
     let mut consumed_surface_keys = Vec::with_capacity(plan.consumed_surface_keys().len());
     for key in plan.consumed_surface_keys() {
         known_surfaces.remove(key);
+        let removed_surface = surfaces
+            .remove_surface(key)
+            .map_err(|error| error.to_string())?;
+        candidate_nodes.extend(removed_surface.cycle().iter().cloned());
         consumed_surface_keys.push(key.clone());
     }
 
     // A consumed region's own edges may still be shared with an adjacent
     // region (`ContourTopology::remove_region`'s own doc), so this only
     // releases *this* region's usage of them and its semantic attributes --
-    // it never deletes shared geometry out from under a sibling.
+    // it never deletes shared geometry out from under a sibling. Whether
+    // any of its nodes truly became orphans is decided once, below, after
+    // every consumed item (surfaces and regions alike) has been retired.
     let mut consumed_region_ids = Vec::with_capacity(plan.consumed_region_ids().len());
     for region_id in plan.consumed_region_ids() {
-        topology
+        let removed_region = topology
             .remove_region(region_id)
             .map_err(|error| error.to_string())?;
+        for loop_ in removed_region
+            .outer_loops()
+            .iter()
+            .chain(removed_region.holes().iter())
+        {
+            for use_ in loop_ {
+                if let Some(edge) = topology.edge(use_.edge()) {
+                    candidate_nodes.insert(edge.start_node().clone());
+                    candidate_nodes.insert(edge.end_node().clone());
+                }
+            }
+        }
         surfaces
             .remove_region_surface(region_id)
             .map_err(|error| error.to_string())?;
         known_regions.remove(region_id);
         consumed_region_ids.push(region_id.clone());
     }
+
+    // A candidate node survives if the new region, its remainder, or any
+    // untouched sibling surface/region still needs it -- both loops above
+    // already registered every one of those before this point, so this is
+    // the final, authoritative answer, not a guess.
+    let nodes_in_use = topology.nodes_in_use();
+    let mut removed_node_ids = Vec::new();
+    let mut removed_edge_ids = Vec::new();
+    for node_id in candidate_nodes {
+        let still_used_by_surface = surfaces.surfaces_referencing(&node_id).next().is_some();
+        if still_used_by_surface || nodes_in_use.contains(&node_id) {
+            continue;
+        }
+        let snapshot = graph.snapshot();
+        for edge in snapshot.edges() {
+            if edge.source() == &node_id || edge.target() == &node_id {
+                removed_edge_ids.push(edge.id().clone());
+            }
+        }
+        graph
+            .remove_node(&node_id)
+            .map_err(|error| error.to_string())?;
+        removed_node_ids.push(node_id);
+    }
+    topology.prune_unused_edges();
 
     Ok(RegionMergeOutcome {
         created_node_ids,
@@ -197,5 +254,7 @@ pub fn apply_region_merge(
         new_region,
         consumed_surface_keys,
         consumed_region_ids,
+        removed_node_ids,
+        removed_edge_ids,
     })
 }

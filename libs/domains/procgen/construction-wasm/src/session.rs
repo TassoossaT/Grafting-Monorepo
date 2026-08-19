@@ -896,9 +896,12 @@ mod tests {
             .expect("first path brush applies");
         let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
         // response_from_outcome pushes the leftover remainder (still
-        // "terrain"-typed) first, then the new "path" region -- the second
-        // stroke below only allows "terrain" as a source type, so it's the
-        // remainder (not the path itself) that must get consumed.
+        // "terrain"-typed) first, then the new "path" region. A path
+        // stroke's own eligibility is purely geometric (`path_brush.rs`'s
+        // `plan_path_brush_region_merge` always answers `true`), so the
+        // second stroke below would happily consume either one -- this
+        // test targets the remainder specifically to also prove type is
+        // irrelevant to what gets cut.
         let first_remainder_region = first_parsed["surfaceIds"]["created"]
             .as_array()
             .unwrap()
@@ -940,6 +943,150 @@ mod tests {
             "the first stroke's own remainder region must no longer be rendered after being consumed"
         );
         assert!(!meshes.is_empty());
+    }
+
+    /// The eligibility gate used to be a type filter (`sourceSurfaceTypes`),
+    /// which meant a path stroke could never cut a region an *earlier* path
+    /// stroke had produced -- that region's own type is "path", never in
+    /// the caller's source list. Cutting must be purely geometric: this
+    /// draws stroke 2 squarely over stroke 1's own *new* "path" region
+    /// (not its terrain remainder) and asserts it gets consumed too.
+    #[test]
+    fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let first = serde_json::json!({
+            "operationId": "path-type-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let first_response = session
+            .apply_path_brush_json(&first)
+            .expect("first path brush applies");
+        let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
+        let first_path_region = first_parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+
+        let second = serde_json::json!({
+            "operationId": "path-type-2",
+            "samples": [[2.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.6},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&second)
+            .expect("second stroke over the first stroke's own path region must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .contains(&first_path_region),
+            "a path region from an earlier stroke must be cut like anything else under the brush: {response}"
+        );
+    }
+
+    /// Consuming a surface must delete its own now-orphaned graph nodes,
+    /// not just untrack it -- otherwise leftover geometry from every past
+    /// stroke keeps accumulating in the graph forever (the "vertices where
+    /// nothing was drawn" symptom). Uses a real 2x2 grid of quads that
+    /// *share* corner nodes (four independent `generate_and_apply_terrain_cell`
+    /// calls never do -- each gets its own private node ids), so consuming
+    /// all four at once actually exercises edge cancellation: the shared
+    /// center node's four edges each cancel against the adjacent cell that
+    /// also owns them, leaving it with nothing to keep it alive, while the
+    /// eight perimeter nodes each keep one surviving outer edge and must
+    /// stay.
+    #[test]
+    fn consuming_shared_quads_deletes_the_now_orphaned_center_node() {
+        let mut session = ConstructionSession::new();
+        let mut corner = |id: &str, x: f32, z: f32| {
+            session
+                .add_node_json(&serde_json::json!({"id": id, "position": [x, 0.0, z]}).to_string())
+                .expect("corner node adds");
+        };
+        corner("q-a", 0.0, 0.0);
+        corner("q-b", 1.0, 0.0);
+        corner("q-c", 2.0, 0.0);
+        corner("q-d", 0.0, 1.0);
+        corner("q-e", 1.0, 1.0);
+        corner("q-f", 2.0, 1.0);
+        corner("q-g", 0.0, 2.0);
+        corner("q-h", 1.0, 2.0);
+        corner("q-i", 2.0, 2.0);
+
+        let mut quad = |cycle: [&str; 4]| {
+            session
+                .add_surface_json(
+                    &serde_json::json!({"cycle": cycle, "surfaceType": "terrain", "physical": true})
+                        .to_string(),
+                )
+                .expect("quad surface adds");
+        };
+        quad(["q-a", "q-b", "q-e", "q-d"]);
+        quad(["q-b", "q-c", "q-f", "q-e"]);
+        quad(["q-d", "q-e", "q-h", "q-g"]);
+        quad(["q-e", "q-f", "q-i", "q-h"]);
+
+        let request = serde_json::json!({
+            "operationId": "path-orphan-cleanup",
+            "samples": [[1.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 1.6},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a brush covering the whole grid applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+
+        let removed_node_ids: Vec<&str> = parsed["nodeIds"]["removed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            removed_node_ids,
+            vec!["q-e"],
+            "only the shared center node has every one of its own edges cancel out: {response}"
+        );
+        assert!(
+            session.graph.node(&grafting_graph_core::NodeId::new("q-e").unwrap()).is_none(),
+            "the reported orphan must actually be gone from the graph"
+        );
+        for surviving in ["q-a", "q-b", "q-c", "q-d", "q-f", "q-g", "q-h", "q-i"] {
+            assert!(
+                session
+                    .graph
+                    .node(&grafting_graph_core::NodeId::new(surviving).unwrap())
+                    .is_some(),
+                "{surviving} still anchors a surviving remainder edge and must not be deleted"
+            );
+        }
     }
 
     /// A single-point (dot) stroke with a circle brush produces a contour

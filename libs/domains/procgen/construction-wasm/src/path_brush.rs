@@ -219,11 +219,11 @@ fn plan_path_brush_region_merge(
 ) -> Result<grafting_procgen_surface_transformations::RegionMergePlan, String> {
     validate_request(request).map_err(|error| error.to_string())?;
     let contour = compact_analytic_brush_contour(request).map_err(|error| error.to_string())?;
-    let source_types = request.source_types.clone();
-    plan_region_merge(graph, surfaces, topology, contour, move |surface_type| {
-        source_types.contains(surface_type)
-    })
-    .map_err(|error| error.to_string())
+    // A path stroke cuts whatever it geometrically covers -- terrain,
+    // another path, or anything else -- so eligibility here is not a type
+    // filter at all, unlike a tool that genuinely needs one.
+    plan_region_merge(graph, surfaces, topology, contour, |_surface_type| true)
+        .map_err(|error| error.to_string())
 }
 
 fn domain_request(request: &ApplyPathBrushRequest) -> PathBrushRequest {
@@ -254,13 +254,13 @@ fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse 
             created: outcome.created_node_ids.iter().map(ToString::to_string).collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
-            removed: Vec::new(),
+            removed: outcome.removed_node_ids.iter().map(ToString::to_string).collect(),
         },
         edge_ids: IdentityDeltaResponse {
             created: outcome.created_edge_ids.iter().map(ToString::to_string).collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
-            removed: Vec::new(),
+            removed: outcome.removed_edge_ids.iter().map(ToString::to_string).collect(),
         },
         surface_ids: SurfaceIdentityDeltaResponse {
             created: created_surfaces,

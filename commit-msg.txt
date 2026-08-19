@@ -1,0 +1,46 @@
+fix(vtt): path-brush cuts geometrically, and consumed surfaces actually delete their own orphaned geometry
+
+Two compounding bugs, both requested to be fixed together:
+
+1. Cutting was still type-gated. `plan_path_brush_region_merge` filtered
+   eligibility by `source_types.contains(surface_type)`, so a stroke could
+   only ever consume surfaces of caller-approved types. Per explicit
+   direction, a path stroke must cut whatever it geometrically covers,
+   regardless of type -- the closure is now `|_| true`.
+
+2. Consuming a surface/region never actually deleted its graph geometry.
+   `apply_region_merge` only called `known_surfaces.remove(key)` (session
+   bookkeeping) for plain surfaces, and never called the registry-level
+   `SurfaceRegistry::remove_surface` at all; for regions it released
+   `ContourTopology` usage tracking but never touched the underlying
+   `Graph` nodes/edges. Every past stroke's own nodes and edges stayed in
+   the graph forever, invisible to rendering (since known_surfaces no
+   longer listed them) but never actually gone -- the root of the "stray
+   vertices" symptom, and why `nodeIds.removed` in the wire response was
+   always empty despite the front end already being wired to consume it
+   (`tabletop-runtime.ts`'s `#foldPathBrushOutcome`).
+
+   Fixed by having `apply_region_merge` track every node a consumed
+   surface's cycle or a consumed region's own loops touched, then --
+   once every consumed item is actually retired and the new region/
+   remainder are fully registered -- deleting whichever of those nodes
+   nothing still references (checked against `SurfaceRegistry::
+   surfaces_referencing` and a new `ContourTopology::nodes_in_use`).
+   `Graph::remove_node` cascades incident generic edges automatically.
+   Added `ContourTopology::prune_unused_edges` to reclaim the
+   `ContourEdge` bookkeeping `remove_region` intentionally leaves behind
+   for a sibling region that might still share it. `RegionMergeOutcome`
+   gained `removed_node_ids`/`removed_edge_ids`, now wired into
+   `ApplyPathBrushResponse` so the front end's existing cleanup path has
+   real data to act on.
+
+New regression tests: a path stroke cutting an earlier stroke's own
+"path"-typed region (previously impossible, blocked by the type filter);
+a shared 2x2 quad grid where consuming all four cells cancels the shared
+center node's edges and it -- and only it -- gets deleted, while the
+eight perimeter nodes (each still anchoring one surviving remainder edge)
+survive.
+
+grafting-graph-core: 50/50, grafting-procgen-surface-transformations:
+27/27, grafting-procgen-construction-wasm: 51/51, apps/vtt: 79/79, tsc
+clean.
