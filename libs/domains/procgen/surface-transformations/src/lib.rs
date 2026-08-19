@@ -25,8 +25,7 @@ use grafting_procgen_surface_mesh::triangulate_surface;
 use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
 
 pub use analytic_brush::{
-    AnalyticBrushContour, AnalyticPathBrushPlan, compact_analytic_brush_contour,
-    plan_analytic_path_brush,
+    AnalyticBrushContour, RegionMergePlan, compact_analytic_brush_contour, plan_region_merge,
 };
 
 const CIRCLE_SEGMENTS: usize = 16;
@@ -276,7 +275,13 @@ pub fn plan_path_brush(
     builder.finish()
 }
 
-fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure> {
+/// Validates a path-brush request's own scalar/geometric fields (operation
+/// identity, samples, shape, depth) -- the path-specific checks
+/// `plan_region_merge` itself has no reason to know about, since it takes
+/// an already-built contour and a plain eligibility predicate, not a
+/// `PathBrushRequest`. A caller building a path-brush stroke on top of that
+/// generic planner calls this first.
+pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure> {
     if request.operation_id.is_empty() {
         return Err(PathBrushFailure::InvalidOperationId);
     }

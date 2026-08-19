@@ -8,10 +8,17 @@
 use std::collections::BTreeMap;
 
 use grafting_graph_core::ContourGeometry;
-use grafting_graph_core::{Graph, NodeId, SurfaceKey, SurfaceRegistry};
+use grafting_graph_core::{ContourEdge, ContourEdgeId, Graph, NodeId, SurfaceKey, SurfaceRegistry, SurfaceType};
 
 use crate::stroke::{StrokePrimitive, fit_stroke};
-use crate::{BrushShape, PathBrushFailure, PathBrushRequest, swept_brush_contains};
+use crate::{BrushShape, PathBrushFailure, PathBrushRequest};
+
+/// Precision for [`contour_polygon`]'s own point-in-region tests -- not a
+/// rendering tolerance (real tessellation for display happens later, from
+/// the true analytic edges, in `grafting-procgen-surface-mesh`), just fine
+/// enough that a spatial eligibility check never misjudges a corner sitting
+/// close to a curved edge.
+const CONTOUR_POLYGON_TOLERANCE: f32 = 0.05;
 
 /// One closed analytic contour, with one geometry entry for every directed
 /// edge from `vertices[index]` to `vertices[(index + 1) % vertices.len()]`.
@@ -25,33 +32,35 @@ pub struct AnalyticBrushContour {
     edge_geometries: Vec<ContourGeometry>,
 }
 
-/// One terrain-to-path operation expressed before graph mutation.
+/// One region-overlay merge plan: which existing surfaces a new region's
+/// contour destroys, their cancelled exterior boundaries (what a leftover
+/// remainder region must carry as its own hole), and the contour itself.
 ///
-/// The legacy source faces are represented only by their cancelled exterior
-/// boundaries. The session can therefore migrate a complete terrain patch to
-/// one analytic source region with the brush contour as its hole, rather
-/// than splitting every source triangle.
+/// Nothing here is specific to any one tool. A path-brush stroke, a future
+/// wall opening, or anything else that overlays one new closed shape onto
+/// the current graph and destroys whatever it covers can reuse this
+/// unchanged -- see [`plan_region_merge`].
 #[derive(Debug, Clone, PartialEq)]
-pub struct AnalyticPathBrushPlan {
-    source_surface_keys: Vec<SurfaceKey>,
-    source_boundaries: Vec<Vec<NodeId>>,
-    target_contour: AnalyticBrushContour,
+pub struct RegionMergePlan {
+    consumed_surface_keys: Vec<SurfaceKey>,
+    consumed_boundaries: Vec<Vec<NodeId>>,
+    contour: AnalyticBrushContour,
 }
 
-impl AnalyticPathBrushPlan {
-    /// Legacy source identities superseded by the analytic region view.
-    pub fn source_surface_keys(&self) -> &[SurfaceKey] {
-        &self.source_surface_keys
+impl RegionMergePlan {
+    /// Existing surfaces the new contour destroys.
+    pub fn consumed_surface_keys(&self) -> &[SurfaceKey] {
+        &self.consumed_surface_keys
     }
 
-    /// Closed exterior boundaries after shared terrain edges cancel.
-    pub fn source_boundaries(&self) -> &[Vec<NodeId>] {
-        &self.source_boundaries
+    /// Closed exterior boundaries after shared edges among consumed surfaces cancel.
+    pub fn consumed_boundaries(&self) -> &[Vec<NodeId>] {
+        &self.consumed_boundaries
     }
 
-    /// The one compact target contour for the complete brush area.
-    pub fn target_contour(&self) -> &AnalyticBrushContour {
-        &self.target_contour
+    /// The new region's own contour, unchanged from what the caller built.
+    pub fn contour(&self) -> &AnalyticBrushContour {
+        &self.contour
     }
 }
 
@@ -120,12 +129,36 @@ pub fn compact_analytic_brush_contour(
     }
 }
 
+/// Tessellates one closed contour into a flat XZ polygon -- good enough for
+/// this module's own point-in-region spatial tests, not rendering quality
+/// (real tessellation for display happens later, from the true analytic
+/// edges, in `grafting-procgen-surface-mesh`). Reuses `ContourEdge`'s own
+/// tessellation math via throwaway node identities that are never touched
+/// or inserted into any graph -- only its geometry math is used.
+fn contour_polygon(contour: &AnalyticBrushContour, tolerance: f32) -> Vec<[f32; 2]> {
+    let vertices = contour.vertices();
+    let scratch_start = NodeId::new("region-merge-tessellate-a").expect("static id is valid");
+    let scratch_end = NodeId::new("region-merge-tessellate-b").expect("static id is valid");
+    let scratch_id = ContourEdgeId::new("region-merge-tessellate").expect("static id is valid");
+    let mut polygon = Vec::new();
+    for (index, geometry) in contour.edge_geometries().iter().copied().enumerate() {
+        let from = vertices[index];
+        let to = vertices[(index + 1) % vertices.len()];
+        let edge = ContourEdge::new(scratch_id.clone(), scratch_start.clone(), scratch_end.clone(), geometry);
+        let mut points = edge.tessellate(from, to, tolerance);
+        points.pop(); // shared with the next edge's own start vertex
+        polygon.extend(points);
+    }
+    polygon
+}
+
 /// Standard even-odd ray-casting point-in-polygon test on the XZ plane --
-/// used only to decide whether a stroke sample lands inside a candidate
-/// source surface's own interior (see `plan_analytic_path_brush`'s own
-/// spatial-eligibility filter); not exact on the polygon's own boundary,
-/// which is fine here since a boundary-straddling sample is already caught
-/// by the corner-in-brush half of that same filter.
+/// used only to decide whether a point lands inside a candidate surface's
+/// own interior, or a candidate surface's corner lands inside the new
+/// contour (see [`plan_region_merge`]'s own spatial-eligibility filter);
+/// not exact on the polygon's own boundary, which is fine here since a
+/// boundary-straddling point is already caught by the corner-in-contour
+/// half of that same filter.
 fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
     let mut inside = false;
     let mut previous = match polygon.last() {
@@ -146,36 +179,38 @@ fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
     inside
 }
 
-/// Plans the analytic migration of all eligible legacy surfaces touched by
-/// the path-brush mode.
+/// Plans destroying-and-rebuilding whatever existing surfaces a new
+/// region's `contour` touches.
 ///
-/// This step does not mutate the graph. It cancels interior shared terrain
-/// edges once and keeps only the exterior loops, which is the prerequisite
-/// for replacing an entire terrain patch with one region-with-hole instead
-/// of emitting a fragment for every original face.
-pub fn plan_analytic_path_brush(
+/// Generic across what counts as eligible to be consumed (`is_eligible`,
+/// tested against each candidate's own `SurfaceType`; a caller wanting no
+/// restriction at all passes `|_| true`) and knows nothing about what kind
+/// of structure produced `contour` -- a path-brush stroke, a future wall
+/// opening, or anything else. Never mutates the graph.
+///
+/// A candidate counts as touched either way a shape can overlap a face
+/// without crossing the other's own vertices: a corner landing inside the
+/// new contour, or the contour's own boundary passing through the
+/// candidate's interior (cutting straight through the middle of a face
+/// touches no corner at all). This step then cancels interior shared edges
+/// among every touched candidate once and keeps only the exterior loops,
+/// the prerequisite for a caller replacing an entire consumed patch with
+/// one region-with-a-hole instead of emitting a fragment for every
+/// original face.
+pub fn plan_region_merge(
     graph: &Graph<[f32; 3], ()>,
     surfaces: &SurfaceRegistry,
-    request: &PathBrushRequest,
-) -> Result<AnalyticPathBrushPlan, PathBrushFailure> {
-    super::validate_request(request)?;
-    // "Touched by the path-brush mode" (see this function's own doc) means
-    // spatially touched, not merely type-matched -- a surface of an eligible
-    // type sitting far from the stroke must never become a source, or the
-    // exterior-loop cancellation below would swallow every same-typed
-    // surface on the whole table into one region, not just the ones the
-    // brush actually passed over. A surface counts as touched either way a
-    // brush can overlap a face without crossing the other's own vertices:
-    // a corner landing inside the swept brush (`swept_brush_contains`, the
-    // same query terrain-cell generation uses), or a stroke sample landing
-    // inside the surface's own interior (a path cutting straight through
-    // the middle of a face touches no corner at all).
-    let source_surface_keys = surfaces
+    contour: AnalyticBrushContour,
+    is_eligible: impl Fn(&SurfaceType) -> bool,
+) -> Result<RegionMergePlan, PathBrushFailure> {
+    let boundary_polygon = contour_polygon(&contour, CONTOUR_POLYGON_TOLERANCE);
+
+    let consumed_surface_keys = surfaces
         .surface_keys()
         .into_iter()
         .filter(|key| {
             surfaces.surface(key).is_some_and(|surface| {
-                if !request.source_types.contains(surface.surface_type()) {
+                if !is_eligible(surface.surface_type()) {
                     return false;
                 }
                 let mut positions = Vec::with_capacity(surface.cycle().len());
@@ -195,21 +230,20 @@ pub fn plan_analytic_path_brush(
                 }
                 positions
                     .iter()
-                    .any(|&position| swept_brush_contains(&request.shape, &request.samples, position))
-                    || request
-                        .samples
+                    .any(|&position| polygon_contains_point(&boundary_polygon, position))
+                    || boundary_polygon
                         .iter()
-                        .any(|&sample| polygon_contains_point(&positions, sample))
+                        .any(|&vertex| polygon_contains_point(&positions, vertex))
             })
         })
         .collect::<Vec<_>>();
-    // A path can be painted with no eligible terrain underneath it at all --
-    // a path is a structure like any other, not one that needs pre-existing
-    // material to consume before it can even be drawn. `source_surface_keys`
-    // (and therefore `boundaries` below) staying empty is the ordinary,
-    // valid "nothing to consume" case, not a failure.
+    // A new region can be planned with nothing eligible underneath it at
+    // all -- a structure doesn't need pre-existing material to consume
+    // just to be drawn. `consumed_surface_keys` (and therefore `boundaries`
+    // below) staying empty is the ordinary, valid "nothing to consume"
+    // case, not a failure.
     let mut edges = BTreeMap::<(NodeId, NodeId), (NodeId, NodeId)>::new();
-    for key in &source_surface_keys {
+    for key in &consumed_surface_keys {
         let surface = surfaces
             .surface(key)
             .expect("surface keys came from the same registry");
@@ -264,10 +298,10 @@ pub fn plan_analytic_path_brush(
             boundaries.push(boundary);
         }
     }
-    Ok(AnalyticPathBrushPlan {
-        source_surface_keys,
-        source_boundaries: boundaries,
-        target_contour: compact_analytic_brush_contour(request)?,
+    Ok(RegionMergePlan {
+        consumed_surface_keys,
+        consumed_boundaries: boundaries,
+        contour,
     })
 }
 
@@ -683,18 +717,18 @@ mod tests {
                 )
                 .unwrap();
         }
-        let plan = plan_analytic_path_brush(
-            &graph,
-            &surfaces,
-            &request(
-                vec![[0.25, 0.5], [1.75, 0.5]],
-                BrushShape::Circle { radius: 0.1 },
-            ),
-        )
+        let contour = compact_analytic_brush_contour(&request(
+            vec![[0.25, 0.5], [1.75, 0.5]],
+            BrushShape::Circle { radius: 0.1 },
+        ))
         .unwrap();
-        assert_eq!(plan.source_surface_keys().len(), 2);
-        assert_eq!(plan.source_boundaries().len(), 1);
-        assert_eq!(plan.source_boundaries()[0].len(), 6);
+        let plan = plan_region_merge(&graph, &surfaces, contour, |surface_type| {
+            surface_type == &SurfaceType::new("terrain")
+        })
+        .unwrap();
+        assert_eq!(plan.consumed_surface_keys().len(), 2);
+        assert_eq!(plan.consumed_boundaries().len(), 1);
+        assert_eq!(plan.consumed_boundaries()[0].len(), 6);
     }
 
     /// A same-typed surface far from the stroke must never become a source --
@@ -743,15 +777,65 @@ mod tests {
             )
             .unwrap();
 
-        let plan = plan_analytic_path_brush(
-            &graph,
-            &surfaces,
-            &request(vec![[0.25, 0.5], [0.75, 0.5]], BrushShape::Circle { radius: 0.1 }),
-        )
+        let contour = compact_analytic_brush_contour(&request(
+            vec![[0.25, 0.5], [0.75, 0.5]],
+            BrushShape::Circle { radius: 0.1 },
+        ))
+        .unwrap();
+        let plan = plan_region_merge(&graph, &surfaces, contour, |surface_type| {
+            surface_type == &SurfaceType::new("terrain")
+        })
         .unwrap();
 
-        assert_eq!(plan.source_surface_keys(), &[near_key]);
-        assert!(!plan.source_surface_keys().contains(&far_key));
+        assert_eq!(plan.consumed_surface_keys(), &[near_key]);
+        assert!(!plan.consumed_surface_keys().contains(&far_key));
+    }
+
+    /// `plan_region_merge` knows nothing about "path" -- it takes whatever
+    /// eligibility predicate the caller hands it. A predicate matching a
+    /// completely different type (or, per the next test, no type at all)
+    /// must work exactly the same as the terrain-only tests above.
+    #[test]
+    fn eligibility_is_the_callers_predicate_not_a_hardcoded_surface_type() {
+        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
+
+        let graph = Graph::try_from_parts(
+            vec![
+                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
+                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
+                Node::new(NodeId::new("c").unwrap(), [1.0, 0.0, 1.0]),
+                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+        let key = surfaces
+            .add_surface(
+                &graph,
+                ["a", "b", "c", "d"]
+                    .into_iter()
+                    .map(|id| NodeId::new(id).unwrap())
+                    .collect(),
+                SurfaceType::new("roof"),
+                true,
+            )
+            .unwrap();
+
+        let contour = compact_analytic_brush_contour(&request(
+            vec![[0.25, 0.5], [0.75, 0.5]],
+            BrushShape::Circle { radius: 0.1 },
+        ))
+        .unwrap();
+
+        let excluded = plan_region_merge(&graph, &surfaces, contour.clone(), |surface_type| {
+            surface_type == &SurfaceType::new("terrain")
+        })
+        .unwrap();
+        assert!(excluded.consumed_surface_keys().is_empty());
+
+        let included = plan_region_merge(&graph, &surfaces, contour, |_| true).unwrap();
+        assert_eq!(included.consumed_surface_keys(), &[key]);
     }
 
     /// A path is a structure like any other -- it must be plannable with no
@@ -767,15 +851,18 @@ mod tests {
         let graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let surfaces = SurfaceRegistry::new();
 
-        let plan = plan_analytic_path_brush(
-            &graph,
-            &surfaces,
-            &request(vec![[0.0, 0.0], [1.0, 0.0]], BrushShape::Circle { radius: 0.25 }),
-        )
+        let contour = compact_analytic_brush_contour(&request(
+            vec![[0.0, 0.0], [1.0, 0.0]],
+            BrushShape::Circle { radius: 0.25 },
+        ))
+        .unwrap();
+        let plan = plan_region_merge(&graph, &surfaces, contour, |surface_type| {
+            surface_type == &SurfaceType::new("terrain")
+        })
         .unwrap();
 
-        assert!(plan.source_surface_keys().is_empty());
-        assert!(plan.source_boundaries().is_empty());
-        assert!(!plan.target_contour().vertices().is_empty());
+        assert!(plan.consumed_surface_keys().is_empty());
+        assert!(plan.consumed_boundaries().is_empty());
+        assert!(!plan.contour().vertices().is_empty());
     }
 }

@@ -1,24 +1,27 @@
-//! Thin JSON boundary for the Phase-B terrain-to-path transformer.
-//!
-//! Geometry, topology planning, and atomic graph mutation stay in the Rust
-//! domain capability and graph core. This module only parses wire data,
-//! forwards it, and translates the resulting identity delta back to JSON.
+//! Thin JSON boundary for the path-brush tool. All the actual work --
+//! building the contour, planning what it destroys, applying that
+//! destroy-and-rebuild -- lives in `grafting_procgen_surface_transformations`
+//! (`compact_analytic_brush_contour`, `plan_region_merge`) and this crate's
+//! own `region_merge` (`apply_region_merge`), neither of which knows
+//! anything about "path." This module only parses wire data, supplies the
+//! path-specific parameters (which source types are eligible, what type the
+//! new region gets, how deep it carves), and translates the result back to
+//! JSON.
 
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashSet;
 
-use grafting_graph_core::{
-    ContourEdge, ContourEdgeId, ContourTopology, Edge, EdgeId, Graph, Node, NodeId,
-    OrientedEdgeUse, RegionId, SurfaceKey, SurfaceRegistry, SurfaceType,
-};
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceKey, SurfaceRegistry, SurfaceType};
 use grafting_procgen_surface_transformations::{
-    BrushShape, PathBrushRequest, plan_analytic_path_brush, swept_brush_contains,
+    BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
+    swept_brush_contains, validate_request,
 };
 
 use crate::dto::surface_key_to_wire;
 use crate::editing::SessionGraph;
 use crate::mesh::{self, SurfaceMeshDto, region_id_to_wire};
+use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -133,7 +136,7 @@ pub struct ApplyPathBrushResponse {
     invalidation: InvalidationResponse,
 }
 
-/// Plans and applies one path brush through the generic atomic executor.
+/// Plans and applies one path brush through the generic region-merge planner/applier.
 pub fn apply_path_brush(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
@@ -143,17 +146,21 @@ pub fn apply_path_brush(
     request: ApplyPathBrushRequest,
 ) -> Result<ApplyPathBrushResponse, String> {
     let domain_request = domain_request(&request);
-    let plan = plan_analytic_path_brush(graph, surfaces, &domain_request)
-        .map_err(|error| error.to_string())?;
-    apply_analytic_plan(
+    let plan = plan_path_brush_region_merge(graph, surfaces, &domain_request)?;
+    let consumed = plan.consumed_surface_keys().to_vec();
+    let depth = domain_request.depth;
+    let outcome = apply_region_merge(
         graph,
         surfaces,
         topology,
         known_surfaces,
         known_regions,
-        &domain_request,
+        &domain_request.operation_id,
+        domain_request.target_type.clone(),
+        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
         plan,
-    )
+    )?;
+    Ok(response_from_outcome(outcome))
 }
 
 /// Builds the exact target-surface preview on cloned state; confirmed state is untouched.
@@ -171,16 +178,20 @@ pub fn preview_path_brush(
     let mut preview_topology = topology.clone();
     let mut preview_known_surfaces = known_surfaces.clone();
     let mut preview_known_regions = known_regions.clone();
+
     let domain_request = domain_request(&request);
-    let plan = plan_analytic_path_brush(&preview_graph, &preview_surfaces, &domain_request)
-        .map_err(|error| error.to_string())?;
-    apply_analytic_plan(
+    let plan = plan_path_brush_region_merge(&preview_graph, &preview_surfaces, &domain_request)?;
+    let consumed = plan.consumed_surface_keys().to_vec();
+    let depth = domain_request.depth;
+    apply_region_merge(
         &mut preview_graph,
         &mut preview_surfaces,
         &mut preview_topology,
         &mut preview_known_surfaces,
         &mut preview_known_regions,
-        &domain_request,
+        &domain_request.operation_id,
+        domain_request.target_type.clone(),
+        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
         plan,
     )?;
     Ok(mesh::all_surface_meshes(
@@ -193,6 +204,25 @@ pub fn preview_path_brush(
     .into_iter()
     .filter(|surface| surface.surface_type == target_type)
     .collect())
+}
+
+/// Path-brush's own contribution to the generic region-merge pipeline: its
+/// scalar validation, the contour it draws, and which existing surface
+/// types it's allowed to consume. Everything past this point (what gets
+/// destroyed, what gets rebuilt) is the generic planner/applier's job, not
+/// path-brush's own.
+fn plan_path_brush_region_merge(
+    graph: &grafting_graph_core::Graph<[f32; 3], ()>,
+    surfaces: &SurfaceRegistry,
+    request: &PathBrushRequest,
+) -> Result<grafting_procgen_surface_transformations::RegionMergePlan, String> {
+    validate_request(request).map_err(|error| error.to_string())?;
+    let contour = compact_analytic_brush_contour(request).map_err(|error| error.to_string())?;
+    let source_types = request.source_types.clone();
+    plan_region_merge(graph, surfaces, contour, move |surface_type| {
+        source_types.contains(surface_type)
+    })
+    .map_err(|error| error.to_string())
 }
 
 fn domain_request(request: &ApplyPathBrushRequest) -> PathBrushRequest {
@@ -211,154 +241,22 @@ fn domain_request(request: &ApplyPathBrushRequest) -> PathBrushRequest {
     }
 }
 
-fn apply_analytic_plan(
-    graph: &mut SessionGraph,
-    surfaces: &mut SurfaceRegistry,
-    topology: &mut ContourTopology,
-    known_surfaces: &mut HashSet<SurfaceKey>,
-    known_regions: &mut HashSet<RegionId>,
-    request: &PathBrushRequest,
-    plan: grafting_procgen_surface_transformations::AnalyticPathBrushPlan,
-) -> Result<ApplyPathBrushResponse, String> {
-    // A path is a structure like any other -- it doesn't need existing
-    // terrain underneath just to be committed, the same way terrain
-    // generation doesn't need anything pre-existing either. When the brush
-    // touched no eligible source surface, this simply skips the
-    // source-region half entirely and creates the target (path) region on
-    // its own; what would have been consumed stays empty.
-    let has_source = !plan.source_surface_keys().is_empty();
-    let target_region = RegionId::new(format!("path-{}-target", request.operation_id))
-        .map_err(|error| error.to_string())?;
-    let source_region_and_type = if has_source {
-        let source_region = RegionId::new(format!("path-{}-terrain", request.operation_id))
-            .map_err(|error| error.to_string())?;
-        let source_type = plan
-            .source_surface_keys()
-            .first()
-            .and_then(|key| surfaces.surface(key))
-            .ok_or("analytic path brush has no source surface")?
-            .surface_type()
-            .clone();
-        Some((source_region, source_type))
-    } else {
-        None
-    };
-
-    let mut source_loops = Vec::new();
-    for (loop_index, boundary) in plan.source_boundaries().iter().enumerate() {
-        let mut loop_ = Vec::new();
-        for (edge_index, (start, end)) in boundary
-            .iter()
-            .cloned()
-            .zip(boundary.iter().cloned().cycle().skip(1))
-            .take(boundary.len())
-            .enumerate()
-        {
-            let id = ContourEdgeId::new(format!(
-                "path-{}-source-contour-{loop_index}-{edge_index}",
-                request.operation_id
-            ))
-            .map_err(|error| error.to_string())?;
-            topology
-                .add_edge(
-                    graph,
-                    ContourEdge::new(
-                        id.clone(),
-                        start,
-                        end,
-                        grafting_graph_core::ContourGeometry::Line,
-                    ),
-                )
-                .map_err(|error| error.to_string())?;
-            loop_.push(OrientedEdgeUse::forward(id));
-        }
-        source_loops.push(loop_);
-    }
-
-    let contour = plan.target_contour();
-    let mut target_nodes = Vec::new();
-    let mut created_node_ids = Vec::new();
-    for (index, point) in contour.vertices().iter().enumerate() {
-        let id = NodeId::new(format!("path-{}-region-node-{index}", request.operation_id))
-            .map_err(|error| error.to_string())?;
-        let y = nearest_source_height(graph, plan.source_surface_keys(), *point) - request.depth;
-        graph
-            .add_node(Node::new(id.clone(), [point[0], y, point[1]]))
-            .map_err(|error| error.to_string())?;
-        created_node_ids.push(id.clone());
-        target_nodes.push(id);
-    }
-    let mut target_loop = Vec::new();
-    let mut created_edge_ids = Vec::new();
-    for (index, geometry) in contour.edge_geometries().iter().copied().enumerate() {
-        let start = target_nodes[index].clone();
-        let end = target_nodes[(index + 1) % target_nodes.len()].clone();
-        let generic_id = EdgeId::new(format!("path-{}-region-edge-{index}", request.operation_id))
-            .map_err(|error| error.to_string())?;
-        graph
-            .add_edge(Edge::new(
-                generic_id.clone(),
-                start.clone(),
-                end.clone(),
-                (),
-            ))
-            .map_err(|error| error.to_string())?;
-        created_edge_ids.push(generic_id);
-        let contour_id = ContourEdgeId::new(format!(
-            "path-{}-target-contour-{index}",
-            request.operation_id
-        ))
-        .map_err(|error| error.to_string())?;
-        topology
-            .add_edge(
-                graph,
-                ContourEdge::new(contour_id.clone(), start, end, geometry),
-            )
-            .map_err(|error| error.to_string())?;
-        target_loop.push(OrientedEdgeUse::forward(contour_id));
-    }
+fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse {
     let mut created_surfaces = Vec::new();
-    if let Some((source_region, source_type)) = source_region_and_type {
-        let source_hole = target_loop
-            .iter()
-            .rev()
-            .map(|use_| OrientedEdgeUse::reversed(use_.edge().clone()))
-            .collect();
-        topology
-            .add_region(source_region.clone(), source_loops, vec![source_hole])
-            .map_err(|error| error.to_string())?;
-        surfaces
-            .add_region_surface(topology, source_region.clone(), source_type, true)
-            .map_err(|error| error.to_string())?;
-        known_regions.insert(source_region.clone());
-        created_surfaces.push(region_id_to_wire(&source_region));
+    if let Some(remainder) = &outcome.remainder_region {
+        created_surfaces.push(region_id_to_wire(remainder));
     }
-    topology
-        .add_region(target_region.clone(), vec![target_loop], Vec::new())
-        .map_err(|error| error.to_string())?;
-    surfaces
-        .add_region_surface(
-            topology,
-            target_region.clone(),
-            request.target_type.clone(),
-            true,
-        )
-        .map_err(|error| error.to_string())?;
-    created_surfaces.push(region_id_to_wire(&target_region));
-    for key in plan.source_surface_keys() {
-        known_surfaces.remove(key);
-    }
-    known_regions.insert(target_region.clone());
+    created_surfaces.push(region_id_to_wire(&outcome.new_region));
 
-    Ok(ApplyPathBrushResponse {
+    ApplyPathBrushResponse {
         node_ids: IdentityDeltaResponse {
-            created: created_node_ids.iter().map(ToString::to_string).collect(),
+            created: outcome.created_node_ids.iter().map(ToString::to_string).collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
             removed: Vec::new(),
         },
         edge_ids: IdentityDeltaResponse {
-            created: created_edge_ids.iter().map(ToString::to_string).collect(),
+            created: outcome.created_edge_ids.iter().map(ToString::to_string).collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
             removed: Vec::new(),
@@ -367,8 +265,8 @@ fn apply_analytic_plan(
             created: created_surfaces,
             preserved: Vec::new(),
             replaced: Vec::new(),
-            removed: plan
-                .source_surface_keys()
+            removed: outcome
+                .consumed_surface_keys
                 .iter()
                 .map(surface_key_to_wire)
                 .collect(),
@@ -378,9 +276,13 @@ fn apply_analytic_plan(
             topology_repair_neighbors: Vec::new(),
             direct_dependencies: Vec::new(),
         },
-    })
+    }
 }
 
+/// Path-brush's own height rule: each new node sits `depth` below whatever
+/// consumed surface's own node happens to be nearest it -- a generic region
+/// merge has no opinion of its own about height, this is exactly the kind
+/// of thing `apply_region_merge`'s `height_for` parameter exists for.
 fn nearest_source_height(graph: &SessionGraph, keys: &[SurfaceKey], point: [f32; 2]) -> f32 {
     keys.iter()
         .flat_map(|key| key.nodes())
@@ -391,60 +293,6 @@ fn nearest_source_height(graph: &SessionGraph, keys: &[SurfaceKey], point: [f32;
             left_distance.total_cmp(&right_distance)
         })
         .map_or(0.0, |position| position[1])
-}
-fn node_delta(delta: &grafting_graph_core::IdentityDelta<NodeId>) -> IdentityDeltaResponse {
-    IdentityDeltaResponse {
-        created: delta.created().iter().map(ToString::to_string).collect(),
-        preserved: delta.preserved().iter().map(ToString::to_string).collect(),
-        replaced: delta.replaced().iter().map(ToString::to_string).collect(),
-        removed: delta.removed().iter().map(ToString::to_string).collect(),
-    }
-}
-
-fn edge_delta(delta: &grafting_graph_core::IdentityDelta<EdgeId>) -> IdentityDeltaResponse {
-    IdentityDeltaResponse {
-        created: delta.created().iter().map(ToString::to_string).collect(),
-        preserved: delta.preserved().iter().map(ToString::to_string).collect(),
-        replaced: delta.replaced().iter().map(ToString::to_string).collect(),
-        removed: delta.removed().iter().map(ToString::to_string).collect(),
-    }
-}
-
-fn surface_delta(
-    delta: &grafting_graph_core::IdentityDelta<SurfaceKey>,
-) -> SurfaceIdentityDeltaResponse {
-    SurfaceIdentityDeltaResponse {
-        created: delta.created().iter().map(surface_key_to_wire).collect(),
-        preserved: delta.preserved().iter().map(surface_key_to_wire).collect(),
-        replaced: delta.replaced().iter().map(surface_key_to_wire).collect(),
-        removed: delta.removed().iter().map(surface_key_to_wire).collect(),
-    }
-}
-
-fn response_for(plan: &grafting_graph_core::TransformationPlan) -> ApplyPathBrushResponse {
-    let invalidation = plan.invalidation();
-    ApplyPathBrushResponse {
-        node_ids: node_delta(plan.node_ids()),
-        edge_ids: edge_delta(plan.edge_ids()),
-        surface_ids: surface_delta(plan.surface_ids()),
-        invalidation: InvalidationResponse {
-            changed_surfaces: invalidation
-                .changed_surfaces()
-                .iter()
-                .map(surface_key_to_wire)
-                .collect(),
-            topology_repair_neighbors: invalidation
-                .topology_repair_neighbors()
-                .iter()
-                .map(surface_key_to_wire)
-                .collect(),
-            direct_dependencies: invalidation
-                .direct_dependencies()
-                .iter()
-                .map(surface_key_to_wire)
-                .collect(),
-        },
-    }
 }
 
 #[cfg(test)]
