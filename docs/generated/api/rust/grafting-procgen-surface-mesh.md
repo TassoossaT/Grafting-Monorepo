@@ -1,5 +1,16 @@
 # grafting-procgen-surface-mesh
 
+### `pub fn grafting_procgen_surface_mesh::triangulate_region(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<alloc::vec::Vec<grafting_procgen_surface_mesh::TriangulatedMesh>>`
+
+Derives transient meshes for every outer loop in an analytic contour
+region. Lines and circular arcs remain analytic in graph state; this is
+the first point where an arc is approximated for GPU consumption.
+
+Holes are assigned to the outer loop that contains their first point in
+the XZ contour plane. An invalid hole that is outside every outer loop
+produces `None` rather than a visually plausible but topologically false
+mesh. Callers resolve node positions from their authoritative graph.
+
 ### `pub fn grafting_procgen_surface_mesh::triangulate_surface(positions: &[[f32; 3]], curvature: core::option::Option<grafting_graph_core::surface::SurfaceCurvature>) -> core::option::Option<grafting_procgen_surface_mesh::TriangulatedMesh>`
 
 Triangulates a simple (hole-free) polygon given by `positions` -- an
