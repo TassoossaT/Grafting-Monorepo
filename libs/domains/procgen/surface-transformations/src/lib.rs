@@ -7,6 +7,7 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+mod analytic_brush;
 mod clip;
 mod stroke;
 
@@ -22,6 +23,8 @@ use grafting_graph_core::{
 };
 use grafting_procgen_surface_mesh::triangulate_surface;
 use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
+
+pub use analytic_brush::{AnalyticBrushContour, compact_analytic_brush_contour};
 
 const CIRCLE_SEGMENTS: usize = 16;
 const POSITION_SCALE: f32 = 10_000.0;
@@ -127,6 +130,9 @@ pub enum PathBrushFailure {
     InvalidBrush,
     /// The request identity could not become a graph identifier.
     InvalidOperationId,
+    /// A stroke needs full planar union normalization before it can be
+    /// represented as one non-overlapping analytic contour.
+    RequiresNormalizedBrushUnion,
     /// An eligible source surface could not be triangulated safely.
     InvalidSourceSurface {
         /// Surface that could not participate in the transformation.
@@ -146,6 +152,9 @@ impl fmt::Display for PathBrushFailure {
             ),
             Self::InvalidOperationId => formatter
                 .write_str("path brush operation identity cannot form deterministic graph IDs"),
+            Self::RequiresNormalizedBrushUnion => formatter.write_str(
+                "path brush requires union normalization before its analytic contour can be committed",
+            ),
             Self::InvalidSourceSurface { key } => {
                 write!(
                     formatter,

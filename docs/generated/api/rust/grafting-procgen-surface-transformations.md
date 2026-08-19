@@ -8,6 +8,25 @@ Renderer-neutral convex brush footprint shared by surface and terrain tools.
 
 Failure while building a path-brush replacement plan.
 
+### `pub fn grafting_procgen_surface_transformations::AnalyticBrushContour::edge_geometries(&self) -> &[grafting_graph_core::contour::ContourGeometry]`
+
+Geometry for each directed boundary edge.
+
+### `pub fn grafting_procgen_surface_transformations::AnalyticBrushContour::vertices(&self) -> &[[f32; 2]]`
+
+Ordered XZ vertices of this closed contour.
+
+### `pub fn grafting_procgen_surface_transformations::compact_analytic_brush_contour(request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Produces an exact compact contour for a point, line, or circular-arc
+stroke fitted from the complete pointer batch.
+
+A complex fitted stroke is intentionally rejected here rather than being
+decomposed into overlapping per-segment regions: the caller must first
+normalize their union into one non-overlapping area. That explicit
+boundary prevents the historical micro-fragment regression from being
+reintroduced through this new API.
+
 ### `pub fn grafting_procgen_surface_transformations::plan_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_graph_core::construction::SurfaceReplacementPlan<[f32; 3], ()>, grafting_procgen_surface_transformations::PathBrushFailure>`
 
 Plans a continuous terrain-to-path transformation without mutating state.
@@ -83,6 +102,11 @@ No source surface had a semantic delta, so no operation may be committed.
 
 The generic plan contract rejected the generated lifecycle data.
 
+### `pub grafting_procgen_surface_transformations::PathBrushFailure::RequiresNormalizedBrushUnion`
+
+A stroke needs full planar union normalization before it can be
+represented as one non-overlapping analytic contour.
+
 ### `pub grafting_procgen_surface_transformations::PathBrushRequest::depth: f32`
 
 Maximum downward displacement at the path centre line.
@@ -114,6 +138,15 @@ Deterministic planning for local construction-surface transformations.
 This crate owns authoritative brush/surface intersection, topology rebuilding,
 and path formation. It never mutates a graph: callers receive one atomic
 [`SurfaceReplacementPlan`] for the whole confirmed stroke.
+
+### `pub struct grafting_procgen_surface_transformations::AnalyticBrushContour`
+
+One closed analytic contour, with one geometry entry for every directed
+edge from `vertices[index]` to `vertices[(index + 1) % vertices.len()]`.
+
+This is intentionally independent of graph identities. The construction
+session assigns stable node and contour-edge ids only after a contour has
+been accepted as one semantic brush operation.
 
 ### `pub struct grafting_procgen_surface_transformations::PathBrushRequest`
 
