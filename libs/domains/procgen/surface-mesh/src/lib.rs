@@ -119,15 +119,27 @@ pub fn triangulate_region(
         .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
         .collect::<Option<Vec<_>>>()?;
 
-    let owners = holes
+    // A hole only ever cleanly nests inside a *single* outer loop when that
+    // outer loop is one connected piece the hole was actually carved out
+    // of. A region can legitimately have several disjoint outer loops at
+    // once (several unrelated surfaces consumed by the same merge, never
+    // sharing an edge to collapse into one ring -- see `region_merge.rs`),
+    // and a hole spanning across more than one of them, or landing outside
+    // all of them, doesn't correspond to any single owner. That must not
+    // fail the *entire* region's mesh -- every other, cleanly-owned piece
+    // still has to render -- so an unresolvable hole is simply dropped
+    // (that one piece renders as its own full, unnotched loop) rather than
+    // this whole function returning `None`.
+    let owners: Vec<Option<usize>> = holes
         .iter()
         .map(|hole| {
-            let point = hole.first()?;
-            outers
-                .iter()
-                .position(|outer| point_in_loop_xz([point[0], point[2]], outer))
+            hole.first().and_then(|point| {
+                outers
+                    .iter()
+                    .position(|outer| point_in_loop_xz([point[0], point[2]], outer))
+            })
         })
-        .collect::<Option<Vec<_>>>()?;
+        .collect();
 
     outers
         .iter()
@@ -136,7 +148,7 @@ pub fn triangulate_region(
             let owned_holes = holes
                 .iter()
                 .zip(owners.iter())
-                .filter_map(|(hole, owner)| (*owner == index).then_some(hole));
+                .filter_map(|(hole, owner)| (*owner == Some(index)).then_some(hole));
             triangulate_contour_loops(outer, owned_holes)
         })
         .collect()

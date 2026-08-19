@@ -1,0 +1,43 @@
+fix(vtt): fix three real causes of the persistent no-mesh-derivable path-brush error
+
+A random-stress test (many overlapping strokes over a real terrain grid) was
+added to session.rs specifically to chase the user's consistently-reproducible
+"no mesh derivable for ...-remainder" report, since every earlier targeted
+synthetic repro had applied cleanly. It found three separate, real defects on
+the very first run:
+
+1. triangulate_region (surface-mesh) aborted the WHOLE region's mesh if a
+   single hole did not nest inside exactly one outer loop. A remainder region
+   commonly has several disjoint outer loops at once (several unrelated,
+   non-adjacent surfaces consumed by the same stroke, never sharing an edge to
+   collapse into one ring), and the new stroke contour used as that region's
+   hole very often spans across more than one of them, or lands outside all
+   of them. That must not fail the entire region's mesh -- every other,
+   cleanly-owned piece still has to render. An unresolvable hole is now simply
+   dropped (that one piece renders as its own full, unnotched loop) instead of
+   the whole triangulate_region call returning None.
+
+2. round_arc (analytic_brush, the fast path for a single-arc stroke with a
+   circle brush) fails whenever the brush radius exceeds the arc's own turning
+   radius (a tight turn with a fat brush -- inner_radius goes negative). The
+   earlier i_overlay union-based fix only routed the non-circle-brush arc case
+   into that fallback; round_arc's own internal failure for this case was
+   never caught and routed there too. Now it is: round_arc failing falls back
+   to union_stroke_footprint, same as every other self-overlap case.
+
+3. BrushShapeRequest's square/hexagon variants demanded literal snake_case
+   rotation_radians on the wire. serde's rename_all on an internally-tagged
+   enum only renames variant names, not each variant's own field names -- it
+   does not recurse into struct-variant fields. Every real caller (the TS
+   BrushShape type, unchanged) sends camelCase rotationRadians, so every
+   square or hexagon path-brush stroke failed to even parse. Fixed with an
+   explicit #[serde(rename = "rotationRadians")] per field.
+
+New tests: many_random_overlapping_strokes_never_leave_an_unmeshable_surface
+(deterministic xorshift stress test, 80 strokes over a 6x6 terrain grid,
+mixing shapes/positions/sample counts, re-derives the mesh for exactly the
+keys the front end itself re-fetches after every single stroke),
+square_and_hexagon_shapes_parse_camel_case_rotation_from_the_wire.
+
+53/53 construction-wasm, 50/50 graph-core, 27/27 surface-transformations,
+11/11 surface-mesh, 79/79 apps/vtt, tsc clean.

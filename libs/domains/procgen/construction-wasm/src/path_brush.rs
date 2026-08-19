@@ -23,12 +23,28 @@ use crate::editing::SessionGraph;
 use crate::mesh::{self, SurfaceMeshDto, region_id_to_wire};
 use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
 
+// `rename_all` on an internally-tagged enum (`tag = "kind"`) only renames
+// the variant names themselves, not each variant's own field names --
+// serde does not apply it recursively into struct-variant fields. Without
+// the per-field `rename` below, this deserializer demanded literal
+// `rotation_radians` while every real caller (`BrushShape` on the TS side,
+// unchanged since it's a plain `rotationRadians: number` field) sends
+// `rotationRadians` -- meaning every square or hexagon path-brush stroke
+// failed to even parse.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum BrushShapeRequest {
     Circle { radius: f32 },
-    Square { size: f32, rotation_radians: f32 },
-    Hexagon { radius: f32, rotation_radians: f32 },
+    Square {
+        size: f32,
+        #[serde(rename = "rotationRadians")]
+        rotation_radians: f32,
+    },
+    Hexagon {
+        radius: f32,
+        #[serde(rename = "rotationRadians")]
+        rotation_radians: f32,
+    },
 }
 
 impl BrushShapeRequest {
@@ -314,5 +330,28 @@ mod tests {
         })
         .unwrap();
         assert_eq!(resolved.cells, vec![0, 1, 2, 3, 4]);
+    }
+
+    /// The wire format every real caller sends (`BrushShape` on the TS
+    /// side never changed) is camelCase throughout, including
+    /// `rotationRadians` -- this must deserialize, not demand the Rust
+    /// field's own snake_case spelling.
+    #[test]
+    fn square_and_hexagon_shapes_parse_camel_case_rotation_from_the_wire() {
+        let square: BrushShapeRequest =
+            serde_json::from_str(r#"{"kind":"square","size":1.0,"rotationRadians":0.2}"#)
+                .expect("camelCase rotationRadians must parse for a square brush");
+        assert!(matches!(
+            square,
+            BrushShapeRequest::Square { rotation_radians, .. } if rotation_radians == 0.2
+        ));
+
+        let hexagon: BrushShapeRequest =
+            serde_json::from_str(r#"{"kind":"hexagon","radius":1.0,"rotationRadians":0.3}"#)
+                .expect("camelCase rotationRadians must parse for a hexagon brush");
+        assert!(matches!(
+            hexagon,
+            BrushShapeRequest::Hexagon { rotation_radians, .. } if rotation_radians == 0.3
+        ));
     }
 }

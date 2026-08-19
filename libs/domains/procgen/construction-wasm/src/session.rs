@@ -1181,6 +1181,113 @@ mod tests {
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
     }
 
+    /// Deterministic xorshift -- no external `rand` dependency needed for
+    /// one stress test.
+    struct Xorshift(u32);
+    impl Xorshift {
+        fn next(&mut self) -> u32 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 17;
+            self.0 ^= self.0 << 5;
+            self.0
+        }
+        fn range(&mut self, lo: f32, hi: f32) -> f32 {
+            lo + (self.next() as f32 / u32::MAX as f32) * (hi - lo)
+        }
+    }
+
+    /// The user reported "no mesh derivable for ...-remainder" appears
+    /// *consistently* while freehand-drawing "vários e vários caminhos
+    /// aleatórios em cima de outros caminhos ou de terreno" -- every
+    /// targeted synthetic repro so far has applied cleanly, so this throws
+    /// many random overlapping strokes (varying shape, radius, and
+    /// position, some on terrain, some on empty space, some on top of a
+    /// prior stroke's own region) at one session and, after *every single*
+    /// stroke, re-derives the mesh for exactly the keys the front end
+    /// itself re-fetches (`surfaceIds.created`, via `mesh::surface_mesh` --
+    /// the single-key lookup, not the infallible `all_surface_meshes`), to
+    /// catch whatever specific combination trips it. Calls the crate's own
+    /// pure inner functions directly (`path_brush::apply_path_brush`,
+    /// `mesh::surface_mesh`) instead of the `#[wasm_bindgen]` JSON wrappers,
+    /// since a `JsValue` error's `.as_string()` aborts outside a real wasm32
+    /// target.
+    #[test]
+    fn many_random_overlapping_strokes_never_leave_an_unmeshable_surface() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(6, 6, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        for cell in 0..36 {
+            let x = cell % 6;
+            let z = cell / 6;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let mut rng = Xorshift(0x9e3779b1);
+        for stroke in 0..80 {
+            let shape = match rng.next() % 3 {
+                0 => serde_json::json!({"kind": "circle", "radius": rng.range(0.3, 1.5)}),
+                1 => serde_json::json!({"kind": "square", "size": rng.range(0.6, 3.0), "rotationRadians": rng.range(0.0, 6.28)}),
+                _ => serde_json::json!({"kind": "hexagon", "radius": rng.range(0.3, 1.5), "rotationRadians": rng.range(0.0, 6.28)}),
+            };
+            let sample_count = 1 + (rng.next() % 3) as usize;
+            let samples: Vec<[f32; 2]> = (0..sample_count)
+                .map(|_| [rng.range(-1.0, 7.0), rng.range(-1.0, 7.0)])
+                .collect();
+            let request_json = serde_json::json!({
+                "operationId": format!("path-stress-{stroke}"),
+                "samples": samples,
+                "brushShape": shape,
+                "depth": 0.1,
+                "sourceSurfaceTypes": ["terrain"],
+                "targetSurfaceType": "path",
+            })
+            .to_string();
+            let request: path_brush::ApplyPathBrushRequest = serde_json::from_str(&request_json)
+                .unwrap_or_else(|error| panic!("bad request json {request_json}: {error}"));
+
+            let response = match path_brush::apply_path_brush(
+                &mut session.graph,
+                &mut session.surfaces,
+                &mut session.topology,
+                &mut session.known_surfaces,
+                &mut session.known_regions,
+                request,
+            ) {
+                Ok(response) => response,
+                Err(message) => {
+                    if message.contains("produced no semantic change") {
+                        continue;
+                    }
+                    panic!("stroke {stroke} ({request_json}) failed to apply: {message}");
+                }
+            };
+            let response_json = serde_json::to_string(&response).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&response_json).unwrap();
+
+            for key in parsed["surfaceIds"]["created"].as_array().unwrap() {
+                let surface_key: Vec<String> = key
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|part| part.as_str().unwrap().to_string())
+                    .collect();
+                if let Err(message) = mesh::surface_mesh(
+                    &session.graph,
+                    &session.surfaces,
+                    &session.topology,
+                    mesh::SurfaceMeshRequest { surface_key: surface_key.clone() },
+                ) {
+                    panic!(
+                        "stroke {stroke} created {surface_key:?} but it doesn't mesh: {message}\nstroke request: {request_json}\nstroke response: {response_json}"
+                    );
+                }
+            }
+        }
+    }
+
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();

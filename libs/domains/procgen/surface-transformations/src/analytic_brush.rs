@@ -139,7 +139,16 @@ pub fn compact_analytic_brush_contour(
             BrushShape::Circle {
                 radius: brush_radius,
             },
-        ) => round_arc(*center, *radius, *start_angle, *sweep_angle, *brush_radius),
+        ) => {
+            // `round_arc`'s offset-arc math cannot represent a turn tight
+            // enough (or a brush fat enough) that the inner offset would
+            // invert -- exactly the self-overlap case `union_stroke_footprint`
+            // already exists to handle for every other multi-primitive
+            // stroke. Falling back here instead of erroring is the same
+            // fix the non-circle-brush arm below already got.
+            round_arc(*center, *radius, *start_angle, *sweep_angle, *brush_radius)
+                .or_else(|_| union_stroke_footprint(&primitives, &request.shape))
+        }
         (StrokePrimitive::Point(center), shape) => polygon(shape.footprint(*center)),
         (StrokePrimitive::Line { start, end }, shape) => {
             let mut vertices = shape.footprint(*start);
