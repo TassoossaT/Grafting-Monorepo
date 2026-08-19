@@ -1,19 +1,17 @@
 import { lerp, mulberry32 } from "@/ui";
-import { DEFAULT_TOOL_PARAMS, resolveBrushShape } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainBrushParams } from "@/features/edit-construction";
 import type { CornerHeightModule } from "@/ports";
 
 import { buildGenerateTerrainCellOperation } from "../default-map-seed.ts";
 import { TERRAIN_GRID_HEIGHT, TERRAIN_GRID_WIDTH } from "../tabletop-runtime.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
-import { brushStrokeOutline } from "./preview-shapes.ts";
+import type { ToolContext } from "./tool-context.ts";
+import { createBrushTool } from "./brush-tool.ts";
 
 const TERRAIN_COLOR: Record<TerrainBrushParams["targetSurface"], number> = {
   terrain: 0x334155,
   "terrain-grass": 0x4a7a4a,
 };
-
-let paintedCells = new Set<number>();
 
 function moduleFor(params: TerrainBrushParams, cell: number): CornerHeightModule {
   const random = mulberry32(Math.floor(params.seed + cell) || 1);
@@ -22,9 +20,7 @@ function moduleFor(params: TerrainBrushParams, cell: number): CornerHeightModule
   return { name: "brush", cornerHeights: heights };
 }
 
-function commitCell(ctx: ToolContext, cell: number, params: TerrainBrushParams): void {
-  if (paintedCells.has(cell)) return;
-  paintedCells.add(cell);
+function paintCell(ctx: ToolContext, cell: number, params: TerrainBrushParams): void {
   const sequence = ctx.nextSequence();
   const operation = buildGenerateTerrainCellOperation(
     ctx.tableId,
@@ -42,44 +38,30 @@ function commitCell(ctx: ToolContext, cell: number, params: TerrainBrushParams):
   }
 }
 
-function commitGesture(ctx: ToolContext, samples: readonly PointerSample[], params: TerrainBrushParams): void {
-  const cells = ctx.runtime.resolveBrushCells({
-    samples: samples.map((sample) => sample.point),
-    brushShape: resolveBrushShape(params),
-    width: TERRAIN_GRID_WIDTH,
-    height: TERRAIN_GRID_HEIGHT,
-  });
-  for (const cell of cells) commitCell(ctx, cell, params);
-  if (cells.length > 0) {
-    ctx.reportFeedback({ tone: "success", message: `Pincel de terreno: ${paintedCells.size} células na footprint Rust.` });
-  }
-}
-
-export const terrainBrushTool: ConstructionTool<"terrain-brush"> = {
+/**
+ * Terrain-brush's own effect. The brush hands over one region -- the whole
+ * gesture, once, on release, never while dragging. Today this still asks
+ * Rust which grid cells that region touches and paints each one with its
+ * own call, because Rust has no whole-region terrain generator yet; that's
+ * a stand-in for a real region-based paint (owner's own call, tracked
+ * separately), not something the brush itself should know or care about.
+ */
+export const terrainBrushTool = createBrushTool<"terrain-brush">({
   id: "terrain-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-brush"],
+  previewColor: (params) => TERRAIN_COLOR[params.targetSurface],
 
-  previewFor(gesture: ToolGesture, params: TerrainBrushParams) {
-    const shape = resolveBrushShape(params);
-    return brushStrokeOutline(
-      gesture.samples.map((sample) => sample.point),
-      shape.kind === "square"
-        ? { kind: shape.kind, radius: shape.size / 2, rotationRadians: shape.rotationRadians }
-        : shape,
-      TERRAIN_COLOR[params.targetSurface],
-    );
+  applyRegion(region, ctx, params) {
+    const cells = ctx.runtime.resolveBrushCells({
+      samples: region.samples,
+      brushShape: region.shape,
+      width: TERRAIN_GRID_WIDTH,
+      height: TERRAIN_GRID_HEIGHT,
+    });
+    const painted = new Set(cells);
+    for (const cell of painted) paintCell(ctx, cell, params);
+    if (painted.size > 0) {
+      ctx.reportFeedback({ tone: "success", message: `Pincel de terreno: ${painted.size} células na footprint Rust.` });
+    }
   },
-
-  onPointerDown(ctx: ToolContext, sample: PointerSample, params: TerrainBrushParams): void {
-    paintedCells = new Set();
-    commitGesture(ctx, [sample], params);
-  },
-
-  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: TerrainBrushParams): void {
-    commitGesture(ctx, gesture.samples, params);
-  },
-
-  onPointerUp(): void {
-    paintedCells = new Set();
-  },
-};
+});
