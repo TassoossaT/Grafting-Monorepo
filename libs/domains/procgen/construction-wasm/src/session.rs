@@ -762,6 +762,71 @@ mod tests {
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
     }
 
+    /// A single-point (dot) stroke with a circle brush produces a contour
+    /// whose edges are ALL circular arcs -- no straight line segment at
+    /// all, unlike a dragged stroke's line-with-round-caps shape. This must
+    /// apply exactly like any other contour.
+    #[test]
+    fn a_single_point_circle_brush_dot_applies_as_a_pure_arc_region() {
+        let mut session = ConstructionSession::new();
+        let request = r#"{"operationId":"path-dot","samples":[[0.0,0.0]],"brushShape":{"kind":"circle","radius":0.5},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+
+        let response = session
+            .apply_path_brush_json(request)
+            .expect("a pure-arc contour must apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 1, "the pure-arc region must produce exactly one mesh: {meshes_json}");
+        assert!(
+            !meshes[0]["indices"].as_array().unwrap().is_empty(),
+            "the pure-arc region's mesh must have real triangles, not be empty: {meshes_json}"
+        );
+    }
+
+    /// The exact user-reported bug this fix addresses, through the whole
+    /// wasm boundary: a stroke that loops back over itself -- like drawing
+    /// a circle with the brush, sample by sample -- used to fail outright
+    /// with "requires union normalization." The committed area must always
+    /// resolve to one region and render as one real mesh, regardless of the
+    /// stroke's own shape.
+    #[test]
+    fn a_self_overlapping_loop_stroke_applies_and_renders_as_one_region() {
+        let mut session = ConstructionSession::new();
+        let loop_samples: Vec<[f32; 2]> = (0..=32)
+            .map(|index| {
+                let angle = std::f32::consts::TAU * index as f32 / 32.0;
+                [2.0 * angle.cos(), 2.0 * angle.sin()]
+            })
+            .collect();
+        let request = serde_json::json!({
+            "operationId": "path-loop",
+            "samples": loop_samples,
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a self-overlapping loop stroke must apply, not require union normalization");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
+
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 1, "the looped stroke must produce exactly one mesh: {meshes_json}");
+        assert!(
+            !meshes[0]["indices"].as_array().unwrap().is_empty(),
+            "the looped stroke's mesh must have real triangles, not be empty: {meshes_json}"
+        );
+    }
+
     /// A path is a structure like any other -- committing one over an empty
     /// session (no terrain, no surfaces at all) must succeed and create just
     /// the path itself, not fail for lack of something to consume.
