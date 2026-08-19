@@ -314,6 +314,30 @@ function revealNear(
   });
 }
 
+/**
+ * How big the lattice needs to be to guarantee it covers wherever this
+ * gesture actually went -- the area comes from the brush's own swept path,
+ * never from an independent terrain-side size guess. Only possible because
+ * the whole gesture is known before the mesh is built (single commit on
+ * release, not a live per-tick reveal that had to pre-guess an upper bound
+ * before the drag was even finished): `params.trianglesPerSide` still acts
+ * as a floor, so a deliberately large single dab still gets its full
+ * requested size, but a long drag can never silently run past a
+ * pre-committed size the way it used to.
+ */
+function latticeTrianglesPerSideFor(gesture: ToolGesture, params: TerrainSculptParams): number {
+  const origin = gesture.start.point;
+  let maxDistance = 0;
+  for (const sample of gesture.samples) {
+    const dx = sample.point.x - origin.x;
+    const dz = sample.point.z - origin.z;
+    maxDistance = Math.max(maxDistance, Math.hypot(dx, dz));
+  }
+  const neededRadius = maxDistance + REVEAL_RADIUS + CROSS_SESSION_WELD_EPSILON;
+  const neededTrianglesPerSide = Math.ceil(neededRadius / HEX_TRIANGLE_SIDE);
+  return Math.max(1, Math.round(params.trianglesPerSide), neededTrianglesPerSide);
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -332,7 +356,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-    const session = startSession(ctx, gesture.start.point, params);
+    const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
+    const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
     const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
     const newSurfaces: ConstructionSurfaceSpec[] = [];
     for (const sample of gesture.samples) {
