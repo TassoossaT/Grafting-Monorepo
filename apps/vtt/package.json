@@ -18,7 +18,8 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "perfect-freehand": "*",
-    "earcut": "*"
+    "earcut": "*",
+    "polygon-clipping": "*"
   },
   "devDependencies": {
     "@types/node": "26.2.0",

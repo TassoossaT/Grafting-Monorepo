@@ -1,5 +1,6 @@
-import earcut from "earcut";
-import { getStroke } from "perfect-freehand";
+import earcut, { flatten as earcutFlatten } from "earcut";
+import polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Polygon } from "polygon-clipping";
 
 import type { PreviewDescriptor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
@@ -92,7 +93,7 @@ export function brushStrokeOutline(
   }
   return { kind: "segments", color, opacity, positions: Float32Array.from(positions) };
 }
-/** The original sample nearest `(x, z)` -- used to carry a plausible terrain height onto an outline point that perfect-freehand invented (it only ever works in 2D). */
+/** The original sample nearest `(x, z)` -- used to carry a plausible terrain height onto a union outline point, which only ever exists in 2D. */
 function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number {
   let bestY = samples[0]?.y ?? 0;
   let bestDistanceSq = Infinity;
@@ -108,6 +109,61 @@ function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosi
   return bestY;
 }
 
+/** `samples` thinned to at least `minDistance` apart (XZ), always keeping the first and last point -- caps how many circles {@link brushSweptRegionFill} has to union without changing the swept shape (points closer than the brush radius add nothing a wider circle didn't already cover). */
+function decimateXZ(samples: readonly ConstructionPosition[], minDistance: number): readonly ConstructionPosition[] {
+  if (samples.length <= 2) return samples;
+  const kept: ConstructionPosition[] = [samples[0]];
+  for (let index = 1; index < samples.length - 1; index += 1) {
+    const last = kept[kept.length - 1];
+    const sample = samples[index];
+    const dx = sample.x - last.x;
+    const dz = sample.z - last.z;
+    if (dx * dx + dz * dz >= minDistance * minDistance) kept.push(sample);
+  }
+  kept.push(samples[samples.length - 1]);
+  return kept;
+}
+
+/** A closed circle ring (XZ), `sides`-gon, for one polygon-clipping `Polygon`. */
+function circleRing(center: ConstructionPosition, radius: number, sides: number): [number, number][] {
+  const ring: [number, number][] = [];
+  for (let index = 0; index <= sides; index += 1) {
+    const angle = (Math.PI * 2 * (index % sides)) / sides;
+    ring.push([center.x + radius * Math.cos(angle), center.z + radius * Math.sin(angle)]);
+  }
+  return ring;
+}
+
+/**
+ * A closed capsule ring (XZ) covering one segment `start` to `end` at
+ * `radius` -- a rectangle with a rounded half-circle cap at each end
+ * (the Minkowski sum of the segment with a disc). Always convex, so always
+ * simple regardless of the brush radius or the segment's own length --
+ * unlike a *chain* of these built by hand, one capsule alone can never
+ * self-intersect. `brushSweptRegionFill` unions one of these per (decimated)
+ * segment instead of a circle per sample, so the covered area is the whole
+ * swept path, not just discs at the sample points with empty gaps between.
+ */
+function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, radius: number, sides: number): [number, number][] {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const length = Math.hypot(dx, dz);
+  if (length <= Number.EPSILON) return circleRing(start, radius, sides);
+
+  const direction = Math.atan2(dz, dx);
+  const capSteps = Math.max(2, Math.round(sides / 2));
+  const ring: [number, number][] = [];
+  for (let step = 0; step <= capSteps; step += 1) {
+    const angle = direction - Math.PI / 2 + (Math.PI * step) / capSteps;
+    ring.push([end.x + radius * Math.cos(angle), end.z + radius * Math.sin(angle)]);
+  }
+  for (let step = 0; step <= capSteps; step += 1) {
+    const angle = direction + Math.PI / 2 + (Math.PI * step) / capSteps;
+    ring.push([start.x + radius * Math.cos(angle), start.z + radius * Math.sin(angle)]);
+  }
+  return ring;
+}
+
 /**
  * A filled highlight of the whole area a brush of `shape` sweeps along
  * `samples`, start to end -- purely "this is the region that's about to be
@@ -120,16 +176,18 @@ function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosi
  *
  * The render port draws this with depth-testing off (a ghost must never be
  * occluded), so any self-overlap in the mesh double-blends the translucent
- * fill and reads as darker little blocks. A hand-rolled offset-ribbon or
- * convex-hull approximation either self-intersects on tight turns or fills
- * across concave stretches of the stroke instead of following it -- both
- * wrong for "show exactly where the brush passed." So this leans on the
- * same two building blocks every whiteboard/drawing app (Excalidraw,
- * tldraw) uses for freehand ink: `perfect-freehand`'s `getStroke` turns the
- * raw samples into one simple outline polygon that actually follows the
- * path (concave stretches included, not just the convex envelope), and
- * `earcut` triangulates that polygon -- both handle the self-intersection
- * and concavity problems generically instead of us re-deriving them here.
+ * fill and reads as darker little blocks -- and earcut, fed a self-
+ * intersecting polygon, produces outright wrong triangles (crossing edges
+ * connecting unrelated parts of the shape), not just a cosmetic artifact.
+ * Both a hand-rolled offset-ribbon *and* `perfect-freehand`'s own stroke
+ * outline self-intersect wherever the path curves tighter than the brush
+ * radius -- ink-stroke tooling assumes a thin pen, not a fat brush, so nei-
+ * ther guarantees a simple polygon here. What *is* guaranteed simple is a
+ * proper 2D polygon union: the swept area is exactly the union of one
+ * capsule per (decimated) segment, and `polygon-clipping` (the
+ * Martinez-Rueda algorithm, also what turf.js uses) computes that union
+ * robustly for any input, self-overlapping or not. `earcut` then
+ * triangulates the union's own simple output, which it was always built for.
  */
 export function brushSweptRegionFill(
   samples: readonly ConstructionPosition[],
@@ -141,45 +199,40 @@ export function brushSweptRegionFill(
   if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
 
   const radius = shape.radius;
-  const outline = getStroke(
-    samples.map((sample) => [sample.x, sample.z]),
-    { size: radius * 2, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false, last: true },
-  );
+  const positions: number[] = [];
+  const indices: number[] = [];
 
-  if (outline.length < 3) {
-    // Perfect-freehand needs a real path to build an outline from -- a
-    // stationary hover (one sample, `outline` empty/degenerate) still needs
-    // its own ghost, so fall back to a plain disc of the same radius.
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const y = first.y + 0.03;
-    positions.push(first.x, y, first.z);
-    const segments = 24;
-    for (let index = 0; index <= segments; index += 1) {
-      const angle = (Math.PI * 2 * index) / segments;
-      positions.push(first.x + radius * Math.cos(angle), y, first.z + radius * Math.sin(angle));
+  const addPolygon = (polygon: Polygon, allSamples: readonly ConstructionPosition[]) => {
+    const { vertices, holes, dimensions } = earcutFlatten(polygon);
+    const triangles = earcut(vertices, holes, dimensions);
+    const base = positions.length / 3;
+    for (let index = 0; index < vertices.length; index += dimensions) {
+      const x = vertices[index];
+      const z = vertices[index + 1];
+      positions.push(x, nearestSampleY(x, z, allSamples) + 0.03, z);
     }
-    for (let index = 1; index <= segments; index += 1) indices.push(0, index, index + 1);
-    return { kind: "mesh", color, opacity, positions: Float32Array.from(positions), indices: Uint16Array.from(indices) };
+    for (const triangleIndex of triangles) indices.push(base + triangleIndex);
+  };
+
+  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
+  if (decimated.length <= 1) {
+    addPolygon([circleRing(first, radius, 24)], samples);
+  } else {
+    const capsules: Polygon[] = [];
+    for (let index = 1; index < decimated.length; index += 1) {
+      capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
+    }
+    const [firstCapsule, ...restCapsules] = capsules;
+    const merged: MultiPolygon = polygonClipping.union(firstCapsule, ...restCapsules);
+    for (const polygon of merged) addPolygon(polygon, samples);
   }
-
-  const flat: number[] = [];
-  for (const [x, z] of outline) flat.push(x, z);
-  const triangleIndices = earcut(flat);
-
-  const positions = new Float32Array(outline.length * 3);
-  outline.forEach(([x, z], index) => {
-    positions[index * 3] = x;
-    positions[index * 3 + 1] = nearestSampleY(x, z, samples) + 0.03;
-    positions[index * 3 + 2] = z;
-  });
 
   return {
     kind: "mesh",
     color,
     opacity,
-    positions,
-    indices: positions.length / 3 > 65535 ? Uint32Array.from(triangleIndices) : Uint16Array.from(triangleIndices),
+    positions: Float32Array.from(positions),
+    indices: positions.length / 3 > 65535 ? Uint32Array.from(indices) : Uint16Array.from(indices),
   };
 }
 
