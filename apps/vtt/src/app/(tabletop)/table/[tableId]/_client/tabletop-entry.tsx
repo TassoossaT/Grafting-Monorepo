@@ -54,7 +54,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "interior-wall": "Gerar Interiores",
   "tower-stamp": "Torre",
   "house-room-delete": "Apagar Cômodo",
-  "irregular-terrain-stamp": "Terreno Irregular",
+  "terrain-sculpt": "Escultura de Terreno",
 };
 
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
@@ -279,7 +279,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         <div>
           <span>
             <strong>M</strong> Mover · <strong>N</strong> Navegar · <strong>T</strong> Terreno · <strong>P</strong>{" "}
-            Parede · <strong>R</strong> Sala · <strong>I</strong> Terreno Irregular · <strong>G</strong> Ímã do
+            Parede · <strong>R</strong> Sala · <strong>I</strong> Escultura de Terreno · <strong>G</strong> Ímã do
             Grid · Câmera: <strong>botão direito</strong> orbita, <strong>botão do meio</strong> arrasta
           </span>
         </div>

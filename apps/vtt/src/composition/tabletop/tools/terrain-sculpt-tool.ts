@@ -1,5 +1,5 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
-import type { IrregularTerrainParams } from "@/features/edit-construction";
+import type { TerrainSculptParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceSpec } from "@/ports";
 
 import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
@@ -65,7 +65,7 @@ interface BrushSession {
 
 let activeSession: BrushSession | undefined;
 
-const TERRAIN_COLOR: Record<IrregularTerrainParams["targetSurface"], number> = {
+const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
   terrain: 0x334155,
   "terrain-grass": 0x4a7a4a,
 };
@@ -83,7 +83,7 @@ const REVEAL_RADIUS = HEX_TRIANGLE_SIDE * 1.5;
  * How close (XZ only) a vertex -- boundary or interior -- must land to an
  * existing node from a *different* stroke/seed before reusing that id
  * instead of creating a new one. Height is excluded on purpose -- see
- * `irregular-terrain-tool.ts`'s own module doc for why.
+ * `terrain-sculpt-tool.ts`'s own module doc for why.
  *
  * Sized relative to `HEX_TRIANGLE_SIDE`: after `ortho()` subdivides, adjacent
  * vertices within one hexagon sit roughly `HEX_TRIANGLE_SIDE / 2` apart, so
@@ -140,7 +140,7 @@ function sampleHeightmapBilinear(heightmap: Float32Array, resolution: number, u:
 }
 
 function nodeId(ctx: ToolContext, salt: number, vertexIndex: number): ConstructionNodeId {
-  return `${ctx.tableId}:irregular-terrain-${salt}:v${vertexIndex}`;
+  return `${ctx.tableId}:terrain-sculpt-${salt}:v${vertexIndex}`;
 }
 
 /** An existing node from *outside* this session (another stroke, the seeded terrain, a wall) to weld onto if a vertex happens to land on it. */
@@ -174,7 +174,7 @@ function nearestExisting(
 function startSession(
   ctx: ToolContext,
   origin: ConstructionPosition,
-  params: IrregularTerrainParams,
+  params: TerrainSculptParams,
 ): BrushSession {
   const salt = ctx.nextSequence();
   const mesh = buildIrregularQuadGrid({
@@ -219,7 +219,7 @@ function startSession(
  * that reuses the same resolved id, which is what keeps the whole stroke one
  * connected mesh.
  */
-function revealNear(ctx: ToolContext, session: BrushSession, point: ConstructionPosition, params: IrregularTerrainParams): void {
+function revealNear(ctx: ToolContext, session: BrushSession, point: ConstructionPosition, params: TerrainSculptParams): void {
   // What the brush's own reach already tells us: any existing node farther
   // than one dab's radius (plus weld slack) from `point` cannot possibly be
   // touched by anything this call reveals, so there is no reason to check it
@@ -304,7 +304,7 @@ function revealNear(ctx: ToolContext, session: BrushSession, point: Construction
   });
 
   if (newNodes.length === 0 && newSurfaces.length === 0) return;
-  ctx.runtime.applyIrregularTerrainPatch(newNodes, newSurfaces, "local", `${ctx.tableId}:irregular-terrain-reveal:${ctx.nextSequence()}`);
+  ctx.runtime.applyIrregularTerrainPatch(newNodes, newSurfaces, "local", `${ctx.tableId}:terrain-sculpt-reveal:${ctx.nextSequence()}`);
 }
 
 /** A circle (approximated as a hexagon) showing one dab's reveal reach -- the real stroke mesh is not built until `onPointerDown`. */
@@ -325,11 +325,11 @@ function reachOutline(center: ConstructionPosition): Float32Array {
   return Float32Array.from(points);
 }
 
-export const irregularTerrainTool: ConstructionTool<"irregular-terrain-stamp"> = {
-  id: "irregular-terrain-stamp",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["irregular-terrain-stamp"],
+export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
+  id: "terrain-sculpt",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: IrregularTerrainParams) {
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
     return {
       kind: "segments",
       color: TERRAIN_COLOR[params.targetSurface],
@@ -338,7 +338,7 @@ export const irregularTerrainTool: ConstructionTool<"irregular-terrain-stamp"> =
     };
   },
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample, params: IrregularTerrainParams): void {
+  onPointerDown(ctx: ToolContext, sample: PointerSample, params: TerrainSculptParams): void {
     activeSession = startSession(ctx, sample.point, params);
     revealNear(ctx, activeSession, sample.point, params);
   },
@@ -346,7 +346,7 @@ export const irregularTerrainTool: ConstructionTool<"irregular-terrain-stamp"> =
   // Throttled by the dispatcher (`use-construction-pointer.ts`'s
   // `MOVE_COMMIT_THROTTLE_MS`), the same safety net any continuous-drag
   // tool relies on to avoid spamming a mutate call every raw pointer tick.
-  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: IrregularTerrainParams): void {
+  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     if (activeSession === undefined) return;
     revealNear(ctx, activeSession, gesture.current.point, params);
   },

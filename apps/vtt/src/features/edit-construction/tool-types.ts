@@ -15,7 +15,7 @@ export type ConstructionToolId =
   | "interior-wall"
   | "tower-stamp"
   | "house-room-delete"
-  | "irregular-terrain-stamp";
+  | "terrain-sculpt";
 
 export type BrushShapeKind = "circle" | "square" | "hexagon";
 
@@ -62,10 +62,10 @@ export interface InteriorGenerateParams {
 /**
  * A single seeded, self-contained hexagon of irregular terrain, submitted as
  * graph nodes/surfaces in one shot -- see
- * `composition/tabletop/tools/irregular-terrain-tool.ts`.
+ * `composition/tabletop/tools/terrain-sculpt-tool.ts`.
  */
-export interface IrregularTerrainParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/irregular-terrain-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+export interface TerrainSculptParams {
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
   readonly trianglesPerSide: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
@@ -111,7 +111,7 @@ export interface ToolParamsByTool {
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly "house-room-delete": NoToolParams;
-  readonly "irregular-terrain-stamp": IrregularTerrainParams;
+  readonly "terrain-sculpt": TerrainSculptParams;
 }
 
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
@@ -125,7 +125,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
   "house-room-delete": Object.freeze({}),
-  "irregular-terrain-stamp": Object.freeze({
+  "terrain-sculpt": Object.freeze({
     trianglesPerSide: 10,
     irregularity: 0.7,
     heightScale: 1.5,

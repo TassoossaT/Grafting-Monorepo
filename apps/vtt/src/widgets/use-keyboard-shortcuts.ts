@@ -42,7 +42,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
       } else if (event.key.toLowerCase() === "p") {
         if (ready) onToolChange("wall-brush");
       } else if (event.key.toLowerCase() === "i") {
-        if (ready) onToolChange("irregular-terrain-stamp");
+        if (ready) onToolChange("terrain-sculpt");
       } else if (event.key.toLowerCase() === "g") {
         onSnapToGridChange(!snapToGrid);
       }

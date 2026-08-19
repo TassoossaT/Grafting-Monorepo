@@ -5,8 +5,8 @@ import type {
   BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
-  IrregularTerrainParams,
   PathBrushParams,
+  TerrainSculptParams,
   ToolParamsByTool,
   TowerStampParams,
   WallBrushParams,
@@ -164,9 +164,9 @@ function TowerStampFields(props: {
   );
 }
 
-function IrregularTerrainFields(props: {
-  readonly params: IrregularTerrainParams;
-  readonly onChange: (next: IrregularTerrainParams) => void;
+function TerrainSculptFields(props: {
+  readonly params: TerrainSculptParams;
+  readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
   return (
@@ -206,7 +206,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "tower-stamp": "Parâmetros: Torre",
-  "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
+  "terrain-sculpt": "Parâmetros: Escultura de Terreno",
 };
 
 /**
@@ -225,7 +225,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Caminho, Parede, Apagar Cômodo ou Terreno Irregular) no hotbar
+          Selecione uma ferramenta de construção (Caminho, Parede, Apagar Cômodo ou Escultura de Terreno) no hotbar
           para ajustar seus parâmetros.
         </p>
       </Card>
@@ -245,9 +245,9 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : (
-        <IrregularTerrainFields
-          params={params["irregular-terrain-stamp"]}
-          onChange={(next) => onParamsChange("irregular-terrain-stamp", next)}
+        <TerrainSculptFields
+          params={params["terrain-sculpt"]}
+          onChange={(next) => onParamsChange("terrain-sculpt", next)}
         />
       ),
   };
