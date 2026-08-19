@@ -34,14 +34,12 @@ impl AnalyticBrushContour {
     }
 }
 
-/// Produces an exact compact contour for a point, line, or circular-arc
-/// stroke fitted from the complete pointer batch.
+/// Produces one compact contour for the complete pointer batch.
 ///
-/// A complex fitted stroke is intentionally rejected here rather than being
-/// decomposed into overlapping per-segment regions: the caller must first
-/// normalize their union into one non-overlapping area. That explicit
-/// boundary prevents the historical micro-fragment regression from being
-/// reintroduced through this new API.
+/// Consecutive fitted primitives become one continuous tube with round joins
+/// and caps. The result is never a list of overlapping per-segment
+/// footprints, so a dense gesture has no more topology than its fitted
+/// lines/arcs require.
 pub fn compact_analytic_brush_contour(
     request: &PathBrushRequest,
 ) -> Result<AnalyticBrushContour, PathBrushFailure> {
@@ -52,6 +50,12 @@ pub fn compact_analytic_brush_contour(
         &request.samples,
         request.shape.extent() * super::STROKE_FIT_TOLERANCE_FACTOR,
     );
+    if primitives.len() != 1 {
+        return match &request.shape {
+            BrushShape::Circle { radius } => round_stroke(&primitives, *radius),
+            _ => Err(PathBrushFailure::RequiresNormalizedBrushUnion),
+        };
+    }
     let [primitive] = primitives.as_slice() else {
         return Err(PathBrushFailure::RequiresNormalizedBrushUnion);
     };
@@ -81,6 +85,205 @@ pub fn compact_analytic_brush_contour(
         }
         (StrokePrimitive::Arc { .. }, _) => Err(PathBrushFailure::RequiresNormalizedBrushUnion),
     }
+}
+
+#[derive(Clone, Copy)]
+struct OffsetPrimitive {
+    left_start: [f32; 2],
+    left_end: [f32; 2],
+    right_start: [f32; 2],
+    right_end: [f32; 2],
+    left_geometry: ContourGeometry,
+    right_geometry: ContourGeometry,
+    start: [f32; 2],
+    end: [f32; 2],
+    start_tangent: [f32; 2],
+    end_tangent: [f32; 2],
+}
+
+fn round_stroke(
+    primitives: &[StrokePrimitive],
+    brush_radius: f32,
+) -> Result<AnalyticBrushContour, PathBrushFailure> {
+    let offsets = primitives
+        .iter()
+        .copied()
+        .map(|primitive| offset_primitive(primitive, brush_radius))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut vertices = vec![offsets[0].left_start];
+    let mut edge_geometries = Vec::new();
+    let mut push_edge = |end: [f32; 2], geometry: ContourGeometry| {
+        edge_geometries.push(geometry);
+        vertices.push(end);
+    };
+
+    for (index, offset) in offsets.iter().enumerate() {
+        push_edge(offset.left_end, offset.left_geometry);
+        if let Some(next) = offsets.get(index + 1) {
+            let turn = cross(offset.end_tangent, next.start_tangent);
+            push_edge(
+                next.left_start,
+                ContourGeometry::CircularArc {
+                    center: offset.end,
+                    clockwise: turn < 0.0,
+                },
+            );
+        }
+    }
+
+    let last = offsets.last().expect("non-empty offsets");
+    push_edge(
+        last.right_end,
+        ContourGeometry::CircularArc {
+            center: last.end,
+            clockwise: arc_through(last.left_end, last.end_tangent, last.right_end, last.end),
+        },
+    );
+
+    for index in (0..offsets.len()).rev() {
+        let offset = offsets[index];
+        push_edge(offset.right_start, reverse_geometry(offset.right_geometry));
+        if index > 0 {
+            let previous = offsets[index - 1];
+            let turn = cross(previous.end_tangent, offset.start_tangent);
+            push_edge(
+                previous.right_end,
+                ContourGeometry::CircularArc {
+                    center: offset.start,
+                    clockwise: turn > 0.0,
+                },
+            );
+        }
+    }
+
+    let first = offsets[0];
+    edge_geometries.push(ContourGeometry::CircularArc {
+        center: first.start,
+        clockwise: arc_through(
+            first.right_start,
+            [-first.start_tangent[0], -first.start_tangent[1]],
+            first.left_start,
+            first.start,
+        ),
+    });
+    Ok(AnalyticBrushContour {
+        vertices,
+        edge_geometries,
+    })
+}
+
+fn offset_primitive(
+    primitive: StrokePrimitive,
+    brush_radius: f32,
+) -> Result<OffsetPrimitive, PathBrushFailure> {
+    match primitive {
+        StrokePrimitive::Line { start, end } => {
+            let tangent = unit([end[0] - start[0], end[1] - start[1]])
+                .ok_or(PathBrushFailure::RequiresNormalizedBrushUnion)?;
+            let left = [-tangent[1] * brush_radius, tangent[0] * brush_radius];
+            Ok(OffsetPrimitive {
+                left_start: add(start, left),
+                left_end: add(end, left),
+                right_start: sub(start, left),
+                right_end: sub(end, left),
+                left_geometry: ContourGeometry::Line,
+                right_geometry: ContourGeometry::Line,
+                start,
+                end,
+                start_tangent: tangent,
+                end_tangent: tangent,
+            })
+        }
+        StrokePrimitive::Arc {
+            center,
+            radius,
+            start_angle,
+            sweep_angle,
+        } => {
+            let clockwise = sweep_angle < 0.0;
+            let end_angle = start_angle + sweep_angle;
+            let left_radius = if clockwise {
+                radius + brush_radius
+            } else {
+                radius - brush_radius
+            };
+            let right_radius = if clockwise {
+                radius - brush_radius
+            } else {
+                radius + brush_radius
+            };
+            if left_radius <= f32::EPSILON || right_radius <= f32::EPSILON {
+                return Err(PathBrushFailure::RequiresNormalizedBrushUnion);
+            }
+            let point = |distance: f32, angle: f32| {
+                [
+                    center[0] + distance * angle.cos(),
+                    center[1] + distance * angle.sin(),
+                ]
+            };
+            let tangent = |angle: f32| {
+                if clockwise {
+                    [angle.sin(), -angle.cos()]
+                } else {
+                    [-angle.sin(), angle.cos()]
+                }
+            };
+            Ok(OffsetPrimitive {
+                left_start: point(left_radius, start_angle),
+                left_end: point(left_radius, end_angle),
+                right_start: point(right_radius, start_angle),
+                right_end: point(right_radius, end_angle),
+                left_geometry: ContourGeometry::CircularArc { center, clockwise },
+                right_geometry: ContourGeometry::CircularArc { center, clockwise },
+                start: point(radius, start_angle),
+                end: point(radius, end_angle),
+                start_tangent: tangent(start_angle),
+                end_tangent: tangent(end_angle),
+            })
+        }
+        StrokePrimitive::Point(_) => Err(PathBrushFailure::RequiresNormalizedBrushUnion),
+    }
+}
+
+fn reverse_geometry(geometry: ContourGeometry) -> ContourGeometry {
+    match geometry {
+        ContourGeometry::Line => ContourGeometry::Line,
+        ContourGeometry::CircularArc { center, clockwise } => ContourGeometry::CircularArc {
+            center,
+            clockwise: !clockwise,
+        },
+    }
+}
+
+fn arc_through(
+    from: [f32; 2],
+    through_direction: [f32; 2],
+    to: [f32; 2],
+    center: [f32; 2],
+) -> bool {
+    let from_angle = (from[1] - center[1]).atan2(from[0] - center[0]);
+    let through_angle = through_direction[1].atan2(through_direction[0]);
+    let to_angle = (to[1] - center[1]).atan2(to[0] - center[0]);
+    let ccw_total = (to_angle - from_angle).rem_euclid(std::f32::consts::TAU);
+    let ccw_through = (through_angle - from_angle).rem_euclid(std::f32::consts::TAU);
+    ccw_through > ccw_total
+}
+
+fn unit(vector: [f32; 2]) -> Option<[f32; 2]> {
+    let length = (vector[0] * vector[0] + vector[1] * vector[1]).sqrt();
+    (length > f32::EPSILON).then_some([vector[0] / length, vector[1] / length])
+}
+
+fn cross(left: [f32; 2], right: [f32; 2]) -> f32 {
+    left[0] * right[1] - left[1] * right[0]
+}
+
+fn add(left: [f32; 2], right: [f32; 2]) -> [f32; 2] {
+    [left[0] + right[0], left[1] + right[1]]
+}
+
+fn sub(left: [f32; 2], right: [f32; 2]) -> [f32; 2] {
+    [left[0] - right[0], left[1] - right[1]]
 }
 
 fn circle(center: [f32; 2], radius: f32) -> AnalyticBrushContour {
@@ -256,12 +459,13 @@ mod tests {
     }
 
     #[test]
-    fn a_multi_primitive_stroke_requires_union_normalization() {
-        let error = compact_analytic_brush_contour(&request(
+    fn a_multi_primitive_stroke_is_one_joined_contour() {
+        let contour = compact_analytic_brush_contour(&request(
             vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0]],
             BrushShape::Circle { radius: 0.25 },
         ))
-        .unwrap_err();
-        assert_eq!(error, PathBrushFailure::RequiresNormalizedBrushUnion);
+        .unwrap();
+        assert_eq!(contour.vertices().len(), contour.edge_geometries().len());
+        assert_eq!(contour.vertices().len(), 8);
     }
 }
