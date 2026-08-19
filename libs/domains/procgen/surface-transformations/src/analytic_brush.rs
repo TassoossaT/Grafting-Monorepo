@@ -11,7 +11,7 @@ use grafting_graph_core::ContourGeometry;
 use grafting_graph_core::{Graph, NodeId, SurfaceKey, SurfaceRegistry};
 
 use crate::stroke::{StrokePrimitive, fit_stroke};
-use crate::{BrushShape, PathBrushFailure, PathBrushRequest};
+use crate::{BrushShape, PathBrushFailure, PathBrushRequest, swept_brush_contains};
 
 /// One closed analytic contour, with one geometry entry for every directed
 /// edge from `vertices[index]` to `vertices[(index + 1) % vertices.len()]`.
@@ -120,6 +120,32 @@ pub fn compact_analytic_brush_contour(
     }
 }
 
+/// Standard even-odd ray-casting point-in-polygon test on the XZ plane --
+/// used only to decide whether a stroke sample lands inside a candidate
+/// source surface's own interior (see `plan_analytic_path_brush`'s own
+/// spatial-eligibility filter); not exact on the polygon's own boundary,
+/// which is fine here since a boundary-straddling sample is already caught
+/// by the corner-in-brush half of that same filter.
+fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
+    let mut inside = false;
+    let mut previous = match polygon.last() {
+        Some(vertex) => *vertex,
+        None => return false,
+    };
+    for &current in polygon {
+        let straddles = (current[1] > point[1]) != (previous[1] > point[1]);
+        if straddles {
+            let x_intersect = current[0]
+                + (point[1] - current[1]) / (previous[1] - current[1]) * (previous[0] - current[0]);
+            if point[0] < x_intersect {
+                inside = !inside;
+            }
+        }
+        previous = current;
+    }
+    inside
+}
+
 /// Plans the analytic migration of all eligible legacy surfaces touched by
 /// the path-brush mode.
 ///
@@ -133,13 +159,48 @@ pub fn plan_analytic_path_brush(
     request: &PathBrushRequest,
 ) -> Result<AnalyticPathBrushPlan, PathBrushFailure> {
     super::validate_request(request)?;
+    // "Touched by the path-brush mode" (see this function's own doc) means
+    // spatially touched, not merely type-matched -- a surface of an eligible
+    // type sitting far from the stroke must never become a source, or the
+    // exterior-loop cancellation below would swallow every same-typed
+    // surface on the whole table into one region, not just the ones the
+    // brush actually passed over. A surface counts as touched either way a
+    // brush can overlap a face without crossing the other's own vertices:
+    // a corner landing inside the swept brush (`swept_brush_contains`, the
+    // same query terrain-cell generation uses), or a stroke sample landing
+    // inside the surface's own interior (a path cutting straight through
+    // the middle of a face touches no corner at all).
     let source_surface_keys = surfaces
         .surface_keys()
         .into_iter()
         .filter(|key| {
-            surfaces
-                .surface(key)
-                .is_some_and(|surface| request.source_types.contains(surface.surface_type()))
+            surfaces.surface(key).is_some_and(|surface| {
+                if !request.source_types.contains(surface.surface_type()) {
+                    return false;
+                }
+                let mut positions = Vec::with_capacity(surface.cycle().len());
+                for node_id in surface.cycle() {
+                    match graph.node(node_id) {
+                        Some(node) => {
+                            let position = node.data();
+                            positions.push([position[0], position[2]]);
+                        }
+                        // A missing node makes this surface invalid regardless
+                        // of location -- stay eligible so the boundary-edge
+                        // pass below still reports `InvalidSourceSurface` for
+                        // it, instead of this spatial filter silently hiding
+                        // that error.
+                        None => return true,
+                    }
+                }
+                positions
+                    .iter()
+                    .any(|&position| swept_brush_contains(&request.shape, &request.samples, position))
+                    || request
+                        .samples
+                        .iter()
+                        .any(|&sample| polygon_contains_point(&positions, sample))
+            })
         })
         .collect::<Vec<_>>();
     if source_surface_keys.is_empty() {
@@ -636,5 +697,62 @@ mod tests {
         assert_eq!(plan.source_surface_keys().len(), 2);
         assert_eq!(plan.source_boundaries().len(), 1);
         assert_eq!(plan.source_boundaries()[0].len(), 6);
+    }
+
+    /// A same-typed surface far from the stroke must never become a source --
+    /// this is the exact bug report: painting a path anywhere used to swallow
+    /// *every* terrain surface on the whole table into one region, since the
+    /// old filter only checked `surface_type`, never location.
+    #[test]
+    fn a_terrain_face_far_from_the_stroke_is_left_out_of_the_plan() {
+        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
+
+        let graph = Graph::try_from_parts(
+            vec![
+                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
+                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
+                Node::new(NodeId::new("c").unwrap(), [1.0, 0.0, 1.0]),
+                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
+                Node::new(NodeId::new("p").unwrap(), [1000.0, 0.0, 1000.0]),
+                Node::new(NodeId::new("q").unwrap(), [1001.0, 0.0, 1000.0]),
+                Node::new(NodeId::new("r").unwrap(), [1001.0, 0.0, 1001.0]),
+                Node::new(NodeId::new("s").unwrap(), [1000.0, 0.0, 1001.0]),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+        let near_key = surfaces
+            .add_surface(
+                &graph,
+                ["a", "b", "c", "d"]
+                    .into_iter()
+                    .map(|id| NodeId::new(id).unwrap())
+                    .collect(),
+                SurfaceType::new("terrain"),
+                true,
+            )
+            .unwrap();
+        let far_key = surfaces
+            .add_surface(
+                &graph,
+                ["p", "q", "r", "s"]
+                    .into_iter()
+                    .map(|id| NodeId::new(id).unwrap())
+                    .collect(),
+                SurfaceType::new("terrain"),
+                true,
+            )
+            .unwrap();
+
+        let plan = plan_analytic_path_brush(
+            &graph,
+            &surfaces,
+            &request(vec![[0.25, 0.5], [0.75, 0.5]], BrushShape::Circle { radius: 0.1 }),
+        )
+        .unwrap();
+
+        assert_eq!(plan.source_surface_keys(), &[near_key]);
+        assert!(!plan.source_surface_keys().contains(&far_key));
     }
 }
