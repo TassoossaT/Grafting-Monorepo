@@ -13,15 +13,15 @@ export { buildGeneratePathExtrusionOperation, buildGenerateTerrainCellOperation 
 // boundary rule -- see `test/architecture-boundaries.test.mjs`) so
 // `TabletopEntry` can build edit-mode history/operations without reaching
 // past `composition` into `features`/`ports` itself.
-export { createMoveNodeHistoryStack } from "../../features/edit-construction/index.ts";
+export { createEditHistoryStack } from "../../features/edit-construction/index.ts";
 export type {
-  MoveNodeHistoryEntry,
-  MoveNodeHistoryStack,
-  MoveNodeHistoryState,
+  EditHistoryStack,
+  EditHistoryState,
+  RegionEditHistoryEntry,
 } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
 
-// Re-exported for the same reason as `createMoveNodeHistoryStack` above --
+// Re-exported for the same reason as `createEditHistoryStack` above --
 // `navigate-camera` is a `features/` verb, and `TabletopEntry` must not
 // reach past `composition` into `features` itself.
 export { attachCameraNavigation } from "../../features/navigate-camera/index.ts";

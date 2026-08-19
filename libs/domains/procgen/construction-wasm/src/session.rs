@@ -22,6 +22,7 @@ use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
 use crate::path_brush;
+use crate::region_editing;
 use crate::terrain;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
@@ -98,10 +99,20 @@ impl ConstructionSession {
         }
     }
 
-    fn remember(&mut self, wire_key: &[String]) {
-        let key = surface_key_from_wire(wire_key)
-            .expect("wire-formatted key was produced internally and must parse back");
-        self.known_surfaces.insert(key);
+    /// Keeps `known_regions` in step with whatever an atomic edit created or
+    /// removed, so `all_surface_meshes_json`/`snapshot_json` never enumerate
+    /// a region that no longer exists (or miss one that now does).
+    fn track(&mut self, outcome: &region_editing::RegionEditOutcomeDto) {
+        for key in &outcome.created_surface_keys {
+            if let Ok(id) = mesh::region_id_from_wire(key) {
+                self.known_regions.insert(id);
+            }
+        }
+        for key in &outcome.removed_surface_keys {
+            if let Ok(id) = mesh::region_id_from_wire(key) {
+                self.known_regions.remove(&id);
+            }
+        }
     }
 
     fn forget(&mut self, wire_key: &[String]) {
@@ -157,63 +168,155 @@ impl ConstructionSession {
         editing::remove_edge(&mut self.graph, request).map_err(to_js_error)
     }
 
-    // ---- The five construction.rs operations ----
+    // ---- Atomic region edits (the analytic edit vocabulary) ----
 
-    /// Moves a node. See `editing::apply_move_node`.
-    pub fn move_node_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// `MoveVertex`. See `region_editing::apply_move_vertex`.
+    pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = editing::apply_move_node(&mut self.graph, &self.surfaces, request)
+        let response = region_editing::apply_move_vertex(&mut self.graph, &self.topology, request)
             .map_err(to_js_error)?;
+        self.track(&response);
         serialize(&response)
     }
 
-    /// Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
-    pub fn delete_node_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = editing::apply_delete_node(&mut self.graph, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
-        for key in &response.removed_surface_keys {
-            self.forget(key);
-        }
-        for key in &response.capping_surface_keys {
-            self.remember(key);
-        }
-        serialize(&response)
-    }
-
-    /// Unites two surfaces. See `editing::apply_merge_surfaces`.
-    pub fn merge_surfaces_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request: editing::MergeSurfacesRequest = parse(request_json)?;
-        let a = request.a.clone();
-        let b = request.b.clone();
-        let response = editing::apply_merge_surfaces(&self.graph, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
-        self.forget(&a);
-        self.forget(&b);
-        self.remember(&response.surface_key);
-        serialize(&response)
-    }
-
-    /// Divides one surface into two. See `editing::apply_split_surface`.
-    pub fn split_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request: editing::SplitSurfaceRequest = parse(request_json)?;
-        let original = request.key.clone();
-        let response = editing::apply_split_surface(&self.graph, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
-        self.forget(&original);
-        self.remember(&response.first_key);
-        self.remember(&response.second_key);
-        serialize(&response)
-    }
-
-    /// Duplicates a surface. See `editing::apply_duplicate_surface`.
-    pub fn duplicate_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+    /// `InsertVertex`. See `region_editing::apply_insert_vertex`.
+    pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
         let response =
-            editing::apply_duplicate_surface(&mut self.graph, &mut self.surfaces, request)
+            region_editing::apply_insert_vertex(&mut self.graph, &mut self.topology, request)
                 .map_err(to_js_error)?;
-        self.remember(&response.surface_key);
+        self.track(&response);
         serialize(&response)
+    }
+
+    /// `RemoveVertex`. See `region_editing::apply_remove_vertex`.
+    pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_remove_vertex(
+            &mut self.graph,
+            &mut self.topology,
+            &self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `RetypeEdge`. See `region_editing::apply_retype_edge`.
+    pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            region_editing::apply_retype_edge(&mut self.topology, request).map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `MoveEdge`. See `region_editing::apply_move_edge`.
+    pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_move_edge(&mut self.graph, &self.topology, request)
+            .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// Registers a bare boundary edge, the staging step before a cut or a
+    /// hole. See `region_editing::add_contour_edge`.
+    pub fn add_contour_edge_json(&mut self, request_json: &str) -> Result<(), JsValue> {
+        let request = parse(request_json)?;
+        region_editing::add_contour_edge(&self.graph, &mut self.topology, request)
+            .map_err(to_js_error)
+    }
+
+    /// `MoveRegion`. See `region_editing::apply_move_region`.
+    pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_move_region(&mut self.graph, &self.topology, request)
+            .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `DeleteRegion`. See `region_editing::apply_delete_region`.
+    pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_delete_region(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
+    pub fn duplicate_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_duplicate_region(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `CutRegion`. See `region_editing::apply_cut_region`.
+    pub fn cut_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            region_editing::apply_cut_region(&mut self.topology, &mut self.surfaces, request)
+                .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `AddHole` -- a door or a window. See `region_editing::apply_add_hole`.
+    pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            region_editing::apply_add_hole(&mut self.topology, request).map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `RemoveHole`. See `region_editing::apply_remove_hole`.
+    pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_remove_hole(
+            &mut self.graph,
+            &mut self.topology,
+            &self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// One region's live boundary, in this crate's own deterministic order.
+    /// See `region_editing::region_topology`.
+    pub fn region_topology_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: region_editing::RegionRequest = parse(request_json)?;
+        let region = mesh::region_id_from_wire(&request.surface_key).map_err(to_js_error)?;
+        let dto =
+            region_editing::region_topology(&self.graph, &self.topology, &self.surfaces, &region)
+                .map_err(to_js_error)?;
+        serialize(&dto)
+    }
+
+    /// Every registered region's boundary -- the edit-mode bootstrap call.
+    /// See `region_editing::all_region_topologies`.
+    pub fn all_region_topologies_json(&self) -> Result<String, JsValue> {
+        let dtos =
+            region_editing::all_region_topologies(&self.graph, &self.topology, &self.surfaces)
+                .map_err(to_js_error)?;
+        serialize(&dtos)
     }
 
     // ---- Terrain mesh lifecycle ----
@@ -641,9 +744,12 @@ mod tests {
         assert!(cell1.contains("n4"));
 
         let move_response = session
-            .move_node_json(r#"{"nodeId":"n0","position":[9.0,9.0,9.0]}"#)
+            .move_vertex_json(r#"{"nodeId":"n0","position":[9.0,9.0,9.0]}"#)
             .expect("n0 exists");
-        assert!(move_response.contains("affectedSurfaceKeys"));
+        assert!(
+            move_response.contains("@region"),
+            "a generated cell is an analytic region, and moving its vertex must report it: {move_response}"
+        );
 
         let snapshot = session.snapshot_json().expect("snapshot always succeeds");
         assert!(snapshot.contains("\"n0\""));
@@ -1320,19 +1426,16 @@ mod tests {
     #[wasm_bindgen_test]
     fn invalid_json_is_rejected_not_panicking() {
         let mut session = ConstructionSession::new();
-        let error = session.move_node_json("not json").unwrap_err();
+        let error = session.move_vertex_json("not json").unwrap_err();
         assert!(error.as_string().unwrap().contains("invalid request JSON"));
     }
 
-    // `merge_surfaces_json` (an ADR-0022 edit operation explicitly out of
-    // this migration's scope) still only operates on legacy `SurfaceKey`
-    // surfaces, but `add_surface_json` now always registers an analytic
-    // region -- there is no longer a public JSON path that creates a
-    // legacy `Surface` for it to merge, so this integration test cannot be
-    // expressed through `ConstructionSession` anymore. The underlying
-    // merge behavior stays fully covered by `editing.rs`'s own
-    // `merge_surfaces_unites_two_adjacent_triangles`, which builds its
-    // legacy fixture directly via `SurfaceRegistry::add_surface`.
+    // `merge_surfaces_json` and the rest of `ADR-0022`'s node-set edit
+    // operations are retired: every creation path registers an analytic
+    // region, which those operations had no way to resolve. Their
+    // replacement is the atomic vocabulary in `region_editing.rs`, covered
+    // by that module's own tests plus
+    // `moving_a_generated_cells_vertex_reports_its_region` below.
 
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_exposes_its_mesh() {

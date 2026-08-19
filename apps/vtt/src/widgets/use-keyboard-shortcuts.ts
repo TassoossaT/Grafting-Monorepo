@@ -36,7 +36,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
         event.preventDefault();
         if (canRedo) onRedo();
       } else if (event.key.toLowerCase() === "m") {
-        onToolChange("move-node");
+        onToolChange("edit-region");
       } else if (event.key.toLowerCase() === "n" || event.key === "Escape") {
         onToolChange("navigate");
       } else if (event.key.toLowerCase() === "p") {

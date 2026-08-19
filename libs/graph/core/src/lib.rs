@@ -12,13 +12,17 @@ mod construction;
 mod contour;
 mod layout;
 mod model;
+mod region_edit;
 mod surface;
 mod transformation_plan;
 
 pub use construction::{
-    ConstructionError, DeleteOutcome, DuplicateSpec, SurfaceReplacementPlan, SurfaceSpec,
-    apply_surface_replacement_plan, delete_node, duplicate_surface, merge_surfaces, move_node,
-    split_surface,
+    ConstructionError, SurfaceReplacementPlan, SurfaceSpec, apply_surface_replacement_plan,
+};
+pub use region_edit::{
+    DuplicateRegionSpec, RegionEditError, RegionEditOutcome, add_hole, cut_region, delete_region,
+    duplicate_region, insert_vertex, move_edge, move_region, move_vertex, prune_orphans,
+    remove_hole, remove_vertex, retype_edge,
 };
 pub use contour::{
     ContourBounds, ContourEdge, ContourEdgeId, ContourError, ContourGeometry,

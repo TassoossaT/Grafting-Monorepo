@@ -8,7 +8,7 @@
  */
 export type ConstructionToolId =
   | "navigate"
-  | "move-node"
+  | "edit-region"
   | "path-brush"
   | "wall-brush"
   | "wall-line"
@@ -104,7 +104,7 @@ export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
-  readonly "move-node": NoToolParams;
+  readonly "edit-region": NoToolParams;
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
@@ -118,7 +118,7 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
-  "move-node": Object.freeze({}),
+  "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),

@@ -3,7 +3,7 @@ import type { ConstructionToolId } from "@/features/edit-construction";
 import type { ConstructionTool } from "./tool-context.ts";
 import { houseRoomDeleteTool } from "./house-room-delete-tool.ts";
 import { interiorWallTool } from "./interior-wall-tool.ts";
-import { moveNodeTool } from "./move-node-tool.ts";
+import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
 import { pathBrushTool } from "./path-brush-tool.ts";
 import { terrainSculptTool } from "./terrain-sculpt-tool.ts";
@@ -19,7 +19,7 @@ import { wallLineTool } from "./wall-line-tool.ts";
 const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id> } = {
   navigate: navigateTool,
   "path-brush": pathBrushTool,
-  "move-node": moveNodeTool,
+  "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
   "interior-wall": interiorWallTool,
