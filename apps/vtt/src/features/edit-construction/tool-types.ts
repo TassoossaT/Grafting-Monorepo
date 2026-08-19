@@ -9,25 +9,29 @@
 export type ConstructionToolId =
   | "navigate"
   | "move-node"
-  | "terrain-brush"
+  | "path-brush"
   | "wall-brush"
   | "wall-line"
   | "interior-wall"
   | "tower-stamp"
   | "house-room-delete"
-  | "irregular-terrain-stamp";
+  | "terrain-sculpt";
 
-export interface TerrainBrushParams {
-  /** World-space brush radius -- how far one stroke sample reaches. */
+export type BrushShapeKind = "circle" | "square" | "hexagon";
+
+export interface BrushShapeParams {
+  /** Convex footprint shared by terrain and path brushes. */
+  readonly shape: BrushShapeKind;
+  /** Circle/hexagon radius, or square half-size, in world units. */
   readonly radius: number;
-  /** How strongly one pass changes the target, in `(0, 1]`. */
-  readonly strength: number;
-  readonly targetSurface: "terrain" | "terrain-grass";
-  /** Selects among deterministic shape/variant presets -- see `composition/tabletop/tools/terrain-brush-tool.ts`. */
-  readonly seed: number;
+  /** Rotation around world Y; ignored by circles. */
+  readonly rotationDegrees: number;
 }
 
-/** Shared by `wall-brush` (free-form drag) and `wall-line` (click point-to-point for an exact straight run) -- they only differ in how they resolve a path's points, not in what a segment is made of. */
+export interface PathBrushParams extends BrushShapeParams {
+  readonly depth: number;
+}
+
 export interface WallBrushParams {
   readonly wallType: "wall-white" | "wall-gray";
 }
@@ -58,10 +62,10 @@ export interface InteriorGenerateParams {
 /**
  * A single seeded, self-contained hexagon of irregular terrain, submitted as
  * graph nodes/surfaces in one shot -- see
- * `composition/tabletop/tools/irregular-terrain-tool.ts`.
+ * `composition/tabletop/tools/terrain-sculpt-tool.ts`.
  */
-export interface IrregularTerrainParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/irregular-terrain-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+export interface TerrainSculptParams {
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
   readonly trianglesPerSide: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
@@ -101,13 +105,13 @@ export type NoToolParams = Record<string, never>;
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
   readonly "move-node": NoToolParams;
-  readonly "terrain-brush": TerrainBrushParams;
+  readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly "house-room-delete": NoToolParams;
-  readonly "irregular-terrain-stamp": IrregularTerrainParams;
+  readonly "terrain-sculpt": TerrainSculptParams;
 }
 
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
@@ -115,13 +119,13 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "move-node": Object.freeze({}),
-  "terrain-brush": Object.freeze({ radius: 1, strength: 0.6, targetSurface: "terrain", seed: 1 }),
+  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
   "house-room-delete": Object.freeze({}),
-  "irregular-terrain-stamp": Object.freeze({
+  "terrain-sculpt": Object.freeze({
     trianglesPerSide: 10,
     irregularity: 0.7,
     heightScale: 1.5,
@@ -141,4 +145,5 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
  */
 export type PreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
-  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number };
+  | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
+  | { readonly kind: "mesh"; readonly positions: Float32Array; readonly indices: Uint16Array | Uint32Array; readonly color: number; readonly opacity?: number };

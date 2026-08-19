@@ -21,7 +21,7 @@
  *
  * Ported verbatim from `apps/architecture-studio/src/vtt/irregular-grid.ts`
  * (2026-08-08 lab trial, tested, never wired to any UI) into `composition/tabletop/tools/`
- * so `irregular-terrain-tool.ts` can submit its output as graph nodes/surfaces
+ * so `terrain-sculpt-tool.ts` can submit its output as graph nodes/surfaces
  * through `ConstructionSessionPort`'s existing generic operations. No change
  * to the algorithm itself -- apps/architecture-studio and apps/vtt are
  * separate Nx apps with no cross-app import path today, so this is a copy,
@@ -29,7 +29,7 @@
  *
  * PENDING (not scheduled): this stays TypeScript, unlike every other
  * procedural generator in the app (`generateTerrainCell`/`generatePathExtrusion` are
- * Rust/WASM). See `irregular-terrain-tool.ts`'s own module doc for the port
+ * Rust/WASM). See `terrain-sculpt-tool.ts`'s own module doc for the port
  * plan -- this file's own share of it is close to a direct translation,
  * `apps/architecture-studio/test/irregular-grid.test.mjs` already specifies
  * the behavior to port against.

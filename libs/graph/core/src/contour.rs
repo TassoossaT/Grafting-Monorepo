@@ -27,7 +27,7 @@
 //! here is resolved against caller-supplied endpoint positions, never an
 //! opaque node payload `N` this crate cannot interpret.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 
@@ -938,6 +938,44 @@ impl ContourTopology {
             }
         }
         Ok(region)
+    }
+
+    /// Every node referenced by an edge at least one still-registered
+    /// region actually uses. A node outside this set is safe for a caller
+    /// to delete from its own [`Graph`] -- nothing in this topology still
+    /// needs it. Deliberately does not include nodes referenced only by a
+    /// [`ContourEdge`] with zero usages: [`remove_region`](Self::remove_region)
+    /// leaves those registered (a sibling region might reuse the id later
+    /// in the same batch of edits) but they hold no region together, so
+    /// they cannot keep a node alive either.
+    pub fn nodes_in_use(&self) -> BTreeSet<NodeId> {
+        let mut nodes = BTreeSet::new();
+        for edge_id in self.usages.keys() {
+            if let Some(edge) = self.edges.get(edge_id) {
+                nodes.insert(edge.start_node.clone());
+                nodes.insert(edge.end_node.clone());
+            }
+        }
+        nodes
+    }
+
+    /// Drops every registered edge no region currently uses -- exactly the
+    /// garbage [`remove_region`](Self::remove_region) intentionally leaves
+    /// behind per its own doc ("another region may still reference them").
+    /// A caller that just finished a batch of removals calls this once to
+    /// reclaim whatever really did become orphaned, rather than every edge
+    /// staying registered forever.
+    pub fn prune_unused_edges(&mut self) -> Vec<ContourEdgeId> {
+        let unused: Vec<ContourEdgeId> = self
+            .edges
+            .keys()
+            .filter(|id| !self.usages.contains_key(*id))
+            .cloned()
+            .collect();
+        for id in &unused {
+            self.edges.remove(id);
+        }
+        unused
     }
 }
 

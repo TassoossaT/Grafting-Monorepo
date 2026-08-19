@@ -8,14 +8,22 @@ import type { TabletopRuntime } from "../tabletop-runtime.ts";
 export interface PointerSample {
   readonly point: ConstructionPosition;
   readonly nodeId?: string;
+  readonly surfaceRef?: string;
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
+  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
+  readonly samples: readonly PointerSample[];
 }
 
+export interface ConstructionToolFeedback {
+  readonly tone: "info" | "success" | "error";
+  readonly message: string;
+  readonly surfaceRef?: string;
+}
 /** What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`). */
 export interface ToolContext {
   readonly runtime: TabletopRuntime;
@@ -25,6 +33,7 @@ export interface ToolContext {
   nextSequence(): number;
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
   reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
+  reportFeedback(feedback: ConstructionToolFeedback | undefined): void;
 }
 
 /**
@@ -39,7 +48,7 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
-  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>): PreviewDescriptor | undefined;
+  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
   /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
   onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
   /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */

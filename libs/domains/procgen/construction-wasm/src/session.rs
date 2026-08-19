@@ -12,14 +12,15 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use grafting_graph_core::{
-    FormationInputs, Graph, GraphPrimitive, PrismGridMesh, SurfaceKey, SurfaceRegistry, SurfaceType,
+    ContourTopology, FormationInputs, Graph, GraphPrimitive, PrismGridMesh, RegionId, SurfaceKey,
+    SurfaceRegistry, SurfaceType,
 };
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::generation;
 use crate::geometry::connected_component;
-use crate::mesh;
+use crate::mesh::{self, region_id_to_wire};
 use crate::path_brush;
 use crate::terrain;
 
@@ -37,6 +38,20 @@ fn to_js_error(message: String) -> JsValue {
     JsValue::from_str(&message)
 }
 
+#[derive(Clone)]
+struct ConstructionState {
+    graph: SessionGraph,
+    surfaces: SurfaceRegistry,
+    known_surfaces: HashSet<SurfaceKey>,
+    topology: ContourTopology,
+    known_regions: HashSet<RegionId>,
+}
+
+struct PathBrushHistoryEntry {
+    operation_id: String,
+    before: ConstructionState,
+    after: ConstructionState,
+}
 /// One live editing session: a `Graph<[f32; 3], ()>` + `SurfaceRegistry`,
 /// plus an optional `PrismGridMesh` terrain generation reads from. In-memory
 /// only -- gone when the tab/Worker closes; see this crate's `AGENTS.md` for
@@ -45,6 +60,7 @@ fn to_js_error(message: String) -> JsValue {
 pub struct ConstructionSession {
     graph: SessionGraph,
     surfaces: SurfaceRegistry,
+    topology: ContourTopology,
     terrain_mesh: Option<PrismGridMesh>,
     /// This crate's own bookkeeping of every surface key currently
     /// registered, purely so [`Self::snapshot_json`] can enumerate them --
@@ -52,6 +68,9 @@ pub struct ConstructionSession {
     /// adding one would be a `grafting-graph-core` change, out of this
     /// crate's scope.
     known_surfaces: HashSet<SurfaceKey>,
+    known_regions: HashSet<RegionId>,
+    path_brush_undo: Vec<PathBrushHistoryEntry>,
+    path_brush_redo: Vec<PathBrushHistoryEntry>,
 }
 
 impl Default for ConstructionSession {
@@ -70,8 +89,12 @@ impl ConstructionSession {
             graph: Graph::try_from_parts(Vec::new(), Vec::new())
                 .expect("an empty graph is always valid"),
             surfaces: SurfaceRegistry::new(),
+            topology: ContourTopology::new(),
             terrain_mesh: None,
             known_surfaces: HashSet::new(),
+            known_regions: HashSet::new(),
+            path_brush_undo: Vec::new(),
+            path_brush_redo: Vec::new(),
         }
     }
 
@@ -231,11 +254,102 @@ impl ConstructionSession {
     /// forwards the resolved request to the domain transformer and publishes
     /// its already-atomic replacement plan.
     pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = path_brush::apply_path_brush(&mut self.graph, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
-        self.known_surfaces = self.surfaces.surface_keys().into_iter().collect();
+        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
+        let operation_id = request.operation_id.clone();
+        let before = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            known_surfaces: self.known_surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        let response = path_brush::apply_path_brush(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            &mut self.known_surfaces,
+            &mut self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
+        let after = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            known_surfaces: self.known_surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        self.path_brush_undo.push(PathBrushHistoryEntry {
+            operation_id,
+            before,
+            after,
+        });
+        self.path_brush_redo.clear();
         serialize(&response)
+    }
+
+    /// Resolves terrain-grid cells through the shared authoritative brush footprint.
+    pub fn resolve_brush_cells_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = path_brush::resolve_brush_cells(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+    /// Returns the exact target mesh for a path brush without mutating confirmed state.
+    pub fn preview_path_brush_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
+        let response = path_brush::preview_path_brush(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            &self.known_surfaces,
+            &self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
+        serialize(&response)
+    }
+    /// Restores the state immediately before the latest matching path-brush operation.
+    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.path_brush_undo.pop() else {
+            return Err(JsValue::from_str(
+                "no path brush operation is available to undo",
+            ));
+        };
+        if entry.operation_id != operation_id {
+            self.path_brush_undo.push(entry);
+            return Err(JsValue::from_str(
+                "path brush undo order does not match session history",
+            ));
+        }
+        self.graph = entry.before.graph.clone();
+        self.surfaces = entry.before.surfaces.clone();
+        self.known_surfaces = entry.before.known_surfaces.clone();
+        self.topology = entry.before.topology.clone();
+        self.known_regions = entry.before.known_regions.clone();
+        self.path_brush_redo.push(entry);
+        Ok(())
+    }
+
+    /// Restores the state immediately after the latest matching undone path-brush operation.
+    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.path_brush_redo.pop() else {
+            return Err(JsValue::from_str(
+                "no path brush operation is available to redo",
+            ));
+        };
+        if entry.operation_id != operation_id {
+            self.path_brush_redo.push(entry);
+            return Err(JsValue::from_str(
+                "path brush redo order does not match session history",
+            ));
+        }
+        self.graph = entry.after.graph.clone();
+        self.surfaces = entry.after.surfaces.clone();
+        self.known_surfaces = entry.after.known_surfaces.clone();
+        self.topology = entry.after.topology.clone();
+        self.known_regions = entry.after.known_regions.clone();
+        self.path_brush_undo.push(entry);
+        Ok(())
     }
     /// Generates one terrain cell's surface and applies it. See
     /// `terrain::generate_and_apply_terrain_cell`.
@@ -360,17 +474,26 @@ impl ConstructionSession {
     /// order -- the one bootstrap call a renderer uses to draw everything
     /// already in the session. See `mesh::all_surface_meshes`.
     pub fn all_surface_meshes_json(&self) -> Result<String, JsValue> {
-        let meshes = mesh::all_surface_meshes(&self.graph, &self.surfaces, &self.known_surfaces);
+        let meshes = mesh::all_surface_meshes(
+            &self.graph,
+            &self.surfaces,
+            &self.known_surfaces,
+            &self.topology,
+            &self.known_regions,
+        );
         serialize(&meshes)
     }
 
-    /// One surface's triangulated mesh, by key -- what a caller re-fetches
-    /// for each entry in an operation's `affectedSurfaceKeys` after a
-    /// mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
+    /// One surface's triangulated mesh piece(s), by key -- what a caller
+    /// re-fetches for each entry in an operation's `affectedSurfaceKeys`
+    /// after a mutation, instead of re-fetching everything. An analytic
+    /// region key can legitimately return more than one piece; a plain
+    /// surface key always returns exactly one. See `mesh::surface_mesh`.
     pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let dto = mesh::surface_mesh(&self.graph, &self.surfaces, request).map_err(to_js_error)?;
-        serialize(&dto)
+        let dtos = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
+            .map_err(to_js_error)?;
+        serialize(&dtos)
     }
 
     // ---- Introspection ----
@@ -396,7 +519,7 @@ impl ConstructionSession {
                 target: edge.target().as_str().to_owned(),
             })
             .collect();
-        let surfaces = self
+        let mut surfaces = self
             .known_surfaces
             .iter()
             .filter_map(|key| {
@@ -406,7 +529,18 @@ impl ConstructionSession {
                     physical: surface.physical(),
                 })
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let mut region_ids = self.known_regions.iter().collect::<Vec<_>>();
+        region_ids.sort();
+        surfaces.extend(region_ids.into_iter().filter_map(|region_id| {
+            self.surfaces
+                .region_surface(region_id)
+                .map(|surface| SurfaceSnapshot {
+                    surface_key: region_id_to_wire(region_id),
+                    surface_type: surface.surface_type().as_str().to_owned(),
+                    physical: surface.physical(),
+                })
+        }));
         serialize(&SnapshotResponse {
             nodes,
             edges,
@@ -589,26 +723,571 @@ mod tests {
             )
             .expect("terrain cell generates");
 
+        let request = r#"{"operationId":"path-1","samples":[[0.5,0.5]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+        let before = session.snapshot_json().expect("snapshot before preview");
+        let preview = session
+            .preview_path_brush_json(request)
+            .expect("path preview succeeds");
+        assert!(preview.contains("\"path\""));
+        assert_eq!(
+            session.snapshot_json().unwrap(),
+            before,
+            "preview is non-mutating"
+        );
+
         let response = session
-            .apply_path_brush_json(
-                r#"{"operationId":"path-1","center":[0.5,0.5],"radius":0.25,"depth":0.1,"sourceSurfaceType":"terrain","targetSurfaceType":"path"}"#,
-            )
+            .apply_path_brush_json(request)
             .expect("path brush applies");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         assert!(
             !parsed["surfaceIds"]["created"]
                 .as_array()
                 .unwrap()
-                .is_empty(),
-            "the transformation must report its created path surface: {parsed}"
+                .is_empty()
+        );
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+
+        let meshes: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+
+        session
+            .undo_path_brush("path-1")
+            .expect("whole stroke undoes");
+        assert_eq!(session.snapshot_json().unwrap(), before);
+        session
+            .redo_path_brush("path-1")
+            .expect("whole stroke redoes");
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+    }
+
+    /// Reproduction: a multi-segment stroke (union path, not a single fitted
+    /// primitive) drawn over existing terrain must leave a remainder region
+    /// whose mesh actually derives -- not "no mesh derivable for analytic
+    /// region ...-remainder".
+    #[test]
+    fn a_multi_segment_stroke_over_terrain_leaves_a_derivable_remainder_mesh() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let request = serde_json::json!({
+            "operationId": "path-multi-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0], [3.0, 3.0], [5.0, 3.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("multi-segment path brush applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            parsed["surfaceIds"]["created"].as_array().unwrap().len(),
+            2,
+            "both the remainder terrain and the new path region must be created"
         );
 
-        let snapshot = session.snapshot_json().expect("snapshot succeeds");
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every created region, including the remainder, must have a derivable mesh");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
         assert!(
-            snapshot.contains("\"path\""),
-            "the new path must be visible in the session snapshot"
+            meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"),
+            "the remainder terrain must still be present and meshable: {meshes_json}"
         );
     }
+
+    /// Reproduction attempt 2: a self-overlapping loop stroke that fully
+    /// covers the only terrain cell it touches -- the remainder's leftover
+    /// boundary is then smaller than (or equal to) the hole the union
+    /// contour cuts into it.
+    #[test]
+    fn a_loop_stroke_fully_covering_its_only_terrain_cell_still_meshes() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
+            )
+            .expect("terrain cell generates");
+
+        let loop_samples: Vec<[f32; 2]> = (0..=32)
+            .map(|index| {
+                let angle = std::f32::consts::TAU * index as f32 / 32.0;
+                [1.0 + 3.0 * angle.cos(), 1.0 + 3.0 * angle.sin()]
+            })
+            .collect();
+        let request = serde_json::json!({
+            "operationId": "path-loop-cover",
+            "samples": loop_samples,
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a loop stroke fully covering its only terrain cell must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every created region must have a derivable mesh, remainder included");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+    }
+
+    /// The real user-reported bug: a SECOND path-brush stroke overlapping
+    /// the region a FIRST stroke already created used to leave that first
+    /// region orphaned forever (`plan_region_merge` only ever scanned plain
+    /// node-cycle surfaces for eligibility, never existing regions), and
+    /// eventually produced "no mesh derivable for ...-remainder" once the
+    /// resulting geometry became inconsistent enough. This must now not
+    /// only apply without error, but actually retire the first stroke's
+    /// own region -- not leave it sitting there duplicated underneath.
+    #[test]
+    fn a_second_overlapping_path_brush_stroke_consumes_the_first_ones_region() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let first = serde_json::json!({
+            "operationId": "path-overlap-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let first_response = session
+            .apply_path_brush_json(&first)
+            .expect("first path brush applies");
+        let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
+        // response_from_outcome pushes the leftover remainder (still
+        // "terrain"-typed) first, then the new "path" region. A path
+        // stroke's own eligibility is purely geometric (`path_brush.rs`'s
+        // `plan_path_brush_region_merge` always answers `true`), so the
+        // second stroke below would happily consume either one -- this
+        // test targets the remainder specifically to also prove type is
+        // irrelevant to what gets cut.
+        let first_remainder_region = first_parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone();
+
+        // Second stroke overlaps the first one's own already-carved region.
+        let second = serde_json::json!({
+            "operationId": "path-overlap-2",
+            "samples": [[1.5, 0.5], [1.5, 2.5]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&second)
+            .expect("second, overlapping path brush stroke must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .contains(&first_remainder_region),
+            "the second stroke must report the first stroke's own remainder region as removed: {response}"
+        );
+
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every surface, including anything from the first stroke, must still mesh");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(
+            !meshes
+                .iter()
+                .any(|mesh| mesh["surfaceKey"] == first_remainder_region),
+            "the first stroke's own remainder region must no longer be rendered after being consumed"
+        );
+        assert!(!meshes.is_empty());
+    }
+
+    /// The eligibility gate used to be a type filter (`sourceSurfaceTypes`),
+    /// which meant a path stroke could never cut a region an *earlier* path
+    /// stroke had produced -- that region's own type is "path", never in
+    /// the caller's source list. Cutting must be purely geometric: this
+    /// draws stroke 2 squarely over stroke 1's own *new* "path" region
+    /// (not its terrain remainder) and asserts it gets consumed too.
+    #[test]
+    fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let first = serde_json::json!({
+            "operationId": "path-type-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let first_response = session
+            .apply_path_brush_json(&first)
+            .expect("first path brush applies");
+        let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
+        let first_path_region = first_parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .clone();
+
+        let second = serde_json::json!({
+            "operationId": "path-type-2",
+            "samples": [[2.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.6},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&second)
+            .expect("second stroke over the first stroke's own path region must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .contains(&first_path_region),
+            "a path region from an earlier stroke must be cut like anything else under the brush: {response}"
+        );
+    }
+
+    /// Consuming a surface must delete its own now-orphaned graph nodes,
+    /// not just untrack it -- otherwise leftover geometry from every past
+    /// stroke keeps accumulating in the graph forever (the "vertices where
+    /// nothing was drawn" symptom). Uses a real 2x2 grid of quads that
+    /// *share* corner nodes (four independent `generate_and_apply_terrain_cell`
+    /// calls never do -- each gets its own private node ids), so consuming
+    /// all four at once actually exercises edge cancellation: the shared
+    /// center node's four edges each cancel against the adjacent cell that
+    /// also owns them, leaving it with nothing to keep it alive, while the
+    /// eight perimeter nodes each keep one surviving outer edge and must
+    /// stay.
+    #[test]
+    fn consuming_shared_quads_deletes_the_now_orphaned_center_node() {
+        let mut session = ConstructionSession::new();
+        let mut corner = |id: &str, x: f32, z: f32| {
+            session
+                .add_node_json(&serde_json::json!({"id": id, "position": [x, 0.0, z]}).to_string())
+                .expect("corner node adds");
+        };
+        corner("q-a", 0.0, 0.0);
+        corner("q-b", 1.0, 0.0);
+        corner("q-c", 2.0, 0.0);
+        corner("q-d", 0.0, 1.0);
+        corner("q-e", 1.0, 1.0);
+        corner("q-f", 2.0, 1.0);
+        corner("q-g", 0.0, 2.0);
+        corner("q-h", 1.0, 2.0);
+        corner("q-i", 2.0, 2.0);
+
+        let mut quad = |cycle: [&str; 4]| {
+            session
+                .add_surface_json(
+                    &serde_json::json!({"cycle": cycle, "surfaceType": "terrain", "physical": true})
+                        .to_string(),
+                )
+                .expect("quad surface adds");
+        };
+        quad(["q-a", "q-b", "q-e", "q-d"]);
+        quad(["q-b", "q-c", "q-f", "q-e"]);
+        quad(["q-d", "q-e", "q-h", "q-g"]);
+        quad(["q-e", "q-f", "q-i", "q-h"]);
+
+        let request = serde_json::json!({
+            "operationId": "path-orphan-cleanup",
+            "samples": [[1.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 1.6},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a brush covering the whole grid applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+
+        let removed_node_ids: Vec<&str> = parsed["nodeIds"]["removed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            removed_node_ids,
+            vec!["q-e"],
+            "only the shared center node has every one of its own edges cancel out: {response}"
+        );
+        assert!(
+            session.graph.node(&grafting_graph_core::NodeId::new("q-e").unwrap()).is_none(),
+            "the reported orphan must actually be gone from the graph"
+        );
+        for surviving in ["q-a", "q-b", "q-c", "q-d", "q-f", "q-g", "q-h", "q-i"] {
+            assert!(
+                session
+                    .graph
+                    .node(&grafting_graph_core::NodeId::new(surviving).unwrap())
+                    .is_some(),
+                "{surviving} still anchors a surviving remainder edge and must not be deleted"
+            );
+        }
+    }
+
+    /// A single-point (dot) stroke with a circle brush produces a contour
+    /// whose edges are ALL circular arcs -- no straight line segment at
+    /// all, unlike a dragged stroke's line-with-round-caps shape. This must
+    /// apply exactly like any other contour.
+    #[test]
+    fn a_single_point_circle_brush_dot_applies_as_a_pure_arc_region() {
+        let mut session = ConstructionSession::new();
+        let request = r#"{"operationId":"path-dot","samples":[[0.0,0.0]],"brushShape":{"kind":"circle","radius":0.5},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+
+        let response = session
+            .apply_path_brush_json(request)
+            .expect("a pure-arc contour must apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 1, "the pure-arc region must produce exactly one mesh: {meshes_json}");
+        assert!(
+            !meshes[0]["indices"].as_array().unwrap().is_empty(),
+            "the pure-arc region's mesh must have real triangles, not be empty: {meshes_json}"
+        );
+    }
+
+    /// The exact user-reported bug this fix addresses, through the whole
+    /// wasm boundary: a stroke that loops back over itself -- like drawing
+    /// a circle with the brush, sample by sample -- used to fail outright
+    /// with "requires union normalization." The committed area must always
+    /// resolve to one region and render as one real mesh, regardless of the
+    /// stroke's own shape.
+    #[test]
+    fn a_self_overlapping_loop_stroke_applies_and_renders_as_one_region() {
+        let mut session = ConstructionSession::new();
+        let loop_samples: Vec<[f32; 2]> = (0..=32)
+            .map(|index| {
+                let angle = std::f32::consts::TAU * index as f32 / 32.0;
+                [2.0 * angle.cos(), 2.0 * angle.sin()]
+            })
+            .collect();
+        let request = serde_json::json!({
+            "operationId": "path-loop",
+            "samples": loop_samples,
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a self-overlapping loop stroke must apply, not require union normalization");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
+
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 1, "the looped stroke must produce exactly one mesh: {meshes_json}");
+        assert!(
+            !meshes[0]["indices"].as_array().unwrap().is_empty(),
+            "the looped stroke's mesh must have real triangles, not be empty: {meshes_json}"
+        );
+    }
+
+    /// A path is a structure like any other -- committing one over an empty
+    /// session (no terrain, no surfaces at all) must succeed and create just
+    /// the path itself, not fail for lack of something to consume.
+    #[test]
+    fn applying_path_brush_with_no_terrain_at_all_still_creates_the_path() {
+        let mut session = ConstructionSession::new();
+        let request = r#"{"operationId":"path-empty","samples":[[0.0,0.0],[1.0,0.0]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
+
+        let response = session
+            .apply_path_brush_json(request)
+            .expect("path brush applies with no terrain underneath");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            parsed["surfaceIds"]["created"].as_array().unwrap().len(),
+            1,
+            "only the target region is created, there is no source region to make"
+        );
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "nothing existed to remove"
+        );
+        assert!(session.snapshot_json().unwrap().contains("\"path\""));
+    }
+
+    /// Deterministic xorshift -- no external `rand` dependency needed for
+    /// one stress test.
+    struct Xorshift(u32);
+    impl Xorshift {
+        fn next(&mut self) -> u32 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 17;
+            self.0 ^= self.0 << 5;
+            self.0
+        }
+        fn range(&mut self, lo: f32, hi: f32) -> f32 {
+            lo + (self.next() as f32 / u32::MAX as f32) * (hi - lo)
+        }
+    }
+
+    /// The user reported "no mesh derivable for ...-remainder" appears
+    /// *consistently* while freehand-drawing "vários e vários caminhos
+    /// aleatórios em cima de outros caminhos ou de terreno" -- every
+    /// targeted synthetic repro so far has applied cleanly, so this throws
+    /// many random overlapping strokes (varying shape, radius, and
+    /// position, some on terrain, some on empty space, some on top of a
+    /// prior stroke's own region) at one session and, after *every single*
+    /// stroke, re-derives the mesh for exactly the keys the front end
+    /// itself re-fetches (`surfaceIds.created`, via `mesh::surface_mesh` --
+    /// the single-key lookup, not the infallible `all_surface_meshes`), to
+    /// catch whatever specific combination trips it. Calls the crate's own
+    /// pure inner functions directly (`path_brush::apply_path_brush`,
+    /// `mesh::surface_mesh`) instead of the `#[wasm_bindgen]` JSON wrappers,
+    /// since a `JsValue` error's `.as_string()` aborts outside a real wasm32
+    /// target.
+    #[test]
+    fn many_random_overlapping_strokes_never_leave_an_unmeshable_surface() {
+        let mut session = ConstructionSession::new();
+        session.set_terrain_mesh(6, 6, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        for cell in 0..36 {
+            let x = cell % 6;
+            let z = cell / 6;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let mut rng = Xorshift(0x9e3779b1);
+        for stroke in 0..80 {
+            let shape = match rng.next() % 3 {
+                0 => serde_json::json!({"kind": "circle", "radius": rng.range(0.3, 1.5)}),
+                1 => serde_json::json!({"kind": "square", "size": rng.range(0.6, 3.0), "rotationRadians": rng.range(0.0, 6.28)}),
+                _ => serde_json::json!({"kind": "hexagon", "radius": rng.range(0.3, 1.5), "rotationRadians": rng.range(0.0, 6.28)}),
+            };
+            let sample_count = 1 + (rng.next() % 3) as usize;
+            let samples: Vec<[f32; 2]> = (0..sample_count)
+                .map(|_| [rng.range(-1.0, 7.0), rng.range(-1.0, 7.0)])
+                .collect();
+            let request_json = serde_json::json!({
+                "operationId": format!("path-stress-{stroke}"),
+                "samples": samples,
+                "brushShape": shape,
+                "depth": 0.1,
+                "sourceSurfaceTypes": ["terrain"],
+                "targetSurfaceType": "path",
+            })
+            .to_string();
+            let request: path_brush::ApplyPathBrushRequest = serde_json::from_str(&request_json)
+                .unwrap_or_else(|error| panic!("bad request json {request_json}: {error}"));
+
+            let response = match path_brush::apply_path_brush(
+                &mut session.graph,
+                &mut session.surfaces,
+                &mut session.topology,
+                &mut session.known_surfaces,
+                &mut session.known_regions,
+                request,
+            ) {
+                Ok(response) => response,
+                Err(message) => {
+                    if message.contains("produced no semantic change") {
+                        continue;
+                    }
+                    panic!("stroke {stroke} ({request_json}) failed to apply: {message}");
+                }
+            };
+            let response_json = serde_json::to_string(&response).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&response_json).unwrap();
+
+            for key in parsed["surfaceIds"]["created"].as_array().unwrap() {
+                let surface_key: Vec<String> = key
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|part| part.as_str().unwrap().to_string())
+                    .collect();
+                if let Err(message) = mesh::surface_mesh(
+                    &session.graph,
+                    &session.surfaces,
+                    &session.topology,
+                    mesh::SurfaceMeshRequest { surface_key: surface_key.clone() },
+                ) {
+                    panic!(
+                        "stroke {stroke} created {surface_key:?} but it doesn't mesh: {message}\nstroke request: {request_json}\nstroke response: {response_json}"
+                    );
+                }
+            }
+        }
+    }
+
     #[wasm_bindgen_test]
     fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
         let mut session = ConstructionSession::new();

@@ -28,9 +28,11 @@
 //! shallowest arc, producing triangles that visibly cut across the surface
 //! instead of following it.
 
-use earcut::{utils3d, Earcut};
+use earcut::{Earcut, utils3d};
 
-use grafting_graph_core::{ArcBulge, SurfaceCurvature};
+use grafting_graph_core::{
+    ArcBulge, ContourEdge, ContourLoop, ContourTopology, NodeId, SurfaceCurvature, SurfaceRegion,
+};
 
 /// Maximum deviation, in world units, between a tessellated arc's chords and
 /// the true circle they approximate -- see this module's own top-level doc
@@ -59,7 +61,10 @@ pub struct TriangulatedMesh {
 /// fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
 /// are states a caller may see transiently mid-edit, not error conditions
 /// to propagate.
-pub fn triangulate_surface(positions: &[[f32; 3]], curvature: Option<SurfaceCurvature>) -> Option<TriangulatedMesh> {
+pub fn triangulate_surface(
+    positions: &[[f32; 3]],
+    curvature: Option<SurfaceCurvature>,
+) -> Option<TriangulatedMesh> {
     if let Some(curvature) = curvature {
         if positions.len() == 4 {
             return triangulate_curved_quad(positions, curvature);
@@ -90,6 +95,152 @@ pub fn triangulate_surface(positions: &[[f32; 3]], curvature: Option<SurfaceCurv
     })
 }
 
+/// Derives transient meshes for every outer loop in an analytic contour
+/// region. Lines and circular arcs remain analytic in graph state; this is
+/// the first point where an arc is approximated for GPU consumption.
+///
+/// Holes are assigned to the outer loop that contains their first point in
+/// the XZ contour plane. An invalid hole that is outside every outer loop
+/// produces `None` rather than a visually plausible but topologically false
+/// mesh. Callers resolve node positions from their authoritative graph.
+pub fn triangulate_region(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+    mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<Vec<TriangulatedMesh>> {
+    let outers = region
+        .outer_loops()
+        .iter()
+        .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
+        .collect::<Option<Vec<_>>>()?;
+    let holes = region
+        .holes()
+        .iter()
+        .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
+        .collect::<Option<Vec<_>>>()?;
+
+    // A hole only ever cleanly nests inside a *single* outer loop when that
+    // outer loop is one connected piece the hole was actually carved out
+    // of. A region can legitimately have several disjoint outer loops at
+    // once (several unrelated surfaces consumed by the same merge, never
+    // sharing an edge to collapse into one ring -- see `region_merge.rs`),
+    // and a hole spanning across more than one of them, or landing outside
+    // all of them, doesn't correspond to any single owner. That must not
+    // fail the *entire* region's mesh -- every other, cleanly-owned piece
+    // still has to render -- so an unresolvable hole is simply dropped
+    // (that one piece renders as its own full, unnotched loop) rather than
+    // this whole function returning `None`.
+    let owners: Vec<Option<usize>> = holes
+        .iter()
+        .map(|hole| {
+            hole.first().and_then(|point| {
+                outers
+                    .iter()
+                    .position(|outer| point_in_loop_xz([point[0], point[2]], outer))
+            })
+        })
+        .collect();
+
+    outers
+        .iter()
+        .enumerate()
+        .map(|(index, outer)| {
+            let owned_holes = holes
+                .iter()
+                .zip(owners.iter())
+                .filter_map(|(hole, owner)| (*owner == Some(index)).then_some(hole));
+            triangulate_contour_loops(outer, owned_holes)
+        })
+        .collect()
+}
+
+fn tessellate_contour_loop(
+    topology: &ContourTopology,
+    loop_: &ContourLoop,
+    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<Vec<[f32; 3]>> {
+    let mut positions = Vec::new();
+    for use_ in loop_ {
+        let edge = topology.edge(use_.edge())?;
+        let traversed = if use_.is_reversed() {
+            ContourEdge::new(
+                edge.id().clone(),
+                edge.end_node().clone(),
+                edge.start_node().clone(),
+                edge.reversed_geometry(),
+            )
+        } else {
+            edge.clone()
+        };
+        let start = resolve_position(traversed.start_node())?;
+        let end = resolve_position(traversed.end_node())?;
+        let planar = traversed.tessellate(
+            [start[0], start[2]],
+            [end[0], end[2]],
+            ARC_TESSELLATION_TOLERANCE,
+        );
+        if planar.len() < 2 {
+            return None;
+        }
+        for (index, point) in planar.iter().take(planar.len() - 1).enumerate() {
+            let t = index as f32 / (planar.len() - 1) as f32;
+            positions.push([point[0], start[1] + (end[1] - start[1]) * t, point[1]]);
+        }
+    }
+    (positions.len() >= 3).then_some(positions)
+}
+
+fn triangulate_contour_loops<'a>(
+    outer: &[[f32; 3]],
+    holes: impl IntoIterator<Item = &'a Vec<[f32; 3]>>,
+) -> Option<TriangulatedMesh> {
+    if outer.len() < 3 {
+        return None;
+    }
+    let mut positions = outer.to_vec();
+    let mut hole_indices = Vec::new();
+    for hole in holes {
+        if hole.len() < 3 {
+            return None;
+        }
+        hole_indices.push(positions.len() as u32);
+        positions.extend(hole.iter().copied());
+    }
+    let projected = positions
+        .iter()
+        .map(|point| [point[0], point[2]])
+        .collect::<Vec<_>>();
+    let mut earcut = Earcut::new();
+    let mut indices = Vec::new();
+    earcut.earcut(projected, &hole_indices, &mut indices);
+    (!indices.is_empty()).then(|| TriangulatedMesh {
+        normals: vec![face_normal(outer).unwrap_or([0.0, 1.0, 0.0]); positions.len()],
+        positions,
+        indices,
+    })
+}
+
+fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool {
+    let mut inside = false;
+    for (current, next) in loop_
+        .iter()
+        .zip(loop_.iter().cycle().skip(1))
+        .take(loop_.len())
+    {
+        let current_z = current[2];
+        let next_z = next[2];
+        if (current_z > point[1]) == (next_z > point[1]) {
+            continue;
+        }
+        let intersection_x =
+            (next[0] - current[0]) * (point[1] - current_z) / (next_z - current_z) + current[0];
+        if point[0] < intersection_x {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
 /// Triangulates a curved quad (see [`crate`]'s own doc for the 4-corner
 /// shape) as a ruled strip: the bottom edge's own tessellated arc paired
 /// with the same arc mirrored at the top's own height, two triangles per
@@ -99,11 +250,24 @@ pub fn triangulate_surface(positions: &[[f32; 3]], curvature: Option<SurfaceCurv
 /// faces. `None` only if [`tessellate_arc`] returns fewer than 2 points --
 /// unreachable in practice, since [`ARC_TESSELLATION_TOLERANCE`] always
 /// yields at least a 2-point (start, end) polyline.
-fn triangulate_curved_quad(positions: &[[f32; 3]], curvature: SurfaceCurvature) -> Option<TriangulatedMesh> {
-    let (bottom_start, bottom_end, top_end, top_start) = (positions[0], positions[1], positions[2], positions[3]);
+fn triangulate_curved_quad(
+    positions: &[[f32; 3]],
+    curvature: SurfaceCurvature,
+) -> Option<TriangulatedMesh> {
+    let (bottom_start, bottom_end, top_end, top_start) =
+        (positions[0], positions[1], positions[2], positions[3]);
 
-    let bottom_arc = tessellate_arc(bottom_start, bottom_end, curvature.center, curvature.bulge, ARC_TESSELLATION_TOLERANCE);
-    let mut top_arc: Vec<[f32; 3]> = bottom_arc.iter().map(|point| [point[0], top_end[1], point[2]]).collect();
+    let bottom_arc = tessellate_arc(
+        bottom_start,
+        bottom_end,
+        curvature.center,
+        curvature.bulge,
+        ARC_TESSELLATION_TOLERANCE,
+    );
+    let mut top_arc: Vec<[f32; 3]> = bottom_arc
+        .iter()
+        .map(|point| [point[0], top_end[1], point[2]])
+        .collect();
     if let Some(first) = top_arc.first_mut() {
         *first = top_start;
     }
@@ -130,15 +294,29 @@ fn triangulate_curved_quad(positions: &[[f32; 3]], curvature: SurfaceCurvature) 
         let bottom_b = bottom_a + 2;
         let top_b = bottom_a + 3;
 
-        let facet_normal = unit_normal(cross(sub(out_positions[bottom_b], out_positions[bottom_a]), sub(out_positions[top_a], out_positions[bottom_a])));
+        let facet_normal = unit_normal(cross(
+            sub(out_positions[bottom_b], out_positions[bottom_a]),
+            sub(out_positions[top_a], out_positions[bottom_a]),
+        ));
         for vertex in [bottom_a, top_a, bottom_b, top_b] {
             normals[vertex] = facet_normal;
         }
 
-        indices.extend_from_slice(&[bottom_a as u32, bottom_b as u32, top_a as u32, top_a as u32, bottom_b as u32, top_b as u32]);
+        indices.extend_from_slice(&[
+            bottom_a as u32,
+            bottom_b as u32,
+            top_a as u32,
+            top_a as u32,
+            bottom_b as u32,
+            top_b as u32,
+        ]);
     }
 
-    Some(TriangulatedMesh { positions: out_positions, normals, indices })
+    Some(TriangulatedMesh {
+        positions: out_positions,
+        normals,
+        indices,
+    })
 }
 
 fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
@@ -166,13 +344,21 @@ fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
 /// recovered from `center`'s own offset off the chord, via the same
 /// apothem relationship `grafting_procgen_structure_generation::extrusion`'s
 /// own `arc_center` uses to place `center` in the first place.
-fn tessellate_arc(start: [f32; 3], end: [f32; 3], center: [f32; 2], bulge: ArcBulge, tolerance: f32) -> Vec<[f32; 3]> {
+fn tessellate_arc(
+    start: [f32; 3],
+    end: [f32; 3],
+    center: [f32; 2],
+    bulge: ArcBulge,
+    tolerance: f32,
+) -> Vec<[f32; 3]> {
     let y = start[1];
     let (sx, sz) = (start[0], start[2]);
     let (ex, ez) = (end[0], end[2]);
     let (mx, mz) = (center[0], center[1]);
     let chord_length = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt();
-    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2)).sqrt().max(f32::EPSILON);
+    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2))
+        .sqrt()
+        .max(f32::EPSILON);
     let (ux, uz) = ((ex - sx) / chord_length, (ez - sz) / chord_length);
     let (nx, nz) = (-uz, ux);
     let sign: f32 = match bulge {
@@ -241,11 +427,64 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    use grafting_graph_core::{
+        ContourEdgeId, ContourGeometry, Graph, Node, OrientedEdgeUse, RegionId,
+    };
+
+    fn nid(name: &str) -> NodeId {
+        NodeId::new(name).unwrap()
+    }
+
+    type PositionGraph = Graph<[f32; 3], ()>;
+
+    fn graph_with_positions(positions: &[(&str, [f32; 3])]) -> PositionGraph {
+        Graph::try_from_parts(
+            positions
+                .iter()
+                .map(|(id, position)| Node::new(nid(id), *position))
+                .collect(),
+            Vec::new(),
+        )
+        .unwrap()
+    }
+
+    fn line_loop(
+        topology: &mut ContourTopology,
+        graph: &PositionGraph,
+        prefix: &str,
+        nodes: &[&str],
+    ) -> ContourLoop {
+        nodes
+            .iter()
+            .enumerate()
+            .map(|(index, start)| {
+                let end = nodes[(index + 1) % nodes.len()];
+                let edge_id = ContourEdgeId::new(format!("{prefix}-{index}")).unwrap();
+                topology
+                    .add_edge(
+                        graph,
+                        ContourEdge::new(
+                            edge_id.clone(),
+                            nid(start),
+                            nid(end),
+                            ContourGeometry::Line,
+                        ),
+                    )
+                    .unwrap();
+                OrientedEdgeUse::forward(edge_id)
+            })
+            .collect()
+    }
 
     #[test]
     fn fewer_than_three_positions_is_none() {
         assert_eq!(triangulate_surface(&[], None), None);
-        assert_eq!(triangulate_surface(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], None), None);
+        assert_eq!(
+            triangulate_surface(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], None),
+            None
+        );
     }
 
     #[test]
@@ -262,8 +501,12 @@ mod tests {
         assert_eq!(mesh.normals.len(), 3);
         assert_eq!(mesh.indices.len(), 3);
         for normal in &mesh.normals {
-            let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-            assert!((length - 1.0).abs() < 1e-4, "normal not unit length: {normal:?}");
+            let length =
+                (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+            assert!(
+                (length - 1.0).abs() < 1e-4,
+                "normal not unit length: {normal:?}"
+            );
         }
     }
 
@@ -312,17 +555,41 @@ mod tests {
     fn a_curved_quads_four_corners_tessellate_into_a_bottom_top_strip() {
         // Same 4-corner shape `extrusion.rs::quad_piece` mints for a
         // semicircle edge: bottom start, bottom end, top end, top start.
-        let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left };
+        let corners = [
+            [0.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [4.0, 3.0, 0.0],
+            [0.0, 3.0, 0.0],
+        ];
+        let curvature = SurfaceCurvature {
+            center: [2.0, 0.0],
+            bulge: ArcBulge::Left,
+        };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
         // Interleaved bottom/top pairs -- always an even position count, at
         // least the 2 pairs (4 points) a degenerate single-segment strip needs.
         assert!(mesh.positions.len() >= 4 && mesh.positions.len() % 2 == 0);
         let last = mesh.positions.len();
-        assert_eq!(mesh.positions[0], [0.0, 0.0, 0.0], "first pair's bottom is the edge's own start");
-        assert_eq!(mesh.positions[1], [0.0, 3.0, 0.0], "first pair's top is directly above the start");
-        assert_eq!(mesh.positions[last - 2], [4.0, 0.0, 0.0], "last pair's bottom is the edge's own end");
-        assert_eq!(mesh.positions[last - 1], [4.0, 3.0, 0.0], "last pair's top is directly above the end");
+        assert_eq!(
+            mesh.positions[0],
+            [0.0, 0.0, 0.0],
+            "first pair's bottom is the edge's own start"
+        );
+        assert_eq!(
+            mesh.positions[1],
+            [0.0, 3.0, 0.0],
+            "first pair's top is directly above the start"
+        );
+        assert_eq!(
+            mesh.positions[last - 2],
+            [4.0, 0.0, 0.0],
+            "last pair's bottom is the edge's own end"
+        );
+        assert_eq!(
+            mesh.positions[last - 1],
+            [4.0, 3.0, 0.0],
+            "last pair's top is directly above the end"
+        );
         // Two triangles (6 indices) per quad segment between consecutive pairs.
         assert_eq!(mesh.indices.len(), (last / 2 - 1) * 6);
         for index in &mesh.indices {
@@ -330,8 +597,12 @@ mod tests {
         }
         assert_eq!(mesh.normals.len(), mesh.positions.len());
         for normal in &mesh.normals {
-            let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-            assert!((length - 1.0).abs() < 1e-4, "normal not unit length: {normal:?}");
+            let length =
+                (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+            assert!(
+                (length - 1.0).abs() < 1e-4,
+                "normal not unit length: {normal:?}"
+            );
         }
     }
 
@@ -346,20 +617,38 @@ mod tests {
         // (see `extrusion.rs`'s own matching test for the derivation).
         let bottom = [2.0, 0.0, 0.0];
         let end = [-1.0, 0.0, 1.7320508];
-        let corners = [bottom, end, [end[0], 3.0, end[2]], [bottom[0], 3.0, bottom[2]]];
-        let curvature = SurfaceCurvature { center: [0.0, 0.0], bulge: ArcBulge::Right };
+        let corners = [
+            bottom,
+            end,
+            [end[0], 3.0, end[2]],
+            [bottom[0], 3.0, bottom[2]],
+        ];
+        let curvature = SurfaceCurvature {
+            center: [0.0, 0.0],
+            bulge: ArcBulge::Right,
+        };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
 
         // Every bottom point (even indices) must sit on the true circle:
         // distance 2 from the origin, not from the chord.
         for bottom in mesh.positions.iter().step_by(2) {
             let distance_from_center = (bottom[0].powi(2) + bottom[2].powi(2)).sqrt();
-            assert!((distance_from_center - 2.0).abs() < 1e-3, "expected the true circle's own radius (2.0), got {distance_from_center}");
+            assert!(
+                (distance_from_center - 2.0).abs() < 1e-3,
+                "expected the true circle's own radius (2.0), got {distance_from_center}"
+            );
         }
 
         for triangle in mesh.indices.chunks_exact(3) {
-            let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
-            let area = cross(sub(mesh.positions[b], mesh.positions[a]), sub(mesh.positions[c], mesh.positions[a]));
+            let [a, b, c] = [
+                triangle[0] as usize,
+                triangle[1] as usize,
+                triangle[2] as usize,
+            ];
+            let area = cross(
+                sub(mesh.positions[b], mesh.positions[a]),
+                sub(mesh.positions[c], mesh.positions[a]),
+            );
             let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
             assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
         }
@@ -371,11 +660,23 @@ mod tests {
     /// onto itself and emit triangles that visibly cut across the surface.
     #[test]
     fn every_triangle_in_a_curved_strip_has_nonzero_area() {
-        let corners = [[0.0, 0.0, 0.0], [4.0, 0.0, 0.0], [4.0, 3.0, 0.0], [0.0, 3.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [2.0, 0.0], bulge: ArcBulge::Left };
+        let corners = [
+            [0.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [4.0, 3.0, 0.0],
+            [0.0, 3.0, 0.0],
+        ];
+        let curvature = SurfaceCurvature {
+            center: [2.0, 0.0],
+            bulge: ArcBulge::Left,
+        };
         let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
         for triangle in mesh.indices.chunks_exact(3) {
-            let [a, b, c] = [triangle[0] as usize, triangle[1] as usize, triangle[2] as usize];
+            let [a, b, c] = [
+                triangle[0] as usize,
+                triangle[1] as usize,
+                triangle[2] as usize,
+            ];
             let edge_ab = sub(mesh.positions[b], mesh.positions[a]);
             let edge_ac = sub(mesh.positions[c], mesh.positions[a]);
             let area = cross(edge_ab, edge_ac);
@@ -387,8 +688,127 @@ mod tests {
     #[test]
     fn curvature_is_ignored_when_positions_are_not_a_four_corner_quad() {
         let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let curvature = SurfaceCurvature { center: [0.5, 0.0], bulge: ArcBulge::Left };
+        let curvature = SurfaceCurvature {
+            center: [0.5, 0.0],
+            bulge: ArcBulge::Left,
+        };
         let mesh = triangulate_surface(&triangle, Some(curvature)).expect("valid triangle");
-        assert_eq!(mesh.positions, triangle, "curvature only applies to the 4-corner quad shape a curved edge mints");
+        assert_eq!(
+            mesh.positions, triangle,
+            "curvature only applies to the 4-corner quad shape a curved edge mints"
+        );
+    }
+
+    #[test]
+    fn analytic_arc_region_tessellates_only_in_the_mesh() {
+        let graph = graph_with_positions(&[
+            ("east", [2.0, 0.0, 0.0]),
+            ("north", [0.0, 0.0, 2.0]),
+            ("west", [-2.0, 0.0, 0.0]),
+            ("south", [0.0, 0.0, -2.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let nodes = ["east", "north", "west", "south"];
+        let loop_ = nodes
+            .iter()
+            .enumerate()
+            .map(|(index, start)| {
+                let end = nodes[(index + 1) % nodes.len()];
+                let edge_id = ContourEdgeId::new(format!("arc-{index}")).unwrap();
+                topology
+                    .add_edge(
+                        &graph,
+                        ContourEdge::new(
+                            edge_id.clone(),
+                            nid(start),
+                            nid(end),
+                            ContourGeometry::CircularArc {
+                                center: [0.0, 0.0],
+                                clockwise: false,
+                            },
+                        ),
+                    )
+                    .unwrap();
+                OrientedEdgeUse::forward(edge_id)
+            })
+            .collect();
+        let region_id = RegionId::new("circle").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+        let positions = graph
+            .snapshot()
+            .nodes()
+            .iter()
+            .map(|node| (node.id().as_str().to_owned(), *node.data()))
+            .collect::<HashMap<_, _>>();
+
+        let meshes = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+            positions.get(id.as_str()).copied()
+        })
+        .unwrap();
+
+        assert_eq!(
+            topology.region(&region_id).unwrap().outer_loops()[0].len(),
+            4
+        );
+        assert_eq!(meshes.len(), 1);
+        assert!(
+            meshes[0].positions.len() > 4,
+            "the renderer may facet the arc"
+        );
+        assert!(!meshes[0].indices.is_empty());
+    }
+
+    #[test]
+    fn analytic_region_hole_receives_no_mesh_triangles() {
+        let graph = graph_with_positions(&[
+            ("o0", [-2.0, 0.0, -2.0]),
+            ("o1", [2.0, 0.0, -2.0]),
+            ("o2", [2.0, 0.0, 2.0]),
+            ("o3", [-2.0, 0.0, 2.0]),
+            ("h0", [-0.5, 0.0, -0.5]),
+            ("h1", [-0.5, 0.0, 0.5]),
+            ("h2", [0.5, 0.0, 0.5]),
+            ("h3", [0.5, 0.0, -0.5]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let outer = line_loop(&mut topology, &graph, "outer", &["o0", "o1", "o2", "o3"]);
+        let hole = line_loop(&mut topology, &graph, "hole", &["h0", "h1", "h2", "h3"]);
+        let region_id = RegionId::new("with-hole").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![outer], vec![hole])
+            .unwrap();
+        let positions = graph
+            .snapshot()
+            .nodes()
+            .iter()
+            .map(|node| (node.id().as_str().to_owned(), *node.data()))
+            .collect::<HashMap<_, _>>();
+
+        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+            positions.get(id.as_str()).copied()
+        })
+        .unwrap()
+        .pop()
+        .unwrap();
+
+        for triangle in mesh.indices.chunks_exact(3) {
+            let centroid = triangle.iter().fold([0.0; 3], |sum, index| {
+                let point = mesh.positions[*index as usize];
+                [
+                    sum[0] + point[0] / 3.0,
+                    sum[1] + point[1] / 3.0,
+                    sum[2] + point[2] / 3.0,
+                ]
+            });
+            assert!(
+                centroid[0] <= -0.5
+                    || centroid[0] >= 0.5
+                    || centroid[2] <= -0.5
+                    || centroid[2] >= 0.5,
+                "triangle centroid entered the analytic hole: {centroid:?}"
+            );
+        }
     }
 }

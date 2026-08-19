@@ -8,6 +8,7 @@ import {
   createTabletopRuntime,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
+  type ConstructionToolFeedback,
   type ConstructionToolId,
   type MoveNodeHistoryStack,
   type RenderViewId,
@@ -45,15 +46,15 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 }
 
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
+  "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "move-node": "Arrastar Node 3D",
-  "terrain-brush": "Pincel de Terreno",
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
   "interior-wall": "Gerar Interiores",
   "tower-stamp": "Torre",
   "house-room-delete": "Apagar Cômodo",
-  "irregular-terrain-stamp": "Terreno Irregular",
+  "terrain-sculpt": "Escultura de Terreno",
 };
 
 export function TabletopEntry({ tableId }: TabletopEntryProps) {
@@ -77,6 +78,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolFeedback, setToolFeedback] = useState<ConstructionToolFeedback | undefined>(undefined);
 
   const historyState = history.getState();
   const current = useSyncExternalStore(
@@ -107,19 +109,28 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const handleUndo = useCallback(() => {
     const entry = history.undo();
     if (entry === undefined) return;
-    runtime.moveNode(entry.nodeId, entry.from, "local", "undo");
-    setSelectedNodeInfo({ id: entry.nodeId, point: entry.from });
+    if ("operationId" in entry) {
+      runtime.undoPathBrush(entry.operationId, "local");
+      setSelectedNodeInfo(null);
+    } else {
+      runtime.moveNode(entry.nodeId, entry.from, "local", "undo");
+      setSelectedNodeInfo({ id: entry.nodeId, point: entry.from });
+    }
     forceHistoryUpdate((value) => value + 1);
   }, [history, runtime]);
 
   const handleRedo = useCallback(() => {
     const entry = history.redo();
     if (entry === undefined) return;
-    runtime.moveNode(entry.nodeId, entry.to, "local", "redo");
-    setSelectedNodeInfo({ id: entry.nodeId, point: entry.to });
+    if ("operationId" in entry) {
+      runtime.redoPathBrush(entry.operationId, "local");
+      setSelectedNodeInfo(null);
+    } else {
+      runtime.moveNode(entry.nodeId, entry.to, "local", "redo");
+      setSelectedNodeInfo({ id: entry.nodeId, point: entry.to });
+    }
     forceHistoryUpdate((value) => value + 1);
   }, [history, runtime]);
-
   const handleToolParamsChange = useCallback(
     <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => {
       setToolParams((previous) => ({ ...previous, [toolId]: next }));
@@ -127,6 +138,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     [],
   );
 
+  const handleFeedbackChange = useCallback((feedback: ConstructionToolFeedback | undefined) => {
+    setToolFeedback((previous) =>
+      previous?.tone === feedback?.tone &&
+      previous?.message === feedback?.message &&
+      previous?.surfaceRef === feedback?.surfaceRef
+        ? previous
+        : feedback,
+    );
+  }, []);
+
+  useEffect(() => setToolFeedback(undefined), [tool]);
   const pointerHandlers = useConstructionPointer({
     activeTool: tool,
     toolParams,
@@ -136,6 +158,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     viewId: viewIdRef.current,
     snapToGrid,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
+    onFeedbackChange: handleFeedbackChange,
   });
 
   useKeyboardShortcuts({
@@ -196,9 +219,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onContextMenu={(event) => event.preventDefault()}
         />
 
-        <div className="gm-stage-overlay-info">
+        <div className="gm-stage-overlay-info" role="status" aria-live="polite">
           <strong>{current.tokens.byId.size} Token Activo</strong>
           <span>| Modo: {TOOL_LABEL[tool]}</span>
+          {toolFeedback !== undefined ? (
+            <span
+              title={toolFeedback.surfaceRef}
+              style={{ color: toolFeedback.tone === "error" ? "#fca5a5" : toolFeedback.tone === "success" ? "#86efac" : "#c4b5fd" }}
+            >
+              | {toolFeedback.message}
+            </span>
+          ) : null}
         </div>
 
         <ToolRail
@@ -248,7 +279,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
         <div>
           <span>
             <strong>M</strong> Mover · <strong>N</strong> Navegar · <strong>T</strong> Terreno · <strong>P</strong>{" "}
-            Parede · <strong>R</strong> Sala · <strong>I</strong> Terreno Irregular · <strong>G</strong> Ímã do
+            Parede · <strong>R</strong> Sala · <strong>I</strong> Escultura de Terreno · <strong>G</strong> Ímã do
             Grid · Câmera: <strong>botão direito</strong> orbita, <strong>botão do meio</strong> arrasta
           </span>
         </div>

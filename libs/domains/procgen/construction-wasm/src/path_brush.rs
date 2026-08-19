@@ -1,31 +1,118 @@
-//! Thin JSON boundary for the Phase-B terrain-to-path transformer.
-//!
-//! Geometry, topology planning, and atomic graph mutation stay in the Rust
-//! domain capability and graph core. This module only parses wire data,
-//! forwards it, and translates the resulting identity delta back to JSON.
+//! Thin JSON boundary for the path-brush tool. All the actual work --
+//! building the contour, planning what it destroys, applying that
+//! destroy-and-rebuild -- lives in `grafting_procgen_surface_transformations`
+//! (`compact_analytic_brush_contour`, `plan_region_merge`) and this crate's
+//! own `region_merge` (`apply_region_merge`), neither of which knows
+//! anything about "path." This module only parses wire data, supplies the
+//! path-specific parameters (which source types are eligible, what type the
+//! new region gets, how deep it carves), and translates the result back to
+//! JSON.
 
 use serde::{Deserialize, Serialize};
 
-use grafting_graph_core::{
-    EdgeId, NodeId, SurfaceKey, SurfaceRegistry, SurfaceType, apply_surface_replacement_plan,
+use std::collections::HashSet;
+
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_procgen_surface_transformations::{
+    BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
+    swept_brush_contains, validate_request,
 };
-use grafting_procgen_surface_transformations::{PathBrushRequest, plan_path_brush};
 
 use crate::dto::surface_key_to_wire;
 use crate::editing::SessionGraph;
+use crate::mesh::{self, SurfaceMeshDto, region_id_to_wire};
+use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
 
+// `rename_all` on an internally-tagged enum (`tag = "kind"`) only renames
+// the variant names themselves, not each variant's own field names --
+// serde does not apply it recursively into struct-variant fields. Without
+// the per-field `rename` below, this deserializer demanded literal
+// `rotation_radians` while every real caller (`BrushShape` on the TS side,
+// unchanged since it's a plain `rotationRadians: number` field) sends
+// `rotationRadians` -- meaning every square or hexagon path-brush stroke
+// failed to even parse.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum BrushShapeRequest {
+    Circle { radius: f32 },
+    Square {
+        size: f32,
+        #[serde(rename = "rotationRadians")]
+        rotation_radians: f32,
+    },
+    Hexagon {
+        radius: f32,
+        #[serde(rename = "rotationRadians")]
+        rotation_radians: f32,
+    },
+}
+
+impl BrushShapeRequest {
+    fn into_domain(self) -> BrushShape {
+        match self {
+            Self::Circle { radius } => BrushShape::Circle { radius },
+            Self::Square {
+                size,
+                rotation_radians,
+            } => BrushShape::Square {
+                size,
+                rotation_radians,
+            },
+            Self::Hexagon {
+                radius,
+                rotation_radians,
+            } => BrushShape::Hexagon {
+                radius,
+                rotation_radians,
+            },
+        }
+    }
+}
 /// JSON request accepted by `ConstructionSession.apply_path_brush_json`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyPathBrushRequest {
-    operation_id: String,
-    center: [f32; 2],
-    radius: f32,
+    pub(crate) operation_id: String,
+    samples: Vec<[f32; 2]>,
+    brush_shape: BrushShapeRequest,
     depth: f32,
-    source_surface_type: String,
+    source_surface_types: Vec<String>,
     target_surface_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveBrushCellsRequest {
+    samples: Vec<[f32; 2]>,
+    brush_shape: BrushShapeRequest,
+    width: usize,
+    height: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveBrushCellsResponse {
+    cells: Vec<usize>,
+}
+
+/// Resolves grid cells through the same authoritative swept footprint as path clipping.
+pub fn resolve_brush_cells(
+    request: ResolveBrushCellsRequest,
+) -> Result<ResolveBrushCellsResponse, String> {
+    if request.samples.is_empty() || request.width == 0 || request.height == 0 {
+        return Err("brush cell resolution requires samples and positive grid dimensions".into());
+    }
+    let shape = request.brush_shape.into_domain();
+    let mut cells = Vec::new();
+    for z in 0..request.height {
+        for x in 0..request.width {
+            if swept_brush_contains(&shape, &request.samples, [x as f32 + 0.5, z as f32 + 0.5]) {
+                cells.push(z * request.width + x);
+            }
+        }
+    }
+    Ok(ResolveBrushCellsResponse { cells })
+}
 /// Wire-ready identity lifecycle delta.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,81 +152,206 @@ pub struct ApplyPathBrushResponse {
     invalidation: InvalidationResponse,
 }
 
-/// Plans and applies one path brush through the generic atomic executor.
+/// Plans and applies one path brush through the generic region-merge planner/applier.
 pub fn apply_path_brush(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
+    topology: &mut ContourTopology,
+    known_surfaces: &mut HashSet<SurfaceKey>,
+    known_regions: &mut HashSet<RegionId>,
     request: ApplyPathBrushRequest,
 ) -> Result<ApplyPathBrushResponse, String> {
-    let plan = plan_path_brush(
+    let domain_request = domain_request(&request);
+    let plan = plan_path_brush_region_merge(graph, surfaces, topology, &domain_request)?;
+    let consumed = plan.consumed_surface_keys().to_vec();
+    let depth = domain_request.depth;
+    let outcome = apply_region_merge(
         graph,
         surfaces,
-        &PathBrushRequest {
-            operation_id: request.operation_id,
-            center: request.center,
-            radius: request.radius,
-            depth: request.depth,
-            source_type: SurfaceType::new(request.source_surface_type),
-            target_type: SurfaceType::new(request.target_surface_type),
-        },
+        topology,
+        known_surfaces,
+        known_regions,
+        &domain_request.operation_id,
+        domain_request.target_type.clone(),
+        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
+        plan,
+    )?;
+    Ok(response_from_outcome(outcome))
+}
+
+/// Builds the exact target-surface preview on cloned state; confirmed state is untouched.
+pub fn preview_path_brush(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    known_surfaces: &HashSet<SurfaceKey>,
+    known_regions: &HashSet<RegionId>,
+    request: ApplyPathBrushRequest,
+) -> Result<Vec<SurfaceMeshDto>, String> {
+    let target_type = request.target_surface_type.clone();
+    let mut preview_graph = graph.clone();
+    let mut preview_surfaces = surfaces.clone();
+    let mut preview_topology = topology.clone();
+    let mut preview_known_surfaces = known_surfaces.clone();
+    let mut preview_known_regions = known_regions.clone();
+
+    let domain_request = domain_request(&request);
+    let plan = plan_path_brush_region_merge(&preview_graph, &preview_surfaces, &preview_topology, &domain_request)?;
+    let consumed = plan.consumed_surface_keys().to_vec();
+    let depth = domain_request.depth;
+    apply_region_merge(
+        &mut preview_graph,
+        &mut preview_surfaces,
+        &mut preview_topology,
+        &mut preview_known_surfaces,
+        &mut preview_known_regions,
+        &domain_request.operation_id,
+        domain_request.target_type.clone(),
+        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
+        plan,
+    )?;
+    Ok(mesh::all_surface_meshes(
+        &preview_graph,
+        &preview_surfaces,
+        &preview_known_surfaces,
+        &preview_topology,
+        &preview_known_regions,
     )
-    .map_err(|error| error.to_string())?;
-    let response = response_for(&plan.transformation);
-    apply_surface_replacement_plan(graph, surfaces, plan).map_err(|error| error.to_string())?;
-    Ok(response)
+    .into_iter()
+    .filter(|surface| surface.surface_type == target_type)
+    .collect())
 }
 
-fn node_delta(delta: &grafting_graph_core::IdentityDelta<NodeId>) -> IdentityDeltaResponse {
-    IdentityDeltaResponse {
-        created: delta.created().iter().map(ToString::to_string).collect(),
-        preserved: delta.preserved().iter().map(ToString::to_string).collect(),
-        replaced: delta.replaced().iter().map(ToString::to_string).collect(),
-        removed: delta.removed().iter().map(ToString::to_string).collect(),
+/// Path-brush's own contribution to the generic region-merge pipeline: its
+/// scalar validation, the contour it draws, and which existing surface
+/// types it's allowed to consume. Everything past this point (what gets
+/// destroyed, what gets rebuilt) is the generic planner/applier's job, not
+/// path-brush's own.
+fn plan_path_brush_region_merge(
+    graph: &grafting_graph_core::Graph<[f32; 3], ()>,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    request: &PathBrushRequest,
+) -> Result<grafting_procgen_surface_transformations::RegionMergePlan, String> {
+    validate_request(request).map_err(|error| error.to_string())?;
+    let contour = compact_analytic_brush_contour(request).map_err(|error| error.to_string())?;
+    // A path stroke cuts whatever it geometrically covers -- terrain,
+    // another path, or anything else -- so eligibility here is not a type
+    // filter at all, unlike a tool that genuinely needs one.
+    plan_region_merge(graph, surfaces, topology, contour, |_surface_type| true)
+        .map_err(|error| error.to_string())
+}
+
+fn domain_request(request: &ApplyPathBrushRequest) -> PathBrushRequest {
+    PathBrushRequest {
+        operation_id: request.operation_id.clone(),
+        samples: request.samples.clone(),
+        shape: request.brush_shape.clone().into_domain(),
+        depth: request.depth,
+        source_types: request
+            .source_surface_types
+            .iter()
+            .cloned()
+            .map(SurfaceType::new)
+            .collect(),
+        target_type: SurfaceType::new(request.target_surface_type.clone()),
     }
 }
 
-fn edge_delta(delta: &grafting_graph_core::IdentityDelta<EdgeId>) -> IdentityDeltaResponse {
-    IdentityDeltaResponse {
-        created: delta.created().iter().map(ToString::to_string).collect(),
-        preserved: delta.preserved().iter().map(ToString::to_string).collect(),
-        replaced: delta.replaced().iter().map(ToString::to_string).collect(),
-        removed: delta.removed().iter().map(ToString::to_string).collect(),
+fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse {
+    let mut created_surfaces = Vec::new();
+    if let Some(remainder) = &outcome.remainder_region {
+        created_surfaces.push(region_id_to_wire(remainder));
     }
-}
+    created_surfaces.push(region_id_to_wire(&outcome.new_region));
 
-fn surface_delta(
-    delta: &grafting_graph_core::IdentityDelta<SurfaceKey>,
-) -> SurfaceIdentityDeltaResponse {
-    SurfaceIdentityDeltaResponse {
-        created: delta.created().iter().map(surface_key_to_wire).collect(),
-        preserved: delta.preserved().iter().map(surface_key_to_wire).collect(),
-        replaced: delta.replaced().iter().map(surface_key_to_wire).collect(),
-        removed: delta.removed().iter().map(surface_key_to_wire).collect(),
-    }
-}
-
-fn response_for(plan: &grafting_graph_core::TransformationPlan) -> ApplyPathBrushResponse {
-    let invalidation = plan.invalidation();
     ApplyPathBrushResponse {
-        node_ids: node_delta(plan.node_ids()),
-        edge_ids: edge_delta(plan.edge_ids()),
-        surface_ids: surface_delta(plan.surface_ids()),
-        invalidation: InvalidationResponse {
-            changed_surfaces: invalidation
-                .changed_surfaces()
+        node_ids: IdentityDeltaResponse {
+            created: outcome.created_node_ids.iter().map(ToString::to_string).collect(),
+            preserved: Vec::new(),
+            replaced: Vec::new(),
+            removed: outcome.removed_node_ids.iter().map(ToString::to_string).collect(),
+        },
+        edge_ids: IdentityDeltaResponse {
+            created: outcome.created_edge_ids.iter().map(ToString::to_string).collect(),
+            preserved: Vec::new(),
+            replaced: Vec::new(),
+            removed: outcome.removed_edge_ids.iter().map(ToString::to_string).collect(),
+        },
+        surface_ids: SurfaceIdentityDeltaResponse {
+            created: created_surfaces,
+            preserved: Vec::new(),
+            replaced: Vec::new(),
+            removed: outcome
+                .consumed_surface_keys
                 .iter()
                 .map(surface_key_to_wire)
-                .collect(),
-            topology_repair_neighbors: invalidation
-                .topology_repair_neighbors()
-                .iter()
-                .map(surface_key_to_wire)
-                .collect(),
-            direct_dependencies: invalidation
-                .direct_dependencies()
-                .iter()
-                .map(surface_key_to_wire)
+                .chain(outcome.consumed_region_ids.iter().map(region_id_to_wire))
                 .collect(),
         },
+        invalidation: InvalidationResponse {
+            changed_surfaces: Vec::new(),
+            topology_repair_neighbors: Vec::new(),
+            direct_dependencies: Vec::new(),
+        },
+    }
+}
+
+/// Path-brush's own height rule: each new node sits `depth` below whatever
+/// consumed surface's own node happens to be nearest it -- a generic region
+/// merge has no opinion of its own about height, this is exactly the kind
+/// of thing `apply_region_merge`'s `height_for` parameter exists for.
+fn nearest_source_height(graph: &SessionGraph, keys: &[SurfaceKey], point: [f32; 2]) -> f32 {
+    keys.iter()
+        .flat_map(|key| key.nodes())
+        .filter_map(|id| graph.node(id).map(|node| *node.data()))
+        .min_by(|left, right| {
+            let left_distance = (left[0] - point[0]).powi(2) + (left[2] - point[1]).powi(2);
+            let right_distance = (right[0] - point[0]).powi(2) + (right[2] - point[1]).powi(2);
+            left_distance.total_cmp(&right_distance)
+        })
+        .map_or(0.0, |position| position[1])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terrain_cells_use_the_same_rotated_shape_and_continuous_sweep() {
+        let resolved = resolve_brush_cells(ResolveBrushCellsRequest {
+            samples: vec![[0.5, 0.5], [4.5, 0.5]],
+            brush_shape: BrushShapeRequest::Square {
+                size: 1.0,
+                rotation_radians: 0.2,
+            },
+            width: 5,
+            height: 2,
+        })
+        .unwrap();
+        assert_eq!(resolved.cells, vec![0, 1, 2, 3, 4]);
+    }
+
+    /// The wire format every real caller sends (`BrushShape` on the TS
+    /// side never changed) is camelCase throughout, including
+    /// `rotationRadians` -- this must deserialize, not demand the Rust
+    /// field's own snake_case spelling.
+    #[test]
+    fn square_and_hexagon_shapes_parse_camel_case_rotation_from_the_wire() {
+        let square: BrushShapeRequest =
+            serde_json::from_str(r#"{"kind":"square","size":1.0,"rotationRadians":0.2}"#)
+                .expect("camelCase rotationRadians must parse for a square brush");
+        assert!(matches!(
+            square,
+            BrushShapeRequest::Square { rotation_radians, .. } if rotation_radians == 0.2
+        ));
+
+        let hexagon: BrushShapeRequest =
+            serde_json::from_str(r#"{"kind":"hexagon","radius":1.0,"rotationRadians":0.3}"#)
+                .expect("camelCase rotationRadians must parse for a hexagon brush");
+        assert!(matches!(
+            hexagon,
+            BrushShapeRequest::Hexagon { rotation_radians, .. } if rotation_radians == 0.3
+        ));
     }
 }

@@ -28,6 +28,8 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
       return 0x334155; // Dark Slate / Construction floor grid
     case "terrain-grass":
       return 0x4a7a4a; // Grass green
+    case "path":
+      return 0xc084fc; // Purple path formation
     default:
       return 0x94a3b8;
   }

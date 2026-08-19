@@ -79,6 +79,10 @@ export type MaterialDescriptor =
       readonly surface: "lit";
       readonly color?: number;
       readonly opacity?: number;
+      /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+      readonly depthTest?: boolean;
+      /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+      readonly depthWrite?: boolean;
       readonly metalness?: number;
       readonly roughness?: number;
       readonly flatShading?: boolean;
@@ -92,6 +96,10 @@ export type MaterialDescriptor =
       readonly surface: "unlit";
       readonly color?: number;
       readonly opacity?: number;
+      /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+      readonly depthTest?: boolean;
+      /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+      readonly depthWrite?: boolean;
       readonly doubleSided?: boolean;
       readonly texture?: TextureSource;
       /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
@@ -102,6 +110,10 @@ export type MaterialDescriptor =
       readonly surface: "line";
       readonly color?: number;
       readonly opacity?: number;
+      /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+      readonly depthTest?: boolean;
+      /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+      readonly depthWrite?: boolean;
     }
   | {
       /**
@@ -119,6 +131,10 @@ export type MaterialDescriptor =
       readonly surface: "points";
       readonly color?: number;
       readonly opacity?: number;
+      /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+      readonly depthTest?: boolean;
+      /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+      readonly depthWrite?: boolean;
       /** Point size. In world units when attenuated, in pixels when not. Defaults to `1`. */
       readonly size?: number;
       /** Whether points shrink with distance. Defaults to `true`. */

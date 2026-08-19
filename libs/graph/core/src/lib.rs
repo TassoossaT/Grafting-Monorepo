@@ -22,8 +22,8 @@ pub use construction::{
 };
 pub use contour::{
     ContourBounds, ContourEdge, ContourEdgeId, ContourError, ContourGeometry,
-    ContourIdentifierError, ContourLoop, ContourPoint, ContourTopology, OrientedEdgeUse,
-    RegionId, SurfaceRegion, straight_cycle_region,
+    ContourIdentifierError, ContourLoop, ContourPoint, ContourTopology, OrientedEdgeUse, RegionId,
+    SurfaceRegion, straight_cycle_region,
 };
 pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot};
 pub use model::{
@@ -31,7 +31,8 @@ pub use model::{
     IdentifierError, Node, NodeId, PrismGridMesh,
 };
 pub use surface::{
-    ArcBulge, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry, SurfaceType,
+    ArcBulge, RegionSurface, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry,
+    SurfaceType,
 };
 
 pub use transformation_plan::{

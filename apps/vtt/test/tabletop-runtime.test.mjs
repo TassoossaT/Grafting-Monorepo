@@ -136,14 +136,29 @@ function createFakeConstructionPort() {
         invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
       };
     },
-    getSurfaceMesh() {
+    previewPathBrush() {
       requireStarted();
-      return {
-        surfaceKey: ["fake:a", "fake:b", "fake:c"],
-        surfaceType: "wall",
-        physical: true,
-        mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
-      };
+      return [];
+    },
+    undoPathBrush() {
+      requireStarted();
+    },
+    redoPathBrush() {
+      requireStarted();
+    },
+    getSurfaceMesh(surfaceKey) {
+      requireStarted();
+      const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
+      const match = this.getAllSurfaceMeshes().find((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey) === surfaceRef);
+      if (match !== undefined) return [match];
+      return [
+        {
+          surfaceKey,
+          surfaceType: "wall",
+          physical: true,
+          mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
+        },
+      ];
     },
     getAllSurfaceMeshes() {
       requireStarted();
@@ -273,19 +288,21 @@ test("starting a table with seedDefaultMap also seeds every node's position from
 
 test("moving a node updates its position and re-uploads the map chunk it belongs to", async () => {
   const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-move-node",
     seedDefaultMap: true,
     renderPort,
-    constructionPort: createFakeConstructionPort(),
+    constructionPort,
   });
   await runtime.start();
   const before = runtime.getSnapshot();
   const uploadsBefore = renderPort.changes.filter((change) => change.type === "map-chunk-upserted").length;
 
+  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
   const affected = runtime.moveNode("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-1");
 
-  assert.deepEqual(affected, { affectedSurfaceKeys: [] });
+  assert.deepEqual(affected, { affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
   const after = runtime.getSnapshot();
   assert.notEqual(after, before);
   const moved = after.map.nodePositions.get("fake:terrain:n0");
@@ -323,20 +340,129 @@ test("moving a node removes a chunk that no longer has any surface in it", async
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-chunk-removal",
-    seedDefaultMap: true,
     renderPort,
     constructionPort,
   });
   await runtime.start();
+  // No seeded wall here on purpose -- `seedDefaultMap` puts both the seeded
+  // terrain cell and wall in the same near-origin chunk, so moving only the
+  // terrain surface away would leave the wall still occupying that chunk
+  // and it would never actually empty out. `generateTerrainCell` alone puts
+  // exactly one surface in the chunk under test.
+  runtime.generateTerrainCell({}, "local", "seed-cell");
   const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
 
-  constructionPort.getAllSurfaceMeshes = () => [];
+  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
+  constructionPort.getSurfaceMesh = (surfaceKey) => [
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      // Far enough from the seeded chunk to land in a different spatial bucket, so the old chunk ends up with zero members.
+      mesh: { positions: new Float32Array([500, 100, 500, 501, 100, 500, 501, 100, 501, 500, 100, 501]) },
+    },
+  ];
   runtime.moveNode("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
 
   const removal = renderPort.changes.find(
     (change) => change.type === "map-chunk-removed" && change.chunkId === seededChunkId,
   );
   assert.ok(removal, "the vacated chunk must be removed, not left stale");
+});
+
+test("editing one surface never touches the render chunk of an unrelated, untouched surface", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-incremental-scope",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  // Two surfaces, deliberately far apart so they land in different spatial
+  // chunk buckets (`chunkKeyFor`'s own 8-unit bucket size).
+  const farKey = ["fake:far:n0", "fake:far:n1"];
+  const nearKey = ["fake:near:n0", "fake:near:n1"];
+  constructionPort.getSurfaceMesh = (surfaceKey) => {
+    if (surfaceRefFromNodeSet(surfaceKey) === surfaceRefFromNodeSet(farKey)) {
+      return [
+        {
+          surfaceKey: farKey,
+          surfaceType: "terrain",
+          physical: true,
+          mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
+        },
+      ];
+    }
+    return [
+      {
+        surfaceKey,
+        surfaceType: "terrain",
+        physical: true,
+        mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+      },
+    ];
+  };
+  constructionPort.generateTerrainCell = () => farKey;
+  runtime.generateTerrainCell({}, "local", "far-cell");
+  const farChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
+  const eventsBeforeSecondEdit = renderPort.changes.length;
+
+  // A second, unrelated surface elsewhere on the map -- this is the only
+  // thing this edit is allowed to touch.
+  constructionPort.generateTerrainCell = () => nearKey;
+  runtime.generateTerrainCell({}, "local", "near-cell");
+
+  const eventsForFarChunkSinceSecondEdit = renderPort.changes
+    .slice(eventsBeforeSecondEdit)
+    .filter((change) => "chunkId" in change ? change.chunkId === farChunkId : change.chunk?.chunkId === farChunkId);
+  assert.deepEqual(
+    eventsForFarChunkSinceSecondEdit,
+    [],
+    "an edit to a different surface must not re-upload or remove an unrelated chunk",
+  );
+});
+
+test("one surface key returning several disjoint mesh pieces uploads every piece, not just the first", async () => {
+  // Regression: an analytic-region surface (a merged path-brush
+  // source/target region) can legitimately triangulate into more than one
+  // disjoint mesh piece -- one per outer loop. `getSurfaceMesh` used to be
+  // a single-mesh contract, so `#applyConstructionMutation`'s refetch kept
+  // only the first piece and silently dropped the rest from the render
+  // chunk -- the real cause of "surfaces vanishing" after a path-brush
+  // stroke merged several separate terrain pieces into one region.
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-multi-piece-surface",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  const regionKey = ["@region", "path-1-target"];
+  constructionPort.getSurfaceMesh = (surfaceKey) => [
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+    },
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      // Far enough from the first piece to land in a different spatial chunk bucket.
+      mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
+    },
+  ];
+  constructionPort.generateTerrainCell = () => regionKey;
+  runtime.generateTerrainCell({}, "local", "multi-piece-cell");
+
+  const upserted = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
+  const chunkIds = new Set(upserted.map((change) => change.chunk.chunkId));
+  assert.equal(chunkIds.size, 2, "both mesh pieces must land in (and upload) their own chunk");
 });
 
 test("generateTerrainCell folds the new surface and its nodes into the map", async () => {
@@ -586,4 +712,61 @@ test("rejects an empty table identity", () => {
       }),
     /must not be empty/,
   );
+});
+test("startup publishes one SurfaceRef pick proxy per semantic surface", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-surface-picks",
+    seedDefaultMap: true,
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  await runtime.start();
+
+  const targets = renderPort.changes
+    .filter((change) => change.type === "surface-pick-target-upserted")
+    .map((change) => change.target.surfaceRef)
+    .sort();
+  assert.deepEqual(targets, [
+    surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY),
+    surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY),
+  ].sort());
+});
+
+test("path preview uses the exact Rust mesh and mode-registry source policy", async () => {
+  const constructionPort = createFakeConstructionPort();
+  let received;
+  constructionPort.previewPathBrush = (request) => {
+    received = request;
+    return [{
+      surfaceKey: ["preview:a", "preview:b", "preview:c"],
+      surfaceType: "path",
+      physical: true,
+      mesh: {
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, -0.2, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    }];
+  };
+  const runtime = createTabletopRuntime({
+    tableId: "table-preview",
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+
+  const preview = runtime.previewPathBrush({
+    operationId: "preview-1",
+    targetType: "path",
+    brushShape: { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 },
+    brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }, { x: 2, y: 0, z: 0.5 }] },
+    parameters: { width: 1.5, depth: 0.2, falloff: 1, strength: 1 },
+  });
+
+  assert.equal(preview.kind, "mesh");
+  assert.deepEqual([...preview.indices], [0, 1, 2]);
+  assert.deepEqual(received.sourceSurfaceTypes, ["terrain", "terrain-grass", "path"]);
+  assert.equal(received.samples.length, 2);
+  assert.deepEqual(received.brushShape, { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 });
 });

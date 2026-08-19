@@ -96,13 +96,19 @@ export interface SurfaceTransformationInvalidation {
   readonly directDependencies: readonly ConstructionSurfaceKey[];
 }
 
-/** One resolved circular terrain-to-path brush request. */
+/** Renderer-neutral convex brush shape accepted by authoritative Rust brush queries. */
+export type ConstructionBrushShape =
+  | { readonly kind: "circle"; readonly radius: number }
+  | { readonly kind: "square"; readonly size: number; readonly rotationRadians: number }
+  | { readonly kind: "hexagon"; readonly radius: number; readonly rotationRadians: number };
+
+/** One resolved continuous convex terrain-to-path brush request. */
 export interface ApplyPathBrushRequest {
   readonly operationId: string;
-  readonly center: ConstructionPosition;
-  readonly radius: number;
+  readonly samples: readonly ConstructionPosition[];
+  readonly brushShape: ConstructionBrushShape;
   readonly depth: number;
-  readonly sourceSurfaceType: string;
+  readonly sourceSurfaceTypes: readonly string[];
   readonly targetSurfaceType: string;
 }
 
@@ -293,6 +299,12 @@ export interface ConstructionSessionPort {
   generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
   applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
+  /** Derives exact target meshes on cloned state; confirmed state is untouched. */
+  previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[];
+  /** Restores the confirmed state immediately before that path-brush operation. */
+  undoPathBrush(operationId: string): void;
+  /** Restores the confirmed state immediately after that undone path-brush operation. */
+  redoPathBrush(operationId: string): void;
   generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome;
   generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
@@ -303,7 +315,13 @@ export interface ConstructionSessionPort {
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
+  /**
+   * One surface's mesh piece(s), by key. Almost always one piece -- but an
+   * analytic-region key (a merged path-brush source/target region) can
+   * legitimately triangulate into several disjoint pieces (one per outer
+   * loop), and every one of them must be rendered, not just the first.
+   */
+  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
 

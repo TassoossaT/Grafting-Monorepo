@@ -31,7 +31,7 @@ export interface ConstructionDockProps {
  * 2. 🚪 Aberturas (Portas & Janelas)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
- * 5. ⛰️ Terreno & Água (Pincel de Terreno, Terreno Irregular)
+ * 5. ⛰️ Terreno & Água (Escultura de Terreno)
  * 6. 🌲 Vegetação (Adornos & Flora)
  * 7. 🎨 Estilo & Paleta (Materiais & Temas)
  * 8. 🔨 Demolir (Apagador de cômodos / elementos)
@@ -56,9 +56,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
     settingsOpen,
   } = props;
 
-  const isTerrainBrushActive = activeTool === "terrain-brush";
-  const isIrregularTerrainActive = activeTool === "irregular-terrain-stamp";
-  const isTerrainChildActive = isTerrainBrushActive || isIrregularTerrainActive;
+  const isTerrainSculptActive = activeTool === "terrain-sculpt";
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
@@ -135,42 +133,21 @@ export function ConstructionDock(props: ConstructionDockProps) {
     {
       key: "paths",
       label: "Caminhos",
-      icon: "🛤️",
-      tooltip: "Caminhos e Arcos em Muros",
-      disabled: true,
+      icon: "⌁",
+      tooltip: "Pincel de Caminhos",
+      active: activeTool === "path-brush",
+      disabled: !ready,
+      onClick: () => onToolChange("path-brush"),
     },
     {
       key: "terrain",
-      label: "Terreno",
+      label: "Escultura de Terreno",
       icon: "⛰️",
-      tooltip: "Escultura de Terreno",
-      shortcut: "T",
-      active: isTerrainBrushActive,
-      childActive: isTerrainChildActive,
+      tooltip: "Escultura de Terreno (tecla I)",
+      shortcut: "I",
+      active: isTerrainSculptActive,
       disabled: !ready,
-      onClick: () => onToolChange("terrain-brush"),
-      subItems: [
-        {
-          key: "terrain-brush",
-          label: "Pincel Circular",
-          icon: "⚪",
-          tooltip: "Pincel de Terreno (tecla T)",
-          shortcut: "T",
-          active: isTerrainBrushActive,
-          disabled: !ready,
-          onClick: () => onToolChange("terrain-brush"),
-        },
-        {
-          key: "irregular-terrain-stamp",
-          label: "Terreno Irregular",
-          icon: "◆",
-          tooltip: "Pincel de Terreno Hex (tecla I)",
-          shortcut: "I",
-          active: isIrregularTerrainActive,
-          disabled: !ready,
-          onClick: () => onToolChange("irregular-terrain-stamp"),
-        },
-      ],
+      onClick: () => onToolChange("terrain-sculpt"),
     },
     {
       key: "foliage",

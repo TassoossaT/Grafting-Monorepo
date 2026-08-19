@@ -1,9 +1,10 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
-import type { IrregularTerrainParams } from "@/features/edit-construction";
+import type { TerrainSculptParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceSpec } from "@/ports";
 
 import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { brushSweptRegionFill } from "./preview-shapes.ts";
+import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
  * PENDING (not scheduled): this whole file -- lattice generation, heightmap
@@ -19,12 +20,12 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  * already specifies its behavior to port against). Heightmap sampling is
  * nearly free -- `generation-wasm`'s `generate_heightmap` already builds as
  * an `rlib`, so `construction-wasm` can depend on it directly in Rust, no
- * WASM-to-WASM call. The genuinely new piece is `BrushSession`'s per-gesture
- * state (`activeSession` below): in Rust it needs a handle-keyed session
- * inside `ConstructionSession` (`start`/`reveal`/`end`), plus an explicit
- * cleanup path for an abandoned handle (`onPointerCancel` firing `end`, or a
- * timeout) -- JS just garbage-collects an orphaned session for free; Rust's
- * WASM linear memory does not.
+ * WASM-to-WASM call. `BrushSession` itself (below) is now only ever a local
+ * variable inside `onPointerUp`, built and resolved in one synchronous pass
+ * over the whole gesture -- no per-gesture mutable module state to leak or
+ * clean up, on the JS side. A Rust port still needs its own equivalent
+ * lifetime handling (allocate the session, resolve every sample, free it),
+ * just scoped to one WASM call instead of a whole gesture's worth of ticks.
  */
 
 /**
@@ -36,15 +37,20 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  * generous the weld tolerance -- welding by proximity was patching the
  * symptom, not the cause.
  *
- * The fix is to stop regenerating geometry every tick. One `QuadMesh` is
- * built **once**, when the stroke starts (`onPointerDown`), sized generously
- * (`params.trianglesPerSide`) to cover a whole stroke. Every vertex gets its
- * node id assigned once, at build time, and every subsequent tick only
- * *reveals* (submits) whichever of that same, already-computed mesh's quads
- * now fall under the pointer. Two revealed quads that share a corner
- * therefore always share the exact same node id by construction -- not by
- * chance proximity -- so the result is one real connected mesh, and dragging
- * slowly across it looks and behaves like painting, not stamping.
+ * The fix is to stop regenerating geometry per reveal. One `QuadMesh` is
+ * built once, sized generously (`params.trianglesPerSide`) to cover a whole
+ * stroke, then every vertex gets its node id assigned once. Two quads that
+ * share a corner therefore always share the exact same node id by
+ * construction -- not by chance proximity -- so the result is one real
+ * connected mesh.
+ *
+ * Unlike the tool's own earlier live-reveal version, this only ever runs
+ * once per gesture, on release (`onPointerUp`): the same generic
+ * preview-then-commit-once contract every other brush in this app follows
+ * (see `brush-tool.ts`'s own doc) -- the drag only shows
+ * `brushSweptRegionFill`'s ghost, and the whole mesh (every quad any sample
+ * along the path ever touched) is resolved and submitted in one shot at the
+ * end, not incrementally while dragging.
  */
 interface BrushSession {
   readonly origin: ConstructionPosition;
@@ -63,9 +69,7 @@ interface BrushSession {
   readonly claimedExternalIds: Set<ConstructionNodeId>;
 }
 
-let activeSession: BrushSession | undefined;
-
-const TERRAIN_COLOR: Record<IrregularTerrainParams["targetSurface"], number> = {
+const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
   terrain: 0x334155,
   "terrain-grass": 0x4a7a4a,
 };
@@ -76,14 +80,14 @@ const HEIGHTMAP_RESOLUTION = 16;
 /** Physical edge length of one triangle in the hex lattice -- world-space scale of one cell. */
 const HEX_TRIANGLE_SIDE = 2;
 
-/** How far from the pointer, each tick, a quad counts as "under the brush" and gets revealed. Roughly one cell's reach, so a slow drag reveals a smooth trail rather than jumping in large clumps. */
+/** How far from a given gesture sample a quad counts as "under the brush" and gets revealed. Roughly one cell's reach, so a slow drag reveals a smooth trail rather than jumping in large clumps. */
 const REVEAL_RADIUS = HEX_TRIANGLE_SIDE * 1.5;
 
 /**
  * How close (XZ only) a vertex -- boundary or interior -- must land to an
  * existing node from a *different* stroke/seed before reusing that id
  * instead of creating a new one. Height is excluded on purpose -- see
- * `irregular-terrain-tool.ts`'s own module doc for why.
+ * `terrain-sculpt-tool.ts`'s own module doc for why.
  *
  * Sized relative to `HEX_TRIANGLE_SIDE`: after `ortho()` subdivides, adjacent
  * vertices within one hexagon sit roughly `HEX_TRIANGLE_SIDE / 2` apart, so
@@ -140,7 +144,7 @@ function sampleHeightmapBilinear(heightmap: Float32Array, resolution: number, u:
 }
 
 function nodeId(ctx: ToolContext, salt: number, vertexIndex: number): ConstructionNodeId {
-  return `${ctx.tableId}:irregular-terrain-${salt}:v${vertexIndex}`;
+  return `${ctx.tableId}:terrain-sculpt-${salt}:v${vertexIndex}`;
 }
 
 /** An existing node from *outside* this session (another stroke, the seeded terrain, a wall) to weld onto if a vertex happens to land on it. */
@@ -174,7 +178,7 @@ function nearestExisting(
 function startSession(
   ctx: ToolContext,
   origin: ConstructionPosition,
-  params: IrregularTerrainParams,
+  params: TerrainSculptParams,
 ): BrushSession {
   const salt = ctx.nextSequence();
   const mesh = buildIrregularQuadGrid({
@@ -212,14 +216,23 @@ function startSession(
 }
 
 /**
- * Submits every not-yet-submitted quad of `session.mesh` whose centroid
- * falls within {@link REVEAL_RADIUS} of `point`. A vertex is resolved (id
- * assigned, and added as a real node unless it welds onto pre-existing
- * geometry) the first time any revealed quad touches it -- every quad after
- * that reuses the same resolved id, which is what keeps the whole stroke one
- * connected mesh.
+ * Resolves (into `newNodes`/`newSurfaces`, not submitted here) every
+ * not-yet-resolved quad of `session.mesh` whose centroid falls within
+ * {@link REVEAL_RADIUS} of `point`. A vertex is resolved (id assigned, and
+ * added as a real node unless it welds onto pre-existing geometry) the first
+ * time any revealed quad touches it -- every quad after that reuses the same
+ * resolved id, which is what keeps the whole stroke one connected mesh.
+ * Called once per gesture sample from `onPointerUp`, accumulating into the
+ * same two arrays, so the whole gesture submits as one batch.
  */
-function revealNear(ctx: ToolContext, session: BrushSession, point: ConstructionPosition, params: IrregularTerrainParams): void {
+function revealNear(
+  ctx: ToolContext,
+  session: BrushSession,
+  point: ConstructionPosition,
+  params: TerrainSculptParams,
+  newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  newSurfaces: ConstructionSurfaceSpec[],
+): void {
   // What the brush's own reach already tells us: any existing node farther
   // than one dab's radius (plus weld slack) from `point` cannot possibly be
   // touched by anything this call reveals, so there is no reason to check it
@@ -239,9 +252,6 @@ function revealNear(ctx: ToolContext, session: BrushSession, point: Construction
       return dx * dx + dz * dz <= searchRadiusSq;
     })
     .map((entry) => ({ id: entry.nodeRef, x: entry.position.x, z: entry.position.z }));
-
-  const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
-  const newSurfaces: ConstructionSurfaceSpec[] = [];
 
   const resolve = (vertexIndex: number): ConstructionNodeId | undefined => {
     const already = session.effectiveId[vertexIndex];
@@ -302,56 +312,70 @@ function revealNear(ctx: ToolContext, session: BrushSession, point: Construction
     session.submittedQuads.add(quadIndex);
     newSurfaces.push({ cycle, surfaceType: params.targetSurface, physical: true });
   });
-
-  if (newNodes.length === 0 && newSurfaces.length === 0) return;
-  ctx.runtime.applyIrregularTerrainPatch(newNodes, newSurfaces, "local", `${ctx.tableId}:irregular-terrain-reveal:${ctx.nextSequence()}`);
 }
 
-/** A circle (approximated as a hexagon) showing one dab's reveal reach -- the real stroke mesh is not built until `onPointerDown`. */
-function reachOutline(center: ConstructionPosition): Float32Array {
-  const points: number[] = [];
-  for (let corner = 0; corner < 6; corner += 1) {
-    const angle = (corner / 6) * Math.PI * 2;
-    const next = ((corner + 1) / 6) * Math.PI * 2;
-    points.push(
-      center.x + REVEAL_RADIUS * Math.cos(angle),
-      center.y,
-      center.z + REVEAL_RADIUS * Math.sin(angle),
-      center.x + REVEAL_RADIUS * Math.cos(next),
-      center.y,
-      center.z + REVEAL_RADIUS * Math.sin(next),
-    );
+/**
+ * How big the lattice needs to be to guarantee it covers wherever this
+ * gesture actually went -- the area comes from the brush's own swept path,
+ * never from an independent terrain-side size guess. Only possible because
+ * the whole gesture is known before the mesh is built (single commit on
+ * release, not a live per-tick reveal that had to pre-guess an upper bound
+ * before the drag was even finished): `params.trianglesPerSide` still acts
+ * as a floor, so a deliberately large single dab still gets its full
+ * requested size, but a long drag can never silently run past a
+ * pre-committed size the way it used to.
+ */
+function latticeTrianglesPerSideFor(gesture: ToolGesture, params: TerrainSculptParams): number {
+  const origin = gesture.start.point;
+  let maxDistance = 0;
+  for (const sample of gesture.samples) {
+    const dx = sample.point.x - origin.x;
+    const dz = sample.point.z - origin.z;
+    maxDistance = Math.max(maxDistance, Math.hypot(dx, dz));
   }
-  return Float32Array.from(points);
+  const neededRadius = maxDistance + REVEAL_RADIUS + CROSS_SESSION_WELD_EPSILON;
+  const neededTrianglesPerSide = Math.ceil(neededRadius / HEX_TRIANGLE_SIDE);
+  return Math.max(1, Math.round(params.trianglesPerSide), neededTrianglesPerSide);
 }
 
-export const irregularTerrainTool: ConstructionTool<"irregular-terrain-stamp"> = {
-  id: "irregular-terrain-stamp",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["irregular-terrain-stamp"],
+/** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls. */
+export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
+  id: "terrain-sculpt",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: IrregularTerrainParams) {
-    return {
-      kind: "segments",
-      color: TERRAIN_COLOR[params.targetSurface],
-      opacity: 0.7,
-      positions: reachOutline(gesture.current.point),
-    };
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+    return brushSweptRegionFill(
+      gesture.samples.map((sample) => sample.point),
+      { kind: "circle", radius: REVEAL_RADIUS },
+      TERRAIN_COLOR[params.targetSurface],
+      0.35,
+    );
   },
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample, params: IrregularTerrainParams): void {
-    activeSession = startSession(ctx, sample.point, params);
-    revealNear(ctx, activeSession, sample.point, params);
-  },
+  // Presence of this hook makes the generic dispatcher capture and sample the drag; the mesh is only ever resolved on release.
+  onPointerMove(): void {},
 
-  // Throttled by the dispatcher (`use-construction-pointer.ts`'s
-  // `MOVE_COMMIT_THROTTLE_MS`), same safety net `terrain-brush-tool.ts`
-  // already relies on for its own continuous painting.
-  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: IrregularTerrainParams): void {
-    if (activeSession === undefined) return;
-    revealNear(ctx, activeSession, gesture.current.point, params);
-  },
-
-  onPointerUp(): void {
-    activeSession = undefined;
+  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+    const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
+    const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
+    const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
+    const newSurfaces: ConstructionSurfaceSpec[] = [];
+    for (const sample of gesture.samples) {
+      revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
+    }
+    if (newNodes.length === 0 && newSurfaces.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nenhum terreno gerado." });
+      return;
+    }
+    ctx.runtime.applyIrregularTerrainPatch(
+      newNodes,
+      newSurfaces,
+      "local",
+      `${ctx.tableId}:terrain-sculpt-reveal:${ctx.nextSequence()}`,
+    );
+    ctx.reportFeedback({
+      tone: "success",
+      message: `Terreno gerado: ${newSurfaces.length} superfícies, ${newNodes.length} nós.`,
+    });
   },
 };

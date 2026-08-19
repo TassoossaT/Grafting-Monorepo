@@ -1129,6 +1129,10 @@ Existing surfaces to remove before registering replacements.
 
 Phase-A lifecycle and invalidation contract for this replacement.
 
+### `pub grafting_graph_core::SurfaceReplacementPlan::updated_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+
+Existing graph nodes whose payload changes while identity is preserved.
+
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s

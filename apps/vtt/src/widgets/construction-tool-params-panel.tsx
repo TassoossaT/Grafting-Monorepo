@@ -2,10 +2,11 @@
 
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
+  BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
-  IrregularTerrainParams,
-  TerrainBrushParams,
+  PathBrushParams,
+  TerrainSculptParams,
   ToolParamsByTool,
   TowerStampParams,
   WallBrushParams,
@@ -37,30 +38,32 @@ function sliderRow(label: string, value: number, min: number, max: number, step:
   );
 }
 
-function TerrainBrushFields(props: {
-  readonly params: TerrainBrushParams;
-  readonly onChange: (next: TerrainBrushParams) => void;
+function BrushShapeFields<Params extends BrushShapeParams>(props: {
+  readonly params: Params;
+  readonly radiusMin: number;
+  readonly radiusMax: number;
+  readonly onChange: (next: Params) => void;
 }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <div className="gm-material-grid">
-        <SelectableChip
-          label="Terreno"
-          swatchColor="#334155"
-          selected={params.targetSurface === "terrain"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain" })}
-        />
-        <SelectableChip
-          label="Grama"
-          swatchColor="#4a7a4a"
-          selected={params.targetSurface === "terrain-grass"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
-        />
+        <SelectableChip label="Círculo" swatchColor="#c084fc" selected={params.shape === "circle"} onSelect={() => onChange({ ...params, shape: "circle" })} />
+        <SelectableChip label="Quadrado" swatchColor="#a78bfa" selected={params.shape === "square"} onSelect={() => onChange({ ...params, shape: "square" })} />
+        <SelectableChip label="Hexágono" swatchColor="#8b5cf6" selected={params.shape === "hexagon"} onSelect={() => onChange({ ...params, shape: "hexagon" })} />
       </div>
-      {sliderRow("Tamanho do pincel", params.radius, 0.5, 4, 0.25, (radius) => onChange({ ...params, radius }))}
-      {sliderRow("Força", params.strength, 0.1, 1, 0.05, (strength) => onChange({ ...params, strength }))}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
+      {sliderRow(params.shape === "square" ? "Meio tamanho" : "Raio", params.radius, props.radiusMin, props.radiusMax, 0.05, (radius) => onChange({ ...params, radius }))}
+      {params.shape === "circle" ? null : sliderRow("Rotação", params.rotationDegrees, 0, 180, 5, (rotationDegrees) => onChange({ ...params, rotationDegrees }))}
+    </div>
+  );
+}
+
+function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <BrushShapeFields params={params} radiusMin={0.15} radiusMax={3} onChange={onChange} />
+      {sliderRow("Profundidade", params.depth, 0.05, 1.5, 0.05, (depth) => onChange({ ...params, depth }))}
     </div>
   );
 }
@@ -161,9 +164,9 @@ function TowerStampFields(props: {
   );
 }
 
-function IrregularTerrainFields(props: {
-  readonly params: IrregularTerrainParams;
-  readonly onChange: (next: IrregularTerrainParams) => void;
+function TerrainSculptFields(props: {
+  readonly params: TerrainSculptParams;
+  readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
   return (
@@ -198,12 +201,12 @@ function IrregularTerrainFields(props: {
 }
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
-  "terrain-brush": "Parâmetros: Terreno",
+  "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "tower-stamp": "Parâmetros: Torre",
-  "irregular-terrain-stamp": "Parâmetros: Terreno Irregular",
+  "terrain-sculpt": "Parâmetros: Escultura de Terreno",
 };
 
 /**
@@ -222,7 +225,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Terreno, Parede, Apagar Cômodo ou Terreno Irregular) no hotbar
+          Selecione uma ferramenta de construção (Caminho, Parede, Apagar Cômodo ou Escultura de Terreno) no hotbar
           para ajustar seus parâmetros.
         </p>
       </Card>
@@ -233,12 +236,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     key: activeTool,
     header: label,
     content:
-      activeTool === "terrain-brush" ? (
-        <TerrainBrushFields
-          params={params["terrain-brush"]}
-          onChange={(next) => onParamsChange("terrain-brush", next)}
-        />
-      ) : activeTool === "wall-brush" ? (
+      activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
@@ -247,9 +245,9 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : (
-        <IrregularTerrainFields
-          params={params["irregular-terrain-stamp"]}
-          onChange={(next) => onParamsChange("irregular-terrain-stamp", next)}
+        <TerrainSculptFields
+          params={params["terrain-sculpt"]}
+          onChange={(next) => onParamsChange("terrain-sculpt", next)}
         />
       ),
   };

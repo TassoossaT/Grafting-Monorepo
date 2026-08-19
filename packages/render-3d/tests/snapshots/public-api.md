@@ -273,6 +273,10 @@ export type MaterialDescriptor = {
     readonly surface: "lit";
     readonly color?: number;
     readonly opacity?: number;
+    /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+    readonly depthTest?: boolean;
+    /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+    readonly depthWrite?: boolean;
     readonly metalness?: number;
     readonly roughness?: number;
     readonly flatShading?: boolean;
@@ -285,6 +289,10 @@ export type MaterialDescriptor = {
     readonly surface: "unlit";
     readonly color?: number;
     readonly opacity?: number;
+    /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+    readonly depthTest?: boolean;
+    /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+    readonly depthWrite?: boolean;
     readonly doubleSided?: boolean;
     readonly texture?: TextureSource;
     /** Whether the engine's active clip plane, if any, cuts this material. Defaults to `false`. */
@@ -294,6 +302,10 @@ export type MaterialDescriptor = {
     readonly surface: "line";
     readonly color?: number;
     readonly opacity?: number;
+    /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+    readonly depthTest?: boolean;
+    /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+    readonly depthWrite?: boolean;
 } | {
     /**
      * Draws each of the geometry's vertices as a point, filling nothing.
@@ -310,6 +322,10 @@ export type MaterialDescriptor = {
     readonly surface: "points";
     readonly color?: number;
     readonly opacity?: number;
+    /** Whether existing scene depth may occlude this material. Defaults to `true`. */
+    readonly depthTest?: boolean;
+    /** Whether drawing this material updates the scene depth buffer. Defaults to `true`. */
+    readonly depthWrite?: boolean;
     /** Point size. In world units when attenuated, in pixels when not. Defaults to `1`. */
     readonly size?: number;
     /** Whether points shrink with distance. Defaults to `true`. */
@@ -970,6 +986,58 @@ export interface HeightfieldParams {
  */
 export declare const heightfieldVisual: VisualDefinition<HeightfieldParams>;
 
+import type { VisualDefinition } from "../contracts/visual.js";
+/** Parameters for the {@link gridVisual} kind. */
+export interface GridParams {
+    /** Half the grid's world-space span on each axis -- it runs from `-extent` to `extent` on both X and Z. */
+    readonly extent: number;
+    /** World-space distance between adjacent lines. */
+    readonly cellSize: number;
+    /** Line color. Defaults to white, so the caller's palette decides. */
+    readonly color?: number;
+    /** Line opacity, in `(0, 1]`. Defaults to `1`. */
+    readonly opacity?: number;
+}
+/**
+ * A replaceable default for a bounded ground-plane reference grid, on
+ * `y = 0`, spanning `[-extent, extent]` on both X and Z with a line every
+ * `cellSize` units.
+ *
+ * It is here, generic and product-agnostic, for the same reason
+ * {@link heightfieldVisual} is: a reference/board grid is not specific to
+ * any one product's meaning, only its placement and color are. A product
+ * that wants a different default (e.g. a camera-anchored infinite-grid
+ * shader instead of bounded line geometry) registers its own kind under a
+ * different name and this one costs it nothing.
+ */
+export declare const gridVisual: VisualDefinition<GridParams>;
+
+import type { VisualDefinition } from "../contracts/visual.js";
+/** Parameters for the {@link gridVisual} kind. */
+export interface GridParams {
+    /** Half the grid's world-space span on each axis -- it runs from `-extent` to `extent` on both X and Z. */
+    readonly extent: number;
+    /** World-space distance between adjacent lines. */
+    readonly cellSize: number;
+    /** Line color. Defaults to white, so the caller's palette decides. */
+    readonly color?: number;
+    /** Line opacity, in `(0, 1]`. Defaults to `1`. */
+    readonly opacity?: number;
+}
+/**
+ * A replaceable default for a bounded ground-plane reference grid, on
+ * `y = 0`, spanning `[-extent, extent]` on both X and Z with a line every
+ * `cellSize` units.
+ *
+ * It is here, generic and product-agnostic, for the same reason
+ * {@link heightfieldVisual} is: a reference/board grid is not specific to
+ * any one product's meaning, only its placement and color are. A product
+ * that wants a different default (e.g. a camera-anchored infinite-grid
+ * shader instead of bounded line geometry) registers its own kind under a
+ * different name and this one costs it nothing.
+ */
+export declare const gridVisual: VisualDefinition<GridParams>;
+
 import type { MeshData } from "../contracts/visual.js";
 /**
  * Concatenates several meshes into one buffer, offsetting each piece's
@@ -988,6 +1056,17 @@ import type { MeshData } from "../contracts/visual.js";
  * shared-vertex structure indexed pieces depend on.
  */
 export declare function mergeMeshChunks(pieces: readonly MeshData[]): MeshData;
+
+/**
+ * A small, self-contained PRNG (mulberry32) rather than `Math.random` --
+ * seeded deterministically, so the same seed always produces the same
+ * sequence. That is what makes procedural visual variation (a room's shape,
+ * a scatter of instances, a jittered grid) reproducible in tests and
+ * replayable across a reload, instead of flaky.
+ */
+export declare function mulberry32(seed: number): () => number;
+/** Linear interpolation: `fraction` of the way from `min` to `max`. */
+export declare function lerp(min: number, max: number, fraction: number): number;
 
 /**
  * Dragging to orbit a view's camera.

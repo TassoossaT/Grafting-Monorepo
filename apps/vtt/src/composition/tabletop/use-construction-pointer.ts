@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import type { ConstructionToolId, MoveNodeHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
@@ -10,10 +10,11 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/tool-registry.ts";
-import type { PointerSample, ToolContext } from "./tools/tool-context.ts";
+import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/tool-context.ts";
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;
+const PREVIEW_THROTTLE_MS = 32;
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -25,6 +26,7 @@ export interface UseConstructionPointerOptions {
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
   readonly snapToGrid: boolean;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
+  readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
 }
 
 function snappedTo(value: number, unit: number): number {
@@ -52,6 +54,7 @@ interface ActiveGesture {
   readonly pointerId: number;
   readonly start: PointerSample;
   last: PointerSample;
+  readonly samples: PointerSample[];
 }
 
 function pointerOffset(event: { currentTarget: HTMLElement; clientX: number; clientY: number }): {
@@ -74,10 +77,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const gestureRef = useRef<ActiveGesture | null>(null);
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
+  const lastPreviewAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
+
+  useEffect(() => {
+    gestureRef.current = null;
+    lastCommitAtRef.current = 0;
+    lastPreviewAtRef.current = 0;
+    options.runtime.clearPreview();
+  }, [options.activeTool, options.runtime]);
+
 
   const ctx = useMemo<ToolContext>(
     () => ({
@@ -92,6 +104,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       },
       nextSequence,
       reportSelection: (info) => optionsRef.current.onSelectionChange(info),
+      reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),
     }),
     [nextSequence],
   );
@@ -107,15 +120,30 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [],
   );
 
-  const showHoverPreview = useCallback((sample: PointerSample | undefined) => {
+  /**
+   * Shows the preview for the very first sample of a gesture, right as it
+   * starts (`onPointerDown`) -- never for idle hovering. A preview that also
+   * ran on passive `pointermove` (no button down) used to recompute and
+   * reappear every time the pointer merely rested near a spot the brush
+   * could still reach -- including right around a stroke you'd already
+   * committed, since the brush footprint is wider than the thin path it
+   * actually carves. That looked exactly like a "stuck" ghost that outlived
+   * the stroke, even though `clearPreview` was firing correctly on every
+   * commit and tool switch. See the tool-switch reset effect above for the
+   * only other place `clearPreview` is expected to run outside a gesture.
+   */
+  const showStartPreview = useCallback((sample: PointerSample | undefined) => {
     const { runtime, activeTool, toolParams } = optionsRef.current;
     const tool = toolFor(activeTool);
     if (sample === undefined || tool.previewFor === undefined) {
       runtime.clearPreview();
       return;
     }
+    const now = performance.now();
+    if (now - lastPreviewAtRef.current < PREVIEW_THROTTLE_MS) return;
+    lastPreviewAtRef.current = now;
     const params = toolParams[activeTool];
-    const descriptor = tool.previewFor({ start: sample, current: sample }, params as never);
+    const descriptor = tool.previewFor({ start: sample, current: sample, samples: [sample] }, params as never, ctx);
     if (descriptor === undefined) runtime.clearPreview();
     else runtime.showPreview(descriptor);
   }, []);
@@ -131,17 +159,18 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const { activeTool, toolParams } = optionsRef.current;
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
+      lastPreviewAtRef.current = 0;
 
       // Only tools that actually react to a drag capture the pointer --
       // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
-        gestureRef.current = { pointerId: event.pointerId, start: sample, last: sample };
+        gestureRef.current = { pointerId: event.pointerId, start: sample, last: sample, samples: [sample] };
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       tool.onPointerDown?.(ctx, sample, params);
-      showHoverPreview(sample);
+      showStartPreview(sample);
     },
-    [ctx, sampleAt, showHoverPreview],
+    [ctx, sampleAt, showStartPreview],
   );
 
   const onPointerMove = useCallback(
@@ -151,26 +180,34 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
 
+      // No button down -- idle hovering never shows a preview, only an
+      // actual drag does (see `showStartPreview`'s own doc for why).
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        showHoverPreview(sampleAt(event));
+        optionsRef.current.runtime.clearPreview();
         return;
       }
 
       const sample = sampleAt(event);
       if (sample === undefined) return; // pointer strayed off pickable geometry -- freeze at the last resolved position, same posture as before this refactor.
       gesture.last = sample;
-      const activeGesture = { start: gesture.start, current: sample };
-
-      const descriptor = tool.previewFor?.(activeGesture, params);
-      if (descriptor === undefined) optionsRef.current.runtime.clearPreview();
-      else optionsRef.current.runtime.showPreview(descriptor);
+      const previous = gesture.samples[gesture.samples.length - 1];
+      if (previous === undefined || previous.point.x !== sample.point.x || previous.point.y !== sample.point.y || previous.point.z !== sample.point.z) {
+        gesture.samples.push(sample);
+      }
+      const activeGesture = { start: gesture.start, current: sample, samples: gesture.samples };
 
       const now = performance.now();
+      if (now - lastPreviewAtRef.current >= PREVIEW_THROTTLE_MS) {
+        lastPreviewAtRef.current = now;
+        const descriptor = tool.previewFor?.(activeGesture, params, ctx);
+        if (descriptor === undefined) optionsRef.current.runtime.clearPreview();
+        else optionsRef.current.runtime.showPreview(descriptor);
+      }
       if (now - lastCommitAtRef.current < MOVE_COMMIT_THROTTLE_MS) return;
       lastCommitAtRef.current = now;
       tool.onPointerMove?.(ctx, activeGesture, params);
     },
-    [ctx, sampleAt, showHoverPreview],
+    [ctx, sampleAt],
   );
 
   const finishGesture = useCallback(
@@ -181,7 +218,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
 
-      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last }, params);
+      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -191,6 +228,15 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx],
   );
 
+  const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (gesture === null || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    optionsRef.current.runtime.clearPreview();
+  }, []);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       const { activeTool, toolParams } = optionsRef.current;
@@ -207,7 +253,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,
-    onPointerCancel: finishGesture,
+    onPointerCancel: cancelGesture,
     onClick,
   };
 }

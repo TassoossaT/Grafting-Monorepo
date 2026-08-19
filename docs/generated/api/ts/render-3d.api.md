@@ -942,7 +942,7 @@ Caller-chosen identity for a draw group.
 
 Scene lighting, as data. The engine ships no default lighting rig of its own.
 
-### `type render-3d.MaterialDescriptor = { clippable?: boolean; color?: number; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { clippable?: boolean; color?: number; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; opacity?: number; surface: "line" } | { color?: number; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
+### `type render-3d.MaterialDescriptor = { clippable?: boolean; color?: number; depthTest?: boolean; depthWrite?: boolean; doubleSided?: boolean; flatShading?: boolean; metalness?: number; opacity?: number; roughness?: number; surface: "lit"; texture?: TextureSource } | { clippable?: boolean; color?: number; depthTest?: boolean; depthWrite?: boolean; doubleSided?: boolean; opacity?: number; surface: "unlit"; texture?: TextureSource } | { color?: number; depthTest?: boolean; depthWrite?: boolean; opacity?: number; surface: "line" } | { color?: number; depthTest?: boolean; depthWrite?: boolean; opacity?: number; size?: number; sizeAttenuation?: boolean; surface: "points"; texture?: TextureSource }`
 
 The appearance half of a visual.
 
