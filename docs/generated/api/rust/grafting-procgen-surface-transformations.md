@@ -16,6 +16,18 @@ Geometry for each directed boundary edge.
 
 Ordered XZ vertices of this closed contour.
 
+### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::source_boundaries(&self) -> &[alloc::vec::Vec<grafting_graph_core::model::NodeId>]`
+
+Closed exterior boundaries after shared terrain edges cancel.
+
+### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::source_surface_keys(&self) -> &[grafting_graph_core::surface::SurfaceKey]`
+
+Legacy source identities superseded by the analytic region view.
+
+### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::target_contour(&self) -> &grafting_procgen_surface_transformations::AnalyticBrushContour`
+
+The one compact target contour for the complete brush area.
+
 ### `pub fn grafting_procgen_surface_transformations::compact_analytic_brush_contour(request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
 
 Produces one compact contour for the complete pointer batch.
@@ -24,6 +36,16 @@ Consecutive fitted primitives become one continuous tube with round joins
 and caps. The result is never a list of overlapping per-segment
 footprints, so a dense gesture has no more topology than its fitted
 lines/arcs require.
+
+### `pub fn grafting_procgen_surface_transformations::plan_analytic_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticPathBrushPlan, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Plans the analytic migration of all eligible legacy surfaces touched by
+the path-brush mode.
+
+This step does not mutate the graph. It cancels interior shared terrain
+edges once and keeps only the exterior loops, which is the prerequisite
+for replacing an entire terrain patch with one region-with-hole instead
+of emitting a fragment for every original face.
 
 ### `pub fn grafting_procgen_surface_transformations::plan_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_graph_core::construction::SurfaceReplacementPlan<[f32; 3], ()>, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -145,6 +167,15 @@ edge from `vertices[index]` to `vertices[(index + 1) % vertices.len()]`.
 This is intentionally independent of graph identities. The construction
 session assigns stable node and contour-edge ids only after a contour has
 been accepted as one semantic brush operation.
+
+### `pub struct grafting_procgen_surface_transformations::AnalyticPathBrushPlan`
+
+One terrain-to-path operation expressed before graph mutation.
+
+The legacy source faces are represented only by their cancelled exterior
+boundaries. The session can therefore migrate a complete terrain patch to
+one analytic source region with the brush contour as its hole, rather
+than splitting every source triangle.
 
 ### `pub struct grafting_procgen_surface_transformations::PathBrushRequest`
 

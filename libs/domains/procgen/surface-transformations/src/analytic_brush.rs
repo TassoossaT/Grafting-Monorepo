@@ -5,7 +5,10 @@
 //! circular arcs; renderer tessellation happens later in
 //! `grafting-procgen-surface-mesh`.
 
+use std::collections::BTreeMap;
+
 use grafting_graph_core::ContourGeometry;
+use grafting_graph_core::{Graph, NodeId, SurfaceKey, SurfaceRegistry};
 
 use crate::stroke::{StrokePrimitive, fit_stroke};
 use crate::{BrushShape, PathBrushFailure, PathBrushRequest};
@@ -20,6 +23,36 @@ use crate::{BrushShape, PathBrushFailure, PathBrushRequest};
 pub struct AnalyticBrushContour {
     vertices: Vec<[f32; 2]>,
     edge_geometries: Vec<ContourGeometry>,
+}
+
+/// One terrain-to-path operation expressed before graph mutation.
+///
+/// The legacy source faces are represented only by their cancelled exterior
+/// boundaries. The session can therefore migrate a complete terrain patch to
+/// one analytic source region with the brush contour as its hole, rather
+/// than splitting every source triangle.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnalyticPathBrushPlan {
+    source_surface_keys: Vec<SurfaceKey>,
+    source_boundaries: Vec<Vec<NodeId>>,
+    target_contour: AnalyticBrushContour,
+}
+
+impl AnalyticPathBrushPlan {
+    /// Legacy source identities superseded by the analytic region view.
+    pub fn source_surface_keys(&self) -> &[SurfaceKey] {
+        &self.source_surface_keys
+    }
+
+    /// Closed exterior boundaries after shared terrain edges cancel.
+    pub fn source_boundaries(&self) -> &[Vec<NodeId>] {
+        &self.source_boundaries
+    }
+
+    /// The one compact target contour for the complete brush area.
+    pub fn target_contour(&self) -> &AnalyticBrushContour {
+        &self.target_contour
+    }
 }
 
 impl AnalyticBrushContour {
@@ -85,6 +118,98 @@ pub fn compact_analytic_brush_contour(
         }
         (StrokePrimitive::Arc { .. }, _) => Err(PathBrushFailure::RequiresNormalizedBrushUnion),
     }
+}
+
+/// Plans the analytic migration of all eligible legacy surfaces touched by
+/// the path-brush mode.
+///
+/// This step does not mutate the graph. It cancels interior shared terrain
+/// edges once and keeps only the exterior loops, which is the prerequisite
+/// for replacing an entire terrain patch with one region-with-hole instead
+/// of emitting a fragment for every original face.
+pub fn plan_analytic_path_brush(
+    graph: &Graph<[f32; 3], ()>,
+    surfaces: &SurfaceRegistry,
+    request: &PathBrushRequest,
+) -> Result<AnalyticPathBrushPlan, PathBrushFailure> {
+    super::validate_request(request)?;
+    let source_surface_keys = surfaces
+        .surface_keys()
+        .into_iter()
+        .filter(|key| {
+            surfaces
+                .surface(key)
+                .is_some_and(|surface| request.source_types.contains(surface.surface_type()))
+        })
+        .collect::<Vec<_>>();
+    if source_surface_keys.is_empty() {
+        return Err(PathBrushFailure::NoChanges);
+    }
+
+    let mut edges = BTreeMap::<(NodeId, NodeId), (NodeId, NodeId)>::new();
+    for key in &source_surface_keys {
+        let surface = surfaces
+            .surface(key)
+            .expect("surface keys came from the same registry");
+        if surface.cycle().len() < 3
+            || surface
+                .cycle()
+                .iter()
+                .any(|node_id| graph.node(node_id).is_none())
+        {
+            return Err(PathBrushFailure::InvalidSourceSurface { key: key.clone() });
+        }
+        for (start, end) in surface
+            .cycle()
+            .iter()
+            .cloned()
+            .zip(surface.cycle().iter().cloned().cycle().skip(1))
+            .take(surface.cycle().len())
+        {
+            let key = if start <= end {
+                (start.clone(), end.clone())
+            } else {
+                (end.clone(), start.clone())
+            };
+            if edges.remove(&key).is_none() {
+                edges.insert(key, (start, end));
+            }
+        }
+    }
+
+    let mut boundaries = Vec::new();
+    while let Some((_, (start, first_end))) = edges.pop_first() {
+        let mut boundary = vec![start.clone()];
+        let mut current = first_end;
+        while current != start {
+            boundary.push(current.clone());
+            let next = edges.iter().find_map(|(key, (left, right))| {
+                if left == &current {
+                    Some((key.clone(), right.clone()))
+                } else if right == &current {
+                    Some((key.clone(), left.clone()))
+                } else {
+                    None
+                }
+            });
+            let Some((key, following)) = next else {
+                return Err(PathBrushFailure::RequiresNormalizedBrushUnion);
+            };
+            edges.remove(&key);
+            current = following;
+        }
+        if boundary.len() >= 3 {
+            boundaries.push(boundary);
+        }
+    }
+    if boundaries.is_empty() {
+        return Err(PathBrushFailure::NoChanges);
+    }
+    Ok(AnalyticPathBrushPlan {
+        source_surface_keys,
+        source_boundaries: boundaries,
+        target_contour: compact_analytic_brush_contour(request)?,
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -467,5 +592,49 @@ mod tests {
         .unwrap();
         assert_eq!(contour.vertices().len(), contour.edge_geometries().len());
         assert_eq!(contour.vertices().len(), 8);
+    }
+
+    #[test]
+    fn terrain_faces_collapse_to_their_outer_boundary_once() {
+        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
+
+        let graph = Graph::try_from_parts(
+            vec![
+                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
+                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
+                Node::new(NodeId::new("c").unwrap(), [2.0, 0.0, 0.0]),
+                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
+                Node::new(NodeId::new("e").unwrap(), [1.0, 0.0, 1.0]),
+                Node::new(NodeId::new("f").unwrap(), [2.0, 0.0, 1.0]),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut surfaces = SurfaceRegistry::new();
+        for cycle in [vec!["a", "b", "e", "d"], vec!["b", "c", "f", "e"]] {
+            surfaces
+                .add_surface(
+                    &graph,
+                    cycle
+                        .into_iter()
+                        .map(|id| NodeId::new(id).unwrap())
+                        .collect(),
+                    SurfaceType::new("terrain"),
+                    true,
+                )
+                .unwrap();
+        }
+        let plan = plan_analytic_path_brush(
+            &graph,
+            &surfaces,
+            &request(
+                vec![[0.25, 0.5], [1.75, 0.5]],
+                BrushShape::Circle { radius: 0.1 },
+            ),
+        )
+        .unwrap();
+        assert_eq!(plan.source_surface_keys().len(), 2);
+        assert_eq!(plan.source_boundaries().len(), 1);
+        assert_eq!(plan.source_boundaries()[0].len(), 6);
     }
 }

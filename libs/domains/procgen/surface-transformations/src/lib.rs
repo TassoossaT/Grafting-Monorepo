@@ -24,7 +24,10 @@ use grafting_graph_core::{
 use grafting_procgen_surface_mesh::triangulate_surface;
 use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
 
-pub use analytic_brush::{AnalyticBrushContour, compact_analytic_brush_contour};
+pub use analytic_brush::{
+    AnalyticBrushContour, AnalyticPathBrushPlan, compact_analytic_brush_contour,
+    plan_analytic_path_brush,
+};
 
 const CIRCLE_SEGMENTS: usize = 16;
 const POSITION_SCALE: f32 = 10_000.0;
