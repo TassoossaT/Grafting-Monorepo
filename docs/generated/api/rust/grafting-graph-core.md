@@ -160,6 +160,26 @@ Looks up a registered edge by identity.
 
 Creates an empty topology.
 
+### `pub fn grafting_graph_core::ContourTopology::nodes_in_use(&self) -> alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>`
+
+Every node referenced by an edge at least one still-registered
+region actually uses. A node outside this set is safe for a caller
+to delete from its own [`Graph`] -- nothing in this topology still
+needs it. Deliberately does not include nodes referenced only by a
+[`ContourEdge`] with zero usages: [`remove_region`](Self::remove_region)
+leaves those registered (a sibling region might reuse the id later
+in the same batch of edits) but they hold no region together, so
+they cannot keep a node alive either.
+
+### `pub fn grafting_graph_core::ContourTopology::prune_unused_edges(&mut self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Drops every registered edge no region currently uses -- exactly the
+garbage [`remove_region`](Self::remove_region) intentionally leaves
+behind per its own doc ("another region may still reference them").
+A caller that just finished a batch of removals calls this once to
+reclaim whatever really did become orphaned, rather than every edge
+staying registered forever.
+
 ### `pub fn grafting_graph_core::ContourTopology::region(&self, id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::SurfaceRegion>`
 
 Looks up a registered region by identity.
@@ -483,6 +503,18 @@ Returns the identifier text.
 
 Creates a non-empty region identifier.
 
+### `pub fn grafting_graph_core::RegionSurface::physical(&self) -> bool`
+
+Whether this region currently blocks movement or acts as ground.
+
+### `pub fn grafting_graph_core::RegionSurface::region_id(&self) -> &grafting_graph_core::RegionId`
+
+The stable analytic-region identity this surface decorates.
+
+### `pub fn grafting_graph_core::RegionSurface::surface_type(&self) -> &grafting_graph_core::SurfaceType`
+
+This region surface's open, extensible type identifier.
+
 ### `pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 This surface's own curvature, if any -- see [`SurfaceCurvature`]'s
@@ -522,6 +554,12 @@ This region's stable identity.
 
 This region's outer boundary loops.
 
+### `pub fn grafting_graph_core::SurfaceRegistry::add_region_surface(&mut self, topology: &grafting_graph_core::ContourTopology, region_id: grafting_graph_core::RegionId, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::SurfaceError>`
+
+Registers semantic attributes for an already-validated analytic
+contour region. [`ContourTopology`] owns edges, loops, and manifold
+validation; this registry owns the construction meaning of that region.
+
 ### `pub fn grafting_graph_core::SurfaceRegistry::add_surface<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, cycle: alloc::vec::Vec<grafting_graph_core::NodeId>, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceError>`
 
 Registers a new surface from a node cycle, validated against
@@ -532,6 +570,20 @@ identity.
 ### `pub fn grafting_graph_core::SurfaceRegistry::new() -> Self`
 
 Creates an empty registry.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::region_surface(&self, region_id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::RegionSurface>`
+
+Looks up semantic attributes for an analytic region.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::region_surface_ids(&self) -> alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Registered analytic-region surface identities in deterministic order.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::remove_region_surface(&mut self, region_id: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionSurface, grafting_graph_core::SurfaceError>`
+
+Removes semantic attributes for one analytic region. The caller owns
+the matching [`ContourTopology::remove_region`](crate::ContourTopology::remove_region)
+operation, so shared contour edges remain available to adjacent regions.
 
 ### `pub fn grafting_graph_core::SurfaceRegistry::remove_surface(&mut self, key: &grafting_graph_core::SurfaceKey) -> core::result::Result<grafting_graph_core::Surface, grafting_graph_core::SurfaceError>`
 
@@ -548,6 +600,14 @@ never encodes its curve, only this attribute does.
 
 Updates a surface's `physical` flag. Touches no node and no cycle,
 for the same reason as [`set_type`](Self::set_type).
+
+### `pub fn grafting_graph_core::SurfaceRegistry::set_region_physical(&mut self, region_id: &grafting_graph_core::RegionId, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates an analytic region surface's physical flag.
+
+### `pub fn grafting_graph_core::SurfaceRegistry::set_region_type(&mut self, region_id: &grafting_graph_core::RegionId, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
+
+Updates an analytic region surface's type.
 
 ### `pub fn grafting_graph_core::SurfaceRegistry::set_type(&mut self, key: &grafting_graph_core::SurfaceKey, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
 
@@ -1081,6 +1141,14 @@ describe -- see this struct's own doc.
 
 The arc's own center, in the same XZ plane as the surface's corners.
 
+### `pub grafting_graph_core::SurfaceError::DuplicateRegionSurface`
+
+Two semantic surface records cannot decorate the same analytic region.
+
+### `pub grafting_graph_core::SurfaceError::DuplicateRegionSurface::id: grafting_graph_core::RegionId`
+
+Stable region identity that already has semantic attributes.
+
 ### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
 
 Two surfaces cannot share the exact same node-set identity.
@@ -1100,6 +1168,24 @@ A cycle referenced a node that is not present in the graph.
 ### `pub grafting_graph_core::SurfaceError::UnknownNode::id: grafting_graph_core::NodeId`
 
 Identity that could not be resolved.
+
+### `pub grafting_graph_core::SurfaceError::UnknownRegion`
+
+An analytic region surface referenced a region that the supplied
+[`ContourTopology`] does not contain.
+
+### `pub grafting_graph_core::SurfaceError::UnknownRegion::id: grafting_graph_core::RegionId`
+
+Stable region identity that could not be resolved.
+
+### `pub grafting_graph_core::SurfaceError::UnknownRegionSurface`
+
+A query or update referenced an analytic region surface that is not
+registered in this registry.
+
+### `pub grafting_graph_core::SurfaceError::UnknownRegionSurface::id: grafting_graph_core::RegionId`
+
+Stable region identity that could not be resolved.
 
 ### `pub grafting_graph_core::SurfaceError::UnknownSurface`
 
@@ -1272,6 +1358,15 @@ A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 Stable identity of a [`SurfaceRegion`], independent of its node set --
 the replacement for [`SurfaceKey`](crate::SurfaceKey)'s node-set identity,
 which cannot distinguish two regions sharing nodes but differing edges.
+
+### `pub struct grafting_graph_core::RegionSurface`
+
+The semantic attributes assigned to an analytic [`SurfaceRegion`](crate::SurfaceRegion).
+
+Unlike [`Surface`], this record deliberately has no node-cycle identity: its
+stable identity is the [`RegionId`] registered by [`ContourTopology`]. This
+migration bridge lets legacy polygon surfaces and analytic contour regions
+coexist while consumers move to region-authoring APIs.
 
 ### `pub struct grafting_graph_core::Surface`
 

@@ -3,20 +3,32 @@ import type { ReactElement, ReactNode } from "react";
 
 /** One label-value row. */
 export interface DescriptionItem {
-  /** Stable identity within the list. */
+  /**
+   * Stable identity within the list.
+   * @example "node-id"
+   */
   readonly key: string;
   /**
    * Row label.
    * @example "Node ID"
    */
   readonly label: string;
-  /** Row value, plain text or caller-rendered content. */
+  /**
+   * Row value, plain text or caller-rendered content.
+   * @example "node_42"
+   */
   readonly value: ReactNode;
 }
 
 /** Public inputs for a compact label-value grid. */
 export interface DescriptionsProps {
-  /** The rows to display, in order. */
+  /**
+   * The rows to display, in order.
+   * @example
+   * ```tsx
+   * [{ key: "id", label: "Node ID", value: "node_42" }]
+   * ```
+   */
   readonly items: readonly DescriptionItem[];
   /**
    * How many label-value pairs sit per row.

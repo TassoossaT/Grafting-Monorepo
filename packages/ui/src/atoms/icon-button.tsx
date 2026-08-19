@@ -11,7 +11,10 @@ export interface IconButtonProps {
   readonly icon: ReactNode;
   /** Optional visible label rendered beside the icon. Icon-only when omitted. */
   readonly label?: string;
-  /** Accessible name and hover tooltip. Required when `label` is omitted, since an icon-only button has no other text content. */
+  /**
+   * Accessible name and hover tooltip. Required when `label` is omitted, since an icon-only button has no other text content.
+   * @example "Toggle sidebar"
+   */
   readonly title: string;
   /** Invoked when the button is activated. */
   readonly onClick?: () => void;

@@ -29,17 +29,29 @@ export type FloatButtonTreePlacement = "top" | "right" | "bottom" | "left";
 
 /** A direct action -- the tree's equivalent of a leaf node. */
 export interface FloatButtonTreeLeaf {
-  /** Stable identity among its siblings. */
+  /**
+   * Stable identity among its siblings.
+   * @example "leaf-1"
+   */
   readonly key: string;
-  /** Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set. */
+  /**
+   * Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set.
+   * @example "📄"
+   */
   readonly icon: ReactNode;
-  /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+  /**
+   * Tooltip and accessible name -- a float button shows no visible text label of its own.
+   * @example "Document"
+   */
   readonly tooltip: string;
   /** Emphasis, e.g. to mark the currently-active leaf in a selector. */
   readonly tone?: "default" | "primary";
   /** Renders this leaf non-interactive. */
   readonly disabled?: boolean;
-  /** Invoked when this leaf is activated. Closes the whole tree afterward, like choosing a menu action. */
+  /**
+   * Invoked when this leaf is activated. Closes the whole tree afterward, like choosing a menu action.
+   * @example () => {}
+   */
   readonly onClick: () => void;
   /** Absent on a leaf -- its presence (not its value) is what distinguishes a {@link FloatButtonTreeBranch} from a leaf. */
   readonly children?: undefined;
@@ -47,11 +59,20 @@ export interface FloatButtonTreeLeaf {
 
 /** A branch: its own floating trigger, revealing a nested list of further {@link FloatButtonTreeNode}s -- leaves, or further branches. */
 export interface FloatButtonTreeBranch {
-  /** Stable identity among its siblings. */
+  /**
+   * Stable identity among its siblings.
+   * @example "branch-1"
+   */
   readonly key: string;
-  /** Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set. */
+  /**
+   * Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set.
+   * @example "📁"
+   */
   readonly icon: ReactNode;
-  /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+  /**
+   * Tooltip and accessible name -- a float button shows no visible text label of its own.
+   * @example "Folder"
+   */
   readonly tooltip: string;
   /** Emphasis, e.g. to mark the currently-active branch in a selector. */
   readonly tone?: "default" | "primary";
@@ -59,7 +80,13 @@ export interface FloatButtonTreeBranch {
   readonly disabled?: boolean;
   /** Absent on a branch -- a branch opens its `children`, it does not fire a direct action. */
   readonly onClick?: undefined;
-  /** The nodes revealed when this branch opens, in display order. */
+  /**
+   * The nodes revealed when this branch opens, in display order.
+   * @example
+   * ```tsx
+   * [{ key: "leaf-1", icon: "📄", tooltip: "Document", onClick: () => {} }]
+   * ```
+   */
   readonly children: readonly FloatButtonTreeNode[];
   /** Overrides the tree-level default trigger for this branch's own submenu. */
   readonly trigger?: FloatButtonTreeTrigger;
@@ -74,7 +101,13 @@ export type FloatButtonTreeNode = FloatButtonTreeLeaf | FloatButtonTreeBranch;
 
 /** Public inputs for a tree of floating-button groups -- a group whose items can themselves be groups. */
 export interface FloatButtonTreeProps {
-  /** The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`. */
+  /**
+   * The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`.
+   * @example
+   * ```tsx
+   * { key: "root", icon: "📁", tooltip: "Root", children: [] }
+   * ```
+   */
   readonly root: FloatButtonTreeBranch;
   /** Default submenu trigger for every branch that does not set its own. @default "click" */
   readonly trigger?: FloatButtonTreeTrigger;

@@ -2,9 +2,15 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 /** One sub-action or variant inside an active {@link ActionDockItem}. */
 export interface ActionDockSubItem {
-  /** Stable identity of the sub-item. */
+  /**
+   * Stable identity of the sub-item.
+   * @example "sub-1"
+   */
   readonly key: string;
-  /** Visible label or accessible title. */
+  /**
+   * Visible label or accessible title.
+   * @example "Sub Item"
+   */
   readonly label: string;
   /** Caller-rendered icon. */
   readonly icon?: ReactNode;
@@ -24,11 +30,20 @@ export interface ActionDockSubItem {
 
 /** One primary category or tool action in the {@link ActionDock}. */
 export interface ActionDockItem {
-  /** Stable identity of the tool or category. */
+  /**
+   * Stable identity of the tool or category.
+   * @example "tool-1"
+   */
   readonly key: string;
-  /** Visible label or accessible title. */
+  /**
+   * Visible label or accessible title.
+   * @example "Tool 1"
+   */
   readonly label: string;
-  /** Caller-rendered icon. */
+  /**
+   * Caller-rendered icon.
+   * @example "🔨"
+   */
   readonly icon: ReactNode;
   /** Tooltip description. */
   readonly tooltip?: string;
@@ -52,7 +67,13 @@ export interface ActionDockItem {
 export interface ActionDockProps {
   /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
   readonly ariaLabel?: string;
-  /** Primary construction verbs / categories in display order. */
+  /**
+   * Primary construction verbs / categories in display order.
+   * @example
+   * ```tsx
+   * [{ key: "tool-1", label: "Tool 1", icon: "🔨" }]
+   * ```
+   */
   readonly items: readonly ActionDockItem[];
   /** Optional leading accessories rendered alongside the items. */
   readonly leadingAccessories?: ReactNode;

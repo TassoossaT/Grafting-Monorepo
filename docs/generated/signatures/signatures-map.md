@@ -182,6 +182,12 @@ pub fn generate_prism_mesh(
 ```rust
 // tests/snapshots/public-api.txt
 pub mod grafting_graph_core
+pub enum grafting_graph_core::ArcBulge
+pub grafting_graph_core::ArcBulge::Left
+pub grafting_graph_core::ArcBulge::Right
+pub fn grafting_graph_core::ArcBulge::clone(&self) -> grafting_graph_core::ArcBulge
+pub fn grafting_graph_core::ArcBulge::eq(&self, other: &grafting_graph_core::ArcBulge) -> bool
+pub fn grafting_graph_core::ArcBulge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::ConstructionError
 pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
 pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
@@ -196,26 +202,20 @@ pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::
 pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
 pub fn grafting_graph_core::ConstructionError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::ConstructionError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::GraphError
-pub grafting_graph_core::GraphError::CycleDetected
-pub grafting_graph_core::GraphError::CycleDetected::remaining: alloc::vec::Vec<grafting_graph_core::NodeId>
-pub grafting_graph_core::GraphError::DuplicateEdge
-pub grafting_graph_core::GraphError::DuplicateEdge::id: grafting_graph_core::EdgeId
-pub grafting_graph_core::GraphError::DuplicateNode
-pub grafting_graph_core::GraphError::DuplicateNode::id: grafting_graph_core::NodeId
-pub grafting_graph_core::GraphError::MissingSource
-pub grafting_graph_core::GraphError::MissingSource::edge: grafting_graph_core::EdgeId
-pub grafting_graph_core::GraphError::MissingSource::source: grafting_graph_core::NodeId
-pub grafting_graph_core::GraphError::MissingTarget
-pub grafting_graph_core::GraphError::MissingTarget::edge: grafting_graph_core::EdgeId
-pub grafting_graph_core::GraphError::MissingTarget::target: grafting_graph_core::NodeId
-pub grafting_graph_core::GraphError::UnknownEdge
-pub grafting_graph_core::GraphError::UnknownEdge::id: grafting_graph_core::EdgeId
-pub grafting_graph_core::GraphError::UnknownNode
-pub grafting_graph_core::GraphError::UnknownNode::id: grafting_graph_core::NodeId
-pub fn grafting_graph_core::GraphError::clone(&self) -> grafting_graph_core::GraphError
-pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
-pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
+pub enum grafting_graph_core::ContourError
+pub grafting_graph_core::ContourError::DuplicateEdge
+pub grafting_graph_core::ContourError::DuplicateEdge::id: grafting_graph_core::ContourEdgeId
+pub grafting_graph_core::ContourError::DuplicateRegion
+pub grafting_graph_core::ContourError::DuplicateRegion::id: grafting_graph_core::RegionId
+pub grafting_graph_core::ContourError::EmptyLoop
+pub grafting_graph_core::ContourError::NoOuterLoop
+pub grafting_graph_core::ContourError::NonManifoldEdge
+pub grafting_graph_core::ContourError::NonManifoldEdge::id: grafting_graph_core::ContourEdgeId
+pub grafting_graph_core::ContourError::OpenLoop
+pub grafting_graph_core::ContourError::OpenLoop::expected: grafting_graph_core::NodeId
+pub grafting_graph_core::ContourError::OpenLoop::found: grafting_graph_core::NodeId
+pub grafting_graph_core::ContourError::UnknownEdge
+pub grafting_graph_core::ContourError::UnknownEdge::id: grafting_graph_core::ContourEdgeId
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -418,201 +418,12 @@ pub fn solve_inner(
 ### `architecture-studio` (`apps/architecture-studio`)
 
 ```ts
-// .next/dev/static/media/generation.worker.3nmcexm9svubh.ts
-export interface HeightmapWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  }
-export type HeightmapWorkerResponse =
-
-// .next/dev/static/media/quantization.worker.321j-bb9_iwkc.ts
-export interface QuantizationWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-  }
-export type QuantizationWorkerResponse =
-
-// .next/dev/static/media/terrain.worker.40o6ffhb52bgi.ts
-export interface TerrainWorkerRequest {
-  readonly type: "elevate";
-  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
-  readonly centres: Float32Array;
-  readonly fieldSize: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-export type TerrainWorkerResponse =
-
-// .next/dev/static/media/tileset.worker.31gjgj61bfyvo.ts
-export interface TilesetWorkerRequest {
-  readonly type: "solve";
-  readonly cellCount: number;
-  readonly facesPerCell: number;
-  readonly links: Uint32Array;
-  readonly sockets: Uint32Array;
-  readonly weights: Float32Array;
-  readonly compatible: Uint32Array;
-export type TilesetWorkerResponse =
-
-// .next/dev/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/dev/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
-// .next/static/media/generation.worker.3nmcexm9svubh.ts
-export interface HeightmapWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  }
-export type HeightmapWorkerResponse =
-
-// .next/static/media/quantization.worker.321j-bb9_iwkc.ts
-export interface QuantizationWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-  }
-export type QuantizationWorkerResponse =
-
-// .next/static/media/terrain.worker.40o6ffhb52bgi.ts
-export interface TerrainWorkerRequest {
-  readonly type: "elevate";
-  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
-  readonly centres: Float32Array;
-  readonly fieldSize: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-export type TerrainWorkerResponse =
-
-// .next/static/media/tileset.worker.31gjgj61bfyvo.ts
-export interface TilesetWorkerRequest {
-  readonly type: "solve";
-  readonly cellCount: number;
-  readonly facesPerCell: number;
-  readonly links: Uint32Array;
-  readonly sockets: Uint32Array;
-  readonly weights: Float32Array;
-  readonly compatible: Uint32Array;
-export type TilesetWorkerResponse =
-
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap, AppRouteHandlerRoutes }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
 // src/app/api/mcp/route.ts
 export const runtime = "nodejs";
 
 // src/app/api/mcp/server.ts
 export function createMcpServer(): McpServer {
   const server = new McpServer({ name: "grafting-architecture-studio", version: "0.1.0" });
-
-// src/app/lab/heightmap/generation.worker.ts
-export interface HeightmapWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  }
-export type HeightmapWorkerResponse =
-
-// src/app/lab/stacked-terrain/terrain.worker.ts
-export interface TerrainWorkerRequest {
-  readonly type: "elevate";
-  /** Normalised cell centres, `u` then `v` per cell, both in `[0, 1]`. */
-  readonly centres: Float32Array;
-  readonly fieldSize: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-export type TerrainWorkerResponse =
-
-// src/app/lab/terrain-quantization/quantization.worker.ts
-export interface QuantizationWorkerRequest {
-  readonly type: "generate";
-  readonly width: number;
-  readonly height: number;
-  readonly seed: number;
-  readonly scale: number;
-  readonly levels: number;
-  }
-export type QuantizationWorkerResponse =
-
-// src/app/lab/terrain-tileset/tileset.worker.ts
-export interface TilesetWorkerRequest {
-  readonly type: "solve";
-  readonly cellCount: number;
-  readonly facesPerCell: number;
-  readonly links: Uint32Array;
-  readonly sockets: Uint32Array;
-  readonly weights: Float32Array;
-  readonly compatible: Uint32Array;
-export type TilesetWorkerResponse =
 
 // src/bench/bench-composition.ts
 export const BENCH_CANVAS_VIEWS = Object.freeze({
@@ -1251,13 +1062,8 @@ export function findEntity(
 
 // src/research-registry-ui.ts
 export const DEMO_LINKS: Readonly<Record<string, string>> = {
-  "noise-rs": "/lab/heightmap",
-  "terrain-quantization": "/lab/terrain-quantization",
-  "irregular-quad-grid": "/lab/irregular-grid",
-  "stacked-terrain": "/lab/stacked-terrain",
-  "terrain-transitions": "/lab/terrain-transitions",
-  "terrain-tileset": "/lab/terrain-tileset",
-  "mesh-procedural": "/lab/mesh-procedural",
+  "vtt-brush": "/lab/vtt-brush",
+  };
 export const SEMANTIC_STATUS: Readonly<Record<StatusId, UiStatus>> = {
   adopted: "success",
   decided: "success",
@@ -1752,6 +1558,14 @@ export interface DelegateResearchInput {
   effort?: Effort;
   }
 
+// src/doc-check.ts
+export interface DocCheckResult {
+  [key: string]: unknown;
+  ok: true;
+  passed: boolean;
+  checks: Array<{ file: string; lineCount: number; maxLines: number; passed: boolean; reason?: string }>;
+  }
+
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
   return path.join(repoPath, '.worktrees', taskId);
@@ -1769,6 +1583,13 @@ export interface DependencyPreparation {
   externalLinks: number;
   copiedFiles: number;
   materialized?: boolean;
+export interface PrepareTaskDependenciesOptions {
+  install?: boolean;
+  updateLockfile?: boolean;
+  add?: string;
+  workspace?: string;
+  dev?: boolean;
+  }
 export interface MergedBranchProof {
   number: number;
   headRefName: string;
@@ -1782,6 +1603,8 @@ export function remoteBranchDeletionPlan(
   openDependentPrNumbers: number[] | undefined,
   ): RemoteBranchDeletionPlan {
   if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+export function parseDependencySpec(dep: string): { name: string; version: string } {
+  let trimmed = dep.trim();
 export class GitWorktreeSession {
   public readonly repoPath: string;
   public readonly worktreePath: string;
@@ -1820,11 +1643,28 @@ export interface TaskNewInput {
   base?: string;
   parent?: string;
   }
+export const KNOWN_AI_COAUTHORS: Record<string, string> = {
+  gemini: "Gemini <gemini@google.com>",
+  claude: "Claude <claude@anthropic.com>",
+  codex: "Codex <codex@openai.com>",
+  openai: "Codex <codex@openai.com>",
+  copilot: "GitHub Copilot <copilot@github.com>",
+  };
+export function resolveCoAuthor(input: string): string {
+  const trimmed = input.trim();
+export function formatCommitMessageWithCoAuthors(message: string, coAuthors?: string[], agent?: string): string {
+  const all = [
+  ...(agent ? [agent] : []),
+  ...(coAuthors ?? []),
+  ].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 export interface TaskCommitInput {
   taskId: string;
   message: string;
   files?: string[];
-  }
+  coAuthors?: string[];
+  agent?: string;
+  amend?: boolean;
+  dryRun?: boolean;
 export interface TaskTestInput {
   taskId: string;
   command?: string;
@@ -1840,6 +1680,14 @@ export interface TaskDoneInput {
 export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
+  }
+export interface TaskDependenciesInput {
+  taskId: string;
+  install?: boolean;
+  updateLockfile?: boolean;
+  add?: string;
+  workspace?: string;
+  dev?: boolean;
   }
 export interface TaskResumeInput {
   taskId?: string;
@@ -1858,24 +1706,6 @@ export interface TaskContextInput {
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
-// src/generated/grafting/contracts/cell-role.ts
-export enum CellRole {
-  Surface = 0,
-  Boundary = 1,
-  Passage = 2,
-  Opening = 3
-  }
-
-// src/generated/grafting/contracts/cell-state-patch.ts
-export class CellStatePatch {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):CellStatePatch {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
 // src/generated/grafting/contracts/command-message.ts
 export class CommandMessage {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -1986,16 +1816,6 @@ export class Incremented {
   return this;
   }
 
-// src/generated/grafting/contracts/prism-cell-data.ts
-export class PrismCellData {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):PrismCellData {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
 // src/generated/grafting/contracts/reset.ts
 export class Reset {
   bb: flatbuffers.ByteBuffer|null = null;
@@ -2041,16 +1861,6 @@ export class StateTable {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
   __init(i:number, bb:flatbuffers.ByteBuffer):StateTable {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/vec3-offset.ts
-export class Vec3Offset {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Vec3Offset {
   this.bb_pos = i;
   this.bb = bb;
   return this;
@@ -2113,14 +1923,14 @@ export interface RenderBackend {
   /** Replaces scene lighting. */
   setLights(lights: readonly LightDescriptor[]): void;
 
-  /** Declares or updates a draw group. */
+  /** Replaces the active clip plane. `undefined` disables clipping. */
 
 // src/backend/three/build-visual.ts
 export interface BuiltVisual {
   readonly object: THREE.Object3D;
   dispose(): void;
   }
-export function buildVisual(descriptor: VisualDescriptor): BuiltVisual {
+export function buildVisual(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): BuiltVisual {
   const geometry =
   descriptor.geometry.shape === "sprite" ? undefined : buildGeometry(descriptor.geometry);
 export function applyTransform(object: THREE.Object3D, transform: Transform | undefined): void {
@@ -2169,6 +1979,8 @@ export function orbitZoom(state: OrbitState, delta: number, factorPerNotch = 1.0
   DISTANCE_RANGE.min,
   DISTANCE_RANGE.max,
   ),
+export function orbitPan(state: OrbitState, dx: number, dy: number, unitsPerPixel = 0.0016): OrbitState {
+  const position = orbitPosition(state);
 export interface OrbitableView {
   /** Replaces the camera description driven by the orbit helper. */
   setCamera(camera: {
@@ -2254,6 +2066,12 @@ export interface Clock {
 
 // src/contracts/engine.ts
 export type LightDescriptor =
+export interface ClipPlaneDescriptor {
+  /** Unit normal of the cutting plane. */
+  readonly normal: Vec3;
+  /** Signed offset in the plane equation `dot(normal, point) + constant >= 0`. */
+  readonly constant: number;
+  }
 export interface FrameReport {
   /** The clock reading this frame ran at. */
   readonly tick: ClockTick;
@@ -2457,15 +2275,16 @@ export type {
   export { createAnimator } from "./animation/create-animator.js";
 export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
 export type {
+  ClipPlaneDescriptor,
   EngineOptions,
   FrameObserver,
   FrameReport,
   LightDescriptor,
   RenderEngine,
   } from "./contracts/engine.js";
-  export { createEngine } from "./engine/create-engine.js";
 export type { Invalidation, InvalidationTracker } from "./invalidation/create-invalidation.js";
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
+export type { GridParams } from "./visual/grid-visual.js";
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
 
 // src/invalidation/create-invalidation.ts
@@ -2488,6 +2307,16 @@ export interface InvalidationTracker {
 export function createInvalidationTracker(): InvalidationTracker {
   let rebuild = new Set<ItemId>();
 
+// src/math/seeded-random.ts
+export function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+  state = (state + 0x6d2b79f5) | 0;
+  let t = Math.imul(state ^ (state >>> 15), 1 | state);
+export function lerp(min: number, max: number, fraction: number): number {
+  return min + (max - min) * fraction;
+  }
+
 // src/scene/create-scene.ts
 export function createScene(): Scene {
   const layers = new Map<LayerId, LayerDefinition>();
@@ -2497,6 +2326,24 @@ export function createVisualRegistry(
   definitions: readonly VisualDefinition<never>[] = [],
   ): VisualRegistry {
   const byKind = new Map<string, VisualDefinition<never>>();
+
+// src/visual/grid-visual.ts
+export interface GridParams {
+  /** Half the grid's world-space span on each axis -- it runs from `-extent` to `extent` on both X and Z. */
+  readonly extent: number;
+  /** World-space distance between adjacent lines. */
+  readonly cellSize: number;
+  /** Line color. Defaults to white, so the caller's palette decides. */
+  readonly color?: number;
+  /** Line opacity, in `(0, 1]`. Defaults to `1`. */
+export const gridVisual: VisualDefinition<GridParams> = {
+  kind: "grid",
+
+  describe(params: GridParams): VisualDescriptor {
+  return {
+  geometry: { shape: "segments", positions: gridPositions(params.extent, params.cellSize) },
+  material: { surface: "line", color: params.color ?? 0xffffff, opacity: params.opacity ?? 1 },
+  };
 
 // src/visual/heightfield-visual.ts
 export interface HeightfieldParams {
@@ -2515,6 +2362,11 @@ export const heightfieldVisual: VisualDefinition<HeightfieldParams> = {
   return {
   geometry: {
   shape: "heightfield",
+
+// src/visual/merge-mesh-chunks.ts
+export function mergeMeshChunks(pieces: readonly MeshData[]): MeshData {
+  if (pieces.length === 0) {
+  return { positions: new Float32Array(0) };
 ```
 
 ### `ui` (`packages/ui`)
@@ -2855,35 +2707,157 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
-// .next/dev/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
+// src/adapters/construction/construction-session-wasm-adapter.ts
+export function createConstructionSessionAdapter(): ConstructionSessionPort {
+  return new ConstructionSessionWasmAdapter();
 
-// .next/dev/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+// src/adapters/construction/terrain-noise-wasm-adapter.ts
+export function createTerrainNoiseAdapter(): TerrainNoisePort {
+  return new TerrainNoiseWasmAdapter();
 
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+// src/adapters/rendering/construction-grid-scene-item.ts
+export const CONSTRUCTION_GRID_LAYER_ID = "construction-grid";
+export const CONSTRUCTION_GRID_MINOR_ITEM_ID = "construction-grid:minor";
+export const CONSTRUCTION_GRID_MAJOR_ITEM_ID = "construction-grid:major";
+export const CONSTRUCTION_GROUND_LAYER_ID = "construction-ground";
+export const CONSTRUCTION_GROUND_ITEM_ID = "construction-ground:plane";
+export const CONSTRUCTION_GROUND_VISUAL_KIND = "vtt-construction-ground";
+export const CONSTRUCTION_GRID_EXTENT = 25;
+export const GRID_SNAP_UNIT = MINOR_CELL_SIZE;
+export function constructionGroundSceneItem(): SceneItem<Record<string, never>> {
+  return {
+  id: CONSTRUCTION_GROUND_ITEM_ID,
+  layer: CONSTRUCTION_GROUND_LAYER_ID,
+  visual: { kind: CONSTRUCTION_GROUND_VISUAL_KIND, params: {} },
+  transform: { position: { x: 0, y: GROUND_PLANE_Y, z: 0 } },
+  data: Object.freeze({ entity: "construction-ground" }),
+  };
+export function constructionGridSceneItems(): readonly [SceneItem<GridParams>, SceneItem<GridParams>] {
+  return [
+  gridSceneItem(CONSTRUCTION_GRID_MINOR_ITEM_ID, {
+  extent: CONSTRUCTION_GRID_EXTENT,
+  cellSize: MINOR_CELL_SIZE,
+  color: MINOR_COLOR,
+  opacity: MINOR_OPACITY,
+  }),
+
+// src/adapters/rendering/construction-preview-scene-item.ts
+export const CONSTRUCTION_PREVIEW_LAYER_ID = "construction-preview";
+export const CONSTRUCTION_PREVIEW_VISUAL_KIND = "vtt-construction-preview";
+export const CONSTRUCTION_PREVIEW_ITEM_ID = "construction-preview:active";
+export interface ConstructionPreviewVisualParams {
+  readonly positions: Float32Array;
+  readonly indices?: Uint16Array | Uint32Array;
+  readonly color: number;
+  readonly opacity: number;
+  readonly filled: boolean;
+  }
+export function constructionPreviewSceneItem(
+  descriptor: RenderPreviewDescriptor,
+  ): SceneItem<ConstructionPreviewVisualParams> {
+  return {
+  id: CONSTRUCTION_PREVIEW_ITEM_ID,
+  layer: CONSTRUCTION_PREVIEW_LAYER_ID,
+  visual: {
+  kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
+
+// src/adapters/rendering/map-chunk-batching.ts
+export function chunkKeyForSurface(surface: SurfaceMeshResult): string {
+  return chunkKeyFor(centroidOf(surface.mesh));
+export function mergeChunkBucket(chunkId: string, members: readonly SurfaceMeshResult[]): RenderMapChunk | undefined {
+  const [first] = members;
+  if (first === undefined) return undefined;
+  return {
+  chunkId,
+  surfaceType: first.surfaceType,
+  physical: first.physical,
+  mesh: mergeMeshChunks(members.map((surface) => surface.mesh)),
+export function chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): readonly RenderMapChunk[] {
+  const byChunk = new Map<string, SurfaceMeshResult[]>();
+export function mergeSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): RenderMeshData {
+  return mergeMeshChunks(surfaces.map((surface) => surface.mesh));
+
+// src/adapters/rendering/map-chunk-key.ts
+export function chunkKeyFor(centroid: Vec3, chunkSize: number = DEFAULT_CHUNK_SIZE): string {
+  const cellX = Math.floor(centroid.x / chunkSize);
+export function clipPlaneForCameraHeight(cameraY: number, offset = 0): ClipPlaneDescriptor {
+  const height = cameraY - offset;
+  // normal = (0, -1, 0): dot(normal, point) + constant >= 0 keeps points
+  // where -point.y + height >= 0, i.e. point.y <= height.
+  return { normal: { x: 0, y: -1, z: 0 }, constant: height };
+
+// src/adapters/rendering/map-chunk-scene-item.ts
+export const MAP_LAYER_ID = "map";
+export const MAP_SURFACE_VISUAL_KIND = "vtt-map-surface";
+export interface MapChunkVisualParams {
+  readonly mesh: RenderMeshData;
+  readonly color: number;
+  }
+export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
+  if (!physical) return 0x3a6b8a;
+  switch (surfaceType) {
+  case "wall":
+  case "wall-white":
+  return 0xe2e8f0; // White / light gray block prototype
+  case "wall-gray":
+  return 0x64748b; // Slate gray block prototype
+export function mapChunkSceneItem(chunk: RenderMapChunk): SceneItem<MapChunkVisualParams> {
+  return {
+  id: `map-chunk:${chunk.chunkId}`,
+  layer: MAP_LAYER_ID,
+  visual: {
+  kind: MAP_SURFACE_VISUAL_KIND,
+  params: { mesh: chunk.mesh, color: colorForSurfaceType(chunk.surfaceType, chunk.physical) },
+  },
+
+// src/adapters/rendering/map-surface-pick-scene-item.ts
+export const MAP_SURFACE_PICK_LAYER_ID = "map-surface-picks";
+export const MAP_SURFACE_PICK_VISUAL_KIND = "vtt-map-surface-pick";
+export interface MapSurfacePickVisualParams {
+  readonly mesh: RenderMeshData;
+  }
+export interface MapSurfacePickData {
+  readonly entity: "map-surface-pick";
+  readonly surfaceRef: string;
+  }
+export function mapSurfacePickSceneItemId(surfaceRef: string): string {
+  return `map-surface-pick:${surfaceRef}`;
+  }
+export function mapSurfacePickSceneItem(
+  surfaceRef: string,
+  mesh: RenderMeshData,
+  ): SceneItem<MapSurfacePickVisualParams> {
+  return {
+  id: mapSurfacePickSceneItemId(surfaceRef),
+  layer: MAP_SURFACE_PICK_LAYER_ID,
+  visual: { kind: MAP_SURFACE_PICK_VISUAL_KIND, params: { mesh } },
+
+// src/adapters/rendering/marker-textures.ts
+export function createMarkerTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+export function createNodeHandleTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+
+// src/adapters/rendering/node-handle-scene-item.ts
+export const NODE_HANDLE_LAYER_ID = "construction-handles";
+export const NODE_HANDLE_VISUAL_KIND = "vtt-construction-node-handle";
+export interface NodeHandlePickData {
+  readonly entity: "construction-node-handle";
+  readonly nodeId: string;
+  }
+export function nodeHandleSceneItemId(nodeId: string): string {
+  return `construction-node-handle:${nodeId}`;
+  }
+export function nodeHandleTransform(position: ConstructionPosition): Transform {
+  return { position, scale: HANDLE_SCALE };
+export function nodeHandleSceneItem(
+  nodeId: string,
+  position: ConstructionPosition,
+  ): SceneItem<Record<string, never>> {
+  return {
+  id: nodeHandleSceneItemId(nodeId),
+  layer: NODE_HANDLE_LAYER_ID,
+  visual: { kind: NODE_HANDLE_VISUAL_KIND, params: {} },
 
 // src/adapters/rendering/render-3d-scene-adapter.ts
 export class Render3dSceneAdapter implements SceneRenderPort {
@@ -2915,12 +2889,45 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
   readonly initialTokens?: readonly TokenProjection[];
+  /** When true, seeds one demo terrain cell and wall upon start. Defaults to false (clean board). */
+  readonly seedDefaultMap?: boolean;
   readonly renderPort?: SceneRenderPort;
-  }
+  readonly constructionPort?: ConstructionSessionPort;
+  readonly terrainNoisePort?: TerrainNoisePort;
 export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
+
+// src/composition/tabletop/default-map-seed.ts
+export function buildGeneratePathExtrusionOperation(
+  tableId: string,
+  salt: string,
+  context: ConstructionOperationContext,
+  edges: readonly PathEdgeSpec[],
+  height: number,
+  surfaceType: string,
+  notch?: EdgeNotchSpec,
+export function buildGenerateTerrainCellOperation(
+  tableId: string,
+  salt: string,
+  context: ConstructionOperationContext,
+  cell: number,
+  module: CornerHeightModule,
+  surfaceType: string,
+  ): GenerateTerrainCellOperation {
+export interface DefaultMapSeed {
+  readonly terrainCell: GenerateTerrainCellOperation;
+  readonly wall: GeneratePathExtrusionOperation;
+  }
+export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMapSeed {
+  const terrainCell = buildGenerateTerrainCellOperation(
+  tableId,
+  "seed",
+  { operationId: `${tableId}:seed:terrain-cell`, tableId, initiatedBy },
+  0,
+  { name: "flat", cornerHeights: [1, 1, 1, 1] },
+  "terrain",
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
@@ -2931,15 +2938,29 @@ export type {
   TabletopRuntimeStatus,
   TabletopSnapshot,
   } from "./tabletop-runtime.ts";
-
+  export { buildGeneratePathExtrusionOperation, buildGenerateTerrainCellOperation } from "./default-map-seed.ts";
+export type {
+  MoveNodeHistoryEntry,
+  MoveNodeHistoryStack,
+  MoveNodeHistoryState,
+  } from "../../features/edit-construction/index.ts";
+export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
+export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
+export type { ConstructionToolFeedback } from "./tools/tool-context.ts";
 
 // src/composition/tabletop/tabletop-runtime.ts
+export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
+export const TERRAIN_GRID_HEIGHT = CONSTRUCTION_GRID_EXTENT;
+export const TERRAIN_GRID_LAYERS = 1;
+export const TERRAIN_CELL_COUNT = TERRAIN_GRID_WIDTH * TERRAIN_GRID_HEIGHT * TERRAIN_GRID_LAYERS;
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 export interface TabletopSnapshot {
   readonly revision: number;
   readonly status: TabletopRuntimeStatus;
   readonly tableId: string;
   readonly tokens: TokenCollectionProjection;
+  readonly map: MapProjection;
   }
 export interface ConfirmedTokenDeltaEnvelope {
   readonly origin: ChangeOrigin;
@@ -2950,13 +2971,410 @@ export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
-  attachView(target: HTMLElement): RenderViewId;
-  detachView(viewId: RenderViewId): void;
-  resizeView(viewId: RenderViewId, width: number, height: number): void;
-  getRenderMetrics(): SceneRenderMetrics;
-  getSnapshot(): TabletopSnapshot;
+  moveNode(
+  nodeId: ConstructionNodeId,
+  position: ConstructionPosition,
+  origin: ChangeOrigin,
+  causeId: string,
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
+
+// src/composition/tabletop/tools/brush-tool.ts
+export interface BrushRegion {
+  readonly samples: readonly ConstructionPosition[];
+  readonly shape: BrushShape;
+  }
+export type BrushableToolId = "path-brush";
+export interface BrushToolSpec<Id extends BrushableToolId> {
+  readonly id: Id;
+  defaultParams(): ToolParamsFor<Id>;
+  previewColor(params: ToolParamsFor<Id>): number;
+  /**
+  * The only place domain semantics live: what the swept region means, and
+  * which backend call applies it. Called exactly once, on pointer release,
+  * with the whole gesture's region -- never incrementally, never per-cell,
+export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
+  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => ({
+  samples: gesture.samples.map((sample) => sample.point),
+  shape: resolveBrushShape(params),
+  });
+
+// src/composition/tabletop/tools/house-room-delete-tool.ts
+export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
+  id: "house-room-delete",
+  defaultParams: () => ({}),
+
+  onClick(ctx: ToolContext, sample: PointerSample): void {
+  const directHit = findWallSurfaceAt(ctx, sample.point);
+
+// src/composition/tabletop/tools/interior-partition.ts
+export interface Vec2 {
+  readonly x: number;
+  readonly z: number;
+  }
+export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { readonly cells: readonly CellCoordinate[]; readonly origin: Vec2 } {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const point of polygon) {
+  minX = Math.min(minX, point.x);
+export function idPrefixForRoom(tableId: string, bottomCycle: readonly ConstructionNodeId[]): string {
+  return `${tableId}:interior:${hashString([...bottomCycle].sort().join("|"))}`;
+  }
+export function isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly ConstructionNodeId[], polygon: readonly Vec2[], tolerance: number): boolean {
+  const map = ctx.runtime.getSnapshot().map;
+  const positions = surfaceKey.map((id) => map.nodePositions.get(id)?.position).filter((position): position is ConstructionPosition => position !== undefined);
+
+// src/composition/tabletop/tools/interior-wall-tool.ts
+export const interiorWallTool: ConstructionTool<"interior-wall"> = {
+  id: "interior-wall",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
+
+  onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
+  const room = findEnclosingRoom(ctx, sample.point, "largest");
+
+// src/composition/tabletop/tools/irregular-grid.ts
+export interface Vec2 {
+  readonly x: number;
+  readonly y: number;
+  }
+export type Face = readonly number[];
+export type Quad = readonly [number, number, number, number];
+export interface FaceMesh {
+  readonly vertices: readonly Vec2[];
+  readonly faces: readonly Face[];
+  }
+export interface QuadMesh {
+  readonly vertices: readonly Vec2[];
+  readonly quads: readonly Quad[];
+  }
+export type Random = () => number;
+export function createRandom(seed: number): Random {
+  let state = seed >>> 0;
+  return () => {
+  state = (state + 0x6d2b79f5) >>> 0;
+  let t = state;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+export interface TriangleHexOptions {
+  /** Triangles along one hexagon edge. Sylves' walkthrough uses `4`. */
+  readonly trianglesPerSide: number;
+  /** Edge length of one equilateral triangle. Defaults to `0.5`. */
+  readonly triangleSide?: number;
+  }
+export function buildTriangleHex(options: TriangleHexOptions): FaceMesh {
+  const side = options.triangleSide ?? 0.5;
+  const perSide = options.trianglesPerSide;
+  if (!Number.isInteger(perSide) || perSide < 1) {
+  throw new RangeError(`trianglesPerSide must be a positive integer; received ${perSide}`);
+export function pairTriangles(mesh: FaceMesh, random: Random): FaceMesh {
+  const edgeOwners = new Map<string, number[]>();
+export function ortho(mesh: FaceMesh): QuadMesh {
+  const vertices: Vec2[] = [...mesh.vertices];
+  const quads: Quad[] = [];
+
+  for (const face of mesh.faces) {
+  const points = face.map((vertex) => mesh.vertices[vertex]).filter(isVec2);
+export function weld(mesh: QuadMesh, epsilon = 1e-6): QuadMesh {
+  const vertices: Vec2[] = [];
+  const lookup = new Map<string, number>();
+export interface RelaxOptions {
+  /** Smoothing passes. Around `10`-`20` settles this grid. Defaults to `12`. */
+  readonly iterations?: number;
+  /** Fraction of the way to the target each pass moves a vertex. Defaults to `0.5`. */
+  readonly strength?: number;
+  /**
+  * Whether vertices on the outer boundary stay put. Defaults to `true`.
+  *
+export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
+  const iterations = options.iterations ?? 12;
+  const strength = options.strength ?? 0.5;
+  const pinned = options.pinBoundary === false ? new Set<number>() : boundaryVertices(mesh);
+export function boundaryVertices(mesh: QuadMesh): Set<number> {
+  const counts = new Map<string, number>();
+
+// src/composition/tabletop/tools/move-node-tool.ts
+export const moveNodeTool: ConstructionTool<"move-node"> = {
+  id: "move-node",
+  defaultParams: () => ({}),
+
+  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+  if (sample.nodeId === undefined) return;
+  ctx.reportSelection({ id: sample.nodeId, point: sample.point });
+
+// src/composition/tabletop/tools/navigate-tool.ts
+export const navigateTool: ConstructionTool<"navigate"> = {
+  id: "navigate",
+  defaultParams: () => ({}),
+  };
+
+// src/composition/tabletop/tools/path-brush-tool.ts
+export const pathBrushTool = createBrushTool<"path-brush">({
+  id: "path-brush",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
+  previewColor: () => PATH_PREVIEW_COLOR,
+
+  applyRegion(region, ctx, params) {
+  const sequence = ctx.nextSequence();
+
+// src/composition/tabletop/tools/path-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly curvature: "straight" | "arc-left" | "arc-right";
+  }
+export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const indices = cornerIndices(points, cornerEpsilon);
+
+// src/composition/tabletop/tools/preview-shapes.ts
+export function quadAround(
+  center: ConstructionPosition,
+  halfExtent: number,
+  color: number,
+  opacity = 0.35,
+  ): PreviewDescriptor {
+  const y = center.y;
+  return {
+export function segmentBetween(
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return {
+  kind: "segments",
+export function footprintQuad(
+  corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const positions = new Float32Array(12);
+export type BrushOutlineShape =
+export function brushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
+export function brushSweptRegionFill(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const first = samples[0];
+  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
+export function circleOutline(
+  center: ConstructionPosition,
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return circularBrushStrokeOutline([center], radius, color, opacity);
+export function circularBrushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  const positions: number[] = [];
+  if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+
+// src/composition/tabletop/tools/room-lookup.ts
+export interface DerivedRoom {
+  readonly bottomCycle: readonly ConstructionNodeId[];
+  readonly topCycle: readonly ConstructionNodeId[];
+  readonly polygon: readonly Vec2[];
+  }
+export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
+  const spans = wallSpans(ctx);
+
+// src/composition/tabletop/tools/terrain-sculpt-tool.ts
+export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
+  id: "terrain-sculpt",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
+
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+  return brushSweptRegionFill(
+  gesture.samples.map((sample) => sample.point),
+  { kind: "circle", radius: REVEAL_RADIUS },
+
+// src/composition/tabletop/tools/tool-context.ts
+export interface PointerSample {
+  readonly point: ConstructionPosition;
+  readonly nodeId?: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolGesture {
+  readonly start: PointerSample;
+  readonly current: PointerSample;
+  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
+  readonly samples: readonly PointerSample[];
+  }
+export interface ConstructionToolFeedback {
+  readonly tone: "info" | "success" | "error";
+  readonly message: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolContext {
+  readonly runtime: TabletopRuntime;
+  readonly history: MoveNodeHistoryStack;
+  readonly tableId: string;
+  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
+  nextSequence(): number;
+  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
+  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
+export interface ConstructionTool<Id extends ConstructionToolId> {
+  readonly id: Id;
+  defaultParams(): ToolParamsFor<Id>;
+  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
+  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
+  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
+  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
+
+// src/composition/tabletop/tools/tool-registry.ts
+export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
+  return TOOL_REGISTRY[id];
+  }
+
+// src/composition/tabletop/tools/tower-geometry.ts
+export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
+  const points = circlePoints(center, radius);
+export function previewOutline(center: ConstructionPosition, radius: number, segments: number): Float32Array {
+  const points: number[] = [];
+  for (let step = 0; step < segments; step += 1) {
+  const from = pointOnCircle(center, radius, (step / segments) * Math.PI * 2);
+
+// src/composition/tabletop/tools/tower-stamp-tool.ts
+export const towerStampTool: ConstructionTool<"tower-stamp"> = {
+  id: "tower-stamp",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
+
+  previewFor(gesture: ToolGesture, params: TowerStampParams) {
+  return {
+  kind: "segments",
+  color: WALL_COLOR[params.wallType],
+
+// src/composition/tabletop/tools/wall-brush-tool.ts
+export const wallBrushTool: ConstructionTool<"wall-brush"> = {
+  id: "wall-brush",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
+
+  previewFor(gesture: ToolGesture, params: WallBrushParams) {
+  const path = rawPath;
+  if (path === undefined || path.length === 0) return undefined;
+
+
+// src/composition/tabletop/tools/wall-line-tool.ts
+export const wallLineTool: ConstructionTool<"wall-line"> = {
+  id: "wall-line",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
+
+  previewFor(gesture: ToolGesture, params: WallBrushParams) {
+  if (anchor === undefined) return undefined;
+  return {
+  kind: "segments",
+
+// src/composition/tabletop/tools/wall-shared.ts
+export const WALL_HEIGHT = 3;
+export const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
+export function idPrefixFor(ctx: ToolContext): string {
+  return `${ctx.tableId}:wall-brush`;
+  }
+export function pinnedToBaseline(baseline: ConstructionPosition, point: ConstructionPosition): ConstructionPosition {
+  return { ...point, y: baseline.y };
+export function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.hypot(dx, dz);
+export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition {
+  for (const span of wallSpans(ctx)) {
+  const spanLength = xzDistance(span.a, span.b);
+export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined {
+  let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
+  for (const span of wallSpans(ctx)) {
+  const { perp } = projectOntoSegment(point, span.a, span.b);
+
+// src/composition/tabletop/use-construction-pointer.ts
+export interface UseConstructionPointerOptions {
+  readonly activeTool: ConstructionToolId;
+  readonly toolParams: ToolParamsByTool;
+  readonly runtime: TabletopRuntime;
+  readonly history: MoveNodeHistoryStack;
+  readonly tableId: string;
+  readonly viewId: RenderViewId | undefined;
+  /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
+export interface ConstructionPointerHandlers {
+  readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  }
+export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
+  const gestureRef = useRef<ActiveGesture | null>(null);
+
+// src/entities/map/index.ts
+export type {
+  MapId,
+  MapProjection,
+  MapProjectionDelta,
+  NodePosition,
+  NodePositionEntry,
+  NodeRef,
+  SurfaceProjection,
+
+// src/entities/map/map-projection.ts
+export type SurfaceRef = string;
+export type NodeRef = string;
+export type MapId = string;
+export interface SurfaceProjection {
+  readonly surfaceRef: SurfaceRef;
+  readonly orderedNodeRefs: readonly NodeRef[];
+  readonly type: string;
+  readonly physical: boolean;
+  readonly revision: number;
+  }
+export interface NodePosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export interface NodePositionEntry {
+  readonly nodeRef: NodeRef;
+  readonly position: NodePosition;
+  readonly revision: number;
+  }
+export interface MapProjection {
+  readonly byId: ReadonlyMap<SurfaceRef, SurfaceProjection>;
+  /**
+  * Live node positions, keyed by {@link NodeRef} -- what edit-mode picking
+  * and drag-to-move need and `SurfaceProjection` alone cannot give (its
+  * `orderedNodeRefs` are bare ids, not positions). Populated from
+  * `ConstructionSessionPort.getNodePositions()` at map load, then kept
+  * current by `node-moved` deltas.
+export type MapProjectionDelta =
+export function surfaceRefFromNodeSet(nodeRefs: readonly NodeRef[]): SurfaceRef {
+  return [...nodeRefs].sort().join(",");
+export function createSurfaceProjection(input: SurfaceProjection): SurfaceProjection {
+  if (input.orderedNodeRefs.length === 0) {
+  throw new Error("orderedNodeRefs must not be empty");
+export function createMapProjection(
+  surfaces: readonly SurfaceProjection[] = [],
+  nodePositions: readonly NodePositionEntry[] = [],
+  ): MapProjection {
+  const byId = new Map<SurfaceRef, SurfaceProjection>();
+export function applyMapProjectionDelta(
+  current: MapProjection,
+  delta: MapProjectionDelta,
+  ): MapProjection {
+  if (delta.type === "node-moved") {
+  const entry = createNodePositionEntry({
+  nodeRef: delta.nodeRef,
+  position: delta.position,
 
 // src/entities/token/index.ts
 export type {
@@ -3007,6 +3425,254 @@ export function applyTokenProjectionDelta(
   ): TokenCollectionProjection {
   if (delta.type === "token-removed") {
   const previous = current.byId.get(delta.tokenId);
+
+// src/features/edit-construction/brush-shape-params.ts
+export function resolveBrushShape(params: BrushShapeParams): BrushShape {
+  const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
+  if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
+
+// src/features/edit-construction/construction-operations.ts
+export type OperationId = string;
+export type ParticipantId = string;
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+  }
+export interface ConstructionOperationContext {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  }
+export interface GenerateTerrainCellOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "construction.generate-terrain-cell@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: GenerateTerrainCellRequest;
+  }
+export interface GeneratePathExtrusionOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "construction.generate-path-extrusion@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: GeneratePathExtrusionRequest;
+  }
+export interface MoveNodePayload {
+  readonly nodeId: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+  }
+export interface MoveNodeOperation {
+  readonly operationId: OperationId;
+  readonly tableId: string;
+  readonly initiatedBy: ParticipantId;
+  readonly kind: "construction.move-node@1";
+  readonly expected: readonly RevisionPrecondition[];
+  readonly payload: MoveNodePayload;
+  }
+export type ConstructionOperation = GenerateTerrainCellOperation | GeneratePathExtrusionOperation | MoveNodeOperation;
+export function createGenerateTerrainCellOperation(
+  payload: GenerateTerrainCellRequest,
+  context: ConstructionOperationContext,
+  ): GenerateTerrainCellOperation {
+  const normalized = operationContext(context);
+export function createGeneratePathExtrusionOperation(
+  payload: GeneratePathExtrusionRequest,
+  context: ConstructionOperationContext,
+  ): GeneratePathExtrusionOperation {
+  const normalized = operationContext(context);
+export function createMoveNodeOperation(
+  payload: MoveNodePayload,
+  context: ConstructionOperationContext,
+  expected: readonly RevisionPrecondition[] = [],
+  ): MoveNodeOperation {
+  const normalized = operationContext(context);
+
+// src/features/edit-construction/index.ts
+export type {
+  ConstructionOperation,
+  ConstructionOperationContext,
+  GeneratePathExtrusionOperation,
+  GenerateTerrainCellOperation,
+  MoveNodeOperation,
+  MoveNodePayload,
+  OperationId,
+export type { ConstructionHistoryEntry, MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState, PathBrushHistoryEntry } from "./move-node-history.ts";
+export type {
+  BrushShapeKind,
+  BrushShapeParams,
+  ConstructionToolId,
+  InteriorGenerateParams,
+  PathBrushParams,
+  NoToolParams,
+  PreviewDescriptor,
+export type {
+  BrushGestureRegion,
+  BrushGestureSample,
+  BrushShape,
+  PathBrushEffect,
+  PathFormationParameters,
+  SurfaceEditModeDefinition,
+  SurfaceEditTargetScope,
+
+// src/features/edit-construction/move-node-history.ts
+export interface MoveNodeHistoryEntry {
+  readonly nodeId: ConstructionNodeId;
+  readonly from: ConstructionPosition;
+  readonly to: ConstructionPosition;
+  }
+export interface PathBrushHistoryEntry {
+  readonly kind: "path-brush";
+  readonly operationId: string;
+  }
+export type ConstructionHistoryEntry = MoveNodeHistoryEntry | PathBrushHistoryEntry;
+export interface MoveNodeHistoryState {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  }
+export interface MoveNodeHistoryStack {
+  /** Records a completed move. Clears any redo history, per standard undo-stack semantics. */
+  record(entry: ConstructionHistoryEntry): void;
+  /** Pops the most recent move and returns it for the caller to re-apply at `from`, or `undefined` if there is nothing to undo. */
+  undo(): ConstructionHistoryEntry | undefined;
+  /** Pops the most recently undone move and returns it for the caller to re-apply at `to`, or `undefined` if there is nothing to redo. */
+  redo(): ConstructionHistoryEntry | undefined;
+  getState(): MoveNodeHistoryState;
+export function createMoveNodeHistoryStack(): MoveNodeHistoryStack {
+  let undoStack: ConstructionHistoryEntry[] = [];
+  let redoStack: ConstructionHistoryEntry[] = [];
+
+  return {
+  record(entry: ConstructionHistoryEntry): void {
+  undoStack = [...undoStack, entry];
+  redoStack = [];
+
+// src/features/edit-construction/surface-edit-contract.ts
+export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
+export interface BrushGestureSample {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export type BrushShape =
+export interface BrushGestureRegion {
+  readonly samples: readonly BrushGestureSample[];
+  }
+export interface PathFormationParameters {
+  readonly width: number;
+  readonly depth: number;
+  readonly falloff: number;
+  readonly strength: number;
+  }
+export interface SurfaceEditModeDefinition {
+  readonly id: string;
+  readonly sourceSurfaceType: string;
+  readonly label: string;
+  readonly supportedTargetScopes: readonly SurfaceEditTargetScope[];
+  readonly effectKinds: readonly string[];
+  readonly transformerCapability: string;
+  readonly scopePolicy: "local" | "explicit-global";
+export interface PathBrushEffect extends ConstructionOperationContext {
+  readonly kind: "surface.path-brush@1";
+  readonly targetScope: "brush-region";
+  readonly targetType: "path";
+  readonly brushShape: BrushShape;
+  readonly brushRegion: BrushGestureRegion;
+  readonly parameters: PathFormationParameters;
+  readonly expected: readonly RevisionPrecondition[];
+export function createPathBrushEffect(
+  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">,
+  context: ConstructionOperationContext,
+  expected: readonly RevisionPrecondition[] = [],
+  ): PathBrushEffect {
+  if (payload.brushRegion.samples.length === 0) throw new Error("brushRegion.samples must not be empty");
+
+// src/features/edit-construction/surface-edit-mode-registry.ts
+export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
+export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
+  return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
+export const PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[] = Object.freeze(
+  SURFACE_EDIT_MODE_DEFINITIONS.filter((definition) =>
+  definition.effectKinds.includes(PATH_BRUSH_EFFECT_KIND),
+  ).map((definition) => definition.sourceSurfaceType),
+  );
+
+// src/features/edit-construction/tool-types.ts
+export type ConstructionToolId =
+export type BrushShapeKind = "circle" | "square" | "hexagon";
+export interface BrushShapeParams {
+  /** Convex footprint shared by terrain and path brushes. */
+  readonly shape: BrushShapeKind;
+  /** Circle/hexagon radius, or square half-size, in world units. */
+  readonly radius: number;
+  /** Rotation around world Y; ignored by circles. */
+  readonly rotationDegrees: number;
+  }
+export interface PathBrushParams extends BrushShapeParams {
+  readonly depth: number;
+  }
+export interface WallBrushParams {
+  readonly wallType: "wall-white" | "wall-gray";
+  }
+export interface InteriorGenerateParams {
+  readonly wallType: "wall-white" | "wall-gray";
+  /** World-space side length of one grid cell. */
+  readonly cellSize: number;
+  /** A connected region larger than this many cells gets auto-split into more than one room. */
+  readonly maxRegionCells: number;
+  /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
+  readonly seed: number;
+export interface TerrainSculptParams {
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+  readonly trianglesPerSide: number;
+  /**
+  * `0` = cells relaxed hard toward square (regular-looking, like a normal
+  * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
+  * variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
+  * own `relax()` step is what pulls cells toward square in the first place --
+export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
+export interface TowerStampParams {
+  readonly wallType: "wall-white" | "wall-gray";
+  readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
+  }
+export type NoToolParams = Record<string, never>;
+export interface ToolParamsByTool {
+  readonly navigate: NoToolParams;
+  readonly "move-node": NoToolParams;
+  readonly "path-brush": PathBrushParams;
+  readonly "wall-brush": WallBrushParams;
+  readonly "wall-line": WallBrushParams;
+  readonly "interior-wall": InteriorGenerateParams;
+  readonly "tower-stamp": TowerStampParams;
+export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
+export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
+  navigate: Object.freeze({}),
+  "move-node": Object.freeze({}),
+  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
+  "wall-brush": Object.freeze({ wallType: "wall-white" }),
+  "wall-line": Object.freeze({ wallType: "wall-white" }),
+  "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
+  "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
+export type PreviewDescriptor =
+
+// src/features/navigate-camera/attach-camera-navigation.ts
+export interface CameraControllable {
+  attachCameraControls(
+  viewId: RenderViewId,
+  element: HTMLElement,
+  options?: CameraControlOptions,
+  ): CameraControlHandle;
+  }
+export function attachCameraNavigation(
+  target: CameraControllable,
+  viewId: RenderViewId,
+  element: HTMLElement,
+  ): () => void {
+  const handle = target.attachCameraControls(viewId, element, CAMERA_SCHEME);
+
+// src/features/navigate-camera/index.ts
+export type { CameraControllable } from "./attach-camera-navigation.ts";
 
 // src/features/place-token/index.ts
 export type {
@@ -3071,21 +3737,91 @@ export function createBindTokenSubjectOperation(
   if (!Number.isInteger(intent.expectedTokenRevision) || intent.expectedTokenRevision < 0) {
   throw new Error("expectedTokenRevision must be a non-negative integer");
 
+// src/ports/construction-session-port.ts
+export type ConstructionNodeId = string;
+export type ConstructionEdgeId = string;
+export type ConstructionSurfaceKey = readonly ConstructionNodeId[];
+export interface ConstructionPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export interface ConstructionSurfaceSpec {
+  readonly cycle: readonly ConstructionNodeId[];
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  }
+export interface AffectedSurfaces {
+  readonly affectedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  }
+export interface DeleteNodeOutcome {
+  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly cappingSurfaceKeys: readonly ConstructionSurfaceKey[];
+  }
+export interface SplitSurfaceOutcome {
+  readonly firstKey: ConstructionSurfaceKey;
+  readonly secondKey: ConstructionSurfaceKey;
+  }
+export interface CornerHeightModule {
+  readonly name: string;
+  /** Exactly 4 entries, in `PrismGridMesh::cell_corners`' cyclic order. */
+  readonly cornerHeights: readonly [number, number, number, number];
+  }
+export interface GenerateTerrainCellRequest {
+  readonly cell: number;
+  readonly module: CornerHeightModule;
+  readonly surfaceType: string;
+  /** One id per corner slot, in cyclic order -- exactly 4 entries. */
+  readonly nodeIds: readonly [
+  ConstructionNodeId,
+  ConstructionNodeId,
+export interface CellCoordinate {
+  readonly x: number;
+  readonly z: number;
+  }
+export interface DiffOutcome {
+  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly removedNodeIds: readonly ConstructionNodeId[];
+  }
+export interface TransformationIdentityDelta<TIdentity> {
+  readonly created: readonly TIdentity[];
+  readonly preserved: readonly TIdentity[];
+  readonly replaced: readonly TIdentity[];
+  readonly removed: readonly TIdentity[];
+  }
+export interface SurfaceTransformationInvalidation {
+  readonly changedSurfaces: readonly ConstructionSurfaceKey[];
+  readonly topologyRepairNeighbors: readonly ConstructionSurfaceKey[];
+  readonly directDependencies: readonly ConstructionSurfaceKey[];
+  }
+export type ConstructionBrushShape =
+
 // src/ports/index.ts
 export type {
+  CameraControlHandle,
+  CameraControlOptions,
   ChangeOrigin,
-  ConfirmedTokenRenderChange,
-  RenderDependencyRevision,
-  RenderToken,
-  RenderViewId,
-  SceneRenderMetrics,
-  SceneRenderPort,
+  ConfirmedMapChunkRenderChange,
+  ConfirmedNodeHandleRenderChange,
+  ConfirmedRenderChange,
+  ConfirmedSurfacePickRenderChange,
+export type { TerrainNoisePort } from "./terrain-noise-port.ts";
+export type {
+  AffectedSurfaces,
+  ApplyPathBrushOutcome,
+  ApplyPathBrushRequest,
+  CellCoordinate,
+  CloudOutcome,
+  CloudRequest,
+  ConstructionBrushShape,
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";
 export type RenderViewId = string;
+export type RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks";
 export interface RenderDependencyRevision {
-  readonly layer: "tokens";
+  readonly layer: RenderLayerKey;
   readonly scopeId: string;
   readonly revision: number;
   }
@@ -3093,21 +3829,62 @@ export interface RenderToken {
   readonly id: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type ConfirmedTokenRenderChange =
-export interface SceneRenderMetrics {
-  readonly rendererCreates: number;
-  readonly rendererDisposes: number;
-  readonly attachedViews: number;
-  readonly confirmedTokenChanges: number;
-  readonly terrainUploads: number;
+export interface RenderMeshData {
+  readonly positions: Float32Array;
+  readonly normals?: Float32Array;
+  readonly uvs?: Float32Array;
+  readonly indices?: Uint16Array | Uint32Array;
   }
-export interface SceneRenderPort {
-  start(runtimeGeneration: number): Promise<void>;
-  attachView(target: HTMLElement): RenderViewId;
-  detachView(viewId: RenderViewId): void;
-  resizeView(viewId: RenderViewId, width: number, height: number): void;
-  applyConfirmed(change: ConfirmedTokenRenderChange): void;
-  getMetrics(): SceneRenderMetrics;
-  dispose(): Promise<void>;
+export interface RenderMapChunk {
+  readonly chunkId: string;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly mesh: RenderMeshData;
+  }
+export interface RenderSurfacePickTarget {
+  readonly surfaceRef: string;
+  readonly mesh: RenderMeshData;
+  }
+export type ConfirmedSurfacePickRenderChange =
+export type ConfirmedMapChunkRenderChange =
+export interface RenderNodeHandle {
+  readonly nodeId: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+export type ConfirmedNodeHandleRenderChange =
+export type ConfirmedRenderChange =
+export interface ScenePickResult {
+  readonly point: { readonly x: number; readonly y: number; readonly z: number };
+
+// src/ports/terrain-noise-port.ts
+export interface TerrainNoisePort {
+  /** Loads the underlying Wasm module. Every other method requires this to have resolved first. */
+  start(): Promise<void>;
+  /**
+  * Samples a real Perlin-noise heightmap on a `width` x `height` grid,
+  * seeded deterministically. Returns a flat row-major array of one height
+  * value per cell, in Perlin's native `[-1, 1]` range. `scale` is the
+  * distance between samples in the noise's own space -- smaller values
+
+// src/widgets/index.ts
+export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "@/features/edit-construction";
+
+// src/widgets/use-keyboard-shortcuts.ts
+export interface KeyboardShortcutsOptions {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
+  readonly onToolChange: (tool: ConstructionToolId) => void;
+  readonly ready: boolean;
+  readonly snapToGrid: boolean;
+export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
+  const { canUndo, canRedo, onUndo, onRedo, onToolChange, ready, snapToGrid, onSnapToGridChange } = options;
+
+  useEffect(() => {
+  const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  if (event.ctrlKey && event.key.toLowerCase() === "z") {
+  event.preventDefault();
 ```
 
 ### `x6-canvas` (`packages/x6-canvas`)
@@ -3384,22 +4161,6 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
 ```csharp
-// Generated/Grafting/Contracts/CellRole.cs
-public enum CellRole : sbyte
-
-// Generated/Grafting/Contracts/CellStatePatch.cs
-public struct CellStatePatch : IFlatbufferObject
-public static void ValidateVersion()
-public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb)
-public static CellStatePatch GetRootAsCellStatePatch(ByteBuffer _bb, CellStatePatch obj)
-public static Offset<Grafting.Contracts.CellStatePatch> CreateCellStatePatch(FlatBufferBuilder builder,
-public static void StartCellStatePatch(FlatBufferBuilder builder)
-public static void AddCellId(FlatBufferBuilder builder, uint cellId)
-public static void AddNewRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole newRole)
-public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
-public static void AddSequence(FlatBufferBuilder builder, ulong sequence)
-public static Offset<Grafting.Contracts.CellStatePatch> EndCellStatePatch(FlatBufferBuilder builder)
-
 // Generated/Grafting/Contracts/CommandMessage.cs
 public struct CommandMessage : IFlatbufferObject
 public static void ValidateVersion()
@@ -3477,23 +4238,6 @@ public static void AddAmount(FlatBufferBuilder builder, long amount)
 public static void AddNewValue(FlatBufferBuilder builder, long newValue)
 public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
 
-// Generated/Grafting/Contracts/PrismCellData.cs
-public struct PrismCellData : IFlatbufferObject
-public static void ValidateVersion()
-public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb)
-public static PrismCellData GetRootAsPrismCellData(ByteBuffer _bb, PrismCellData obj)
-public static Offset<Grafting.Contracts.PrismCellData> CreatePrismCellData(FlatBufferBuilder builder,
-public static void StartPrismCellData(FlatBufferBuilder builder)
-public static void AddId(FlatBufferBuilder builder, uint id)
-public static void AddLayer(FlatBufferBuilder builder, byte layer)
-public static void AddX(FlatBufferBuilder builder, int x)
-public static void AddY(FlatBufferBuilder builder, int y)
-public static void AddRole(FlatBufferBuilder builder, Grafting.Contracts.CellRole role)
-public static void AddVertexShift(FlatBufferBuilder builder, Offset<Grafting.Contracts.Vec3Offset> vertexShiftOffset)
-public static void AddNeighbors(FlatBufferBuilder builder, VectorOffset neighborsOffset)
-public static VectorOffset CreateNeighborsVector(FlatBufferBuilder builder, int[] data)
-public static VectorOffset CreateNeighborsVectorBlock(FlatBufferBuilder builder, int[] data)
-
 // Generated/Grafting/Contracts/Reset.cs
 public struct Reset : IFlatbufferObject
 public static void ValidateVersion()
@@ -3550,18 +4294,6 @@ public static Offset<Grafting.Contracts.StateTable> CreateStateTable(FlatBufferB
 public static void StartStateTable(FlatBufferBuilder builder)
 public static void AddValue(FlatBufferBuilder builder, long value)
 public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/Vec3Offset.cs
-public struct Vec3Offset : IFlatbufferObject
-public static void ValidateVersion()
-public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb)
-public static Vec3Offset GetRootAsVec3Offset(ByteBuffer _bb, Vec3Offset obj)
-public static Offset<Grafting.Contracts.Vec3Offset> CreateVec3Offset(FlatBufferBuilder builder,
-public static void StartVec3Offset(FlatBufferBuilder builder)
-public static void AddX(FlatBufferBuilder builder, float x)
-public static void AddY(FlatBufferBuilder builder, float y)
-public static void AddZ(FlatBufferBuilder builder, float z)
-public static Offset<Grafting.Contracts.Vec3Offset> EndVec3Offset(FlatBufferBuilder builder)
 
 // Generated/Grafting/Contracts/WasReset.cs
 public struct WasReset : IFlatbufferObject

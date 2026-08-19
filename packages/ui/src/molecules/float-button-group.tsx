@@ -3,11 +3,20 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 /** One action inside a {@link FloatButtonGroup}. */
 export interface FloatButtonItem {
-  /** Stable identity within the list. */
+  /**
+   * Stable identity within the list.
+   * @example "action-1"
+   */
   readonly key: string;
-  /** Caller-rendered icon content. Vendor-neutral -- this molecule never ships its own icon set. */
+  /**
+   * Caller-rendered icon content. Vendor-neutral -- this molecule never ships its own icon set.
+   * @example "⚙"
+   */
   readonly icon: ReactNode;
-  /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+  /**
+   * Tooltip and accessible name -- a float button shows no visible text label of its own.
+   * @example "Configurações"
+   */
   readonly tooltip: string;
   /** Invoked when this item is activated. */
   readonly onClick?: () => void;
@@ -24,7 +33,13 @@ export interface FloatButtonItem {
 export interface FloatButtonGroupProps {
   /** The trigger's own icon, shown when the group is collapsed. Unused when `alwaysExpanded` is set -- there is no trigger to show it on. */
   readonly icon?: ReactNode;
-  /** The actions revealed when the group is open, in display order. */
+  /**
+   * The actions revealed when the group is open, in display order.
+   * @example
+   * ```tsx
+   * [{ key: "action-1", icon: "⚙", tooltip: "Settings" }]
+   * ```
+   */
   readonly items: readonly FloatButtonItem[];
   /**
    * Which side the group expands toward from the trigger -- `"top"`/`"bottom"`

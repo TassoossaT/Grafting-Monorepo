@@ -3,15 +3,27 @@ import type { ReactElement, ReactNode } from "react";
 
 /** Public inputs for a small floating panel anchored to a trigger element. */
 export interface PopoverProps {
-  /** The element the popover positions itself against. */
+  /**
+   * The element the popover positions itself against.
+   * @example <button>Open</button>
+   */
   readonly anchor: ReactNode;
-  /** Whether the popover is currently shown. */
+  /**
+   * Whether the popover is currently shown.
+   * @example true
+   */
   readonly open: boolean;
-  /** Invoked when the popover requests to close, e.g. an outside click or Escape. */
+  /**
+   * Invoked when the popover requests to close, e.g. an outside click or Escape.
+   * @example () => {}
+   */
   readonly onClose: () => void;
   /** Optional header text shown above the content. */
   readonly title?: string;
-  /** Content rendered inside the popover body. */
+  /**
+   * Content rendered inside the popover body.
+   * @example <div>Content</div>
+   */
   readonly children: ReactNode;
   /**
    * Which side of `anchor` the popover opens toward.

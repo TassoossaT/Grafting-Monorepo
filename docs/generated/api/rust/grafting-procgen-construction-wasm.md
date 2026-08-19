@@ -10,7 +10,8 @@ Adds a brand-new node. See `editing::add_node`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Registers a brand-new surface. See `editing::add_surface`.
+Registers a brand-new surface, as an analytic region. See
+`editing::add_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::all_surface_meshes_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -132,9 +133,11 @@ Divides one surface into two. See `editing::apply_split_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-One surface's triangulated mesh, by key -- what a caller re-fetches
-for each entry in an operation's `affectedSurfaceKeys` after a
-mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
+One surface's triangulated mesh piece(s), by key -- what a caller
+re-fetches for each entry in an operation's `affectedSurfaceKeys`
+after a mutation, instead of re-fetching everything. An analytic
+region key can legitimately return more than one piece; a plain
+surface key always returns exactly one. See `mesh::surface_mesh`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
 

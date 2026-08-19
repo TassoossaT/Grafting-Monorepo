@@ -197,7 +197,10 @@ export interface IconButtonProps {
     readonly icon: ReactNode;
     /** Optional visible label rendered beside the icon. Icon-only when omitted. */
     readonly label?: string;
-    /** Accessible name and hover tooltip. Required when `label` is omitted, since an icon-only button has no other text content. */
+    /**
+     * Accessible name and hover tooltip. Required when `label` is omitted, since an icon-only button has no other text content.
+     * @example "Toggle sidebar"
+     */
     readonly title: string;
     /** Invoked when the button is activated. */
     readonly onClick?: () => void;
@@ -260,15 +263,27 @@ export declare function SelectableChip(props: SelectableChipProps): ReactElement
 import type { ReactElement, ReactNode } from "react";
 /** Public inputs for a small floating panel anchored to a trigger element. */
 export interface PopoverProps {
-    /** The element the popover positions itself against. */
+    /**
+     * The element the popover positions itself against.
+     * @example <button>Open</button>
+     */
     readonly anchor: ReactNode;
-    /** Whether the popover is currently shown. */
+    /**
+     * Whether the popover is currently shown.
+     * @example true
+     */
     readonly open: boolean;
-    /** Invoked when the popover requests to close, e.g. an outside click or Escape. */
+    /**
+     * Invoked when the popover requests to close, e.g. an outside click or Escape.
+     * @example () => {}
+     */
     readonly onClose: () => void;
     /** Optional header text shown above the content. */
     readonly title?: string;
-    /** Content rendered inside the popover body. */
+    /**
+     * Content rendered inside the popover body.
+     * @example <div>Content</div>
+     */
     readonly children: ReactNode;
     /**
      * Which side of `anchor` the popover opens toward.
@@ -293,13 +308,22 @@ export declare function Popover(props: PopoverProps): ReactElement;
 import type { ReactElement, ReactNode } from "react";
 /** Public inputs for a panel that slides in from a screen edge. */
 export interface DrawerProps {
-    /** Whether the drawer is currently shown. */
+    /**
+     * Whether the drawer is currently shown.
+     * @example true
+     */
     readonly open: boolean;
-    /** Invoked when the drawer requests to close, e.g. its own close button or Escape. */
+    /**
+     * Invoked when the drawer requests to close, e.g. its own close button or Escape.
+     * @example () => {}
+     */
     readonly onClose: () => void;
     /** Optional header text shown above the content. */
     readonly title?: string;
-    /** Content rendered inside the drawer body. */
+    /**
+     * Content rendered inside the drawer body.
+     * @example <div>Drawer content</div>
+     */
     readonly children: ReactNode;
     /**
      * Which screen edge the drawer slides in from.
@@ -329,19 +353,31 @@ export declare function Drawer(props: DrawerProps): ReactElement;
 import type { ReactElement, ReactNode } from "react";
 /** One label-value row. */
 export interface DescriptionItem {
-    /** Stable identity within the list. */
+    /**
+     * Stable identity within the list.
+     * @example "node-id"
+     */
     readonly key: string;
     /**
      * Row label.
      * @example "Node ID"
      */
     readonly label: string;
-    /** Row value, plain text or caller-rendered content. */
+    /**
+     * Row value, plain text or caller-rendered content.
+     * @example "node_42"
+     */
     readonly value: ReactNode;
 }
 /** Public inputs for a compact label-value grid. */
 export interface DescriptionsProps {
-    /** The rows to display, in order. */
+    /**
+     * The rows to display, in order.
+     * @example
+     * ```tsx
+     * [{ key: "id", label: "Node ID", value: "node_42" }]
+     * ```
+     */
     readonly items: readonly DescriptionItem[];
     /**
      * How many label-value pairs sit per row.
@@ -366,19 +402,31 @@ export declare function Descriptions(props: DescriptionsProps): ReactElement;
 import type { ReactElement, ReactNode } from "react";
 /** One collapsible section. */
 export interface CollapsePanel {
-    /** Stable identity within the list, and what `defaultActiveKeys` names. */
+    /**
+     * Stable identity within the list, and what `defaultActiveKeys` names.
+     * @example "section-1"
+     */
     readonly key: string;
     /**
      * Section header, always visible.
      * @example "Inspector de Seleção"
      */
     readonly header: string;
-    /** Section content, shown when expanded. */
+    /**
+     * Section content, shown when expanded.
+     * @example <div>Section body</div>
+     */
     readonly content: ReactNode;
 }
 /** Public inputs for a set of stacked, individually collapsible sections. */
 export interface CollapseProps {
-    /** The sections, in display order. */
+    /**
+     * The sections, in display order.
+     * @example
+     * ```tsx
+     * [{ key: "section-1", header: "Section", content: "Body" }]
+     * ```
+     */
     readonly panels: readonly CollapsePanel[];
     /** Which panel keys start expanded. Defaults to every panel's own key, i.e. all expanded. */
     readonly defaultActiveKeys?: readonly string[];
@@ -408,9 +456,15 @@ export declare function Collapse(props: CollapseProps): ReactElement;
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** Public inputs for a single floating action, independent of any group. */
 export interface FloatButtonProps {
-    /** Caller-rendered icon content. Vendor-neutral -- this atom never ships its own icon set. */
+    /**
+     * Caller-rendered icon content. Vendor-neutral -- this atom never ships its own icon set.
+     * @example "⚙"
+     */
     readonly icon: ReactNode;
-    /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+    /**
+     * Tooltip and accessible name -- a float button shows no visible text label of its own.
+     * @example "Configurações"
+     */
     readonly tooltip: string;
     /** Invoked when this button is activated. */
     readonly onClick?: () => void;
@@ -449,17 +503,27 @@ export declare function FloatButton(props: FloatButtonProps): ReactElement;
 import type { CSSProperties, ReactElement } from "react";
 /** Public inputs for a small handle fused to one edge of a panel, toggling it open/closed. */
 export interface EdgeHandleProps {
-    /** Whether the panel this handle belongs to is currently open. */
+    /**
+     * Whether the panel this handle belongs to is currently open.
+     * @example true
+     */
     readonly open: boolean;
-    /** Invoked on a plain tap/click (movement below the drag threshold) or a keyboard activation. Never called for a real drag -- use `onDragEnd` for that. */
+    /**
+     * Invoked on a plain tap/click (movement below the drag threshold) or a keyboard activation. Never called for a real drag -- use `onDragEnd` for that.
+     * @example () => {}
+     */
     readonly onClick: () => void;
     /**
      * Which edge of the panel the handle protrudes from -- `"right"` bulges
      * rightward (for a panel anchored to the screen's left edge), `"left"`
      * bulges leftward (for a panel anchored to the right edge).
+     * @example "right"
      */
     readonly edge: "left" | "right";
-    /** Tooltip and accessible name. */
+    /**
+     * Tooltip and accessible name.
+     * @example "Recolher painel"
+     */
     readonly title: string;
     /** Optional caller-owned class name for layout composition. */
     readonly className?: string;
@@ -679,11 +743,20 @@ export declare function PreviewCard(props: PreviewCardProps): ReactElement;
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** One action inside a {@link FloatButtonGroup}. */
 export interface FloatButtonItem {
-    /** Stable identity within the list. */
+    /**
+     * Stable identity within the list.
+     * @example "action-1"
+     */
     readonly key: string;
-    /** Caller-rendered icon content. Vendor-neutral -- this molecule never ships its own icon set. */
+    /**
+     * Caller-rendered icon content. Vendor-neutral -- this molecule never ships its own icon set.
+     * @example "⚙"
+     */
     readonly icon: ReactNode;
-    /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+    /**
+     * Tooltip and accessible name -- a float button shows no visible text label of its own.
+     * @example "Configurações"
+     */
     readonly tooltip: string;
     /** Invoked when this item is activated. */
     readonly onClick?: () => void;
@@ -699,7 +772,13 @@ export interface FloatButtonItem {
 export interface FloatButtonGroupProps {
     /** The trigger's own icon, shown when the group is collapsed. Unused when `alwaysExpanded` is set -- there is no trigger to show it on. */
     readonly icon?: ReactNode;
-    /** The actions revealed when the group is open, in display order. */
+    /**
+     * The actions revealed when the group is open, in display order.
+     * @example
+     * ```tsx
+     * [{ key: "action-1", icon: "⚙", tooltip: "Settings" }]
+     * ```
+     */
     readonly items: readonly FloatButtonItem[];
     /**
      * Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
@@ -773,15 +852,30 @@ export declare function FloatButtonGroup(props: FloatButtonGroupProps): ReactEle
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed. */
 export interface SlidingPanelProps {
-    /** Whether the panel is currently open. */
+    /**
+     * Whether the panel is currently open.
+     * @example true
+     */
     readonly open: boolean;
-    /** Invoked with the panel's next open state, from a tap or a drag past the midpoint. */
+    /**
+     * Invoked with the panel's next open state, from a tap or a drag past the midpoint.
+     * @example () => {}
+     */
     readonly onOpenChange: (open: boolean) => void;
-    /** Which screen edge the panel is anchored to. */
+    /**
+     * Which screen edge the panel is anchored to.
+     * @example "left"
+     */
     readonly edge: "left" | "right";
-    /** Panel width in pixels. */
+    /**
+     * Panel width in pixels.
+     * @example 320
+     */
     readonly width: number;
-    /** The panel's own content. */
+    /**
+     * The panel's own content.
+     * @example <div>Panel content</div>
+     */
     readonly children: ReactNode;
     /** Stacking order for the panel's own fixed container. @default 20 */
     readonly zIndex?: number;
@@ -909,9 +1003,15 @@ export declare function DataTable<Row extends object>(props: DataTableProps<Row>
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** One sub-action or variant inside an active {@link ActionDockItem}. */
 export interface ActionDockSubItem {
-    /** Stable identity of the sub-item. */
+    /**
+     * Stable identity of the sub-item.
+     * @example "sub-1"
+     */
     readonly key: string;
-    /** Visible label or accessible title. */
+    /**
+     * Visible label or accessible title.
+     * @example "Sub Item"
+     */
     readonly label: string;
     /** Caller-rendered icon. */
     readonly icon?: ReactNode;
@@ -930,11 +1030,20 @@ export interface ActionDockSubItem {
 }
 /** One primary category or tool action in the {@link ActionDock}. */
 export interface ActionDockItem {
-    /** Stable identity of the tool or category. */
+    /**
+     * Stable identity of the tool or category.
+     * @example "tool-1"
+     */
     readonly key: string;
-    /** Visible label or accessible title. */
+    /**
+     * Visible label or accessible title.
+     * @example "Tool 1"
+     */
     readonly label: string;
-    /** Caller-rendered icon. */
+    /**
+     * Caller-rendered icon.
+     * @example "🔨"
+     */
     readonly icon: ReactNode;
     /** Tooltip description. */
     readonly tooltip?: string;
@@ -957,7 +1066,13 @@ export interface ActionDockItem {
 export interface ActionDockProps {
     /** Accessible name for the toolbar region. @default "Barra de ferramentas de construção" */
     readonly ariaLabel?: string;
-    /** Primary construction verbs / categories in display order. */
+    /**
+     * Primary construction verbs / categories in display order.
+     * @example
+     * ```tsx
+     * [{ key: "tool-1", label: "Tool 1", icon: "🔨" }]
+     * ```
+     */
     readonly items: readonly ActionDockItem[];
     /** Optional leading accessories rendered alongside the items. */
     readonly leadingAccessories?: ReactNode;
@@ -992,28 +1107,49 @@ export type FloatButtonTreeSiblingMode = "accordion" | "multiple";
 export type FloatButtonTreePlacement = "top" | "right" | "bottom" | "left";
 /** A direct action -- the tree's equivalent of a leaf node. */
 export interface FloatButtonTreeLeaf {
-    /** Stable identity among its siblings. */
+    /**
+     * Stable identity among its siblings.
+     * @example "leaf-1"
+     */
     readonly key: string;
-    /** Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set. */
+    /**
+     * Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set.
+     * @example "📄"
+     */
     readonly icon: ReactNode;
-    /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+    /**
+     * Tooltip and accessible name -- a float button shows no visible text label of its own.
+     * @example "Document"
+     */
     readonly tooltip: string;
     /** Emphasis, e.g. to mark the currently-active leaf in a selector. */
     readonly tone?: "default" | "primary";
     /** Renders this leaf non-interactive. */
     readonly disabled?: boolean;
-    /** Invoked when this leaf is activated. Closes the whole tree afterward, like choosing a menu action. */
+    /**
+     * Invoked when this leaf is activated. Closes the whole tree afterward, like choosing a menu action.
+     * @example () => {}
+     */
     readonly onClick: () => void;
     /** Absent on a leaf -- its presence (not its value) is what distinguishes a {@link FloatButtonTreeBranch} from a leaf. */
     readonly children?: undefined;
 }
 /** A branch: its own floating trigger, revealing a nested list of further {@link FloatButtonTreeNode}s -- leaves, or further branches. */
 export interface FloatButtonTreeBranch {
-    /** Stable identity among its siblings. */
+    /**
+     * Stable identity among its siblings.
+     * @example "branch-1"
+     */
     readonly key: string;
-    /** Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set. */
+    /**
+     * Caller-rendered icon content. Vendor-neutral -- this organism never ships its own icon set.
+     * @example "📁"
+     */
     readonly icon: ReactNode;
-    /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+    /**
+     * Tooltip and accessible name -- a float button shows no visible text label of its own.
+     * @example "Folder"
+     */
     readonly tooltip: string;
     /** Emphasis, e.g. to mark the currently-active branch in a selector. */
     readonly tone?: "default" | "primary";
@@ -1021,7 +1157,13 @@ export interface FloatButtonTreeBranch {
     readonly disabled?: boolean;
     /** Absent on a branch -- a branch opens its `children`, it does not fire a direct action. */
     readonly onClick?: undefined;
-    /** The nodes revealed when this branch opens, in display order. */
+    /**
+     * The nodes revealed when this branch opens, in display order.
+     * @example
+     * ```tsx
+     * [{ key: "leaf-1", icon: "📄", tooltip: "Document", onClick: () => {} }]
+     * ```
+     */
     readonly children: readonly FloatButtonTreeNode[];
     /** Overrides the tree-level default trigger for this branch's own submenu. */
     readonly trigger?: FloatButtonTreeTrigger;
@@ -1034,7 +1176,13 @@ export interface FloatButtonTreeBranch {
 export type FloatButtonTreeNode = FloatButtonTreeLeaf | FloatButtonTreeBranch;
 /** Public inputs for a tree of floating-button groups -- a group whose items can themselves be groups. */
 export interface FloatButtonTreeProps {
-    /** The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`. */
+    /**
+     * The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`.
+     * @example
+     * ```tsx
+     * { key: "root", icon: "📁", tooltip: "Root", children: [] }
+     * ```
+     */
     readonly root: FloatButtonTreeBranch;
     /** Default submenu trigger for every branch that does not set its own. @default "click" */
     readonly trigger?: FloatButtonTreeTrigger;

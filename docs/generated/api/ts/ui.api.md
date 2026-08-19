@@ -1,5 +1,121 @@
 # ui
 
+### `interface ui.ActionDockItem`
+
+One primary category or tool action in the ActionDock.
+
+### `property ui.ActionDockItem.active?: boolean`
+
+Whether this tool/category is currently active.
+
+### `property ui.ActionDockItem.childActive?: boolean`
+
+Whether any child sub-item of this item is active.
+
+### `property ui.ActionDockItem.className?: string`
+
+Optional caller-owned class name.
+
+### `property ui.ActionDockItem.disabled?: boolean`
+
+Whether this item is non-interactive.
+
+### `property ui.ActionDockItem.icon: ReactNode`
+
+Caller-rendered icon.
+
+### `property ui.ActionDockItem.key: string`
+
+Stable identity of the tool or category.
+
+### `property ui.ActionDockItem.label: string`
+
+Visible label or accessible title.
+
+### `property ui.ActionDockItem.onClick?: () => void`
+
+Invoked when this item is clicked.
+
+### `property ui.ActionDockItem.shortcut?: string`
+
+Keyboard shortcut hint (e.g. "B", "W", "P", "T").
+
+### `property ui.ActionDockItem.subItems?: readonly ActionDockSubItem[]`
+
+Optional sub-tools revealed above this button when it is active.
+
+### `property ui.ActionDockItem.tooltip?: string`
+
+Tooltip description.
+
+### `interface ui.ActionDockProps`
+
+Public inputs for the generic ActionDock bottom toolbar organism.
+
+### `property ui.ActionDockProps.ariaLabel?: string`
+
+Accessible name for the toolbar region.
+
+### `property ui.ActionDockProps.className?: string`
+
+Optional caller-owned class name applied to the outer wrapper.
+
+### `property ui.ActionDockProps.items: readonly ActionDockItem[]`
+
+Primary construction verbs / categories in display order.
+
+### `property ui.ActionDockProps.leadingAccessories?: ReactNode`
+
+Optional leading accessories rendered alongside the items.
+
+### `property ui.ActionDockProps.style?: CSSProperties`
+
+Optional inline style override for the outer wrapper.
+
+### `property ui.ActionDockProps.trailingAccessories?: ReactNode`
+
+Optional trailing accessories rendered alongside the items.
+
+### `interface ui.ActionDockSubItem`
+
+One sub-action or variant inside an active ActionDockItem.
+
+### `property ui.ActionDockSubItem.active?: boolean`
+
+Whether this sub-item is currently active.
+
+### `property ui.ActionDockSubItem.className?: string`
+
+Optional caller-owned class name.
+
+### `property ui.ActionDockSubItem.disabled?: boolean`
+
+Whether this sub-item is disabled.
+
+### `property ui.ActionDockSubItem.icon?: ReactNode`
+
+Caller-rendered icon.
+
+### `property ui.ActionDockSubItem.key: string`
+
+Stable identity of the sub-item.
+
+### `property ui.ActionDockSubItem.label: string`
+
+Visible label or accessible title.
+
+### `property ui.ActionDockSubItem.onClick?: () => void`
+
+Invoked when this sub-item is clicked.
+
+### `property ui.ActionDockSubItem.shortcut?: string`
+
+Keyboard shortcut hint (e.g. "1", "2", "Shift+W").
+
+### `property ui.ActionDockSubItem.tooltip?: string`
+
+Tooltip description.
+
 ### `interface ui.ButtonProps`
 
 Public inputs for a compact, clickable action.
@@ -1681,19 +1797,27 @@ Optional color swatch rendered before the label, e.g. a material preview.
 
 ### `interface ui.SlidingPanelProps`
 
-Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed, dragged open/closed by a handle fused to its own edge.
+Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed.
 
 ### `property ui.SlidingPanelProps.children: ReactNode`
 
-The panel's own content, below the title.
+The panel's own content.
 
 ### `property ui.SlidingPanelProps.className?: string`
 
-Optional caller-owned class name for the panel's own container.
+Caller-owned class name for the panel's own container (use this for background, shadows, borders).
 
 ### `property ui.SlidingPanelProps.edge: "left" | "right"`
 
 Which screen edge the panel is anchored to.
+
+### `property ui.SlidingPanelProps.handleCloseLabel?: string`
+
+Tooltip/Aria label for the handle when the panel is closed.
+
+### `property ui.SlidingPanelProps.handleOpenLabel?: string`
+
+Tooltip/Aria label for the handle when the panel is open.
 
 ### `property ui.SlidingPanelProps.onOpenChange: (open: boolean) => void`
 
@@ -1705,11 +1829,7 @@ Whether the panel is currently open.
 
 ### `property ui.SlidingPanelProps.style?: CSSProperties`
 
-Optional caller-owned inline style, merged onto the panel's own container.
-
-### `property ui.SlidingPanelProps.title: string`
-
-Header text shown at the top of the panel's content area.
+Caller-owned inline style, merged onto the panel's own container.
 
 ### `property ui.SlidingPanelProps.width: number`
 
@@ -1844,6 +1964,17 @@ Semantic statuses supported by Grafting UI components.
 ### `variable ui.EDGE_HANDLE_SIZE: 28`
 
 The handle's own footprint (`width`, half of `height`) -- exported so a caller composing a panel around this handle (e.g. `SlidingPanel`) can position it flush against the panel's edge without duplicating the magic number.
+
+### `function ui.ActionDock(props: ActionDockProps): ReactElement`
+
+A generic bottom action dock organism.
+
+Renders an accessible toolbar of primary actions with optional expandable
+sub-action rows positioned horizontally above active items.
+
+All visual identity (theming, colors, glassmorphism, sketch styles) is owned
+by the consuming application via CSS classes (`.grafting-action-dock`,
+`.grafting-action-dock__item`, etc.).
 
 ### `function ui.Button(props: ButtonProps): ReactElement`
 
@@ -2013,19 +2144,9 @@ vendor primitive already models.
 
 ### `function ui.SlidingPanel(props: SlidingPanelProps): ReactElement`
 
-A panel fixed to one edge of the screen that slides fully off-screen when
+A generic panel fixed to one edge of the screen that slides fully off-screen when
 closed and back into view when open, with an EdgeHandle fused to
-its edge as the drag/toggle control -- the handle is a child of the
-panel's own transformed element, so it visually travels with the slide
-animation instead of sitting at a fixed screen position while the panel
-moves independently underneath it. The handle can also be dragged: while
-pressed, the panel tracks the pointer 1:1 (no transition), and on release
-it snaps to whichever side (open/closed) it crossed the midpoint toward.
-
-Not built on `Drawer` (this package's own, wrapping Ant Design's): that
-component's portal/motion internals give no seam to attach external
-content that moves with its animated edge, which is the entire point of
-this molecule.
+its edge as the drag/toggle control.
 
 ### `function ui.StatusBadge(props: StatusBadgeProps): ReactElement`
 

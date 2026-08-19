@@ -3,17 +3,27 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactElement } f
 
 /** Public inputs for a small handle fused to one edge of a panel, toggling it open/closed. */
 export interface EdgeHandleProps {
-  /** Whether the panel this handle belongs to is currently open. */
+  /**
+   * Whether the panel this handle belongs to is currently open.
+   * @example true
+   */
   readonly open: boolean;
-  /** Invoked on a plain tap/click (movement below the drag threshold) or a keyboard activation. Never called for a real drag -- use `onDragEnd` for that. */
+  /**
+   * Invoked on a plain tap/click (movement below the drag threshold) or a keyboard activation. Never called for a real drag -- use `onDragEnd` for that.
+   * @example () => {}
+   */
   readonly onClick: () => void;
   /**
    * Which edge of the panel the handle protrudes from -- `"right"` bulges
    * rightward (for a panel anchored to the screen's left edge), `"left"`
    * bulges leftward (for a panel anchored to the right edge).
+   * @example "right"
    */
   readonly edge: "left" | "right";
-  /** Tooltip and accessible name. */
+  /**
+   * Tooltip and accessible name.
+   * @example "Recolher painel"
+   */
   readonly title: string;
   /** Optional caller-owned class name for layout composition. */
   readonly className?: string;

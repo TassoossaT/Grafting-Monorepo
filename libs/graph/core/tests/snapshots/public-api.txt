@@ -390,6 +390,8 @@ pub fn grafting_graph_core::ContourTopology::add_edge<N, E>(&mut self, graph: &g
 pub fn grafting_graph_core::ContourTopology::add_region(&mut self, id: grafting_graph_core::RegionId, outer_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>, holes: alloc::vec::Vec<grafting_graph_core::ContourLoop>) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>
 pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>
 pub fn grafting_graph_core::ContourTopology::new() -> Self
+pub fn grafting_graph_core::ContourTopology::nodes_in_use(&self) -> alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>
+pub fn grafting_graph_core::ContourTopology::prune_unused_edges(&mut self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>
 pub fn grafting_graph_core::ContourTopology::region(&self, id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::SurfaceRegion>
 pub fn grafting_graph_core::ContourTopology::remove_region(&mut self, id: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::SurfaceRegion, grafting_graph_core::ContourError>
 impl core::clone::Clone for grafting_graph_core::ContourTopology
@@ -1155,6 +1157,26 @@ Looks up a registered edge by identity.
 ### `pub fn grafting_graph_core::ContourTopology::new() -> Self`
 
 Creates an empty topology.
+
+### `pub fn grafting_graph_core::ContourTopology::nodes_in_use(&self) -> alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>`
+
+Every node referenced by an edge at least one still-registered
+region actually uses. A node outside this set is safe for a caller
+to delete from its own [`Graph`] -- nothing in this topology still
+needs it. Deliberately does not include nodes referenced only by a
+[`ContourEdge`] with zero usages: [`remove_region`](Self::remove_region)
+leaves those registered (a sibling region might reuse the id later
+in the same batch of edits) but they hold no region together, so
+they cannot keep a node alive either.
+
+### `pub fn grafting_graph_core::ContourTopology::prune_unused_edges(&mut self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Drops every registered edge no region currently uses -- exactly the
+garbage [`remove_region`](Self::remove_region) intentionally leaves
+behind per its own doc ("another region may still reference them").
+A caller that just finished a batch of removals calls this once to
+reclaim whatever really did become orphaned, rather than every edge
+staying registered forever.
 
 ### `pub fn grafting_graph_core::ContourTopology::region(&self, id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::SurfaceRegion>`
 
