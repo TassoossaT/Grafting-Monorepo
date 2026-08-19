@@ -315,7 +315,13 @@ export interface ConstructionSessionPort {
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult;
+  /**
+   * One surface's mesh piece(s), by key. Almost always one piece -- but an
+   * analytic-region key (a merged path-brush source/target region) can
+   * legitimately triangulate into several disjoint pieces (one per outer
+   * loop), and every one of them must be rendered, not just the first.
+   */
+  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
 

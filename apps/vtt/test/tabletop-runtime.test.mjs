@@ -150,13 +150,15 @@ function createFakeConstructionPort() {
       requireStarted();
       const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
       const match = this.getAllSurfaceMeshes().find((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey) === surfaceRef);
-      if (match !== undefined) return match;
-      return {
-        surfaceKey,
-        surfaceType: "wall",
-        physical: true,
-        mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
-      };
+      if (match !== undefined) return [match];
+      return [
+        {
+          surfaceKey,
+          surfaceType: "wall",
+          physical: true,
+          mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
+        },
+      ];
     },
     getAllSurfaceMeshes() {
       requireStarted();
@@ -351,13 +353,15 @@ test("moving a node removes a chunk that no longer has any surface in it", async
   const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
 
   constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
-  constructionPort.getSurfaceMesh = (surfaceKey) => ({
-    surfaceKey,
-    surfaceType: "terrain",
-    physical: true,
-    // Far enough from the seeded chunk to land in a different spatial bucket, so the old chunk ends up with zero members.
-    mesh: { positions: new Float32Array([500, 100, 500, 501, 100, 500, 501, 100, 501, 500, 100, 501]) },
-  });
+  constructionPort.getSurfaceMesh = (surfaceKey) => [
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      // Far enough from the seeded chunk to land in a different spatial bucket, so the old chunk ends up with zero members.
+      mesh: { positions: new Float32Array([500, 100, 500, 501, 100, 500, 501, 100, 501, 500, 100, 501]) },
+    },
+  ];
   runtime.moveNode("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
 
   const removal = renderPort.changes.find(
@@ -382,19 +386,23 @@ test("editing one surface never touches the render chunk of an unrelated, untouc
   const nearKey = ["fake:near:n0", "fake:near:n1"];
   constructionPort.getSurfaceMesh = (surfaceKey) => {
     if (surfaceRefFromNodeSet(surfaceKey) === surfaceRefFromNodeSet(farKey)) {
-      return {
-        surfaceKey: farKey,
+      return [
+        {
+          surfaceKey: farKey,
+          surfaceType: "terrain",
+          physical: true,
+          mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
+        },
+      ];
+    }
+    return [
+      {
+        surfaceKey,
         surfaceType: "terrain",
         physical: true,
-        mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
-      };
-    }
-    return {
-      surfaceKey,
-      surfaceType: "terrain",
-      physical: true,
-      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
-    };
+        mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+      },
+    ];
   };
   constructionPort.generateTerrainCell = () => farKey;
   runtime.generateTerrainCell({}, "local", "far-cell");
@@ -414,6 +422,47 @@ test("editing one surface never touches the render chunk of an unrelated, untouc
     [],
     "an edit to a different surface must not re-upload or remove an unrelated chunk",
   );
+});
+
+test("one surface key returning several disjoint mesh pieces uploads every piece, not just the first", async () => {
+  // Regression: an analytic-region surface (a merged path-brush
+  // source/target region) can legitimately triangulate into more than one
+  // disjoint mesh piece -- one per outer loop. `getSurfaceMesh` used to be
+  // a single-mesh contract, so `#applyConstructionMutation`'s refetch kept
+  // only the first piece and silently dropped the rest from the render
+  // chunk -- the real cause of "surfaces vanishing" after a path-brush
+  // stroke merged several separate terrain pieces into one region.
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-multi-piece-surface",
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  const regionKey = ["@region", "path-1-target"];
+  constructionPort.getSurfaceMesh = (surfaceKey) => [
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+    },
+    {
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      // Far enough from the first piece to land in a different spatial chunk bucket.
+      mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
+    },
+  ];
+  constructionPort.generateTerrainCell = () => regionKey;
+  runtime.generateTerrainCell({}, "local", "multi-piece-cell");
+
+  const upserted = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
+  const chunkIds = new Set(upserted.map((change) => change.chunk.chunkId));
+  assert.equal(chunkIds.size, 2, "both mesh pieces must land in (and upload) their own chunk");
 });
 
 test("generateTerrainCell folds the new surface and its nodes into the map", async () => {

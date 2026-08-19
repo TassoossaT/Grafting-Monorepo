@@ -35,6 +35,7 @@ import type {
   GenerateTerrainCellRequest,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
+  RenderMeshData,
   RenderPreviewDescriptor,
   RenderViewId,
   ScenePickResult,
@@ -261,10 +262,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #seedDefaultMapOnStart: boolean;
   /** Last uploaded revision per `RenderMapChunk.chunkId`. */
   readonly #chunkRevisions = new Map<string, number>();
-  /** Every surface currently landing in each spatial chunk bucket, keyed by `chunkId` then `surfaceRef` -- the persistent membership `#syncSurfaceChunks` incrementally updates instead of re-deriving every chunk's buffer from the whole map on every edit. */
+  /**
+   * Every mesh piece currently landing in each spatial chunk bucket, keyed
+   * by `chunkId` then by a per-piece member key -- the persistent
+   * membership `#syncSurfaceChunks` incrementally updates instead of
+   * re-deriving every chunk's buffer from the whole map on every edit. One
+   * `surfaceRef` can own more than one member key: an analytic-region
+   * surface (a merged path-brush source/target region) can legitimately
+   * triangulate into several disjoint mesh pieces (one per outer loop), and
+   * each piece can land in a different spatial chunk.
+   */
   readonly #chunkMembers = new Map<string, Map<string, SurfaceMeshResult>>();
-  /** Reverse index of `#chunkMembers`: which chunk a given surface currently belongs to, so moving/removing it only touches its own (old and new) chunk. */
-  readonly #surfaceChunk = new Map<string, string>();
+  /** Reverse index of `#chunkMembers`: which chunk a given member piece currently belongs to, so moving/removing it only touches its own (old and new) chunk. */
+  readonly #memberChunk = new Map<string, string>();
+  /** Every member key currently registered for a given `surfaceRef`, so a surface whose piece count shrinks (or whose ref is removed outright) can find and drop exactly its own stale pieces. */
+  readonly #surfaceMembers = new Map<string, ReadonlySet<string>>();
   /** Last uploaded revision for each invisible per-surface pick proxy. */
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
@@ -359,10 +371,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return map;
   }
 
-  /** Upserts one surface's invisible pick proxy. */
+  /** Upserts one surface's invisible pick proxy. `meshData` is the surface's whole pick geometry -- already merged across every mesh piece the surface currently has, if more than one. */
   #upsertSurfacePickTarget(
     surfaceRef: string,
-    mesh: SurfaceMeshResult,
+    meshData: RenderMeshData,
     origin: ChangeOrigin,
     causeId: string,
     generation: number,
@@ -375,7 +387,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       causeId,
       runtimeGeneration: generation,
       dependency: { layer: "surface-picks", scopeId: surfaceRef, revision },
-      target: { surfaceRef, mesh: mesh.mesh },
+      target: { surfaceRef, mesh: meshData },
     });
   }
 
@@ -426,33 +438,67 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const dirtyChunkIds = new Set<string>();
 
     for (const surfaceRef of removedSurfaceRefs) {
-      const oldChunkId = this.#surfaceChunk.get(surfaceRef);
-      if (oldChunkId !== undefined) {
-        this.#chunkMembers.get(oldChunkId)?.delete(surfaceRef);
-        this.#surfaceChunk.delete(surfaceRef);
-        dirtyChunkIds.add(oldChunkId);
-      }
+      this.#dropSurfaceMembers(surfaceRef, dirtyChunkIds);
       this.#removeSurfacePickTarget(surfaceRef, origin, causeId, generation);
     }
 
+    // `changedMeshes` can hold more than one entry per `surfaceRef`: an
+    // analytic-region surface (a merged path-brush source/target region)
+    // legitimately triangulates into several disjoint pieces (one per outer
+    // loop), each independently bucketed by its own chunk -- grouping here
+    // is what stops all but the first piece from silently going unrendered.
+    const piecesBySurface = new Map<string, SurfaceMeshResult[]>();
     for (const mesh of changedMeshes) {
       const surfaceRef = surfaceRefFromNodeSet(mesh.surfaceKey);
-      const newChunkId = chunkKeyForSurface(mesh);
-      const oldChunkId = this.#surfaceChunk.get(surfaceRef);
-      if (oldChunkId !== undefined && oldChunkId !== newChunkId) {
-        this.#chunkMembers.get(oldChunkId)?.delete(surfaceRef);
-        dirtyChunkIds.add(oldChunkId);
+      let pieces = piecesBySurface.get(surfaceRef);
+      if (pieces === undefined) {
+        pieces = [];
+        piecesBySurface.set(surfaceRef, pieces);
       }
-      let bucket = this.#chunkMembers.get(newChunkId);
-      if (bucket === undefined) {
-        bucket = new Map();
-        this.#chunkMembers.set(newChunkId, bucket);
-      }
-      bucket.set(surfaceRef, mesh);
-      this.#surfaceChunk.set(surfaceRef, newChunkId);
-      dirtyChunkIds.add(newChunkId);
+      pieces.push(mesh);
+    }
 
-      this.#upsertSurfacePickTarget(surfaceRef, mesh, origin, causeId, generation);
+    for (const [surfaceRef, pieces] of piecesBySurface) {
+      const previousMembers = this.#surfaceMembers.get(surfaceRef);
+      const nextMembers = new Set<string>();
+
+      pieces.forEach((mesh, index) => {
+        const memberKey = `${surfaceRef}#${index}`;
+        nextMembers.add(memberKey);
+        const newChunkId = chunkKeyForSurface(mesh);
+        const oldChunkId = this.#memberChunk.get(memberKey);
+        if (oldChunkId !== undefined && oldChunkId !== newChunkId) {
+          this.#chunkMembers.get(oldChunkId)?.delete(memberKey);
+          dirtyChunkIds.add(oldChunkId);
+        }
+        let bucket = this.#chunkMembers.get(newChunkId);
+        if (bucket === undefined) {
+          bucket = new Map();
+          this.#chunkMembers.set(newChunkId, bucket);
+        }
+        bucket.set(memberKey, mesh);
+        this.#memberChunk.set(memberKey, newChunkId);
+        dirtyChunkIds.add(newChunkId);
+      });
+
+      // A piece count that shrank since last sync (e.g. a region losing one
+      // of its outer loops) leaves its now-excess old member keys behind --
+      // drop exactly those, not the ones still current.
+      if (previousMembers !== undefined) {
+        for (const staleKey of previousMembers) {
+          if (nextMembers.has(staleKey)) continue;
+          const oldChunkId = this.#memberChunk.get(staleKey);
+          if (oldChunkId !== undefined) {
+            this.#chunkMembers.get(oldChunkId)?.delete(staleKey);
+            this.#memberChunk.delete(staleKey);
+            dirtyChunkIds.add(oldChunkId);
+          }
+        }
+      }
+      this.#surfaceMembers.set(surfaceRef, nextMembers);
+
+      const pickMeshData = pieces.length === 1 ? pieces[0].mesh : mergeSurfaceMeshes(pieces);
+      this.#upsertSurfacePickTarget(surfaceRef, pickMeshData, origin, causeId, generation);
     }
 
     for (const chunkId of dirtyChunkIds) {
@@ -486,12 +532,27 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
   }
 
+  /** Drops every mesh piece currently registered for `surfaceRef` from `#chunkMembers`/`#memberChunk`/`#surfaceMembers`, marking each piece's chunk dirty. */
+  #dropSurfaceMembers(surfaceRef: string, dirtyChunkIds: Set<string>): void {
+    const members = this.#surfaceMembers.get(surfaceRef);
+    if (members === undefined) return;
+    for (const memberKey of members) {
+      const oldChunkId = this.#memberChunk.get(memberKey);
+      if (oldChunkId !== undefined) {
+        this.#chunkMembers.get(oldChunkId)?.delete(memberKey);
+        this.#memberChunk.delete(memberKey);
+        dirtyChunkIds.add(oldChunkId);
+      }
+    }
+    this.#surfaceMembers.delete(surfaceRef);
+  }
+
   /**
    * The only place `getAllSurfaceMeshes()` (a full re-derivation of the
    * entire map) is still allowed to run -- when the actual set of changed
    * surfaces genuinely isn't known (the initial load, or restoring an
    * undo/redo checkpoint that may have touched an arbitrary, unenumerated
-   * set of surfaces). Diffs the fresh full list against `#surfaceChunk`'s
+   * set of surfaces). Diffs the fresh full list against `#surfaceMembers`'s
    * own tracked membership to find what's now stale, then reuses
    * {@link AppTabletopRuntime.#syncSurfaceChunks} so both paths update
    * exactly the same persistent state.
@@ -503,7 +564,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     generation: number,
   ): void {
     const currentRefs = new Set(meshes.map((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey)));
-    const staleRefs = [...this.#surfaceChunk.keys()].filter((ref) => !currentRefs.has(ref));
+    const staleRefs = [...this.#surfaceMembers.keys()].filter((ref) => !currentRefs.has(ref));
     this.#syncSurfaceChunks(meshes, staleRefs, origin, causeId, generation);
   }
 
@@ -634,7 +695,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    const meshes = surfaceKeys.map((surfaceKey) => this.#construction.getSurfaceMesh(surfaceKey));
+    const meshes = surfaceKeys.flatMap((surfaceKey) => this.#construction.getSurfaceMesh(surfaceKey));
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);

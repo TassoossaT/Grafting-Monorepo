@@ -484,14 +484,16 @@ impl ConstructionSession {
         serialize(&meshes)
     }
 
-    /// One surface's triangulated mesh, by key -- what a caller re-fetches
-    /// for each entry in an operation's `affectedSurfaceKeys` after a
-    /// mutation, instead of re-fetching everything. See `mesh::surface_mesh`.
+    /// One surface's triangulated mesh piece(s), by key -- what a caller
+    /// re-fetches for each entry in an operation's `affectedSurfaceKeys`
+    /// after a mutation, instead of re-fetching everything. An analytic
+    /// region key can legitimately return more than one piece; a plain
+    /// surface key always returns exactly one. See `mesh::surface_mesh`.
     pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let dto = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
+        let dtos = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
             .map_err(to_js_error)?;
-        serialize(&dto)
+        serialize(&dtos)
     }
 
     // ---- Introspection ----

@@ -300,9 +300,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     };
   }
 
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): SurfaceMeshResult {
-    const wire = JSON.parse(this.#require().surface_mesh_json(JSON.stringify({ surfaceKey }))) as SurfaceMeshWire;
-    return toMeshResult(wire);
+  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[] {
+    const wire = JSON.parse(
+      this.#require().surface_mesh_json(JSON.stringify({ surfaceKey })),
+    ) as readonly SurfaceMeshWire[];
+    return wire.map(toMeshResult);
   }
 
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[] {
