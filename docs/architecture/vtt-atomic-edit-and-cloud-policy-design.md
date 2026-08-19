@@ -1,8 +1,26 @@
 # VTT atomic edit vocabulary and cloud policy ownership
 
-- Status: **discussion record; not an accepted ADR, not an implementation
-  plan**
-- Date: 2026-08-19
+- Status: **implemented** — this file's settled design is now built. It
+  stays as the rationale record; the code is the contract.
+- Date: 2026-08-19 (discussion), implemented 2026-08-19
+- Where it lives now:
+  - Rust primitives: `libs/graph/core/src/region_edit.rs`, over the
+    `ContourTopology` mutation surface added in `contour.rs`.
+  - Wire shape and region-topology query:
+    `libs/domains/procgen/construction-wasm/src/region_editing.rs`.
+  - App boundary: `ConstructionSessionPort`'s atomic-vocabulary section.
+  - Role tables per structure type:
+    `apps/vtt/src/features/edit-construction/structure-types/`.
+  - Gesture orchestration:
+    `apps/vtt/src/features/edit-construction/edit-orchestrator.ts`.
+  - The tool that drives it:
+    `apps/vtt/src/composition/tabletop/tools/edit-region-tool.ts`.
+- Two decisions this file left open were settled during implementation:
+  the TS file layout (above), and the wire contract (one shared
+  `RegionEditOutcome` for every op, plus `regionTopology` as the
+  deterministic ordering the index-to-role mapping reads). What is **not**
+  built: the visual handle/gizmo layer, still open exactly as recorded
+  below.
 - Scope: the generic vertex/edge/region edit vocabulary Rust exposes for an
   already-built `SurfaceRegion`, and how per-structure-type editing policy
   (what a wall vs. a terrain patch vs. a path lets you do) is defined and
@@ -15,11 +33,10 @@
   walls"). `apps/vtt/src/features/edit-construction/surface-edit-mode-registry.ts`
   (existing precedent for per-type policy living on the TS side).
 
-This file records an in-progress design discussion, reached by consensus
-over several rounds with the repository owner. Nothing here is authorized
-for implementation by itself — it exists so the discussion isn't lost and
-so a future implementation task can be scoped against settled ground
-instead of re-deriving it.
+This file records a design discussion reached by consensus over several
+rounds with the repository owner, and now built. Read it for *why* the
+ownership split falls where it does; read the files listed above for what
+the code actually does.
 
 ## Why this discussion started
 
@@ -152,12 +169,29 @@ tower) are where the rich per-role table actually pays off.
   parameter, and issues the primary + cascade Rust calls in sequence as
   one transaction.
 
+## Settled during implementation
+
+- **TS layout.** Types sharing a generation call share one definition
+  rather than restating it: every `extrude_path` product (wall, tower,
+  door, cap) is the same upright panel (`panel-structure.ts`), and every
+  procedurally swept product (terrain, path) is the same non-enumerable
+  boundary (`organic-structure.ts`). One file per *product name* would have
+  been duplication, not per-type policy.
+- **Role assignment for panels** uses height comparison against the
+  region's own baseline rather than the raw response index. Both describe
+  the exact same creation shape, but the height rule still classifies
+  correctly after a T-junction weld has subdivided the panel's runs.
+- **Wire contract.** Every op returns one `RegionEditOutcome`
+  (affected/created/removed surfaces, created/removed nodes), so a caller
+  merges a primary op with its cascade instead of branching per op.
+- **T-junctions no longer split.** `resolveWallCrossing` used to call the
+  retired `split_surface`; it now inserts a vertex into the crossed panel's
+  bottom and top runs. Splitting was only ever a way to get nodes at the
+  crossing point, which `InsertVertex` does directly and cannot
+  desynchronize the panel's two runs.
+
 ## Explicitly not decided by this file
 
-- The exact TS file/folder layout for per-type definitions.
-- The exact wire contract (request/response shape) for each atomic op.
-- Any implementation plan, file list, or build/staging order for actually
-  writing this.
 - Gizmo/handle visual design, drag-constraint UX details, map-bounds
   clamping behavior, and the other open questions already recorded in
   `vtt-node-and-wall-handle-design-notes.md` — those remain open and this
