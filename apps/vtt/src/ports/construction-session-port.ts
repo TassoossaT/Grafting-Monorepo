@@ -22,14 +22,57 @@ export interface AffectedSurfaces {
   readonly affectedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
 
-export interface DeleteNodeOutcome {
+/**
+ * What one atomic region edit changed. Every op in the vocabulary reports
+ * this same shape, so a caller batching a policy's primary op with its
+ * cascade merges outcomes instead of branching per op -- see
+ * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+ */
+export interface RegionEditOutcome {
+  /** Surfaces whose mesh must be re-derived. */
+  readonly affectedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly createdSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly cappingSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly createdNodeIds: readonly ConstructionNodeId[];
+  /** Nodes the engine's own zero-orphan cleanup reclaimed. */
+  readonly removedNodeIds: readonly ConstructionNodeId[];
 }
 
-export interface SplitSurfaceOutcome {
-  readonly firstKey: ConstructionSurfaceKey;
-  readonly secondKey: ConstructionSurfaceKey;
+/**
+ * A contour edge's explicit geometry. `"arc"`'s `center` is an XZ point in
+ * the surface's own plane -- geometry lives per edge, so a tapering wall is
+ * simply two edges with their own centers, not a special case.
+ */
+export type ConstructionEdgeGeometry =
+  | { readonly kind: "line" }
+  | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean };
+
+/** One boundary edge walked in a loop's own direction. */
+export interface ConstructionOrientedEdgeUse {
+  readonly edgeId: ConstructionEdgeId;
+  readonly reversed: boolean;
+}
+
+/** One edge of a region's boundary, with its walk direction already resolved. */
+export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly geometry: ConstructionEdgeGeometry;
+}
+
+/**
+ * One region's live boundary, in the engine's own deterministic order. That
+ * ordering is the entire contract behind index-to-role mapping: the front
+ * end asked for a specific generated shape, so it already knows what
+ * `nodes[0]` means. Rust never tags a node or edge with a role.
+ */
+export interface ConstructionRegionTopology {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
+  readonly holes: readonly (readonly ConstructionRegionEdge[])[];
+  readonly nodes: readonly ConstructionNodeSnapshot[];
 }
 
 export interface CornerHeightModule {
@@ -243,11 +286,8 @@ export interface ConstructionNodeSnapshot {
  * Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
  * (Rust panics are uncatchable on `wasm32-unknown-unknown`, so an adapter
  * must validate at this boundary, not rely on recovering from one) behind
- * app-owned types. Mirrors the whole session ABI, not only the
- * generate-terrain-cell/generate-wall slice this task's own runtime wiring
- * calls -- `E3.7`'s edit-mode interaction needs the five mutation
- * operations too, and shaping this once avoids redesigning the boundary
- * when that lands.
+ * app-owned types. Mirrors the whole session ABI, not only the slice the
+ * current runtime wiring calls.
  */
 export interface ConstructionSessionPort {
   /**
@@ -263,29 +303,74 @@ export interface ConstructionSessionPort {
   addEdge(id: ConstructionEdgeId, source: ConstructionNodeId, target: ConstructionNodeId): void;
   addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey;
 
-  moveNode(nodeId: ConstructionNodeId, position: ConstructionPosition): AffectedSurfaces;
-  deleteNode(
-    nodeId: ConstructionNodeId,
-    capSurfaceType: string,
-    capPhysical: boolean,
-  ): DeleteNodeOutcome;
-  mergeSurfaces(
-    a: ConstructionSurfaceKey,
-    b: ConstructionSurfaceKey,
-    merged: ConstructionSurfaceSpec,
-  ): ConstructionSurfaceKey;
-  splitSurface(
-    key: ConstructionSurfaceKey,
-    first: ConstructionSurfaceSpec,
-    second: ConstructionSurfaceSpec,
-  ): SplitSurfaceOutcome;
-  duplicateSurface(
-    key: ConstructionSurfaceKey,
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    ringEdgeIds: readonly ConstructionEdgeId[],
-    surfaceType: string,
-    physical: boolean,
-  ): ConstructionSurfaceKey;
+  // ---- The atomic edit vocabulary ----
+  //
+  // Type-agnostic by construction: nothing below knows what a wall or a
+  // terrain patch is. Which ops a structure type allows, what constrains
+  // their parameters, and what cascades alongside them lives entirely in
+  // `features/edit-construction/structure-types/`.
+
+  /** Moves one boundary node to an absolute position. */
+  moveVertex(nodeId: ConstructionNodeId, position: ConstructionPosition): RegionEditOutcome;
+  /**
+   * Subdivides one boundary edge, minting a new node on it. Both fragments
+   * keep the original's geometry description. Called twice on the same
+   * original edge, this is also the whole of the "carve a movable notch"
+   * case -- there is deliberately no separate cut primitive here.
+   */
+  insertVertex(request: {
+    readonly edgeId: ConstructionEdgeId;
+    readonly nodeId: ConstructionNodeId;
+    readonly position: ConstructionPosition;
+    readonly firstEdgeId: ConstructionEdgeId;
+    readonly secondEdgeId: ConstructionEdgeId;
+  }): RegionEditOutcome;
+  /** Welds a node's two neighboring edges into one -- `insertVertex`'s inverse. */
+  removeVertex(nodeId: ConstructionNodeId, weldedEdgeId: ConstructionEdgeId): RegionEditOutcome;
+
+  /** Swaps one edge's geometry without touching either endpoint. */
+  retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
+  /** Moves both of an edge's endpoints as one rigid unit. */
+  moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
+  /** Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`. */
+  addContourEdge(request: {
+    readonly edgeId: ConstructionEdgeId;
+    readonly startNodeId: ConstructionNodeId;
+    readonly endNodeId: ConstructionNodeId;
+    readonly geometry: ConstructionEdgeGeometry;
+  }): void;
+
+  /** Moves every node on a region's boundary, holes included. */
+  moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome;
+  /** Unregisters a region, leaving zero orphaned nodes or edges behind. */
+  deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome;
+  /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
+  duplicateRegion(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly suffix: string;
+    readonly offset: ConstructionPosition;
+    readonly surfaceType: string;
+    readonly physical: boolean;
+  }): RegionEditOutcome;
+  /** Divides one region in two along an already-registered cut path. */
+  cutRegion(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly cutPath: readonly ConstructionOrientedEdgeUse[];
+    readonly firstRegionId: string;
+    readonly secondRegionId: string;
+  }): RegionEditOutcome;
+  /** Adds an inner loop -- what a door or a window is. */
+  addHole(
+    surfaceKey: ConstructionSurfaceKey,
+    hole: readonly ConstructionOrientedEdgeUse[],
+  ): RegionEditOutcome;
+  /** Drops one inner loop by index. */
+  removeHole(surfaceKey: ConstructionSurfaceKey, index: number): RegionEditOutcome;
+
+  /** One region's live boundary, or `undefined` for a stale key. */
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  /** Every region's boundary -- the edit-mode bootstrap call. */
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
   /** Must be called once before {@link generateTerrainCell}. */
   setTerrainMesh(

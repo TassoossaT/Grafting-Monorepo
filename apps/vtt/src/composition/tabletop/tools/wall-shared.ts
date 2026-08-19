@@ -2,6 +2,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
 
 import type { ToolContext } from "./tool-context.ts";
+import { wallSpans } from "./wall-spans.ts";
 
 const WALL_SURFACE_TYPES = new Set(["wall-white", "wall-gray"]);
 /** Perpendicular distance (world units) within which a point counts as landing "on" an existing wall's centerline. */
@@ -49,66 +50,6 @@ function cornerId(idPrefix: string, x: number, z: number, top: boolean): Constru
   return `${idPrefix}:corner:${x.toFixed(3)}:${z.toFixed(3)}:${top ? "top" : "bottom"}`;
 }
 
-interface WallSpan {
-  readonly surfaceKey: readonly ConstructionNodeId[];
-  readonly surfaceType: string;
-  readonly physical: boolean;
-  readonly bottomA: ConstructionNodeId;
-  readonly bottomB: ConstructionNodeId;
-  readonly topA: ConstructionNodeId;
-  readonly topB: ConstructionNodeId;
-  readonly a: ConstructionPosition;
-  readonly b: ConstructionPosition;
-  readonly topY: number;
-}
-
-/**
- * Every 4-node wall panel currently on the table, with its two vertical
- * posts recovered by grouping nodes that share an XZ position (a
- * `ConstructionSurfaceKey` is an unordered node-set identity, so this
- * cannot assume array order) -- mirrors `room-lookup.ts`'s own `wallSpans`,
- * kept separate since that one only needs XZ posts for room-tracing while
- * this needs the full 3D positions plus the surface's own key/type/physical
- * flag to actually split it.
- */
-function wallSpans(ctx: ToolContext): readonly WallSpan[] {
-  const map = ctx.runtime.getSnapshot().map;
-  const spans: WallSpan[] = [];
-
-  for (const surface of map.byId.values()) {
-    if (!WALL_SURFACE_TYPES.has(surface.type)) continue;
-    if (surface.orderedNodeRefs.length !== 4) continue;
-    const nodes = surface.orderedNodeRefs
-      .map((id) => map.nodePositions.get(id))
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
-    if (nodes.length !== 4) continue;
-
-    const [first, ...rest] = nodes;
-    if (first === undefined) continue;
-    const sameXz = (a: (typeof nodes)[number], b: (typeof nodes)[number]) =>
-      Math.abs(a.position.x - b.position.x) < 1e-3 && Math.abs(a.position.z - b.position.z) < 1e-3;
-    const groupA = [first, ...rest.filter((node) => sameXz(node, first))];
-    const groupB = rest.filter((node) => !sameXz(node, first));
-    if (groupA.length !== 2 || groupB.length !== 2) continue;
-
-    const [a0, a1] = groupA.sort((x, y) => x.position.y - y.position.y) as [(typeof nodes)[number], (typeof nodes)[number]];
-    const [b0, b1] = groupB.sort((x, y) => x.position.y - y.position.y) as [(typeof nodes)[number], (typeof nodes)[number]];
-    spans.push({
-      surfaceKey: surface.orderedNodeRefs,
-      surfaceType: surface.type,
-      physical: surface.physical,
-      bottomA: a0.nodeRef,
-      topA: a1.nodeRef,
-      bottomB: b0.nodeRef,
-      topB: b1.nodeRef,
-      a: a0.position,
-      b: b0.position,
-      topY: a1.position.y,
-    });
-  }
-  return spans;
-}
-
 /** `point` projected onto the infinite line through `a`/`b` (XZ only): how far along the segment (`t`, `0` at `a`, `1` at `b`) and how far off it (`perp`, world units). */
 function projectOntoSegment(point: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): { t: number; perp: number; x: number; z: number } {
   const abx = b.x - a.x;
@@ -127,15 +68,20 @@ function projectOntoSegment(point: ConstructionPosition, a: ConstructionPosition
 /**
  * If `point` lands within {@link CROSSING_TOLERANCE} of an existing wall
  * panel's own centerline, and far enough (per {@link CROSSING_END_MARGIN})
- * from either of that panel's own corners to be a genuine mid-span
- * crossing rather than basically hitting a corner already: splits that
- * panel in two at the projected point (via `TabletopRuntime.applyWallCrossingSplit`)
- * and returns the projected point, snapped to the existing wall's own
- * baseline/top Y so the caller's own new wall welds onto the freshly-split
- * nodes by position, forming a T-junction -- "quando eu crio uma a partir
- * da lateral de outra... da um snap neles para que eles grudem um no
- * outro." Returns `point` unchanged (a plain no-op) if no wall panel
- * qualifies.
+ * from either of that panel's own corners to be a genuine mid-span crossing
+ * rather than basically hitting a corner already: subdivides that panel's
+ * bottom and top runs at the projected point through `insertVertex`, and
+ * returns the projected point snapped to the existing wall's own
+ * baseline/top Y -- so the caller's own new wall welds onto the freshly
+ * minted nodes by position, forming a T-junction ("quando eu crio uma a
+ * partir da lateral de outra... da um snap neles para que eles grudem um no
+ * outro").
+ *
+ * The crossed panel stays one region with more boundary, rather than being
+ * replaced by two. Splitting it was only ever a way to get nodes at the
+ * crossing point, which is exactly what an insert does directly -- and
+ * unlike a split, it cannot desynchronize the panel's own two runs. Returns
+ * `point` unchanged (a plain no-op) if no wall panel qualifies.
  */
 export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition {
   for (const span of wallSpans(ctx)) {
@@ -147,23 +93,25 @@ export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPositio
     const marginT = CROSSING_END_MARGIN / spanLength;
     if (t <= marginT || t >= 1 - marginT) continue;
 
+    // One bottom edge and one top edge is the panel as `extrude_path` emits
+    // it; a panel already welded at another crossing has more, and only the
+    // run the point actually lands on should subdivide -- but a 4-node span
+    // by definition has not been welded yet, so taking the single run of
+    // each is exact, not a simplification.
+    const bottomEdgeId = span.bottomEdgeIds[0];
+    const topEdgeId = span.topEdgeIds[0];
+    if (bottomEdgeId === undefined || topEdgeId === undefined) continue;
+
     const idPrefix = idPrefixFor(ctx);
     const bottomId = cornerId(idPrefix, x, z, false);
     const topId = cornerId(idPrefix, x, z, true);
     const bottomPos: ConstructionPosition = { x, y: span.a.y, z };
     const topPos: ConstructionPosition = { x, y: span.topY, z };
 
-    ctx.runtime.applyWallCrossingSplit(
+    ctx.runtime.applyWallCrossingWeld(
       [
-        { id: bottomId, position: bottomPos },
-        { id: topId, position: topPos },
-      ],
-      [
-        {
-          originalKey: span.surfaceKey,
-          first: { cycle: [span.bottomA, bottomId, topId, span.topA], surfaceType: span.surfaceType, physical: span.physical },
-          second: { cycle: [bottomId, span.bottomB, span.topB, topId], surfaceType: span.surfaceType, physical: span.physical },
-        },
+        { edgeId: bottomEdgeId, nodeId: bottomId, position: bottomPos, firstEdgeId: `${bottomEdgeId}|${bottomId}|0`, secondEdgeId: `${bottomEdgeId}|${bottomId}|1` },
+        { edgeId: topEdgeId, nodeId: topId, position: topPos, firstEdgeId: `${topEdgeId}|${topId}|0`, secondEdgeId: `${topEdgeId}|${topId}|1` },
       ],
       "local",
       causeId,

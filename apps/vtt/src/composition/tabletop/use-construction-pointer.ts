@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, MoveNodeHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
@@ -20,7 +20,7 @@ export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
   readonly runtime: TabletopRuntime;
-  readonly history: MoveNodeHistoryStack;
+  readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */

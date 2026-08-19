@@ -1,6 +1,7 @@
 import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
 
 import type { ToolContext } from "./tool-context.ts";
+import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
 /**
  * Finds the smallest closed wall loop containing a click point -- used by
@@ -14,49 +15,7 @@ interface Vec2 {
   readonly z: number;
 }
 
-interface WallSpan {
-  readonly bottomA: ConstructionNodeId;
-  readonly bottomB: ConstructionNodeId;
-  readonly topA: ConstructionNodeId;
-  readonly topB: ConstructionNodeId;
-  readonly a: Vec2;
-  readonly b: Vec2;
-}
 
-/** Recovers a wall's two vertical posts from its surface's node positions -- grouped by matching XZ, not by array order (a `ConstructionSurfaceKey` is an unordered node-set identity, per `ports/construction-session-port.ts`). Mirrors `wall-brush-tool.ts`'s own `wallPostsFromNodes`, kept separate since the two tools' input shapes differ enough that sharing would need its own seam. */
-function wallSpans(ctx: ToolContext): readonly WallSpan[] {
-  const map = ctx.runtime.getSnapshot().map;
-  const spans: WallSpan[] = [];
-
-  for (const surface of map.byId.values()) {
-    if (surface.type !== "wall-white" && surface.type !== "wall-gray") continue;
-    if (surface.orderedNodeRefs.length !== 4) continue;
-    const nodes = surface.orderedNodeRefs
-      .map((id) => map.nodePositions.get(id))
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
-    if (nodes.length !== 4) continue;
-
-    const [first, ...rest] = nodes;
-    if (first === undefined) continue;
-    const sameXz = (a: (typeof nodes)[number], b: (typeof nodes)[number]) =>
-      Math.abs(a.position.x - b.position.x) < 1e-3 && Math.abs(a.position.z - b.position.z) < 1e-3;
-    const groupA = [first, ...rest.filter((node) => sameXz(node, first))];
-    const groupB = rest.filter((node) => !sameXz(node, first));
-    if (groupA.length !== 2 || groupB.length !== 2) continue;
-
-    const [a0, a1] = groupA.sort((x, y) => x.position.y - y.position.y) as [(typeof nodes)[number], (typeof nodes)[number]];
-    const [b0, b1] = groupB.sort((x, y) => x.position.y - y.position.y) as [(typeof nodes)[number], (typeof nodes)[number]];
-    spans.push({
-      bottomA: a0.nodeRef,
-      topA: a1.nodeRef,
-      bottomB: b0.nodeRef,
-      topB: b1.nodeRef,
-      a: { x: a0.position.x, z: a0.position.z },
-      b: { x: b0.position.x, z: b0.position.z },
-    });
-  }
-  return spans;
-}
 
 function angleFromTo(a: Vec2, b: Vec2): number {
   return Math.atan2(b.z - a.z, b.x - a.x);

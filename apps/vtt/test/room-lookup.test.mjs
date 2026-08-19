@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { findEnclosingRoom } from "../src/composition/tabletop/tools/room-lookup.ts";
+import { panelTopology } from "./wall-spans-fixture.mjs";
 
-const WALL_HEIGHT = 3;
 
 /** Named corners of a 4x4 exterior square already split (by "Gerar Interiores") into a west and an east 2x4 half, sharing node ids wherever their positions coincide -- exactly how real, position-derived corner ids weld. */
 const CORNERS = {
@@ -22,46 +22,34 @@ function topId(name) {
   return `${name}:top`;
 }
 
-function wallSurface(id, fromName, toName) {
-  const from = CORNERS[fromName];
-  const to = CORNERS[toName];
-  return {
-    surfaceRef: id,
-    orderedNodeRefs: [bottomId(fromName), bottomId(toName), topId(toName), topId(fromName)],
-    type: "wall-white",
-    physical: true,
-    revision: 1,
-    endpoints: [fromName, toName],
-    positions: {
-      [bottomId(fromName)]: { x: from.x, y: 0, z: from.z },
-      [bottomId(toName)]: { x: to.x, y: 0, z: to.z },
-      [topId(toName)]: { x: to.x, y: WALL_HEIGHT, z: to.z },
-      [topId(fromName)]: { x: from.x, y: WALL_HEIGHT, z: from.z },
+function wallTopology(id, fromName, toName) {
+  return panelTopology(
+    id,
+    { from: CORNERS[fromName], to: CORNERS[toName] },
+    {
+      bottomFrom: bottomId(fromName),
+      bottomTo: bottomId(toName),
+      topTo: topId(toName),
+      topFrom: topId(fromName),
     },
-  };
+  );
 }
 
-/** A 4x4 exterior square, already subdivided by one interior wall down the middle (x=2) into two 2x4 halves -- mirrors what `interior-wall-tool.ts` leaves behind after one "Gerar Interiores" click. */
-function subdividedSquareMap() {
-  const walls = [
-    wallSurface("south-west", "sw", "ms"),
-    wallSurface("south-east", "ms", "se"),
-    wallSurface("east", "se", "ne"),
-    wallSurface("north-east", "ne", "mn"),
-    wallSurface("north-west", "mn", "nw"),
-    wallSurface("west", "nw", "sw"),
-    wallSurface("mid", "ms", "mn"),
+/** A 4x4 exterior square, already subdivided by one interior wall down the middle (x=2) into two 2x4 halves -- mirrors what `interior-wall-tool.ts` leaves behind after one "Gerar Interiores" click. Corner node ids are shared wherever positions coincide, exactly how real, position-derived ids weld. */
+function subdividedSquareTopologies() {
+  return [
+    wallTopology("south-west", "sw", "ms"),
+    wallTopology("south-east", "ms", "se"),
+    wallTopology("east", "se", "ne"),
+    wallTopology("north-east", "ne", "mn"),
+    wallTopology("north-west", "mn", "nw"),
+    wallTopology("west", "nw", "sw"),
+    wallTopology("mid", "ms", "mn"),
   ];
-  const byId = new Map(walls.map((wall) => [wall.surfaceRef, wall]));
-  const nodePositions = new Map();
-  for (const wall of walls) {
-    for (const [id, position] of Object.entries(wall.positions)) nodePositions.set(id, { nodeRef: id, position, revision: 1 });
-  }
-  return { byId, nodePositions, revision: 1 };
 }
 
-function contextWith(map) {
-  return { runtime: { getSnapshot: () => ({ map }) } };
+function contextWith(topologies) {
+  return { runtime: { getAllRegionTopologies: () => topologies } };
 }
 
 /** Shoelace formula -- used instead of comparing raw vertex lists, since a loop crossing a T-junction (the mid wall meeting the south/north walls) picks up extra colinear vertices there without changing its own area or true shape. */
@@ -74,21 +62,21 @@ function polygonArea(polygon) {
 }
 
 test("findEnclosingRoom defaults to the smallest loop -- a subdivided half, not the whole exterior", () => {
-  const ctx = contextWith(subdividedSquareMap());
+  const ctx = contextWith(subdividedSquareTopologies());
   const room = findEnclosingRoom(ctx, { x: 1, y: 0, z: 2 });
   assert.ok(room !== undefined);
   assert.equal(polygonArea(room.polygon), 8, "the smallest loop containing (1,2) is the 2x4 west half");
 });
 
 test("findEnclosingRoom with preference 'largest' resolves to the whole exterior even after subdivision", () => {
-  const ctx = contextWith(subdividedSquareMap());
+  const ctx = contextWith(subdividedSquareTopologies());
   const room = findEnclosingRoom(ctx, { x: 1, y: 0, z: 2 }, "largest");
   assert.ok(room !== undefined);
   assert.equal(polygonArea(room.polygon), 16, "the largest loop containing (1,2) is the whole 4x4 exterior");
 });
 
 test("findEnclosingRoom with preference 'largest' still resolves consistently regardless of which half is clicked", () => {
-  const ctx = contextWith(subdividedSquareMap());
+  const ctx = contextWith(subdividedSquareTopologies());
   const fromWestHalf = findEnclosingRoom(ctx, { x: 1, y: 0, z: 2 }, "largest");
   const fromEastHalf = findEnclosingRoom(ctx, { x: 3, y: 0, z: 2 }, "largest");
   assert.ok(fromWestHalf !== undefined);

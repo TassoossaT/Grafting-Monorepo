@@ -14,8 +14,8 @@ export type {
   ParticipantId,
   RevisionPrecondition,
 } from "./construction-operations.ts";
-export { createMoveNodeHistoryStack } from "./move-node-history.ts";
-export type { ConstructionHistoryEntry, MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState, PathBrushHistoryEntry } from "./move-node-history.ts";
+export { createEditHistoryStack } from "./edit-history.ts";
+export type { ConstructionHistoryEntry, EditHistoryStack, EditHistoryState, PathBrushHistoryEntry, RegionEditHistoryEntry } from "./edit-history.ts";
 export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
 export type {
   BrushShapeKind,
@@ -41,6 +41,39 @@ export type {
   SurfaceEditModeDefinition,
   SurfaceEditTargetScope,
 } from "./surface-edit-contract.ts";
+
+export {
+  ALL_AXES,
+  HEIGHT_AXIS,
+  HORIZONTAL_AXES,
+  ZERO_DELTA,
+  addPosition,
+  constrainToAxes,
+  scalePosition,
+} from "./atomic-edit.ts";
+export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
+export {
+  EMPTY_OUTCOME,
+  applyEditOp,
+  applyEditPlan,
+  mergeOutcomes,
+  planEdit,
+} from "./edit-orchestrator.ts";
+export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+export {
+  ORGANIC_ROLES,
+  PANEL_ROLES,
+  STRUCTURE_TYPE_DEFINITIONS,
+  resolvePolicy,
+  structureTypeFor,
+} from "./structure-types/index.ts";
+export type {
+  CascadeContext,
+  EditResolution,
+  EditRole,
+  RolePolicy,
+  StructureTypeDefinition,
+} from "./structure-types/index.ts";
 
 export { resolveBrushShape } from "./brush-shape-params.ts";
 export {

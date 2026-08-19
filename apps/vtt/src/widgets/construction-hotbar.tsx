@@ -18,7 +18,7 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
 /** The "Casa" branch's own children. */
 const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
   { id: "house-room-delete", icon: "−", tooltip: "Apagar Cômodo (clique dentro de um cômodo)" },
-  { id: "move-node", icon: "◇", tooltip: "Expandir Cômodo (arraste um canto -- mesma ferramenta de mover nó)" },
+  { id: "edit-region", icon: "◇", tooltip: "Editar (arraste um canto, uma aresta ou o corpo -- o que cada parte permite depende do tipo da estrutura)" },
 ];
 
 const HOUSE_TOOL_IDS: ReadonlySet<ConstructionToolId> = new Set(HOUSE_TOOLS.map((tool) => tool.id));
@@ -78,7 +78,7 @@ export function ConstructionHotbar(props: ConstructionHotbarProps) {
         key: "construction-tools",
         icon: "C",
         tooltip: "Construir",
-        tone: props.activeTool === "navigate" || props.activeTool === "move-node" ? "default" : "primary",
+        tone: props.activeTool === "navigate" || props.activeTool === "edit-region" ? "default" : "primary",
         children,
       }}
     />

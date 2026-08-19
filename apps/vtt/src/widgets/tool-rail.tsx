@@ -45,11 +45,11 @@ export function ToolRail(props: ToolRailProps) {
           onClick: () => props.onToolChange("navigate"),
         },
         {
-          key: "move-node",
+          key: "edit-region",
           icon: "M",
-          tooltip: "Mover Node do Grafo (tecla M)",
-          tone: props.tool === "move-node" ? "primary" : "default",
-          onClick: () => props.onToolChange("move-node"),
+          tooltip: "Editar Região -- canto, aresta ou corpo (tecla M)",
+          tone: props.tool === "edit-region" ? "primary" : "default",
+          onClick: () => props.onToolChange("edit-region"),
         },
         {
           key: "snap-to-grid",
