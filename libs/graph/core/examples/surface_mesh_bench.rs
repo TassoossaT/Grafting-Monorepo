@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
-use grafting_graph_core::{move_node, Graph, Node, NodeId, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{Graph, Node, NodeId, SurfaceRegistry, SurfaceType};
 
 const STROKES: usize = 200;
 const BRUSH_SIDE: usize = 7;
@@ -121,11 +121,13 @@ fn run_strokes(
 
         for y in start_y..(start_y + BRUSH_SIDE).min(height + 1) {
             for x in start_x..(start_x + BRUSH_SIDE).min(width + 1) {
-                let keys = move_node(graph, surfaces, &node_id(x, y), |position| {
-                    position[1] += 0.01
-                })
-                .expect("brush nodes remain in the graph");
-                affected.extend(keys);
+                // The retired `move_node` operation's own two steps, inlined:
+                // this bench measures the legacy node-set surface path, which
+                // `region_edit`'s analytic primitives deliberately do not serve.
+                let id = node_id(x, y);
+                let node = graph.node_mut(&id).expect("brush nodes remain in the graph");
+                node.data_mut()[1] += 0.01;
+                affected.extend(surfaces.surfaces_referencing(&id).cloned());
             }
         }
 

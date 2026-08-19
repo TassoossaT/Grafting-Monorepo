@@ -959,6 +959,198 @@ impl ContourTopology {
         nodes
     }
 
+    /// Every registered region's identity, in a caller-stable sorted order.
+    pub fn region_ids(&self) -> Vec<RegionId> {
+        let mut ids: Vec<RegionId> = self.regions.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
+    /// Every region currently using `edge`, in a caller-stable sorted order.
+    /// At most two, by the non-manifold rule -- see [`ContourError::NonManifoldEdge`].
+    pub fn regions_using_edge(&self, edge: &ContourEdgeId) -> Vec<RegionId> {
+        let mut ids: Vec<RegionId> = self
+            .usages
+            .get(edge)
+            .into_iter()
+            .flatten()
+            .map(|usage| usage.region.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// Every registered edge with `node` as one of its two endpoints, in a
+    /// caller-stable sorted order. Includes edges no region currently uses --
+    /// a caller that only cares about live boundaries filters by
+    /// [`regions_using_edge`](Self::regions_using_edge).
+    pub fn edges_incident_to(&self, node: &NodeId) -> Vec<ContourEdgeId> {
+        let mut ids: Vec<ContourEdgeId> = self
+            .edges
+            .values()
+            .filter(|edge| edge.start_node == *node || edge.end_node == *node)
+            .map(|edge| edge.id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    /// Every region whose boundary touches `node`, in a caller-stable sorted
+    /// order -- exactly the regions whose mesh a caller must re-derive after
+    /// moving that node.
+    pub fn regions_touching_node(&self, node: &NodeId) -> Vec<RegionId> {
+        let mut ids: Vec<RegionId> = self
+            .edges_incident_to(node)
+            .iter()
+            .flat_map(|edge| self.regions_using_edge(edge))
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// Every node on a region's own boundary (outer loops plus holes), in
+    /// first-encountered loop order -- the ordering guarantee the front end's
+    /// index-to-role mapping relies on (see
+    /// `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`).
+    pub fn region_nodes(&self, id: &RegionId) -> Result<Vec<NodeId>, ContourError> {
+        let region = self
+            .regions
+            .get(id)
+            .ok_or_else(|| ContourError::UnknownRegion { id: id.clone() })?;
+        let mut nodes = Vec::new();
+        for loop_ in region.outer_loops.iter().chain(region.holes.iter()) {
+            for use_ in loop_ {
+                let node = self.use_start_node(use_);
+                if !nodes.contains(&node) {
+                    nodes.push(node);
+                }
+            }
+        }
+        Ok(nodes)
+    }
+
+    /// Replaces one registered edge's geometry in place, leaving its identity
+    /// and both endpoints untouched -- the `RetypeEdge` primitive's whole
+    /// effect on topology (swap `Line` for `Arc`, or re-aim an arc's center).
+    pub fn set_edge_geometry(
+        &mut self,
+        id: &ContourEdgeId,
+        geometry: ContourGeometry,
+    ) -> Result<(), ContourError> {
+        let edge = self
+            .edges
+            .get_mut(id)
+            .ok_or_else(|| ContourError::UnknownEdgeIdentity { id: id.clone() })?;
+        edge.geometry = geometry;
+        Ok(())
+    }
+
+    /// Substitutes every use of `id`, across every registered region, with
+    /// `replacement` walked in that use's own direction -- a forward use is
+    /// replaced by `replacement` as given, a reversed use by `replacement`
+    /// reversed with each entry's own direction flipped. This is the single
+    /// shared mechanism behind `InsertVertex` (one edge becomes two) and
+    /// `RemoveVertex` (two edges become one); neither reimplements loop
+    /// surgery on its own.
+    ///
+    /// `id` itself is left registered but unused, for
+    /// [`prune_unused_edges`](Self::prune_unused_edges) to reclaim as part of
+    /// the caller's own end-of-transaction cleanup.
+    pub fn replace_edge_uses(
+        &mut self,
+        id: &ContourEdgeId,
+        replacement: &[OrientedEdgeUse],
+    ) -> Result<Vec<RegionId>, ContourError> {
+        if !self.edges.contains_key(id) {
+            return Err(ContourError::UnknownEdgeIdentity { id: id.clone() });
+        }
+        if replacement.is_empty() {
+            return Err(ContourError::EmptyLoop);
+        }
+        for use_ in replacement {
+            if !self.edges.contains_key(&use_.edge) {
+                return Err(ContourError::UnknownEdge {
+                    id: use_.edge.clone(),
+                });
+            }
+        }
+
+        let affected = self.regions_using_edge(id);
+        for region_id in &affected {
+            let region = self
+                .regions
+                .get(region_id)
+                .expect("usage bookkeeping never names an unregistered region");
+            let rewrite = |loops: &[ContourLoop]| -> Vec<ContourLoop> {
+                loops
+                    .iter()
+                    .map(|loop_| {
+                        loop_
+                            .iter()
+                            .flat_map(|use_| {
+                                if use_.edge != *id {
+                                    return vec![use_.clone()];
+                                }
+                                if use_.reversed {
+                                    replacement
+                                        .iter()
+                                        .rev()
+                                        .map(|entry| OrientedEdgeUse {
+                                            edge: entry.edge.clone(),
+                                            reversed: !entry.reversed,
+                                        })
+                                        .collect()
+                                } else {
+                                    replacement.to_vec()
+                                }
+                            })
+                            .collect()
+                    })
+                    .collect()
+            };
+            let outer_loops = rewrite(&region.outer_loops);
+            let holes = rewrite(&region.holes);
+            self.replace_region_loops(region_id, outer_loops, holes)?;
+        }
+        Ok(affected)
+    }
+
+    /// Re-registers `id`'s boundary with new loops, revalidating closure and
+    /// the non-manifold rule exactly as [`add_region`](Self::add_region)
+    /// does. The region keeps its identity; on any failure the original
+    /// boundary is restored and nothing is left half-applied.
+    pub fn replace_region_loops(
+        &mut self,
+        id: &RegionId,
+        outer_loops: Vec<ContourLoop>,
+        holes: Vec<ContourLoop>,
+    ) -> Result<(), ContourError> {
+        let previous = self.remove_region(id)?;
+        match self.add_region(id.clone(), outer_loops, holes) {
+            Ok(_) => Ok(()),
+            Err(error) => {
+                self.add_region(id.clone(), previous.outer_loops, previous.holes)
+                    .expect("a boundary that validated before still validates after rollback");
+                Err(error)
+            }
+        }
+    }
+
+    /// Drops one registered edge outright. Rejected while any region still
+    /// uses it -- a caller removing real boundary calls
+    /// [`replace_edge_uses`](Self::replace_edge_uses) or
+    /// [`remove_region`](Self::remove_region) first.
+    pub fn remove_edge(&mut self, id: &ContourEdgeId) -> Result<ContourEdge, ContourError> {
+        if self.usages.contains_key(id) {
+            return Err(ContourError::NonManifoldEdge { id: id.clone() });
+        }
+        self.edges
+            .remove(id)
+            .ok_or_else(|| ContourError::UnknownEdgeIdentity { id: id.clone() })
+    }
+
     /// Drops every registered edge no region currently uses -- exactly the
     /// garbage [`remove_region`](Self::remove_region) intentionally leaves
     /// behind per its own doc ("another region may still reference them").
