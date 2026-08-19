@@ -120,7 +120,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [],
   );
 
-  const showHoverPreview = useCallback((sample: PointerSample | undefined) => {
+  /**
+   * Shows the preview for the very first sample of a gesture, right as it
+   * starts (`onPointerDown`) -- never for idle hovering. A preview that also
+   * ran on passive `pointermove` (no button down) used to recompute and
+   * reappear every time the pointer merely rested near a spot the brush
+   * could still reach -- including right around a stroke you'd already
+   * committed, since the brush footprint is wider than the thin path it
+   * actually carves. That looked exactly like a "stuck" ghost that outlived
+   * the stroke, even though `clearPreview` was firing correctly on every
+   * commit and tool switch. See the tool-switch reset effect above for the
+   * only other place `clearPreview` is expected to run outside a gesture.
+   */
+  const showStartPreview = useCallback((sample: PointerSample | undefined) => {
     const { runtime, activeTool, toolParams } = optionsRef.current;
     const tool = toolFor(activeTool);
     if (sample === undefined || tool.previewFor === undefined) {
@@ -156,9 +168,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       tool.onPointerDown?.(ctx, sample, params);
-      showHoverPreview(sample);
+      showStartPreview(sample);
     },
-    [ctx, sampleAt, showHoverPreview],
+    [ctx, sampleAt, showStartPreview],
   );
 
   const onPointerMove = useCallback(
@@ -168,8 +180,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
 
+      // No button down -- idle hovering never shows a preview, only an
+      // actual drag does (see `showStartPreview`'s own doc for why).
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        showHoverPreview(sampleAt(event));
+        optionsRef.current.runtime.clearPreview();
         return;
       }
 
@@ -193,7 +207,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       lastCommitAtRef.current = now;
       tool.onPointerMove?.(ctx, activeGesture, params);
     },
-    [ctx, sampleAt, showHoverPreview],
+    [ctx, sampleAt],
   );
 
   const finishGesture = useCallback(
