@@ -12,8 +12,8 @@
 use std::collections::HashSet;
 
 use grafting_graph_core::{
-    ContourEdge, ContourEdgeId, ContourGeometry, ContourTopology, Edge, EdgeId, Node, NodeId,
-    OrientedEdgeUse, RegionId, SurfaceKey, SurfaceRegistry, SurfaceType,
+    ContourEdge, ContourEdgeId, ContourTopology, Edge, EdgeId, Node, NodeId, OrientedEdgeUse,
+    RegionId, SurfaceKey, SurfaceRegistry, SurfaceType,
 };
 use grafting_procgen_surface_transformations::RegionMergePlan;
 
@@ -33,6 +33,8 @@ pub struct RegionMergeOutcome {
     pub new_region: RegionId,
     /// Every existing surface this merge consumed.
     pub consumed_surface_keys: Vec<SurfaceKey>,
+    /// Every existing analytic region this merge consumed and removed.
+    pub consumed_region_ids: Vec<RegionId>,
 }
 
 /// Applies `plan` (see `RegionMergePlan`'s own doc): destroys every surface
@@ -58,19 +60,28 @@ pub fn apply_region_merge(
     height_for: impl Fn(&SessionGraph, [f32; 2]) -> f32,
     plan: RegionMergePlan,
 ) -> Result<RegionMergeOutcome, String> {
-    let has_remainder = !plan.consumed_surface_keys().is_empty();
+    let has_remainder =
+        !plan.consumed_surface_keys().is_empty() || !plan.consumed_region_ids().is_empty();
     let new_region = RegionId::new(format!("region-merge-{operation_id}-new"))
         .map_err(|error| error.to_string())?;
     let remainder_region_and_type = if has_remainder {
         let remainder_region = RegionId::new(format!("region-merge-{operation_id}-remainder"))
             .map_err(|error| error.to_string())?;
+        // A leftover remainder keeps whichever consumed item's own type --
+        // a plain surface's or an existing region's alike, whichever this
+        // merge actually found something to consume from.
         let remainder_type = plan
             .consumed_surface_keys()
             .first()
             .and_then(|key| surfaces.surface(key))
-            .ok_or("region merge has no consumed surface")?
-            .surface_type()
-            .clone();
+            .map(|surface| surface.surface_type().clone())
+            .or_else(|| {
+                plan.consumed_region_ids()
+                    .first()
+                    .and_then(|id| surfaces.region_surface(id))
+                    .map(|region_surface| region_surface.surface_type().clone())
+            })
+            .ok_or("region merge has no consumed surface or region")?;
         Some((remainder_region, remainder_type))
     } else {
         None
@@ -79,13 +90,8 @@ pub fn apply_region_merge(
     let mut remainder_loops = Vec::new();
     for (loop_index, boundary) in plan.consumed_boundaries().iter().enumerate() {
         let mut loop_ = Vec::new();
-        for (edge_index, (start, end)) in boundary
-            .iter()
-            .cloned()
-            .zip(boundary.iter().cloned().cycle().skip(1))
-            .take(boundary.len())
-            .enumerate()
-        {
+        for (edge_index, (start, geometry)) in boundary.iter().enumerate() {
+            let end = &boundary[(edge_index + 1) % boundary.len()].0;
             let id = ContourEdgeId::new(format!(
                 "region-merge-{operation_id}-remainder-contour-{loop_index}-{edge_index}"
             ))
@@ -93,7 +99,7 @@ pub fn apply_region_merge(
             topology
                 .add_edge(
                     graph,
-                    ContourEdge::new(id.clone(), start, end, ContourGeometry::Line),
+                    ContourEdge::new(id.clone(), start.clone(), end.clone(), *geometry),
                 )
                 .map_err(|error| error.to_string())?;
             loop_.push(OrientedEdgeUse::forward(id));
@@ -168,11 +174,28 @@ pub fn apply_region_merge(
         consumed_surface_keys.push(key.clone());
     }
 
+    // A consumed region's own edges may still be shared with an adjacent
+    // region (`ContourTopology::remove_region`'s own doc), so this only
+    // releases *this* region's usage of them and its semantic attributes --
+    // it never deletes shared geometry out from under a sibling.
+    let mut consumed_region_ids = Vec::with_capacity(plan.consumed_region_ids().len());
+    for region_id in plan.consumed_region_ids() {
+        topology
+            .remove_region(region_id)
+            .map_err(|error| error.to_string())?;
+        surfaces
+            .remove_region_surface(region_id)
+            .map_err(|error| error.to_string())?;
+        known_regions.remove(region_id);
+        consumed_region_ids.push(region_id.clone());
+    }
+
     Ok(RegionMergeOutcome {
         created_node_ids,
         created_edge_ids,
         remainder_region,
         new_region,
         consumed_surface_keys,
+        consumed_region_ids,
     })
 }

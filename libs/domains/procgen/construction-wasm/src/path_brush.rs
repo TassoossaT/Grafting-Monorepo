@@ -146,7 +146,7 @@ pub fn apply_path_brush(
     request: ApplyPathBrushRequest,
 ) -> Result<ApplyPathBrushResponse, String> {
     let domain_request = domain_request(&request);
-    let plan = plan_path_brush_region_merge(graph, surfaces, &domain_request)?;
+    let plan = plan_path_brush_region_merge(graph, surfaces, topology, &domain_request)?;
     let consumed = plan.consumed_surface_keys().to_vec();
     let depth = domain_request.depth;
     let outcome = apply_region_merge(
@@ -180,7 +180,7 @@ pub fn preview_path_brush(
     let mut preview_known_regions = known_regions.clone();
 
     let domain_request = domain_request(&request);
-    let plan = plan_path_brush_region_merge(&preview_graph, &preview_surfaces, &domain_request)?;
+    let plan = plan_path_brush_region_merge(&preview_graph, &preview_surfaces, &preview_topology, &domain_request)?;
     let consumed = plan.consumed_surface_keys().to_vec();
     let depth = domain_request.depth;
     apply_region_merge(
@@ -214,12 +214,13 @@ pub fn preview_path_brush(
 fn plan_path_brush_region_merge(
     graph: &grafting_graph_core::Graph<[f32; 3], ()>,
     surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
     request: &PathBrushRequest,
 ) -> Result<grafting_procgen_surface_transformations::RegionMergePlan, String> {
     validate_request(request).map_err(|error| error.to_string())?;
     let contour = compact_analytic_brush_contour(request).map_err(|error| error.to_string())?;
     let source_types = request.source_types.clone();
-    plan_region_merge(graph, surfaces, contour, move |surface_type| {
+    plan_region_merge(graph, surfaces, topology, contour, move |surface_type| {
         source_types.contains(surface_type)
     })
     .map_err(|error| error.to_string())
@@ -269,6 +270,7 @@ fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse 
                 .consumed_surface_keys
                 .iter()
                 .map(surface_key_to_wire)
+                .chain(outcome.consumed_region_ids.iter().map(region_id_to_wire))
                 .collect(),
         },
         invalidation: InvalidationResponse {

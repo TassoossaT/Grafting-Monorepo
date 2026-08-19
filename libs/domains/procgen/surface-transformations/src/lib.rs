@@ -25,7 +25,8 @@ use grafting_procgen_surface_mesh::triangulate_surface;
 use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
 
 pub use analytic_brush::{
-    AnalyticBrushContour, RegionMergePlan, compact_analytic_brush_contour, plan_region_merge,
+    AnalyticBrushContour, BoundaryVertex, RegionMergePlan, compact_analytic_brush_contour,
+    plan_region_merge,
 };
 
 const CIRCLE_SEGMENTS: usize = 16;

@@ -762,6 +762,186 @@ mod tests {
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
     }
 
+    /// Reproduction: a multi-segment stroke (union path, not a single fitted
+    /// primitive) drawn over existing terrain must leave a remainder region
+    /// whose mesh actually derives -- not "no mesh derivable for analytic
+    /// region ...-remainder".
+    #[test]
+    fn a_multi_segment_stroke_over_terrain_leaves_a_derivable_remainder_mesh() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let request = serde_json::json!({
+            "operationId": "path-multi-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0], [3.0, 3.0], [5.0, 3.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("multi-segment path brush applies");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            parsed["surfaceIds"]["created"].as_array().unwrap().len(),
+            2,
+            "both the remainder terrain and the new path region must be created"
+        );
+
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every created region, including the remainder, must have a derivable mesh");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+        assert!(
+            meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"),
+            "the remainder terrain must still be present and meshable: {meshes_json}"
+        );
+    }
+
+    /// Reproduction attempt 2: a self-overlapping loop stroke that fully
+    /// covers the only terrain cell it touches -- the remainder's leftover
+    /// boundary is then smaller than (or equal to) the hole the union
+    /// contour cuts into it.
+    #[test]
+    fn a_loop_stroke_fully_covering_its_only_terrain_cell_still_meshes() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        session
+            .generate_and_apply_terrain_cell_json(
+                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
+            )
+            .expect("terrain cell generates");
+
+        let loop_samples: Vec<[f32; 2]> = (0..=32)
+            .map(|index| {
+                let angle = std::f32::consts::TAU * index as f32 / 32.0;
+                [1.0 + 3.0 * angle.cos(), 1.0 + 3.0 * angle.sin()]
+            })
+            .collect();
+        let request = serde_json::json!({
+            "operationId": "path-loop-cover",
+            "samples": loop_samples,
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("a loop stroke fully covering its only terrain cell must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every created region must have a derivable mesh, remainder included");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+    }
+
+    /// The real user-reported bug: a SECOND path-brush stroke overlapping
+    /// the region a FIRST stroke already created used to leave that first
+    /// region orphaned forever (`plan_region_merge` only ever scanned plain
+    /// node-cycle surfaces for eligibility, never existing regions), and
+    /// eventually produced "no mesh derivable for ...-remainder" once the
+    /// resulting geometry became inconsistent enough. This must now not
+    /// only apply without error, but actually retire the first stroke's
+    /// own region -- not leave it sitting there duplicated underneath.
+    #[test]
+    fn a_second_overlapping_path_brush_stroke_consumes_the_first_ones_region() {
+        let mut session = ConstructionSession::new();
+        session
+            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
+        for cell in 0..16 {
+            let x = cell % 4;
+            let z = cell / 4;
+            session
+                .generate_and_apply_terrain_cell_json(&format!(
+                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
+                ))
+                .expect("terrain cell generates");
+        }
+
+        let first = serde_json::json!({
+            "operationId": "path-overlap-1",
+            "samples": [[1.0, 1.0], [3.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let first_response = session
+            .apply_path_brush_json(&first)
+            .expect("first path brush applies");
+        let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
+        // response_from_outcome pushes the leftover remainder (still
+        // "terrain"-typed) first, then the new "path" region -- the second
+        // stroke below only allows "terrain" as a source type, so it's the
+        // remainder (not the path itself) that must get consumed.
+        let first_remainder_region = first_parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone();
+
+        // Second stroke overlaps the first one's own already-carved region.
+        let second = serde_json::json!({
+            "operationId": "path-overlap-2",
+            "samples": [[1.5, 0.5], [1.5, 2.5]],
+            "brushShape": {"kind": "circle", "radius": 0.5},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["terrain"],
+            "targetSurfaceType": "path",
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&second)
+            .expect("second, overlapping path brush stroke must still apply");
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+        assert!(
+            parsed["surfaceIds"]["removed"]
+                .as_array()
+                .unwrap()
+                .contains(&first_remainder_region),
+            "the second stroke must report the first stroke's own remainder region as removed: {response}"
+        );
+
+        let meshes_json = session
+            .all_surface_meshes_json()
+            .expect("every surface, including anything from the first stroke, must still mesh");
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert!(
+            !meshes
+                .iter()
+                .any(|mesh| mesh["surfaceKey"] == first_remainder_region),
+            "the first stroke's own remainder region must no longer be rendered after being consumed"
+        );
+        assert!(!meshes.is_empty());
+    }
+
     /// A single-point (dot) stroke with a circle brush produces a contour
     /// whose edges are ALL circular arcs -- no straight line segment at
     /// all, unlike a dragged stroke's line-with-round-caps shape. This must
