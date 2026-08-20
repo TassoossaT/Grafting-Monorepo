@@ -190,6 +190,55 @@ function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, rad
  * triangulates the union's own simple output, which it was always built for.
  */
 /**
+ * The union of one capsule per stroke segment, and never a thrown error.
+ *
+ * The union is geometry the user is mid-gesture with, so it runs on every
+ * pointer move and again on release. `polygon-clipping` is robust for
+ * ordinary input but not total: certain near-degenerate arrangements make it
+ * give up mid-ring. That must not take the table down, and it must not
+ * silently shrink the stroke either -- so a capsule the union refuses is
+ * kept as its own polygon instead. Overlapping polygons in the result are
+ * fine for both consumers: `earcut` triangulates each one independently, and
+ * the footprint query merges the regions it finds by identity.
+ *
+ * Snapping the corners to a grid first was tried and dropped: over 2000
+ * simulated wandering drags it changed the failure rate from 12 to 10, and
+ * on straighter strokes it introduced failures where there had been none.
+ * The arrangements that defeat the algorithm are not near-duplicate corners,
+ * so rounding them does not help.
+ */
+function unionCapsules(capsules: readonly Polygon[]): MultiPolygon {
+  const [first, ...rest] = capsules;
+  if (first === undefined) return [];
+  try {
+    return polygonClipping.union(first, ...rest);
+  } catch {
+    let merged: MultiPolygon = [first];
+    for (const capsule of rest) {
+      try {
+        merged = polygonClipping.union(merged, capsule);
+      } catch {
+        merged = [...merged, capsule];
+      }
+    }
+    return merged;
+  }
+}
+
+/** One capsule per (decimated) stroke segment, snapped and ready to union. */
+function strokeCapsules(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+): readonly Polygon[] {
+  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
+  const capsules: Polygon[] = [];
+  for (let index = 1; index < decimated.length; index += 1) {
+    capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
+  }
+  return capsules;
+}
+
+/**
  * The swept area of a circular brush stroke, as real 2D polygons (XZ).
  *
  * Shared with {@link brushSweptRegionFill} on purpose: the ghost the user
@@ -203,14 +252,9 @@ export function brushSweptOutlinePolygons(
 ): MultiPolygon {
   const first = samples[0];
   if (first === undefined) return [];
-  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
-  if (decimated.length <= 1) return [[circleRing(first, radius, 24)]];
-  const capsules: Polygon[] = [];
-  for (let index = 1; index < decimated.length; index += 1) {
-    capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
-  }
-  const [firstCapsule, ...restCapsules] = capsules;
-  return polygonClipping.union(firstCapsule, ...restCapsules);
+  const capsules = strokeCapsules(samples, radius);
+  if (capsules.length === 0) return [[circleRing(first, radius, 24)]];
+  return unionCapsules(capsules);
 }
 
 export function brushSweptRegionFill(
@@ -238,17 +282,11 @@ export function brushSweptRegionFill(
     for (const triangleIndex of triangles) indices.push(base + triangleIndex);
   };
 
-  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
-  if (decimated.length <= 1) {
+  const capsules = strokeCapsules(samples, radius);
+  if (capsules.length === 0) {
     addPolygon([circleRing(first, radius, 24)], samples);
   } else {
-    const capsules: Polygon[] = [];
-    for (let index = 1; index < decimated.length; index += 1) {
-      capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
-    }
-    const [firstCapsule, ...restCapsules] = capsules;
-    const merged: MultiPolygon = polygonClipping.union(firstCapsule, ...restCapsules);
-    for (const polygon of merged) addPolygon(polygon, samples);
+    for (const polygon of unionCapsules(capsules)) addPolygon(polygon, samples);
   }
 
   return {
