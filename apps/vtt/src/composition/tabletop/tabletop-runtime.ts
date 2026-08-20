@@ -26,6 +26,7 @@ import type {
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
+  ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionRemovalOutcome,
@@ -146,7 +147,7 @@ export interface TabletopRuntime {
    * Registers a whole generated patch -- nodes, shared boundary edges, and
    * the faces over them -- in one transaction. See `ConstructionPatch`.
    */
-  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
   /** Every closed loop of boundary with no face on it -- a hole whose rim already exists. */
   getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
@@ -225,19 +226,6 @@ export interface TabletopRuntime {
   removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
-  /**
-   * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-   * hexagon's worth) through the construction session's existing generic
-   * `addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-   * like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-   * `ConstructionSessionPort.addNode`/`addSurface` already exist.
-   */
-  applyIrregularTerrainPatch(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    surfaces: readonly ConstructionSurfaceSpec[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): readonly ConstructionSurfaceKey[];
   /**
    * Welds a T-junction into an existing panel: subdividing the crossed
    * panel's own boundary edges at the crossing point, through
@@ -827,7 +815,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.applyRegionEdit([{ kind: "move-vertex", nodeId, position }], origin, causeId);
   }
 
-  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome {
     this.#requireReady("registering a generated patch");
     const outcome = this.#construction.addPatch(patch);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
@@ -1134,37 +1122,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
     return this.#construction.cloudFor(request);
-  }
-
-  applyIrregularTerrainPatch(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    surfaces: readonly ConstructionSurfaceSpec[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): readonly ConstructionSurfaceKey[] {
-    this.#requireReady("applying an irregular terrain patch");
-
-    for (const node of nodes) this.#construction.addNode(node.id, node.position);
-
-    // No duplicate tolerance here, on purpose. A cycle that already has a
-    // region is not something to swallow: `add_surface` registers the
-    // boundary edges *before* the surface, so a clash surfaces as
-    // `an edge already exists with identity ...` from the topology, and by
-    // then some edges of that cycle may already be registered -- swallowing
-    // it would leave that debris behind. The caller is responsible for not
-    // asking twice; `terrain-sculpt-tool.ts` does that by classifying each
-    // resolved face's *welded* centroid against live regions before
-    // submitting. (The branch that used to sit here matched
-    // `a surface already exists for node set`, which the region model no
-    // longer reaches -- it had been dead since the SurfaceRegion migration,
-    // which is why the duplicate came through as a crash.)
-    const surfaceKeys: ConstructionSurfaceKey[] = [];
-    for (const spec of surfaces) surfaceKeys.push(this.#construction.addSurface(spec));
-
-    this.#applyConstructionMutation(surfaceKeys, [], origin, causeId, (map) =>
-      this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return surfaceKeys;
   }
 
   applyWallCrossingWeld(

@@ -33,6 +33,7 @@ export type {
   ConstructionCoveredRegion,
   ConstructionPatch,
   ConstructionPatchEdge,
+  ConstructionPatchOutcome,
   ConstructionPatchRegion,
   ConstructionUnfilledLoop,
   ConstructionEdgeGeometry,

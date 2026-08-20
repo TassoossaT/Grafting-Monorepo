@@ -869,6 +869,18 @@ pub struct AddPatchRequest {
     pub regions: Vec<PatchRegionDto>,
 }
 
+/// What [`apply_add_patch`] registered, and what it refused.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPatchResponse {
+    pub outcome: RegionEditOutcomeDto,
+    /// Faces left unregistered because their boundary had no room -- the
+    /// ground under them already has a face. Reported rather than thrown:
+    /// refusing the whole stroke over one such face is what used to make
+    /// painting near existing terrain do nothing at all.
+    pub skipped_region_ids: Vec<String>,
+}
+
 /// Registers a whole generated patch -- nodes, **shared** boundary edges,
 /// and the regions over them -- in one transaction.
 ///
@@ -896,7 +908,7 @@ pub fn apply_add_patch(
     topology: &mut ContourTopology,
     surfaces: &mut SurfaceRegistry,
     request: AddPatchRequest,
-) -> Result<RegionEditOutcomeDto, String> {
+) -> Result<AddPatchResponse, String> {
     let mut created_node_ids = Vec::new();
     for node in request.nodes {
         let id = parse_node_id(&node.id)?;
@@ -909,6 +921,7 @@ pub fn apply_add_patch(
         created_node_ids.push(id.as_str().to_owned());
     }
 
+    let mut minted: Vec<ContourEdgeId> = Vec::new();
     for edge in request.edges {
         let id = parse_edge_id(&edge.edge_id)?;
         if topology.edge(&id).is_some() {
@@ -919,18 +932,26 @@ pub fn apply_add_patch(
         topology
             .add_edge(
                 graph,
-                ContourEdge::new(id, start, end, ContourGeometry::Line),
+                ContourEdge::new(id.clone(), start, end, ContourGeometry::Line),
             )
             .map_err(|error| error.to_string())?;
+        minted.push(id);
     }
 
     let mut created_surface_keys = Vec::new();
+    let mut skipped_region_ids = Vec::new();
+    let mut orphaned: Vec<ContourEdgeId> = Vec::new();
     for region in request.regions {
         let id = parse_region_id(&region.region_id)?;
         if topology.region(&id).is_some() {
             continue;
         }
         let boundary = parse_loop(region.boundary)?;
+        if !boundary_has_room(topology, &boundary) {
+            skipped_region_ids.push(id.as_str().to_owned());
+            orphaned.extend(boundary.iter().map(|use_| use_.edge().clone()));
+            continue;
+        }
         topology
             .add_region(id.clone(), vec![boundary], Vec::new())
             .map_err(|error| error.to_string())?;
@@ -945,9 +966,41 @@ pub fn apply_add_patch(
         created_surface_keys.push(region_id_to_wire(&id));
     }
 
-    Ok(RegionEditOutcomeDto {
-        created_surface_keys,
-        created_node_ids,
-        ..RegionEditOutcomeDto::default()
+    // An edge minted for a face that then had to be skipped can be left
+    // referenced by nothing. Dropping those keeps a refused face from
+    // leaving debris that would later read as free boundary. Only edges a
+    // *skipped* face named are considered: a call that stages edges with no
+    // regions of its own is doing that on purpose.
+    for id in orphaned {
+        if minted.contains(&id) && topology.usage_count(&id) == 0 {
+            let _ = topology.remove_edge(&id);
+        }
+    }
+
+    Ok(AddPatchResponse {
+        outcome: RegionEditOutcomeDto {
+            created_surface_keys,
+            created_node_ids,
+            ..RegionEditOutcomeDto::default()
+        },
+        skipped_region_ids,
+    })
+}
+
+/// Whether every edge of `boundary` can still take one more use in the
+/// direction this loop walks it.
+///
+/// An edge already used twice is interior -- it has a face on both sides --
+/// and an edge used once in the same direction this loop wants is one whose
+/// only free side faces the other way. Either way the face being registered
+/// would sit on top of geometry that is already there, which is exactly the
+/// "terrain is never created above anything" rule arriving at the level
+/// where it is precise. Checked against the live topology, so faces earlier
+/// in this same batch count.
+fn boundary_has_room(topology: &ContourTopology, boundary: &ContourLoop) -> bool {
+    boundary.iter().all(|use_| match topology.usage_count(use_.edge()) {
+        0 => true,
+        1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
+        _ => false,
     })
 }

@@ -597,14 +597,21 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
     }
     const resolved = pruneFacesOnExistingGround(ctx, newNodes, newSurfaces);
-    if (resolved.surfaces.length > 0) {
-      ctx.runtime.addPatch(toPatch(ctx, resolved.nodes, resolved.surfaces), "local", causeId);
-    }
+    // A face the engine refuses is one whose boundary had no room -- ground
+    // that already has a face on both sides. It costs that face, never the
+    // stroke, so the count is reported rather than treated as a failure.
+    const outcome =
+      resolved.surfaces.length > 0
+        ? ctx.runtime.addPatch(toPatch(ctx, resolved.nodes, resolved.surfaces), "local", causeId)
+        : undefined;
+    const built = outcome?.createdSurfaceKeys.length ?? 0;
+    const refused = outcome?.skippedRegionIds.length ?? 0;
     const filled = fillUnfilledLoops(ctx, params.targetSurface, causeId);
 
     const parts: string[] = [];
-    if (resolved.surfaces.length > 0) parts.push(`${resolved.surfaces.length} faces novas`);
+    if (built > 0) parts.push(`${built} faces novas`);
     if (filled > 0) parts.push(`${filled} buracos fechados`);
+    if (refused > 0) parts.push(`${refused} sobre terreno existente`);
     if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
     if (parts.length === 0) {
       ctx.reportFeedback({

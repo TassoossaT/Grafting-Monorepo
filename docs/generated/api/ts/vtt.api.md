@@ -393,7 +393,7 @@ two tables never collide inside one `ConstructionSession`.
 
 Registers a bare boundary edge -- staging before `addRegion`.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 Registers a whole generated patch -- nodes, shared boundary edges, and
 the faces over them -- in one transaction. See `ConstructionPatch`.
@@ -403,14 +403,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 Registers a region from already-registered edges, so it can share a boundary.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
-
-Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-hexagon's worth) through the construction session's existing generic
-`addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-`ConstructionSessionPort.addNode`/`addSurface` already exist.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
 
@@ -558,7 +550,7 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 Registers a bare boundary edge -- staging before `addRegion`.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 Registers a whole generated patch -- nodes, shared boundary edges, and
 the faces over them -- in one transaction. See `ConstructionPatch`.
@@ -568,14 +560,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 Registers a region from already-registered edges, so it can share a boundary.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
-
-Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-hexagon's worth) through the construction session's existing generic
-`addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-`ConstructionSessionPort.addNode`/`addSurface` already exist.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
 
@@ -2765,6 +2749,8 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionPatchEdge`
 
+### `reference vtt.ports.ConstructionPatchOutcome`
+
 ### `reference vtt.ports.ConstructionPatchRegion`
 
 ### `reference vtt.ports.ConstructionPosition`
@@ -2957,6 +2943,31 @@ One straight boundary segment of a generated patch, named by its caller.
 
 ### `property vtt.construction-session-port.ConstructionPatchEdge.startNodeId: string`
 
+### `interface vtt.construction-session-port.ConstructionPatchOutcome`
+
+What ConstructionSessionPort.addPatch registered, and what it refused.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Surfaces whose mesh must be re-derived.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.createdNodeIds: readonly string[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.createdSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.removedNodeIds: readonly string[]`
+
+Nodes the engine's own zero-orphan cleanup reclaimed.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.skippedRegionIds: readonly string[]`
+
+Faces left unregistered because their boundary had no room -- the ground
+under them already has a face on both sides of an edge they wanted.
+Reported rather than thrown: one refused face must not cost the whole
+stroke.
+
 ### `interface vtt.construction-session-port.ConstructionPatchRegion`
 
 One face of a generated patch, over edges the same request declares.
@@ -3053,7 +3064,7 @@ Adds an inner loop -- what a door or a window is.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addNode(id: string, position: ConstructionPosition): void`
 
-### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): RegionEditOutcome`
+### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): ConstructionPatchOutcome`
 
 Registers a whole generated patch in one transaction -- see
 ConstructionPatch for why a generator names its own edges.

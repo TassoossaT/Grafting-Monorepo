@@ -568,4 +568,124 @@ mod tests {
             "the declared hole is somebody's doorway, not a gap to seal"
         );
     }
+    /// A later stroke welding onto a segment that already has a face on
+    /// both sides is asking for a third face on it. That is terrain being
+    /// created above terrain, and the manifold rule is where it becomes
+    /// precise -- but it must cost that one face, not the whole stroke.
+    #[test]
+    fn a_face_reusing_an_interior_edge_is_skipped_not_thrown() {
+        let (mut graph, mut topology, mut surfaces) = lattice(2, 1, &[]);
+        // The segment between the two faces is interior: used twice.
+        assert_eq!(topology.usage_count(&edge("v1_0")), 2);
+
+        let response = apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: vec![
+                    PatchNodeDto {
+                        id: "extra".into(),
+                        position: [1.5, 0.0, 0.5],
+                    },
+                    PatchNodeDto {
+                        id: "y0".into(),
+                        position: [20.0, 0.0, 0.0],
+                    },
+                    PatchNodeDto {
+                        id: "y1".into(),
+                        position: [21.0, 0.0, 0.0],
+                    },
+                    PatchNodeDto {
+                        id: "y2".into(),
+                        position: [21.0, 0.0, 1.0],
+                    },
+                ],
+                edges: vec![
+                    PatchEdgeDto {
+                        edge_id: "xa".into(),
+                        start_node_id: "n1_1".into(),
+                        end_node_id: "extra".into(),
+                    },
+                    PatchEdgeDto {
+                        edge_id: "xb".into(),
+                        start_node_id: "extra".into(),
+                        end_node_id: "n1_0".into(),
+                    },
+                    PatchEdgeDto {
+                        edge_id: "ya".into(),
+                        start_node_id: "y0".into(),
+                        end_node_id: "y1".into(),
+                    },
+                    PatchEdgeDto {
+                        edge_id: "yb".into(),
+                        start_node_id: "y1".into(),
+                        end_node_id: "y2".into(),
+                    },
+                    PatchEdgeDto {
+                        edge_id: "yc".into(),
+                        start_node_id: "y2".into(),
+                        end_node_id: "y0".into(),
+                    },
+                ],
+                regions: vec![
+                    PatchRegionDto {
+                        region_id: "intruder".into(),
+                        boundary: vec![
+                            OrientedEdgeUseDto {
+                                edge_id: "v1_0".into(),
+                                reversed: false,
+                            },
+                            OrientedEdgeUseDto {
+                                edge_id: "xa".into(),
+                                reversed: false,
+                            },
+                            OrientedEdgeUseDto {
+                                edge_id: "xb".into(),
+                                reversed: false,
+                            },
+                        ],
+                        surface_type: "terrain".into(),
+                        physical: true,
+                    },
+                    PatchRegionDto {
+                        region_id: "innocent".into(),
+                        boundary: vec![
+                            OrientedEdgeUseDto {
+                                edge_id: "ya".into(),
+                                reversed: false,
+                            },
+                            OrientedEdgeUseDto {
+                                edge_id: "yb".into(),
+                                reversed: false,
+                            },
+                            OrientedEdgeUseDto {
+                                edge_id: "yc".into(),
+                                reversed: false,
+                            },
+                        ],
+                        surface_type: "terrain".into(),
+                        physical: true,
+                    },
+                ],
+            },
+        )
+        .expect("one refused face must not abort the batch");
+
+        assert_eq!(response.skipped_region_ids, vec!["intruder".to_string()]);
+        assert_eq!(
+            response.outcome.created_surface_keys.len(),
+            1,
+            "the face standing on open ground still went in"
+        );
+        assert_eq!(
+            topology.usage_count(&edge("v1_0")),
+            2,
+            "the interior segment still has exactly its two faces"
+        );
+        assert!(
+            topology.edge(&edge("xa")).is_none() && topology.edge(&edge("xb")).is_none(),
+            "edges minted only for the refused face leave no debris"
+        );
+    }
 }

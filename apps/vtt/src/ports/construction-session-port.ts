@@ -124,6 +124,17 @@ export interface ConstructionPatch {
   readonly regions: readonly ConstructionPatchRegion[];
 }
 
+/** What {@link ConstructionSessionPort.addPatch} registered, and what it refused. */
+export interface ConstructionPatchOutcome extends RegionEditOutcome {
+  /**
+   * Faces left unregistered because their boundary had no room -- the ground
+   * under them already has a face on both sides of an edge they wanted.
+   * Reported rather than thrown: one refused face must not cost the whole
+   * stroke.
+   */
+  readonly skippedRegionIds: readonly string[];
+}
+
 /** A closed loop of boundary with no face on it -- a hole in the surface. */
 export interface ConstructionUnfilledLoop {
   /**
@@ -432,7 +443,7 @@ export interface ConstructionSessionPort {
    * stroke overlapping an earlier one re-declares what they share, and that
    * must not mint a second copy.
    */
-  addPatch(patch: ConstructionPatch): RegionEditOutcome;
+  addPatch(patch: ConstructionPatch): ConstructionPatchOutcome;
   /**
    * Every closed loop of boundary that some other loop encloses and no face
    * fills -- a hole in the surface whose rim already exists.

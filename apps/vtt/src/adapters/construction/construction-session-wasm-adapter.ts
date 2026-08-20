@@ -20,6 +20,7 @@ import type {
   ConstructionNodeSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
+  ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionRemovalOutcome,
@@ -50,6 +51,24 @@ function curvatureToWire(curvature: "straight" | "arc-left" | "arc-right"): stri
 }
 
 type WirePosition = readonly [number, number, number];
+
+interface RegionEditOutcomeWire {
+  readonly affectedSurfaceKeys: readonly (readonly string[])[];
+  readonly createdSurfaceKeys: readonly (readonly string[])[];
+  readonly removedSurfaceKeys: readonly (readonly string[])[];
+  readonly createdNodeIds: readonly string[];
+  readonly removedNodeIds: readonly string[];
+}
+
+function fromWireOutcome(wire: RegionEditOutcomeWire): RegionEditOutcome {
+  return {
+    affectedSurfaceKeys: wire.affectedSurfaceKeys,
+    createdSurfaceKeys: wire.createdSurfaceKeys,
+    removedSurfaceKeys: wire.removedSurfaceKeys,
+    createdNodeIds: wire.createdNodeIds,
+    removedNodeIds: wire.removedNodeIds,
+  };
+}
 
 function toWirePosition(position: ConstructionPosition): WirePosition {
   return [position.x, position.y, position.z];
@@ -210,8 +229,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
-  addPatch(patch: ConstructionPatch): RegionEditOutcome {
-    return this.#regionEdit(
+  addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {
+    const wire = JSON.parse(
       this.#require().add_patch_json(
         JSON.stringify({
           nodes: patch.nodes.map((node: ConstructionPatch["nodes"][number]) => ({
@@ -222,7 +241,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
           regions: patch.regions,
         }),
       ),
-    );
+    ) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
   }
 
   getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
@@ -343,20 +363,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   #regionEdit(responseJson: string): RegionEditOutcome {
-    const wire = JSON.parse(responseJson) as {
-      affectedSurfaceKeys: readonly (readonly string[])[];
-      createdSurfaceKeys: readonly (readonly string[])[];
-      removedSurfaceKeys: readonly (readonly string[])[];
-      createdNodeIds: readonly string[];
-      removedNodeIds: readonly string[];
-    };
-    return {
-      affectedSurfaceKeys: wire.affectedSurfaceKeys,
-      createdSurfaceKeys: wire.createdSurfaceKeys,
-      removedSurfaceKeys: wire.removedSurfaceKeys,
-      createdNodeIds: wire.createdNodeIds,
-      removedNodeIds: wire.removedNodeIds,
-    };
+    return fromWireOutcome(JSON.parse(responseJson) as RegionEditOutcomeWire);
   }
 
   setTerrainMesh(

@@ -307,7 +307,7 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&dto);
+        self.track(&dto.outcome);
         serialize(&dto)
     }
 
