@@ -332,6 +332,62 @@ pub fn apply_delete_region(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AddRegionRequest {
+    pub region_id: String,
+    pub outer_loops: Vec<Vec<OrientedEdgeUseDto>>,
+    #[serde(default)]
+    pub holes: Vec<Vec<OrientedEdgeUseDto>>,
+    pub surface_type: String,
+    pub physical: bool,
+}
+
+/// Registers a region from **already-registered** edges, named explicitly.
+///
+/// This is what `add_surface` cannot do. That call derives a region from a
+/// node cycle and always mints fresh edges for it, so a new face built along
+/// an existing boundary ends up with its own edge *coincident* with the
+/// neighbour's rather than being the same edge. Coincident-but-separate is
+/// not a join: nothing structurally connects the two faces, and the manifold
+/// rule never notices because each edge is still used once.
+///
+/// Stitching onto the rim a removal exposed therefore has to reuse those rim
+/// edges, walked in the opposite direction -- which is exactly what makes the
+/// two faces manifold neighbours. Hence this entry point.
+pub fn apply_add_region(
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: AddRegionRequest,
+) -> Result<RegionEditOutcomeDto, String> {
+    let region = parse_region_id(&request.region_id)?;
+    let outer_loops = request
+        .outer_loops
+        .into_iter()
+        .map(parse_loop)
+        .collect::<Result<Vec<_>, _>>()?;
+    let holes = request
+        .holes
+        .into_iter()
+        .map(parse_loop)
+        .collect::<Result<Vec<_>, _>>()?;
+    topology
+        .add_region(region.clone(), outer_loops, holes)
+        .map_err(|error| error.to_string())?;
+    surfaces
+        .add_region_surface(
+            topology,
+            region.clone(),
+            SurfaceType::new(request.surface_type),
+            request.physical,
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(RegionEditOutcomeDto {
+        created_surface_keys: vec![region_id_to_wire(&region)],
+        ..RegionEditOutcomeDto::default()
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeleteRegionsRequest {
     pub surface_keys: Vec<Vec<String>>,
 }

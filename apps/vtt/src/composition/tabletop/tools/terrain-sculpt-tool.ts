@@ -1,9 +1,15 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceSpec } from "@/ports";
+import type {
+  ConstructionCoveredRegion,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionSurfaceSpec,
+} from "@/ports";
 
 import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
-import { brushSweptRegionFill } from "./preview-shapes.ts";
+import { brushSweptOutlinePolygons, brushSweptRegionFill } from "./preview-shapes.ts";
+import { restackTerrain } from "./terrain-restack.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
@@ -338,6 +344,26 @@ function latticeTrianglesPerSideFor(gesture: ToolGesture, params: TerrainSculptP
   return Math.max(1, Math.round(params.trianglesPerSide), neededTrianglesPerSide);
 }
 
+/**
+ * Every region the stroke's own swept area touches, asked of the engine once
+ * per disjoint piece of that area and merged by identity.
+ *
+ * The footprint is the very shape the drag ghost showed
+ * (`brushSweptOutlinePolygons` is shared with the preview), so the stroke
+ * never affects ground the user was not shown.
+ */
+function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly ConstructionCoveredRegion[] {
+  const merged = new Map<string, ConstructionCoveredRegion>();
+  for (const polygon of brushSweptOutlinePolygons(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS)) {
+    const ring = polygon[0];
+    if (ring === undefined || ring.length < 3) continue;
+    for (const region of ctx.runtime.getFootprintCoverage(ring)) {
+      merged.set(region.surfaceKey.join(" "), region);
+    }
+  }
+  return [...merged.values()];
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -356,6 +382,31 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+    const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
+
+    // Ground already under the brush is *raised*, never painted over. Asking
+    // the engine what is there first is what makes that possible: a stroke
+    // used to build its own independent lattice and submit it regardless,
+    // which stacked geometry on every pass and collided outright wherever
+    // two strokes happened to derive the same cycle.
+    const covered = coveredByStroke(ctx, gesture);
+    if (covered.length > 0) {
+      const outcome = restackTerrain(ctx, params.targetSurface, covered, causeId);
+      if ("reason" in outcome) {
+        ctx.reportFeedback({ tone: "error", message: outcome.reason });
+        return;
+      }
+      if (outcome.raisedFaces > 0) {
+        ctx.reportFeedback({
+          tone: "success",
+          message: `Terreno elevado: ${outcome.raisedFaces} faces, ${outcome.bandFaces} de ligação.`,
+        });
+        return;
+      }
+    }
+
+    // Nothing underneath (or only clipped faces the stroke must not drag):
+    // this is bare ground, so generate terrain where there is none.
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
     const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];

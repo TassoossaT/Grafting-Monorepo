@@ -253,6 +253,17 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Registers a region from already-registered edges, so a new face can
+    /// *share* a boundary instead of laying a coincident copy of it beside
+    /// the neighbour's. See `region_editing::apply_add_region`.
+    pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_add_region(&mut self.topology, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
     /// Removes a whole set of regions at once and reports the rim the hole
     /// is left bounded by -- what a caller stitches new geometry onto so the
     /// result has neither a leftover hole nor an extra face. See

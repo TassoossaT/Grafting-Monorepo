@@ -1040,6 +1040,55 @@ impl ContourTopology {
         self.usages.get(edge).map(Vec::len).unwrap_or(0)
     }
 
+    /// Which direction the one region still using `edge` walks it, or `None`
+    /// when it is unused or shared. A face being stitched onto a free
+    /// boundary must walk it the **opposite** way -- that opposition is what
+    /// makes the two manifold neighbours instead of an illegal double use.
+    pub fn sole_usage_reversed(&self, edge: &ContourEdgeId) -> Option<bool> {
+        match self.usages.get(edge)?.as_slice() {
+            [usage] => Some(usage.reversed),
+            _ => None,
+        }
+    }
+
+    /// Chains already-oriented uses into closed loops, keeping each use's own
+    /// direction rather than choosing one. Used for a rim whose orientation
+    /// is dictated from outside (opposite the surviving neighbour's), where
+    /// re-deriving direction from connectivity would discard that.
+    pub fn assemble_oriented_loops(&self, uses: &[OrientedEdgeUse]) -> Vec<ContourLoop> {
+        let ends = |use_: &OrientedEdgeUse| -> Option<(NodeId, NodeId)> {
+            let edge = self.edges.get(use_.edge())?;
+            Some(if use_.is_reversed() {
+                (edge.end_node.clone(), edge.start_node.clone())
+            } else {
+                (edge.start_node.clone(), edge.end_node.clone())
+            })
+        };
+
+        let mut remaining: Vec<OrientedEdgeUse> = uses.to_vec();
+        let mut loops = Vec::new();
+        while let Some(seed) = remaining.pop() {
+            let Some((origin, mut cursor)) = ends(&seed) else {
+                continue;
+            };
+            let mut walked: ContourLoop = vec![seed];
+            while cursor != origin {
+                let found = remaining
+                    .iter()
+                    .position(|candidate| ends(candidate).is_some_and(|(start, _)| start == cursor));
+                let Some(index) = found else { break };
+                let next = remaining.remove(index);
+                let Some((_, end)) = ends(&next) else { break };
+                cursor = end;
+                walked.push(next);
+            }
+            if cursor == origin {
+                loops.push(walked);
+            }
+        }
+        loops
+    }
+
     /// Chains `edges` into closed loops by shared endpoints, orienting each
     /// use so consecutive entries meet end-to-start.
     ///

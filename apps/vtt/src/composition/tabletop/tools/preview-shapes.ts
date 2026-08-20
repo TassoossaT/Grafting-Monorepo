@@ -189,6 +189,30 @@ function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, rad
  * robustly for any input, self-overlapping or not. `earcut` then
  * triangulates the union's own simple output, which it was always built for.
  */
+/**
+ * The swept area of a circular brush stroke, as real 2D polygons (XZ).
+ *
+ * Shared with {@link brushSweptRegionFill} on purpose: the ghost the user
+ * saw while dragging and the footprint the engine is then asked about must
+ * be the identical shape, or the stroke would affect ground the preview
+ * never highlighted.
+ */
+export function brushSweptOutlinePolygons(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+): MultiPolygon {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
+  if (decimated.length <= 1) return [[circleRing(first, radius, 24)]];
+  const capsules: Polygon[] = [];
+  for (let index = 1; index < decimated.length; index += 1) {
+    capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
+  }
+  const [firstCapsule, ...restCapsules] = capsules;
+  return polygonClipping.union(firstCapsule, ...restCapsules);
+}
+
 export function brushSweptRegionFill(
   samples: readonly ConstructionPosition[],
   shape: BrushOutlineShape,

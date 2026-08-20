@@ -21,9 +21,13 @@ import type {
   CloudOutcome,
   CloudRequest,
   ConfirmedTokenRenderChange,
+  ConstructionCoveredRegion,
+  ConstructionEdgeGeometry,
   ConstructionNodeId,
+  ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionTopology,
+  ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
@@ -138,6 +142,38 @@ export interface TabletopRuntime {
   ): RegionEditOutcome;
   /** One region's live boundary -- what a handle/hit-test layer reads. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  /** What a brush footprint currently covers, before anything is generated. */
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[];
+  /** Removes a set of regions in one transaction, reporting the rim to stitch onto. */
+  deleteRegions(
+    surfaceKeys: readonly ConstructionSurfaceKey[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionRemovalOutcome;
+  /** Registers a bare boundary edge -- staging before `addRegion`. */
+  addContourEdge(
+    request: {
+      readonly edgeId: string;
+      readonly startNodeId: ConstructionNodeId;
+      readonly endNodeId: ConstructionNodeId;
+      readonly geometry: ConstructionEdgeGeometry;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): void;
+  /** Registers a region from already-registered edges, so it can share a boundary. */
+  addRegion(
+    request: {
+      readonly regionId: string;
+      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+      readonly surfaceType: string;
+      readonly physical: boolean;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   generateTerrainCell(
@@ -781,6 +817,56 @@ export class AppTabletopRuntime implements TabletopRuntime {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
     this.#requireReady("reading a region's topology");
     return this.#construction.getRegionTopology(surfaceKey);
+  }
+
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[] {
+    this.#requireReady("querying a footprint's coverage");
+    return this.#construction.getFootprintCoverage(polygon);
+  }
+
+  deleteRegions(
+    surfaceKeys: readonly ConstructionSurfaceKey[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionRemovalOutcome {
+    this.#requireReady("removing regions");
+    const outcome = this.#construction.deleteRegions(surfaceKeys);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  addContourEdge(
+    request: {
+      readonly edgeId: string;
+      readonly startNodeId: ConstructionNodeId;
+      readonly endNodeId: ConstructionNodeId;
+      readonly geometry: ConstructionEdgeGeometry;
+    },
+    _origin: ChangeOrigin,
+    _causeId: string,
+  ): void {
+    // Staging only: a bare edge no region uses yet changes nothing visible,
+    // so there is no projection or render sync to run for it.
+    this.#requireReady("registering a boundary edge");
+    this.#construction.addContourEdge(request);
+  }
+
+  addRegion(
+    request: {
+      readonly regionId: string;
+      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+      readonly surfaceType: string;
+      readonly physical: boolean;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome {
+    this.#requireReady("registering a region");
+    const outcome = this.#construction.addRegion(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

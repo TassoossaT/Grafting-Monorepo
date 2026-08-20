@@ -196,6 +196,18 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
+  addRegion(request: {
+    readonly regionId: string;
+    readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+    readonly holes?: readonly (readonly ConstructionOrientedEdgeUse[])[];
+    readonly surfaceType: string;
+    readonly physical: boolean;
+  }): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().add_region_json(JSON.stringify({ holes: [], ...request })),
+    );
+  }
+
   addContourEdge(request: {
     readonly edgeId: string;
     readonly startNodeId: string;

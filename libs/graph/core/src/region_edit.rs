@@ -509,6 +509,11 @@ pub struct RegionRemoval {
     /// exactly what a caller must stitch back onto to leave neither a hole
     /// nor an extra face.
     ///
+    /// **Each use is already oriented for the stitching face**, opposite to
+    /// how the surviving neighbour walks it, so a caller registers a new
+    /// region with these verbatim. Using the neighbour's own direction would
+    /// be an illegal second use in the same direction.
+    ///
     /// Empty when the removal opened no hole (nothing neighboured it).
     pub exposed_loops: Vec<ContourLoop>,
 }
@@ -559,9 +564,21 @@ pub fn delete_regions<N, E>(
     }
     let removed_nodes = prune_orphans(graph, topology, surfaces, &candidate_nodes)?;
 
-    let rim: Vec<ContourEdgeId> = touched_edges
+    // Each rim use is oriented **opposite** to how the surviving neighbour
+    // walks it, so a caller can stitch a face onto the rim by using these
+    // verbatim. Handing back the neighbour's own direction instead would
+    // make every such face an illegal second use in the same direction.
+    let rim: Vec<OrientedEdgeUse> = touched_edges
         .into_iter()
-        .filter(|edge| topology.usage_count(edge) == 1)
+        .filter_map(|edge| {
+            topology.sole_usage_reversed(&edge).map(|reversed| {
+                if reversed {
+                    OrientedEdgeUse::forward(edge)
+                } else {
+                    OrientedEdgeUse::reversed(edge)
+                }
+            })
+        })
         .collect();
     Ok(RegionRemoval {
         outcome: RegionEditOutcome {
@@ -570,7 +587,7 @@ pub fn delete_regions<N, E>(
             removed_nodes,
             ..RegionEditOutcome::default()
         },
-        exposed_loops: topology.assemble_loops(&rim),
+        exposed_loops: topology.assemble_oriented_loops(&rim),
     })
 }
 
@@ -1307,6 +1324,38 @@ mod tests {
         );
         assert!(topology.edge(&eid("v2_1")).is_none(), "and it was reclaimed");
         assert_eq!(rim.len(), 6, "two merged faces leave one six-edge rim");
+    }
+
+    /// The rim's whole purpose: a face registered with those uses verbatim
+    /// must be *accepted*, sharing each rim edge with the neighbour that
+    /// still holds it. If the orientation were handed back as the
+    /// neighbour's own, this would be rejected as a second use in the same
+    /// direction -- which is precisely the mistake the rim exists to prevent.
+    #[test]
+    fn a_face_stitched_onto_the_rim_verbatim_is_accepted_as_a_shared_boundary() {
+        let (mut graph, mut topology, mut surfaces, regions) = lattice();
+        let removal = delete_regions(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            &[regions[1][1].clone()],
+        )
+        .unwrap();
+
+        let rim = removal.exposed_loops[0].clone();
+        let patch = rid("stitched");
+        topology
+            .add_region(patch.clone(), vec![rim.clone()], Vec::new())
+            .expect("the rim's own orientation must be directly usable");
+
+        for use_ in &rim {
+            assert_eq!(
+                topology.usage_count(use_.edge()),
+                2,
+                "each rim edge is now shared by the neighbour and the stitched face"
+            );
+        }
+        assert!(topology.region(&patch).is_some());
     }
 
     #[test]
