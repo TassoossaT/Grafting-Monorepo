@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    add_hole, cut_region, delete_region, duplicate_region, insert_vertex, move_edge, move_region,
-    move_vertex, remove_hole, remove_vertex, retype_edge,
+    add_hole, cut_region, delete_region, delete_regions, duplicate_region, insert_vertex, move_edge,
+    move_region, move_vertex, remove_hole, remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -328,6 +328,52 @@ pub fn apply_delete_region(
     let region = region_id_from_wire(&request.surface_key)?;
     let outcome = delete_region(graph, topology, surfaces, &region).map_err(|e| e.to_string())?;
     Ok(outcome.into())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteRegionsRequest {
+    pub surface_keys: Vec<Vec<String>>,
+}
+
+/// One rim edge, resolved in the loop's own walk direction so a caller can
+/// stitch onto it without re-deriving orientation.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovalResponse {
+    #[serde(flatten)]
+    pub outcome: RegionEditOutcomeDto,
+    /// Closed loops bounding the hole the removal opened -- exactly what
+    /// must be stitched back onto so the result has neither a leftover hole
+    /// nor an extra face. Empty when the removal opened no hole.
+    pub exposed_loops: Vec<Vec<RegionEdgeDto>>,
+}
+
+/// Removes a whole set of regions in one transaction and reports the rim
+/// left behind. See `grafting_graph_core::delete_regions` for why batching
+/// is a correctness condition rather than an optimization.
+pub fn apply_delete_regions(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: DeleteRegionsRequest,
+) -> Result<RemovalResponse, String> {
+    let regions = request
+        .surface_keys
+        .iter()
+        .map(|key| region_id_from_wire(key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let removal =
+        delete_regions(graph, topology, surfaces, &regions).map_err(|error| error.to_string())?;
+    let exposed_loops = removal
+        .exposed_loops
+        .iter()
+        .map(|loop_| loop_dto(topology, loop_))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(RemovalResponse {
+        outcome: removal.outcome.into(),
+        exposed_loops,
+    })
 }
 
 #[derive(Debug, Deserialize)]

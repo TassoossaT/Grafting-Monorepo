@@ -14,11 +14,14 @@ import type {
   ApplyPathBrushRequest,
   CloudOutcome,
   CloudRequest,
+  ConstructionCoverageKind,
+  ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
   ConstructionNodeSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionTopology,
+  ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
@@ -212,6 +215,35 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome {
     return this.#regionEdit(this.#require().delete_region_json(JSON.stringify({ surfaceKey })));
+  }
+
+  deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome {
+    const responseJson = this.#require().delete_regions_json(JSON.stringify({ surfaceKeys }));
+    const wire = JSON.parse(responseJson) as { exposedLoops: readonly (readonly RegionEdgeWire[])[] };
+    return { ...this.#regionEdit(responseJson), exposedLoops: wire.exposedLoops };
+  }
+
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[] {
+    const wire = JSON.parse(this.#require().footprint_coverage_json(JSON.stringify({ polygon }))) as {
+      covered: readonly {
+        surfaceKey: readonly string[];
+        surfaceType: string;
+        physical: boolean;
+        coverage: ConstructionCoverageKind;
+        centroid: WirePosition;
+        nodeIds: readonly string[];
+      }[];
+    };
+    return wire.covered.map((entry) => ({
+      surfaceKey: entry.surfaceKey,
+      surfaceType: entry.surfaceType,
+      physical: entry.physical,
+      coverage: entry.coverage,
+      centroid: fromWirePosition(entry.centroid),
+      nodeIds: entry.nodeIds,
+    }));
   }
 
   duplicateRegion(request: {

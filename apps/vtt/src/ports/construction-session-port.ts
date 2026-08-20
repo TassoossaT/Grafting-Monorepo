@@ -61,6 +61,40 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
 }
 
 /**
+ * How a brush footprint touches one existing region.
+ *
+ * Reported as data rather than resolved by the engine: a type that swaps
+ * whole faces (terrain restacking onto itself) and a type that cuts (a path
+ * carved through) need different rules from the very same answer.
+ */
+export type ConstructionCoverageKind =
+  /** The region's own centroid is under the brush -- the whole face is covered. */
+  | "centroid"
+  /** The brush and the region overlap, but the centroid is outside -- the brush clips it. */
+  | "overlap";
+
+/** One existing region a footprint touches, with what a per-type rule needs to decide. */
+export interface ConstructionCoveredRegion {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly coverage: ConstructionCoverageKind;
+  /** World-space centroid; `y` is the height the face currently sits at. */
+  readonly centroid: ConstructionPosition;
+  readonly nodeIds: readonly ConstructionNodeId[];
+}
+
+/**
+ * What a removal left behind. `exposedLoops` are the closed rims bounding
+ * the hole that opened -- exactly what new geometry must be stitched onto so
+ * the result carries neither a leftover hole nor an extra face. Empty when
+ * the removal opened no hole.
+ */
+export interface ConstructionRemovalOutcome extends RegionEditOutcome {
+  readonly exposedLoops: readonly (readonly ConstructionRegionEdge[])[];
+}
+
+/**
  * One region's live boundary, in the engine's own deterministic order. That
  * ordering is the entire contract behind index-to-role mapping: the front
  * end asked for a specific generated shape, so it already knows what
@@ -344,6 +378,21 @@ export interface ConstructionSessionPort {
   moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome;
   /** Unregisters a region, leaving zero orphaned nodes or edges behind. */
   deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome;
+  /**
+   * Removes a whole set of regions in one transaction, reporting the rim the
+   * hole is left bounded by. Batching is a correctness condition, not an
+   * optimization: an edge shared by two regions both being removed is
+   * interior to the removal, and removing one at a time would expose it.
+   */
+  deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome;
+  /**
+   * What a footprint currently covers, before anything is generated -- the
+   * creation-side counterpart to {@link getRegionTopology}. The engine
+   * reports; `features/edit-construction`'s per-type table decides.
+   */
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[];
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

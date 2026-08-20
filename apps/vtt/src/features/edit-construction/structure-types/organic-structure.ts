@@ -2,6 +2,7 @@ import type { EditTarget } from "../atomic-edit.ts";
 import { HORIZONTAL_AXES } from "../atomic-edit.ts";
 import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { allowed, denied } from "./structure-type.ts";
+import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "./creation-interaction.ts";
 
 /**
  * The role model for a procedurally generated, non-enumerable boundary --
@@ -64,6 +65,7 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
+  interactionOver: (coveredType: string) => CreationInteraction,
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
@@ -71,5 +73,38 @@ export function organicStructureType(
     creation,
     roleFor: organicRoleFor,
     policyFor: organicPolicyFactory(structural),
+    interactionOver,
   });
+}
+
+/** Surface types that are themselves ground -- what terrain may restack onto. */
+const TERRAIN_TYPES = new Set(["terrain", "terrain-grass"]);
+
+/**
+ * Terrain painted over terrain **raises** it: the covered faces are deleted,
+ * the new ones generated above, and the result stitched back onto the rim
+ * the removal exposed. It does not overlay a second lattice on top of the
+ * first, which is what used to stack geometry on every stroke.
+ *
+ * Terrain over anything else is refused. Ground is not something that can
+ * come into being above a wall or a path -- there is no meaning to assign,
+ * so nothing is generated and the caller says why. This is the direction
+ * that does *not* mirror: a wall over terrain is perfectly ordinary.
+ */
+export function terrainInteractionOver(coveredType: string): CreationInteraction {
+  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
+  return forbid(`terrain cannot be created above "${coveredType}"`);
+}
+
+/**
+ * A path **carves**: it consumes what it crosses and keeps the leftover with
+ * the path's own shape cut out of it. Over terrain that is a road; over a
+ * wall the same cut reads as an opening through it.
+ *
+ * Over another path there is nothing to carve -- the ground is already path
+ * -- so the two simply coexist rather than one consuming the other.
+ */
+export function pathInteractionOver(coveredType: string): CreationInteraction {
+  if (coveredType === "path") return IGNORE;
+  return CUT;
 }

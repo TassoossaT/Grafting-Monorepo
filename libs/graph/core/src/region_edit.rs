@@ -498,29 +498,92 @@ pub fn remove_hole<N, E>(
     })
 }
 
-/// `DeleteRegion`: unregisters a region and its surface, then runs the
-/// shared orphan cleanup over every node its boundary used -- leaving zero
-/// orphaned nodes or edges behind, per this module's own structural
-/// guarantee.
+/// What a removal left behind: the edit's own outcome, plus the rim the
+/// hole is now bounded by.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RegionRemoval {
+    /// Affected neighbours, removed regions, reclaimed nodes.
+    pub outcome: RegionEditOutcome,
+    /// Closed loops of surviving edges now used by exactly one region --
+    /// the literal boundary of the hole the removal opened, and therefore
+    /// exactly what a caller must stitch back onto to leave neither a hole
+    /// nor an extra face.
+    ///
+    /// Empty when the removal opened no hole (nothing neighboured it).
+    pub exposed_loops: Vec<ContourLoop>,
+}
+
+/// `DeleteRegion` over a whole set at once, reporting the rim left behind.
+///
+/// Batching is not an optimization, it is the correctness condition: an
+/// edge shared by two regions that are *both* being removed is interior to
+/// the removal and must not appear in the rim. Deleting one at a time would
+/// expose it in between, and a caller stitching onto it would weld into the
+/// middle of its own hole.
+///
+/// The rim is derived, never guessed: after the removal and the shared
+/// orphan cleanup, it is exactly those of the removed regions' own edges
+/// that still exist and are now used by exactly one region.
+pub fn delete_regions<N, E>(
+    graph: &mut Graph<N, E>,
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    regions: &[RegionId],
+) -> Result<RegionRemoval, RegionEditError> {
+    let removed: BTreeSet<RegionId> = regions.iter().cloned().collect();
+    let mut touched_edges: Vec<ContourEdgeId> = Vec::new();
+    let mut candidate_nodes: Vec<NodeId> = Vec::new();
+    let mut neighbors: Vec<RegionId> = Vec::new();
+
+    for id in &removed {
+        let region = topology
+            .region(id)
+            .ok_or_else(|| ContourError::UnknownRegion { id: id.clone() })?;
+        for use_ in region.outer_loops().iter().chain(region.holes().iter()).flatten() {
+            touched_edges.push(use_.edge().clone());
+            neighbors.extend(topology.regions_using_edge(use_.edge()));
+        }
+        candidate_nodes.extend(topology.region_nodes(id)?);
+    }
+    touched_edges.sort();
+    touched_edges.dedup();
+    neighbors.retain(|id| !removed.contains(id));
+    neighbors.sort();
+    neighbors.dedup();
+
+    for id in &removed {
+        topology.remove_region(id)?;
+        if surfaces.region_surface(id).is_some() {
+            surfaces.remove_region_surface(id)?;
+        }
+    }
+    let removed_nodes = prune_orphans(graph, topology, surfaces, &candidate_nodes)?;
+
+    let rim: Vec<ContourEdgeId> = touched_edges
+        .into_iter()
+        .filter(|edge| topology.usage_count(edge) == 1)
+        .collect();
+    Ok(RegionRemoval {
+        outcome: RegionEditOutcome {
+            affected_regions: neighbors,
+            removed_regions: removed.into_iter().collect(),
+            removed_nodes,
+            ..RegionEditOutcome::default()
+        },
+        exposed_loops: topology.assemble_loops(&rim),
+    })
+}
+
+/// `DeleteRegion` for a single region -- [`delete_regions`] with one entry,
+/// discarding the rim. A caller that intends to stitch anything back should
+/// call [`delete_regions`] instead and keep it.
 pub fn delete_region<N, E>(
     graph: &mut Graph<N, E>,
     topology: &mut ContourTopology,
     surfaces: &mut SurfaceRegistry,
     region: &RegionId,
 ) -> Result<RegionEditOutcome, RegionEditError> {
-    let candidates = topology.region_nodes(region)?;
-    let neighbors = neighbor_regions(topology, region);
-    topology.remove_region(region)?;
-    if surfaces.region_surface(region).is_some() {
-        surfaces.remove_region_surface(region)?;
-    }
-    let removed_nodes = prune_orphans(graph, topology, surfaces, &candidates)?;
-    Ok(RegionEditOutcome {
-        affected_regions: neighbors,
-        removed_regions: vec![region.clone()],
-        removed_nodes,
-        ..RegionEditOutcome::default()
-    })
+    Ok(delete_regions(graph, topology, surfaces, std::slice::from_ref(region))?.outcome)
 }
 
 /// How [`duplicate_region`] derives every new identity and payload from the
@@ -761,25 +824,6 @@ fn loop_nodes(topology: &ContourTopology, loop_: &ContourLoop) -> Vec<NodeId> {
         .filter_map(|use_| topology.edge(use_.edge()))
         .flat_map(|edge| [edge.start_node().clone(), edge.end_node().clone()])
         .collect()
-}
-
-/// Every region other than `region` that shares at least one edge with it --
-/// the neighbors whose own mesh a removal invalidates.
-fn neighbor_regions(topology: &ContourTopology, region: &RegionId) -> Vec<RegionId> {
-    let Some(source) = topology.region(region) else {
-        return Vec::new();
-    };
-    let mut neighbors: Vec<RegionId> = source
-        .outer_loops()
-        .iter()
-        .chain(source.holes().iter())
-        .flatten()
-        .flat_map(|use_| topology.regions_using_edge(use_.edge()))
-        .filter(|id| id != region)
-        .collect();
-    neighbors.sort();
-    neighbors.dedup();
-    neighbors
 }
 
 fn suffixed_node(id: &NodeId, suffix: &str) -> Result<NodeId, RegionEditError> {
@@ -1081,6 +1125,231 @@ mod tests {
         assert_eq!(graph.node_count(), 0);
         assert!(topology.edge(&eid("quad-0")).is_none());
         assert!(surfaces.region_surface(&region).is_none());
+    }
+
+    /// A 4x4 grid of quad faces sharing every interior edge -- shaped like a
+    /// real terrain lattice, and big enough that a *pair* of adjacent faces
+    /// can both be interior (a 3x3 has only one such face, so every pair
+    /// touches the outside).
+    ///
+    /// That surrounding is the whole point: an edge only survives a removal
+    /// if something on its other side still holds it. A face on the
+    /// lattice's outer rim therefore leaves a notch open to the outside, not
+    /// an enclosed hole -- which is correct, and is why a 1-wide strip is
+    /// the wrong fixture for this.
+    ///
+    /// `regions[row][column]` is `face{column}_{row}`.
+    fn lattice() -> (TestGraph, ContourTopology, SurfaceRegistry, Vec<Vec<RegionId>>) {
+        const SIDE: usize = 4;
+        let mut nodes = Vec::new();
+        for row in 0..=SIDE {
+            for column in 0..=SIDE {
+                nodes.push(Node::new(
+                    nid(&format!("n{column}_{row}")),
+                    [column as f32, 0.0, row as f32],
+                ));
+            }
+        }
+        let graph: TestGraph = Graph::try_from_parts(nodes, Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+
+        for row in 0..=SIDE {
+            for column in 0..SIDE {
+                topology
+                    .add_edge(
+                        &graph,
+                        ContourEdge::new(
+                            eid(&format!("h{column}_{row}")),
+                            nid(&format!("n{column}_{row}")),
+                            nid(&format!("n{}_{row}", column + 1)),
+                            ContourGeometry::Line,
+                        ),
+                    )
+                    .unwrap();
+            }
+        }
+        for row in 0..SIDE {
+            for column in 0..=SIDE {
+                topology
+                    .add_edge(
+                        &graph,
+                        ContourEdge::new(
+                            eid(&format!("v{column}_{row}")),
+                            nid(&format!("n{column}_{row}")),
+                            nid(&format!("n{column}_{}", row + 1)),
+                            ContourGeometry::Line,
+                        ),
+                    )
+                    .unwrap();
+            }
+        }
+
+        let mut regions = Vec::new();
+        for row in 0..SIDE {
+            let mut in_row = Vec::new();
+            for column in 0..SIDE {
+                let id = rid(&format!("face{column}_{row}"));
+                topology
+                    .add_region(
+                        id.clone(),
+                        vec![vec![
+                            OrientedEdgeUse::forward(eid(&format!("h{column}_{row}"))),
+                            OrientedEdgeUse::forward(eid(&format!("v{}_{row}", column + 1))),
+                            OrientedEdgeUse::reversed(eid(&format!("h{column}_{}", row + 1))),
+                            OrientedEdgeUse::reversed(eid(&format!("v{column}_{row}"))),
+                        ]],
+                        Vec::new(),
+                    )
+                    .unwrap();
+                surfaces
+                    .add_region_surface(&topology, id.clone(), SurfaceType::new("terrain"), true)
+                    .unwrap();
+                in_row.push(id);
+            }
+            regions.push(in_row);
+        }
+        (graph, topology, surfaces, regions)
+    }
+
+    #[test]
+    fn removing_a_surrounded_face_exposes_the_rim_its_neighbours_still_hold() {
+        let (mut graph, mut topology, mut surfaces, regions) = lattice();
+
+        let removal = delete_regions(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            &[regions[1][1].clone()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            removal.outcome.affected_regions,
+            vec![
+                regions[1][0].clone(),
+                regions[0][1].clone(),
+                regions[2][1].clone(),
+                regions[1][2].clone(),
+            ],
+            "all four neighbours lost their other side and must re-derive"
+        );
+        assert_eq!(removal.exposed_loops.len(), 1, "one face leaves one hole");
+        let rim: BTreeSet<ContourEdgeId> = removal.exposed_loops[0]
+            .iter()
+            .map(|use_| use_.edge().clone())
+            .collect();
+        assert_eq!(
+            rim,
+            BTreeSet::from([eid("h1_1"), eid("v2_1"), eid("h1_2"), eid("v1_1")]),
+            "the rim is the removed face's own edges, each now used exactly once"
+        );
+        for edge in &rim {
+            assert_eq!(topology.usage_count(edge), 1);
+        }
+        assert!(
+            removal.outcome.removed_nodes.is_empty(),
+            "every corner is still held by a neighbouring face"
+        );
+    }
+
+    /// A face on the lattice's own outer rim has edges nothing sits behind.
+    /// Those are reclaimed rather than reported, so the result is an open
+    /// notch with no closed loop -- correctly, since there is no ring there
+    /// to stitch onto.
+    #[test]
+    fn removing_a_face_on_the_outer_rim_leaves_an_open_notch_not_a_loop() {
+        let (mut graph, mut topology, mut surfaces, regions) = lattice();
+
+        let removal = delete_regions(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            &[regions[0][0].clone()],
+        )
+        .unwrap();
+
+        assert!(
+            removal.exposed_loops.is_empty(),
+            "a corner face's outward edges had nothing behind them to keep them alive"
+        );
+        assert!(topology.edge(&eid("h0_0")).is_none());
+        assert_eq!(
+            topology.usage_count(&eid("v1_0")),
+            1,
+            "the inward edges do survive"
+        );
+    }
+
+    /// The correctness condition behind batching: an edge between two faces
+    /// that are *both* going away is interior to the removal. Reporting it
+    /// as rim would send a caller stitching into the middle of its own hole.
+    #[test]
+    fn an_edge_between_two_removed_faces_is_never_part_of_the_rim() {
+        let (mut graph, mut topology, mut surfaces, regions) = lattice();
+
+        let removal = delete_regions(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            &[regions[1][1].clone(), regions[1][2].clone()],
+        )
+        .unwrap();
+
+        assert_eq!(removal.exposed_loops.len(), 1);
+        let rim: BTreeSet<ContourEdgeId> = removal.exposed_loops[0]
+            .iter()
+            .map(|use_| use_.edge().clone())
+            .collect();
+        assert!(
+            !rim.contains(&eid("v2_1")),
+            "v2_1 sat between the two removed faces and is interior to the removal"
+        );
+        assert!(topology.edge(&eid("v2_1")).is_none(), "and it was reclaimed");
+        assert_eq!(rim.len(), 6, "two merged faces leave one six-edge rim");
+    }
+
+    #[test]
+    fn the_exposed_rim_is_a_closed_walk_a_caller_can_stitch_onto() {
+        let (mut graph, mut topology, mut surfaces, regions) = lattice();
+        let removal = delete_regions(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            &[regions[1][1].clone()],
+        )
+        .unwrap();
+
+        let walked = &removal.exposed_loops[0];
+        for window in walked.windows(2) {
+            let ends_at = topology.edge(window[0].edge()).map(|edge| {
+                if window[0].is_reversed() {
+                    edge.start_node().clone()
+                } else {
+                    edge.end_node().clone()
+                }
+            });
+            let starts_at = topology.edge(window[1].edge()).map(|edge| {
+                if window[1].is_reversed() {
+                    edge.end_node().clone()
+                } else {
+                    edge.start_node().clone()
+                }
+            });
+            assert_eq!(ends_at, starts_at, "consecutive rim uses must meet");
+        }
+    }
+
+    /// Removing a face nothing neighbours opens no hole, so there is nothing
+    /// to stitch -- and the rim must be empty rather than reporting the
+    /// outer perimeter, which was already free before the removal.
+    #[test]
+    fn removing_an_isolated_region_exposes_no_rim() {
+        let (mut graph, mut topology, mut surfaces, region) = quad();
+        let removal =
+            delete_regions(&mut graph, &mut topology, &mut surfaces, &[region.clone()]).unwrap();
+        assert!(removal.exposed_loops.is_empty());
+        assert_eq!(removal.outcome.removed_nodes.len(), 4);
     }
 
     #[test]

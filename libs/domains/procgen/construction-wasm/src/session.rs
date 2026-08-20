@@ -18,6 +18,7 @@ use grafting_graph_core::{
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
+use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
@@ -249,6 +250,35 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         self.track(&response);
+        serialize(&response)
+    }
+
+    /// Removes a whole set of regions at once and reports the rim the hole
+    /// is left bounded by -- what a caller stitches new geometry onto so the
+    /// result has neither a leftover hole nor an extra face. See
+    /// `region_editing::apply_delete_regions`.
+    pub fn delete_regions_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_delete_regions(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response.outcome);
+        serialize(&response)
+    }
+
+    /// What a brush footprint currently covers, before anything is
+    /// generated -- the creation-side counterpart to `region_topology_json`.
+    /// The engine reports; the caller's own per-type table decides what to
+    /// do about it. See `footprint::footprint_coverage`.
+    pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            footprint::footprint_coverage(&self.graph, &self.topology, &self.surfaces, request)
+                .map_err(to_js_error)?;
         serialize(&response)
     }
 
