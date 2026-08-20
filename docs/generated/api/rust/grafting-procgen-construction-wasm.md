@@ -45,6 +45,12 @@ Applies one validated terrain-to-path brush operation. The session only
 forwards the resolved request to the domain transformer and publishes
 its already-atomic replacement plan.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::classify_points_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Which of the given XZ points already sit inside a region -- what a
+generator consults so it only builds over open ground. See
+`footprint::classify_points`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cloud_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 The connected component of same-`type` surfaces reachable from

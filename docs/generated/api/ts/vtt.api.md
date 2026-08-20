@@ -432,6 +432,10 @@ minted nodes by position, which is all the junction ever needed.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.attachView(target: HTMLElement): string`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(): void`
 
 Hides the active tool preview, if any.
@@ -580,6 +584,10 @@ minted nodes by position, which is all the junction ever needed.
 ### `method vtt.tabletop-runtime.TabletopRuntime.attachCameraControls(viewId: string, element: HTMLElement, options?: CameraControlOptions): CameraControlHandle`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.attachView(target: HTMLElement): string`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(): void`
 
@@ -1133,11 +1141,13 @@ instead of the whole footprint again.
 
 ### `property vtt.terrain-restack.RestackOutcome.raisedFaces: number`
 
-### `interface vtt.terrain-restack.RestackRefusal`
+### `property vtt.terrain-restack.RestackOutcome.skipped: readonly string[]`
 
-Refusal from the type table -- the whole stroke is abandoned, not part of it.
-
-### `property vtt.terrain-restack.RestackRefusal.reason: string`
+Why some covered faces were left alone -- a wall the brush centred on,
+most commonly. Reported rather than thrown: refusing the *whole* stroke
+over one such face was the earlier behaviour, and it meant painting
+terrain anywhere near a wall did nothing at all, since a wall stands on
+terrain and therefore always overlaps it in XZ.
 
 ### `variable vtt.terrain-restack.ELEVATION_STEP: 0.5`
 
@@ -1149,15 +1159,14 @@ The faces a terrain stroke should raise: those the brush covers whole.
 A face the brush merely clips is left alone -- raising it would drag
 ground the user never painted over.
 
-### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome | RestackRefusal`
+### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome`
 
-Raises every covered face by one step and stitches the result back onto
-the ground around it.
+Raises every covered face the type table allows, and stitches the result
+back onto the ground around it.
 
-Returns a refusal when the type table forbids any part of what the stroke
-touched -- terrain crossing a wall, most commonly. One refusal condemns
-the whole stroke: terraforming everything except the wall would be worse
-than doing nothing.
+A face the table forbids -- a wall the brush centred on -- is left alone
+and reported in `skipped`, not thrown. The stroke still does everything
+else it was asked to.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -2988,6 +2997,16 @@ coincident copy of that edge beside it.
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
 
 Applies one resolved terrain-to-path brush atomically through the domain transformer.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- the per-point form of
+getFootprintCoverage, for a generator deciding face by face
+whether the ground under it is free. A stroke spanning both occupied and
+open ground needs that distinction *within* its own area, which one
+footprint-wide verdict cannot give.
+
+Indexed back to the request; a point over open ground is simply absent.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
