@@ -2,6 +2,10 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
+  ConstructionOrientedEdgeUse,
+  ConstructionPatch,
+  ConstructionPatchEdge,
+  ConstructionPatchRegion,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionSurfaceSpec,
@@ -370,6 +374,90 @@ interface ResolvedPatch {
 }
 
 /**
+ * Turns resolved face cycles into a patch whose neighbours share their
+ * boundary edges.
+ *
+ * The edge between two nodes is named after the *pair*, in a fixed order, so
+ * both faces that meet on it derive the same name and end up referencing one
+ * edge used twice. Letting each face mint its own (which is what submitting
+ * bare cycles does) produces two coincident edges used once each: visually
+ * identical, structurally unconnected, and with no free-versus-shared
+ * distinction left for {@link ToolContext.runtime.getUnfilledLoops} to read.
+ *
+ * A face keeps its cycle-derived region id, so painting the same ground
+ * twice still resolves to the same identity and is skipped rather than
+ * duplicated.
+ */
+function toPatch(
+  ctx: ToolContext,
+  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  surfaces: readonly ConstructionSurfaceSpec[],
+): ConstructionPatch {
+  const edges = new Map<string, ConstructionPatchEdge>();
+  const regions: ConstructionPatchRegion[] = [];
+
+  for (const surface of surfaces) {
+    const boundary: ConstructionOrientedEdgeUse[] = [];
+    for (let index = 0; index < surface.cycle.length; index += 1) {
+      const from = surface.cycle[index];
+      const to = surface.cycle[(index + 1) % surface.cycle.length];
+      if (from === undefined || to === undefined) continue;
+      // Lexicographic order picks the same representative from either side,
+      // which is the whole mechanism -- nothing else makes two independently
+      // generated faces agree on one name for the line between them.
+      const forward = from < to;
+      const start = forward ? from : to;
+      const end = forward ? to : from;
+      const edgeId = `${ctx.tableId}:seg:${start}~${end}`;
+      if (!edges.has(edgeId)) edges.set(edgeId, { edgeId, startNodeId: start, endNodeId: end });
+      boundary.push({ edgeId, reversed: !forward });
+    }
+    if (boundary.length !== surface.cycle.length) continue;
+    regions.push({
+      regionId: surface.cycle.join("|"),
+      boundary,
+      surfaceType: surface.surfaceType,
+      physical: surface.physical,
+    });
+  }
+
+  return { nodes, edges: [...edges.values()], regions };
+}
+
+/**
+ * Fills every closed loop of boundary the surface leaves uncovered.
+ *
+ * A face this stroke declined -- degenerate, welded onto ground that already
+ * had one, refused by a rule -- leaves a gap whose rim its neighbours still
+ * hold. Those are the visible holes in the terrain, and they are recoverable
+ * without knowing why each one happened: the engine reports the loops, each
+ * already oriented for the face that closes it, so filling one is a plain
+ * region registration that adds no edge and no node.
+ *
+ * A hole a region *declared* -- a doorway, a courtyard -- is not reported
+ * and so is never sealed; that exclusion lives in the engine.
+ */
+function fillUnfilledLoops(ctx: ToolContext, surfaceType: string, causeId: string): number {
+  const loops = ctx.runtime.getUnfilledLoops();
+  if (loops.length === 0) return 0;
+  ctx.runtime.addPatch(
+    {
+      nodes: [],
+      edges: [],
+      regions: loops.map((loop) => ({
+        regionId: loop.nodeIds.join("|"),
+        boundary: loop.boundary,
+        surfaceType,
+        physical: true,
+      })),
+    },
+    "local",
+    causeId,
+  );
+  return loops.length;
+}
+
+/**
  * Drops every resolved face that, *after welding*, landed on ground that
  * already has one.
  *
@@ -508,13 +596,15 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     for (const sample of gesture.samples) {
       revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
     }
-    const patch = pruneFacesOnExistingGround(ctx, newNodes, newSurfaces);
-    if (patch.surfaces.length > 0) {
-      ctx.runtime.applyIrregularTerrainPatch(patch.nodes, patch.surfaces, "local", causeId);
+    const resolved = pruneFacesOnExistingGround(ctx, newNodes, newSurfaces);
+    if (resolved.surfaces.length > 0) {
+      ctx.runtime.addPatch(toPatch(ctx, resolved.nodes, resolved.surfaces), "local", causeId);
     }
+    const filled = fillUnfilledLoops(ctx, params.targetSurface, causeId);
 
     const parts: string[] = [];
-    if (patch.surfaces.length > 0) parts.push(`${patch.surfaces.length} faces novas`);
+    if (resolved.surfaces.length > 0) parts.push(`${resolved.surfaces.length} faces novas`);
+    if (filled > 0) parts.push(`${filled} buracos fechados`);
     if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
     if (parts.length === 0) {
       ctx.reportFeedback({

@@ -18,6 +18,7 @@ use grafting_graph_core::{
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
+use crate::enclosure;
 use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
@@ -290,6 +291,32 @@ impl ConstructionSession {
         let response =
             footprint::footprint_coverage(&self.graph, &self.topology, &self.surfaces, request)
                 .map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Registers a whole generated patch -- nodes, shared boundary edges,
+    /// and the regions over them -- in one call. See
+    /// `region_editing::apply_add_patch` for why a generator must name its
+    /// own edges rather than let each face mint its own.
+    pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let dto = region_editing::apply_add_patch(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&dto);
+        serialize(&dto)
+    }
+
+    /// Every closed loop of free boundary that some other free loop
+    /// encloses -- a hole in the surface whose rim already exists. See
+    /// `enclosure::unfilled_loops`.
+    pub fn unfilled_loops_json(&self) -> Result<String, JsValue> {
+        let response =
+            enclosure::unfilled_loops(&self.graph, &self.topology).map_err(to_js_error)?;
         serialize(&response)
     }
 

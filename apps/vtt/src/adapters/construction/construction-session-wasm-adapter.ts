@@ -19,12 +19,14 @@ import type {
   ConstructionEdgeGeometry,
   ConstructionNodeSnapshot,
   ConstructionOrientedEdgeUse,
+  ConstructionPatch,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateBoundaryCapRequest,
   GeneratePathExtrusionRequest,
@@ -206,6 +208,36 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#regionEdit(
       this.#require().add_region_json(JSON.stringify({ holes: [], ...request })),
     );
+  }
+
+  addPatch(patch: ConstructionPatch): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().add_patch_json(
+        JSON.stringify({
+          nodes: patch.nodes.map((node: ConstructionPatch["nodes"][number]) => ({
+            id: node.id,
+            position: toWirePosition(node.position),
+          })),
+          edges: patch.edges,
+          regions: patch.regions,
+        }),
+      ),
+    );
+  }
+
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
+    const wire = JSON.parse(this.#require().unfilled_loops_json()) as {
+      readonly loops: readonly {
+        readonly boundary: readonly { readonly edgeId: string; readonly reversed: boolean }[];
+        readonly nodeIds: readonly string[];
+        readonly centroid: WirePosition;
+      }[];
+    };
+    return wire.loops.map((entry) => ({
+      boundary: entry.boundary,
+      nodeIds: entry.nodeIds,
+      centroid: fromWirePosition(entry.centroid),
+    }));
   }
 
   addContourEdge(request: {

@@ -433,6 +433,7 @@ pub fn grafting_graph_core::ContourTopology::add_region(&mut self, id: grafting_
 pub fn grafting_graph_core::ContourTopology::assemble_loops(&self, edges: &[grafting_graph_core::ContourEdgeId]) -> alloc::vec::Vec<grafting_graph_core::ContourLoop>
 pub fn grafting_graph_core::ContourTopology::assemble_oriented_loops(&self, uses: &[grafting_graph_core::OrientedEdgeUse]) -> alloc::vec::Vec<grafting_graph_core::ContourLoop>
 pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>
+pub fn grafting_graph_core::ContourTopology::edge_ids(&self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>
 pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>
 pub fn grafting_graph_core::ContourTopology::new() -> Self
 pub fn grafting_graph_core::ContourTopology::nodes_in_use(&self) -> alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>
@@ -1275,6 +1276,12 @@ re-deriving direction from connectivity would discard that.
 ### `pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>`
 
 Looks up a registered edge by identity.
+
+### `pub fn grafting_graph_core::ContourTopology::edge_ids(&self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Every registered edge's identity, in a caller-stable sorted order.
+Includes edges no region uses -- a caller looking for live boundaries
+filters by [`usage_count`](Self::usage_count).
 
 ### `pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
 

@@ -25,12 +25,14 @@ import type {
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
+  ConstructionPatch,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateBoundaryCapRequest,
   GeneratePathExtrusionRequest,
@@ -140,6 +142,13 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): RegionEditOutcome;
+  /**
+   * Registers a whole generated patch -- nodes, shared boundary edges, and
+   * the faces over them -- in one transaction. See `ConstructionPatch`.
+   */
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** Every closed loop of boundary with no face on it -- a hole whose rim already exists. */
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** What a brush footprint currently covers, before anything is generated. */
@@ -816,6 +825,18 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
   ): RegionEditOutcome {
     return this.applyRegionEdit([{ kind: "move-vertex", nodeId, position }], origin, causeId);
+  }
+
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+    this.#requireReady("registering a generated patch");
+    const outcome = this.#construction.addPatch(patch);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
+    this.#requireReady("looking for unfilled loops");
+    return this.#construction.getUnfilledLoops();
   }
 
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {

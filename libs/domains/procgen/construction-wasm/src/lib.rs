@@ -6,6 +6,7 @@
 mod diff_apply;
 mod dto;
 mod editing;
+mod enclosure;
 mod footprint;
 mod generation;
 mod geometry;

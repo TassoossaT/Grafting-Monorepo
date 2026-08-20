@@ -834,3 +834,120 @@ mod tests {
         assert_eq!(graph.node_count(), 0);
     }
 }
+
+// ---- Batched patch registration (shared edges) ----
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchNodeDto {
+    pub id: String,
+    pub position: [f32; 3],
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchEdgeDto {
+    pub edge_id: String,
+    pub start_node_id: String,
+    pub end_node_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchRegionDto {
+    pub region_id: String,
+    pub boundary: Vec<OrientedEdgeUseDto>,
+    pub surface_type: String,
+    pub physical: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPatchRequest {
+    pub nodes: Vec<PatchNodeDto>,
+    pub edges: Vec<PatchEdgeDto>,
+    pub regions: Vec<PatchRegionDto>,
+}
+
+/// Registers a whole generated patch -- nodes, **shared** boundary edges,
+/// and the regions over them -- in one transaction.
+///
+/// This is what `add_surface` per face cannot do, and the difference is not
+/// about batching. `add_surface` derives a region from a node cycle and
+/// mints an edge per cycle step, named after that region; two faces sitting
+/// side by side therefore end up with two *different* edges along the line
+/// they visually share. Nothing structurally connects them, the manifold
+/// rule never objects because each edge is used exactly once, and the
+/// surface has no free/shared distinction left to reason about -- which is
+/// why a hole in it cannot be found by looking at the topology.
+///
+/// Here the caller names each edge itself, so the two faces on either side
+/// of a line reference the *same* edge and it ends up used twice. That is
+/// what makes the patch a mesh: a boundary is shared where two faces meet
+/// and free where none does, and that distinction is exactly what
+/// [`crate::enclosure::unfilled_loops`] reads.
+///
+/// Already-present nodes, edges, and regions are skipped rather than
+/// rejected: a stroke overlapping an earlier one legitimately re-declares
+/// the geometry they have in common, and re-declaring it must not mint a
+/// second copy.
+pub fn apply_add_patch(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: AddPatchRequest,
+) -> Result<RegionEditOutcomeDto, String> {
+    let mut created_node_ids = Vec::new();
+    for node in request.nodes {
+        let id = parse_node_id(&node.id)?;
+        if graph.node(&id).is_some() {
+            continue;
+        }
+        graph
+            .add_node(Node::new(id.clone(), node.position))
+            .map_err(|error| error.to_string())?;
+        created_node_ids.push(id.as_str().to_owned());
+    }
+
+    for edge in request.edges {
+        let id = parse_edge_id(&edge.edge_id)?;
+        if topology.edge(&id).is_some() {
+            continue;
+        }
+        let start = parse_node_id(&edge.start_node_id)?;
+        let end = parse_node_id(&edge.end_node_id)?;
+        topology
+            .add_edge(
+                graph,
+                ContourEdge::new(id, start, end, ContourGeometry::Line),
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    let mut created_surface_keys = Vec::new();
+    for region in request.regions {
+        let id = parse_region_id(&region.region_id)?;
+        if topology.region(&id).is_some() {
+            continue;
+        }
+        let boundary = parse_loop(region.boundary)?;
+        topology
+            .add_region(id.clone(), vec![boundary], Vec::new())
+            .map_err(|error| error.to_string())?;
+        surfaces
+            .add_region_surface(
+                topology,
+                id.clone(),
+                SurfaceType::new(region.surface_type),
+                region.physical,
+            )
+            .map_err(|error| error.to_string())?;
+        created_surface_keys.push(region_id_to_wire(&id));
+    }
+
+    Ok(RegionEditOutcomeDto {
+        created_surface_keys,
+        created_node_ids,
+        ..RegionEditOutcomeDto::default()
+    })
+}

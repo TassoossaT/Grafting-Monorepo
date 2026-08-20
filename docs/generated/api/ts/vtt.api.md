@@ -393,6 +393,11 @@ two tables never collide inside one `ConstructionSession`.
 
 Registers a bare boundary edge -- staging before `addRegion`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a whole generated patch -- nodes, shared boundary edges, and
+the faces over them -- in one transaction. See `ConstructionPatch`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Registers a region from already-registered edges, so it can share a boundary.
@@ -501,6 +506,10 @@ One region's live boundary -- what a handle/hit-test layer reads.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getSnapshot(): TabletopSnapshot`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary with no face on it -- a hole whose rim already exists.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 The single-op shortcut for a caller that already knows the absolute
@@ -548,6 +557,11 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `method vtt.tabletop-runtime.TabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, origin: ChangeOrigin, causeId: string): void`
 
 Registers a bare boundary edge -- staging before `addRegion`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a whole generated patch -- nodes, shared boundary edges, and
+the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -648,6 +662,10 @@ One region's live boundary -- what a handle/hit-test layer reads.
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRenderMetrics(): SceneRenderMetrics`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getSnapshot(): TabletopSnapshot`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary with no face on it -- a hole whose rim already exists.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -2743,6 +2761,12 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionOrientedEdgeUse`
 
+### `reference vtt.ports.ConstructionPatch`
+
+### `reference vtt.ports.ConstructionPatchEdge`
+
+### `reference vtt.ports.ConstructionPatchRegion`
+
 ### `reference vtt.ports.ConstructionPosition`
 
 ### `reference vtt.ports.ConstructionRegionEdge`
@@ -2756,6 +2780,8 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.ConstructionSurfaceKey`
 
 ### `reference vtt.ports.ConstructionSurfaceSpec`
+
+### `reference vtt.ports.ConstructionUnfilledLoop`
 
 ### `reference vtt.ports.CornerHeightModule`
 
@@ -2901,6 +2927,48 @@ One boundary edge walked in a loop's own direction.
 
 ### `property vtt.construction-session-port.ConstructionOrientedEdgeUse.reversed: boolean`
 
+### `interface vtt.construction-session-port.ConstructionPatch`
+
+A whole generated patch: its nodes, its **shared** boundary edges, and the
+faces over them.
+
+The caller naming its own edges is the point, not the batching. A face
+registered from a bare node cycle mints an edge per step named after that
+face, so two faces sitting side by side get two different edges along the
+line they visually share -- coincident, never connected, and the manifold
+rule stays silent because each is used once. Naming the segment instead
+lets both faces reference the same edge, which is what makes the result a
+mesh and what gives ConstructionSessionPort.getUnfilledLoops a
+free-versus-shared distinction to read.
+
+### `property vtt.construction-session-port.ConstructionPatch.edges: readonly ConstructionPatchEdge[]`
+
+### `property vtt.construction-session-port.ConstructionPatch.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.construction-session-port.ConstructionPatch.regions: readonly ConstructionPatchRegion[]`
+
+### `interface vtt.construction-session-port.ConstructionPatchEdge`
+
+One straight boundary segment of a generated patch, named by its caller.
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.edgeId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.endNodeId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.startNodeId: string`
+
+### `interface vtt.construction-session-port.ConstructionPatchRegion`
+
+One face of a generated patch, over edges the same request declares.
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.physical: boolean`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.regionId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.surfaceType: string`
+
 ### `interface vtt.construction-session-port.ConstructionPosition`
 
 ### `property vtt.construction-session-port.ConstructionPosition.x: number`
@@ -2944,10 +3012,10 @@ end asked for a specific generated shape, so it already knows what
 
 ### `interface vtt.construction-session-port.ConstructionRemovalOutcome`
 
-What a removal left behind. `exposedLoops` are the closed rims bounding
-the hole that opened -- exactly what new geometry must be stitched onto so
-the result carries neither a leftover hole nor an extra face. Empty when
-the removal opened no hole.
+What one atomic region edit changed. Every op in the vocabulary reports
+this same shape, so a caller batching a policy's primary op with its
+cascade merges outcomes instead of branching per op -- see
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
 ### `property vtt.construction-session-port.ConstructionRemovalOutcome.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
@@ -2984,6 +3052,14 @@ Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`.
 Adds an inner loop -- what a door or a window is.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addNode(id: string, position: ConstructionPosition): void`
+
+### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): RegionEditOutcome`
+
+Registers a whole generated patch in one transaction -- see
+ConstructionPatch for why a generator names its own edges.
+Nodes, edges, and regions already present are skipped, not rejected: a
+stroke overlapping an earlier one re-declares what they share, and that
+must not mint a second copy.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
 
@@ -3076,6 +3152,15 @@ analytic-region key (a merged path-brush source/target region) can
 legitimately triangulate into several disjoint pieces (one per outer
 loop), and every one of them must be rendered, not just the first.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary that some other loop encloses and no face
+fills -- a hole in the surface whose rim already exists.
+
+Structural, not geometric: it reports only loops the registered edges
+already close, never a gap guessed from proximity. Filling one adds no
+edge and no node, because the boundary was there all along.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.insertVertex(request: { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }): RegionEditOutcome`
 
 Subdivides one boundary edge, minting a new node on it. Both fragments
@@ -3146,6 +3231,19 @@ Restores the confirmed state immediately before that path-brush operation.
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.physical: boolean`
 
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.surfaceType: string`
+
+### `interface vtt.construction-session-port.ConstructionUnfilledLoop`
+
+A closed loop of boundary with no face on it -- a hole in the surface.
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+The loop's edges, each already oriented for the face that would fill it
+-- opposite the single region still using it. Registrable verbatim.
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.centroid: ConstructionPosition`
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
 
 ### `interface vtt.construction-session-port.CornerHeightModule`
 

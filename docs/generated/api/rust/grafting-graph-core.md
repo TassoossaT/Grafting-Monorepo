@@ -184,6 +184,12 @@ re-deriving direction from connectivity would discard that.
 
 Looks up a registered edge by identity.
 
+### `pub fn grafting_graph_core::ContourTopology::edge_ids(&self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Every registered edge's identity, in a caller-stable sorted order.
+Includes edges no region uses -- a caller looking for live boundaries
+filters by [`usage_count`](Self::usage_count).
+
 ### `pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
 
 Every registered edge with `node` as one of its two endpoints, in a

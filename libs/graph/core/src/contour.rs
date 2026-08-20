@@ -966,6 +966,15 @@ impl ContourTopology {
         ids
     }
 
+    /// Every registered edge's identity, in a caller-stable sorted order.
+    /// Includes edges no region uses -- a caller looking for live boundaries
+    /// filters by [`usage_count`](Self::usage_count).
+    pub fn edge_ids(&self) -> Vec<ContourEdgeId> {
+        let mut ids: Vec<ContourEdgeId> = self.edges.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
     /// Every region currently using `edge`, in a caller-stable sorted order.
     /// At most two, by the non-manifold rule -- see [`ContourError::NonManifoldEdge`].
     pub fn regions_using_edge(&self, edge: &ContourEdgeId) -> Vec<RegionId> {

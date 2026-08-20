@@ -70,7 +70,7 @@ pub struct FootprintCoverageResponse {
     pub covered: Vec<CoveredRegionDto>,
 }
 
-fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
+pub(crate) fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
     let mut inside = false;
     let mut j = polygon.len().wrapping_sub(1);
     for i in 0..polygon.len() {
@@ -90,7 +90,7 @@ fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> bool {
 /// One loop's boundary sampled into an XZ polygon, walking each edge in the
 /// loop's own direction so a curve contributes its real shape rather than
 /// its chord.
-fn loop_polygon(
+pub(crate) fn loop_polygon(
     topology: &ContourTopology,
     graph: &SessionGraph,
     loop_: &ContourLoop,
@@ -125,7 +125,7 @@ fn loop_polygon(
     (polygon.len() >= 3).then_some(polygon)
 }
 
-fn xz(graph: &SessionGraph, id: &NodeId) -> Option<[f32; 2]> {
+pub(crate) fn xz(graph: &SessionGraph, id: &NodeId) -> Option<[f32; 2]> {
     graph.node(id).map(|node| {
         let position = node.data();
         [position[0], position[2]]
