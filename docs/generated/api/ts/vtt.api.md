@@ -389,6 +389,14 @@ two tables never collide inside one `ConstructionSession`.
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[], seedDefaultMap: boolean): AppTabletopRuntime`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, _origin: ChangeOrigin, _causeId: string): void`
+
+Registers a bare boundary edge -- staging before `addRegion`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a region from already-registered edges, so it can share a boundary.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
@@ -432,6 +440,10 @@ Hides the active tool preview, if any.
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
+
+Removes a set of regions in one transaction, reporting the rim to stitch onto.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
@@ -472,6 +484,10 @@ bootstrap call.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+What a brush footprint currently covers, before anything is generated.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
@@ -525,6 +541,14 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `interface vtt.tabletop-runtime.TabletopRuntime`
 
+### `method vtt.tabletop-runtime.TabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, origin: ChangeOrigin, causeId: string): void`
+
+Registers a bare boundary edge -- staging before `addRegion`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a region from already-registered edges, so it can share a boundary.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
@@ -565,6 +589,10 @@ Hides the active tool preview, if any.
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
+
+Removes a set of regions in one transaction, reporting the rim to stitch onto.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
@@ -600,6 +628,10 @@ the same call (a split moving, two regions merging). See
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+What a brush footprint currently covers, before anything is generated.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
@@ -1025,31 +1057,16 @@ large improvement over one straight panel per raw pointer sample; see
 
 Preview-only outline for any convex brush shape supported by the Rust contract.
 
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number): MultiPolygon`
+
+The swept area of a circular brush stroke, as real 2D polygons (XZ).
+
+Shared with brushSweptRegionFill on purpose: the ghost the user
+saw while dragging and the footprint the engine is then asked about must
+be the identical shape, or the stroke would affect ground the preview
+never highlighted.
+
 ### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
-
-A filled highlight of the whole area a brush of `shape` sweeps along
-`samples`, start to end -- purely "this is the region that's about to be
-affected," with no relation to whatever geometry a later backend call
-actually produces for it. Every shape is filled as a rounded stroke of
-`shape.radius`, ignoring corners/rotation -- exact enough to read as "this
-area," not a stand-in for the real result. Used as every brush's default
-preview; a tool with a real result preview (e.g. path-brush's analytic
-mesh) replaces it, this is only the fallback/ghost.
-
-The render port draws this with depth-testing off (a ghost must never be
-occluded), so any self-overlap in the mesh double-blends the translucent
-fill and reads as darker little blocks -- and earcut, fed a self-
-intersecting polygon, produces outright wrong triangles (crossing edges
-connecting unrelated parts of the shape), not just a cosmetic artifact.
-Both a hand-rolled offset-ribbon *and* `perfect-freehand`'s own stroke
-outline self-intersect wherever the path curves tighter than the brush
-radius -- ink-stroke tooling assumes a thin pen, not a fat brush, so nei-
-ther guarantees a simple polygon here. What *is* guaranteed simple is a
-proper 2D polygon union: the swept area is exactly the union of one
-capsule per (decimated) segment, and `polygon-clipping` (the
-Martinez-Rueda algorithm, also what turf.js uses) computes that union
-robustly for any input, self-overlapping or not. `earcut` then
-triangulates the union's own simple output, which it was always built for.
 
 ### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
 
@@ -1109,6 +1126,38 @@ room it already subdivided must still resolve to that structure's own
 land in after a prior generation -- otherwise regenerating (e.g. after
 changing the seed) only ever re-subdivides an already-subdivided sliver
 instead of the whole footprint again.
+
+### `interface vtt.terrain-restack.RestackOutcome`
+
+### `property vtt.terrain-restack.RestackOutcome.bandFaces: number`
+
+### `property vtt.terrain-restack.RestackOutcome.raisedFaces: number`
+
+### `interface vtt.terrain-restack.RestackRefusal`
+
+Refusal from the type table -- the whole stroke is abandoned, not part of it.
+
+### `property vtt.terrain-restack.RestackRefusal.reason: string`
+
+### `variable vtt.terrain-restack.ELEVATION_STEP: 0.5`
+
+How far one stroke raises the ground it covers.
+
+### `function vtt.terrain-restack.facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[]`
+
+The faces a terrain stroke should raise: those the brush covers whole.
+A face the brush merely clips is left alone -- raising it would drag
+ground the user never painted over.
+
+### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome | RestackRefusal`
+
+Raises every covered face by one step and stitches the result back onto
+the ground around it.
+
+Returns a refusal when the type table forbids any part of what the stroke
+touched -- terrain crossing a wall, most commonly. One refusal condemns
+the whole stroke: terraforming everything except the wall would be worse
+than doing nothing.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -2925,6 +2974,14 @@ Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`.
 Adds an inner loop -- what a door or a window is.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addNode(id: string, position: ConstructionPosition): void`
+
+### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
+
+Registers a region from **already-registered** edges. Unlike
+addSurface, which derives a region from a node cycle and always
+mints fresh edges, this lets a new face *share* an existing boundary --
+the only way to actually join it to its neighbour rather than laying a
+coincident copy of that edge beside it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey`
 

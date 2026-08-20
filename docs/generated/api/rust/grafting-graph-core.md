@@ -173,6 +173,13 @@ finds, which is deterministic but not necessarily the caller's
 intended pairing. Callers that can produce pinch points own
 splitting `edges` into unambiguous groups first.
 
+### `pub fn grafting_graph_core::ContourTopology::assemble_oriented_loops(&self, uses: &[grafting_graph_core::OrientedEdgeUse]) -> alloc::vec::Vec<grafting_graph_core::ContourLoop>`
+
+Chains already-oriented uses into closed loops, keeping each use's own
+direction rather than choosing one. Used for a rim whose orientation
+is dictated from outside (opposite the surviving neighbour's), where
+re-deriving direction from connectivity would discard that.
+
 ### `pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>`
 
 Looks up a registered edge by identity.
@@ -272,6 +279,13 @@ boundary is restored and nothing is left half-applied.
 Replaces one registered edge's geometry in place, leaving its identity
 and both endpoints untouched -- the `RetypeEdge` primitive's whole
 effect on topology (swap `Line` for `Arc`, or re-aim an arc's center).
+
+### `pub fn grafting_graph_core::ContourTopology::sole_usage_reversed(&self, edge: &grafting_graph_core::ContourEdgeId) -> core::option::Option<bool>`
+
+Which direction the one region still using `edge` walks it, or `None`
+when it is unused or shared. A face being stitched onto a free
+boundary must walk it the **opposite** way -- that opposition is what
+makes the two manifold neighbours instead of an illegal double use.
 
 ### `pub fn grafting_graph_core::ContourTopology::usage_count(&self, edge: &grafting_graph_core::ContourEdgeId) -> usize`
 
@@ -1333,6 +1347,11 @@ Closed loops of surviving edges now used by exactly one region --
 the literal boundary of the hole the removal opened, and therefore
 exactly what a caller must stitch back onto to leave neither a hole
 nor an extra face.
+
+**Each use is already oriented for the stitching face**, opposite to
+how the surviving neighbour walks it, so a caller registers a new
+region with these verbatim. Using the neighbour's own direction would
+be an illegal second use in the same direction.
 
 Empty when the removal opened no hole (nothing neighboured it).
 

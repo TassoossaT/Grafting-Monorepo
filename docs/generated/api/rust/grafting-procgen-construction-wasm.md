@@ -17,6 +17,12 @@ Adds a brand-new edge. See `editing::add_edge`.
 
 Adds a brand-new node. See `editing::add_node`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Registers a region from already-registered edges, so a new face can
+*share* a boundary instead of laying a coincident copy of it beside
+the neighbour's. See `region_editing::apply_add_region`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Registers a brand-new surface, as an analytic region. See
