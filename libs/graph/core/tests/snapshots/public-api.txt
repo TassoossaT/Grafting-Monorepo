@@ -27,12 +27,7 @@ impl core::marker::Unpin for grafting_graph_core::ArcBulge
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::ArcBulge
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::ArcBulge
 pub enum grafting_graph_core::ConstructionError
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize
 pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
-pub grafting_graph_core::ConstructionError::SameSurface
-pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey
 pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
 impl core::clone::Clone for grafting_graph_core::ConstructionError
 pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
@@ -80,6 +75,8 @@ pub fn grafting_graph_core::ContourError::clone(&self) -> grafting_graph_core::C
 impl core::cmp::Eq for grafting_graph_core::ContourError
 impl core::cmp::PartialEq for grafting_graph_core::ContourError
 pub fn grafting_graph_core::ContourError::eq(&self, other: &grafting_graph_core::ContourError) -> bool
+impl core::convert::From<grafting_graph_core::ContourError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::ContourError) -> Self
 impl core::error::Error for grafting_graph_core::ContourError
 impl core::fmt::Debug for grafting_graph_core::ContourError
 pub fn grafting_graph_core::ContourError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -156,6 +153,8 @@ impl core::cmp::PartialEq for grafting_graph_core::GraphError
 pub fn grafting_graph_core::GraphError::eq(&self, other: &grafting_graph_core::GraphError) -> bool
 impl core::convert::From<grafting_graph_core::GraphError> for grafting_graph_core::ConstructionError
 pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
+impl core::convert::From<grafting_graph_core::GraphError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::GraphError) -> Self
 impl core::error::Error for grafting_graph_core::GraphError
 impl core::fmt::Debug for grafting_graph_core::GraphError
 pub fn grafting_graph_core::GraphError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -258,6 +257,47 @@ impl core::marker::Sync for grafting_graph_core::PlanIdentityKind
 impl core::marker::Unpin for grafting_graph_core::PlanIdentityKind
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::PlanIdentityKind
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::PlanIdentityKind
+pub enum grafting_graph_core::RegionEditError
+pub grafting_graph_core::RegionEditError::Contour(grafting_graph_core::ContourError)
+pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary
+pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary::region: grafting_graph_core::RegionId
+pub grafting_graph_core::RegionEditError::CutShapeUnsupported
+pub grafting_graph_core::RegionEditError::CutShapeUnsupported::region: grafting_graph_core::RegionId
+pub grafting_graph_core::RegionEditError::Graph(grafting_graph_core::GraphError)
+pub grafting_graph_core::RegionEditError::IncompatibleWeld
+pub grafting_graph_core::RegionEditError::IncompatibleWeld::node: grafting_graph_core::NodeId
+pub grafting_graph_core::RegionEditError::InvalidIdentifier
+pub grafting_graph_core::RegionEditError::InvalidIdentifier::id: alloc::string::String
+pub grafting_graph_core::RegionEditError::NotWeldable
+pub grafting_graph_core::RegionEditError::NotWeldable::incident_edges: usize
+pub grafting_graph_core::RegionEditError::NotWeldable::node: grafting_graph_core::NodeId
+pub grafting_graph_core::RegionEditError::Surface(grafting_graph_core::SurfaceError)
+pub grafting_graph_core::RegionEditError::UnknownHole
+pub grafting_graph_core::RegionEditError::UnknownHole::index: usize
+pub grafting_graph_core::RegionEditError::UnknownHole::region: grafting_graph_core::RegionId
+impl core::clone::Clone for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::clone(&self) -> grafting_graph_core::RegionEditError
+impl core::cmp::Eq for grafting_graph_core::RegionEditError
+impl core::cmp::PartialEq for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::eq(&self, other: &grafting_graph_core::RegionEditError) -> bool
+impl core::convert::From<grafting_graph_core::ContourError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::ContourError) -> Self
+impl core::convert::From<grafting_graph_core::GraphError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::GraphError) -> Self
+impl core::convert::From<grafting_graph_core::SurfaceError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::SurfaceError) -> Self
+impl core::error::Error for grafting_graph_core::RegionEditError
+impl core::fmt::Debug for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::RegionEditError
+impl core::marker::Freeze for grafting_graph_core::RegionEditError
+impl core::marker::Send for grafting_graph_core::RegionEditError
+impl core::marker::Sync for grafting_graph_core::RegionEditError
+impl core::marker::Unpin for grafting_graph_core::RegionEditError
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::RegionEditError
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::RegionEditError
 pub enum grafting_graph_core::SurfaceError
 pub grafting_graph_core::SurfaceError::DuplicateRegionSurface
 pub grafting_graph_core::SurfaceError::DuplicateRegionSurface::id: grafting_graph_core::RegionId
@@ -279,6 +319,8 @@ impl core::cmp::PartialEq for grafting_graph_core::SurfaceError
 pub fn grafting_graph_core::SurfaceError::eq(&self, other: &grafting_graph_core::SurfaceError) -> bool
 impl core::convert::From<grafting_graph_core::SurfaceError> for grafting_graph_core::ConstructionError
 pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
+impl core::convert::From<grafting_graph_core::SurfaceError> for grafting_graph_core::RegionEditError
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::SurfaceError) -> Self
 impl core::error::Error for grafting_graph_core::SurfaceError
 impl core::fmt::Debug for grafting_graph_core::SurfaceError
 pub fn grafting_graph_core::SurfaceError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -389,11 +431,20 @@ impl grafting_graph_core::ContourTopology
 pub fn grafting_graph_core::ContourTopology::add_edge<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, edge: grafting_graph_core::ContourEdge) -> core::result::Result<grafting_graph_core::ContourEdgeId, grafting_graph_core::ContourError>
 pub fn grafting_graph_core::ContourTopology::add_region(&mut self, id: grafting_graph_core::RegionId, outer_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>, holes: alloc::vec::Vec<grafting_graph_core::ContourLoop>) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>
 pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>
+pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>
 pub fn grafting_graph_core::ContourTopology::new() -> Self
 pub fn grafting_graph_core::ContourTopology::nodes_in_use(&self) -> alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>
 pub fn grafting_graph_core::ContourTopology::prune_unused_edges(&mut self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>
 pub fn grafting_graph_core::ContourTopology::region(&self, id: &grafting_graph_core::RegionId) -> core::option::Option<&grafting_graph_core::SurfaceRegion>
+pub fn grafting_graph_core::ContourTopology::region_ids(&self) -> alloc::vec::Vec<grafting_graph_core::RegionId>
+pub fn grafting_graph_core::ContourTopology::region_nodes(&self, id: &grafting_graph_core::RegionId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::ContourError>
+pub fn grafting_graph_core::ContourTopology::regions_touching_node(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::RegionId>
+pub fn grafting_graph_core::ContourTopology::regions_using_edge(&self, edge: &grafting_graph_core::ContourEdgeId) -> alloc::vec::Vec<grafting_graph_core::RegionId>
+pub fn grafting_graph_core::ContourTopology::remove_edge(&mut self, id: &grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::ContourEdge, grafting_graph_core::ContourError>
 pub fn grafting_graph_core::ContourTopology::remove_region(&mut self, id: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::SurfaceRegion, grafting_graph_core::ContourError>
+pub fn grafting_graph_core::ContourTopology::replace_edge_uses(&mut self, id: &grafting_graph_core::ContourEdgeId, replacement: &[grafting_graph_core::OrientedEdgeUse]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::RegionId>, grafting_graph_core::ContourError>
+pub fn grafting_graph_core::ContourTopology::replace_region_loops(&mut self, id: &grafting_graph_core::RegionId, outer_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>, holes: alloc::vec::Vec<grafting_graph_core::ContourLoop>) -> core::result::Result<(), grafting_graph_core::ContourError>
+pub fn grafting_graph_core::ContourTopology::set_edge_geometry(&mut self, id: &grafting_graph_core::ContourEdgeId, geometry: grafting_graph_core::ContourGeometry) -> core::result::Result<(), grafting_graph_core::ContourError>
 impl core::clone::Clone for grafting_graph_core::ContourTopology
 pub fn grafting_graph_core::ContourTopology::clone(&self) -> grafting_graph_core::ContourTopology
 impl core::default::Default for grafting_graph_core::ContourTopology
@@ -406,29 +457,17 @@ impl core::marker::Sync for grafting_graph_core::ContourTopology
 impl core::marker::Unpin for grafting_graph_core::ContourTopology
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::ContourTopology
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::ContourTopology
-pub struct grafting_graph_core::DeleteOutcome<N>
-pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>
-pub grafting_graph_core::DeleteOutcome::removed_node: grafting_graph_core::Node<N>
-pub grafting_graph_core::DeleteOutcome::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>
-impl<N: core::fmt::Debug> core::fmt::Debug for grafting_graph_core::DeleteOutcome<N>
-pub fn grafting_graph_core::DeleteOutcome<N>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl<N> core::marker::Freeze for grafting_graph_core::DeleteOutcome<N> where N: core::marker::Freeze
-impl<N> core::marker::Send for grafting_graph_core::DeleteOutcome<N> where N: core::marker::Send
-impl<N> core::marker::Sync for grafting_graph_core::DeleteOutcome<N> where N: core::marker::Sync
-impl<N> core::marker::Unpin for grafting_graph_core::DeleteOutcome<N> where N: core::marker::Unpin
-impl<N> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::DeleteOutcome<N> where N: core::panic::unwind_safe::RefUnwindSafe
-impl<N> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::DeleteOutcome<N> where N: core::panic::unwind_safe::UnwindSafe
-pub struct grafting_graph_core::DuplicateSpec<N, E>
-pub grafting_graph_core::DuplicateSpec::nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>
-pub grafting_graph_core::DuplicateSpec::physical: bool
-pub grafting_graph_core::DuplicateSpec::ring_edges: alloc::vec::Vec<(grafting_graph_core::EdgeId, E)>
-pub grafting_graph_core::DuplicateSpec::surface_type: grafting_graph_core::SurfaceType
-impl<N, E> core::marker::Freeze for grafting_graph_core::DuplicateSpec<N, E>
-impl<N, E> core::marker::Send for grafting_graph_core::DuplicateSpec<N, E> where N: core::marker::Send, E: core::marker::Send
-impl<N, E> core::marker::Sync for grafting_graph_core::DuplicateSpec<N, E> where N: core::marker::Sync, E: core::marker::Sync
-impl<N, E> core::marker::Unpin for grafting_graph_core::DuplicateSpec<N, E> where N: core::marker::Unpin, E: core::marker::Unpin
-impl<N, E> core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::DuplicateSpec<N, E> where N: core::panic::unwind_safe::RefUnwindSafe, E: core::panic::unwind_safe::RefUnwindSafe
-impl<N, E> core::panic::unwind_safe::UnwindSafe for grafting_graph_core::DuplicateSpec<N, E> where N: core::panic::unwind_safe::UnwindSafe, E: core::panic::unwind_safe::UnwindSafe
+pub struct grafting_graph_core::DuplicateRegionSpec<'a, N>
+pub grafting_graph_core::DuplicateRegionSpec::clone_payload: &'a dyn core::ops::function::Fn(&N) -> N
+pub grafting_graph_core::DuplicateRegionSpec::physical: bool
+pub grafting_graph_core::DuplicateRegionSpec::suffix: &'a str
+pub grafting_graph_core::DuplicateRegionSpec::surface_type: grafting_graph_core::SurfaceType
+impl<'a, N> core::marker::Freeze for grafting_graph_core::DuplicateRegionSpec<'a, N>
+impl<'a, N> !core::marker::Send for grafting_graph_core::DuplicateRegionSpec<'a, N>
+impl<'a, N> !core::marker::Sync for grafting_graph_core::DuplicateRegionSpec<'a, N>
+impl<'a, N> core::marker::Unpin for grafting_graph_core::DuplicateRegionSpec<'a, N>
+impl<'a, N> !core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::DuplicateRegionSpec<'a, N>
+impl<'a, N> !core::panic::unwind_safe::UnwindSafe for grafting_graph_core::DuplicateRegionSpec<'a, N>
 pub struct grafting_graph_core::Edge<E>
 impl<E> grafting_graph_core::Edge<E>
 pub fn grafting_graph_core::Edge<E>::data(&self) -> &E
@@ -746,6 +785,30 @@ impl core::marker::Sync for grafting_graph_core::PrismGridMesh
 impl core::marker::Unpin for grafting_graph_core::PrismGridMesh
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::PrismGridMesh
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::PrismGridMesh
+pub struct grafting_graph_core::RegionEditOutcome
+pub grafting_graph_core::RegionEditOutcome::affected_regions: alloc::vec::Vec<grafting_graph_core::RegionId>
+pub grafting_graph_core::RegionEditOutcome::created_nodes: alloc::vec::Vec<grafting_graph_core::NodeId>
+pub grafting_graph_core::RegionEditOutcome::created_regions: alloc::vec::Vec<grafting_graph_core::RegionId>
+pub grafting_graph_core::RegionEditOutcome::removed_nodes: alloc::vec::Vec<grafting_graph_core::NodeId>
+pub grafting_graph_core::RegionEditOutcome::removed_regions: alloc::vec::Vec<grafting_graph_core::RegionId>
+impl grafting_graph_core::RegionEditOutcome
+pub fn grafting_graph_core::RegionEditOutcome::merge(&mut self, other: grafting_graph_core::RegionEditOutcome)
+impl core::clone::Clone for grafting_graph_core::RegionEditOutcome
+pub fn grafting_graph_core::RegionEditOutcome::clone(&self) -> grafting_graph_core::RegionEditOutcome
+impl core::cmp::Eq for grafting_graph_core::RegionEditOutcome
+impl core::cmp::PartialEq for grafting_graph_core::RegionEditOutcome
+pub fn grafting_graph_core::RegionEditOutcome::eq(&self, other: &grafting_graph_core::RegionEditOutcome) -> bool
+impl core::default::Default for grafting_graph_core::RegionEditOutcome
+pub fn grafting_graph_core::RegionEditOutcome::default() -> grafting_graph_core::RegionEditOutcome
+impl core::fmt::Debug for grafting_graph_core::RegionEditOutcome
+pub fn grafting_graph_core::RegionEditOutcome::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::RegionEditOutcome
+impl core::marker::Freeze for grafting_graph_core::RegionEditOutcome
+impl core::marker::Send for grafting_graph_core::RegionEditOutcome
+impl core::marker::Sync for grafting_graph_core::RegionEditOutcome
+impl core::marker::Unpin for grafting_graph_core::RegionEditOutcome
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::RegionEditOutcome
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::RegionEditOutcome
 pub struct grafting_graph_core::RegionId(_)
 impl grafting_graph_core::RegionId
 pub fn grafting_graph_core::RegionId::as_str(&self) -> &str
@@ -991,12 +1054,19 @@ pub fn grafting_graph_core::Graph<N, E>::edge(&self, id: &grafting_graph_core::E
 pub fn grafting_graph_core::Graph<N, E>::node(&self, id: &grafting_graph_core::NodeId) -> core::option::Option<&grafting_graph_core::Node<N>>
 pub fn grafting_graph_core::Graph<N, E>::predecessors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
 pub fn grafting_graph_core::Graph<N, E>::successors(&self, id: &grafting_graph_core::NodeId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::GraphError>
+pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, hole: grafting_graph_core::ContourLoop) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>
-pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>
-pub fn grafting_graph_core::duplicate_surface<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, duplicate: grafting_graph_core::DuplicateSpec<N, E>) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>
-pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>
-pub fn grafting_graph_core::move_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::SurfaceKey>, grafting_graph_core::GraphError>
-pub fn grafting_graph_core::split_surface<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, first: grafting_graph_core::SurfaceSpec, second: grafting_graph_core::SurfaceSpec) -> core::result::Result<(grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceKey), grafting_graph_core::ConstructionError>
+pub fn grafting_graph_core::cut_region(topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, cut_path: &[grafting_graph_core::OrientedEdgeUse], first: grafting_graph_core::RegionId, second: grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::duplicate_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, spec: grafting_graph_core::DuplicateRegionSpec<'_, N>) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::move_edge<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::move_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::move_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::retype_edge(topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, geometry: grafting_graph_core::ContourGeometry) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::straight_cycle_region<N, E>(topology: &mut grafting_graph_core::ContourTopology, graph: &grafting_graph_core::Graph<N, E>, id: grafting_graph_core::RegionId, cycle: &[grafting_graph_core::NodeId]) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>
 pub type grafting_graph_core::ContourLoop = alloc::vec::Vec<grafting_graph_core::OrientedEdgeUse>
 pub type grafting_graph_core::ContourPoint = [f32; 2]
@@ -1051,6 +1121,10 @@ Invalid input or arithmetic failure from the grouped-grid heuristic.
 ### `pub enum grafting_graph_core::PlanIdentityKind`
 
 The identity category whose states overlap in an invalid plan.
+
+### `pub enum grafting_graph_core::RegionEditError`
+
+Structural failure of an atomic region edit.
 
 ### `pub enum grafting_graph_core::SurfaceError`
 
@@ -1154,6 +1228,13 @@ partial state on any failure.
 
 Looks up a registered edge by identity.
 
+### `pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Every registered edge with `node` as one of its two endpoints, in a
+caller-stable sorted order. Includes edges no region currently uses --
+a caller that only cares about live boundaries filters by
+[`regions_using_edge`](Self::regions_using_edge).
+
 ### `pub fn grafting_graph_core::ContourTopology::new() -> Self`
 
 Creates an empty topology.
@@ -1182,10 +1263,66 @@ staying registered forever.
 
 Looks up a registered region by identity.
 
+### `pub fn grafting_graph_core::ContourTopology::region_ids(&self) -> alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Every registered region's identity, in a caller-stable sorted order.
+
+### `pub fn grafting_graph_core::ContourTopology::region_nodes(&self, id: &grafting_graph_core::RegionId) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::ContourError>`
+
+Every node on a region's own boundary (outer loops plus holes), in
+first-encountered loop order -- the ordering guarantee the front end's
+index-to-role mapping relies on (see
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`).
+
+### `pub fn grafting_graph_core::ContourTopology::regions_touching_node(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Every region whose boundary touches `node`, in a caller-stable sorted
+order -- exactly the regions whose mesh a caller must re-derive after
+moving that node.
+
+### `pub fn grafting_graph_core::ContourTopology::regions_using_edge(&self, edge: &grafting_graph_core::ContourEdgeId) -> alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Every region currently using `edge`, in a caller-stable sorted order.
+At most two, by the non-manifold rule -- see [`ContourError::NonManifoldEdge`].
+
+### `pub fn grafting_graph_core::ContourTopology::remove_edge(&mut self, id: &grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::ContourEdge, grafting_graph_core::ContourError>`
+
+Drops one registered edge outright. Rejected while any region still
+uses it -- a caller removing real boundary calls
+[`replace_edge_uses`](Self::replace_edge_uses) or
+[`remove_region`](Self::remove_region) first.
+
 ### `pub fn grafting_graph_core::ContourTopology::remove_region(&mut self, id: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::SurfaceRegion, grafting_graph_core::ContourError>`
 
 Removes a region, releasing its edge usages. Edges themselves stay
 registered (another region may still reference them).
+
+### `pub fn grafting_graph_core::ContourTopology::replace_edge_uses(&mut self, id: &grafting_graph_core::ContourEdgeId, replacement: &[grafting_graph_core::OrientedEdgeUse]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::RegionId>, grafting_graph_core::ContourError>`
+
+Substitutes every use of `id`, across every registered region, with
+`replacement` walked in that use's own direction -- a forward use is
+replaced by `replacement` as given, a reversed use by `replacement`
+reversed with each entry's own direction flipped. This is the single
+shared mechanism behind `InsertVertex` (one edge becomes two) and
+`RemoveVertex` (two edges become one); neither reimplements loop
+surgery on its own.
+
+`id` itself is left registered but unused, for
+[`prune_unused_edges`](Self::prune_unused_edges) to reclaim as part of
+the caller's own end-of-transaction cleanup.
+
+### `pub fn grafting_graph_core::ContourTopology::replace_region_loops(&mut self, id: &grafting_graph_core::RegionId, outer_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>, holes: alloc::vec::Vec<grafting_graph_core::ContourLoop>) -> core::result::Result<(), grafting_graph_core::ContourError>`
+
+Re-registers `id`'s boundary with new loops, revalidating closure and
+the non-manifold rule exactly as [`add_region`](Self::add_region)
+does. The region keeps its identity; on any failure the original
+boundary is restored and nothing is left half-applied.
+
+### `pub fn grafting_graph_core::ContourTopology::set_edge_geometry(&mut self, id: &grafting_graph_core::ContourEdgeId, geometry: grafting_graph_core::ContourGeometry) -> core::result::Result<(), grafting_graph_core::ContourError>`
+
+Replaces one registered edge's geometry in place, leaving its identity
+and both endpoints untouched -- the `RetypeEdge` primitive's whole
+effect on topology (swap `Line` for `Arc`, or re-aim an arc's center).
 
 ### `pub fn grafting_graph_core::Edge<E>::data(&self) -> &E`
 
@@ -1457,6 +1594,11 @@ Total number of cells in the mesh.
 
 Constructs a grid of width x height x layers cells with 6-slot connectivity.
 
+### `pub fn grafting_graph_core::RegionEditOutcome::merge(&mut self, other: grafting_graph_core::RegionEditOutcome)`
+
+Folds `other` into this outcome -- what a caller applying a policy's
+primary operation plus its cascade uses to report one combined result.
+
 ### `pub fn grafting_graph_core::RegionId::as_str(&self) -> &str`
 
 Returns the identifier text.
@@ -1623,6 +1765,14 @@ Node lifecycle changes.
 
 Surface lifecycle changes.
 
+### `pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, hole: grafting_graph_core::ContourLoop) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`AddHole`: registers one more inner loop on an existing region -- what a
+door or a window is. A hole is not a marker: it is a real loop of
+registered [`ContourEdge`]s with real graph nodes, validated by the same
+closure and manifold rules as any outer loop, and consumed directly by
+triangulation.
+
 ### `pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>`
 
 Applies a complete local surface replacement atomically.
@@ -1634,80 +1784,97 @@ and only a fully valid result replaces the confirmed state. This requires
 cloneable caller payloads but avoids exposing the graph backend or making a
 bridge reimplement partial-rollback logic.
 
-### `pub fn grafting_graph_core::delete_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, cap_surface: impl core::ops::function::FnMut(&[grafting_graph_core::NodeId]) -> (grafting_graph_core::SurfaceType, bool)) -> core::result::Result<grafting_graph_core::DeleteOutcome<N>, grafting_graph_core::ConstructionError>`
+### `pub fn grafting_graph_core::cut_region(topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, cut_path: &[grafting_graph_core::OrientedEdgeUse], first: grafting_graph_core::RegionId, second: grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-Deletes a node and repairs the hole it leaves, per `ADR-0022`'s general
-cycle-repair algorithm:
+`CutRegion`: divides one region in two along `cut_path`, a chain of
+already-registered edges whose two ends both sit on the region's own
+outer loop. Both halves keep the cut as their shared boundary -- the
+same edges, walked in opposite directions -- which is exactly what makes
+them manifold neighbors rather than two unrelated regions that happen to
+touch.
 
-1. Every surface referencing the deleted node is removed.
-2. The node (and its edges) is removed from the graph.
-3. Each connected component of the induced subgraph on the deleted
-   node's former neighbors -- using only edges that already existed
-   directly between them, collapsing any multi-edge between the same
-   pair to one logical adjacency -- is checked: if every node in that
-   component has degree exactly 2 within it (a connected 2-regular
-   subgraph, which is always exactly one simple cycle), a new surface
-   is generated to cap it, via `cap_surface`. A component that is not a
-   clean cycle (a branch, an open path) is left as an accepted hole --
-   not an error, and not searched for a sub-cycle within it (confirmed
-   scope with the repository owner: no general cycle search inside an
-   irregular component).
+Scoped to a region with exactly one outer loop and no holes: with more
+than one, there is no unambiguous rule for which side of the cut the
+leftover loops belong to, and inventing one here would be a policy
+decision this layer does not own.
 
-`cap_surface` receives each found cycle's nodes, in traversal order,
-and returns the `(SurfaceType, physical)` the new capping surface
-should have -- this crate does not decide domain semantics.
+### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-Every candidate capping surface is checked against `surfaces` for a
-node-set collision with an already-registered, unrelated surface
-*before* anything is mutated, so a collision fails the whole operation
-atomically rather than leaving the node removed with only some of its
-capping surfaces registered.
+`DeleteRegion`: unregisters a region and its surface, then runs the
+shared orphan cleanup over every node its boundary used -- leaving zero
+orphaned nodes or edges behind, per this module's own structural
+guarantee.
 
-### `pub fn grafting_graph_core::duplicate_surface<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, duplicate: grafting_graph_core::DuplicateSpec<N, E>) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+### `pub fn grafting_graph_core::duplicate_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, spec: grafting_graph_core::DuplicateRegionSpec<'_, N>) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-Duplicates a surface, per `ADR-0022`'s `Duplicate` ("only a whole
-surface... can be duplicated. A single node alone carries no usable
-information"). This crate cannot invent new `NodeId`/`EdgeId` strings or
-domain payloads, so `duplicate` supplies the new nodes explicitly; the
-connecting edges are generated automatically as a closed ring over
-`duplicate.nodes` in order (matching `Surface`'s own cycle shape), from
-the `(EdgeId, E)` pairs `duplicate.ring_edges` supplies -- one entry per
-node, not an arbitrary edge list, since a cycle's natural connectivity
-is exactly its consecutive pairs.
+`DuplicateRegion`: mints a parallel copy of a region -- one new node per
+boundary node, one new edge per boundary edge, the same loop structure,
+and its own registered surface.
 
-Every new node and edge id is checked against the graph (and against
-each other, to catch a caller accidentally repeating an id within the
-same call) before anything is added, so a validation failure never
-leaves a partial set of new nodes/edges behind.
+### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-### `pub fn grafting_graph_core::merge_surfaces<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, a: &grafting_graph_core::SurfaceKey, b: &grafting_graph_core::SurfaceKey, merged: grafting_graph_core::SurfaceSpec) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::ConstructionError>`
+`InsertVertex`: subdivides one boundary edge, minting a new node on it.
+Both fragments keep the original edge's own geometry description (an arc
+keeps its center and sweep direction, only its span shrinks), and every
+region using the original -- in either direction -- is rewritten to walk
+the two fragments instead.
 
-Unites two existing surfaces into one new surface, per `ADR-0022`'s
-`Merge` ("a door's nodes and an adjoining wall's nodes becoming one
-thing"). `merged` is the caller-supplied result -- only the domain
-knows the correct combined boundary, this crate does not compute
-geometry. Both `a` and `b` must already be registered and distinct;
-`merged` is validated (existing nodes, non-empty, no collision with an
-unrelated third surface) *before* `a` and `b` are removed, so a failure
-never leaves either original surface gone without its replacement.
+The caller supplies the new node (with the position it wants) and both
+fragment identities, so ids stay caller-derived and reproducible. This
+is also the whole of the "cut a movable notch out of a straight edge"
+case: call it twice on the same original edge, and the middle fragment
+is an independently movable segment -- there is no separate `Cut`
+primitive.
 
-### `pub fn grafting_graph_core::move_node<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &grafting_graph_core::SurfaceRegistry, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::SurfaceKey>, grafting_graph_core::GraphError>`
+### `pub fn grafting_graph_core::move_edge<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-Moves a node by applying `update` to its payload, then reports every
-surface that referenced it and therefore needs its mesh recomputed --
-the reactive-redraw behavior `ADR-0022` describes for `Move`. Always
-safe: moving a node never changes graph topology or surface membership,
-so this cannot fail for any reason but the node not existing.
+`MoveEdge`: applies `update` to both of an edge's endpoints, moving the
+whole segment as one rigid unit ("drag a whole wall panel"). Any other
+edge sharing one of those endpoints follows along, exactly as it would
+if the node were dragged on its own -- nodes only ever share what they
+are each independently connected to.
 
-### `pub fn grafting_graph_core::split_surface<N, E>(graph: &grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, key: &grafting_graph_core::SurfaceKey, first: grafting_graph_core::SurfaceSpec, second: grafting_graph_core::SurfaceSpec) -> core::result::Result<(grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceKey), grafting_graph_core::ConstructionError>`
+### `pub fn grafting_graph_core::move_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-Divides one existing surface into two new surfaces, per `ADR-0022`'s
-`Split` ("cutting a wall into two"). `first` and `second` are the
-caller-supplied halves -- only the domain knows how to cut the
-geometry, this crate does not compute it. `key` must already be
-registered; both halves are validated, and checked not to collide with
-*each other*, before `key` is removed -- a failure never leaves the
-original surface gone with only one (or neither) half registered.
+`MoveRegion`: applies `update` to every node on a region's own boundary,
+including its holes. Neighboring regions sharing any of those nodes are
+reported as affected too -- a shared boundary moves with it by
+construction, since both regions reference the very same edges.
+
+### `pub fn grafting_graph_core::move_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`MoveVertex`: applies `update` to one node's payload and reports every
+region whose boundary touches it. Topology is untouched, so this can only
+fail when the node does not exist.
+
+### `pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>`
+
+The one shared end-of-transaction cleanup every removing primitive runs:
+drop every contour edge no region uses anymore, then delete every
+candidate node nothing references -- neither a surviving region's
+boundary nor a legacy [`crate::Surface`]. Candidates are scoped to the
+nodes the caller's own edit could have orphaned, never the whole graph,
+so a node staged for an unrelated in-flight operation is never collected.
+
+### `pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`RemoveHole`: drops one of a region's inner loops by index, then runs the
+shared orphan cleanup over the nodes that loop used.
+
+### `pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`RemoveVertex`: welds a node's two neighboring boundary edges into one,
+the exact inverse of [`insert_vertex`]. Requires exactly two incident
+boundary edges describing the same curve; a junction or a geometry
+mismatch is rejected rather than silently reshaped.
+
+Runs the shared [`prune_orphans`] cleanup, so the welded-away node and
+both replaced edges are gone when this returns.
+
+### `pub fn grafting_graph_core::retype_edge(topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, geometry: grafting_graph_core::ContourGeometry) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`RetypeEdge`: swaps one boundary edge's geometry -- `Line` for `Arc`, or
+an arc's own center/sweep -- without touching either endpoint.
 
 ### `pub fn grafting_graph_core::straight_cycle_region<N, E>(topology: &mut grafting_graph_core::ContourTopology, graph: &grafting_graph_core::Graph<N, E>, id: grafting_graph_core::RegionId, cycle: &[grafting_graph_core::NodeId]) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>`
 
@@ -1729,31 +1896,9 @@ Bulges toward the chord's left side, facing from the arc's own start to its end.
 
 Bulges toward the chord's right side, facing from the arc's own start to its end.
 
-### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch`
-
-[`duplicate_surface`]'s supplied node or ring-edge count did not
-match what the original surface's cycle requires.
-
-### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize`
-
-The count actually supplied.
-
-### `pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize`
-
-The count the original surface's cycle requires.
-
 ### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
 
 The underlying graph query or mutation failed.
-
-### `pub grafting_graph_core::ConstructionError::SameSurface`
-
-[`merge_surfaces`] or [`split_surface`] was asked to treat the same
-node-set identity as two distinct operands.
-
-### `pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey`
-
-The identity that was supplied twice.
 
 ### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
 
@@ -1875,39 +2020,22 @@ A contour edge identifier must contain at least one character.
 
 A region identifier must contain at least one character.
 
-### `pub grafting_graph_core::DeleteOutcome::capping_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+### `pub grafting_graph_core::DuplicateRegionSpec::clone_payload: &'a dyn core::ops::function::Fn(&N) -> N`
 
-New surfaces generated to cap a hole -- one per simple cycle found
-among the deleted node's former neighbors, per `ADR-0022`'s general
-cycle-repair algorithm.
+Derives the copy's node payload from the original's -- where an
+offset, if any, is applied.
 
-### `pub grafting_graph_core::DeleteOutcome::removed_node: grafting_graph_core::Node<N>`
+### `pub grafting_graph_core::DuplicateRegionSpec::physical: bool`
 
-The deleted node's payload.
+Whether the copy is physical.
 
-### `pub grafting_graph_core::DeleteOutcome::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
+### `pub grafting_graph_core::DuplicateRegionSpec::suffix: &'a str`
 
-Surfaces removed because their cycle included the deleted node.
+Appended to the original region, edge, and node ids.
 
-### `pub grafting_graph_core::DuplicateSpec::nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
+### `pub grafting_graph_core::DuplicateRegionSpec::surface_type: grafting_graph_core::SurfaceType`
 
-New nodes, one per node in the original surface's cycle, in the
-same order.
-
-### `pub grafting_graph_core::DuplicateSpec::physical: bool`
-
-Whether the new surface blocks movement or acts as ground.
-
-### `pub grafting_graph_core::DuplicateSpec::ring_edges: alloc::vec::Vec<(grafting_graph_core::EdgeId, E)>`
-
-New edge id + payload for each consecutive pair in `nodes`,
-including the wrap-around from the last node back to the first --
-one entry per node, closing `nodes` into a ring mirroring the
-original cycle's shape. Must be the same length as `nodes`.
-
-### `pub grafting_graph_core::DuplicateSpec::surface_type: grafting_graph_core::SurfaceType`
-
-The new surface's type identifier.
+The copy's surface type.
 
 ### `pub grafting_graph_core::FormationInputs::deformation_xy: f32`
 
@@ -2090,6 +2218,101 @@ Flat list of 3D vertex positions [x, y, z] for corners across all layers.
 
 Width of the grid in cells.
 
+### `pub grafting_graph_core::RegionEditError::Contour(grafting_graph_core::ContourError)`
+
+The underlying contour topology rejected the mutation.
+
+### `pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary`
+
+[`cut_region`] was given a cut path whose endpoints are not both on
+the region's single outer loop.
+
+### `pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary::region: grafting_graph_core::RegionId`
+
+The region that could not be cut.
+
+### `pub grafting_graph_core::RegionEditError::CutShapeUnsupported`
+
+[`cut_region`] currently supports exactly one outer loop and no
+holes -- a multi-loop or holed region has no unambiguous assignment
+of the leftover loops to either side of the cut.
+
+### `pub grafting_graph_core::RegionEditError::CutShapeUnsupported::region: grafting_graph_core::RegionId`
+
+The region that could not be cut.
+
+### `pub grafting_graph_core::RegionEditError::Graph(grafting_graph_core::GraphError)`
+
+The underlying graph rejected the mutation.
+
+### `pub grafting_graph_core::RegionEditError::IncompatibleWeld`
+
+[`remove_vertex`]'s two neighboring edges do not describe the same
+curve, so welding them would silently invent geometry.
+
+### `pub grafting_graph_core::RegionEditError::IncompatibleWeld::node: grafting_graph_core::NodeId`
+
+The node whose two neighbors disagree.
+
+### `pub grafting_graph_core::RegionEditError::InvalidIdentifier`
+
+A derived identity (a duplicate's suffixed node, edge, or region id)
+came out empty and cannot be registered.
+
+### `pub grafting_graph_core::RegionEditError::InvalidIdentifier::id: alloc::string::String`
+
+The identity text that was rejected.
+
+### `pub grafting_graph_core::RegionEditError::NotWeldable`
+
+[`remove_vertex`] requires a node used by exactly two boundary edges
+-- the inverse of [`insert_vertex`]. A junction (three or more) or a
+dangling endpoint has no single well-defined weld.
+
+### `pub grafting_graph_core::RegionEditError::NotWeldable::incident_edges: usize`
+
+How many registered boundary edges actually touch it.
+
+### `pub grafting_graph_core::RegionEditError::NotWeldable::node: grafting_graph_core::NodeId`
+
+The node that could not be welded away.
+
+### `pub grafting_graph_core::RegionEditError::Surface(grafting_graph_core::SurfaceError)`
+
+The underlying surface registry rejected the mutation.
+
+### `pub grafting_graph_core::RegionEditError::UnknownHole`
+
+[`remove_hole`] was given an index the region does not have.
+
+### `pub grafting_graph_core::RegionEditError::UnknownHole::index: usize`
+
+The index supplied.
+
+### `pub grafting_graph_core::RegionEditError::UnknownHole::region: grafting_graph_core::RegionId`
+
+The region queried.
+
+### `pub grafting_graph_core::RegionEditOutcome::affected_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions whose geometry changed and whose mesh must be re-derived.
+
+### `pub grafting_graph_core::RegionEditOutcome::created_nodes: alloc::vec::Vec<grafting_graph_core::NodeId>`
+
+Graph nodes minted by this edit.
+
+### `pub grafting_graph_core::RegionEditOutcome::created_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions that came into existence.
+
+### `pub grafting_graph_core::RegionEditOutcome::removed_nodes: alloc::vec::Vec<grafting_graph_core::NodeId>`
+
+Graph nodes the shared orphan cleanup reclaimed.
+
+### `pub grafting_graph_core::RegionEditOutcome::removed_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions that stopped existing.
+
 ### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
 
 Which of the two arcs a shared center and two endpoints could
@@ -2245,13 +2468,12 @@ loop closure and the non-manifold-edge rule at registration time -- see
 brush stroke mid-edit) is expected to stay unregistered, off-graph, until
 normalized; only a manifold result is ever submitted here.
 
-### `pub struct grafting_graph_core::DeleteOutcome<N>`
+### `pub struct grafting_graph_core::DuplicateRegionSpec<'a, N>`
 
-Outcome of [`delete_node`].
-
-### `pub struct grafting_graph_core::DuplicateSpec<N, E>`
-
-New nodes and connecting edges for [`duplicate_surface`].
+How [`duplicate_region`] derives every new identity and payload from the
+original's. Deterministic on purpose: the same original plus the same
+suffix always reproduces the same ids, so a caller can re-issue a
+duplicate without minting a second copy.
 
 ### `pub struct grafting_graph_core::Edge<E>`
 
@@ -2310,6 +2532,12 @@ and whether it is walked in its own declared direction or reversed.
 
 A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
 (4 lateral, 1 bottom, 1 top), positions, and deformation inputs.
+
+### `pub struct grafting_graph_core::RegionEditOutcome`
+
+What one atomic edit changed. Every list is sorted and deduplicated, so
+a caller batching several primitives into one transaction can merge
+outcomes without re-normalizing.
 
 ### `pub struct grafting_graph_core::RegionId(_)`
 
@@ -2394,10 +2622,9 @@ a partial surface transformation.
 
 ### `pub struct grafting_graph_core::SurfaceSpec`
 
-A surface's non-identity attributes, for operations that register a new
-surface as one step of a larger operation ([`merge_surfaces`],
-[`split_surface`]) rather than standalone via
-[`SurfaceRegistry::add_surface`].
+A surface's non-identity attributes, for a transformer registering a new
+surface as one step of a larger [`SurfaceReplacementPlan`] rather than
+standalone via [`SurfaceRegistry::add_surface`].
 
 ### `pub struct grafting_graph_core::SurfaceType(_)`
 

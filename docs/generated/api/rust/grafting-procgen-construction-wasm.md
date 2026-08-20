@@ -1,8 +1,17 @@
 # grafting-procgen-construction-wasm
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_contour_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Registers a bare boundary edge, the staging step before a cut or a
+hole. See `region_editing::add_contour_edge`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Adds a brand-new edge. See `editing::add_edge`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`AddHole` -- a door or a window. See `region_editing::apply_add_hole`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_node_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
@@ -12,6 +21,11 @@ Adds a brand-new node. See `editing::add_node`.
 
 Registers a brand-new surface, as an analytic region. See
 `editing::add_surface`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::all_region_topologies_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Every registered region's boundary -- the edit-mode bootstrap call.
+See `region_editing::all_region_topologies`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::all_surface_meshes_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -31,17 +45,21 @@ The connected component of same-`type` surfaces reachable from
 `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
 `geometry::connected_component`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_node_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cut_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Deletes a node and repairs the hole it leaves. See `editing::apply_delete_node`.
+`CutRegion`. See `region_editing::apply_cut_region`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`DeleteRegion`. See `region_editing::apply_delete_region`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe()`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe_vector()`
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::duplicate_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::duplicate_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Duplicates a surface. See `editing::apply_duplicate_surface`.
+`DuplicateRegion`. See `region_editing::apply_duplicate_region`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -75,17 +93,25 @@ commit. See `generation::generate_and_apply_region_partition`.
 Generates one terrain cell's surface and applies it. See
 `terrain::generate_and_apply_terrain_cell`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::insert_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`InsertVertex`. See `region_editing::apply_insert_vertex`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::into_abi(self) -> Self::Abi`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::is_none(abi: &Self::Abi) -> bool`
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::merge_surfaces_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Unites two surfaces. See `editing::apply_merge_surfaces`.
+`MoveEdge`. See `region_editing::apply_move_edge`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_node_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Moves a node. See `editing::apply_move_node`.
+`MoveRegion`. See `region_editing::apply_move_region`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`MoveVertex`. See `region_editing::apply_move_vertex`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::new() -> grafting_procgen_construction_wasm::ConstructionSession`
 
@@ -101,19 +127,36 @@ Returns the exact target mesh for a path brush without mutating confirmed state.
 
 Restores the state immediately after the latest matching undone path-brush operation.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::region_topology_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+One region's live boundary, in this crate's own deterministic order.
+See `region_editing::region_topology`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_edge_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Removes an edge outright -- no repair, no cascading. See
 `editing::remove_edge`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`RemoveHole`. See `region_editing::apply_remove_hole`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Unregisters a surface outright -- no hole-repair, no cascading. See
 `editing::remove_surface`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`RemoveVertex`. See `region_editing::apply_remove_vertex`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::resolve_brush_cells_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Resolves terrain-grid cells through the shared authoritative brush footprint.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::retype_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`RetypeEdge`. See `region_editing::apply_retype_edge`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_terrain_mesh(&mut self, width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
@@ -126,10 +169,6 @@ input shape `@grafting/procgen-generation-wasm`'s own
 
 The session's current nodes, edges, and surfaces, for a caller to
 render from without re-deriving state.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::split_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Divides one surface into two. See `editing::apply_split_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_mesh_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

@@ -1,4 +1,4 @@
-import type { MoveNodeHistoryStack } from "@/features/edit-construction";
+import type { EditHistoryStack } from "@/features/edit-construction";
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
@@ -27,7 +27,7 @@ export interface ConstructionToolFeedback {
 /** What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`). */
 export interface ToolContext {
   readonly runtime: TabletopRuntime;
-  readonly history: MoveNodeHistoryStack;
+  readonly history: EditHistoryStack;
   readonly tableId: string;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;

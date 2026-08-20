@@ -74,8 +74,27 @@ function createFakeRenderPort() {
 const FAKE_TERRAIN_SURFACE_KEY = ["fake:terrain:n0", "fake:terrain:n1", "fake:terrain:n2", "fake:terrain:n3"];
 const FAKE_WALL_SURFACE_KEY = ["fake:wall:a", "fake:wall:b", "fake:wall:c"];
 
+function emptyRegionEdit() {
+  return {
+    affectedSurfaceKeys: [],
+    createdSurfaceKeys: [],
+    removedSurfaceKeys: [],
+    createdNodeIds: [],
+    removedNodeIds: [],
+  };
+}
+
 function createFakeConstructionPort() {
   let started = false;
+  const livePositions = new Map([
+    ["fake:terrain:n0", { x: 0, y: 0, z: 0 }],
+    ["fake:terrain:n1", { x: 1, y: 0, z: 0 }],
+    ["fake:terrain:n2", { x: 1, y: 0, z: 1 }],
+    ["fake:terrain:n3", { x: 0, y: 0, z: 1 }],
+    ["fake:wall:a", { x: 2, y: 0, z: 0 }],
+    ["fake:wall:b", { x: 2, y: 0, z: 4 }],
+    ["fake:wall:c", { x: 2, y: 3, z: 0 }],
+  ]);
 
   function requireStarted() {
     if (!started) throw new Error("construction session is not started");
@@ -96,23 +115,63 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
-    moveNode() {
+    moveVertex(nodeId, position) {
       requireStarted();
-      return { affectedSurfaceKeys: [] };
+      // The real engine holds the positions, so the fake must too: the
+      // runtime re-scans `getNodePositions()` after every edit rather than
+      // trusting the caller's own target, since a cascade moves nodes the
+      // caller never named.
+      livePositions.set(nodeId, position);
+      return emptyRegionEdit();
     },
-    deleteNode() {
+    insertVertex() {
       requireStarted();
-      return { removedSurfaceKeys: [], cappingSurfaceKeys: [] };
+      return emptyRegionEdit();
     },
-    mergeSurfaces() {
+    removeVertex() {
       requireStarted();
-      return [];
+      return emptyRegionEdit();
     },
-    splitSurface() {
+    retypeEdge() {
       requireStarted();
-      return { firstKey: [], secondKey: [] };
+      return emptyRegionEdit();
     },
-    duplicateSurface() {
+    moveEdge() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    addContourEdge() {
+      requireStarted();
+    },
+    moveRegion() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    deleteRegion() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    duplicateRegion() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    cutRegion() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    addHole() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    removeHole() {
+      requireStarted();
+      return emptyRegionEdit();
+    },
+    getRegionTopology() {
+      requireStarted();
+      return undefined;
+    },
+    getAllRegionTopologies() {
       requireStarted();
       return [];
     },
@@ -187,15 +246,7 @@ function createFakeConstructionPort() {
     },
     getNodePositions() {
       requireStarted();
-      return [
-        { id: "fake:terrain:n0", position: { x: 0, y: 0, z: 0 } },
-        { id: "fake:terrain:n1", position: { x: 1, y: 0, z: 0 } },
-        { id: "fake:terrain:n2", position: { x: 1, y: 0, z: 1 } },
-        { id: "fake:terrain:n3", position: { x: 0, y: 0, z: 1 } },
-        { id: "fake:wall:a", position: { x: 2, y: 0, z: 0 } },
-        { id: "fake:wall:b", position: { x: 2, y: 0, z: 4 } },
-        { id: "fake:wall:c", position: { x: 2, y: 3, z: 0 } },
-      ];
+      return [...livePositions].map(([id, position]) => ({ id, position }));
     },
     async dispose() {
       if (!started) return;
@@ -286,7 +337,7 @@ test("starting a table with seedDefaultMap also seeds every node's position from
   assert.deepEqual(nodePositions.get("fake:wall:a").position, { x: 2, y: 0, z: 0 });
 });
 
-test("moving a node updates its position and re-uploads the map chunk it belongs to", async () => {
+test("moving a vertex updates its position and re-uploads the map chunk it belongs to", async () => {
   const renderPort = createFakeRenderPort();
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
@@ -299,10 +350,14 @@ test("moving a node updates its position and re-uploads the map chunk it belongs
   const before = runtime.getSnapshot();
   const uploadsBefore = renderPort.changes.filter((change) => change.type === "map-chunk-upserted").length;
 
-  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
-  const affected = runtime.moveNode("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-1");
+  const move = constructionPort.moveVertex.bind(constructionPort);
+  constructionPort.moveVertex = (nodeId, position) => ({
+    ...move(nodeId, position),
+    affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
+  });
+  const outcome = runtime.moveVertex("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-1");
 
-  assert.deepEqual(affected, { affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
+  assert.deepEqual(outcome.affectedSurfaceKeys, [FAKE_TERRAIN_SURFACE_KEY]);
   const after = runtime.getSnapshot();
   assert.notEqual(after, before);
   const moved = after.map.nodePositions.get("fake:terrain:n0");
@@ -310,12 +365,12 @@ test("moving a node updates its position and re-uploads the map chunk it belongs
   assert.equal(moved.revision, 2);
 
   const uploadsAfter = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
-  assert.ok(uploadsAfter.length > uploadsBefore, "moving a node re-uploads its chunk");
+  assert.ok(uploadsAfter.length > uploadsBefore, "moving a vertex re-uploads its chunk");
   assert.equal(uploadsAfter.at(-1).origin, "local");
   assert.equal(uploadsAfter.at(-1).causeId, "drag-1");
 });
 
-test("moving a node bumps the revision of every surface the engine reports as affected", async () => {
+test("moving a vertex bumps the revision of every surface the engine reports as affected", async () => {
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-affected-surfaces",
@@ -329,13 +384,17 @@ test("moving a node bumps the revision of every surface the engine reports as af
   const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
   assert.equal(runtime.getSnapshot().map.byId.get(surfaceRef).revision, 1);
 
-  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [surfaceKey] });
-  runtime.moveNode("fake:terrain:n0", { x: 2, y: 0, z: 0 }, "local", "drag-2");
+  const move = constructionPort.moveVertex.bind(constructionPort);
+  constructionPort.moveVertex = (nodeId, position) => ({
+    ...move(nodeId, position),
+    affectedSurfaceKeys: [surfaceKey],
+  });
+  runtime.moveVertex("fake:terrain:n0", { x: 2, y: 0, z: 0 }, "local", "drag-2");
 
   assert.equal(runtime.getSnapshot().map.byId.get(surfaceRef).revision, 2);
 });
 
-test("moving a node removes a chunk that no longer has any surface in it", async () => {
+test("moving a vertex removes a chunk that no longer has any surface in it", async () => {
   const renderPort = createFakeRenderPort();
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
@@ -352,7 +411,11 @@ test("moving a node removes a chunk that no longer has any surface in it", async
   runtime.generateTerrainCell({}, "local", "seed-cell");
   const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
 
-  constructionPort.moveNode = () => ({ affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY] });
+  const move = constructionPort.moveVertex.bind(constructionPort);
+  constructionPort.moveVertex = (nodeId, position) => ({
+    ...move(nodeId, position),
+    affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
+  });
   constructionPort.getSurfaceMesh = (surfaceKey) => [
     {
       surfaceKey,
@@ -362,7 +425,7 @@ test("moving a node removes a chunk that no longer has any surface in it", async
       mesh: { positions: new Float32Array([500, 100, 500, 501, 100, 500, 501, 100, 501, 500, 100, 501]) },
     },
   ];
-  runtime.moveNode("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
+  runtime.moveVertex("fake:terrain:n0", { x: 100, y: 100, z: 100 }, "local", "drag-3");
 
   const removal = renderPort.changes.find(
     (change) => change.type === "map-chunk-removed" && change.chunkId === seededChunkId,
@@ -594,13 +657,13 @@ test("generating construction requires a ready tabletop runtime", async () => {
   assert.throws(() => runtime.generatePathExtrusion({}, "local", "c"), /ready/);
 });
 
-test("moving a node requires a ready tabletop runtime", async () => {
+test("moving a vertex requires a ready tabletop runtime", async () => {
   const runtime = createTabletopRuntime({
     tableId: "table-not-ready",
     renderPort: createFakeRenderPort(),
     constructionPort: createFakeConstructionPort(),
   });
-  assert.throws(() => runtime.moveNode("n0", { x: 0, y: 0, z: 0 }, "local", "c"), /ready/);
+  assert.throws(() => runtime.moveVertex("n0", { x: 0, y: 0, z: 0 }, "local", "c"), /ready/);
 });
 
 test("a confirmed token move invalidates only that token and preserves no-op identity", async () => {

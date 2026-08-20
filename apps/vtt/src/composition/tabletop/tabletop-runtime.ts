@@ -14,7 +14,6 @@ import {
   type MapProjection,
 } from "../../entities/map/index.ts";
 import type {
-  AffectedSurfaces,
   ApplyPathBrushOutcome,
   CameraControlHandle,
   CameraControlOptions,
@@ -24,15 +23,16 @@ import type {
   ConfirmedTokenRenderChange,
   ConstructionNodeId,
   ConstructionPosition,
+  ConstructionRegionTopology,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  DeleteNodeOutcome,
   DiffOutcome,
   GenerateBoundaryCapRequest,
   GeneratePathExtrusionRequest,
   GenerateRegionPartitionRequest,
   GenerateTerrainCellRequest,
+  RegionEditOutcome,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
   RenderMeshData,
@@ -45,7 +45,14 @@ import type {
   TerrainNoisePort,
 } from "@/ports";
 
-import { PATH_BRUSH_SOURCE_SURFACE_TYPES, type PathBrushEffect } from "../../features/edit-construction/index.ts";
+import {
+  EMPTY_OUTCOME,
+  PATH_BRUSH_SOURCE_SURFACE_TYPES,
+  applyEditOp,
+  mergeOutcomes,
+  type AtomicEditOp,
+  type PathBrushEffect,
+} from "../../features/edit-construction/index.ts";
 
 import { defaultMapSeed } from "./default-map-seed.ts";
 
@@ -106,12 +113,33 @@ export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
-  moveNode(
+  /**
+   * Applies a resolved sequence of atomic edit ops as one transaction --
+   * what `planEdit` produced from the user's gesture and the grabbed role's
+   * own policy. The runtime deliberately does not resolve policy itself:
+   * that belongs to `features/edit-construction`, and the tool layer runs it
+   * before calling here.
+   */
+  applyRegionEdit(
+    ops: readonly AtomicEditOp[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome;
+  /**
+   * The single-op shortcut for a caller that already knows the absolute
+   * position it wants (an undo/redo stack replaying a drag), skipping the
+   * policy pass a live gesture goes through.
+   */
+  moveVertex(
     nodeId: ConstructionNodeId,
     position: ConstructionPosition,
     origin: ChangeOrigin,
     causeId: string,
-  ): AffectedSurfaces;
+  ): RegionEditOutcome;
+  /** One region's live boundary -- what a handle/hit-test layer reads. */
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  /** Every region's boundary. */
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   generateTerrainCell(
     request: GenerateTerrainCellRequest,
     origin: ChangeOrigin,
@@ -146,14 +174,6 @@ export interface TabletopRuntime {
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void;
   /** Removes an edge outright -- no repair, no cascading. See `ConstructionSessionPort.removeEdge`. */
   removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void;
-  /** Deletes a node and repairs the hole it leaves. See `ConstructionSessionPort.deleteNode`. */
-  deleteNode(
-    nodeId: ConstructionNodeId,
-    capSurfaceType: string,
-    capPhysical: boolean,
-    origin: ChangeOrigin,
-    causeId: string,
-  ): DeleteNodeOutcome;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
   /**
@@ -170,23 +190,23 @@ export interface TabletopRuntime {
     causeId: string,
   ): readonly ConstructionSurfaceKey[];
   /**
-   * Inserts `nodes` (e.g. a crossing point's bottom/top pair), then splits
-   * each existing surface named in `splits` into two new ones through the
-   * generic `addNode`/`splitSurface` operations -- no new Rust/Wasm surface.
-   * The old surface's projection entry is explicitly removed (unlike
-   * `applyIrregularTerrainPatch`'s add-only shape, `splitSurface` always
-   * *replaces* what it's given).
+   * Welds a T-junction into an existing panel: subdividing the crossed
+   * panel's own boundary edges at the crossing point, through
+   * `insertVertex`. The panel stays one region with more boundary, rather
+   * than being replaced by two -- the crossing wall welds onto the freshly
+   * minted nodes by position, which is all the junction ever needed.
    */
-  applyWallCrossingSplit(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    splits: readonly {
-      readonly originalKey: ConstructionSurfaceKey;
-      readonly first: ConstructionSurfaceSpec;
-      readonly second: ConstructionSurfaceSpec;
+  applyWallCrossingWeld(
+    inserts: readonly {
+      readonly edgeId: string;
+      readonly nodeId: ConstructionNodeId;
+      readonly position: ConstructionPosition;
+      readonly firstEdgeId: string;
+      readonly secondEdgeId: string;
     }[],
     origin: ChangeOrigin,
     causeId: string,
-  ): readonly ConstructionSurfaceKey[];
+  ): RegionEditOutcome;
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
   generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
@@ -724,33 +744,76 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
 
   /**
-   * Moves an existing construction node to an absolute position through the
-   * real engine, then re-derives and re-uploads every chunk and folds the
-   * affected surfaces plus the moved node's own new position into the cached
-   * `MapProjection`. Returns the engine's own `AffectedSurfaces` so a caller
-   * (e.g. an undo/redo stack) can see what else changed.
+   * Applies a resolved sequence of atomic edit ops as one transaction, then
+   * re-derives and re-uploads every chunk and folds the whole merged
+   * outcome into the cached `MapProjection`.
+   *
+   * Policy resolution deliberately happens *before* this call, in
+   * `features/edit-construction`: this method never asks what a wall allows,
+   * it only performs what was already decided -- see
+   * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
    */
-  moveNode(
+  applyRegionEdit(
+    ops: readonly AtomicEditOp[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome {
+    this.#requireReady("editing a region");
+    if (ops.length === 0) return EMPTY_OUTCOME;
+
+    const outcome = ops.reduce(
+      (merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)),
+      EMPTY_OUTCOME,
+    );
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  moveVertex(
     nodeId: ConstructionNodeId,
     position: ConstructionPosition,
     origin: ChangeOrigin,
     causeId: string,
-  ): AffectedSurfaces {
-    this.#requireReady("moving a node");
+  ): RegionEditOutcome {
+    return this.applyRegionEdit([{ kind: "move-vertex", nodeId, position }], origin, causeId);
+  }
 
-    const affected = this.#construction.moveNode(nodeId, position);
-    this.#applyConstructionMutation(affected.affectedSurfaceKeys, [], origin, causeId, (map) => {
-      const previousNode = map.nodePositions.get(nodeId);
-      const next = applyMapProjectionDelta(map, {
-        type: "node-moved",
-        nodeRef: nodeId,
-        position,
-        revision: (previousNode?.revision ?? 0) + 1,
-      });
-      this.#uploadNodeHandle(nodeId, position, origin, causeId, this.#generation);
-      return next;
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
+    this.#requireReady("reading a region's topology");
+    return this.#construction.getRegionTopology(surfaceKey);
+  }
+
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
+    this.#requireReady("reading every region's topology");
+    return this.#construction.getAllRegionTopologies();
+  }
+
+  /**
+   * The projection/render sync every atomic edit shares. Node positions come
+   * from a full re-scan rather than a known target: an edit's cascade (and
+   * the engine's own zero-orphan cleanup) can move or delete nodes this
+   * caller never named, so there is no shortcut position to fold directly.
+   */
+  #foldRegionEditOutcome(outcome: RegionEditOutcome, origin: ChangeOrigin, causeId: string): void {
+    const changed = [...outcome.affectedSurfaceKeys, ...outcome.createdSurfaceKeys];
+    const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
+    this.#applyConstructionMutation(changed, removedRefs, origin, causeId, (map) => {
+      let next = map;
+      for (const removedRef of removedRefs) {
+        const previous = next.byId.get(removedRef);
+        if (previous === undefined) continue;
+        next = applyMapProjectionDelta(next, {
+          type: "surface-removed",
+          surfaceRef: removedRef,
+          revision: previous.revision + 1,
+        });
+      }
+      for (const nodeId of outcome.removedNodeIds) {
+        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+      }
+      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
     });
-    return affected;
   }
 
   /**
@@ -950,31 +1013,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#applyConstructionMutation([], [], origin, causeId, (map) => map);
   }
 
-  deleteNode(
-    nodeId: ConstructionNodeId,
-    capSurfaceType: string,
-    capPhysical: boolean,
-    origin: ChangeOrigin,
-    causeId: string,
-  ): DeleteNodeOutcome {
-    this.#requireReady("deleting a node");
-
-    const outcome = this.#construction.deleteNode(nodeId, capSurfaceType, capPhysical);
-    const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
-    this.#applyConstructionMutation(outcome.cappingSurfaceKeys, removedRefs, origin, causeId, (map) => {
-      let next = map;
-      for (const surfaceRef of removedRefs) {
-        const previous = next.byId.get(surfaceRef);
-        if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
-      }
-      next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
-      this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
-      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-    });
-    return outcome;
-  }
-
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
     return this.#construction.cloudFor(request);
@@ -1020,42 +1058,22 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return surfaceKeys;
   }
 
-  applyWallCrossingSplit(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    splits: readonly {
-      readonly originalKey: ConstructionSurfaceKey;
-      readonly first: ConstructionSurfaceSpec;
-      readonly second: ConstructionSurfaceSpec;
+  applyWallCrossingWeld(
+    inserts: readonly {
+      readonly edgeId: string;
+      readonly nodeId: ConstructionNodeId;
+      readonly position: ConstructionPosition;
+      readonly firstEdgeId: string;
+      readonly secondEdgeId: string;
     }[],
     origin: ChangeOrigin,
     causeId: string,
-  ): readonly ConstructionSurfaceKey[] {
-    this.#requireReady("splitting a wall at a crossing");
-
-    for (const node of nodes) this.#construction.addNode(node.id, node.position);
-
-    const newKeys: ConstructionSurfaceKey[] = [];
-    const removedRefs: string[] = [];
-    for (const split of splits) {
-      const outcome = this.#construction.splitSurface(split.originalKey, split.first, split.second);
-      newKeys.push(outcome.firstKey, outcome.secondKey);
-      removedRefs.push(surfaceRefFromNodeSet(split.originalKey));
-    }
-
-    this.#applyConstructionMutation(newKeys, removedRefs, origin, causeId, (map) => {
-      let next = map;
-      for (const removedRef of removedRefs) {
-        const previous = next.byId.get(removedRef);
-        if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, {
-          type: "surface-removed",
-          surfaceRef: removedRef,
-          revision: previous.revision + 1,
-        });
-      }
-      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-    });
-    return newKeys;
+  ): RegionEditOutcome {
+    return this.applyRegionEdit(
+      inserts.map((insert) => ({ kind: "insert-vertex" as const, ...insert })),
+      origin,
+      causeId,
+    );
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {

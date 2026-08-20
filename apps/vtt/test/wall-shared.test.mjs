@@ -2,36 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { findWallSurfaceAt, resolveWallCrossing } from "../src/composition/tabletop/tools/wall-shared.ts";
+import { panelTopology } from "./wall-spans-fixture.mjs";
 
 const TABLE_ID = "table-1";
+const WALL = panelTopology("wall-1", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } });
 
-/** One 4-node wall panel from (0,0,0) to (4,0,0), height 3, matching `extrude_path`'s own `[bottomA, bottomB, topB, topA]` cycle convention. */
-function wallMap() {
-  const surface = {
-    surfaceRef: "wall-1",
-    orderedNodeRefs: ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"],
-    type: "wall-white",
-    physical: true,
-    revision: 1,
-  };
-  const nodePositions = new Map([
-    ["w:a-bottom", { nodeRef: "w:a-bottom", position: { x: 0, y: 0, z: 0 }, revision: 1 }],
-    ["w:a-top", { nodeRef: "w:a-top", position: { x: 0, y: 3, z: 0 }, revision: 1 }],
-    ["w:b-bottom", { nodeRef: "w:b-bottom", position: { x: 4, y: 0, z: 0 }, revision: 1 }],
-    ["w:b-top", { nodeRef: "w:b-top", position: { x: 4, y: 3, z: 0 }, revision: 1 }],
-  ]);
-  return { byId: new Map([["wall-1", surface]]), nodePositions, revision: 1 };
-}
-
-function contextFor(map) {
-  const splitCalls = [];
+function contextFor(topologies) {
+  const weldCalls = [];
   return {
     ctx: {
       runtime: {
-        getSnapshot: () => ({ map }),
-        applyWallCrossingSplit: (nodes, splits, origin, causeId) => {
-          splitCalls.push({ nodes, splits, origin, causeId });
-          return [];
+        getAllRegionTopologies: () => topologies,
+        applyWallCrossingWeld: (inserts, origin, causeId) => {
+          weldCalls.push({ inserts, origin, causeId });
+          return {
+            affectedSurfaceKeys: [],
+            createdSurfaceKeys: [],
+            removedSurfaceKeys: [],
+            createdNodeIds: [],
+            removedNodeIds: [],
+          };
         },
       },
       history: undefined,
@@ -42,93 +32,81 @@ function contextFor(map) {
       })(),
       reportSelection: () => {},
     },
-    splitCalls,
+    weldCalls,
   };
 }
 
-test("a point on the middle of a wall's centerline splits it and snaps onto the split", () => {
-  const { ctx, splitCalls } = contextFor(wallMap());
+test("a point on the middle of a wall's centerline welds into it and snaps onto the weld", () => {
+  const { ctx, weldCalls } = contextFor([WALL]);
 
   const resolved = resolveWallCrossing(ctx, { x: 2, y: 5, z: 0 }, "cause-1");
 
   assert.deepEqual(resolved, { x: 2, y: 0, z: 0 }, "snaps to the existing wall's own baseline Y, not the raw point's");
-  assert.equal(splitCalls.length, 1);
+  assert.equal(weldCalls.length, 1);
 
-  const [call] = splitCalls;
+  const [call] = weldCalls;
   assert.equal(call.causeId, "cause-1");
   const idPrefix = `${TABLE_ID}:wall-brush`;
   const bottomId = `${idPrefix}:corner:2.000:0.000:bottom`;
   const topId = `${idPrefix}:corner:2.000:0.000:top`;
 
+  assert.equal(call.inserts.length, 2, "the bottom run and the top run each gain a vertex");
   assert.deepEqual(
-    call.nodes,
+    call.inserts.map((insert) => ({ edgeId: insert.edgeId, nodeId: insert.nodeId, position: insert.position })),
     [
-      { id: bottomId, position: { x: 2, y: 0, z: 0 } },
-      { id: topId, position: { x: 2, y: 3, z: 0 } },
+      { edgeId: "wall-1-0", nodeId: bottomId, position: { x: 2, y: 0, z: 0 } },
+      { edgeId: "wall-1-2", nodeId: topId, position: { x: 2, y: 3, z: 0 } },
     ],
   );
-  assert.equal(call.splits.length, 1);
-  assert.deepEqual(call.splits[0], {
-    originalKey: ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"],
-    first: { cycle: ["w:a-bottom", bottomId, topId, "w:a-top"], surfaceType: "wall-white", physical: true },
-    second: { cycle: [bottomId, "w:b-bottom", "w:b-top", topId], surfaceType: "wall-white", physical: true },
-  });
+  for (const insert of call.inserts) {
+    assert.ok(insert.firstEdgeId.startsWith(insert.edgeId), "fragment ids stay derived from the edge they replace");
+    assert.notEqual(insert.firstEdgeId, insert.secondEdgeId);
+  }
 });
 
 test("a point too far off the wall's centerline is left alone", () => {
-  const { ctx, splitCalls } = contextFor(wallMap());
+  const { ctx, weldCalls } = contextFor([WALL]);
 
   const resolved = resolveWallCrossing(ctx, { x: 2, y: 0, z: 1 }, "cause-1");
 
   assert.deepEqual(resolved, { x: 2, y: 0, z: 1 });
-  assert.equal(splitCalls.length, 0);
+  assert.equal(weldCalls.length, 0);
 });
 
 test("a point near an existing corner is left alone -- ordinary position-weld already handles it", () => {
-  const { ctx, splitCalls } = contextFor(wallMap());
+  const { ctx, weldCalls } = contextFor([WALL]);
 
   const resolved = resolveWallCrossing(ctx, { x: 0.05, y: 0, z: 0 }, "cause-1");
 
   assert.deepEqual(resolved, { x: 0.05, y: 0, z: 0 });
-  assert.equal(splitCalls.length, 0);
+  assert.equal(weldCalls.length, 0);
 });
 
 test("a point with no wall panels on the table is left alone", () => {
-  const { ctx, splitCalls } = contextFor({ byId: new Map(), nodePositions: new Map(), revision: 0 });
+  const { ctx, weldCalls } = contextFor([]);
 
   const resolved = resolveWallCrossing(ctx, { x: 2, y: 0, z: 0 }, "cause-1");
 
   assert.deepEqual(resolved, { x: 2, y: 0, z: 0 });
-  assert.equal(splitCalls.length, 0);
+  assert.equal(weldCalls.length, 0);
 });
 
 test("findWallSurfaceAt returns the panel a point lands directly on, even near its own corner", () => {
-  const { ctx } = contextFor(wallMap());
+  const { ctx } = contextFor([WALL]);
 
-  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 1.5, z: 0 }), ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"]);
-  assert.deepEqual(findWallSurfaceAt(ctx, { x: 0.05, y: 0, z: 0 }), ["w:a-bottom", "w:b-bottom", "w:b-top", "w:a-top"]);
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 1.5, z: 0 }), ["@region", "wall-1"]);
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 0.05, y: 0, z: 0 }), ["@region", "wall-1"]);
 });
 
 test("findWallSurfaceAt returns undefined for a point off every wall's centerline", () => {
-  const { ctx } = contextFor(wallMap());
+  const { ctx } = contextFor([WALL]);
 
   assert.equal(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 5 }), undefined);
 });
 
 test("findWallSurfaceAt picks the closest panel when more than one qualifies", () => {
-  const map = wallMap();
-  map.byId.set("wall-2", {
-    surfaceRef: "wall-2",
-    orderedNodeRefs: ["w2:a-bottom", "w2:b-bottom", "w2:b-top", "w2:a-top"],
-    type: "wall-white",
-    physical: true,
-    revision: 1,
-  });
-  map.nodePositions.set("w2:a-bottom", { nodeRef: "w2:a-bottom", position: { x: 0, y: 0, z: 0.1 }, revision: 1 });
-  map.nodePositions.set("w2:a-top", { nodeRef: "w2:a-top", position: { x: 0, y: 3, z: 0.1 }, revision: 1 });
-  map.nodePositions.set("w2:b-bottom", { nodeRef: "w2:b-bottom", position: { x: 4, y: 0, z: 0.1 }, revision: 1 });
-  map.nodePositions.set("w2:b-top", { nodeRef: "w2:b-top", position: { x: 4, y: 3, z: 0.1 }, revision: 1 });
-  const { ctx } = contextFor(map);
+  const nearer = panelTopology("wall-2", { from: { x: 0, z: 0.1 }, to: { x: 4, z: 0.1 } });
+  const { ctx } = contextFor([WALL, nearer]);
 
-  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 0.06 }), ["w2:a-bottom", "w2:b-bottom", "w2:b-top", "w2:a-top"]);
+  assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 0.06 }), ["@region", "wall-2"]);
 });

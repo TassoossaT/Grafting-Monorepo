@@ -14,8 +14,11 @@ import type {
   ApplyPathBrushRequest,
   CloudOutcome,
   CloudRequest,
+  ConstructionEdgeGeometry,
   ConstructionNodeSnapshot,
+  ConstructionOrientedEdgeUse,
   ConstructionPosition,
+  ConstructionRegionTopology,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
@@ -24,6 +27,7 @@ import type {
   GeneratePathExtrusionRequest,
   GenerateRegionPartitionRequest,
   GenerateTerrainCellRequest,
+  RegionEditOutcome,
   RemoveEdgeRequest,
   RemoveSurfaceRequest,
   SurfaceMeshResult,
@@ -53,6 +57,41 @@ function fromWirePosition(position: WirePosition): ConstructionPosition {
 
 interface SnapshotWire {
   readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
+}
+
+/** The engine tags an arc `"arc"`; its center is an XZ pair, never a 3D normal. */
+function toWireGeometry(geometry: ConstructionEdgeGeometry): unknown {
+  return geometry.kind === "line"
+    ? { kind: "line" }
+    : { kind: "arc", center: geometry.center, clockwise: geometry.clockwise };
+}
+
+interface RegionEdgeWire {
+  readonly edgeId: string;
+  readonly reversed: boolean;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+  readonly geometry: ConstructionEdgeGeometry;
+}
+
+interface RegionTopologyWire {
+  readonly surfaceKey: readonly string[];
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly outerLoops: readonly (readonly RegionEdgeWire[])[];
+  readonly holes: readonly (readonly RegionEdgeWire[])[];
+  readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
+}
+
+function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology {
+  return {
+    surfaceKey: wire.surfaceKey,
+    surfaceType: wire.surfaceType,
+    physical: wire.physical,
+    outerLoops: wire.outerLoops,
+    holes: wire.holes,
+    nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
+  };
 }
 
 function toWireSpec(spec: ConstructionSurfaceSpec): { cycle: readonly string[]; surfaceType: string; physical: boolean } {
@@ -116,55 +155,123 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return response.surfaceKey;
   }
 
-  moveNode(nodeId: string, position: ConstructionPosition) {
-    const response = JSON.parse(
-      this.#require().move_node_json(JSON.stringify({ nodeId, position: toWirePosition(position) })),
-    ) as { affectedSurfaceKeys: readonly (readonly string[])[] };
-    return { affectedSurfaceKeys: response.affectedSurfaceKeys };
+  // ---- The atomic edit vocabulary ----
+
+  moveVertex(nodeId: string, position: ConstructionPosition): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().move_vertex_json(JSON.stringify({ nodeId, position: toWirePosition(position) })),
+    );
   }
 
-  deleteNode(nodeId: string, capSurfaceType: string, capPhysical: boolean) {
-    const response = JSON.parse(
-      this.#require().delete_node_json(JSON.stringify({ nodeId, capSurfaceType, capPhysical })),
-    ) as { removedSurfaceKeys: readonly (readonly string[])[]; cappingSurfaceKeys: readonly (readonly string[])[] };
-    return { removedSurfaceKeys: response.removedSurfaceKeys, cappingSurfaceKeys: response.cappingSurfaceKeys };
-  }
-
-  mergeSurfaces(a: ConstructionSurfaceKey, b: ConstructionSurfaceKey, merged: ConstructionSurfaceSpec): ConstructionSurfaceKey {
-    const response = JSON.parse(
-      this.#require().merge_surfaces_json(JSON.stringify({ a, b, merged: toWireSpec(merged) })),
-    ) as { surfaceKey: readonly string[] };
-    return response.surfaceKey;
-  }
-
-  splitSurface(key: ConstructionSurfaceKey, first: ConstructionSurfaceSpec, second: ConstructionSurfaceSpec) {
-    const response = JSON.parse(
-      this.#require().split_surface_json(
-        JSON.stringify({ key, first: toWireSpec(first), second: toWireSpec(second) }),
+  insertVertex(request: {
+    readonly edgeId: string;
+    readonly nodeId: string;
+    readonly position: ConstructionPosition;
+    readonly firstEdgeId: string;
+    readonly secondEdgeId: string;
+  }): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().insert_vertex_json(
+        JSON.stringify({ ...request, position: toWirePosition(request.position) }),
       ),
-    ) as { firstKey: readonly string[]; secondKey: readonly string[] };
-    return { firstKey: response.firstKey, secondKey: response.secondKey };
+    );
   }
 
-  duplicateSurface(
-    key: ConstructionSurfaceKey,
-    nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[],
-    ringEdgeIds: readonly string[],
-    surfaceType: string,
-    physical: boolean,
-  ): ConstructionSurfaceKey {
-    const response = JSON.parse(
-      this.#require().duplicate_surface_json(
-        JSON.stringify({
-          key,
-          nodes: nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
-          ringEdgeIds,
-          surfaceType,
-          physical,
-        }),
+  removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome {
+    return this.#regionEdit(this.#require().remove_vertex_json(JSON.stringify({ nodeId, weldedEdgeId })));
+  }
+
+  retypeEdge(edgeId: string, geometry: ConstructionEdgeGeometry): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().retype_edge_json(JSON.stringify({ edgeId, geometry: toWireGeometry(geometry) })),
+    );
+  }
+
+  moveEdge(edgeId: string, delta: ConstructionPosition): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().move_edge_json(JSON.stringify({ edgeId, delta: toWirePosition(delta) })),
+    );
+  }
+
+  addContourEdge(request: {
+    readonly edgeId: string;
+    readonly startNodeId: string;
+    readonly endNodeId: string;
+    readonly geometry: ConstructionEdgeGeometry;
+  }): void {
+    this.#require().add_contour_edge_json(
+      JSON.stringify({ ...request, geometry: toWireGeometry(request.geometry) }),
+    );
+  }
+
+  moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().move_region_json(JSON.stringify({ surfaceKey, delta: toWirePosition(delta) })),
+    );
+  }
+
+  deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome {
+    return this.#regionEdit(this.#require().delete_region_json(JSON.stringify({ surfaceKey })));
+  }
+
+  duplicateRegion(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly suffix: string;
+    readonly offset: ConstructionPosition;
+    readonly surfaceType: string;
+    readonly physical: boolean;
+  }): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().duplicate_region_json(
+        JSON.stringify({ ...request, offset: toWirePosition(request.offset) }),
       ),
-    ) as { surfaceKey: readonly string[] };
-    return response.surfaceKey;
+    );
+  }
+
+  cutRegion(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly cutPath: readonly ConstructionOrientedEdgeUse[];
+    readonly firstRegionId: string;
+    readonly secondRegionId: string;
+  }): RegionEditOutcome {
+    return this.#regionEdit(this.#require().cut_region_json(JSON.stringify(request)));
+  }
+
+  addHole(surfaceKey: ConstructionSurfaceKey, hole: readonly ConstructionOrientedEdgeUse[]): RegionEditOutcome {
+    return this.#regionEdit(this.#require().add_hole_json(JSON.stringify({ surfaceKey, hole })));
+  }
+
+  removeHole(surfaceKey: ConstructionSurfaceKey, index: number): RegionEditOutcome {
+    return this.#regionEdit(this.#require().remove_hole_json(JSON.stringify({ surfaceKey, index })));
+  }
+
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
+    const wire = JSON.parse(this.#require().region_topology_json(JSON.stringify({ surfaceKey }))) as
+      | RegionTopologyWire
+      | null;
+    return wire === null ? undefined : fromWireTopology(wire);
+  }
+
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
+    const wire = JSON.parse(this.#require().all_region_topologies_json()) as readonly RegionTopologyWire[];
+    return wire.map(fromWireTopology);
+  }
+
+  #regionEdit(responseJson: string): RegionEditOutcome {
+    const wire = JSON.parse(responseJson) as {
+      affectedSurfaceKeys: readonly (readonly string[])[];
+      createdSurfaceKeys: readonly (readonly string[])[];
+      removedSurfaceKeys: readonly (readonly string[])[];
+      createdNodeIds: readonly string[];
+      removedNodeIds: readonly string[];
+    };
+    return {
+      affectedSurfaceKeys: wire.affectedSurfaceKeys,
+      createdSurfaceKeys: wire.createdSurfaceKeys,
+      removedSurfaceKeys: wire.removedSurfaceKeys,
+      createdNodeIds: wire.createdNodeIds,
+      removedNodeIds: wire.removedNodeIds,
+    };
   }
 
   setTerrainMesh(

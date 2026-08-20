@@ -4,13 +4,13 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 
 import {
   attachCameraNavigation,
-  createMoveNodeHistoryStack,
+  createEditHistoryStack,
   createTabletopRuntime,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
   type ConstructionToolFeedback,
   type ConstructionToolId,
-  type MoveNodeHistoryStack,
+  type EditHistoryStack,
   type RenderViewId,
   type TabletopRuntime,
   type TabletopRuntimeStatus,
@@ -48,7 +48,7 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
-  "move-node": "Arrastar Node 3D",
+  "edit-region": "Editar Região",
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
   "interior-wall": "Gerar Interiores",
@@ -65,8 +65,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   }
   const runtime = runtimeRef.current;
 
-  const historyRef = useRef<MoveNodeHistoryStack | null>(null);
-  if (historyRef.current === null) historyRef.current = createMoveNodeHistoryStack();
+  const historyRef = useRef<EditHistoryStack | null>(null);
+  if (historyRef.current === null) historyRef.current = createEditHistoryStack();
   const history = historyRef.current;
 
   const viewIdRef = useRef<RenderViewId | undefined>(undefined);
@@ -111,11 +111,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     if (entry === undefined) return;
     if ("operationId" in entry) {
       runtime.undoPathBrush(entry.operationId, "local");
-      setSelectedNodeInfo(null);
     } else {
-      runtime.moveNode(entry.nodeId, entry.from, "local", "undo");
-      setSelectedNodeInfo({ id: entry.nodeId, point: entry.from });
+      runtime.applyRegionEdit(entry.undo, "local", "undo");
     }
+    setSelectedNodeInfo(null);
     forceHistoryUpdate((value) => value + 1);
   }, [history, runtime]);
 
@@ -124,11 +123,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     if (entry === undefined) return;
     if ("operationId" in entry) {
       runtime.redoPathBrush(entry.operationId, "local");
-      setSelectedNodeInfo(null);
     } else {
-      runtime.moveNode(entry.nodeId, entry.to, "local", "redo");
-      setSelectedNodeInfo({ id: entry.nodeId, point: entry.to });
+      runtime.applyRegionEdit(entry.redo, "local", "redo");
     }
+    setSelectedNodeInfo(null);
     forceHistoryUpdate((value) => value + 1);
   }, [history, runtime]);
   const handleToolParamsChange = useCallback(

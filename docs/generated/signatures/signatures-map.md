@@ -189,12 +189,7 @@ pub fn grafting_graph_core::ArcBulge::clone(&self) -> grafting_graph_core::ArcBu
 pub fn grafting_graph_core::ArcBulge::eq(&self, other: &grafting_graph_core::ArcBulge) -> bool
 pub fn grafting_graph_core::ArcBulge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::ConstructionError
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::actual: usize
-pub grafting_graph_core::ConstructionError::DuplicateCountMismatch::expected: usize
 pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
-pub grafting_graph_core::ConstructionError::SameSurface
-pub grafting_graph_core::ConstructionError::SameSurface::key: grafting_graph_core::SurfaceKey
 pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
 pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
 pub fn grafting_graph_core::ConstructionError::eq(&self, other: &grafting_graph_core::ConstructionError) -> bool
@@ -216,6 +211,11 @@ pub grafting_graph_core::ContourError::OpenLoop::expected: grafting_graph_core::
 pub grafting_graph_core::ContourError::OpenLoop::found: grafting_graph_core::NodeId
 pub grafting_graph_core::ContourError::UnknownEdge
 pub grafting_graph_core::ContourError::UnknownEdge::id: grafting_graph_core::ContourEdgeId
+pub grafting_graph_core::ContourError::UnknownEdgeIdentity
+pub grafting_graph_core::ContourError::UnknownEdgeIdentity::id: grafting_graph_core::ContourEdgeId
+pub grafting_graph_core::ContourError::UnknownNode
+pub grafting_graph_core::ContourError::UnknownNode::id: grafting_graph_core::NodeId
+pub grafting_graph_core::ContourError::UnknownRegion
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -2940,9 +2940,9 @@ export type {
   } from "./tabletop-runtime.ts";
   export { buildGeneratePathExtrusionOperation, buildGenerateTerrainCellOperation } from "./default-map-seed.ts";
 export type {
-  MoveNodeHistoryEntry,
-  MoveNodeHistoryStack,
-  MoveNodeHistoryState,
+  EditHistoryStack,
+  EditHistoryState,
+  RegionEditHistoryEntry,
   } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
@@ -2971,11 +2971,11 @@ export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
-  moveNode(
-  nodeId: ConstructionNodeId,
-  position: ConstructionPosition,
-  origin: ChangeOrigin,
-  causeId: string,
+  /**
+  * Applies a resolved sequence of atomic edit ops as one transaction --
+  * what `planEdit` produced from the user's gesture and the grabbed role's
+  * own policy. The runtime deliberately does not resolve policy itself:
+  * that belongs to `features/edit-construction`, and the tool layer runs it
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
@@ -2998,6 +2998,15 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   samples: gesture.samples.map((sample) => sample.point),
   shape: resolveBrushShape(params),
   });
+
+// src/composition/tabletop/tools/edit-region-tool.ts
+export const editRegionTool: ConstructionTool<"edit-region"> = {
+  id: "edit-region",
+  defaultParams: () => ({}),
+
+  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+  active = undefined;
+  const grabbed = grabbedTarget(ctx, sample);
 
 // src/composition/tabletop/tools/house-room-delete-tool.ts
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
@@ -3092,15 +3101,6 @@ export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
   const pinned = options.pinBoundary === false ? new Set<number>() : boundaryVertices(mesh);
 export function boundaryVertices(mesh: QuadMesh): Set<number> {
   const counts = new Map<string, number>();
-
-// src/composition/tabletop/tools/move-node-tool.ts
-export const moveNodeTool: ConstructionTool<"move-node"> = {
-  id: "move-node",
-  defaultParams: () => ({}),
-
-  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
-  if (sample.nodeId === undefined) return;
-  ctx.reportSelection({ id: sample.nodeId, point: sample.point });
 
 // src/composition/tabletop/tools/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
@@ -3220,7 +3220,7 @@ export interface ConstructionToolFeedback {
   }
 export interface ToolContext {
   readonly runtime: TabletopRuntime;
-  readonly history: MoveNodeHistoryStack;
+  readonly history: EditHistoryStack;
   readonly tableId: string;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;
@@ -3298,12 +3298,27 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
 
+// src/composition/tabletop/tools/wall-spans.ts
+export interface WallSpan {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly bottomA: ConstructionNodeId;
+  readonly bottomB: ConstructionNodeId;
+  readonly topA: ConstructionNodeId;
+  readonly topB: ConstructionNodeId;
+export function wallSpans(ctx: ToolContext): readonly WallSpan[] {
+  return ctx.runtime
+  .getAllRegionTopologies()
+  .map(spanOf)
+  .filter((span): span is WallSpan => span !== undefined);
+
 // src/composition/tabletop/use-construction-pointer.ts
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
   readonly runtime: TabletopRuntime;
-  readonly history: MoveNodeHistoryStack;
+  readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
@@ -3426,6 +3441,34 @@ export function applyTokenProjectionDelta(
   if (delta.type === "token-removed") {
   const previous = current.byId.get(delta.tokenId);
 
+// src/features/edit-construction/atomic-edit.ts
+export type AtomicEditOp =
+export type AtomicEditOpKind = AtomicEditOp["kind"];
+export type EditTarget =
+export interface EditGesture {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly target: EditTarget;
+  /** World-space movement the pointer accumulated over the drag. */
+  readonly delta: ConstructionPosition;
+  }
+export const ZERO_DELTA: ConstructionPosition = Object.freeze({ x: 0, y: 0, z: 0 });
+export function addPosition(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+export function scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition {
+  return { x: position.x * factor, y: position.y * factor, z: position.z * factor };
+export type EditAxis = "x" | "y" | "z";
+export function constrainToAxes(
+  delta: ConstructionPosition,
+  axes: readonly EditAxis[],
+  ): ConstructionPosition {
+  return {
+  x: axes.includes("x") ? delta.x : 0,
+  y: axes.includes("y") ? delta.y : 0,
+  z: axes.includes("z") ? delta.z : 0,
+export const ALL_AXES: readonly EditAxis[] = Object.freeze(["x", "y", "z"] as const);
+export const HORIZONTAL_AXES: readonly EditAxis[] = Object.freeze(["x", "z"] as const);
+export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
+
 // src/features/edit-construction/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
@@ -3489,6 +3532,76 @@ export function createMoveNodeOperation(
   ): MoveNodeOperation {
   const normalized = operationContext(context);
 
+// src/features/edit-construction/edit-history.ts
+export interface RegionEditHistoryEntry {
+  readonly kind: "region-edit";
+  readonly undo: readonly AtomicEditOp[];
+  readonly redo: readonly AtomicEditOp[];
+  }
+export interface PathBrushHistoryEntry {
+  readonly kind: "path-brush";
+  readonly operationId: string;
+  }
+export type ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry;
+export interface EditHistoryState {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  }
+export interface EditHistoryStack {
+  /** Records a completed move. Clears any redo history, per standard undo-stack semantics. */
+  record(entry: ConstructionHistoryEntry): void;
+  /** Pops the most recent entry and returns it for the caller to apply its `undo` ops, or `undefined` if there is nothing to undo. */
+  undo(): ConstructionHistoryEntry | undefined;
+  /** Pops the most recently undone entry and returns it for the caller to apply its `redo` ops, or `undefined` if there is nothing to redo. */
+  redo(): ConstructionHistoryEntry | undefined;
+  getState(): EditHistoryState;
+export function createEditHistoryStack(): EditHistoryStack {
+  let undoStack: ConstructionHistoryEntry[] = [];
+  let redoStack: ConstructionHistoryEntry[] = [];
+
+  return {
+  record(entry: ConstructionHistoryEntry): void {
+  undoStack = [...undoStack, entry];
+  redoStack = [];
+
+// src/features/edit-construction/edit-orchestrator.ts
+export type EditPlan =
+export function planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan {
+  const policy = resolvePolicy(topology, gesture.target);
+export interface EditOpSink {
+  moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
+  moveEdge(edgeId: string, delta: { x: number; y: number; z: number }): RegionEditOutcome;
+  moveRegion(
+  surfaceKey: readonly string[],
+  delta: { x: number; y: number; z: number },
+  ): RegionEditOutcome;
+  insertVertex(request: {
+export function applyEditOp(sink: EditOpSink, op: AtomicEditOp): RegionEditOutcome {
+  switch (op.kind) {
+  case "move-vertex":
+  return sink.moveVertex(op.nodeId, op.position);
+export const EMPTY_OUTCOME: RegionEditOutcome = Object.freeze({
+  affectedSurfaceKeys: Object.freeze([]),
+  createdSurfaceKeys: Object.freeze([]),
+  removedSurfaceKeys: Object.freeze([]),
+  createdNodeIds: Object.freeze([]),
+  removedNodeIds: Object.freeze([]),
+  });
+export function mergeOutcomes(left: RegionEditOutcome, right: RegionEditOutcome): RegionEditOutcome {
+  return {
+  affectedSurfaceKeys: mergeKeys(left.affectedSurfaceKeys, right.affectedSurfaceKeys),
+  createdSurfaceKeys: mergeKeys(left.createdSurfaceKeys, right.createdSurfaceKeys),
+  removedSurfaceKeys: mergeKeys(left.removedSurfaceKeys, right.removedSurfaceKeys),
+  createdNodeIds: mergeIds(left.createdNodeIds, right.createdNodeIds),
+  removedNodeIds: mergeIds(left.removedNodeIds, right.removedNodeIds),
+  };
+export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutcome {
+  if (plan.kind !== "apply") return EMPTY_OUTCOME;
+  return plan.ops.reduce(
+  (outcome, op) => mergeOutcomes(outcome, applyEditOp(sink, op)),
+  EMPTY_OUTCOME,
+  );
+
 // src/features/edit-construction/index.ts
 export type {
   ConstructionOperation,
@@ -3498,7 +3611,7 @@ export type {
   MoveNodeOperation,
   MoveNodePayload,
   OperationId,
-export type { ConstructionHistoryEntry, MoveNodeHistoryEntry, MoveNodeHistoryStack, MoveNodeHistoryState, PathBrushHistoryEntry } from "./move-node-history.ts";
+export type { ConstructionHistoryEntry, EditHistoryStack, EditHistoryState, PathBrushHistoryEntry, RegionEditHistoryEntry } from "./edit-history.ts";
 export type {
   BrushShapeKind,
   BrushShapeParams,
@@ -3515,38 +3628,116 @@ export type {
   PathFormationParameters,
   SurfaceEditModeDefinition,
   SurfaceEditTargetScope,
+export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
+export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+export type {
+  CascadeContext,
+  EditResolution,
+  EditRole,
+  RolePolicy,
+  StructureTypeDefinition,
+  } from "./structure-types/index.ts";
 
-// src/features/edit-construction/move-node-history.ts
-export interface MoveNodeHistoryEntry {
-  readonly nodeId: ConstructionNodeId;
-  readonly from: ConstructionPosition;
-  readonly to: ConstructionPosition;
-  }
-export interface PathBrushHistoryEntry {
-  readonly kind: "path-brush";
-  readonly operationId: string;
-  }
-export type ConstructionHistoryEntry = MoveNodeHistoryEntry | PathBrushHistoryEntry;
-export interface MoveNodeHistoryState {
-  readonly canUndo: boolean;
-  readonly canRedo: boolean;
-  }
-export interface MoveNodeHistoryStack {
-  /** Records a completed move. Clears any redo history, per standard undo-stack semantics. */
-  record(entry: ConstructionHistoryEntry): void;
-  /** Pops the most recent move and returns it for the caller to re-apply at `from`, or `undefined` if there is nothing to undo. */
-  undo(): ConstructionHistoryEntry | undefined;
-  /** Pops the most recently undone move and returns it for the caller to re-apply at `to`, or `undefined` if there is nothing to redo. */
-  redo(): ConstructionHistoryEntry | undefined;
-  getState(): MoveNodeHistoryState;
-export function createMoveNodeHistoryStack(): MoveNodeHistoryStack {
-  let undoStack: ConstructionHistoryEntry[] = [];
-  let redoStack: ConstructionHistoryEntry[] = [];
 
-  return {
-  record(entry: ConstructionHistoryEntry): void {
-  undoStack = [...undoStack, entry];
-  redoStack = [];
+// src/features/edit-construction/structure-types/index.ts
+export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
+export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
+  return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
+  const definition = structureTypeFor(topology.surfaceType);
+export type {
+  CascadeContext,
+  EditResolution,
+  EditRole,
+  RolePolicy,
+  StructureTypeDefinition,
+  } from "./structure-type.ts";
+
+
+// src/features/edit-construction/structure-types/organic-structure.ts
+export const ORGANIC_ROLES = {
+  boundaryVertex: "organic-boundary-vertex",
+  boundaryEdge: "organic-boundary-edge",
+  body: "organic-body",
+  } as const;
+
+export function organicRoleFor(_topology: unknown, target: EditTarget): EditRole {
+  if (target.kind === "vertex") return ORGANIC_ROLES.boundaryVertex;
+  if (target.kind === "edge") return ORGANIC_ROLES.boundaryEdge;
+  return ORGANIC_ROLES.body;
+  }
+export function organicPolicyFactory(structural: "regenerate" | "deny") {
+  return function organicPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  case ORGANIC_ROLES.boundaryVertex:
+  case ORGANIC_ROLES.boundaryEdge:
+  case ORGANIC_ROLES.body:
+  return allowed(role, HORIZONTAL_AXES);
+export function organicStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  structural: "regenerate" | "deny",
+  ): StructureTypeDefinition {
+  return Object.freeze({
+  surfaceType,
+
+// src/features/edit-construction/structure-types/panel-structure.ts
+export const PANEL_ROLES = {
+  bottomCorner: "panel-bottom-corner",
+  topCorner: "panel-top-corner",
+  bottomEdge: "panel-bottom-edge",
+  topEdge: "panel-top-edge",
+  post: "panel-post",
+  body: "panel-body",
+  unknown: "panel-unknown",
+export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  if (target.kind === "region") return PANEL_ROLES.body;
+  if (target.kind === "vertex") {
+  return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
+  }
+export function panelPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  case PANEL_ROLES.bottomCorner:
+  return allowed(role, HORIZONTAL_AXES, pairedTopCorners);
+export function panelStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  ): StructureTypeDefinition {
+  return Object.freeze({
+  surfaceType,
+  label,
+
+// src/features/edit-construction/structure-types/structure-type.ts
+export type EditRole = string;
+export type EditResolution =
+export interface RolePolicy {
+  readonly role: EditRole;
+  readonly resolve: EditResolution;
+  /** Axes the gesture's delta survives on. Ignored when `resolve` is not `"allow"`. */
+  readonly axes: readonly EditAxis[];
+  /**
+  * Extra ops fired alongside the primary one, as one transaction -- e.g.
+  * moving a wall's bottom corner moves its paired top corner by the *same*
+export interface CascadeContext {
+  readonly topology: ConstructionRegionTopology;
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: { readonly x: number; readonly y: number; readonly z: number };
+export interface StructureTypeDefinition {
+  /** The `surfaceType` the engine reports for regions of this kind. */
+  readonly surfaceType: string;
+  readonly label: string;
+  /**
+  * How this type is generated, recorded next to the roles it implies --
+  * the doc's whole point is that these two halves must not drift apart.
+  */
+export function denied(role: EditRole, reason: string): RolePolicy {
+  return { role, resolve: { kind: "deny", reason }, axes: [] };
+export function allowed(role: EditRole, axes: readonly EditAxis[], cascade?: RolePolicy["cascade"]): RolePolicy {
+  return { role, resolve: { kind: "allow" }, axes, cascade };
+export type { EditGesture };
 
 // src/features/edit-construction/surface-edit-contract.ts
 export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
@@ -3639,7 +3830,7 @@ export interface TowerStampParams {
 export type NoToolParams = Record<string, never>;
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
-  readonly "move-node": NoToolParams;
+  readonly "edit-region": NoToolParams;
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallBrushParams;
@@ -3648,7 +3839,7 @@ export interface ToolParamsByTool {
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
-  "move-node": Object.freeze({}),
+  "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
   "wall-brush": Object.freeze({ wallType: "wall-white" }),
   "wall-line": Object.freeze({ wallType: "wall-white" }),
@@ -3754,13 +3945,31 @@ export interface ConstructionSurfaceSpec {
 export interface AffectedSurfaces {
   readonly affectedSurfaceKeys: readonly ConstructionSurfaceKey[];
   }
-export interface DeleteNodeOutcome {
+export interface RegionEditOutcome {
+  /** Surfaces whose mesh must be re-derived. */
+  readonly affectedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly createdSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly cappingSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly createdNodeIds: readonly ConstructionNodeId[];
+  /** Nodes the engine's own zero-orphan cleanup reclaimed. */
+  readonly removedNodeIds: readonly ConstructionNodeId[];
+export type ConstructionEdgeGeometry =
+export interface ConstructionOrientedEdgeUse {
+  readonly edgeId: ConstructionEdgeId;
+  readonly reversed: boolean;
   }
-export interface SplitSurfaceOutcome {
-  readonly firstKey: ConstructionSurfaceKey;
-  readonly secondKey: ConstructionSurfaceKey;
+export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export interface ConstructionRegionTopology {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
+  readonly holes: readonly (readonly ConstructionRegionEdge[])[];
+  readonly nodes: readonly ConstructionNodeSnapshot[];
   }
 export interface CornerHeightModule {
   readonly name: string;
@@ -3784,18 +3993,6 @@ export interface DiffOutcome {
   readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly removedNodeIds: readonly ConstructionNodeId[];
   }
-export interface TransformationIdentityDelta<TIdentity> {
-  readonly created: readonly TIdentity[];
-  readonly preserved: readonly TIdentity[];
-  readonly replaced: readonly TIdentity[];
-  readonly removed: readonly TIdentity[];
-  }
-export interface SurfaceTransformationInvalidation {
-  readonly changedSurfaces: readonly ConstructionSurfaceKey[];
-  readonly topologyRepairNeighbors: readonly ConstructionSurfaceKey[];
-  readonly directDependencies: readonly ConstructionSurfaceKey[];
-  }
-export type ConstructionBrushShape =
 
 // src/ports/index.ts
 export type {
