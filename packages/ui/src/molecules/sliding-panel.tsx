@@ -5,15 +5,30 @@ import { EDGE_HANDLE_SIZE, EdgeHandle } from "../atoms/edge-handle.js";
 
 /** Public inputs for a panel anchored to one screen edge that slides fully off-screen when closed. */
 export interface SlidingPanelProps {
-  /** Whether the panel is currently open. */
+  /**
+   * Whether the panel is currently open.
+   * @example true
+   */
   readonly open: boolean;
-  /** Invoked with the panel's next open state, from a tap or a drag past the midpoint. */
+  /**
+   * Invoked with the panel's next open state, from a tap or a drag past the midpoint.
+   * @example () => {}
+   */
   readonly onOpenChange: (open: boolean) => void;
-  /** Which screen edge the panel is anchored to. */
+  /**
+   * Which screen edge the panel is anchored to.
+   * @example "left"
+   */
   readonly edge: "left" | "right";
-  /** Panel width in pixels. */
+  /**
+   * Panel width in pixels.
+   * @example 320
+   */
   readonly width: number;
-  /** The panel's own content. */
+  /**
+   * The panel's own content.
+   * @example <div>Panel content</div>
+   */
   readonly children: ReactNode;
   /** Stacking order for the panel's own fixed container. @default 20 */
   readonly zIndex?: number;

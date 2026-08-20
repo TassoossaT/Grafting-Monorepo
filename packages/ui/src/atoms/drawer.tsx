@@ -3,13 +3,22 @@ import type { ReactElement, ReactNode } from "react";
 
 /** Public inputs for a panel that slides in from a screen edge. */
 export interface DrawerProps {
-  /** Whether the drawer is currently shown. */
+  /**
+   * Whether the drawer is currently shown.
+   * @example true
+   */
   readonly open: boolean;
-  /** Invoked when the drawer requests to close, e.g. its own close button or Escape. */
+  /**
+   * Invoked when the drawer requests to close, e.g. its own close button or Escape.
+   * @example () => {}
+   */
   readonly onClose: () => void;
   /** Optional header text shown above the content. */
   readonly title?: string;
-  /** Content rendered inside the drawer body. */
+  /**
+   * Content rendered inside the drawer body.
+   * @example <div>Drawer content</div>
+   */
   readonly children: ReactNode;
   /**
    * Which screen edge the drawer slides in from.

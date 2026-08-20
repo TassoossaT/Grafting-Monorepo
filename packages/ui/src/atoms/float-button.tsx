@@ -3,9 +3,15 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 
 /** Public inputs for a single floating action, independent of any group. */
 export interface FloatButtonProps {
-  /** Caller-rendered icon content. Vendor-neutral -- this atom never ships its own icon set. */
+  /**
+   * Caller-rendered icon content. Vendor-neutral -- this atom never ships its own icon set.
+   * @example "⚙"
+   */
   readonly icon: ReactNode;
-  /** Tooltip and accessible name -- a float button shows no visible text label of its own. */
+  /**
+   * Tooltip and accessible name -- a float button shows no visible text label of its own.
+   * @example "Configurações"
+   */
   readonly tooltip: string;
   /** Invoked when this button is activated. */
   readonly onClick?: () => void;

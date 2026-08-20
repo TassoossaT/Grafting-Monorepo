@@ -115,6 +115,7 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
     };
   }
   if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
+  if (subcommand === "sync") return { taskId, fetch: argv.includes("--fetch"), abort: argv.includes("--abort") };
   if (subcommand === "status") return { taskId };
   if (subcommand === "doctor") return { taskId };
   if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };

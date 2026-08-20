@@ -16,17 +16,23 @@ Geometry for each directed boundary edge.
 
 Ordered XZ vertices of this closed contour.
 
-### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::source_boundaries(&self) -> &[alloc::vec::Vec<grafting_graph_core::model::NodeId>]`
+### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::consumed_boundaries(&self) -> &[alloc::vec::Vec<grafting_procgen_surface_transformations::BoundaryVertex>]`
 
-Closed exterior boundaries after shared terrain edges cancel.
+Closed exterior boundaries after shared edges among every consumed
+surface and region cancel -- each carrying its own edge geometry
+forward, not assuming straight lines.
 
-### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::source_surface_keys(&self) -> &[grafting_graph_core::surface::SurfaceKey]`
+### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::consumed_region_ids(&self) -> &[grafting_graph_core::contour::RegionId]`
 
-Legacy source identities superseded by the analytic region view.
+Existing analytic regions the new contour destroys.
 
-### `pub fn grafting_procgen_surface_transformations::AnalyticPathBrushPlan::target_contour(&self) -> &grafting_procgen_surface_transformations::AnalyticBrushContour`
+### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::consumed_surface_keys(&self) -> &[grafting_graph_core::surface::SurfaceKey]`
 
-The one compact target contour for the complete brush area.
+Existing plain surfaces the new contour destroys.
+
+### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::contour(&self) -> &grafting_procgen_surface_transformations::AnalyticBrushContour`
+
+The new region's own contour, unchanged from what the caller built.
 
 ### `pub fn grafting_procgen_surface_transformations::compact_analytic_brush_contour(request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -36,16 +42,6 @@ Consecutive fitted primitives become one continuous tube with round joins
 and caps. The result is never a list of overlapping per-segment
 footprints, so a dense gesture has no more topology than its fitted
 lines/arcs require.
-
-### `pub fn grafting_procgen_surface_transformations::plan_analytic_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticPathBrushPlan, grafting_procgen_surface_transformations::PathBrushFailure>`
-
-Plans the analytic migration of all eligible legacy surfaces touched by
-the path-brush mode.
-
-This step does not mutate the graph. It cancels interior shared terrain
-edges once and keeps only the exterior loops, which is the prerequisite
-for replacing an entire terrain patch with one region-with-hole instead
-of emitting a fragment for every original face.
 
 ### `pub fn grafting_procgen_surface_transformations::plan_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_graph_core::construction::SurfaceReplacementPlan<[f32; 3], ()>, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -58,6 +54,37 @@ U-shaped profile. Only a genuinely coarse source polygon is partitioned
 against the sweep; its cut positions are interned and all resulting changes
 are published as one atomic replacement plan.
 
+### `pub fn grafting_procgen_surface_transformations::plan_region_merge(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, topology: &grafting_graph_core::contour::ContourTopology, contour: grafting_procgen_surface_transformations::AnalyticBrushContour, is_eligible: impl core::ops::function::Fn(&grafting_graph_core::surface::SurfaceType) -> bool) -> core::result::Result<grafting_procgen_surface_transformations::RegionMergePlan, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Plans destroying-and-rebuilding whatever existing surfaces or existing
+analytic regions a new region's `contour` touches.
+
+Generic across what counts as eligible to be consumed (`is_eligible`,
+tested against each candidate's own `SurfaceType`; a caller wanting no
+restriction at all passes `|_| true`) and knows nothing about what kind
+of structure produced `contour` -- a path-brush stroke, a future wall
+opening, or anything else. Never mutates the graph.
+
+A candidate (a plain surface or an existing region alike) counts as
+touched either way a shape can overlap a face without crossing the
+other's own vertices: a corner landing inside the new contour, or the
+contour's own boundary passing through the candidate's interior
+(cutting straight through the middle of a face touches no corner at
+all). This step then cancels interior shared edges among every touched
+candidate once -- surfaces and regions together, in one pool, so a
+region bordering a plain surface (or another region) cancels exactly
+the same way two plain surfaces already did -- and keeps only the
+exterior loops, the prerequisite for a caller replacing an entire
+consumed patch with one region-with-a-hole instead of emitting a
+fragment for every original piece.
+
+**Known scope limit:** only a consumed region's *outer* loop(s)
+participate in cancellation -- a hole already inside a consumed region
+(an even earlier stroke's own cutout) is not carried forward as a hole
+of the new remainder. A stroke that fully re-covers a multi-generation
+hole "heals" it instead of preserving it. Narrower than the total
+invisibility this replaces, but not a complete fix.
+
 ### `pub fn grafting_procgen_surface_transformations::swept_brush_contains(shape: &grafting_procgen_surface_transformations::BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool`
 
 Returns whether `point` lies in the continuous sweep of `shape` over `samples`.
@@ -65,6 +92,15 @@ Returns whether `point` lies in the continuous sweep of `shape` over `samples`.
 This is the shared authoritative footprint query used by terrain-cell
 generation and surface transformations, so both tools interpret brush
 shape, rotation, and gaps between pointer samples identically.
+
+### `pub fn grafting_procgen_surface_transformations::validate_request(request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<(), grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Validates a path-brush request's own scalar/geometric fields (operation
+identity, samples, shape, depth) -- the path-specific checks
+`plan_region_merge` itself has no reason to know about, since it takes
+an already-built contour and a plain eligibility predicate, not a
+`PathBrushRequest`. A caller building a path-brush stroke on top of that
+generic planner calls this first.
 
 ### `pub grafting_procgen_surface_transformations::BrushShape::Circle`
 
@@ -168,15 +204,31 @@ This is intentionally independent of graph identities. The construction
 session assigns stable node and contour-edge ids only after a contour has
 been accepted as one semantic brush operation.
 
-### `pub struct grafting_procgen_surface_transformations::AnalyticPathBrushPlan`
-
-One terrain-to-path operation expressed before graph mutation.
-
-The legacy source faces are represented only by their cancelled exterior
-boundaries. The session can therefore migrate a complete terrain patch to
-one analytic source region with the brush contour as its hole, rather
-than splitting every source triangle.
-
 ### `pub struct grafting_procgen_surface_transformations::PathBrushRequest`
 
 One convex brush stroke resolved in construction-world XZ space.
+
+### `pub struct grafting_procgen_surface_transformations::RegionMergePlan`
+
+One region-overlay merge plan: which existing surfaces and existing
+analytic regions a new region's contour destroys, their cancelled
+exterior boundaries (what a leftover remainder region must carry as its
+own hole), and the contour itself.
+
+Nothing here is specific to any one tool. A path-brush stroke, a future
+wall opening, or anything else that overlays one new closed shape onto
+the current graph and destroys whatever it covers can reuse this
+unchanged -- see [`plan_region_merge`]. Consuming an existing *region*
+(not just a plain surface) matters as soon as more than one such
+overlay can happen in the same place: without it, a second stroke can
+never touch, cut, or remove what an earlier one already created, and it
+just sits there orphaned forever.
+
+### `pub type grafting_procgen_surface_transformations::BoundaryVertex = (grafting_graph_core::model::NodeId, grafting_graph_core::contour::ContourGeometry)`
+
+One vertex of a cancelled exterior boundary, paired with the geometry of
+the edge leading from it to the *next* vertex in the same boundary
+(wrapping from the last vertex back to the first). Unlike a plain
+surface's cycle (always straight), a consumed analytic region's own
+edges can be curved, and the remainder boundary this vertex ends up in
+must keep that curve, not silently flatten it to a line.

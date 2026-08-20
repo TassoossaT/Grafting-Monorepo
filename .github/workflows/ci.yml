@@ -10,8 +10,8 @@ jobs:
   linux:
     # Master source S2.3: platform-dependent artifacts build on the
     # corresponding system; the normal (non-native) build runs on Linux.
-    # No Windows/.NET job yet; the root scaffold now exists, so B-010 is
-    # actionable but remains a separate task.
+    # Verification is generic across the monorepo using standard workspace
+    # targets (Nx run-many, Cargo workspace, script test suite, docs drift check).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,16 +36,6 @@ jobs:
           key: flatc-${{ runner.os }}-${{ hashFiles('tools/flatc-version.txt') }}
 
       - name: Install pinned flatc (C-005, master source S10.3)
-        # Rust/TS use this primary pin (tools/flatc-version.txt); C#
-        # uses a second, older, separately-pinned flatc instead (see
-        # tools/scripts/get-flatc-csharp.ps1) -- irrelevant here, this
-        # job doesn't build the C# side. Asset name verified against the
-        # real google/flatbuffers GitHub release, not assumed. Must run
-        # before "Install Node dependencies": libs/isekai/wasm-bridge's own
-        # `postinstall` (triggered by that step) compiles grafting-domain-core,
-        # which needs this generated code to exist already -- it doesn't
-        # go through Nx's own `dependsOn` codegen chain, since a plain
-        # `pnpm install` isn't an `nx run` invocation.
         run: |
           FLATC_VERSION=$(cat tools/flatc-version.txt)
           if ! command -v flatc &> /dev/null || [ "$(flatc --version | awk '{print $3}')" != "${FLATC_VERSION}" ]; then
@@ -56,22 +46,31 @@ jobs:
           fi
           flatc --version
 
-      - name: Generate FlatBuffers Rust code (C-005/C-006)
-        # Only the Rust output is needed here; TS/C# generation isn't
-        # exercised by this job (no Windows/.NET or Node-typecheck CI job
-        # exists yet -- B-010, a separate, already-tracked gap).
-        run: flatc --rust -o libs/engine/domain-core/src/generated libs/engine/domain-core/contracts/command.fbs libs/engine/domain-core/contracts/domain_event.fbs libs/engine/domain-core/contracts/snapshot.fbs
+      - name: Cache wasm-pack binary
+        id: cache-wasm-pack
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/wasm-pack
+          key: wasm-pack-${{ runner.os }}-${{ hashFiles('tools/wasm-pack-version.txt') }}
 
       - name: Install pinned wasm-pack (DEC-055/ADR-0017)
         # libs/isekai/wasm-bridge and libs/domains/procgen/generation-wasm each run
         # `wasm-pack build` from their own package.json `postinstall` --
         # the "Install Node dependencies" step below triggers those, so
-        # wasm-pack must already be on PATH before `pnpm install` runs, not
-        # after. Pinned to the same version tools/wasm-pack-version.txt
-        # already declares for the Windows toolchain validator
-        # (tools/scripts/validate-toolchains.ps1), so both platforms stay
-        # locked to one source of truth.
-        run: cargo install wasm-pack --version "$(cat tools/wasm-pack-version.txt)" --locked
+        # wasm-pack must already be on PATH before `pnpm install` runs.
+        run: |
+          WASM_PACK_VERSION=$(cat tools/wasm-pack-version.txt)
+          if ! command -v wasm-pack &> /dev/null || [ "$(wasm-pack --version | awk '{print $2}')" != "${WASM_PACK_VERSION}" ]; then
+            curl --retry 5 --retry-all-errors --retry-delay 3 -fsSL "https://github.com/rustwasm/wasm-pack/releases/download/v${WASM_PACK_VERSION}/wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C /tmp
+            chmod +x /tmp/wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack
+            sudo mv /tmp/wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl/wasm-pack /usr/local/bin/wasm-pack
+          fi
+          wasm-pack --version
+
+      - name: Generate FlatBuffers contracts (C-005/C-006)
+        # Generates Rust and TS contracts authoritatively before Node installation
+        # so wasm-pack postinstall scripts compile against fresh generated types.
+        run: node tools/scripts/generate-contracts.mjs
 
       - uses: pnpm/action-setup@v4
         with:
@@ -90,33 +89,21 @@ jobs:
           cargo check --workspace
           cargo test --workspace
 
-      - name: TypeScript behavior contracts
+      - name: License notices and script behavior tests
         run: |
-          node --test tools/scripts/agent-task-guard.test.mjs
-          node --test tools/scripts/research-registry-reminder.test.mjs
-          node --test tools/scripts/check-third-party-notices.test.mjs
-          node --test tools/scripts/third-party-attribution-reminder.test.mjs
-          node tools/scripts/check-third-party-notices.mjs
-          pnpm exec nx run x6-canvas:check
-          pnpm exec nx run x6-canvas:test
-          pnpm exec nx run ui:check
-          pnpm exec nx run ui:test
-          pnpm exec nx run ui:api-check
+          pnpm run licenses:third-party-check
+          node --test tools/scripts/*.test.mjs
 
-      - name: Auto-generate Docs and Graph IR
+      - name: Generic workspace checks and tests
+        # Executes check, test, and api-check across all projects in the monorepo graph
         run: |
-          pnpm run graph:map
-          pnpm run graph:manifest
-          pnpm run graph:signatures
-          pnpm run graph:extract
-          pnpm run docs:api:ts:generate
-          pnpm run docs:api:rust:generate
+          pnpm exec nx run-many --target=check --all
+          pnpm exec nx run-many --target=test --all
+          pnpm exec nx run-many --target=api-check --all
 
-      - name: Docs and Graph IR validation
+      - name: Docs, Graph IR, and API baseline validation
+        # Validates that committed repo map, manifest, signatures, and Graph IR do not drift
         run: pnpm run docs:check
-
-      - name: Nx check
-        run: pnpm exec nx run engine-domain-core:check
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -127,5 +114,7 @@ jobs:
           uv lock --check
           uv sync --locked
 
-      - name: Python tests
-        run: uv run --package automation pytest
+      - name: Python tests and AI coordination checks
+        run: |
+          uv run --package automation pytest
+          pnpm run ai:check

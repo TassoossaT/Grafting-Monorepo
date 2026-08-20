@@ -3,20 +3,32 @@ import type { ReactElement, ReactNode } from "react";
 
 /** One collapsible section. */
 export interface CollapsePanel {
-  /** Stable identity within the list, and what `defaultActiveKeys` names. */
+  /**
+   * Stable identity within the list, and what `defaultActiveKeys` names.
+   * @example "section-1"
+   */
   readonly key: string;
   /**
    * Section header, always visible.
    * @example "Inspector de Seleção"
    */
   readonly header: string;
-  /** Section content, shown when expanded. */
+  /**
+   * Section content, shown when expanded.
+   * @example <div>Section body</div>
+   */
   readonly content: ReactNode;
 }
 
 /** Public inputs for a set of stacked, individually collapsible sections. */
 export interface CollapseProps {
-  /** The sections, in display order. */
+  /**
+   * The sections, in display order.
+   * @example
+   * ```tsx
+   * [{ key: "section-1", header: "Section", content: "Body" }]
+   * ```
+   */
   readonly panels: readonly CollapsePanel[];
   /** Which panel keys start expanded. Defaults to every panel's own key, i.e. all expanded. */
   readonly defaultActiveKeys?: readonly string[];

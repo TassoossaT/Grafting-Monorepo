@@ -334,6 +334,571 @@
       ]
     },
     {
+      "id": "atom.icon-button",
+      "name": "IconButton",
+      "layer": "atom",
+      "summary": "Compact icon-first action button with an explicit selected state, for\ntoolbars, rails, and hotbars where a text-label {@link Button} would not\nfit -- backed by the same Ant Design button as {@link Button}, with\nGrafting owning the selected-state boundary color rather than trusting a\nvendor theme default.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "icon",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Caller-rendered icon content (glyph, emoji, or inline SVG). Vendor-neutral\non purpose -- this atom never ships its own icon set.",
+          "example": "\"▢\""
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional visible label rendered beside the icon. Icon-only when omitted."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Accessible name and hover tooltip. Required when `label` is omitted, since an icon-only button has no other text content.",
+          "example": "\"Toggle sidebar\""
+        },
+        {
+          "name": "onClick",
+          "type": "() => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when the button is activated."
+        },
+        {
+          "name": "selected",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the button displays its selected/active treatment.",
+          "defaultValue": "false"
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the button rejects interaction.",
+          "defaultValue": "false"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.selectable-chip",
+      "name": "SelectableChip",
+      "layer": "atom",
+      "summary": "One toggleable choice in a small set -- e.g. a material or preset picker --\nbuilt on Ant Design's `Tag.CheckableTag` rather than a bare `Tag`, since the\nselectable behavior (not just the visual chip shape) is exactly what that\nvendor primitive already models.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Human-readable choice label.",
+          "example": "\"Bloco Branco\""
+        },
+        {
+          "name": "swatchColor",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional color swatch rendered before the label, e.g. a material preview."
+        },
+        {
+          "name": "selected",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether this chip is the active choice.",
+          "defaultValue": "false"
+        },
+        {
+          "name": "onSelect",
+          "type": "(selected: boolean) => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when the chip is activated. Receives the chip's own next selected state, matching Ant Design's `CheckableTag` convention."
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.popover",
+      "name": "Popover",
+      "layer": "atom",
+      "summary": "Dismissible floating content anchored to a trigger element -- e.g. a\nshape/material picker opened from a toolbar button -- built on Ant\nDesign's own `Popover` rather than a hand-positioned overlay, since\nanchor-relative placement (including flipping when it would overflow the\nviewport) is exactly what that vendor primitive already solves.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "anchor",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "The element the popover positions itself against.",
+          "example": "<button>Open</button>"
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": true,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the popover is currently shown.",
+          "example": "true"
+        },
+        {
+          "name": "onClose",
+          "type": "() => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when the popover requests to close, e.g. an outside click or Escape.",
+          "example": "() => {}"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional header text shown above the content."
+        },
+        {
+          "name": "children",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Content rendered inside the popover body.",
+          "example": "<div>Content</div>"
+        },
+        {
+          "name": "placement",
+          "type": "\"top\" | \"bottom\" | \"left\" | \"right\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "description": "Which side of `anchor` the popover opens toward.",
+          "defaultValue": "\"top\""
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.drawer",
+      "name": "Drawer",
+      "layer": "atom",
+      "summary": "An edge-sliding settings/inspector panel, built on Ant Design's own\n`Drawer`. Non-modal by default (no backdrop, no interaction lock on the\nrest of the page) -- the common case for a persistent settings panel\nbeside a live 3D viewport, where blocking the scene behind it would be\nunwanted.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": true,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the drawer is currently shown.",
+          "example": "true"
+        },
+        {
+          "name": "onClose",
+          "type": "() => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when the drawer requests to close, e.g. its own close button or Escape.",
+          "example": "() => {}"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional header text shown above the content."
+        },
+        {
+          "name": "children",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Content rendered inside the drawer body.",
+          "example": "<div>Drawer content</div>"
+        },
+        {
+          "name": "placement",
+          "type": "\"left\" | \"right\" | \"top\" | \"bottom\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "description": "Which screen edge the drawer slides in from.",
+          "defaultValue": "\"right\""
+        },
+        {
+          "name": "size",
+          "type": "number",
+          "required": false,
+          "control": {
+            "kind": "number"
+          },
+          "description": "Drawer width (for `left`/`right` placement) or height (for `top`/`bottom`), in CSS pixels.",
+          "defaultValue": "320"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.descriptions",
+      "name": "Descriptions",
+      "layer": "atom",
+      "summary": "A read-only label-value grid -- the right shape for an inspector or a\nmetrics panel, where {@link Card} (a bounded, bordered surface meant to\nstand alone, e.g. in a gallery grid) adds a frame this content does not\nneed, especially when several of these already sit inside another bounded\nsurface like {@link Drawer} or a {@link Collapse} panel.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "items",
+          "type": "readonly DescriptionItem[]",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "The rows to display, in order.",
+          "example": "[{ key: \"id\", label: \"Node ID\", value: \"node_42\" }]"
+        },
+        {
+          "name": "column",
+          "type": "number",
+          "required": false,
+          "control": {
+            "kind": "number"
+          },
+          "description": "How many label-value pairs sit per row.",
+          "defaultValue": "1"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.collapse",
+      "name": "Collapse",
+      "layer": "atom",
+      "summary": "Several named sections stacked in one surface, each independently\nexpandable -- the right shape for a settings/inspector panel with more\nthan one topic, where stacking a separate {@link Card} per topic would\ndouble the framing (the panel this sits inside, e.g. a {@link Drawer},\nalready provides the outer boundary).",
+      "status": "stable",
+      "props": [
+        {
+          "name": "panels",
+          "type": "readonly CollapsePanel[]",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "The sections, in display order.",
+          "example": "[{ key: \"section-1\", header: \"Section\", content: \"Body\" }]"
+        },
+        {
+          "name": "defaultActiveKeys",
+          "type": "readonly string[]",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Which panel keys start expanded. Defaults to every panel's own key, i.e. all expanded."
+        },
+        {
+          "name": "bordered",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the whole set draws its own outer border and panel background.\nSet to `false` when this sits inside a surface that already provides\nits own boundary (e.g. a {@link Drawer}) -- left `true`, both frame the\nsame content and it reads as boxed twice.",
+          "defaultValue": "true"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "atom.float-button",
+      "name": "FloatButton",
+      "layer": "atom",
+      "summary": "One floating action, standalone -- the right shape for a corner-fixed\ntrigger like a settings-panel toggle, or a `Popover`/`Drawer` anchor whose\nbehavior (opens a panel) does not belong inside a `FloatButtonGroup`\nmolecule's list of direct actions.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "icon",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Caller-rendered icon content. Vendor-neutral -- this atom never ships its own icon set.",
+          "example": "\"⚙\""
+        },
+        {
+          "name": "tooltip",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Tooltip and accessible name -- a float button shows no visible text label of its own.",
+          "example": "\"Configurações\""
+        },
+        {
+          "name": "onClick",
+          "type": "() => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked when this button is activated."
+        },
+        {
+          "name": "disabled",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Renders this button non-interactive."
+        },
+        {
+          "name": "tone",
+          "type": "\"default\" | \"primary\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "default",
+              "primary"
+            ]
+          },
+          "description": "Emphasis. `\"primary\"` is the right choice for a button that opens a\npanel rather than firing a direct action, so it reads as distinct from\na same-row action cluster.",
+          "defaultValue": "\"default\""
+        },
+        {
+          "name": "shape",
+          "type": "\"circle\" | \"square\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "circle",
+              "square"
+            ]
+          },
+          "description": "Outline. `\"square\"` reads as part of a joined block -- pair it with a\n`FloatButtonGroup` molecule using the same shape so the two visually\nbelong together.",
+          "defaultValue": "\"circle\""
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional caller-owned inline style, e.g. to place this button at a specific fixed position."
+        }
+      ]
+    },
+    {
+      "id": "atom.edge-handle",
+      "name": "EdgeHandle",
+      "layer": "atom",
+      "summary": "A half-round tab fused to one edge of a panel -- rounded on the side\nfacing away from the panel, flat on the side touching it, so it reads as\ngrown out of the panel rather than a separate floating control. Toggles\nthe panel open/closed on tap; optionally reports raw drag deltas so a\ncaller can let the panel itself be pulled open/closed, not just clicked.\nNo library ships this shape (confirmed by research before building it --\nshadcn/ui's `SidebarRail` is the closest published pattern, but it is a\nfull-height drag rail on a Tailwind/Radix stack this project does not\nuse, not this shape). Hand-built CSS is the right size of solution here:\none small shape, no dependency.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": true,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the panel this handle belongs to is currently open.",
+          "example": "true"
+        },
+        {
+          "name": "onClick",
+          "type": "() => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked on a plain tap/click (movement below the drag threshold) or a keyboard activation. Never called for a real drag -- use `onDragEnd` for that.",
+          "example": "() => {}"
+        },
+        {
+          "name": "edge",
+          "type": "\"left\" | \"right\"",
+          "required": true,
+          "control": {
+            "kind": "select",
+            "options": [
+              "left",
+              "right"
+            ]
+          },
+          "description": "Which edge of the panel the handle protrudes from -- `\"right\"` bulges\nrightward (for a panel anchored to the screen's left edge), `\"left\"`\nbulges leftward (for a panel anchored to the right edge).",
+          "example": "\"right\""
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Tooltip and accessible name.",
+          "example": "\"Recolher painel\""
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional caller-owned inline style, e.g. to place this handle at a specific position."
+        },
+        {
+          "name": "onDrag",
+          "type": "(deltaX: number) => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Optional drag reporting. Once a press moves past a small threshold,\n`onDrag` fires on every subsequent move with the horizontal offset (in\npixels, signed) from where the press started, and `onDragEnd` fires\nonce on release with the final offset -- a caller (e.g. `SlidingPanel`)\nuses these to let the panel itself track the pointer 1:1 while\ndragging. A press that never crosses the threshold is a plain tap and\nonly calls `onClick`; provide both callbacks together or neither."
+        },
+        {
+          "name": "onDragEnd",
+          "type": "(deltaX: number) => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Fires once on release, only after a real drag (see `onDrag`)."
+        }
+      ]
+    },
+    {
       "id": "molecule.entity-summary",
       "name": "EntitySummary",
       "layer": "molecule",
@@ -745,6 +1310,232 @@
       ]
     },
     {
+      "id": "molecule.float-button-group",
+      "name": "FloatButtonGroup",
+      "layer": "molecule",
+      "summary": "A cluster of floating actions -- either collapsed behind one trigger\n(Ant Design's own `FloatButton.Group`, for a Foundry-style tool menu: a\ncategory button that reveals its own sub-items) or, with `alwaysExpanded`,\na plain always-visible row/column of the same items with no trigger at\nall. The atom `FloatButton` remains the right choice for a single\nstandalone action; this molecule is for a *cluster*.\n\nThe collapsed path renders its items as Ant Design's own `FloatButton`\ndirectly, not this package's `FloatButton` atom -- `FloatButton.Group`\nrecognizes its children by that exact component reference to apply\ngroup-item styling and layout, and a wrapping component in between breaks\nthat recognition silently (the group renders, but its items lose the\ngroup's own positioning and behavior). The `alwaysExpanded` path has no\nsuch constraint (no `FloatButton.Group` involved), but uses the same\ndirect `AntFloatButton` reference for consistency.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "icon",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "The trigger's own icon, shown when the group is collapsed. Unused when `alwaysExpanded` is set -- there is no trigger to show it on."
+        },
+        {
+          "name": "items",
+          "type": "readonly FloatButtonItem[]",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "The actions revealed when the group is open, in display order.",
+          "example": "[{ key: \"action-1\", icon: \"⚙\", tooltip: \"Settings\" }]"
+        },
+        {
+          "name": "placement",
+          "type": "\"top\" | \"left\" | \"right\" | \"bottom\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "description": "Which side the group expands toward from the trigger -- `\"top\"`/`\"bottom\"`\nstack items in a vertical column, `\"left\"`/`\"right\"` lay them out in a\nhorizontal row. When `alwaysExpanded` is set, this only picks the row's\naxis (vertical for `\"top\"`/`\"bottom\"`, horizontal for `\"left\"`/`\"right\"`),\nsince there is no trigger to expand away from.",
+          "defaultValue": "\"top\""
+        },
+        {
+          "name": "trigger",
+          "type": "\"click\" | \"hover\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "click",
+              "hover"
+            ]
+          },
+          "description": "Whether the group opens on click or hover. Ignored when `alwaysExpanded`\nis set.",
+          "defaultValue": "\"click\""
+        },
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Controlled open state, together with `trigger` -- required to close the\ngroup programmatically, e.g. after an item's own `onClick` fires, since\nAnt Design does not do that on its own. Uncontrolled (starts collapsed,\ncloses only on its own trigger/outside click) when omitted. Ignored\nwhen `alwaysExpanded` is set."
+        },
+        {
+          "name": "onOpenChange",
+          "type": "(open: boolean) => void",
+          "required": false,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked with the group's next open state, e.g. on an outside click or its own trigger."
+        },
+        {
+          "name": "shape",
+          "type": "\"circle\" | \"square\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "circle",
+              "square"
+            ]
+          },
+          "description": "Outline. `\"square\"` renders the items as one joined, gapless block\n(Ant Design's own compact-group styling) instead of separate floating\ncircles -- the trigger itself, which becomes the close control once\nopen, always renders as its own separate element outside that block.\nIgnored (no joined styling) when `alwaysExpanded` is set.",
+          "defaultValue": "\"circle\""
+        },
+        {
+          "name": "alwaysExpanded",
+          "type": "boolean",
+          "required": false,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Skips the collapsible trigger entirely -- every item renders directly,\nalways visible, with no separate open/close button. Use this for a\nplain always-on toolbar rather than a Foundry-style \"tap to reveal\"\nmenu.",
+          "defaultValue": "false"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for layout composition."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional caller-owned inline style, e.g. to place this group's trigger at a specific fixed position."
+        }
+      ]
+    },
+    {
+      "id": "molecule.sliding-panel",
+      "name": "SlidingPanel",
+      "layer": "molecule",
+      "summary": "A generic panel fixed to one edge of the screen that slides fully off-screen when\nclosed and back into view when open, with an {@link EdgeHandle} fused to\nits edge as the drag/toggle control.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "open",
+          "type": "boolean",
+          "required": true,
+          "control": {
+            "kind": "boolean"
+          },
+          "description": "Whether the panel is currently open.",
+          "example": "true"
+        },
+        {
+          "name": "onOpenChange",
+          "type": "(open: boolean) => void",
+          "required": true,
+          "control": {
+            "kind": "action"
+          },
+          "description": "Invoked with the panel's next open state, from a tap or a drag past the midpoint.",
+          "example": "() => {}"
+        },
+        {
+          "name": "edge",
+          "type": "\"left\" | \"right\"",
+          "required": true,
+          "control": {
+            "kind": "select",
+            "options": [
+              "left",
+              "right"
+            ]
+          },
+          "description": "Which screen edge the panel is anchored to.",
+          "example": "\"left\""
+        },
+        {
+          "name": "width",
+          "type": "number",
+          "required": true,
+          "control": {
+            "kind": "number"
+          },
+          "description": "Panel width in pixels.",
+          "example": "320"
+        },
+        {
+          "name": "children",
+          "type": "ReactNode",
+          "required": true,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "The panel's own content.",
+          "example": "<div>Panel content</div>"
+        },
+        {
+          "name": "zIndex",
+          "type": "number",
+          "required": false,
+          "control": {
+            "kind": "number"
+          },
+          "description": "Stacking order for the panel's own fixed container. @default 20"
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Caller-owned class name for the panel's own container (use this for background, shadows, borders)."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Caller-owned inline style, merged onto the panel's own container."
+        },
+        {
+          "name": "handleOpenLabel",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Tooltip/Aria label for the handle when the panel is open. @default \"Fechar\""
+        },
+        {
+          "name": "handleCloseLabel",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Tooltip/Aria label for the handle when the panel is closed. @default \"Abrir\""
+        }
+      ]
+    },
+    {
       "id": "organism.data-table",
       "name": "DataTable",
       "layer": "organism",
@@ -851,6 +1642,161 @@
             "kind": "text"
           },
           "description": "Optional caller-owned class name for layout composition."
+        }
+      ]
+    },
+    {
+      "id": "organism.action-dock",
+      "name": "ActionDock",
+      "layer": "organism",
+      "summary": "A generic bottom action dock organism.\n\nRenders an accessible toolbar of primary actions with optional expandable\nsub-action rows positioned horizontally above active items.\n\nAll visual identity (theming, colors, glassmorphism, sketch styles) is owned\nby the consuming application via CSS classes (`.grafting-action-dock`,\n`.grafting-action-dock__item`, etc.).",
+      "status": "stable",
+      "props": [
+        {
+          "name": "ariaLabel",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Accessible name for the toolbar region. @default \"Barra de ferramentas de construção\""
+        },
+        {
+          "name": "items",
+          "type": "readonly ActionDockItem[]",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "Primary construction verbs / categories in display order.",
+          "example": "[{ key: \"tool-1\", label: \"Tool 1\", icon: \"🔨\" }]"
+        },
+        {
+          "name": "leadingAccessories",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional leading accessories rendered alongside the items."
+        },
+        {
+          "name": "trailingAccessories",
+          "type": "ReactNode",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional trailing accessories rendered alongside the items."
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name applied to the outer wrapper."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional inline style override for the outer wrapper."
+        }
+      ]
+    },
+    {
+      "id": "organism.float-button-tree",
+      "name": "FloatButtonTree",
+      "layer": "organism",
+      "summary": "A tree of floating-button groups: a root trigger reveals a floating list\nof items, any of which can itself be a branch with its own nested list\n-- \"a group of groups\". Generic and product-agnostic: every node is\nplain data (an action, or an icon/tooltip plus more nodes), nothing here\nnames a product concept.\n\nBuilt on `@floating-ui/react` (MIT, the maintained successor to Popper.js)\nrather than hand-rolled, specifically for its `FloatingTree` primitive:\ncoordinating open/close state, dismissal, and positioning across an\narbitrarily nested set of floating elements is exactly the hard part a\nlibrary should own. The event-coordination pattern here (a branch\nannounces opening via `tree.events` so accordion siblings close, a leaf\nclick announces closing the whole tree) mirrors Floating UI's own\nreference nested-menu implementation\n(`packages/react/test/visual/components/Menu.tsx` in their monorepo),\nsimplified: no roving-tabindex list navigation or typeahead, since this\nis a cluster of buttons, not a full ARIA menu widget.\n\nEvery branch's trigger mode (`\"click\"` | `\"hover\"`) and sibling behavior\n(`\"accordion\"` | `\"multiple\"`) default from this component's own props\nbut can be overridden per branch node, so one tree can mix e.g.\nclick-to-open categories with hover-to-open sub-items.",
+      "status": "stable",
+      "props": [
+        {
+          "name": "root",
+          "type": "FloatButtonTreeBranch",
+          "required": true,
+          "control": {
+            "kind": "object"
+          },
+          "description": "The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`.",
+          "example": "{ key: \"root\", icon: \"📁\", tooltip: \"Root\", children: [] }"
+        },
+        {
+          "name": "trigger",
+          "type": "FloatButtonTreeTrigger",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "click",
+              "hover"
+            ]
+          },
+          "description": "Default submenu trigger for every branch that does not set its own. @default \"click\""
+        },
+        {
+          "name": "siblingMode",
+          "type": "FloatButtonTreeSiblingMode",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "accordion",
+              "multiple"
+            ]
+          },
+          "description": "Default sibling behavior for every branch that does not set its own. @default \"accordion\""
+        },
+        {
+          "name": "placement",
+          "type": "FloatButtonTreePlacement",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "top",
+              "bottom",
+              "left",
+              "right"
+            ]
+          },
+          "description": "Default submenu expand direction for every branch that does not set its own. @default \"right\""
+        },
+        {
+          "name": "shape",
+          "type": "\"circle\" | \"square\"",
+          "required": false,
+          "control": {
+            "kind": "select",
+            "options": [
+              "circle",
+              "square"
+            ]
+          },
+          "description": "Outline for every button in the tree. @default \"circle\""
+        },
+        {
+          "name": "className",
+          "type": "string",
+          "required": false,
+          "control": {
+            "kind": "text"
+          },
+          "description": "Optional caller-owned class name for the tree's own root position wrapper."
+        },
+        {
+          "name": "style",
+          "type": "CSSProperties",
+          "required": false,
+          "control": {
+            "kind": "disabled"
+          },
+          "description": "Optional caller-owned inline style, e.g. to fix the tree's root to a corner of the screen."
         }
       ]
     },
