@@ -53,6 +53,13 @@ The connected component of same-`type` surfaces reachable from
 
 `DeleteRegion`. See `region_editing::apply_delete_region`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_regions_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Removes a whole set of regions at once and reports the rim the hole
+is left bounded by -- what a caller stitches new geometry onto so the
+result has neither a leftover hole nor an extra face. See
+`region_editing::apply_delete_regions`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe()`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe_vector()`
@@ -60,6 +67,13 @@ The connected component of same-`type` surfaces reachable from
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::duplicate_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::footprint_coverage_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+What a brush footprint currently covers, before anything is
+generated -- the creation-side counterpart to `region_topology_json`.
+The engine reports; the caller's own per-type table decides what to
+do about it. See `footprint::footprint_coverage`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
