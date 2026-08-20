@@ -425,16 +425,18 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // exactly that mix: it touches both and its middle is empty, so
     // treating the two as alternatives fills nothing.
     //
-    // The raise goes first because generation reads live state twice -- which
-    // quads sit over open ground, and which existing nodes to weld onto.
-    // Running it against the pre-raise state would weld onto nodes the
-    // raise then reclaims as orphans. Occupancy is unaffected by the order:
-    // raising ground moves it in Y, never in XZ.
+    // The raise goes first so generation welds onto ground already at its
+    // final height. Order is no longer load-bearing the way it was when the
+    // raise deleted and recreated the patch -- it now only moves existing
+    // nodes, so no id the generator might weld onto is ever invalidated --
+    // but a vertex that welds onto the rim still wants the raised Y, not the
+    // stale one. Occupancy is unaffected either way: the raise moves ground
+    // in Y, never in XZ.
     const covered = coveredByStroke(ctx, gesture);
     const raised =
       covered.length > 0
         ? restackTerrain(ctx, params.targetSurface, covered, causeId)
-        : { raisedFaces: 0, bandFaces: 0, skipped: [] };
+        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
@@ -451,7 +453,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
 
     const parts: string[] = [];
     if (newSurfaces.length > 0) parts.push(`${newSurfaces.length} faces novas`);
-    if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (+${raised.bandFaces} de ligação)`);
+    if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
     if (parts.length === 0) {
       ctx.reportFeedback({
         tone: "info",

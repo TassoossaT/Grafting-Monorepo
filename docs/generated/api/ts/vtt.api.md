@@ -1137,7 +1137,9 @@ instead of the whole footprint again.
 
 ### `interface vtt.terrain-restack.RestackOutcome`
 
-### `property vtt.terrain-restack.RestackOutcome.bandFaces: number`
+### `property vtt.terrain-restack.RestackOutcome.movedVertices: number`
+
+Distinct nodes actually moved -- shared corners count once.
 
 ### `property vtt.terrain-restack.RestackOutcome.raisedFaces: number`
 
@@ -1161,8 +1163,7 @@ ground the user never painted over.
 
 ### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome`
 
-Raises every covered face the type table allows, and stitches the result
-back onto the ground around it.
+Raises every covered face the type table allows.
 
 A face the table forbids -- a wall the brush centred on -- is left alone
 and reported in `skipped`, not thrown. The stroke still does everything
