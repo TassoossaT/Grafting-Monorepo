@@ -364,6 +364,41 @@ function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly Const
   return [...merged.values()];
 }
 
+/**
+ * Marks every lattice quad whose centre already sits inside some region as
+ * submitted, so the stroke generates only over open ground.
+ *
+ * This is what enforces "terrain is never created above anything" precisely,
+ * face by face. Refusing the whole stroke because its edge happened to graze
+ * a wall was the blunt version of the same rule -- and wrong, since a wall
+ * *stands on* terrain and so always overlaps it in XZ.
+ */
+function blockOccupiedQuads(ctx: ToolContext, session: BrushSession): void {
+  const centroids: [number, number][] = [];
+  const quadIndices: number[] = [];
+  session.mesh.quads.forEach((quad, quadIndex) => {
+    let x = 0;
+    let z = 0;
+    let corners = 0;
+    for (const vertexIndex of quad) {
+      const local = session.mesh.vertices[vertexIndex];
+      if (local === undefined) continue;
+      x += session.origin.x + local.x;
+      z += session.origin.z + local.y;
+      corners += 1;
+    }
+    if (corners === 0) return;
+    centroids.push([x / corners, z / corners]);
+    quadIndices.push(quadIndex);
+  });
+  if (centroids.length === 0) return;
+
+  for (const hit of ctx.runtime.classifyPoints(centroids)) {
+    const quadIndex = quadIndices[hit.index];
+    if (quadIndex !== undefined) session.submittedQuads.add(quadIndex);
+  }
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -384,49 +419,52 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
 
-    // Ground already under the brush is *raised*, never painted over. Asking
-    // the engine what is there first is what makes that possible: a stroke
-    // used to build its own independent lattice and submit it regardless,
-    // which stacked geometry on every pass and collided outright wherever
-    // two strokes happened to derive the same cycle.
+    // One stroke does both, per area -- it is not a choice between them.
+    // Where ground already exists the covered faces are raised; where it
+    // does not, terrain is generated. A stroke uniting two patches spans
+    // exactly that mix: it touches both and its middle is empty, so
+    // treating the two as alternatives fills nothing.
+    //
+    // The raise goes first because generation reads live state twice -- which
+    // quads sit over open ground, and which existing nodes to weld onto.
+    // Running it against the pre-raise state would weld onto nodes the
+    // raise then reclaims as orphans. Occupancy is unaffected by the order:
+    // raising ground moves it in Y, never in XZ.
     const covered = coveredByStroke(ctx, gesture);
-    if (covered.length > 0) {
-      const outcome = restackTerrain(ctx, params.targetSurface, covered, causeId);
-      if ("reason" in outcome) {
-        ctx.reportFeedback({ tone: "error", message: outcome.reason });
-        return;
-      }
-      if (outcome.raisedFaces > 0) {
-        ctx.reportFeedback({
-          tone: "success",
-          message: `Terreno elevado: ${outcome.raisedFaces} faces, ${outcome.bandFaces} de ligação.`,
-        });
-        return;
-      }
-    }
+    const raised =
+      covered.length > 0
+        ? restackTerrain(ctx, params.targetSurface, covered, causeId)
+        : { raisedFaces: 0, bandFaces: 0, skipped: [] };
 
-    // Nothing underneath (or only clipped faces the stroke must not drag):
-    // this is bare ground, so generate terrain where there is none.
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
+    blockOccupiedQuads(ctx, session);
+
     const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
     const newSurfaces: ConstructionSurfaceSpec[] = [];
     for (const sample of gesture.samples) {
       revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
     }
-    if (newNodes.length === 0 && newSurfaces.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhum terreno gerado." });
+    if (newSurfaces.length > 0) {
+      ctx.runtime.applyIrregularTerrainPatch(newNodes, newSurfaces, "local", causeId);
+    }
+
+    const parts: string[] = [];
+    if (newSurfaces.length > 0) parts.push(`${newSurfaces.length} faces novas`);
+    if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (+${raised.bandFaces} de ligação)`);
+    if (parts.length === 0) {
+      ctx.reportFeedback({
+        tone: "info",
+        message:
+          raised.skipped.length > 0
+            ? raised.skipped[0] ?? "Nada a fazer aqui."
+            : "Nada a fazer aqui.",
+      });
       return;
     }
-    ctx.runtime.applyIrregularTerrainPatch(
-      newNodes,
-      newSurfaces,
-      "local",
-      `${ctx.tableId}:terrain-sculpt-reveal:${ctx.nextSequence()}`,
-    );
     ctx.reportFeedback({
       tone: "success",
-      message: `Terreno gerado: ${newSurfaces.length} superfícies, ${newNodes.length} nós.`,
+      message: `Terreno: ${parts.join(", ")}.${raised.skipped.length > 0 ? ` ${raised.skipped[0]}` : ""}`,
     });
   },
 };

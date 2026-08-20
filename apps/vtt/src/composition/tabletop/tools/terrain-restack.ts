@@ -1,8 +1,4 @@
-import {
-  firstRefusal,
-  resolveCoverage,
-  type ResolvedCoverage,
-} from "@/features/edit-construction";
+import { resolveCoverage, type ResolvedCoverage } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionNodeId,
@@ -37,11 +33,14 @@ export const ELEVATION_STEP = 0.5;
 export interface RestackOutcome {
   readonly raisedFaces: number;
   readonly bandFaces: number;
-}
-
-/** Refusal from the type table -- the whole stroke is abandoned, not part of it. */
-export interface RestackRefusal {
-  readonly reason: string;
+  /**
+   * Why some covered faces were left alone -- a wall the brush centred on,
+   * most commonly. Reported rather than thrown: refusing the *whole* stroke
+   * over one such face was the earlier behaviour, and it meant painting
+   * terrain anywhere near a wall did nothing at all, since a wall stands on
+   * terrain and therefore always overlaps it in XZ.
+   */
+  readonly skipped: readonly string[];
 }
 
 function elevatedId(nodeId: ConstructionNodeId, salt: number): ConstructionNodeId {
@@ -64,26 +63,32 @@ export function facesToRaise(resolved: readonly ResolvedCoverage[]): readonly Co
 }
 
 /**
- * Raises every covered face by one step and stitches the result back onto
- * the ground around it.
+ * Raises every covered face the type table allows, and stitches the result
+ * back onto the ground around it.
  *
- * Returns a refusal when the type table forbids any part of what the stroke
- * touched -- terrain crossing a wall, most commonly. One refusal condemns
- * the whole stroke: terraforming everything except the wall would be worse
- * than doing nothing.
+ * A face the table forbids -- a wall the brush centred on -- is left alone
+ * and reported in `skipped`, not thrown. The stroke still does everything
+ * else it was asked to.
  */
 export function restackTerrain(
   ctx: ToolContext,
   paintedType: string,
   covered: readonly ConstructionCoveredRegion[],
   causeId: string,
-): RestackOutcome | RestackRefusal {
+): RestackOutcome {
   const resolved = resolveCoverage(paintedType, covered);
-  const refusal = firstRefusal(resolved);
-  if (refusal !== undefined) return { reason: refusal };
+  // Only a face the brush actually covers can be refused; one it merely
+  // clips is none of this stroke's business either way.
+  const skipped = [
+    ...new Set(
+      resolved
+        .filter((entry) => entry.covered.coverage === "centroid" && entry.interaction.kind === "forbid")
+        .map((entry) => (entry.interaction.kind === "forbid" ? entry.interaction.reason : "")),
+    ),
+  ].filter((reason) => reason.length > 0);
 
   const raising = facesToRaise(resolved);
-  if (raising.length === 0) return { raisedFaces: 0, bandFaces: 0 };
+  if (raising.length === 0) return { raisedFaces: 0, bandFaces: 0, skipped };
 
   // Positions must be read *before* the removal: the engine's own orphan
   // cleanup deletes every interior node of the patch, and their heights are
@@ -128,7 +133,7 @@ export function restackTerrain(
   );
 
   const bandFaces = stitchBand(ctx, removal.exposedLoops, paintedType, prefix, salt, causeId);
-  return { raisedFaces: raising.length, bandFaces };
+  return { raisedFaces: raising.length, bandFaces, skipped };
 }
 
 /**

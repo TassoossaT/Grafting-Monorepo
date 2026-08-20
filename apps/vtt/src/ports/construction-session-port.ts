@@ -407,6 +407,18 @@ export interface ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
+  /**
+   * Which of `points` already sit inside a region -- the per-point form of
+   * {@link getFootprintCoverage}, for a generator deciding face by face
+   * whether the ground under it is free. A stroke spanning both occupied and
+   * open ground needs that distinction *within* its own area, which one
+   * footprint-wide verdict cannot give.
+   *
+   * Indexed back to the request; a point over open ground is simply absent.
+   */
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

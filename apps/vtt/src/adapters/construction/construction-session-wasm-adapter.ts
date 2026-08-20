@@ -289,6 +289,15 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#regionEdit(this.#require().remove_hole_json(JSON.stringify({ surfaceKey, index })));
   }
 
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
+    const wire = JSON.parse(this.#require().classify_points_json(JSON.stringify({ points }))) as {
+      hits: readonly { index: number; surfaceKey: readonly string[]; surfaceType: string }[];
+    };
+    return wire.hits;
+  }
+
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
     const wire = JSON.parse(this.#require().region_topology_json(JSON.stringify({ surfaceKey }))) as
       | RegionTopologyWire

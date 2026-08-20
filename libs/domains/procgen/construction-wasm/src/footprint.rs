@@ -231,6 +231,85 @@ fn covered_region(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassifyPointsRequest {
+    /// XZ points to test, in the caller's own order.
+    pub points: Vec<[f32; 2]>,
+}
+
+/// One point that landed inside a region, by its index in the request.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointHitDto {
+    pub index: usize,
+    pub surface_key: Vec<String>,
+    pub surface_type: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassifyPointsResponse {
+    /// Only the points that hit something; a point over open ground is
+    /// simply absent, so the common "mostly empty" case stays small.
+    pub hits: Vec<PointHitDto>,
+}
+
+/// Which of `points` fall inside an already-registered region.
+///
+/// The precise, cheap form of "is there already something here?" -- what a
+/// generator consults per candidate face so it builds only over open ground.
+/// A footprint-wide answer ([`footprint_coverage`]) cannot serve this: a
+/// stroke that spans both occupied and open ground needs the distinction
+/// *within* its own area, not one verdict for the whole thing.
+pub fn classify_points(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    surfaces: &SurfaceRegistry,
+    request: ClassifyPointsRequest,
+) -> Result<ClassifyPointsResponse, String> {
+    let mut hits = Vec::new();
+    let mut polygons: Vec<(RegionId, String, Vec<Vec<[f32; 2]>>)> = Vec::new();
+    for region_id in topology.region_ids() {
+        let (Some(region), Some(surface)) = (
+            topology.region(&region_id),
+            surfaces.region_surface(&region_id),
+        ) else {
+            continue;
+        };
+        let rings: Vec<Vec<[f32; 2]>> = region
+            .outer_loops()
+            .iter()
+            .filter_map(|loop_| loop_polygon(topology, graph, loop_))
+            .collect();
+        if rings.is_empty() {
+            continue;
+        }
+        polygons.push((
+            region_id,
+            surface.surface_type().as_str().to_owned(),
+            rings,
+        ));
+    }
+
+    for (index, point) in request.points.iter().enumerate() {
+        for (region_id, surface_type, rings) in &polygons {
+            if rings
+                .iter()
+                .any(|ring| polygon_contains_point(ring, *point))
+            {
+                hits.push(PointHitDto {
+                    index,
+                    surface_key: region_id_to_wire(region_id),
+                    surface_type: surface_type.clone(),
+                });
+                break;
+            }
+        }
+    }
+    Ok(ClassifyPointsResponse { hits })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,6 +418,50 @@ mod tests {
         .unwrap()
         .covered;
         assert_eq!(covered[0].centroid[1], 5.0);
+    }
+
+    /// The distinction one footprint-wide verdict cannot give: a stroke
+    /// spanning occupied and open ground needs to know, face by face, which
+    /// is which. This is what stops a generator building on top of what is
+    /// already there while still letting it fill the gap beside it.
+    #[test]
+    fn classify_points_separates_occupied_ground_from_open_ground() {
+        let (graph, topology, surfaces) = two_faces();
+        let response = classify_points(
+            &graph,
+            &topology,
+            &surfaces,
+            ClassifyPointsRequest {
+                points: vec![[0.5, 0.5], [9.0, 9.0], [1.5, 0.5]],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            response
+                .hits
+                .iter()
+                .map(|hit| (hit.index, hit.surface_key[1].as_str()))
+                .collect::<Vec<_>>(),
+            vec![(0, "face0"), (2, "face1")],
+            "the open-ground point is simply absent, not reported as a miss"
+        );
+        assert_eq!(response.hits[0].surface_type, "terrain");
+    }
+
+    #[test]
+    fn classify_points_over_an_empty_session_reports_nothing() {
+        let (graph, topology, surfaces) = two_faces();
+        let response = classify_points(
+            &graph,
+            &topology,
+            &surfaces,
+            ClassifyPointsRequest {
+                points: vec![[50.0, 50.0]],
+            },
+        )
+        .unwrap();
+        assert!(response.hits.is_empty());
     }
 
     #[test]

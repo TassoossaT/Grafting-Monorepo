@@ -293,6 +293,17 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Which of the given XZ points already sit inside a region -- what a
+    /// generator consults so it only builds over open ground. See
+    /// `footprint::classify_points`.
+    pub fn classify_points_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            footprint::classify_points(&self.graph, &self.topology, &self.surfaces, request)
+                .map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     /// `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
     pub fn duplicate_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;

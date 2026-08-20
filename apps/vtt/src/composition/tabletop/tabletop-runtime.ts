@@ -146,6 +146,10 @@ export interface TabletopRuntime {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
+  /** Which of `points` already sit inside a region -- per-point, for a generator building only over open ground. */
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Removes a set of regions in one transaction, reporting the rim to stitch onto. */
   deleteRegions(
     surfaceKeys: readonly ConstructionSurfaceKey[],
@@ -824,6 +828,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): readonly ConstructionCoveredRegion[] {
     this.#requireReady("querying a footprint's coverage");
     return this.#construction.getFootprintCoverage(polygon);
+  }
+
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
+    this.#requireReady("classifying points");
+    return this.#construction.classifyPoints(points);
   }
 
   deleteRegions(
