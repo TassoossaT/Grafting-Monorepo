@@ -1125,29 +1125,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     for (const node of nodes) this.#construction.addNode(node.id, node.position);
 
-    // A duplicate node-set is an *expected* outcome of the irregular-terrain
-    // brush's own merge strategy -- `irregular-terrain-tool.ts`'s `revealNear`
-    // deliberately welds a new stroke's vertices onto nearby existing nodes,
-    // so two overlapping strokes (or two overlapping dabs of the same
-    // stroke) can legitimately compute the exact same cycle twice. If a
-    // surface for that cycle already exists, that surface already *is* the
-    // connected geometry this call wanted -- nothing to add, nothing wrong.
-    // Each surface gets its own attempt (not one `.map()` that aborts the
-    // whole batch on the first failure) so one redundant cycle can't also
-    // silently drop every surface queued after it in the same call.
+    // No duplicate tolerance here, on purpose. A cycle that already has a
+    // region is not something to swallow: `add_surface` registers the
+    // boundary edges *before* the surface, so a clash surfaces as
+    // `an edge already exists with identity ...` from the topology, and by
+    // then some edges of that cycle may already be registered -- swallowing
+    // it would leave that debris behind. The caller is responsible for not
+    // asking twice; `terrain-sculpt-tool.ts` does that by classifying each
+    // resolved face's *welded* centroid against live regions before
+    // submitting. (The branch that used to sit here matched
+    // `a surface already exists for node set`, which the region model no
+    // longer reaches -- it had been dead since the SurfaceRegion migration,
+    // which is why the duplicate came through as a crash.)
     const surfaceKeys: ConstructionSurfaceKey[] = [];
-    for (const spec of surfaces) {
-      try {
-        surfaceKeys.push(this.#construction.addSurface(spec));
-      } catch (error) {
-        // The Rust side throws a bare `JsValue::from_str` for this, not a
-        // wrapped `Error` -- see `session.rs`'s `to_js_error` -- so a plain
-        // string is the normal shape here, not just a defensive fallback.
-        const message = typeof error === "string" ? error : error instanceof Error ? error.message : undefined;
-        const isDuplicate = message !== undefined && message.includes("a surface already exists for node set");
-        if (!isDuplicate) throw error;
-      }
-    }
+    for (const spec of surfaces) surfaceKeys.push(this.#construction.addSurface(spec));
 
     this.#applyConstructionMutation(surfaceKeys, [], origin, causeId, (map) =>
       this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),

@@ -364,6 +364,67 @@ function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly Const
   return [...merged.values()];
 }
 
+interface ResolvedPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  readonly surfaces: readonly ConstructionSurfaceSpec[];
+}
+
+/**
+ * Drops every resolved face that, *after welding*, landed on ground that
+ * already has one.
+ *
+ * `blockOccupiedQuads` cannot catch these: it runs before resolution and so
+ * tests each quad where the lattice put it, not where welding pulled it.
+ * A corner welds to anything within {@link CROSS_SESSION_WELD_EPSILON}, which
+ * is a sizeable fraction of one cell, so a quad whose own centre sits just
+ * outside an existing face can still have all four corners snap onto that
+ * face's nodes -- reproducing it exactly. Submitting that is what raised
+ * `an edge already exists with identity ...`: same cycle, same derived
+ * region id, same derived edge ids.
+ *
+ * Testing the welded centroid is the same question asked at the only moment
+ * the answer is final. Nodes left unreferenced by the surviving faces are
+ * dropped too, so a rejected face cannot leave loose nodes behind.
+ */
+function pruneFacesOnExistingGround(
+  ctx: ToolContext,
+  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  surfaces: readonly ConstructionSurfaceSpec[],
+): ResolvedPatch {
+  if (surfaces.length === 0) return { nodes, surfaces };
+
+  const pending = new Map<ConstructionNodeId, ConstructionPosition>();
+  for (const node of nodes) pending.set(node.id, node.position);
+  const live = ctx.runtime.getSnapshot().map.nodePositions;
+  const positionOf = (id: ConstructionNodeId): ConstructionPosition | undefined =>
+    pending.get(id) ?? live.get(id)?.position;
+
+  const centroids: [number, number][] = surfaces.map((surface) => {
+    let x = 0;
+    let z = 0;
+    let corners = 0;
+    for (const id of surface.cycle) {
+      const position = positionOf(id);
+      if (position === undefined) continue;
+      x += position.x;
+      z += position.z;
+      corners += 1;
+    }
+    // A face none of whose corners resolved has no centre to test; NaN
+    // never falls inside any polygon, so it survives here and fails loudly
+    // later rather than being silently swallowed by this filter.
+    return corners === 0 ? [NaN, NaN] : [x / corners, z / corners];
+  });
+
+  const occupied = new Set(ctx.runtime.classifyPoints(centroids).map((hit) => hit.index));
+  if (occupied.size === 0) return { nodes, surfaces };
+
+  const kept = surfaces.filter((_, index) => !occupied.has(index));
+  const referenced = new Set<ConstructionNodeId>();
+  for (const surface of kept) for (const id of surface.cycle) referenced.add(id);
+  return { nodes: nodes.filter((node) => referenced.has(node.id)), surfaces: kept };
+}
+
 /**
  * Marks every lattice quad whose centre already sits inside some region as
  * submitted, so the stroke generates only over open ground.
@@ -447,12 +508,13 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     for (const sample of gesture.samples) {
       revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
     }
-    if (newSurfaces.length > 0) {
-      ctx.runtime.applyIrregularTerrainPatch(newNodes, newSurfaces, "local", causeId);
+    const patch = pruneFacesOnExistingGround(ctx, newNodes, newSurfaces);
+    if (patch.surfaces.length > 0) {
+      ctx.runtime.applyIrregularTerrainPatch(patch.nodes, patch.surfaces, "local", causeId);
     }
 
     const parts: string[] = [];
-    if (newSurfaces.length > 0) parts.push(`${newSurfaces.length} faces novas`);
+    if (patch.surfaces.length > 0) parts.push(`${patch.surfaces.length} faces novas`);
     if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
     if (parts.length === 0) {
       ctx.reportFeedback({
