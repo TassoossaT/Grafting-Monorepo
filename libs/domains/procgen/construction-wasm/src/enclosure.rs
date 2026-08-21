@@ -21,22 +21,22 @@
 //! editing: a courtyard between two unrelated patches is a closed loop
 //! enclosed by another closed loop, and a global sweep would pave it over
 //! because a brush ran somewhere else entirely. Confining the walk to the
-//! painted nodes also collapses the enclosure test from every candidate on
-//! the map to the handful this stroke bounds.
+//! painted nodes also keeps the work proportional to the stroke rather than
+//! to the table.
 //!
 //! **No policy here.** Which loops are worth filling, and with what surface
 //! type, is the caller's decision; this module has no opinion about terrain.
 
 use serde::{Deserialize, Serialize};
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use grafting_graph_core::{
-    ContourEdgeId, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse,
+    ContourEdgeId, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse, RegionId,
 };
 
 use crate::editing::SessionGraph;
-use crate::footprint::{loop_polygon, polygon_contains_point};
+use crate::footprint::{loop_polygon, polygon_contains_point, xz};
 
 /// The region to look inside: the nodes a stroke touched.
 ///
@@ -109,23 +109,274 @@ fn centroid_of(graph: &SessionGraph, nodes: &[NodeId]) -> Option<[f32; 3]> {
     Some([sum[0] / count, sum[1] / count, sum[2] / count])
 }
 
-/// Every closed loop of free boundary, *within `request`'s nodes*, that
-/// another such loop encloses.
+/// Every edge incident to each node, built once so a walk can look at the
+/// fan around a node without rescanning the topology at every step.
+fn incidence(topology: &ContourTopology) -> BTreeMap<NodeId, Vec<ContourEdgeId>> {
+    let mut fans: BTreeMap<NodeId, Vec<ContourEdgeId>> = BTreeMap::new();
+    for id in topology.edge_ids() {
+        let Some(edge) = topology.edge(&id) else {
+            continue;
+        };
+        fans.entry(edge.start_node().clone())
+            .or_default()
+            .push(id.clone());
+        fans.entry(edge.end_node().clone()).or_default().push(id);
+    }
+    fans
+}
+
+/// `edge`'s far endpoint seen from `node`, or `None` if it does not touch it.
+fn opposite_end(topology: &ContourTopology, edge: &ContourEdgeId, node: &NodeId) -> Option<NodeId> {
+    let edge = topology.edge(edge)?;
+    if edge.start_node() == node {
+        Some(edge.end_node().clone())
+    } else if edge.end_node() == node {
+        Some(edge.start_node().clone())
+    } else {
+        None
+    }
+}
+
+/// The edges meeting at `node`, in angular order around it in XZ.
 ///
-/// **Why enclosure and not orientation.** Free edges split into two kinds:
-/// the outer silhouette of a patch, and the rim of a hole inside it. Telling
+/// Straight chords, which is what a terrain boundary is made of. An arc
+/// leaving its node at a different angle from its chord would need its
+/// tangent here instead; the walk that reads this only ever consults it at a
+/// node where two gaps meet, so a wrong angle there costs one pairing, not
+/// the surface.
+fn fan_around(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    fans: &BTreeMap<NodeId, Vec<ContourEdgeId>>,
+    node: &NodeId,
+) -> Option<Vec<ContourEdgeId>> {
+    let centre = xz(graph, node)?;
+    let mut ordered: Vec<(f32, ContourEdgeId)> = Vec::new();
+    for edge in fans.get(node)? {
+        let Some(far) = opposite_end(topology, edge, node) else {
+            continue;
+        };
+        let Some(point) = xz(graph, &far) else {
+            continue;
+        };
+        ordered.push((
+            (point[1] - centre[1]).atan2(point[0] - centre[0]),
+            edge.clone(),
+        ));
+    }
+    ordered.sort_by(|left, right| left.0.total_cmp(&right.0));
+    Some(ordered.into_iter().map(|(_, edge)| edge).collect())
+}
+
+/// Which edge continues the *same gap* at `node` after arriving along
+/// `arrived`.
+///
+/// Two gaps meeting at a single node -- two skipped faces sitting corner to
+/// corner, which is what a patchy stroke produces constantly -- offer a walk
+/// two ways onward, and taking the wrong one splices both gaps into a single
+/// figure-eight loop that is not a face anybody can register. Picking by the
+/// geometry around the node settles it exactly.
+///
+/// `arrived` is free, so exactly one face touches it, and that face occupies
+/// exactly one of the two sectors meeting along it at `node`. The other
+/// sector is therefore empty -- nothing can cover it without also using
+/// `arrived` as a boundary -- and the edge bounding that empty sector is
+/// simply `arrived`'s angular neighbour on the far side from the face's own
+/// other edge here. No winding is assumed anywhere: which side is solid is
+/// read off the face that is actually there.
+fn continuation(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    fans: &BTreeMap<NodeId, Vec<ContourEdgeId>>,
+    node: &NodeId,
+    arrived: &ContourEdgeId,
+) -> Option<ContourEdgeId> {
+    let region_id = topology.regions_using_edge(arrived).into_iter().next()?;
+    let region = topology.region(&region_id)?;
+    let solid = region
+        .outer_loops()
+        .iter()
+        .chain(region.holes())
+        .flatten()
+        .map(|use_| use_.edge())
+        .find(|edge| *edge != arrived && opposite_end(topology, edge, node).is_some())?
+        .clone();
+
+    let fan = fan_around(graph, topology, fans, node)?;
+    let index = fan.iter().position(|edge| edge == arrived)?;
+    let before = fan[(index + fan.len() - 1) % fan.len()].clone();
+    let after = fan[(index + 1) % fan.len()].clone();
+    if before == solid {
+        Some(after)
+    } else if after == solid {
+        Some(before)
+    } else {
+        None
+    }
+}
+
+/// Chains free boundary into closed loops, resolving a node where two gaps
+/// meet by [`continuation`] rather than by whichever edge happened to come
+/// first in the list.
+///
+/// A walk that cannot close puts back every edge it consumed. Otherwise one
+/// open chain -- a rim running off the edge of the caller's scope -- would
+/// swallow edges belonging to loops that *do* close, and the gaps they bound
+/// would go unreported for a reason having nothing to do with them.
+fn assemble_free_loops(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    free: &[OrientedEdgeUse],
+) -> Vec<ContourLoop> {
+    let fans = incidence(topology);
+    let ends = |use_: &OrientedEdgeUse| -> Option<(NodeId, NodeId)> {
+        let edge = topology.edge(use_.edge())?;
+        Some(if use_.is_reversed() {
+            (edge.end_node().clone(), edge.start_node().clone())
+        } else {
+            (edge.start_node().clone(), edge.end_node().clone())
+        })
+    };
+
+    let mut outgoing: BTreeMap<NodeId, Vec<usize>> = BTreeMap::new();
+    for (index, use_) in free.iter().enumerate() {
+        if let Some((start, _)) = ends(use_) {
+            outgoing.entry(start).or_default().push(index);
+        }
+    }
+
+    let mut used = vec![false; free.len()];
+    let mut loops = Vec::new();
+    for seed in 0..free.len() {
+        if used[seed] {
+            continue;
+        }
+        let Some((origin, mut cursor)) = ends(&free[seed]) else {
+            continue;
+        };
+        let mut walked = vec![seed];
+        let mut arrived = free[seed].edge().clone();
+        used[seed] = true;
+
+        while cursor != origin {
+            let candidates: Vec<usize> = outgoing
+                .get(&cursor)
+                .into_iter()
+                .flatten()
+                .copied()
+                .filter(|index| !used[*index])
+                .collect();
+            let chosen = match candidates.as_slice() {
+                [] => None,
+                [only] => Some(*only),
+                _ => continuation(graph, topology, &fans, &cursor, &arrived).and_then(|edge| {
+                    candidates
+                        .iter()
+                        .copied()
+                        .find(|index| *free[*index].edge() == edge)
+                }),
+            };
+            let Some(index) = chosen else {
+                break;
+            };
+            let Some((_, end)) = ends(&free[index]) else {
+                break;
+            };
+            used[index] = true;
+            walked.push(index);
+            arrived = free[index].edge().clone();
+            cursor = end;
+        }
+
+        if cursor == origin {
+            loops.push(walked.iter().map(|index| free[*index].clone()).collect());
+        } else {
+            for index in walked {
+                used[index] = false;
+            }
+        }
+    }
+    loops
+}
+
+/// A point in the middle of a region, for asking which side of a loop it is
+/// on.
+///
+/// The centroid of the region's outer loop, which is inside it for the
+/// convex faces a lattice produces. For a region shaped so that its own
+/// centroid falls outside it, the answer degrades toward "this loop is not a
+/// gap" -- the safe direction, since the cost is a hole left alone rather
+/// than a face laid over something.
+fn region_probe(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    region: &RegionId,
+) -> Option<[f32; 2]> {
+    let outer = topology.region(region)?.outer_loops().first()?.clone();
+    let polygon = loop_polygon(topology, graph, &outer)?;
+    if polygon.is_empty() {
+        return None;
+    }
+    let mut sum = [0.0_f32; 2];
+    for point in &polygon {
+        sum[0] += point[0];
+        sum[1] += point[1];
+    }
+    let count = polygon.len() as f32;
+    Some([sum[0] / count, sum[1] / count])
+}
+
+/// Whether any face along this loop lies *inside* it.
+///
+/// This is what tells a gap from the outline of the surface around it, and
+/// it asks only about the faces the loop already touches -- no second loop
+/// has to be present for the answer to be right. A gap's rim has its
+/// neighbours on the outside of it; a patch's own outline has them on the
+/// inside, because it goes around them. That difference is what lets the
+/// query answer for a *part* of a surface: a brush covering the middle of an
+/// existing patch names nodes whose outline is nowhere in scope, and asking
+/// "what encloses this loop" would find nothing to enclose it and call the
+/// gap no gap at all.
+fn wraps_a_neighbour(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    probes: &mut BTreeMap<RegionId, Option<[f32; 2]>>,
+    loop_: &ContourLoop,
+    polygon: &[[f32; 2]],
+) -> bool {
+    for use_ in loop_ {
+        for region in topology.regions_using_edge(use_.edge()) {
+            let probe = match probes.get(&region) {
+                Some(cached) => *cached,
+                None => {
+                    let computed = region_probe(graph, topology, &region);
+                    probes.insert(region.clone(), computed);
+                    computed
+                }
+            };
+            if let Some(point) = probe {
+                if polygon_contains_point(polygon, point) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Every closed loop of free boundary, *within `request`'s nodes*, that no
+/// face fills.
+///
+/// **Why the neighbours and not the winding.** Free edges split into two
+/// kinds: the outline of a patch, and the rim of a gap inside it. Telling
 /// them apart by winding assumes every face was registered with a consistent
 /// winding, which nothing in this crate enforces -- a generator emitting one
-/// quad clockwise would then have its outer boundary reported as a hole and
-/// get a face laid over the whole patch. Enclosure asks the question
-/// directly: a hole is a loop something else contains, and an outer
-/// silhouette is contained by nothing. Disjoint patches fall out correctly
-/// for free -- neither contains the other, so neither is a hole.
-///
-/// The outer silhouette of the scope is what gives the enclosure test
-/// something to be enclosed *by*, so it must stay in the candidate set even
-/// though it is never itself reported -- which is why the filter is on the
-/// nodes rather than on, say, only the edges this stroke minted.
+/// quad clockwise would then have its outline reported as a gap and get a
+/// face laid over the whole patch. Asking where the loop's own neighbours
+/// lie needs no such assumption, and needs no second loop either: a gap has
+/// the faces around it on the *outside* of its rim, an outline has them on
+/// the inside because it goes around them. Disjoint patches fall out for
+/// free, since each outline wraps its own faces.
 pub fn unfilled_loops(
     graph: &SessionGraph,
     topology: &ContourTopology,
@@ -183,9 +434,9 @@ pub fn unfilled_loops(
         .map(|use_| use_.edge().clone())
         .collect();
 
-    let closed = topology.assemble_oriented_loops(&free);
-    let mut candidates: Vec<(ContourLoop, Vec<NodeId>, Vec<[f32; 2]>)> = Vec::new();
-    for loop_ in closed {
+    let mut probes: BTreeMap<RegionId, Option<[f32; 2]>> = BTreeMap::new();
+    let mut loops = Vec::new();
+    for loop_ in assemble_free_loops(graph, topology, &free) {
         if loop_.iter().all(|use_| declared.contains(use_.edge())) {
             continue;
         }
@@ -195,25 +446,10 @@ pub fn unfilled_loops(
         ) else {
             continue;
         };
-        candidates.push((loop_, nodes, polygon));
-    }
-
-    let mut loops = Vec::new();
-    for (index, (loop_, nodes, polygon)) in candidates.iter().enumerate() {
-        // Any vertex of a hole lies strictly inside whatever encloses it, so
-        // one probe settles it -- no need for area, winding, or a full
-        // polygon-in-polygon test.
-        let Some(&probe) = polygon.first() else {
-            continue;
-        };
-        let enclosed = candidates
-            .iter()
-            .enumerate()
-            .any(|(other, (_, _, outer))| other != index && polygon_contains_point(outer, probe));
-        if !enclosed {
+        if wraps_a_neighbour(graph, topology, &mut probes, &loop_, &polygon) {
             continue;
         }
-        let Some(centroid) = centroid_of(graph, nodes) else {
+        let Some(centroid) = centroid_of(graph, &nodes) else {
             continue;
         };
         loops.push(UnfilledLoopDto {
@@ -607,6 +843,50 @@ mod tests {
                 .loops
                 .is_empty()
         );
+    }
+
+    /// Two gaps touching at one corner, which a patchy stroke produces
+    /// constantly. Walking the free boundary greedily splices them into one
+    /// figure-eight loop through the shared node: a single bow-tie "face"
+    /// that fills neither gap, and one report where there should be two.
+    #[test]
+    fn two_gaps_meeting_at_a_corner_are_two_loops_not_a_figure_eight() {
+        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1), (2, 2)]);
+        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        assert_eq!(response.loops.len(), 2, "one loop per gap");
+        let mut centres: Vec<[f32; 3]> = response.loops.iter().map(|l| l.centroid).collect();
+        centres.sort_by(|left, right| left[0].total_cmp(&right[0]));
+        assert_eq!(centres, vec![[1.5, 0.0, 1.5], [2.5, 0.0, 2.5]]);
+        for hole in &response.loops {
+            assert_eq!(hole.boundary.len(), 4, "each gap keeps its own four sides");
+        }
+    }
+
+    /// Two gaps sharing a whole edge are one gap, and come back as one
+    /// six-sided loop rather than two overlapping quads.
+    #[test]
+    fn two_gaps_sharing_an_edge_are_reported_as_one() {
+        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1), (2, 1)]);
+        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        assert_eq!(response.loops.len(), 1);
+        assert_eq!(response.loops[0].boundary.len(), 6);
+    }
+
+    /// The repaint case, and the reason the outline cannot be what decides.
+    /// A brush passing over the middle of an existing patch names only the
+    /// nodes it covered; the patch's own outline is nowhere in that scope,
+    /// and every edge bounding the scope is interior to the patch and so not
+    /// free at all. The gap is still a gap, and still fillable.
+    #[test]
+    fn a_gap_is_found_when_the_scope_covers_only_the_middle_of_a_patch() {
+        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1)]);
+        let middle: Vec<String> = (0..=3)
+            .flat_map(|column| (0..=3).map(move |row| format!("n{column}_{row}")))
+            .collect();
+        let named: Vec<&str> = middle.iter().map(String::as_str).collect();
+        let response = unfilled_loops(&graph, &topology, scope(&named)).unwrap();
+        assert_eq!(response.loops.len(), 1, "the gap in the middle");
+        assert_eq!(response.loops[0].centroid, [1.5, 0.0, 1.5]);
     }
 
     /// A hole somebody asked for is not a hole to repair. A floor with a

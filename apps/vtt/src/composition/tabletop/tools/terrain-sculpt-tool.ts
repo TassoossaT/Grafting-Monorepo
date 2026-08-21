@@ -602,6 +602,20 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         ? restackTerrain(ctx, params.targetSurface, covered, causeId)
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
+    // Mend the ground that is already here *before* generating over it, and
+    // for two reasons. It is what "pass the brush over a hole to close it"
+    // has to mean -- the rim of that hole is already in the map, so closing
+    // it is a region registration, never new geometry. And doing it first
+    // makes the gap occupied ground, so the lattice below skips it: a fresh
+    // lattice is seeded at this gesture's own origin and lands wherever the
+    // pointer went, so its vertices do not line up with the older mesh
+    // around the hole and only some of them fall close enough to weld. What
+    // it would generate there is a quad at its own offset, overlapping the
+    // rim instead of meeting it -- more free boundary, not less.
+    const existing = new Set<ConstructionNodeId>();
+    for (const region of covered) for (const id of region.nodeIds) existing.add(id);
+    const mended = fillUnfilledLoops(ctx, [...existing], params.targetSurface, causeId);
+
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
     blockOccupiedQuads(ctx, session);
@@ -628,10 +642,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // those are only the *new* nodes; a cycle also names the existing ones
     // its corners welded onto, and a gap at the seam between old ground and
     // new is bounded by exactly that mix.
-    const touched = new Set<ConstructionNodeId>();
+    const touched = new Set<ConstructionNodeId>(existing);
     for (const surface of resolved.surfaces) for (const id of surface.cycle) touched.add(id);
-    for (const region of covered) for (const id of region.nodeIds) touched.add(id);
-    const filled = fillUnfilledLoops(ctx, [...touched], params.targetSurface, causeId);
+    const filled = mended + fillUnfilledLoops(ctx, [...touched], params.targetSurface, causeId);
 
     const parts: string[] = [];
     if (built > 0) parts.push(`${built} faces novas`);

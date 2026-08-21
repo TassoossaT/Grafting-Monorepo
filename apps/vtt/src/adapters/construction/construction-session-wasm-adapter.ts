@@ -17,6 +17,7 @@ import type {
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
+  ConstructionNodeId,
   ConstructionNodeSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
