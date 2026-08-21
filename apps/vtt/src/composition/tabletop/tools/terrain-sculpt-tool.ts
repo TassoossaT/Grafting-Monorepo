@@ -462,14 +462,47 @@ function fillUnfilledLoops(
       regions: loops.map((loop) => ({
         regionId: loop.nodeIds.join("|"),
         boundary: loop.boundary,
-        surfaceType,
-        physical: true,
+        ...matchTheGroundAround(loop.neighbours, surfaceType),
       })),
     },
     "local",
     causeId,
   );
   return loops.length;
+}
+
+/**
+ * What to make a gap out of: whatever most of the faces around it are made
+ * of, falling back to the brush's own target when it has no neighbours to
+ * copy.
+ *
+ * Filling with the *selected* type instead is what leaves a mended gap a
+ * different colour from the ground it sits in -- paint grass, pass over an
+ * older slate patch to close a hole in it, and the patch comes back with a
+ * green tile in the middle. The stroke never retypes ground it merely passes
+ * over (raising only moves Y), so a gap inside that ground must not be
+ * retyped either. A gap inside terrain this same stroke generated has that
+ * type on every side anyway, so the two cases agree.
+ */
+function matchTheGroundAround(
+  neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[],
+  fallback: string,
+): { readonly surfaceType: string; readonly physical: boolean } {
+  const tally = new Map<string, { count: number; physical: number }>();
+  for (const neighbour of neighbours) {
+    const entry = tally.get(neighbour.surfaceType) ?? { count: 0, physical: 0 };
+    entry.count += 1;
+    if (neighbour.physical) entry.physical += 1;
+    tally.set(neighbour.surfaceType, entry);
+  }
+  let best: { surfaceType: string; count: number; physical: number } | undefined;
+  for (const [surfaceType, entry] of tally) {
+    if (best === undefined || entry.count > best.count) best = { surfaceType, ...entry };
+  }
+  if (best === undefined) return { surfaceType: fallback, physical: true };
+  // Physical wins a tie: a gap left walk-through in the middle of solid
+  // ground is a worse wrong answer than a solid tile in a decorative patch.
+  return { surfaceType: best.surfaceType, physical: best.physical * 2 >= best.count };
 }
 
 /**

@@ -144,6 +144,14 @@ export interface ConstructionUnfilledLoop {
   readonly boundary: readonly ConstructionOrientedEdgeUse[];
   readonly nodeIds: readonly ConstructionNodeId[];
   readonly centroid: ConstructionPosition;
+  /**
+   * The face on the far side of each boundary edge, in the loop's own walk
+   * order and with repeats -- so a caller filling the gap can make it match
+   * the ground around it instead of whatever the current brush happens to
+   * be set to. Reported, never applied: the engine has no opinion on what a
+   * gap should be made of.
+   */
+  readonly neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[];
 }
 
 export interface ConstructionRemovalOutcome extends RegionEditOutcome {

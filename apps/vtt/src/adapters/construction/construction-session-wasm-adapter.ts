@@ -253,12 +253,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
         readonly boundary: readonly { readonly edgeId: string; readonly reversed: boolean }[];
         readonly nodeIds: readonly string[];
         readonly centroid: WirePosition;
+        readonly neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[];
       }[];
     };
     return wire.loops.map((entry) => ({
       boundary: entry.boundary,
       nodeIds: entry.nodeIds,
       centroid: fromWirePosition(entry.centroid),
+      neighbours: entry.neighbours,
     }));
   }
 

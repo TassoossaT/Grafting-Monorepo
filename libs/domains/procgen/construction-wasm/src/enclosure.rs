@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use grafting_graph_core::{
-    ContourEdgeId, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse, RegionId,
+    ContourEdgeId, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse, RegionId, SurfaceRegistry,
 };
 
 use crate::editing::SessionGraph;
@@ -58,6 +58,17 @@ pub struct BoundaryUseDto {
     pub reversed: bool,
 }
 
+/// The face on the other side of one of a gap's edges.
+///
+/// Reported, never acted on: what a gap should be *made of* is policy, and
+/// policy lives with the caller. All this says is what is actually there.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NeighbourFaceDto {
+    pub surface_type: String,
+    pub physical: bool,
+}
+
 /// One closed loop with no face on it.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,6 +83,10 @@ pub struct UnfilledLoopDto {
     pub node_ids: Vec<String>,
     /// The loop's centroid in world space, averaged over its nodes.
     pub centroid: [f32; 3],
+    /// The face on the far side of each boundary edge, in the loop's own
+    /// walk order and with repeats -- a caller that wants the gap to match
+    /// the ground around it can count them rather than guess.
+    pub neighbours: Vec<NeighbourFaceDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -326,6 +341,32 @@ fn region_probe(
     Some([sum[0] / count, sum[1] / count])
 }
 
+/// What sits on the far side of each of a gap's edges, in walk order.
+///
+/// Repeats are kept on purpose. A gap bounded on three sides by one kind of
+/// ground and on one side by another is a fact about the gap, and a caller
+/// deciding what to fill it with wants the counts, not a set.
+fn neighbours_of(
+    topology: &ContourTopology,
+    surfaces: &SurfaceRegistry,
+    loop_: &ContourLoop,
+) -> Vec<NeighbourFaceDto> {
+    let mut faces = Vec::with_capacity(loop_.len());
+    for use_ in loop_ {
+        let Some(region) = topology.regions_using_edge(use_.edge()).into_iter().next() else {
+            continue;
+        };
+        let Some(surface) = surfaces.region_surface(&region) else {
+            continue;
+        };
+        faces.push(NeighbourFaceDto {
+            surface_type: surface.surface_type().as_str().to_owned(),
+            physical: surface.physical(),
+        });
+    }
+    faces
+}
+
 /// Whether any face along this loop lies *inside* it.
 ///
 /// This is what tells a gap from the outline of the surface around it, and
@@ -380,6 +421,7 @@ fn wraps_a_neighbour(
 pub fn unfilled_loops(
     graph: &SessionGraph,
     topology: &ContourTopology,
+    surfaces: &SurfaceRegistry,
     request: UnfilledLoopsRequest,
 ) -> Result<UnfilledLoopsResponse, String> {
     let scope: BTreeSet<NodeId> = request
@@ -462,6 +504,7 @@ pub fn unfilled_loops(
                 .collect(),
             node_ids: nodes.iter().map(|id| id.as_str().to_owned()).collect(),
             centroid,
+            neighbours: neighbours_of(topology, surfaces, &loop_),
         });
     }
     Ok(UnfilledLoopsResponse { loops })
@@ -650,8 +693,8 @@ mod tests {
 
     #[test]
     fn a_complete_patch_reports_no_hole() {
-        let (graph, topology, _surfaces) = lattice(3, 3, &[]);
-        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        let (graph, topology, surfaces) = lattice(3, 3, &[]);
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap();
         assert!(
             response.loops.is_empty(),
             "the outer silhouette is free boundary but nothing encloses it"
@@ -663,8 +706,8 @@ mod tests {
     /// anything about how the gap came to be.
     #[test]
     fn a_missing_interior_face_is_reported_as_an_unfilled_loop() {
-        let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
-        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        let (graph, topology, surfaces) = lattice(3, 3, &[(1, 1)]);
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap();
         assert_eq!(response.loops.len(), 1);
         let hole = &response.loops[0];
         assert_eq!(hole.boundary.len(), 4);
@@ -682,7 +725,7 @@ mod tests {
     #[test]
     fn a_reported_loop_is_registrable_verbatim_and_closes_the_hole() {
         let (mut graph, mut topology, mut surfaces) = lattice(3, 3, &[(1, 1)]);
-        let hole = unfilled_loops(&graph, &topology, scope_of(&topology))
+        let hole = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
             .unwrap()
             .loops
             .pop()
@@ -721,7 +764,7 @@ mod tests {
                 use_.edge_id
             );
         }
-        assert!(unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
     }
 
     /// Two separate patches are not each other's holes, however close they
@@ -789,7 +832,7 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
     }
 
     /// The scope is the answer, not a speed-up. A stroke somewhere else on
@@ -798,10 +841,10 @@ mod tests {
     /// another, and a courtyard between two patches is precisely such a gap.
     #[test]
     fn a_gap_outside_the_named_region_is_not_reported() {
-        let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
+        let (graph, topology, surfaces) = lattice(3, 3, &[(1, 1)]);
         let elsewhere = scope(&["n0_0", "n1_0", "n1_1", "n0_1"]);
         assert!(
-            unfilled_loops(&graph, &topology, elsewhere)
+            unfilled_loops(&graph, &topology, &surfaces, elsewhere)
                 .unwrap()
                 .loops
                 .is_empty(),
@@ -809,7 +852,7 @@ mod tests {
         );
         // ...and the same graph still reports it to a caller that did.
         assert_eq!(
-            unfilled_loops(&graph, &topology, scope_of(&topology))
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
                 .unwrap()
                 .loops
                 .len(),
@@ -822,9 +865,9 @@ mod tests {
     /// exists to avoid, and it would arrive by accident.
     #[test]
     fn an_empty_scope_finds_nothing_rather_than_everything() {
-        let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
+        let (graph, topology, surfaces) = lattice(3, 3, &[(1, 1)]);
         assert!(
-            unfilled_loops(&graph, &topology, scope(&[]))
+            unfilled_loops(&graph, &topology, &surfaces, scope(&[]))
                 .unwrap()
                 .loops
                 .is_empty()
@@ -836,9 +879,9 @@ mod tests {
     /// case, and it must add nothing.
     #[test]
     fn a_region_whose_only_loop_is_its_own_outline_is_left_alone() {
-        let (graph, topology, _surfaces) = lattice(2, 2, &[]);
+        let (graph, topology, surfaces) = lattice(2, 2, &[]);
         assert!(
-            unfilled_loops(&graph, &topology, scope_of(&topology))
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
                 .unwrap()
                 .loops
                 .is_empty()
@@ -851,8 +894,8 @@ mod tests {
     /// that fills neither gap, and one report where there should be two.
     #[test]
     fn two_gaps_meeting_at_a_corner_are_two_loops_not_a_figure_eight() {
-        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1), (2, 2)]);
-        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        let (graph, topology, surfaces) = lattice(4, 4, &[(1, 1), (2, 2)]);
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap();
         assert_eq!(response.loops.len(), 2, "one loop per gap");
         let mut centres: Vec<[f32; 3]> = response.loops.iter().map(|l| l.centroid).collect();
         centres.sort_by(|left, right| left[0].total_cmp(&right[0]));
@@ -866,10 +909,40 @@ mod tests {
     /// six-sided loop rather than two overlapping quads.
     #[test]
     fn two_gaps_sharing_an_edge_are_reported_as_one() {
-        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1), (2, 1)]);
-        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
+        let (graph, topology, surfaces) = lattice(4, 4, &[(1, 1), (2, 1)]);
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap();
         assert_eq!(response.loops.len(), 1);
         assert_eq!(response.loops[0].boundary.len(), 6);
+    }
+
+    /// A gap comes back with the ground around it described, so a caller can
+    /// fill it to match instead of stamping whatever its brush is set to --
+    /// which is how a mended gap ends up a different colour from the patch
+    /// it sits in.
+    #[test]
+    fn a_gap_reports_what_each_of_its_sides_is_made_of() {
+        let (graph, topology, mut surfaces) = lattice(3, 3, &[(1, 1)]);
+        surfaces
+            .set_region_type(
+                &RegionId::new("face0_1").unwrap(),
+                SurfaceType::new("terrain-grass"),
+            )
+            .unwrap();
+
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap();
+        let hole = &response.loops[0];
+        let mut kinds: Vec<&str> = hole
+            .neighbours
+            .iter()
+            .map(|face| face.surface_type.as_str())
+            .collect();
+        kinds.sort();
+        assert_eq!(
+            kinds,
+            vec!["terrain", "terrain", "terrain", "terrain-grass"],
+            "one side is the retyped face, three are plain terrain"
+        );
+        assert!(hole.neighbours.iter().all(|face| face.physical));
     }
 
     /// The repaint case, and the reason the outline cannot be what decides.
@@ -879,12 +952,12 @@ mod tests {
     /// free at all. The gap is still a gap, and still fillable.
     #[test]
     fn a_gap_is_found_when_the_scope_covers_only_the_middle_of_a_patch() {
-        let (graph, topology, _surfaces) = lattice(4, 4, &[(1, 1)]);
+        let (graph, topology, surfaces) = lattice(4, 4, &[(1, 1)]);
         let middle: Vec<String> = (0..=3)
             .flat_map(|column| (0..=3).map(move |row| format!("n{column}_{row}")))
             .collect();
         let named: Vec<&str> = middle.iter().map(String::as_str).collect();
-        let response = unfilled_loops(&graph, &topology, scope(&named)).unwrap();
+        let response = unfilled_loops(&graph, &topology, &surfaces, scope(&named)).unwrap();
         assert_eq!(response.loops.len(), 1, "the gap in the middle");
         assert_eq!(response.loops[0].centroid, [1.5, 0.0, 1.5]);
     }
@@ -964,7 +1037,7 @@ mod tests {
             .unwrap();
 
         assert!(
-            unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty(),
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty(),
             "the declared hole is somebody's doorway, not a gap to seal"
         );
     }

@@ -319,7 +319,7 @@ impl ConstructionSession {
     pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
         let response =
-            enclosure::unfilled_loops(&self.graph, &self.topology, request).map_err(to_js_error)?;
+            enclosure::unfilled_loops(&self.graph, &self.topology, &self.surfaces, request).map_err(to_js_error)?;
         serialize(&response)
     }
 
