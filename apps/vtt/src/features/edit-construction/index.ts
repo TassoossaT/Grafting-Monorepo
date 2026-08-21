@@ -61,16 +61,26 @@ export {
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export {
+  CUT,
+  IGNORE,
   ORGANIC_ROLES,
   PANEL_ROLES,
+  RESTACK,
   STRUCTURE_TYPE_DEFINITIONS,
+  firstRefusal,
+  forbid,
+  resolveCoverage,
+  resolveCreationInteraction,
   resolvePolicy,
   structureTypeFor,
 } from "./structure-types/index.ts";
 export type {
   CascadeContext,
+  CreationInteraction,
+  CreationInteractionKind,
   EditResolution,
   EditRole,
+  ResolvedCoverage,
   RolePolicy,
   StructureTypeDefinition,
 } from "./structure-types/index.ts";

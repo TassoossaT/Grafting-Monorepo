@@ -61,6 +61,96 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
 }
 
 /**
+ * How a brush footprint touches one existing region.
+ *
+ * Reported as data rather than resolved by the engine: a type that swaps
+ * whole faces (terrain restacking onto itself) and a type that cuts (a path
+ * carved through) need different rules from the very same answer.
+ */
+export type ConstructionCoverageKind =
+  /** The region's own centroid is under the brush -- the whole face is covered. */
+  | "centroid"
+  /** The brush and the region overlap, but the centroid is outside -- the brush clips it. */
+  | "overlap";
+
+/** One existing region a footprint touches, with what a per-type rule needs to decide. */
+export interface ConstructionCoveredRegion {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  readonly physical: boolean;
+  readonly coverage: ConstructionCoverageKind;
+  /** World-space centroid; `y` is the height the face currently sits at. */
+  readonly centroid: ConstructionPosition;
+  readonly nodeIds: readonly ConstructionNodeId[];
+}
+
+/**
+ * What a removal left behind. `exposedLoops` are the closed rims bounding
+ * the hole that opened -- exactly what new geometry must be stitched onto so
+ * the result carries neither a leftover hole nor an extra face. Empty when
+ * the removal opened no hole.
+ */
+/** One face of a generated patch, over edges the same request declares. */
+export interface ConstructionPatchRegion {
+  readonly regionId: string;
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  readonly surfaceType: string;
+  readonly physical: boolean;
+}
+
+/** One straight boundary segment of a generated patch, named by its caller. */
+export interface ConstructionPatchEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+}
+
+/**
+ * A whole generated patch: its nodes, its **shared** boundary edges, and the
+ * faces over them.
+ *
+ * The caller naming its own edges is the point, not the batching. A face
+ * registered from a bare node cycle mints an edge per step named after that
+ * face, so two faces sitting side by side get two different edges along the
+ * line they visually share -- coincident, never connected, and the manifold
+ * rule stays silent because each is used once. Naming the segment instead
+ * lets both faces reference the same edge, which is what makes the result a
+ * mesh and what gives {@link ConstructionSessionPort.getUnfilledLoops} a
+ * free-versus-shared distinction to read.
+ */
+export interface ConstructionPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+  readonly regions: readonly ConstructionPatchRegion[];
+}
+
+/** What {@link ConstructionSessionPort.addPatch} registered, and what it refused. */
+export interface ConstructionPatchOutcome extends RegionEditOutcome {
+  /**
+   * Faces left unregistered because their boundary had no room -- the ground
+   * under them already has a face on both sides of an edge they wanted.
+   * Reported rather than thrown: one refused face must not cost the whole
+   * stroke.
+   */
+  readonly skippedRegionIds: readonly string[];
+}
+
+/** A closed loop of boundary with no face on it -- a hole in the surface. */
+export interface ConstructionUnfilledLoop {
+  /**
+   * The loop's edges, each already oriented for the face that would fill it
+   * -- opposite the single region still using it. Registrable verbatim.
+   */
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  readonly nodeIds: readonly ConstructionNodeId[];
+  readonly centroid: ConstructionPosition;
+}
+
+export interface ConstructionRemovalOutcome extends RegionEditOutcome {
+  readonly exposedLoops: readonly (readonly ConstructionRegionEdge[])[];
+}
+
+/**
  * One region's live boundary, in the engine's own deterministic order. That
  * ordering is the entire contract behind index-to-role mapping: the front
  * end asked for a specific generated shape, so it already knows what
@@ -332,6 +422,37 @@ export interface ConstructionSessionPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
+  /**
+   * Registers a region from **already-registered** edges. Unlike
+   * {@link addSurface}, which derives a region from a node cycle and always
+   * mints fresh edges, this lets a new face *share* an existing boundary --
+   * the only way to actually join it to its neighbour rather than laying a
+   * coincident copy of that edge beside it.
+   */
+  addRegion(request: {
+    readonly regionId: string;
+    readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+    readonly holes?: readonly (readonly ConstructionOrientedEdgeUse[])[];
+    readonly surfaceType: string;
+    readonly physical: boolean;
+  }): RegionEditOutcome;
+  /**
+   * Registers a whole generated patch in one transaction -- see
+   * {@link ConstructionPatch} for why a generator names its own edges.
+   * Nodes, edges, and regions already present are skipped, not rejected: a
+   * stroke overlapping an earlier one re-declares what they share, and that
+   * must not mint a second copy.
+   */
+  addPatch(patch: ConstructionPatch): ConstructionPatchOutcome;
+  /**
+   * Every closed loop of boundary that some other loop encloses and no face
+   * fills -- a hole in the surface whose rim already exists.
+   *
+   * Structural, not geometric: it reports only loops the registered edges
+   * already close, never a gap guessed from proximity. Filling one adds no
+   * edge and no node, because the boundary was there all along.
+   */
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
   /** Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`. */
   addContourEdge(request: {
     readonly edgeId: ConstructionEdgeId;
@@ -344,6 +465,33 @@ export interface ConstructionSessionPort {
   moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome;
   /** Unregisters a region, leaving zero orphaned nodes or edges behind. */
   deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome;
+  /**
+   * Removes a whole set of regions in one transaction, reporting the rim the
+   * hole is left bounded by. Batching is a correctness condition, not an
+   * optimization: an edge shared by two regions both being removed is
+   * interior to the removal, and removing one at a time would expose it.
+   */
+  deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome;
+  /**
+   * What a footprint currently covers, before anything is generated -- the
+   * creation-side counterpart to {@link getRegionTopology}. The engine
+   * reports; `features/edit-construction`'s per-type table decides.
+   */
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[];
+  /**
+   * Which of `points` already sit inside a region -- the per-point form of
+   * {@link getFootprintCoverage}, for a generator deciding face by face
+   * whether the ground under it is free. A stroke spanning both occupied and
+   * open ground needs that distinction *within* its own area, which one
+   * footprint-wide verdict cannot give.
+   *
+   * Indexed back to the request; a point over open ground is simply absent.
+   */
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;

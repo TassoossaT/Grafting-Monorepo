@@ -17,6 +17,12 @@ Adds a brand-new edge. See `editing::add_edge`.
 
 Adds a brand-new node. See `editing::add_node`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Registers a region from already-registered edges, so a new face can
+*share* a boundary instead of laying a coincident copy of it beside
+the neighbour's. See `region_editing::apply_add_region`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Registers a brand-new surface, as an analytic region. See
@@ -39,6 +45,12 @@ Applies one validated terrain-to-path brush operation. The session only
 forwards the resolved request to the domain transformer and publishes
 its already-atomic replacement plan.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::classify_points_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Which of the given XZ points already sit inside a region -- what a
+generator consults so it only builds over open ground. See
+`footprint::classify_points`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cloud_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 The connected component of same-`type` surfaces reachable from
@@ -53,6 +65,13 @@ The connected component of same-`type` surfaces reachable from
 
 `DeleteRegion`. See `region_editing::apply_delete_region`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_regions_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Removes a whole set of regions at once and reports the rim the hole
+is left bounded by -- what a caller stitches new geometry onto so the
+result has neither a leftover hole nor an extra face. See
+`region_editing::apply_delete_regions`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe()`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::describe_vector()`
@@ -60,6 +79,13 @@ The connected component of same-`type` surfaces reachable from
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::duplicate_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::footprint_coverage_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+What a brush footprint currently covers, before anything is
+generated -- the creation-side counterpart to `region_topology_json`.
+The engine reports; the caller's own per-type table decides what to
+do about it. See `footprint::footprint_coverage`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_boundary_cap_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

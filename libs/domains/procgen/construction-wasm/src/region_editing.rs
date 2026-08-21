@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    add_hole, cut_region, delete_region, duplicate_region, insert_vertex, move_edge, move_region,
-    move_vertex, remove_hole, remove_vertex, retype_edge,
+    add_hole, cut_region, delete_region, delete_regions, duplicate_region, insert_vertex, move_edge,
+    move_region, move_vertex, remove_hole, remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -328,6 +328,108 @@ pub fn apply_delete_region(
     let region = region_id_from_wire(&request.surface_key)?;
     let outcome = delete_region(graph, topology, surfaces, &region).map_err(|e| e.to_string())?;
     Ok(outcome.into())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddRegionRequest {
+    pub region_id: String,
+    pub outer_loops: Vec<Vec<OrientedEdgeUseDto>>,
+    #[serde(default)]
+    pub holes: Vec<Vec<OrientedEdgeUseDto>>,
+    pub surface_type: String,
+    pub physical: bool,
+}
+
+/// Registers a region from **already-registered** edges, named explicitly.
+///
+/// This is what `add_surface` cannot do. That call derives a region from a
+/// node cycle and always mints fresh edges for it, so a new face built along
+/// an existing boundary ends up with its own edge *coincident* with the
+/// neighbour's rather than being the same edge. Coincident-but-separate is
+/// not a join: nothing structurally connects the two faces, and the manifold
+/// rule never notices because each edge is still used once.
+///
+/// Stitching onto the rim a removal exposed therefore has to reuse those rim
+/// edges, walked in the opposite direction -- which is exactly what makes the
+/// two faces manifold neighbours. Hence this entry point.
+pub fn apply_add_region(
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: AddRegionRequest,
+) -> Result<RegionEditOutcomeDto, String> {
+    let region = parse_region_id(&request.region_id)?;
+    let outer_loops = request
+        .outer_loops
+        .into_iter()
+        .map(parse_loop)
+        .collect::<Result<Vec<_>, _>>()?;
+    let holes = request
+        .holes
+        .into_iter()
+        .map(parse_loop)
+        .collect::<Result<Vec<_>, _>>()?;
+    topology
+        .add_region(region.clone(), outer_loops, holes)
+        .map_err(|error| error.to_string())?;
+    surfaces
+        .add_region_surface(
+            topology,
+            region.clone(),
+            SurfaceType::new(request.surface_type),
+            request.physical,
+        )
+        .map_err(|error| error.to_string())?;
+    Ok(RegionEditOutcomeDto {
+        created_surface_keys: vec![region_id_to_wire(&region)],
+        ..RegionEditOutcomeDto::default()
+    })
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteRegionsRequest {
+    pub surface_keys: Vec<Vec<String>>,
+}
+
+/// One rim edge, resolved in the loop's own walk direction so a caller can
+/// stitch onto it without re-deriving orientation.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovalResponse {
+    #[serde(flatten)]
+    pub outcome: RegionEditOutcomeDto,
+    /// Closed loops bounding the hole the removal opened -- exactly what
+    /// must be stitched back onto so the result has neither a leftover hole
+    /// nor an extra face. Empty when the removal opened no hole.
+    pub exposed_loops: Vec<Vec<RegionEdgeDto>>,
+}
+
+/// Removes a whole set of regions in one transaction and reports the rim
+/// left behind. See `grafting_graph_core::delete_regions` for why batching
+/// is a correctness condition rather than an optimization.
+pub fn apply_delete_regions(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: DeleteRegionsRequest,
+) -> Result<RemovalResponse, String> {
+    let regions = request
+        .surface_keys
+        .iter()
+        .map(|key| region_id_from_wire(key))
+        .collect::<Result<Vec<_>, _>>()?;
+    let removal =
+        delete_regions(graph, topology, surfaces, &regions).map_err(|error| error.to_string())?;
+    let exposed_loops = removal
+        .exposed_loops
+        .iter()
+        .map(|loop_| loop_dto(topology, loop_))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(RemovalResponse {
+        outcome: removal.outcome.into(),
+        exposed_loops,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -731,4 +833,174 @@ mod tests {
         );
         assert_eq!(graph.node_count(), 0);
     }
+}
+
+// ---- Batched patch registration (shared edges) ----
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchNodeDto {
+    pub id: String,
+    pub position: [f32; 3],
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchEdgeDto {
+    pub edge_id: String,
+    pub start_node_id: String,
+    pub end_node_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchRegionDto {
+    pub region_id: String,
+    pub boundary: Vec<OrientedEdgeUseDto>,
+    pub surface_type: String,
+    pub physical: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPatchRequest {
+    pub nodes: Vec<PatchNodeDto>,
+    pub edges: Vec<PatchEdgeDto>,
+    pub regions: Vec<PatchRegionDto>,
+}
+
+/// What [`apply_add_patch`] registered, and what it refused.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPatchResponse {
+    pub outcome: RegionEditOutcomeDto,
+    /// Faces left unregistered because their boundary had no room -- the
+    /// ground under them already has a face. Reported rather than thrown:
+    /// refusing the whole stroke over one such face is what used to make
+    /// painting near existing terrain do nothing at all.
+    pub skipped_region_ids: Vec<String>,
+}
+
+/// Registers a whole generated patch -- nodes, **shared** boundary edges,
+/// and the regions over them -- in one transaction.
+///
+/// This is what `add_surface` per face cannot do, and the difference is not
+/// about batching. `add_surface` derives a region from a node cycle and
+/// mints an edge per cycle step, named after that region; two faces sitting
+/// side by side therefore end up with two *different* edges along the line
+/// they visually share. Nothing structurally connects them, the manifold
+/// rule never objects because each edge is used exactly once, and the
+/// surface has no free/shared distinction left to reason about -- which is
+/// why a hole in it cannot be found by looking at the topology.
+///
+/// Here the caller names each edge itself, so the two faces on either side
+/// of a line reference the *same* edge and it ends up used twice. That is
+/// what makes the patch a mesh: a boundary is shared where two faces meet
+/// and free where none does, and that distinction is exactly what
+/// [`crate::enclosure::unfilled_loops`] reads.
+///
+/// Already-present nodes, edges, and regions are skipped rather than
+/// rejected: a stroke overlapping an earlier one legitimately re-declares
+/// the geometry they have in common, and re-declaring it must not mint a
+/// second copy.
+pub fn apply_add_patch(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    surfaces: &mut SurfaceRegistry,
+    request: AddPatchRequest,
+) -> Result<AddPatchResponse, String> {
+    let mut created_node_ids = Vec::new();
+    for node in request.nodes {
+        let id = parse_node_id(&node.id)?;
+        if graph.node(&id).is_some() {
+            continue;
+        }
+        graph
+            .add_node(Node::new(id.clone(), node.position))
+            .map_err(|error| error.to_string())?;
+        created_node_ids.push(id.as_str().to_owned());
+    }
+
+    let mut minted: Vec<ContourEdgeId> = Vec::new();
+    for edge in request.edges {
+        let id = parse_edge_id(&edge.edge_id)?;
+        if topology.edge(&id).is_some() {
+            continue;
+        }
+        let start = parse_node_id(&edge.start_node_id)?;
+        let end = parse_node_id(&edge.end_node_id)?;
+        topology
+            .add_edge(
+                graph,
+                ContourEdge::new(id.clone(), start, end, ContourGeometry::Line),
+            )
+            .map_err(|error| error.to_string())?;
+        minted.push(id);
+    }
+
+    let mut created_surface_keys = Vec::new();
+    let mut skipped_region_ids = Vec::new();
+    let mut orphaned: Vec<ContourEdgeId> = Vec::new();
+    for region in request.regions {
+        let id = parse_region_id(&region.region_id)?;
+        if topology.region(&id).is_some() {
+            continue;
+        }
+        let boundary = parse_loop(region.boundary)?;
+        if !boundary_has_room(topology, &boundary) {
+            skipped_region_ids.push(id.as_str().to_owned());
+            orphaned.extend(boundary.iter().map(|use_| use_.edge().clone()));
+            continue;
+        }
+        topology
+            .add_region(id.clone(), vec![boundary], Vec::new())
+            .map_err(|error| error.to_string())?;
+        surfaces
+            .add_region_surface(
+                topology,
+                id.clone(),
+                SurfaceType::new(region.surface_type),
+                region.physical,
+            )
+            .map_err(|error| error.to_string())?;
+        created_surface_keys.push(region_id_to_wire(&id));
+    }
+
+    // An edge minted for a face that then had to be skipped can be left
+    // referenced by nothing. Dropping those keeps a refused face from
+    // leaving debris that would later read as free boundary. Only edges a
+    // *skipped* face named are considered: a call that stages edges with no
+    // regions of its own is doing that on purpose.
+    for id in orphaned {
+        if minted.contains(&id) && topology.usage_count(&id) == 0 {
+            let _ = topology.remove_edge(&id);
+        }
+    }
+
+    Ok(AddPatchResponse {
+        outcome: RegionEditOutcomeDto {
+            created_surface_keys,
+            created_node_ids,
+            ..RegionEditOutcomeDto::default()
+        },
+        skipped_region_ids,
+    })
+}
+
+/// Whether every edge of `boundary` can still take one more use in the
+/// direction this loop walks it.
+///
+/// An edge already used twice is interior -- it has a face on both sides --
+/// and an edge used once in the same direction this loop wants is one whose
+/// only free side faces the other way. Either way the face being registered
+/// would sit on top of geometry that is already there, which is exactly the
+/// "terrain is never created above anything" rule arriving at the level
+/// where it is precise. Checked against the live topology, so faces earlier
+/// in this same batch count.
+fn boundary_has_room(topology: &ContourTopology, boundary: &ContourLoop) -> bool {
+    boundary.iter().all(|use_| match topology.usage_count(use_.edge()) {
+        0 => true,
+        1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
+        _ => false,
+    })
 }
