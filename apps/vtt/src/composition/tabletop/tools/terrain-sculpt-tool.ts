@@ -1,9 +1,19 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceSpec } from "@/ports";
+import type {
+  ConstructionCoveredRegion,
+  ConstructionOrientedEdgeUse,
+  ConstructionPatch,
+  ConstructionPatchEdge,
+  ConstructionPatchRegion,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionSurfaceSpec,
+} from "@/ports";
 
 import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
-import { brushSweptRegionFill } from "./preview-shapes.ts";
+import { brushSweptOutlinePolygons, brushSweptRegionFill } from "./preview-shapes.ts";
+import { restackTerrain } from "./terrain-restack.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
@@ -338,6 +348,206 @@ function latticeTrianglesPerSideFor(gesture: ToolGesture, params: TerrainSculptP
   return Math.max(1, Math.round(params.trianglesPerSide), neededTrianglesPerSide);
 }
 
+/**
+ * Every region the stroke's own swept area touches, asked of the engine once
+ * per disjoint piece of that area and merged by identity.
+ *
+ * The footprint is the very shape the drag ghost showed
+ * (`brushSweptOutlinePolygons` is shared with the preview), so the stroke
+ * never affects ground the user was not shown.
+ */
+function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly ConstructionCoveredRegion[] {
+  const merged = new Map<string, ConstructionCoveredRegion>();
+  for (const polygon of brushSweptOutlinePolygons(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS)) {
+    const ring = polygon[0];
+    if (ring === undefined || ring.length < 3) continue;
+    for (const region of ctx.runtime.getFootprintCoverage(ring)) {
+      merged.set(region.surfaceKey.join(" "), region);
+    }
+  }
+  return [...merged.values()];
+}
+
+interface ResolvedPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  readonly surfaces: readonly ConstructionSurfaceSpec[];
+}
+
+/**
+ * Turns resolved face cycles into a patch whose neighbours share their
+ * boundary edges.
+ *
+ * The edge between two nodes is named after the *pair*, in a fixed order, so
+ * both faces that meet on it derive the same name and end up referencing one
+ * edge used twice. Letting each face mint its own (which is what submitting
+ * bare cycles does) produces two coincident edges used once each: visually
+ * identical, structurally unconnected, and with no free-versus-shared
+ * distinction left for {@link ToolContext.runtime.getUnfilledLoops} to read.
+ *
+ * A face keeps its cycle-derived region id, so painting the same ground
+ * twice still resolves to the same identity and is skipped rather than
+ * duplicated.
+ */
+function toPatch(
+  ctx: ToolContext,
+  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  surfaces: readonly ConstructionSurfaceSpec[],
+): ConstructionPatch {
+  const edges = new Map<string, ConstructionPatchEdge>();
+  const regions: ConstructionPatchRegion[] = [];
+
+  for (const surface of surfaces) {
+    const boundary: ConstructionOrientedEdgeUse[] = [];
+    for (let index = 0; index < surface.cycle.length; index += 1) {
+      const from = surface.cycle[index];
+      const to = surface.cycle[(index + 1) % surface.cycle.length];
+      if (from === undefined || to === undefined) continue;
+      // Lexicographic order picks the same representative from either side,
+      // which is the whole mechanism -- nothing else makes two independently
+      // generated faces agree on one name for the line between them.
+      const forward = from < to;
+      const start = forward ? from : to;
+      const end = forward ? to : from;
+      const edgeId = `${ctx.tableId}:seg:${start}~${end}`;
+      if (!edges.has(edgeId)) edges.set(edgeId, { edgeId, startNodeId: start, endNodeId: end });
+      boundary.push({ edgeId, reversed: !forward });
+    }
+    if (boundary.length !== surface.cycle.length) continue;
+    regions.push({
+      regionId: surface.cycle.join("|"),
+      boundary,
+      surfaceType: surface.surfaceType,
+      physical: surface.physical,
+    });
+  }
+
+  return { nodes, edges: [...edges.values()], regions };
+}
+
+/**
+ * Fills every closed loop of boundary the surface leaves uncovered.
+ *
+ * A face this stroke declined -- degenerate, welded onto ground that already
+ * had one, refused by a rule -- leaves a gap whose rim its neighbours still
+ * hold. Those are the visible holes in the terrain, and they are recoverable
+ * without knowing why each one happened: the engine reports the loops, each
+ * already oriented for the face that closes it, so filling one is a plain
+ * region registration that adds no edge and no node.
+ *
+ * A hole a region *declared* -- a doorway, a courtyard -- is not reported
+ * and so is never sealed; that exclusion lives in the engine.
+ */
+function fillUnfilledLoops(ctx: ToolContext, surfaceType: string, causeId: string): number {
+  const loops = ctx.runtime.getUnfilledLoops();
+  if (loops.length === 0) return 0;
+  ctx.runtime.addPatch(
+    {
+      nodes: [],
+      edges: [],
+      regions: loops.map((loop) => ({
+        regionId: loop.nodeIds.join("|"),
+        boundary: loop.boundary,
+        surfaceType,
+        physical: true,
+      })),
+    },
+    "local",
+    causeId,
+  );
+  return loops.length;
+}
+
+/**
+ * Drops every resolved face that, *after welding*, landed on ground that
+ * already has one.
+ *
+ * `blockOccupiedQuads` cannot catch these: it runs before resolution and so
+ * tests each quad where the lattice put it, not where welding pulled it.
+ * A corner welds to anything within {@link CROSS_SESSION_WELD_EPSILON}, which
+ * is a sizeable fraction of one cell, so a quad whose own centre sits just
+ * outside an existing face can still have all four corners snap onto that
+ * face's nodes -- reproducing it exactly. Submitting that is what raised
+ * `an edge already exists with identity ...`: same cycle, same derived
+ * region id, same derived edge ids.
+ *
+ * Testing the welded centroid is the same question asked at the only moment
+ * the answer is final. Nodes left unreferenced by the surviving faces are
+ * dropped too, so a rejected face cannot leave loose nodes behind.
+ */
+function pruneFacesOnExistingGround(
+  ctx: ToolContext,
+  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  surfaces: readonly ConstructionSurfaceSpec[],
+): ResolvedPatch {
+  if (surfaces.length === 0) return { nodes, surfaces };
+
+  const pending = new Map<ConstructionNodeId, ConstructionPosition>();
+  for (const node of nodes) pending.set(node.id, node.position);
+  const live = ctx.runtime.getSnapshot().map.nodePositions;
+  const positionOf = (id: ConstructionNodeId): ConstructionPosition | undefined =>
+    pending.get(id) ?? live.get(id)?.position;
+
+  const centroids: [number, number][] = surfaces.map((surface) => {
+    let x = 0;
+    let z = 0;
+    let corners = 0;
+    for (const id of surface.cycle) {
+      const position = positionOf(id);
+      if (position === undefined) continue;
+      x += position.x;
+      z += position.z;
+      corners += 1;
+    }
+    // A face none of whose corners resolved has no centre to test; NaN
+    // never falls inside any polygon, so it survives here and fails loudly
+    // later rather than being silently swallowed by this filter.
+    return corners === 0 ? [NaN, NaN] : [x / corners, z / corners];
+  });
+
+  const occupied = new Set(ctx.runtime.classifyPoints(centroids).map((hit) => hit.index));
+  if (occupied.size === 0) return { nodes, surfaces };
+
+  const kept = surfaces.filter((_, index) => !occupied.has(index));
+  const referenced = new Set<ConstructionNodeId>();
+  for (const surface of kept) for (const id of surface.cycle) referenced.add(id);
+  return { nodes: nodes.filter((node) => referenced.has(node.id)), surfaces: kept };
+}
+
+/**
+ * Marks every lattice quad whose centre already sits inside some region as
+ * submitted, so the stroke generates only over open ground.
+ *
+ * This is what enforces "terrain is never created above anything" precisely,
+ * face by face. Refusing the whole stroke because its edge happened to graze
+ * a wall was the blunt version of the same rule -- and wrong, since a wall
+ * *stands on* terrain and so always overlaps it in XZ.
+ */
+function blockOccupiedQuads(ctx: ToolContext, session: BrushSession): void {
+  const centroids: [number, number][] = [];
+  const quadIndices: number[] = [];
+  session.mesh.quads.forEach((quad, quadIndex) => {
+    let x = 0;
+    let z = 0;
+    let corners = 0;
+    for (const vertexIndex of quad) {
+      const local = session.mesh.vertices[vertexIndex];
+      if (local === undefined) continue;
+      x += session.origin.x + local.x;
+      z += session.origin.z + local.y;
+      corners += 1;
+    }
+    if (corners === 0) return;
+    centroids.push([x / corners, z / corners]);
+    quadIndices.push(quadIndex);
+  });
+  if (centroids.length === 0) return;
+
+  for (const hit of ctx.runtime.classifyPoints(centroids)) {
+    const quadIndex = quadIndices[hit.index];
+    if (quadIndex !== undefined) session.submittedQuads.add(quadIndex);
+  }
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -356,26 +566,66 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
+    const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
+
+    // One stroke does both, per area -- it is not a choice between them.
+    // Where ground already exists the covered faces are raised; where it
+    // does not, terrain is generated. A stroke uniting two patches spans
+    // exactly that mix: it touches both and its middle is empty, so
+    // treating the two as alternatives fills nothing.
+    //
+    // The raise goes first so generation welds onto ground already at its
+    // final height. Order is no longer load-bearing the way it was when the
+    // raise deleted and recreated the patch -- it now only moves existing
+    // nodes, so no id the generator might weld onto is ever invalidated --
+    // but a vertex that welds onto the rim still wants the raised Y, not the
+    // stale one. Occupancy is unaffected either way: the raise moves ground
+    // in Y, never in XZ.
+    const covered = coveredByStroke(ctx, gesture);
+    const raised =
+      covered.length > 0
+        ? restackTerrain(ctx, params.targetSurface, covered, causeId)
+        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
+    blockOccupiedQuads(ctx, session);
+
     const newNodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
     const newSurfaces: ConstructionSurfaceSpec[] = [];
     for (const sample of gesture.samples) {
       revealNear(ctx, session, sample.point, params, newNodes, newSurfaces);
     }
-    if (newNodes.length === 0 && newSurfaces.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhum terreno gerado." });
+    const resolved = pruneFacesOnExistingGround(ctx, newNodes, newSurfaces);
+    // A face the engine refuses is one whose boundary had no room -- ground
+    // that already has a face on both sides. It costs that face, never the
+    // stroke, so the count is reported rather than treated as a failure.
+    const outcome =
+      resolved.surfaces.length > 0
+        ? ctx.runtime.addPatch(toPatch(ctx, resolved.nodes, resolved.surfaces), "local", causeId)
+        : undefined;
+    const built = outcome?.createdSurfaceKeys.length ?? 0;
+    const refused = outcome?.skippedRegionIds.length ?? 0;
+    const filled = fillUnfilledLoops(ctx, params.targetSurface, causeId);
+
+    const parts: string[] = [];
+    if (built > 0) parts.push(`${built} faces novas`);
+    if (filled > 0) parts.push(`${filled} buracos fechados`);
+    if (refused > 0) parts.push(`${refused} sobre terreno existente`);
+    if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
+    if (parts.length === 0) {
+      ctx.reportFeedback({
+        tone: "info",
+        message:
+          raised.skipped.length > 0
+            ? raised.skipped[0] ?? "Nada a fazer aqui."
+            : "Nada a fazer aqui.",
+      });
       return;
     }
-    ctx.runtime.applyIrregularTerrainPatch(
-      newNodes,
-      newSurfaces,
-      "local",
-      `${ctx.tableId}:terrain-sculpt-reveal:${ctx.nextSequence()}`,
-    );
     ctx.reportFeedback({
       tone: "success",
-      message: `Terreno gerado: ${newSurfaces.length} superfícies, ${newNodes.length} nós.`,
+      message: `Terreno: ${parts.join(", ")}.${raised.skipped.length > 0 ? ` ${raised.skipped[0]}` : ""}`,
     });
   },
 };

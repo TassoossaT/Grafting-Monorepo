@@ -21,12 +21,19 @@ import type {
   CloudOutcome,
   CloudRequest,
   ConfirmedTokenRenderChange,
+  ConstructionCoveredRegion,
+  ConstructionEdgeGeometry,
   ConstructionNodeId,
+  ConstructionOrientedEdgeUse,
+  ConstructionPatch,
+  ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
+  ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateBoundaryCapRequest,
   GeneratePathExtrusionRequest,
@@ -136,8 +143,51 @@ export interface TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
   ): RegionEditOutcome;
+  /**
+   * Registers a whole generated patch -- nodes, shared boundary edges, and
+   * the faces over them -- in one transaction. See `ConstructionPatch`.
+   */
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
+  /** Every closed loop of boundary with no face on it -- a hole whose rim already exists. */
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  /** What a brush footprint currently covers, before anything is generated. */
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[];
+  /** Which of `points` already sit inside a region -- per-point, for a generator building only over open ground. */
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  /** Removes a set of regions in one transaction, reporting the rim to stitch onto. */
+  deleteRegions(
+    surfaceKeys: readonly ConstructionSurfaceKey[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionRemovalOutcome;
+  /** Registers a bare boundary edge -- staging before `addRegion`. */
+  addContourEdge(
+    request: {
+      readonly edgeId: string;
+      readonly startNodeId: ConstructionNodeId;
+      readonly endNodeId: ConstructionNodeId;
+      readonly geometry: ConstructionEdgeGeometry;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): void;
+  /** Registers a region from already-registered edges, so it can share a boundary. */
+  addRegion(
+    request: {
+      readonly regionId: string;
+      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+      readonly surfaceType: string;
+      readonly physical: boolean;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   generateTerrainCell(
@@ -176,19 +226,6 @@ export interface TabletopRuntime {
   removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
-  /**
-   * Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-   * hexagon's worth) through the construction session's existing generic
-   * `addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-   * like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-   * `ConstructionSessionPort.addNode`/`addSurface` already exist.
-   */
-  applyIrregularTerrainPatch(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    surfaces: readonly ConstructionSurfaceSpec[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): readonly ConstructionSurfaceKey[];
   /**
    * Welds a T-junction into an existing panel: subdividing the crossed
    * panel's own boundary edges at the crossing point, through
@@ -778,9 +815,78 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.applyRegionEdit([{ kind: "move-vertex", nodeId, position }], origin, causeId);
   }
 
+  addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome {
+    this.#requireReady("registering a generated patch");
+    const outcome = this.#construction.addPatch(patch);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
+    this.#requireReady("looking for unfilled loops");
+    return this.#construction.getUnfilledLoops();
+  }
+
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
     this.#requireReady("reading a region's topology");
     return this.#construction.getRegionTopology(surfaceKey);
+  }
+
+  getFootprintCoverage(
+    polygon: readonly (readonly [number, number])[],
+  ): readonly ConstructionCoveredRegion[] {
+    this.#requireReady("querying a footprint's coverage");
+    return this.#construction.getFootprintCoverage(polygon);
+  }
+
+  classifyPoints(
+    points: readonly (readonly [number, number])[],
+  ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
+    this.#requireReady("classifying points");
+    return this.#construction.classifyPoints(points);
+  }
+
+  deleteRegions(
+    surfaceKeys: readonly ConstructionSurfaceKey[],
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionRemovalOutcome {
+    this.#requireReady("removing regions");
+    const outcome = this.#construction.deleteRegions(surfaceKeys);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  addContourEdge(
+    request: {
+      readonly edgeId: string;
+      readonly startNodeId: ConstructionNodeId;
+      readonly endNodeId: ConstructionNodeId;
+      readonly geometry: ConstructionEdgeGeometry;
+    },
+    _origin: ChangeOrigin,
+    _causeId: string,
+  ): void {
+    // Staging only: a bare edge no region uses yet changes nothing visible,
+    // so there is no projection or render sync to run for it.
+    this.#requireReady("registering a boundary edge");
+    this.#construction.addContourEdge(request);
+  }
+
+  addRegion(
+    request: {
+      readonly regionId: string;
+      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
+      readonly surfaceType: string;
+      readonly physical: boolean;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome {
+    this.#requireReady("registering a region");
+    const outcome = this.#construction.addRegion(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
@@ -1016,46 +1122,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
     return this.#construction.cloudFor(request);
-  }
-
-  applyIrregularTerrainPatch(
-    nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
-    surfaces: readonly ConstructionSurfaceSpec[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): readonly ConstructionSurfaceKey[] {
-    this.#requireReady("applying an irregular terrain patch");
-
-    for (const node of nodes) this.#construction.addNode(node.id, node.position);
-
-    // A duplicate node-set is an *expected* outcome of the irregular-terrain
-    // brush's own merge strategy -- `irregular-terrain-tool.ts`'s `revealNear`
-    // deliberately welds a new stroke's vertices onto nearby existing nodes,
-    // so two overlapping strokes (or two overlapping dabs of the same
-    // stroke) can legitimately compute the exact same cycle twice. If a
-    // surface for that cycle already exists, that surface already *is* the
-    // connected geometry this call wanted -- nothing to add, nothing wrong.
-    // Each surface gets its own attempt (not one `.map()` that aborts the
-    // whole batch on the first failure) so one redundant cycle can't also
-    // silently drop every surface queued after it in the same call.
-    const surfaceKeys: ConstructionSurfaceKey[] = [];
-    for (const spec of surfaces) {
-      try {
-        surfaceKeys.push(this.#construction.addSurface(spec));
-      } catch (error) {
-        // The Rust side throws a bare `JsValue::from_str` for this, not a
-        // wrapped `Error` -- see `session.rs`'s `to_js_error` -- so a plain
-        // string is the normal shape here, not just a defensive fallback.
-        const message = typeof error === "string" ? error : error instanceof Error ? error.message : undefined;
-        const isDuplicate = message !== undefined && message.includes("a surface already exists for node set");
-        if (!isDuplicate) throw error;
-      }
-    }
-
-    this.#applyConstructionMutation(surfaceKeys, [], origin, causeId, (map) =>
-      this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return surfaceKeys;
   }
 
   applyWallCrossingWeld(

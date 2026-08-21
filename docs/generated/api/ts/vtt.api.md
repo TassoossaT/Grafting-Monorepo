@@ -389,15 +389,20 @@ two tables never collide inside one `ConstructionSession`.
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[], seedDefaultMap: boolean): AppTabletopRuntime`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, _origin: ChangeOrigin, _causeId: string): void`
+
+Registers a bare boundary edge -- staging before `addRegion`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+Registers a whole generated patch -- nodes, shared boundary edges, and
+the faces over them -- in one transaction. See `ConstructionPatch`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a region from already-registered edges, so it can share a boundary.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
-
-Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-hexagon's worth) through the construction session's existing generic
-`addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-`ConstructionSessionPort.addNode`/`addSurface` already exist.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
 
@@ -424,6 +429,10 @@ minted nodes by position, which is all the junction ever needed.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.attachView(target: HTMLElement): string`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(): void`
 
 Hides the active tool preview, if any.
@@ -431,6 +440,10 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
+
+Removes a set of regions in one transaction, reporting the rim to stitch onto.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
@@ -473,6 +486,10 @@ bootstrap call.
 
 Every region's boundary.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+What a brush footprint currently covers, before anything is generated.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 One region's live boundary -- what a handle/hit-test layer reads.
@@ -480,6 +497,10 @@ One region's live boundary -- what a handle/hit-test layer reads.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getRenderMetrics(): SceneRenderMetrics`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getSnapshot(): TabletopSnapshot`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary with no face on it -- a hole whose rim already exists.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -525,15 +546,20 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `interface vtt.tabletop-runtime.TabletopRuntime`
 
+### `method vtt.tabletop-runtime.TabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, origin: ChangeOrigin, causeId: string): void`
+
+Registers a bare boundary edge -- staging before `addRegion`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+Registers a whole generated patch -- nodes, shared boundary edges, and
+the faces over them -- in one transaction. See `ConstructionPatch`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Registers a region from already-registered edges, so it can share a boundary.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.applyIrregularTerrainPatch(nodes: readonly { id: string; position: ConstructionPosition }[], surfaces: readonly ConstructionSurfaceSpec[], origin: ChangeOrigin, causeId: string): readonly ConstructionSurfaceKey[]`
-
-Submits a whole batch of nodes and surfaces (e.g. one irregular-terrain
-hexagon's worth) through the construction session's existing generic
-`addNode`/`addSurface` operations, then re-derives/re-uploads exactly
-like `generateTerrainCell`/`generatePathExtrusion` do. No new Rust/Wasm surface --
-`ConstructionSessionPort.addNode`/`addSurface` already exist.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
 
@@ -557,6 +583,10 @@ minted nodes by position, which is all the junction ever needed.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.attachView(target: HTMLElement): string`
 
+### `method vtt.tabletop-runtime.TabletopRuntime.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(): void`
 
 Hides the active tool preview, if any.
@@ -564,6 +594,10 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
+
+Removes a set of regions in one transaction, reporting the rim to stitch onto.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
@@ -601,6 +635,10 @@ the same call (a split moving, two regions merging). See
 
 Every region's boundary.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+What a brush footprint currently covers, before anything is generated.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 One region's live boundary -- what a handle/hit-test layer reads.
@@ -608,6 +646,10 @@ One region's live boundary -- what a handle/hit-test layer reads.
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRenderMetrics(): SceneRenderMetrics`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getSnapshot(): TabletopSnapshot`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary with no face on it -- a hole whose rim already exists.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -1025,31 +1067,16 @@ large improvement over one straight panel per raw pointer sample; see
 
 Preview-only outline for any convex brush shape supported by the Rust contract.
 
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number): MultiPolygon`
+
+The swept area of a circular brush stroke, as real 2D polygons (XZ).
+
+Shared with brushSweptRegionFill on purpose: the ghost the user
+saw while dragging and the footprint the engine is then asked about must
+be the identical shape, or the stroke would affect ground the preview
+never highlighted.
+
 ### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
-
-A filled highlight of the whole area a brush of `shape` sweeps along
-`samples`, start to end -- purely "this is the region that's about to be
-affected," with no relation to whatever geometry a later backend call
-actually produces for it. Every shape is filled as a rounded stroke of
-`shape.radius`, ignoring corners/rotation -- exact enough to read as "this
-area," not a stand-in for the real result. Used as every brush's default
-preview; a tool with a real result preview (e.g. path-brush's analytic
-mesh) replaces it, this is only the fallback/ghost.
-
-The render port draws this with depth-testing off (a ghost must never be
-occluded), so any self-overlap in the mesh double-blends the translucent
-fill and reads as darker little blocks -- and earcut, fed a self-
-intersecting polygon, produces outright wrong triangles (crossing edges
-connecting unrelated parts of the shape), not just a cosmetic artifact.
-Both a hand-rolled offset-ribbon *and* `perfect-freehand`'s own stroke
-outline self-intersect wherever the path curves tighter than the brush
-radius -- ink-stroke tooling assumes a thin pen, not a fat brush, so nei-
-ther guarantees a simple polygon here. What *is* guaranteed simple is a
-proper 2D polygon union: the swept area is exactly the union of one
-capsule per (decimated) segment, and `polygon-clipping` (the
-Martinez-Rueda algorithm, also what turf.js uses) computes that union
-robustly for any input, self-overlapping or not. `earcut` then
-triangulates the union's own simple output, which it was always built for.
 
 ### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
 
@@ -1109,6 +1136,40 @@ room it already subdivided must still resolve to that structure's own
 land in after a prior generation -- otherwise regenerating (e.g. after
 changing the seed) only ever re-subdivides an already-subdivided sliver
 instead of the whole footprint again.
+
+### `interface vtt.terrain-restack.RestackOutcome`
+
+### `property vtt.terrain-restack.RestackOutcome.movedVertices: number`
+
+Distinct nodes actually moved -- shared corners count once.
+
+### `property vtt.terrain-restack.RestackOutcome.raisedFaces: number`
+
+### `property vtt.terrain-restack.RestackOutcome.skipped: readonly string[]`
+
+Why some covered faces were left alone -- a wall the brush centred on,
+most commonly. Reported rather than thrown: refusing the *whole* stroke
+over one such face was the earlier behaviour, and it meant painting
+terrain anywhere near a wall did nothing at all, since a wall stands on
+terrain and therefore always overlaps it in XZ.
+
+### `variable vtt.terrain-restack.ELEVATION_STEP: 0.5`
+
+How far one stroke raises the ground it covers.
+
+### `function vtt.terrain-restack.facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[]`
+
+The faces a terrain stroke should raise: those the brush covers whole.
+A face the brush merely clips is left alone -- raising it would drag
+ground the user never painted over.
+
+### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome`
+
+Raises every covered face the type table allows.
+
+A face the table forbids -- a wall the brush centred on -- is left alone
+and reported in `skipped`, not thrown. The stroke still does everything
+else it was asked to.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -1617,6 +1678,12 @@ derivation, called from the adapter layer.
 
 ### `reference vtt.edit-construction.createPathBrushEffect`
 
+### `reference vtt.edit-construction.CreationInteraction`
+
+### `reference vtt.edit-construction.CreationInteractionKind`
+
+### `reference vtt.edit-construction.CUT`
+
 ### `reference vtt.edit-construction.DEFAULT_TOOL_PARAMS`
 
 ### `reference vtt.edit-construction.EditAxis`
@@ -1639,6 +1706,10 @@ derivation, called from the adapter layer.
 
 ### `reference vtt.edit-construction.EMPTY_OUTCOME`
 
+### `reference vtt.edit-construction.firstRefusal`
+
+### `reference vtt.edit-construction.forbid`
+
 ### `reference vtt.edit-construction.GeneratePathExtrusionOperation`
 
 ### `reference vtt.edit-construction.GenerateTerrainCellOperation`
@@ -1646,6 +1717,8 @@ derivation, called from the adapter layer.
 ### `reference vtt.edit-construction.HEIGHT_AXIS`
 
 ### `reference vtt.edit-construction.HORIZONTAL_AXES`
+
+### `reference vtt.edit-construction.IGNORE`
 
 ### `reference vtt.edit-construction.InteriorGenerateParams`
 
@@ -1683,7 +1756,15 @@ derivation, called from the adapter layer.
 
 ### `reference vtt.edit-construction.resolveBrushShape`
 
+### `reference vtt.edit-construction.resolveCoverage`
+
+### `reference vtt.edit-construction.resolveCreationInteraction`
+
+### `reference vtt.edit-construction.ResolvedCoverage`
+
 ### `reference vtt.edit-construction.resolvePolicy`
+
+### `reference vtt.edit-construction.RESTACK`
 
 ### `reference vtt.edit-construction.RevisionPrecondition`
 
@@ -1969,6 +2050,14 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `interface vtt.structure-types.ResolvedCoverage`
+
+One covered region, paired with what the painted type wants to do about it.
+
+### `property vtt.structure-types.ResolvedCoverage.covered: ConstructionCoveredRegion`
+
+### `property vtt.structure-types.ResolvedCoverage.interaction: CreationInteraction`
+
 ### `variable vtt.structure-types.STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[]`
 
 One file per structure type, each pairing creation-shape knowledge with
@@ -1980,6 +2069,28 @@ one: every `extrude_path` product (wall, tower, door jamb) is the same
 upright panel, and every procedurally swept product (terrain, path) is the
 same non-enumerable boundary. Splitting them per product name would be
 duplication, not per-type policy.
+
+### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
+
+The first refusal in a resolved coverage, if any.
+
+### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[]): readonly ResolvedCoverage[]`
+
+Pairs every region a footprint touches with its resolved interaction --
+the creation-side counterpart to `planEdit`. Pure: it decides, it does not
+act, and the caller performs whatever the resolutions imply.
+
+A `"forbid"` anywhere in the result is the caller's cue to abandon the
+whole stroke rather than apply the rest: painting terrain across a wall
+must not quietly terraform everything except the wall.
+
+### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string): CreationInteraction`
+
+What painting `paintedType` over one already-present region means.
+
+An unrecognized covered type is refused rather than defaulting to
+`"ignore"`: silently stacking on top of something nobody declared is
+exactly how geometry accumulates unnoticed.
 
 ### `function vtt.structure-types.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
 
@@ -1996,11 +2107,21 @@ The definition governing one surface type, or `undefined` if it has none.
 
 ### `reference vtt.structure-types.CascadeContext`
 
+### `reference vtt.structure-types.CreationInteraction`
+
+### `reference vtt.structure-types.CreationInteractionKind`
+
+### `reference vtt.structure-types.CUT`
+
 ### `reference vtt.structure-types.denied`
 
 ### `reference vtt.structure-types.EditResolution`
 
 ### `reference vtt.structure-types.EditRole`
+
+### `reference vtt.structure-types.forbid`
+
+### `reference vtt.structure-types.IGNORE`
 
 ### `reference vtt.structure-types.ORGANIC_ROLES`
 
@@ -2010,9 +2131,40 @@ The definition governing one surface type, or `undefined` if it has none.
 
 ### `reference vtt.structure-types.panelStructureType`
 
+### `reference vtt.structure-types.pathInteractionOver`
+
+### `reference vtt.structure-types.RESTACK`
+
 ### `reference vtt.structure-types.RolePolicy`
 
 ### `reference vtt.structure-types.StructureTypeDefinition`
+
+### `reference vtt.structure-types.terrainInteractionOver`
+
+### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
+
+What happens when one structure type is painted over another.
+
+Creation and editing are two faces of the same coin: a type declares what
+its own parts allow (the role table) *and* how it meets every other type.
+Neither half lives in Rust -- the engine answers "what is already here"
+(`getFootprintCoverage`) and performs primitives; which of them to run is
+this table's call.
+
+**The relation is directional, and that is the point.** A wall goes on top
+of terrain; terrain does not go on top of a wall. Declaring one direction
+says nothing about the other, so both are declared separately rather than
+inferred from a symmetric "compatible" flag.
+
+### `type vtt.creation-interaction.CreationInteractionKind = CreationInteraction["kind"]`
+
+### `variable vtt.creation-interaction.CUT: CreationInteraction`
+
+### `variable vtt.creation-interaction.IGNORE: CreationInteraction`
+
+### `variable vtt.creation-interaction.RESTACK: CreationInteraction`
+
+### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
 
 ### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
 
@@ -2035,7 +2187,28 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate"): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+
+### `function vtt.organic-structure.pathInteractionOver(coveredType: string): CreationInteraction`
+
+A path **carves**: it consumes what it crosses and keeps the leftover with
+the path's own shape cut out of it. Over terrain that is a road; over a
+wall the same cut reads as an opening through it.
+
+Over another path there is nothing to carve -- the ground is already path
+-- so the two simply coexist rather than one consuming the other.
+
+### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
+
+Terrain painted over terrain **raises** it: the covered faces are deleted,
+the new ones generated above, and the result stitched back onto the rim
+the removal exposed. It does not overlay a second lattice on top of the
+first, which is what used to stack geometry on every stroke.
+
+Terrain over anything else is refused. Ground is not something that can
+come into being above a wall or a path -- there is no meaning to assign,
+so nothing is generated and the caller says why. This is the direction
+that does *not* mirror: a wall over terrain is perfectly ordinary.
 
 ### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
 
@@ -2053,6 +2226,13 @@ each slot by construction -- Rust neither tags nor reports a role. Height
 comparison is used rather than the raw index so a panel that has since
 been subdivided (a T-junction weld inserting a vertex mid-run) still
 classifies correctly; both rules describe the very same creation shape.
+
+### `function vtt.panel-structure.panelInteractionOver(_coveredType: string): CreationInteraction`
+
+A panel is built *on top of* whatever is already there and consumes
+nothing: a wall standing on terrain leaves that terrain intact, and two
+walls crossing weld at their shared corners rather than eating each other.
+That is the whole of the panel side of the interaction table.
 
 ### `function vtt.panel-structure.panelPolicyFor(role: string): RolePolicy`
 
@@ -2110,6 +2290,13 @@ together on purpose:
 
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
+
+### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string) => CreationInteraction`
+
+What happens when **this** type is painted over `coveredType` -- the
+creation half of the same declaration. Directional on purpose: a wall
+goes on terrain, terrain does not go on a wall, and neither direction
+says anything about the other.
 
 ### `property vtt.structure-type.StructureTypeDefinition.label: string`
 
@@ -2544,6 +2731,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionBrushShape`
 
+### `reference vtt.ports.ConstructionCoverageKind`
+
+### `reference vtt.ports.ConstructionCoveredRegion`
+
 ### `reference vtt.ports.ConstructionEdgeGeometry`
 
 ### `reference vtt.ports.ConstructionEdgeId`
@@ -2554,17 +2745,29 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionOrientedEdgeUse`
 
+### `reference vtt.ports.ConstructionPatch`
+
+### `reference vtt.ports.ConstructionPatchEdge`
+
+### `reference vtt.ports.ConstructionPatchOutcome`
+
+### `reference vtt.ports.ConstructionPatchRegion`
+
 ### `reference vtt.ports.ConstructionPosition`
 
 ### `reference vtt.ports.ConstructionRegionEdge`
 
 ### `reference vtt.ports.ConstructionRegionTopology`
 
+### `reference vtt.ports.ConstructionRemovalOutcome`
+
 ### `reference vtt.ports.ConstructionSessionPort`
 
 ### `reference vtt.ports.ConstructionSurfaceKey`
 
 ### `reference vtt.ports.ConstructionSurfaceSpec`
+
+### `reference vtt.ports.ConstructionUnfilledLoop`
 
 ### `reference vtt.ports.CornerHeightModule`
 
@@ -2678,6 +2881,24 @@ surfaces reachable from `seed` by shared graph nodes.
 
 ### `property vtt.construction-session-port.CloudRequest.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionCoveredRegion`
+
+One existing region a footprint touches, with what a per-type rule needs to decide.
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.centroid: ConstructionPosition`
+
+World-space centroid; `y` is the height the face currently sits at.
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.coverage: ConstructionCoverageKind`
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.nodeIds: readonly string[]`
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.physical: boolean`
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceType: string`
+
 ### `interface vtt.construction-session-port.ConstructionNodeSnapshot`
 
 ### `property vtt.construction-session-port.ConstructionNodeSnapshot.id: string`
@@ -2691,6 +2912,73 @@ One boundary edge walked in a loop's own direction.
 ### `property vtt.construction-session-port.ConstructionOrientedEdgeUse.edgeId: string`
 
 ### `property vtt.construction-session-port.ConstructionOrientedEdgeUse.reversed: boolean`
+
+### `interface vtt.construction-session-port.ConstructionPatch`
+
+A whole generated patch: its nodes, its **shared** boundary edges, and the
+faces over them.
+
+The caller naming its own edges is the point, not the batching. A face
+registered from a bare node cycle mints an edge per step named after that
+face, so two faces sitting side by side get two different edges along the
+line they visually share -- coincident, never connected, and the manifold
+rule stays silent because each is used once. Naming the segment instead
+lets both faces reference the same edge, which is what makes the result a
+mesh and what gives ConstructionSessionPort.getUnfilledLoops a
+free-versus-shared distinction to read.
+
+### `property vtt.construction-session-port.ConstructionPatch.edges: readonly ConstructionPatchEdge[]`
+
+### `property vtt.construction-session-port.ConstructionPatch.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.construction-session-port.ConstructionPatch.regions: readonly ConstructionPatchRegion[]`
+
+### `interface vtt.construction-session-port.ConstructionPatchEdge`
+
+One straight boundary segment of a generated patch, named by its caller.
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.edgeId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.endNodeId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.startNodeId: string`
+
+### `interface vtt.construction-session-port.ConstructionPatchOutcome`
+
+What ConstructionSessionPort.addPatch registered, and what it refused.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Surfaces whose mesh must be re-derived.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.createdNodeIds: readonly string[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.createdSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.removedNodeIds: readonly string[]`
+
+Nodes the engine's own zero-orphan cleanup reclaimed.
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.construction-session-port.ConstructionPatchOutcome.skippedRegionIds: readonly string[]`
+
+Faces left unregistered because their boundary had no room -- the ground
+under them already has a face on both sides of an edge they wanted.
+Reported rather than thrown: one refused face must not cost the whole
+stroke.
+
+### `interface vtt.construction-session-port.ConstructionPatchRegion`
+
+One face of a generated patch, over edges the same request declares.
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.physical: boolean`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.regionId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.surfaceType: string`
 
 ### `interface vtt.construction-session-port.ConstructionPosition`
 
@@ -2733,6 +3021,29 @@ end asked for a specific generated shape, so it already knows what
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionRemovalOutcome`
+
+What one atomic region edit changed. Every op in the vocabulary reports
+this same shape, so a caller batching a policy's primary op with its
+cascade merges outcomes instead of branching per op -- see
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Surfaces whose mesh must be re-derived.
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.createdNodeIds: readonly string[]`
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.createdSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.exposedLoops: readonly (readonly ConstructionRegionEdge[])[]`
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.removedNodeIds: readonly string[]`
+
+Nodes the engine's own zero-orphan cleanup reclaimed.
+
+### `property vtt.construction-session-port.ConstructionRemovalOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
 ### `interface vtt.construction-session-port.ConstructionSessionPort`
 
 Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
@@ -2753,11 +3064,37 @@ Adds an inner loop -- what a door or a window is.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addNode(id: string, position: ConstructionPosition): void`
 
+### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): ConstructionPatchOutcome`
+
+Registers a whole generated patch in one transaction -- see
+ConstructionPatch for why a generator names its own edges.
+Nodes, edges, and regions already present are skipped, not rejected: a
+stroke overlapping an earlier one re-declares what they share, and that
+must not mint a second copy.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
+
+Registers a region from **already-registered** edges. Unlike
+addSurface, which derives a region from a node cycle and always
+mints fresh edges, this lets a new face *share* an existing boundary --
+the only way to actually join it to its neighbour rather than laying a
+coincident copy of that edge beside it.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
 
 Applies one resolved terrain-to-path brush atomically through the domain transformer.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
+
+Which of `points` already sit inside a region -- the per-point form of
+getFootprintCoverage, for a generator deciding face by face
+whether the ground under it is free. A stroke spanning both occupied and
+open ground needs that distinction *within* its own area, which one
+footprint-wide verdict cannot give.
+
+Indexed back to the request; a point over open ground is simply absent.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
@@ -2770,6 +3107,13 @@ Divides one region in two along an already-registered cut path.
 ### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome`
 
 Unregisters a region, leaving zero orphaned nodes or edges behind.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome`
+
+Removes a whole set of regions in one transaction, reporting the rim the
+hole is left bounded by. Batching is a correctness condition, not an
+optimization: an edge shared by two regions both being removed is
+interior to the removal, and removing one at a time would expose it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.dispose(): Promise<void>`
 
@@ -2793,6 +3137,12 @@ Every region's boundary -- the edit-mode bootstrap call.
 
 Every currently-known surface's mesh -- the bootstrap/full-render call.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+What a footprint currently covers, before anything is generated -- the
+creation-side counterpart to getRegionTopology. The engine
+reports; `features/edit-construction`'s per-type table decides.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.getNodePositions(): readonly ConstructionNodeSnapshot[]`
 
 Every node currently in the session with its live position -- what an
@@ -2812,6 +3162,15 @@ One surface's mesh piece(s), by key. Almost always one piece -- but an
 analytic-region key (a merged path-brush source/target region) can
 legitimately triangulate into several disjoint pieces (one per outer
 loop), and every one of them must be rendered, not just the first.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+
+Every closed loop of boundary that some other loop encloses and no face
+fills -- a hole in the surface whose rim already exists.
+
+Structural, not geometric: it reports only loops the registered edges
+already close, never a gap guessed from proximity. Filling one adds no
+edge and no node, because the boundary was there all along.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.insertVertex(request: { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }): RegionEditOutcome`
 
@@ -2883,6 +3242,19 @@ Restores the confirmed state immediately before that path-brush operation.
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.physical: boolean`
 
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.surfaceType: string`
+
+### `interface vtt.construction-session-port.ConstructionUnfilledLoop`
+
+A closed loop of boundary with no face on it -- a hole in the surface.
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+The loop's edges, each already oriented for the face that would fill it
+-- opposite the single region still using it. Registrable verbatim.
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.centroid: ConstructionPosition`
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
 
 ### `interface vtt.construction-session-port.CornerHeightModule`
 
@@ -3090,6 +3462,14 @@ Identity lifecycle emitted by an atomic surface transformation.
 ### `type vtt.construction-session-port.ConstructionBrushShape = { kind: "circle"; radius: number } | { kind: "square"; rotationRadians: number; size: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
 
 Renderer-neutral convex brush shape accepted by authoritative Rust brush queries.
+
+### `type vtt.construction-session-port.ConstructionCoverageKind = "centroid" | "overlap"`
+
+How a brush footprint touches one existing region.
+
+Reported as data rather than resolved by the engine: a type that swaps
+whole faces (terrain restacking onto itself) and a type that cuts (a path
+carved through) need different rules from the very same answer.
 
 ### `type vtt.construction-session-port.ConstructionEdgeGeometry = { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }`
 

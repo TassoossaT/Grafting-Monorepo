@@ -156,9 +156,39 @@ loop closure and the non-manifold-edge rule against edges already
 registered via [`add_edge`](Self::add_edge). Rejects and leaves no
 partial state on any failure.
 
+### `pub fn grafting_graph_core::ContourTopology::assemble_loops(&self, edges: &[grafting_graph_core::ContourEdgeId]) -> alloc::vec::Vec<grafting_graph_core::ContourLoop>`
+
+Chains `edges` into closed loops by shared endpoints, orienting each
+use so consecutive entries meet end-to-start.
+
+Used to rebuild the rim a removal exposes (see
+[`delete_regions`](crate::delete_regions)), where the result must be
+stitchable without leaving a hole or inventing a face -- so a chain
+that cannot close is **dropped rather than returned half-open**, and
+a caller comparing input and output counts can tell that happened.
+
+A node where three or more of `edges` meet (a pinch point) has no
+unambiguous continuation; this walk takes the first unused one it
+finds, which is deterministic but not necessarily the caller's
+intended pairing. Callers that can produce pinch points own
+splitting `edges` into unambiguous groups first.
+
+### `pub fn grafting_graph_core::ContourTopology::assemble_oriented_loops(&self, uses: &[grafting_graph_core::OrientedEdgeUse]) -> alloc::vec::Vec<grafting_graph_core::ContourLoop>`
+
+Chains already-oriented uses into closed loops, keeping each use's own
+direction rather than choosing one. Used for a rim whose orientation
+is dictated from outside (opposite the surviving neighbour's), where
+re-deriving direction from connectivity would discard that.
+
 ### `pub fn grafting_graph_core::ContourTopology::edge(&self, id: &grafting_graph_core::ContourEdgeId) -> core::option::Option<&grafting_graph_core::ContourEdge>`
 
 Looks up a registered edge by identity.
+
+### `pub fn grafting_graph_core::ContourTopology::edge_ids(&self) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
+
+Every registered edge's identity, in a caller-stable sorted order.
+Includes edges no region uses -- a caller looking for live boundaries
+filters by [`usage_count`](Self::usage_count).
 
 ### `pub fn grafting_graph_core::ContourTopology::edges_incident_to(&self, node: &grafting_graph_core::NodeId) -> alloc::vec::Vec<grafting_graph_core::ContourEdgeId>`
 
@@ -255,6 +285,21 @@ boundary is restored and nothing is left half-applied.
 Replaces one registered edge's geometry in place, leaving its identity
 and both endpoints untouched -- the `RetypeEdge` primitive's whole
 effect on topology (swap `Line` for `Arc`, or re-aim an arc's center).
+
+### `pub fn grafting_graph_core::ContourTopology::sole_usage_reversed(&self, edge: &grafting_graph_core::ContourEdgeId) -> core::option::Option<bool>`
+
+Which direction the one region still using `edge` walks it, or `None`
+when it is unused or shared. A face being stitched onto a free
+boundary must walk it the **opposite** way -- that opposition is what
+makes the two manifold neighbours instead of an illegal double use.
+
+### `pub fn grafting_graph_core::ContourTopology::usage_count(&self, edge: &grafting_graph_core::ContourEdgeId) -> usize`
+
+How many registered regions currently walk `edge`. At most two, by
+the non-manifold rule. **One is the number that matters:** an edge
+used exactly once is a free boundary -- nothing sits on its other
+side -- which is what makes it part of the rim left behind when
+neighbouring regions are removed.
 
 ### `pub fn grafting_graph_core::Edge<E>::clone(&self) -> grafting_graph_core::Edge<E>`
 
@@ -776,10 +821,23 @@ decision this layer does not own.
 
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
-`DeleteRegion`: unregisters a region and its surface, then runs the
-shared orphan cleanup over every node its boundary used -- leaving zero
-orphaned nodes or edges behind, per this module's own structural
-guarantee.
+`DeleteRegion` for a single region -- [`delete_regions`] with one entry,
+discarding the rim. A caller that intends to stitch anything back should
+call [`delete_regions`] instead and keep it.
+
+### `pub fn grafting_graph_core::delete_regions<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, regions: &[grafting_graph_core::RegionId]) -> core::result::Result<grafting_graph_core::RegionRemoval, grafting_graph_core::RegionEditError>`
+
+`DeleteRegion` over a whole set at once, reporting the rim left behind.
+
+Batching is not an optimization, it is the correctness condition: an
+edge shared by two regions that are *both* being removed is interior to
+the removal and must not appear in the rim. Deleting one at a time would
+expose it in between, and a caller stitching onto it would weld into the
+middle of its own hole.
+
+The rim is derived, never guessed: after the removal and the shared
+orphan cleanup, it is exactly those of the removed regions' own edges
+that still exist and are now used by exactly one region.
 
 ### `pub fn grafting_graph_core::duplicate_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, spec: grafting_graph_core::DuplicateRegionSpec<'_, N>) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -1289,6 +1347,24 @@ Graph nodes the shared orphan cleanup reclaimed.
 
 Regions that stopped existing.
 
+### `pub grafting_graph_core::RegionRemoval::exposed_loops: alloc::vec::Vec<grafting_graph_core::ContourLoop>`
+
+Closed loops of surviving edges now used by exactly one region --
+the literal boundary of the hole the removal opened, and therefore
+exactly what a caller must stitch back onto to leave neither a hole
+nor an extra face.
+
+**Each use is already oriented for the stitching face**, opposite to
+how the surviving neighbour walks it, so a caller registers a new
+region with these verbatim. Using the neighbour's own direction would
+be an illegal second use in the same direction.
+
+Empty when the removal opened no hole (nothing neighboured it).
+
+### `pub grafting_graph_core::RegionRemoval::outcome: grafting_graph_core::RegionEditOutcome`
+
+Affected neighbours, removed regions, reclaimed nodes.
+
 ### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
 
 Which of the two arcs a shared center and two endpoints could
@@ -1520,6 +1596,11 @@ outcomes without re-normalizing.
 Stable identity of a [`SurfaceRegion`], independent of its node set --
 the replacement for [`SurfaceKey`](crate::SurfaceKey)'s node-set identity,
 which cannot distinguish two regions sharing nodes but differing edges.
+
+### `pub struct grafting_graph_core::RegionRemoval`
+
+What a removal left behind: the edit's own outcome, plus the rim the
+hole is now bounded by.
 
 ### `pub struct grafting_graph_core::RegionSurface`
 

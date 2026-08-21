@@ -1,6 +1,7 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../atomic-edit.ts";
+import type { CreationInteraction } from "./creation-interaction.ts";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -74,6 +75,13 @@ export interface StructureTypeDefinition {
   readonly roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => EditRole;
   /** The policy for one role. */
   readonly policyFor: (role: EditRole) => RolePolicy;
+  /**
+   * What happens when **this** type is painted over `coveredType` -- the
+   * creation half of the same declaration. Directional on purpose: a wall
+   * goes on terrain, terrain does not go on a wall, and neither direction
+   * says anything about the other.
+   */
+  readonly interactionOver: (coveredType: string) => CreationInteraction;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

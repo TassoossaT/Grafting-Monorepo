@@ -18,6 +18,8 @@ use grafting_graph_core::{
 
 use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
+use crate::enclosure;
+use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
@@ -249,6 +251,83 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         self.track(&response);
+        serialize(&response)
+    }
+
+    /// Registers a region from already-registered edges, so a new face can
+    /// *share* a boundary instead of laying a coincident copy of it beside
+    /// the neighbour's. See `region_editing::apply_add_region`.
+    pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_add_region(&mut self.topology, &mut self.surfaces, request)
+            .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// Removes a whole set of regions at once and reports the rim the hole
+    /// is left bounded by -- what a caller stitches new geometry onto so the
+    /// result has neither a leftover hole nor an extra face. See
+    /// `region_editing::apply_delete_regions`.
+    pub fn delete_regions_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = region_editing::apply_delete_regions(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response.outcome);
+        serialize(&response)
+    }
+
+    /// What a brush footprint currently covers, before anything is
+    /// generated -- the creation-side counterpart to `region_topology_json`.
+    /// The engine reports; the caller's own per-type table decides what to
+    /// do about it. See `footprint::footprint_coverage`.
+    pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            footprint::footprint_coverage(&self.graph, &self.topology, &self.surfaces, request)
+                .map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Registers a whole generated patch -- nodes, shared boundary edges,
+    /// and the regions over them -- in one call. See
+    /// `region_editing::apply_add_patch` for why a generator must name its
+    /// own edges rather than let each face mint its own.
+    pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let dto = region_editing::apply_add_patch(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&dto.outcome);
+        serialize(&dto)
+    }
+
+    /// Every closed loop of free boundary that some other free loop
+    /// encloses -- a hole in the surface whose rim already exists. See
+    /// `enclosure::unfilled_loops`.
+    pub fn unfilled_loops_json(&self) -> Result<String, JsValue> {
+        let response =
+            enclosure::unfilled_loops(&self.graph, &self.topology).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Which of the given XZ points already sit inside a region -- what a
+    /// generator consults so it only builds over open ground. See
+    /// `footprint::classify_points`.
+    pub fn classify_points_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            footprint::classify_points(&self.graph, &self.topology, &self.surfaces, request)
+                .map_err(to_js_error)?;
         serialize(&response)
     }
 

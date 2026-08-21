@@ -966,6 +966,15 @@ impl ContourTopology {
         ids
     }
 
+    /// Every registered edge's identity, in a caller-stable sorted order.
+    /// Includes edges no region uses -- a caller looking for live boundaries
+    /// filters by [`usage_count`](Self::usage_count).
+    pub fn edge_ids(&self) -> Vec<ContourEdgeId> {
+        let mut ids: Vec<ContourEdgeId> = self.edges.keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
     /// Every region currently using `edge`, in a caller-stable sorted order.
     /// At most two, by the non-manifold rule -- see [`ContourError::NonManifoldEdge`].
     pub fn regions_using_edge(&self, edge: &ContourEdgeId) -> Vec<RegionId> {
@@ -1029,6 +1038,140 @@ impl ContourTopology {
             }
         }
         Ok(nodes)
+    }
+
+    /// How many registered regions currently walk `edge`. At most two, by
+    /// the non-manifold rule. **One is the number that matters:** an edge
+    /// used exactly once is a free boundary -- nothing sits on its other
+    /// side -- which is what makes it part of the rim left behind when
+    /// neighbouring regions are removed.
+    pub fn usage_count(&self, edge: &ContourEdgeId) -> usize {
+        self.usages.get(edge).map(Vec::len).unwrap_or(0)
+    }
+
+    /// Which direction the one region still using `edge` walks it, or `None`
+    /// when it is unused or shared. A face being stitched onto a free
+    /// boundary must walk it the **opposite** way -- that opposition is what
+    /// makes the two manifold neighbours instead of an illegal double use.
+    pub fn sole_usage_reversed(&self, edge: &ContourEdgeId) -> Option<bool> {
+        match self.usages.get(edge)?.as_slice() {
+            [usage] => Some(usage.reversed),
+            _ => None,
+        }
+    }
+
+    /// Chains already-oriented uses into closed loops, keeping each use's own
+    /// direction rather than choosing one. Used for a rim whose orientation
+    /// is dictated from outside (opposite the surviving neighbour's), where
+    /// re-deriving direction from connectivity would discard that.
+    pub fn assemble_oriented_loops(&self, uses: &[OrientedEdgeUse]) -> Vec<ContourLoop> {
+        let ends = |use_: &OrientedEdgeUse| -> Option<(NodeId, NodeId)> {
+            let edge = self.edges.get(use_.edge())?;
+            Some(if use_.is_reversed() {
+                (edge.end_node.clone(), edge.start_node.clone())
+            } else {
+                (edge.start_node.clone(), edge.end_node.clone())
+            })
+        };
+
+        let mut remaining: Vec<OrientedEdgeUse> = uses.to_vec();
+        let mut loops = Vec::new();
+        while let Some(seed) = remaining.pop() {
+            let Some((origin, mut cursor)) = ends(&seed) else {
+                continue;
+            };
+            let mut walked: ContourLoop = vec![seed];
+            while cursor != origin {
+                let found = remaining
+                    .iter()
+                    .position(|candidate| ends(candidate).is_some_and(|(start, _)| start == cursor));
+                let Some(index) = found else { break };
+                let next = remaining.remove(index);
+                let Some((_, end)) = ends(&next) else { break };
+                cursor = end;
+                walked.push(next);
+            }
+            if cursor == origin {
+                loops.push(walked);
+            }
+        }
+        loops
+    }
+
+    /// Chains `edges` into closed loops by shared endpoints, orienting each
+    /// use so consecutive entries meet end-to-start.
+    ///
+    /// Used to rebuild the rim a removal exposes (see
+    /// [`delete_regions`](crate::delete_regions)), where the result must be
+    /// stitchable without leaving a hole or inventing a face -- so a chain
+    /// that cannot close is **dropped rather than returned half-open**, and
+    /// a caller comparing input and output counts can tell that happened.
+    ///
+    /// A node where three or more of `edges` meet (a pinch point) has no
+    /// unambiguous continuation; this walk takes the first unused one it
+    /// finds, which is deterministic but not necessarily the caller's
+    /// intended pairing. Callers that can produce pinch points own
+    /// splitting `edges` into unambiguous groups first.
+    pub fn assemble_loops(&self, edges: &[ContourEdgeId]) -> Vec<ContourLoop> {
+        let mut incident: HashMap<NodeId, Vec<ContourEdgeId>> = HashMap::new();
+        for id in edges {
+            let Some(edge) = self.edges.get(id) else {
+                continue;
+            };
+            incident
+                .entry(edge.start_node.clone())
+                .or_default()
+                .push(id.clone());
+            incident
+                .entry(edge.end_node.clone())
+                .or_default()
+                .push(id.clone());
+        }
+
+        let mut used: BTreeSet<ContourEdgeId> = BTreeSet::new();
+        let mut loops = Vec::new();
+        for seed in edges {
+            if used.contains(seed) {
+                continue;
+            }
+            let Some(edge) = self.edges.get(seed) else {
+                continue;
+            };
+            let origin = edge.start_node.clone();
+            let mut walked: ContourLoop = vec![OrientedEdgeUse::forward(seed.clone())];
+            used.insert(seed.clone());
+            let mut cursor = edge.end_node.clone();
+
+            while cursor != origin {
+                let next = incident
+                    .get(&cursor)
+                    .into_iter()
+                    .flatten()
+                    .find(|candidate| !used.contains(*candidate))
+                    .cloned();
+                let Some(next) = next else { break };
+                let Some(next_edge) = self.edges.get(&next) else {
+                    break;
+                };
+                let reversed = next_edge.start_node != cursor;
+                cursor = if reversed {
+                    next_edge.start_node.clone()
+                } else {
+                    next_edge.end_node.clone()
+                };
+                walked.push(if reversed {
+                    OrientedEdgeUse::reversed(next.clone())
+                } else {
+                    OrientedEdgeUse::forward(next.clone())
+                });
+                used.insert(next);
+            }
+
+            if cursor == origin {
+                loops.push(walked);
+            }
+        }
+        loops
     }
 
     /// Replaces one registered edge's geometry in place, leaving its identity
