@@ -311,12 +311,15 @@ impl ConstructionSession {
         serialize(&dto)
     }
 
-    /// Every closed loop of free boundary that some other free loop
-    /// encloses -- a hole in the surface whose rim already exists. See
+    /// Every closed loop of free boundary, among the nodes the request
+    /// names, that another such loop encloses -- a hole in the surface whose
+    /// rim already exists. The caller passes the region it just touched;
+    /// boundary elsewhere on the map is none of its business. See
     /// `enclosure::unfilled_loops`.
-    pub fn unfilled_loops_json(&self) -> Result<String, JsValue> {
+    pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
         let response =
-            enclosure::unfilled_loops(&self.graph, &self.topology).map_err(to_js_error)?;
+            enclosure::unfilled_loops(&self.graph, &self.topology, request).map_err(to_js_error)?;
         serialize(&response)
     }
 

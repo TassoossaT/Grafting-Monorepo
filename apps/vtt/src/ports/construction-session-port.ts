@@ -445,14 +445,21 @@ export interface ConstructionSessionPort {
    */
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome;
   /**
-   * Every closed loop of boundary that some other loop encloses and no face
-   * fills -- a hole in the surface whose rim already exists.
+   * Every closed loop of boundary **among `scope`'s nodes** that another
+   * such loop encloses and no face fills -- a hole in the surface whose rim
+   * already exists.
    *
    * Structural, not geometric: it reports only loops the registered edges
    * already close, never a gap guessed from proximity. Filling one adds no
    * edge and no node, because the boundary was there all along.
+   *
+   * `scope` is the region the caller just touched, and narrowing to it is
+   * what makes the answer right rather than merely cheap: free boundary
+   * elsewhere on the map bounds shapes nobody is editing, and a courtyard
+   * between two unrelated patches reads as a hole from every angle except
+   * "did this stroke put it there". An empty scope reports nothing.
    */
-  getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`. */
   addContourEdge(request: {
     readonly edgeId: ConstructionEdgeId;

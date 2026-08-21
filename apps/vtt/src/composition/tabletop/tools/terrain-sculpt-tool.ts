@@ -425,7 +425,8 @@ function toPatch(
 }
 
 /**
- * Fills every closed loop of boundary the surface leaves uncovered.
+ * Fills every closed loop of boundary *this stroke's own region* leaves
+ * uncovered.
  *
  * A face this stroke declined -- degenerate, welded onto ground that already
  * had one, refused by a rule -- leaves a gap whose rim its neighbours still
@@ -434,11 +435,25 @@ function toPatch(
  * already oriented for the face that closes it, so filling one is a plain
  * region registration that adds no edge and no node.
  *
+ * `scope` is the whole point. The brush already knows every node it touched,
+ * so the search never has to be a sweep of the map -- and must not be one: a
+ * closed loop with no face somewhere the brush never went is somebody else's
+ * shape, and paving it over because a stroke happened elsewhere is a bug,
+ * not a repair. Confined to the stroke, the only loops in play are the ones
+ * it just bounded, and its own outline is among them -- that one encloses
+ * the others rather than being enclosed, so an unbroken stroke fills
+ * nothing and simply creates as it always did.
+ *
  * A hole a region *declared* -- a doorway, a courtyard -- is not reported
  * and so is never sealed; that exclusion lives in the engine.
  */
-function fillUnfilledLoops(ctx: ToolContext, surfaceType: string, causeId: string): number {
-  const loops = ctx.runtime.getUnfilledLoops();
+function fillUnfilledLoops(
+  ctx: ToolContext,
+  scope: readonly ConstructionNodeId[],
+  surfaceType: string,
+  causeId: string,
+): number {
+  const loops = ctx.runtime.getUnfilledLoops(scope);
   if (loops.length === 0) return 0;
   ctx.runtime.addPatch(
     {
@@ -606,7 +621,17 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         : undefined;
     const built = outcome?.createdSurfaceKeys.length ?? 0;
     const refused = outcome?.skippedRegionIds.length ?? 0;
-    const filled = fillUnfilledLoops(ctx, params.targetSurface, causeId);
+
+    // The region to search for holes: every node this stroke touched, from
+    // both halves of it -- the faces it generated and the ones it raised.
+    // Taken from the face cycles rather than from `resolved.nodes` because
+    // those are only the *new* nodes; a cycle also names the existing ones
+    // its corners welded onto, and a gap at the seam between old ground and
+    // new is bounded by exactly that mix.
+    const touched = new Set<ConstructionNodeId>();
+    for (const surface of resolved.surfaces) for (const id of surface.cycle) touched.add(id);
+    for (const region of covered) for (const id of region.nodeIds) touched.add(id);
+    const filled = fillUnfilledLoops(ctx, [...touched], params.targetSurface, causeId);
 
     const parts: string[] = [];
     if (built > 0) parts.push(`${built} faces novas`);

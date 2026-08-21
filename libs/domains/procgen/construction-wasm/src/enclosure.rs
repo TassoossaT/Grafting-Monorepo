@@ -13,10 +13,21 @@
 //! be registered along them directly. Filling one adds no edge and no node
 //! -- the boundary was there all along, used once instead of twice.
 //!
+//! **Scoped to the caller's own region.** The query is always asked about a
+//! set of nodes -- the ones a stroke just touched -- and only boundary whose
+//! *both* endpoints are in that set can take part. That is not an
+//! optimisation bolted onto a global sweep; it is what makes the answer
+//! right. Free boundary elsewhere on the map belongs to shapes nobody is
+//! editing: a courtyard between two unrelated patches is a closed loop
+//! enclosed by another closed loop, and a global sweep would pave it over
+//! because a brush ran somewhere else entirely. Confining the walk to the
+//! painted nodes also collapses the enclosure test from every candidate on
+//! the map to the handful this stroke bounds.
+//!
 //! **No policy here.** Which loops are worth filling, and with what surface
 //! type, is the caller's decision; this module has no opinion about terrain.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeSet;
 
@@ -26,6 +37,17 @@ use grafting_graph_core::{
 
 use crate::editing::SessionGraph;
 use crate::footprint::{loop_polygon, polygon_contains_point};
+
+/// The region to look inside: the nodes a stroke touched.
+///
+/// An empty -- or two-node -- set closes nothing, and is answered with no
+/// loops rather than by widening the search. A caller with no region to name
+/// has no hole to fill.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnfilledLoopsRequest {
+    pub node_ids: Vec<String>,
+}
 
 /// One oriented use of an already-registered edge, in the wire shape
 /// `add_region` accepts unchanged.
@@ -87,7 +109,8 @@ fn centroid_of(graph: &SessionGraph, nodes: &[NodeId]) -> Option<[f32; 3]> {
     Some([sum[0] / count, sum[1] / count, sum[2] / count])
 }
 
-/// Every closed loop of free boundary that some other free loop encloses.
+/// Every closed loop of free boundary, *within `request`'s nodes*, that
+/// another such loop encloses.
 ///
 /// **Why enclosure and not orientation.** Free edges split into two kinds:
 /// the outer silhouette of a patch, and the rim of a hole inside it. Telling
@@ -98,15 +121,40 @@ fn centroid_of(graph: &SessionGraph, nodes: &[NodeId]) -> Option<[f32; 3]> {
 /// directly: a hole is a loop something else contains, and an outer
 /// silhouette is contained by nothing. Disjoint patches fall out correctly
 /// for free -- neither contains the other, so neither is a hole.
+///
+/// The outer silhouette of the scope is what gives the enclosure test
+/// something to be enclosed *by*, so it must stay in the candidate set even
+/// though it is never itself reported -- which is why the filter is on the
+/// nodes rather than on, say, only the edges this stroke minted.
 pub fn unfilled_loops(
     graph: &SessionGraph,
     topology: &ContourTopology,
+    request: UnfilledLoopsRequest,
 ) -> Result<UnfilledLoopsResponse, String> {
+    let scope: BTreeSet<NodeId> = request
+        .node_ids
+        .into_iter()
+        .map(|id| NodeId::new(id).map_err(|error| error.to_string()))
+        .collect::<Result<_, _>>()?;
+    // Three nodes are the fewest that can bound anything, and an unscoped
+    // call must find nothing rather than fall back to the whole map.
+    if scope.len() < 3 {
+        return Ok(UnfilledLoopsResponse { loops: Vec::new() });
+    }
+
     // Oriented opposite the sole user, so what comes back is directly
     // registrable -- see `BoundaryUseDto::boundary`.
     let free: Vec<OrientedEdgeUse> = topology
         .edge_ids()
         .into_iter()
+        .filter(|edge| {
+            // Both endpoints, not either: an edge leaving the painted region
+            // is the region's own rim seen from outside, and following it
+            // would walk the search out into geometry nobody touched.
+            topology.edge(edge).is_some_and(|edge| {
+                scope.contains(edge.start_node()) && scope.contains(edge.end_node())
+            })
+        })
         .filter_map(|edge| {
             topology.sole_usage_reversed(&edge).map(|reversed| {
                 if reversed {
@@ -197,6 +245,24 @@ mod tests {
 
     fn edge(id: &str) -> ContourEdgeId {
         ContourEdgeId::new(id.to_owned()).unwrap()
+    }
+
+    /// Every node any region uses -- the scope a stroke that had painted the
+    /// whole fixture would name.
+    fn scope_of(topology: &ContourTopology) -> UnfilledLoopsRequest {
+        UnfilledLoopsRequest {
+            node_ids: topology
+                .nodes_in_use()
+                .iter()
+                .map(|id| id.as_str().to_owned())
+                .collect(),
+        }
+    }
+
+    fn scope(names: &[&str]) -> UnfilledLoopsRequest {
+        UnfilledLoopsRequest {
+            node_ids: names.iter().map(|name| (*name).to_owned()).collect(),
+        }
     }
 
     /// The reason a generator cannot let each face mint its own edges: two
@@ -349,7 +415,7 @@ mod tests {
     #[test]
     fn a_complete_patch_reports_no_hole() {
         let (graph, topology, _surfaces) = lattice(3, 3, &[]);
-        let response = unfilled_loops(&graph, &topology).unwrap();
+        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
         assert!(
             response.loops.is_empty(),
             "the outer silhouette is free boundary but nothing encloses it"
@@ -362,7 +428,7 @@ mod tests {
     #[test]
     fn a_missing_interior_face_is_reported_as_an_unfilled_loop() {
         let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
-        let response = unfilled_loops(&graph, &topology).unwrap();
+        let response = unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap();
         assert_eq!(response.loops.len(), 1);
         let hole = &response.loops[0];
         assert_eq!(hole.boundary.len(), 4);
@@ -380,7 +446,7 @@ mod tests {
     #[test]
     fn a_reported_loop_is_registrable_verbatim_and_closes_the_hole() {
         let (mut graph, mut topology, mut surfaces) = lattice(3, 3, &[(1, 1)]);
-        let hole = unfilled_loops(&graph, &topology)
+        let hole = unfilled_loops(&graph, &topology, scope_of(&topology))
             .unwrap()
             .loops
             .pop()
@@ -419,7 +485,7 @@ mod tests {
                 use_.edge_id
             );
         }
-        assert!(unfilled_loops(&graph, &topology).unwrap().loops.is_empty());
+        assert!(unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty());
     }
 
     /// Two separate patches are not each other's holes, however close they
@@ -487,8 +553,62 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(unfilled_loops(&graph, &topology).unwrap().loops.is_empty());
+        assert!(unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty());
     }
+
+    /// The scope is the answer, not a speed-up. A stroke somewhere else on
+    /// the table must leave an existing gap exactly as it found it --
+    /// without this, painting in one corner would quietly pave over a gap in
+    /// another, and a courtyard between two patches is precisely such a gap.
+    #[test]
+    fn a_gap_outside_the_named_region_is_not_reported() {
+        let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
+        let elsewhere = scope(&["n0_0", "n1_0", "n1_1", "n0_1"]);
+        assert!(
+            unfilled_loops(&graph, &topology, elsewhere)
+                .unwrap()
+                .loops
+                .is_empty(),
+            "the gap at (1,1) belongs to nodes this caller never named"
+        );
+        // ...and the same graph still reports it to a caller that did.
+        assert_eq!(
+            unfilled_loops(&graph, &topology, scope_of(&topology))
+                .unwrap()
+                .loops
+                .len(),
+            1
+        );
+    }
+
+    /// A caller naming nothing gets nothing. An empty scope must never be
+    /// read as "look everywhere" -- that is the whole-map sweep this query
+    /// exists to avoid, and it would arrive by accident.
+    #[test]
+    fn an_empty_scope_finds_nothing_rather_than_everything() {
+        let (graph, topology, _surfaces) = lattice(3, 3, &[(1, 1)]);
+        assert!(
+            unfilled_loops(&graph, &topology, scope(&[]))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
+    }
+
+    /// A stroke that painted an unbroken patch has one closed loop in scope
+    /// -- its own outline -- and that is not a hole. This is the ordinary
+    /// case, and it must add nothing.
+    #[test]
+    fn a_region_whose_only_loop_is_its_own_outline_is_left_alone() {
+        let (graph, topology, _surfaces) = lattice(2, 2, &[]);
+        assert!(
+            unfilled_loops(&graph, &topology, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
+    }
+
     /// A hole somebody asked for is not a hole to repair. A floor with a
     /// doorway cut in it looks identical from the outside -- free boundary
     /// enclosed by the floor's own silhouette -- so without this the very
@@ -564,7 +684,7 @@ mod tests {
             .unwrap();
 
         assert!(
-            unfilled_loops(&graph, &topology).unwrap().loops.is_empty(),
+            unfilled_loops(&graph, &topology, scope_of(&topology)).unwrap().loops.is_empty(),
             "the declared hole is somebody's doorway, not a gap to seal"
         );
     }
