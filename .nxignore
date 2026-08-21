@@ -1,0 +1,25 @@
+# Dependencies and package managers
+node_modules
+.pnpm-store
+
+# Worktrees and virtual environments
+.worktrees
+.venv
+.pytest_cache
+
+# Rust build outputs
+target
+
+# Distribution and build outputs
+dist
+artifacts
+TestResults
+storybook-static
+
+# .NET build outputs
+dotnet/**/bin
+dotnet/**/obj
+
+# Spikes and temporary tools
+spikes
+tools/.flatc-csharp
