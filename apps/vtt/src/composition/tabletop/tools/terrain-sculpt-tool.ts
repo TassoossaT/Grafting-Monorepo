@@ -425,7 +425,8 @@ function toPatch(
 }
 
 /**
- * Fills every closed loop of boundary the surface leaves uncovered.
+ * Fills every closed loop of boundary *this stroke's own region* leaves
+ * uncovered.
  *
  * A face this stroke declined -- degenerate, welded onto ground that already
  * had one, refused by a rule -- leaves a gap whose rim its neighbours still
@@ -434,11 +435,25 @@ function toPatch(
  * already oriented for the face that closes it, so filling one is a plain
  * region registration that adds no edge and no node.
  *
+ * `scope` is the whole point. The brush already knows every node it touched,
+ * so the search never has to be a sweep of the map -- and must not be one: a
+ * closed loop with no face somewhere the brush never went is somebody else's
+ * shape, and paving it over because a stroke happened elsewhere is a bug,
+ * not a repair. Confined to the stroke, the only loops in play are the ones
+ * it just bounded, and its own outline is among them -- that one encloses
+ * the others rather than being enclosed, so an unbroken stroke fills
+ * nothing and simply creates as it always did.
+ *
  * A hole a region *declared* -- a doorway, a courtyard -- is not reported
  * and so is never sealed; that exclusion lives in the engine.
  */
-function fillUnfilledLoops(ctx: ToolContext, surfaceType: string, causeId: string): number {
-  const loops = ctx.runtime.getUnfilledLoops();
+function fillUnfilledLoops(
+  ctx: ToolContext,
+  scope: readonly ConstructionNodeId[],
+  surfaceType: string,
+  causeId: string,
+): number {
+  const loops = ctx.runtime.getUnfilledLoops(scope);
   if (loops.length === 0) return 0;
   ctx.runtime.addPatch(
     {
@@ -447,14 +462,47 @@ function fillUnfilledLoops(ctx: ToolContext, surfaceType: string, causeId: strin
       regions: loops.map((loop) => ({
         regionId: loop.nodeIds.join("|"),
         boundary: loop.boundary,
-        surfaceType,
-        physical: true,
+        ...matchTheGroundAround(loop.neighbours, surfaceType),
       })),
     },
     "local",
     causeId,
   );
   return loops.length;
+}
+
+/**
+ * What to make a gap out of: whatever most of the faces around it are made
+ * of, falling back to the brush's own target when it has no neighbours to
+ * copy.
+ *
+ * Filling with the *selected* type instead is what leaves a mended gap a
+ * different colour from the ground it sits in -- paint grass, pass over an
+ * older slate patch to close a hole in it, and the patch comes back with a
+ * green tile in the middle. The stroke never retypes ground it merely passes
+ * over (raising only moves Y), so a gap inside that ground must not be
+ * retyped either. A gap inside terrain this same stroke generated has that
+ * type on every side anyway, so the two cases agree.
+ */
+function matchTheGroundAround(
+  neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[],
+  fallback: string,
+): { readonly surfaceType: string; readonly physical: boolean } {
+  const tally = new Map<string, { count: number; physical: number }>();
+  for (const neighbour of neighbours) {
+    const entry = tally.get(neighbour.surfaceType) ?? { count: 0, physical: 0 };
+    entry.count += 1;
+    if (neighbour.physical) entry.physical += 1;
+    tally.set(neighbour.surfaceType, entry);
+  }
+  let best: { surfaceType: string; count: number; physical: number } | undefined;
+  for (const [surfaceType, entry] of tally) {
+    if (best === undefined || entry.count > best.count) best = { surfaceType, ...entry };
+  }
+  if (best === undefined) return { surfaceType: fallback, physical: true };
+  // Physical wins a tie: a gap left walk-through in the middle of solid
+  // ground is a worse wrong answer than a solid tile in a decorative patch.
+  return { surfaceType: best.surfaceType, physical: best.physical * 2 >= best.count };
 }
 
 /**
@@ -587,6 +635,20 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         ? restackTerrain(ctx, params.targetSurface, covered, causeId)
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
+    // Mend the ground that is already here *before* generating over it, and
+    // for two reasons. It is what "pass the brush over a hole to close it"
+    // has to mean -- the rim of that hole is already in the map, so closing
+    // it is a region registration, never new geometry. And doing it first
+    // makes the gap occupied ground, so the lattice below skips it: a fresh
+    // lattice is seeded at this gesture's own origin and lands wherever the
+    // pointer went, so its vertices do not line up with the older mesh
+    // around the hole and only some of them fall close enough to weld. What
+    // it would generate there is a quad at its own offset, overlapping the
+    // rim instead of meeting it -- more free boundary, not less.
+    const existing = new Set<ConstructionNodeId>();
+    for (const region of covered) for (const id of region.nodeIds) existing.add(id);
+    const mended = fillUnfilledLoops(ctx, [...existing], params.targetSurface, causeId);
+
     const trianglesPerSide = latticeTrianglesPerSideFor(gesture, params);
     const session = startSession(ctx, gesture.start.point, { ...params, trianglesPerSide });
     blockOccupiedQuads(ctx, session);
@@ -606,7 +668,16 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         : undefined;
     const built = outcome?.createdSurfaceKeys.length ?? 0;
     const refused = outcome?.skippedRegionIds.length ?? 0;
-    const filled = fillUnfilledLoops(ctx, params.targetSurface, causeId);
+
+    // The region to search for holes: every node this stroke touched, from
+    // both halves of it -- the faces it generated and the ones it raised.
+    // Taken from the face cycles rather than from `resolved.nodes` because
+    // those are only the *new* nodes; a cycle also names the existing ones
+    // its corners welded onto, and a gap at the seam between old ground and
+    // new is bounded by exactly that mix.
+    const touched = new Set<ConstructionNodeId>(existing);
+    for (const surface of resolved.surfaces) for (const id of surface.cycle) touched.add(id);
+    const filled = mended + fillUnfilledLoops(ctx, [...touched], params.targetSurface, causeId);
 
     const parts: string[] = [];
     if (built > 0) parts.push(`${built} faces novas`);

@@ -17,6 +17,7 @@ import type {
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
+  ConstructionNodeId,
   ConstructionNodeSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -245,18 +246,21 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
   }
 
-  getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
-    const wire = JSON.parse(this.#require().unfilled_loops_json()) as {
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
+    if (scope.length === 0) return [];
+    const wire = JSON.parse(this.#require().unfilled_loops_json(JSON.stringify({ nodeIds: scope }))) as {
       readonly loops: readonly {
         readonly boundary: readonly { readonly edgeId: string; readonly reversed: boolean }[];
         readonly nodeIds: readonly string[];
         readonly centroid: WirePosition;
+        readonly neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[];
       }[];
     };
     return wire.loops.map((entry) => ({
       boundary: entry.boundary,
       nodeIds: entry.nodeIds,
       centroid: fromWirePosition(entry.centroid),
+      neighbours: entry.neighbours,
     }));
   }
 

@@ -148,8 +148,8 @@ export interface TabletopRuntime {
    * the faces over them -- in one transaction. See `ConstructionPatch`.
    */
   addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
-  /** Every closed loop of boundary with no face on it -- a hole whose rim already exists. */
-  getUnfilledLoops(): readonly ConstructionUnfilledLoop[];
+  /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** What a brush footprint currently covers, before anything is generated. */
@@ -822,9 +822,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
-  getUnfilledLoops(): readonly ConstructionUnfilledLoop[] {
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
     this.#requireReady("looking for unfilled loops");
-    return this.#construction.getUnfilledLoops();
+    return this.#construction.getUnfilledLoops(scope);
   }
 
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
