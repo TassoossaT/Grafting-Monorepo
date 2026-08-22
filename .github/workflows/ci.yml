@@ -115,12 +115,27 @@ jobs:
         # `project-graph.json` was never refreshed by anything, so every
         # artifact downstream of it was rebuilt from a stale input. `graph:project`
         # now runs first, inside `docs:generate`.
+        #
+        # `artifact-manifest.json` is excluded because it is a record of *where
+        # it was built*, not a derivation of the sources. Its `target` is the
+        # build machine's triple, so this Linux runner and any developer machine
+        # disagree by construction; its `gitSha` is `git rev-parse HEAD`, so the
+        # committed value is necessarily the sha of the commit before the one
+        # that wrote it, and no commit can record its own. Diffing it byte for
+        # byte cannot pass, which is what it did from #189 until #194.
+        #
+        # It is still checked -- by its own `--check`, which compares the fields
+        # that carry meaning and skips exactly those two. That is the general
+        # rule this step has to respect: a diff reports more than `--check`
+        # does, but only `--check` knows which parts of its own output are
+        # claims rather than provenance.
         run: |
           pnpm run docs:generate
-          if ! git diff --exit-code -- docs/generated; then
+          if ! git diff --exit-code -- docs/generated ':!docs/generated/artifact-manifest.json'; then
             echo "::error::Generated artifacts are stale. Run 'pnpm run docs:generate' and commit the result."
             exit 1
           fi
+          pnpm run graph:manifest:check
 
       - name: Public API baselines
         # Kept separate from the regeneration above: a baseline is a reviewed
