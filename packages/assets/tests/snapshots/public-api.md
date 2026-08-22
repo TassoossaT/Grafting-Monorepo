@@ -181,6 +181,27 @@ export interface MeshResource {
     readonly bounds: Aabb;
 }
 /**
+ * Geometry that arrived as several pieces, kept separate.
+ *
+ * An authored asset routinely holds more than one primitive. Concatenating
+ * them into a single buffer is a real operation, but it is **not this
+ * package's**: joining buffers to save a draw call is a decision for whoever
+ * draws, and `@grafting/render-3d` already owns an implementation
+ * (`mergeMeshChunks`). Duplicating it here would be a second copy of
+ * authoritative behaviour that drifts from the first (`DEC-049`).
+ *
+ * So the store decodes — accessors, node transforms, bounds — and hands over
+ * what the file actually contains. A consumer that wants one buffer merges;
+ * one that wants per-part materials later, or per-part culling, still can,
+ * which a pre-merged buffer would have made impossible.
+ */
+export interface MeshPartsResource {
+    /** One entry per primitive, already in the asset's own world space. */
+    readonly parts: readonly MeshResource[];
+    /** Union of every part's bounds, so extent is available without merging. */
+    readonly bounds: Aabb;
+}
+/**
  * An image ready for a renderer to consume.
  *
  * Two forms, because a GPU-compressed texture is not a decoded bitmap and never
@@ -634,12 +655,19 @@ export type GltfMeshSource =
  * No glTF type escapes this module. The result is a plain {@link MeshResource},
  * as every other resolver produces.
  *
- * **This first version brings geometry only.** Materials, textures, animation
- * clips and scene hierarchy are deliberately out: each becomes its own
- * registered kind later, without changing a single contract — the property
- * open kinds were chosen for. Every primitive in every scene is flattened into
- * one mesh with node transforms applied, which is what a consumer drawing a
- * prop or a unit prototype actually wants.
+ * Node transforms **are** applied, because interpreting the scene hierarchy is
+ * part of reading the format. Concatenating the resulting primitives into one
+ * buffer is not: that is a draw-call decision owned by whoever draws, and
+ * `@grafting/render-3d` already implements it as `mergeMeshChunks`. Producing
+ * separate {@link MeshPartsResource} parts keeps this package from carrying a
+ * second copy of that algorithm (`DEC-049`), and leaves per-part materials or
+ * per-part culling possible later — which a pre-merged buffer would have
+ * foreclosed.
+ *
+ * **This first version brings geometry only.** Materials, textures and
+ * animation clips are deliberately out: each becomes its own registered kind
+ * later, without changing a single contract — the property open kinds were
+ * chosen for.
  */
 export declare const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND>;
 
@@ -675,12 +703,19 @@ export type GltfMeshSource =
  * No glTF type escapes this module. The result is a plain {@link MeshResource},
  * as every other resolver produces.
  *
- * **This first version brings geometry only.** Materials, textures, animation
- * clips and scene hierarchy are deliberately out: each becomes its own
- * registered kind later, without changing a single contract — the property
- * open kinds were chosen for. Every primitive in every scene is flattened into
- * one mesh with node transforms applied, which is what a consumer drawing a
- * prop or a unit prototype actually wants.
+ * Node transforms **are** applied, because interpreting the scene hierarchy is
+ * part of reading the format. Concatenating the resulting primitives into one
+ * buffer is not: that is a draw-call decision owned by whoever draws, and
+ * `@grafting/render-3d` already implements it as `mergeMeshChunks`. Producing
+ * separate {@link MeshPartsResource} parts keeps this package from carrying a
+ * second copy of that algorithm (`DEC-049`), and leaves per-part materials or
+ * per-part culling possible later — which a pre-merged buffer would have
+ * foreclosed.
+ *
+ * **This first version brings geometry only.** Materials, textures and
+ * animation clips are deliberately out: each becomes its own registered kind
+ * later, without changing a single contract — the property open kinds were
+ * chosen for.
  */
 export declare const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND>;
 ```

@@ -42,6 +42,28 @@ export interface MeshResource {
 }
 
 /**
+ * Geometry that arrived as several pieces, kept separate.
+ *
+ * An authored asset routinely holds more than one primitive. Concatenating
+ * them into a single buffer is a real operation, but it is **not this
+ * package's**: joining buffers to save a draw call is a decision for whoever
+ * draws, and `@grafting/render-3d` already owns an implementation
+ * (`mergeMeshChunks`). Duplicating it here would be a second copy of
+ * authoritative behaviour that drifts from the first (`DEC-049`).
+ *
+ * So the store decodes — accessors, node transforms, bounds — and hands over
+ * what the file actually contains. A consumer that wants one buffer merges;
+ * one that wants per-part materials later, or per-part culling, still can,
+ * which a pre-merged buffer would have made impossible.
+ */
+export interface MeshPartsResource {
+  /** One entry per primitive, already in the asset's own world space. */
+  readonly parts: readonly MeshResource[];
+  /** Union of every part's bounds, so extent is available without merging. */
+  readonly bounds: Aabb;
+}
+
+/**
  * An image ready for a renderer to consume.
  *
  * Two forms, because a GPU-compressed texture is not a decoded bitmap and never

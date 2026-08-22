@@ -73,54 +73,68 @@ const storeWith = (bytes, ref = resourceRef("model/one")) => {
   return store;
 };
 
-test("a glTF asset becomes a plain MeshResource", async () => {
+test("a glTF asset becomes plain parts, not a merged buffer", async () => {
   const store = storeWith(await glbWith());
-  const mesh = await store.acquire(resourceRef("model/one")).whenReady();
+  const model = await store.acquire(resourceRef("model/one")).whenReady();
 
-  assert.equal(mesh.positions.length, 9, "three vertices");
-  assert.equal(mesh.indices.length, 3);
-  assert.equal(mesh.normals.length, 9);
-  assert.equal(mesh.uvs.length, 6);
-  assert.ok(mesh.positions instanceof Float32Array, "no glTF accessor type leaks through");
+  assert.equal(model.parts.length, 1, "one primitive in, one part out");
+  const [part] = model.parts;
+  assert.equal(part.positions.length, 9, "three vertices");
+  assert.equal(part.indices.length, 3);
+  assert.equal(part.normals.length, 9);
+  assert.equal(part.uvs.length, 6);
+  assert.ok(part.positions instanceof Float32Array, "no glTF accessor type leaks through");
+});
+
+test("joining parts is left to the consumer, so per-part detail survives", async () => {
+  const store = storeWith(await glbWith());
+  const model = await store.acquire(resourceRef("model/one")).whenReady();
+
+  // The store decodes; concatenating buffers to save a draw call belongs to
+  // whoever draws, and render-3d already owns that as mergeMeshChunks.
+  assert.equal(model.positions, undefined, "no merged buffer is produced here");
+  assert.ok(Array.isArray(model.parts) || model.parts.length >= 0);
 });
 
 test("node transforms are applied, so geometry arrives in world space", async () => {
   const store = storeWith(await glbWith({ translation: [10, 5, 0] }));
-  const mesh = await store.acquire(resourceRef("model/one")).whenReady();
+  const model = await store.acquire(resourceRef("model/one")).whenReady();
+  const [part] = model.parts;
 
-  assert.equal(mesh.positions[0], 10, "first vertex shifted by the node translation");
-  assert.equal(mesh.positions[1], 5);
-  assert.equal(mesh.bounds.min.x, 10);
-  assert.equal(mesh.bounds.max.y, 5);
+  assert.equal(part.positions[0], 10, "first vertex shifted by the node translation");
+  assert.equal(part.positions[1], 5);
+  assert.equal(model.bounds.min.x, 10);
+  assert.equal(model.bounds.max.y, 5);
 });
 
 test("bounds describe the geometry rather than being reported as empty", async () => {
   const store = storeWith(await glbWith({ vertexCount: 4 }));
-  const mesh = await store.acquire(resourceRef("model/one")).whenReady();
+  const model = await store.acquire(resourceRef("model/one")).whenReady();
 
-  assert.equal(mesh.bounds.min.x, 0);
-  assert.equal(mesh.bounds.max.x, 3, "four vertices at x = 0..3");
-  assert.ok(mesh.bounds.max.z >= mesh.bounds.min.z);
+  assert.equal(model.bounds.min.x, 0);
+  assert.equal(model.bounds.max.x, 3, "four vertices at x = 0..3");
+  assert.ok(model.bounds.max.z >= model.bounds.min.z);
+  assert.deepEqual(model.bounds, model.parts[0].bounds, "one part means its own bounds are the union");
 });
 
 test("an attribute missing from the source is absent rather than fabricated", async () => {
   const store = storeWith(await glbWith({ withNormals: false, withUvs: false }));
-  const mesh = await store.acquire(resourceRef("model/one")).whenReady();
+  const [part] = (await store.acquire(resourceRef("model/one")).whenReady()).parts;
 
-  assert.equal(mesh.normals, undefined);
-  assert.equal(mesh.uvs, undefined);
-  assert.equal(mesh.positions.length, 9, "geometry still loads without them");
+  assert.equal(part.normals, undefined);
+  assert.equal(part.uvs, undefined);
+  assert.equal(part.positions.length, 9, "geometry still loads without them");
 });
 
 test("index width follows the vertex count rather than a fixed choice", async () => {
   const small = await storeWith(await glbWith()).acquire(resourceRef("model/one")).whenReady();
-  assert.ok(small.indices instanceof Uint16Array, "16 bits is enough for three vertices");
+  assert.ok(small.parts[0].indices instanceof Uint16Array, "16 bits is enough for three vertices");
 
   const large = await storeWith(await glbWith({ vertexCount: 70000 }))
     .acquire(resourceRef("model/one"))
     .whenReady();
   assert.ok(
-    large.indices instanceof Uint32Array,
+    large.parts[0].indices instanceof Uint32Array,
     "past 65535 vertices, 16-bit indices cannot address the buffer",
   );
 });

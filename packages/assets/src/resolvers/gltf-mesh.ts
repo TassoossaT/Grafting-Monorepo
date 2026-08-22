@@ -1,7 +1,7 @@
 import { WebIO, type Document, type Node, type Primitive } from "@gltf-transform/core";
 
 import type { AssetDefinition } from "../contracts/definition.js";
-import type { Aabb, MeshResource } from "../contracts/resource.js";
+import type { Aabb, MeshPartsResource, MeshResource } from "../contracts/resource.js";
 import type { ResourceResolver } from "../contracts/resolver.js";
 
 /** The kind {@link gltfMeshResolver} claims. */
@@ -54,15 +54,7 @@ function transformDirection(m: Matrix, x: number, y: number, z: number): [number
   return length === 0 ? out : [out[0] / length, out[1] / length, out[2] / length];
 }
 
-/** One primitive's geometry, already in world space. */
-interface Piece {
-  readonly positions: Float32Array;
-  readonly normals?: Float32Array;
-  readonly uvs?: Float32Array;
-  readonly indices: Uint32Array;
-}
-
-function readPrimitive(primitive: Primitive, matrix: Matrix): Piece | undefined {
+function readPrimitive(primitive: Primitive, matrix: Matrix): MeshResource | undefined {
   const position = primitive.getAttribute("POSITION");
   if (position === null) return undefined;
 
@@ -105,28 +97,31 @@ function readPrimitive(primitive: Primitive, matrix: Matrix): Piece | undefined 
   const uvSource = uvAccessor?.getArray() ?? null;
   const uvs = uvSource === null ? undefined : Float32Array.from(uvSource);
 
-  // An indexless primitive is a plain triangle list; giving it explicit
-  // indices here is what lets pieces concatenate uniformly below.
+  // Index width follows the data: 16 bits cannot address past 65535 vertices.
+  // An indexless primitive is a plain triangle list, given explicit indices
+  // here so every part has the same shape.
   const indexAccessor = primitive.getIndices();
   const indexSource = indexAccessor?.getArray() ?? null;
-  const indices =
-    indexSource === null
-      ? Uint32Array.from({ length: vertexCount }, (_unused, index) => index)
-      : Uint32Array.from(indexSource);
+  const indexCount = indexSource === null ? vertexCount : indexSource.length;
+  const indices: Uint16Array | Uint32Array =
+    vertexCount > 0xffff ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
+  for (let index = 0; index < indexCount; index += 1) {
+    indices[index] = indexSource === null ? index : (indexSource[index] ?? 0);
+  }
 
-  return { positions, normals, uvs, indices };
+  return { positions, normals, uvs, indices, bounds: boundsOf(positions) };
 }
 
 /** Every primitive reachable from the document's scenes, in world space. */
-function collectPieces(document: Document): Piece[] {
-  const pieces: Piece[] = [];
+function collectParts(document: Document): MeshResource[] {
+  const parts: MeshResource[] = [];
   const visit = (node: Node): void => {
     const mesh = node.getMesh();
     const matrix = node.getWorldMatrix() ?? IDENTITY;
     if (mesh !== null) {
       for (const primitive of mesh.listPrimitives()) {
-        const piece = readPrimitive(primitive, matrix);
-        if (piece !== undefined) pieces.push(piece);
+        const part = readPrimitive(primitive, matrix);
+        if (part !== undefined) parts.push(part);
       }
     }
     for (const child of node.listChildren()) visit(child);
@@ -135,7 +130,7 @@ function collectPieces(document: Document): Piece[] {
   for (const scene of document.getRoot().listScenes()) {
     for (const node of scene.listChildren()) visit(node);
   }
-  return pieces;
+  return parts;
 }
 
 function boundsOf(positions: Float32Array): Aabb {
@@ -162,39 +157,26 @@ function boundsOf(positions: Float32Array): Aabb {
   return { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } };
 }
 
-/** Concatenates world-space pieces into one buffer, offsetting each piece's indices. */
-function mergePieces(pieces: readonly Piece[]): MeshResource {
-  const vertexCount = pieces.reduce((total, piece) => total + piece.positions.length / 3, 0);
-  const indexCount = pieces.reduce((total, piece) => total + piece.indices.length, 0);
-
-  const positions = new Float32Array(vertexCount * 3);
-  // Attributes are all-or-nothing across the merged result: a mesh where only
-  // some primitives carry normals would otherwise produce a buffer that is
-  // partly meaningful, which is worse than not carrying them at all.
-  const hasNormals = pieces.length > 0 && pieces.every((piece) => piece.normals !== undefined);
-  const hasUvs = pieces.length > 0 && pieces.every((piece) => piece.uvs !== undefined);
-  const normals = hasNormals ? new Float32Array(vertexCount * 3) : undefined;
-  const uvs = hasUvs ? new Float32Array(vertexCount * 2) : undefined;
-  // 16-bit indices cannot address past 65535, so the width follows the data
-  // rather than a fixed choice.
-  const indices = vertexCount > 0xffff ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
-
-  let vertexOffset = 0;
-  let indexOffset = 0;
-  for (const piece of pieces) {
-    positions.set(piece.positions, vertexOffset * 3);
-    if (normals !== undefined && piece.normals !== undefined) {
-      normals.set(piece.normals, vertexOffset * 3);
-    }
-    if (uvs !== undefined && piece.uvs !== undefined) uvs.set(piece.uvs, vertexOffset * 2);
-    for (let index = 0; index < piece.indices.length; index += 1) {
-      indices[indexOffset + index] = (piece.indices[index] ?? 0) + vertexOffset;
-    }
-    vertexOffset += piece.positions.length / 3;
-    indexOffset += piece.indices.length;
+/** Union of every part's own bounds. */
+function unionBounds(parts: readonly MeshResource[]): Aabb {
+  const first = parts[0];
+  if (first === undefined) {
+    return { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
   }
-
-  return { positions, normals, uvs, indices, bounds: boundsOf(positions) };
+  let { min, max } = first.bounds;
+  for (const part of parts.slice(1)) {
+    min = {
+      x: Math.min(min.x, part.bounds.min.x),
+      y: Math.min(min.y, part.bounds.min.y),
+      z: Math.min(min.z, part.bounds.min.z),
+    };
+    max = {
+      x: Math.max(max.x, part.bounds.max.x),
+      y: Math.max(max.y, part.bounds.max.y),
+      z: Math.max(max.z, part.bounds.max.z),
+    };
+  }
+  return { min, max };
 }
 
 async function bytesFor(source: GltfMeshSource): Promise<Uint8Array> {
@@ -216,12 +198,19 @@ async function bytesFor(source: GltfMeshSource): Promise<Uint8Array> {
  * No glTF type escapes this module. The result is a plain {@link MeshResource},
  * as every other resolver produces.
  *
- * **This first version brings geometry only.** Materials, textures, animation
- * clips and scene hierarchy are deliberately out: each becomes its own
- * registered kind later, without changing a single contract — the property
- * open kinds were chosen for. Every primitive in every scene is flattened into
- * one mesh with node transforms applied, which is what a consumer drawing a
- * prop or a unit prototype actually wants.
+ * Node transforms **are** applied, because interpreting the scene hierarchy is
+ * part of reading the format. Concatenating the resulting primitives into one
+ * buffer is not: that is a draw-call decision owned by whoever draws, and
+ * `@grafting/render-3d` already implements it as `mergeMeshChunks`. Producing
+ * separate {@link MeshPartsResource} parts keeps this package from carrying a
+ * second copy of that algorithm (`DEC-049`), and leaves per-part materials or
+ * per-part culling possible later — which a pre-merged buffer would have
+ * foreclosed.
+ *
+ * **This first version brings geometry only.** Materials, textures and
+ * animation clips are deliberately out: each becomes its own registered kind
+ * later, without changing a single contract — the property open kinds were
+ * chosen for.
  */
 export const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND> = {
   kind: GLTF_MESH_KIND,
@@ -231,19 +220,22 @@ export const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND> = {
 
     const bytes = await bytesFor(source);
     const document = await new WebIO().readBinary(bytes);
-    const pieces = collectPieces(document);
-    if (pieces.length === 0) {
+    const parts = collectParts(document);
+    if (parts.length === 0) {
       throw new Error(`"${definition.ref}" contains no drawable primitive`);
     }
-    return mergePieces(pieces) as never;
+    return { parts, bounds: unionBounds(parts) } as never;
   },
   sizeOf(resource): number {
-    const mesh = resource as unknown as MeshResource;
-    return (
-      mesh.positions.byteLength +
-      (mesh.normals?.byteLength ?? 0) +
-      (mesh.uvs?.byteLength ?? 0) +
-      (mesh.indices?.byteLength ?? 0)
+    const mesh = resource as unknown as MeshPartsResource;
+    return mesh.parts.reduce(
+      (total, part) =>
+        total +
+        part.positions.byteLength +
+        (part.normals?.byteLength ?? 0) +
+        (part.uvs?.byteLength ?? 0) +
+        (part.indices?.byteLength ?? 0),
+      0,
     );
   },
 };

@@ -15,7 +15,13 @@
 export { resourceRef } from "./contracts/ref.js";
 export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
 
-export type { Aabb, ImageResource, MeshResource, Vec3 } from "./contracts/resource.js";
+export type {
+  Aabb,
+  ImageResource,
+  MeshPartsResource,
+  MeshResource,
+  Vec3,
+} from "./contracts/resource.js";
 
 export type { AssetDefinition, AssetProvenance } from "./contracts/definition.js";
 
