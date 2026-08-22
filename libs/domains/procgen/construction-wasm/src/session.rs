@@ -11,10 +11,7 @@ use std::collections::HashSet;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use grafting_graph_core::{
-    ContourTopology, FormationInputs, Graph, GraphPrimitive, PrismGridMesh, RegionId,
-    SurfaceRegistry, SurfaceType,
-};
+use grafting_graph_core::{ContourTopology, Graph, RegionId, SurfaceRegistry, SurfaceType};
 
 use crate::editing::{self, SessionGraph};
 use crate::enclosure;
@@ -24,7 +21,6 @@ use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
 use crate::path_brush;
 use crate::region_editing;
-use crate::terrain;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -62,7 +58,6 @@ pub struct ConstructionSession {
     graph: SessionGraph,
     surfaces: SurfaceRegistry,
     topology: ContourTopology,
-    terrain_mesh: Option<PrismGridMesh>,
     known_regions: HashSet<RegionId>,
     path_brush_undo: Vec<PathBrushHistoryEntry>,
     path_brush_redo: Vec<PathBrushHistoryEntry>,
@@ -85,7 +80,6 @@ impl ConstructionSession {
                 .expect("an empty graph is always valid"),
             surfaces: SurfaceRegistry::new(),
             topology: ContourTopology::new(),
-            terrain_mesh: None,
             known_regions: HashSet::new(),
             path_brush_undo: Vec::new(),
             path_brush_redo: Vec::new(),
@@ -110,18 +104,6 @@ impl ConstructionSession {
 
     // ---- Bootstrapping ----
 
-    /// Adds a brand-new node. See `editing::add_node`.
-    pub fn add_node_json(&mut self, request_json: &str) -> Result<(), JsValue> {
-        let request = parse(request_json)?;
-        editing::add_node(&mut self.graph, request).map_err(to_js_error)
-    }
-
-    /// Adds a brand-new edge. See `editing::add_edge`.
-    pub fn add_edge_json(&mut self, request_json: &str) -> Result<(), JsValue> {
-        let request = parse(request_json)?;
-        editing::add_edge(&mut self.graph, request).map_err(to_js_error)
-    }
-
     /// Unregisters a surface outright -- no hole-repair, no cascading. See
     /// `editing::remove_surface`.
     pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue> {
@@ -131,13 +113,6 @@ impl ConstructionSession {
             .map_err(to_js_error)?;
         self.known_regions.remove(&region_id);
         Ok(())
-    }
-
-    /// Removes an edge outright -- no repair, no cascading. See
-    /// `editing::remove_edge`.
-    pub fn remove_edge_json(&mut self, request_json: &str) -> Result<(), JsValue> {
-        let request = parse(request_json)?;
-        editing::remove_edge(&mut self.graph, request).map_err(to_js_error)
     }
 
     // ---- Atomic region edits (the analytic edit vocabulary) ----
@@ -189,14 +164,6 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Registers a bare boundary edge, the staging step before a cut or a
-    /// hole. See `region_editing::add_contour_edge`.
-    pub fn add_contour_edge_json(&mut self, request_json: &str) -> Result<(), JsValue> {
-        let request = parse(request_json)?;
-        region_editing::add_contour_edge(&self.graph, &mut self.topology, request)
-            .map_err(to_js_error)
-    }
-
     /// `MoveRegion`. See `region_editing::apply_move_region`.
     pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
@@ -217,35 +184,6 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         self.track(&response);
-        serialize(&response)
-    }
-
-    /// Registers a region from already-registered edges, so a new face can
-    /// *share* a boundary instead of laying a coincident copy of it beside
-    /// the neighbour's. See `region_editing::apply_add_region`.
-    pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response =
-            region_editing::apply_add_region(&mut self.topology, &mut self.surfaces, request)
-                .map_err(to_js_error)?;
-        self.track(&response);
-        serialize(&response)
-    }
-
-    /// Removes a whole set of regions at once and reports the rim the hole
-    /// is left bounded by -- what a caller stitches new geometry onto so the
-    /// result has neither a leftover hole nor an extra face. See
-    /// `region_editing::apply_delete_regions`.
-    pub fn delete_regions_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = region_editing::apply_delete_regions(
-            &mut self.graph,
-            &mut self.topology,
-            &mut self.surfaces,
-            request,
-        )
-        .map_err(to_js_error)?;
-        self.track(&response.outcome);
         serialize(&response)
     }
 
@@ -316,35 +254,6 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// `CutRegion`. See `region_editing::apply_cut_region`.
-    pub fn cut_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response =
-            region_editing::apply_cut_region(&mut self.topology, &mut self.surfaces, request)
-                .map_err(to_js_error)?;
-        self.track(&response);
-        serialize(&response)
-    }
-
-    /// `AddHole` -- a door or a window. See `region_editing::apply_add_hole`.
-    pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response =
-            region_editing::apply_add_hole(&mut self.topology, request).map_err(to_js_error)?;
-        self.track(&response);
-        serialize(&response)
-    }
-
-    /// `RemoveHole`. See `region_editing::apply_remove_hole`.
-    pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response =
-            region_editing::apply_remove_hole(&mut self.graph, &mut self.topology, request)
-                .map_err(to_js_error)?;
-        self.track(&response);
-        serialize(&response)
-    }
-
     /// One region's live boundary, in this crate's own deterministic order.
     /// See `region_editing::region_topology`.
     pub fn region_topology_json(&self, request_json: &str) -> Result<String, JsValue> {
@@ -366,43 +275,6 @@ impl ConstructionSession {
     }
 
     // ---- Terrain mesh lifecycle ----
-
-    /// Constructs and stores this session's own `PrismGridMesh`, the same
-    /// input shape `@grafting/procgen-generation-wasm`'s own
-    /// `generate_prism_mesh` takes. Must be called before
-    /// [`Self::generate_and_apply_terrain_cell_json`].
-    pub fn set_terrain_mesh(
-        &mut self,
-        width: u32,
-        height: u32,
-        layers: u32,
-        primitive_u8: u8,
-        deformation_xy: f32,
-        deformation_z: f32,
-    ) -> Result<(), JsValue> {
-        if width == 0 || height == 0 || layers == 0 {
-            return Err(JsValue::from_str(
-                "set_terrain_mesh: dimensions must be greater than 0",
-            ));
-        }
-        if width > 512 || height > 512 || layers > 64 {
-            return Err(JsValue::from_str(
-                "set_terrain_mesh: grid size exceeds maximum limits",
-            ));
-        }
-        let primitive = match primitive_u8 {
-            0 => GraphPrimitive::Passage,
-            1 => GraphPrimitive::Boundary,
-            _ => GraphPrimitive::Surface,
-        };
-        let inputs = FormationInputs {
-            primitive,
-            deformation_xy: deformation_xy.clamp(0.0, 1.0),
-            deformation_z: deformation_z.clamp(0.0, 1.0),
-        };
-        self.terrain_mesh = Some(PrismGridMesh::new(width, height, layers, inputs));
-        Ok(())
-    }
 
     // ---- Generate-and-apply ----
 
@@ -441,25 +313,6 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// Resolves terrain-grid cells through the shared authoritative brush footprint.
-    pub fn resolve_brush_cells_json(&self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = path_brush::resolve_brush_cells(request).map_err(to_js_error)?;
-        serialize(&response)
-    }
-    /// Returns the exact target mesh for a path brush without mutating confirmed state.
-    pub fn preview_path_brush_json(&self, request_json: &str) -> Result<String, JsValue> {
-        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
-        let response = path_brush::preview_path_brush(
-            &self.graph,
-            &self.surfaces,
-            &self.topology,
-            &self.known_regions,
-            request,
-        )
-        .map_err(to_js_error)?;
-        serialize(&response)
-    }
     /// Restores the state immediately before the latest matching path-brush operation.
     pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
         let Some(entry) = self.path_brush_undo.pop() else {
@@ -501,85 +354,6 @@ impl ConstructionSession {
         self.path_brush_undo.push(entry);
         Ok(())
     }
-    /// Generates one terrain cell's surface and applies it. See
-    /// `terrain::generate_and_apply_terrain_cell`.
-    pub fn generate_and_apply_terrain_cell_json(
-        &mut self,
-        request_json: &str,
-    ) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = terrain::generate_and_apply_terrain_cell(
-            &mut self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            self.terrain_mesh.as_ref(),
-            request,
-        )
-        .map_err(to_js_error)?;
-        let region_id = mesh::region_id_from_wire(&response.surface_key).map_err(to_js_error)?;
-        self.known_regions.insert(region_id);
-        serialize(&response)
-    }
-
-    /// Regenerates a path's whole panel geometry (straight and
-    /// semicircular-arc edges, with an optional single-edge notch) and
-    /// applies only the difference against whatever this structure already
-    /// holds -- the free-form path/wall brush's per-tick commit, and the
-    /// generic replacement for a one-shot wall-with-door generation. Never
-    /// generates a floor/ceiling itself. See
-    /// `generation::generate_and_apply_path_extrusion`.
-    pub fn generate_and_apply_path_extrusion_json(
-        &mut self,
-        request_json: &str,
-    ) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = generation::generate_and_apply_path_extrusion(
-            &mut self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            &self.known_regions,
-            request,
-        )
-        .map_err(to_js_error)?;
-        for wire_key in &response.removed_surface_keys {
-            self.known_regions
-                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        for wire_key in &response.added_surface_keys {
-            self.known_regions
-                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        serialize(&response)
-    }
-
-    /// Regenerates one closed boundary's cap (a floor, a ceiling, or any
-    /// other flat or per-vertex-height polygon) and applies only the
-    /// difference against whatever this structure already holds. See
-    /// `generation::generate_and_apply_boundary_cap`.
-    pub fn generate_and_apply_boundary_cap_json(
-        &mut self,
-        request_json: &str,
-    ) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = generation::generate_and_apply_boundary_cap(
-            &mut self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            &self.known_regions,
-            request,
-        )
-        .map_err(to_js_error)?;
-        for wire_key in &response.removed_surface_keys {
-            self.known_regions
-                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        for wire_key in &response.added_surface_keys {
-            self.known_regions
-                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        serialize(&response)
-    }
-
     /// Regenerates a painted cell set's whole region partition (every
     /// region's own per-cell floor/ceiling, and a wall -- notched where a
     /// run borders a different region -- along every boundary run) and
@@ -752,27 +526,62 @@ mod tests {
     use serde_json::json;
     use wasm_bindgen_test::wasm_bindgen_test;
 
+    /// One flat unit quad of terrain at grid cell `cell`, declared the way
+    /// every generator declares a face: a patch over caller-named shared
+    /// edges. Corners run `(x, z)`, `(x+1, z)`, `(x+1, z+1)`, `(x, z+1)`,
+    /// the same ring the retired prism-grid generator used, so a stroke
+    /// crossing these quads meets the geometry it always did.
+    fn terrain_cell(
+        session: &mut ConstructionSession,
+        cell: usize,
+        width: usize,
+        y: f32,
+        nodes: [&str; 4],
+    ) {
+        let x = (cell % width) as f32;
+        let z = (cell / width) as f32;
+        let corners = [
+            [x, y, z],
+            [x + 1.0, y, z],
+            [x + 1.0, y, z + 1.0],
+            [x, y, z + 1.0],
+        ];
+        let mut edges = Vec::new();
+        let mut boundary = Vec::new();
+        for index in 0..4 {
+            let from = nodes[index];
+            let to = nodes[(index + 1) % 4];
+            let forward = from < to;
+            let (start, end) = if forward { (from, to) } else { (to, from) };
+            let edge_id = format!("seg:{start}~{end}");
+            edges.push(json!({"edgeId": edge_id, "startNodeId": start, "endNodeId": end}));
+            boundary.push(json!({"edgeId": edge_id, "reversed": !forward}));
+        }
+        let request = json!({
+            "nodes": nodes
+                .iter()
+                .zip(corners.iter())
+                .map(|(id, position)| json!({"id": id, "position": position}))
+                .collect::<Vec<_>>(),
+            "edges": edges,
+            "regions": [{
+                "regionId": nodes.join("|"),
+                "boundary": boundary,
+                "surfaceType": "terrain",
+                "physical": true,
+            }],
+        });
+        session
+            .add_patch_json(&request.to_string())
+            .expect("terrain patch registers");
+    }
+
     #[wasm_bindgen_test]
     fn a_full_session_sequence_generates_moves_and_merges() {
         let mut session = ConstructionSession::new();
 
-        session
-            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
-
-        let cell0 = session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
-            )
-            .expect("cell 0 generates");
-        assert!(cell0.contains("n0"));
-
-        let cell1 = session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":1,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n4","n5","n6","n7"],"edgeIds":["e4","e5","e6","e7"]}"#,
-            )
-            .expect("cell 1 generates");
-        assert!(cell1.contains("n4"));
+        terrain_cell(&mut session, 0, 2, 1.0, ["n0", "n1", "n2", "n3"]);
+        terrain_cell(&mut session, 1, 2, 1.0, ["n4", "n5", "n6", "n7"]);
 
         let move_response = session
             .move_vertex_json(r#"{"nodeId":"n0","position":[9.0,9.0,9.0]}"#)
@@ -787,109 +596,13 @@ mod tests {
         assert!(snapshot.contains("\"surfaces\""));
     }
 
-    /// Regression test for a real bug found during `E3.8`'s end-to-end
-    /// validation: a wall running along Z (this app's own default seed and
-    /// its "generate wall" edit-mode trigger both build walls this way) had
-    /// its top nodes collapse back onto the centerline
-    /// (`grafting-procgen-structure-generation`'s `position_at` added
-    /// `height` to the same axis as the wall's own length), so every
-    /// wall/door mesh silently failed to triangulate and never appeared in
-    /// `all_surface_meshes_json`. Plain `#[test]`, not `#[wasm_bindgen_test]`
-    /// -- this crate's `wasm_bindgen_test`s are not wired into any CI job
-    /// and do not run under a plain `cargo test`, which is exactly how this
-    /// bug went uncaught despite `generating_a_notched_wall_exposes_three_sibling_meshes`
-    /// already asserting the right mesh count.
-    #[test]
-    fn generating_a_terrain_cell_then_a_z_running_wall_exposes_all_four_meshes() {
-        let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
-        session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["tn0","tn1","tn2","tn3"],"edgeIds":["te0","te1","te2","te3"]}"#,
-            )
-            .expect("terrain cell generates");
-
-        let request = json!({
-            "edges": [{"start": [2.0, 0.0, 0.0], "end": [2.0, 0.0, 4.0], "curvature": "straight"}],
-            "height": 3.0,
-            "idPrefix": "z-wall-1",
-            "surfaceType": "wall",
-            "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
-        })
-        .to_string();
-        session
-            .generate_and_apply_path_extrusion_json(&request)
-            .expect("wall generates");
-
-        let meshes_json = session
-            .all_surface_meshes_json()
-            .expect("meshes always succeed");
-        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(
-            meshes.len(),
-            4,
-            "1 terrain + 3 wall/door pieces, every one triangulable"
-        );
-    }
-
-    /// The TS adapter's `JSON.stringify` drops any key whose value is
-    /// `undefined` -- a no-notch wall-brush call therefore sends a request
-    /// with the `notch` key *absent*, not `null`. No prior test exercised
-    /// that exact wire shape. Reported while testing `VTT-WALL-CORNER-WELD`:
-    /// a wall drawn with the door UI removed still produced more than 4
-    /// nodes.
-    #[test]
-    fn a_path_extrusion_request_with_no_notch_key_at_all_still_produces_exactly_four_nodes() {
-        let mut session = ConstructionSession::new();
-        let request = json!({
-            "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
-            "height": 3.0,
-            "idPrefix": "no-notch-1",
-            "surfaceType": "wall",
-        })
-        .to_string();
-
-        let response = session
-            .generate_and_apply_path_extrusion_json(&request)
-            .expect("wall generates");
-        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(parsed["addedSurfaceKeys"].as_array().unwrap().len(), 1);
-
-        let snapshot: serde_json::Value =
-            serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
-        assert_eq!(
-            snapshot["nodes"].as_array().unwrap().len(),
-            4,
-            "no-notch wall must be exactly 4 nodes: {snapshot}"
-        );
-    }
-
     #[test]
     fn applying_path_brush_replaces_terrain_through_the_wasm_boundary() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
-        session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
-            )
-            .expect("terrain cell generates");
+        terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
 
         let request = r#"{"operationId":"path-1","samples":[[0.5,0.5]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
-        let before = session.snapshot_json().expect("snapshot before preview");
-        let preview = session
-            .preview_path_brush_json(request)
-            .expect("path preview succeeds");
-        assert!(preview.contains("\"path\""));
-        assert_eq!(
-            session.snapshot_json().unwrap(),
-            before,
-            "preview is non-mutating"
-        );
-
+        let before = session.snapshot_json().expect("snapshot before the stroke");
         let response = session
             .apply_path_brush_json(request)
             .expect("path brush applies");
@@ -924,17 +637,21 @@ mod tests {
     #[test]
     fn a_multi_segment_stroke_over_terrain_leaves_a_derivable_remainder_mesh() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
         for cell in 0..16 {
             let x = cell % 4;
             let z = cell / 4;
-            session
-                .generate_and_apply_terrain_cell_json(&format!(
-                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
-                ))
-                .expect("terrain cell generates");
+            terrain_cell(
+                &mut session,
+                cell,
+                4,
+                0.0,
+                [
+                    &format!("n{x}-{z}-0"),
+                    &format!("n{x}-{z}-1"),
+                    &format!("n{x}-{z}-2"),
+                    &format!("n{x}-{z}-3"),
+                ],
+            );
         }
 
         let request = serde_json::json!({
@@ -975,14 +692,7 @@ mod tests {
     #[test]
     fn a_loop_stroke_fully_covering_its_only_terrain_cell_still_meshes() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
-        session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
-            )
-            .expect("terrain cell generates");
+        terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
 
         let loop_samples: Vec<[f32; 2]> = (0..=32)
             .map(|index| {
@@ -1029,17 +739,21 @@ mod tests {
     #[test]
     fn a_second_overlapping_path_brush_stroke_consumes_the_first_ones_region() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
         for cell in 0..16 {
             let x = cell % 4;
             let z = cell / 4;
-            session
-                .generate_and_apply_terrain_cell_json(&format!(
-                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
-                ))
-                .expect("terrain cell generates");
+            terrain_cell(
+                &mut session,
+                cell,
+                4,
+                0.0,
+                [
+                    &format!("n{x}-{z}-0"),
+                    &format!("n{x}-{z}-1"),
+                    &format!("n{x}-{z}-2"),
+                    &format!("n{x}-{z}-3"),
+                ],
+            );
         }
 
         let first = serde_json::json!({
@@ -1119,17 +833,21 @@ mod tests {
     #[test]
     fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
         for cell in 0..16 {
             let x = cell % 4;
             let z = cell / 4;
-            session
-                .generate_and_apply_terrain_cell_json(&format!(
-                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
-                ))
-                .expect("terrain cell generates");
+            terrain_cell(
+                &mut session,
+                cell,
+                4,
+                0.0,
+                [
+                    &format!("n{x}-{z}-0"),
+                    &format!("n{x}-{z}-1"),
+                    &format!("n{x}-{z}-2"),
+                    &format!("n{x}-{z}-3"),
+                ],
+            );
         }
 
         let first = serde_json::json!({
@@ -1188,10 +906,12 @@ mod tests {
     #[test]
     fn consuming_shared_quads_deletes_the_now_orphaned_center_node() {
         let mut session = ConstructionSession::new();
+        // Nodes arrive with the patch that uses them; these are declared up
+        // front only so each quad below can name them without repeating a
+        // position.
+        let mut corners: Vec<serde_json::Value> = Vec::new();
         let mut corner = |id: &str, x: f32, z: f32| {
-            session
-                .add_node_json(&serde_json::json!({"id": id, "position": [x, 0.0, z]}).to_string())
-                .expect("corner node adds");
+            corners.push(serde_json::json!({"id": id, "position": [x, 0.0, z]}));
         };
         corner("q-a", 0.0, 0.0);
         corner("q-b", 1.0, 0.0);
@@ -1234,7 +954,7 @@ mod tests {
             session
                 .add_patch_json(
                     &serde_json::json!({
-                        "nodes": [],
+                        "nodes": corners,
                         "edges": edges,
                         "regions": [{
                             "regionId": cycle.join("|"),
@@ -1428,17 +1148,21 @@ mod tests {
     #[test]
     fn many_random_overlapping_strokes_never_leave_an_unmeshable_surface() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(6, 6, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
         for cell in 0..36 {
             let x = cell % 6;
             let z = cell / 6;
-            session
-                .generate_and_apply_terrain_cell_json(&format!(
-                    r#"{{"cell":{cell},"module":{{"name":"flat","cornerHeights":[0.0,0.0,0.0,0.0]}},"surfaceType":"terrain","nodeIds":["n{x}-{z}-0","n{x}-{z}-1","n{x}-{z}-2","n{x}-{z}-3"],"edgeIds":["e{x}-{z}-0","e{x}-{z}-1","e{x}-{z}-2","e{x}-{z}-3"]}}"#
-                ))
-                .expect("terrain cell generates");
+            terrain_cell(
+                &mut session,
+                cell,
+                4,
+                0.0,
+                [
+                    &format!("n{x}-{z}-0"),
+                    &format!("n{x}-{z}-1"),
+                    &format!("n{x}-{z}-2"),
+                    &format!("n{x}-{z}-3"),
+                ],
+            );
         }
 
         let mut rng = Xorshift(0x9e3779b1);
@@ -1510,41 +1234,21 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn generating_a_terrain_cell_before_set_terrain_mesh_errors_cleanly() {
-        let mut session = ConstructionSession::new();
-        let error = session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
-            )
-            .unwrap_err();
-        assert!(error.as_string().unwrap().contains("set_terrain_mesh"));
-    }
-
-    #[wasm_bindgen_test]
     fn invalid_json_is_rejected_not_panicking() {
         let mut session = ConstructionSession::new();
         let error = session.move_vertex_json("not json").unwrap_err();
         assert!(error.as_string().unwrap().contains("invalid request JSON"));
     }
 
-    // `merge_surfaces_json` and the rest of `ADR-0022`'s node-set edit
-    // operations are retired: every creation path registers an analytic
-    // region, which those operations had no way to resolve. Their
-    // replacement is the atomic vocabulary in `region_editing.rs`, covered
-    // by that module's own tests plus
-    // `moving_a_generated_cells_vertex_reports_its_region` below.
+    // `ADR-0022`'s node-set edit operations are retired: every creation
+    // path registers an analytic region, which those operations had no way
+    // to resolve. Their replacement is the atomic vocabulary in
+    // `region_editing.rs`, covered by that module's own tests.
 
     #[wasm_bindgen_test]
-    fn generating_a_terrain_cell_exposes_its_mesh() {
+    fn a_registered_patch_exposes_its_mesh() {
         let mut session = ConstructionSession::new();
-        session
-            .set_terrain_mesh(2, 2, 1, 2, 0.0, 0.0)
-            .expect("valid dimensions");
-        session
-            .generate_and_apply_terrain_cell_json(
-                r#"{"cell":0,"module":{"name":"flat","cornerHeights":[1.0,1.0,1.0,1.0]},"surfaceType":"terrain","nodeIds":["n0","n1","n2","n3"],"edgeIds":["e0","e1","e2","e3"]}"#,
-            )
-            .expect("cell 0 generates");
+        terrain_cell(&mut session, 0, 2, 1.0, ["n0", "n1", "n2", "n3"]);
 
         let meshes_json = session
             .all_surface_meshes_json()
@@ -1564,52 +1268,16 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn generating_a_notched_wall_exposes_three_sibling_meshes() {
-        let mut session = ConstructionSession::new();
-        let request = json!({
-            "edges": [{"start": [0.0, 0.0, 0.0], "end": [4.0, 0.0, 0.0], "curvature": "straight"}],
-            "height": 3.0,
-            "idPrefix": "notched-1",
-            "surfaceType": "wall",
-            "notch": {"startsAt": 0.25, "endsAt": 0.75, "surfaceType": "door"},
-        })
-        .to_string();
-
-        session
-            .generate_and_apply_path_extrusion_json(&request)
-            .expect("wall with notch generates");
-
-        let meshes_json = session
-            .all_surface_meshes_json()
-            .expect("meshes always succeed");
-        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(
-            meshes.len(),
-            3,
-            "left remainder, door, right remainder = three sibling surfaces"
-        );
-        for entry in &meshes {
-            assert_eq!(
-                entry["indices"].as_array().unwrap().len(),
-                6,
-                "each piece is a quad: two triangles"
-            );
-        }
-    }
-
-    // `move_node_json` (also out of migration scope) likewise only reports
-    // legacy `SurfaceKey` surfaces as affected, and `add_surface_json` no
-    // longer creates one -- same reasoning as the removed merge test above.
-    // `editing.rs`'s own `move_node_reports_the_referencing_surface`
-    // (built on a direct `SurfaceRegistry::add_surface` fixture) keeps this
-    // covered at the Rust level.
-
-    #[wasm_bindgen_test]
     fn surface_mesh_json_rejects_an_unregistered_key() {
         let session = ConstructionSession::new();
         let error = session
-            .surface_mesh_json(r#"{"surfaceKey":["missing"]}"#)
+            .surface_mesh_json(r#"{"surfaceKey":["@region","missing"]}"#)
             .unwrap_err();
-        assert!(error.as_string().unwrap().contains("no mesh derivable"));
+        assert!(
+            error
+                .as_string()
+                .unwrap()
+                .contains("unknown analytic region")
+        );
     }
 }

@@ -33,13 +33,12 @@ use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_structure_generation::{
-    ArcBulge, Axis, BoundaryRun, CellCoord, EdgeCurvature, EdgeNotch, PathEdge, StructurePiece,
+    Axis, BoundaryRun, CellCoord, EdgeCurvature, EdgeNotch, PathEdge, StructurePiece,
     boundary_runs, cap_boundary, extrude_path, partition_cells_into_regions,
 };
 
 use crate::diff_apply::diff_and_apply;
 use crate::editing::SessionGraph;
-use crate::geometry::point_in_or_on_polygon;
 
 /// Whether every node touched by `region_id`'s own outer loops (and holes)
 /// satisfies `in_scope`, resolving each contour edge's endpoints through
@@ -89,67 +88,6 @@ fn regions_in_scope(
 
 // ---- Path extrusion ----
 
-fn default_included_angle() -> f32 {
-    std::f32::consts::PI
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PathEdgeDto {
-    pub start: [f32; 3],
-    pub end: [f32; 3],
-    /// One of `"straight"`, `"arcLeft"`, `"arcRight"`.
-    pub curvature: String,
-    /// The arc's own swept angle in radians, for `"arcLeft"`/`"arcRight"` --
-    /// defaults to a true semicircle (`PI`) when omitted, so every existing
-    /// caller (wall-brush's own curve-fitting, which only ever detects
-    /// semicircles) needs no change. Ignored for `"straight"`.
-    #[serde(default = "default_included_angle")]
-    pub included_angle: f32,
-}
-
-fn parse_curvature(wire: &str, included_angle: f32) -> Result<EdgeCurvature, String> {
-    match wire {
-        "straight" => Ok(EdgeCurvature::Straight),
-        "arcLeft" => Ok(EdgeCurvature::Arc {
-            bulge: ArcBulge::Left,
-            included_angle,
-        }),
-        "arcRight" => Ok(EdgeCurvature::Arc {
-            bulge: ArcBulge::Right,
-            included_angle,
-        }),
-        other => Err(format!("unknown edge curvature: {other}")),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EdgeNotchDto {
-    pub starts_at: f32,
-    pub ends_at: f32,
-    pub surface_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenerateAndApplyPathExtrusionRequest {
-    /// The stroke's *whole* current accumulated path, not just what
-    /// changed since the last tick -- same full-resend contract as every
-    /// other `generate_and_apply_*` request in this crate.
-    pub edges: Vec<PathEdgeDto>,
-    pub height: f32,
-    /// Namespaces every id this call derives -- must stay the same fixed
-    /// value across every tick of one structure, and must vary per
-    /// floor/level sharing a footprint. See
-    /// `grafting_procgen_structure_generation::extrude_path`'s own doc.
-    pub id_prefix: String,
-    pub surface_type: String,
-    /// A single opening cut into the path, if `edges` is exactly one
-    /// straight edge -- see `extrude_path`'s own scoping of this.
-    pub notch: Option<EdgeNotchDto>,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffResponse {
@@ -181,116 +119,7 @@ fn bounding_box_scope(pieces: &[StructurePiece]) -> impl Fn(&[f32; 3]) -> bool +
     }
 }
 
-/// Regenerates a path's whole panel geometry and diffs it against whatever
-/// this same structure already holds, applying only the difference.
-/// Errors, leaving nothing changed, if `edges` is empty or the path itself
-/// is invalid (discontinuous, degenerate, inconsistent baseline, or a notch
-/// on anything but a single straight edge) -- see `extrude_path`'s own
-/// errors.
-pub fn generate_and_apply_path_extrusion(
-    graph: &mut SessionGraph,
-    surfaces: &mut SurfaceRegistry,
-    topology: &mut ContourTopology,
-    known_regions: &HashSet<RegionId>,
-    request: GenerateAndApplyPathExtrusionRequest,
-) -> Result<DiffResponse, String> {
-    if request.edges.is_empty() {
-        return Err("edges must not be empty".to_string());
-    }
-
-    let edges: Vec<PathEdge> = request
-        .edges
-        .iter()
-        .map(|dto| {
-            Ok(PathEdge {
-                start: dto.start,
-                end: dto.end,
-                curvature: parse_curvature(&dto.curvature, dto.included_angle)?,
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-
-    let notch = request.notch.map(|dto| EdgeNotch {
-        starts_at: dto.starts_at,
-        ends_at: dto.ends_at,
-        surface_type: SurfaceType::new(dto.surface_type),
-    });
-
-    let pieces = extrude_path(
-        &edges,
-        request.height,
-        notch.as_ref(),
-        &request.id_prefix,
-        SurfaceType::new(request.surface_type),
-    )
-    .map_err(|error| error.to_string())?;
-
-    let in_scope = bounding_box_scope(&pieces);
-    let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
-
-    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, pieces, |node| {
-        in_scope(node.data())
-    })?;
-    Ok(DiffResponse {
-        added_surface_keys: outcome.added_surface_keys,
-        removed_surface_keys: outcome.removed_surface_keys,
-        removed_node_ids: outcome.removed_node_ids,
-    })
-}
-
 // ---- Boundary cap ----
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenerateAndApplyBoundaryCapRequest {
-    /// A closed boundary, in cycle order, each entry's own `[x, y, z]`.
-    pub points: Vec<[f32; 3]>,
-    pub id_prefix: String,
-    pub surface_type: String,
-    pub top: bool,
-}
-
-/// Regenerates one closed boundary's cap and diffs it against whatever
-/// this same structure already holds, scoped to the boundary's own XZ
-/// polygon (a true point-in-polygon test, not a bounding box -- see
-/// `geometry`'s own doc for why that matters on a concave shape). Errors,
-/// leaving nothing changed, if `points` has fewer than 3 entries.
-pub fn generate_and_apply_boundary_cap(
-    graph: &mut SessionGraph,
-    surfaces: &mut SurfaceRegistry,
-    topology: &mut ContourTopology,
-    known_regions: &HashSet<RegionId>,
-    request: GenerateAndApplyBoundaryCapRequest,
-) -> Result<DiffResponse, String> {
-    if request.points.len() < 3 {
-        return Err("points must have at least 3 entries".to_string());
-    }
-
-    let piece = cap_boundary(
-        &request.points,
-        &request.id_prefix,
-        SurfaceType::new(request.surface_type),
-        request.top,
-    );
-    let polygon: Vec<(f32, f32)> = request
-        .points
-        .iter()
-        .map(|point| (point[0], point[2]))
-        .collect();
-    let in_scope =
-        |position: &[f32; 3]| point_in_or_on_polygon((position[0], position[2]), &polygon);
-
-    let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
-
-    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, vec![piece], |node| {
-        in_scope(node.data())
-    })?;
-    Ok(DiffResponse {
-        added_surface_keys: outcome.added_surface_keys,
-        removed_surface_keys: outcome.removed_surface_keys,
-        removed_node_ids: outcome.removed_node_ids,
-    })
-}
 
 // ---- Region partition ----
 
@@ -440,9 +269,14 @@ pub fn generate_and_apply_region_partition(
     let in_scope = bounding_box_scope(&all_pieces);
     let old_ids_in_scope = regions_in_scope(topology, graph, known_regions, &in_scope);
 
-    let outcome = diff_and_apply(graph, surfaces, topology, &old_ids_in_scope, all_pieces, |node| {
-        in_scope(node.data())
-    })?;
+    let outcome = diff_and_apply(
+        graph,
+        surfaces,
+        topology,
+        &old_ids_in_scope,
+        all_pieces,
+        |node| in_scope(node.data()),
+    )?;
     Ok(DiffResponse {
         added_surface_keys: outcome.added_surface_keys,
         removed_surface_keys: outcome.removed_surface_keys,
@@ -453,9 +287,14 @@ pub fn generate_and_apply_region_partition(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use grafting_graph_core::{ContourGeometry, Graph};
+    use grafting_graph_core::Graph;
 
-    fn empty_session() -> (SessionGraph, SurfaceRegistry, ContourTopology, HashSet<RegionId>) {
+    fn empty_session() -> (
+        SessionGraph,
+        SurfaceRegistry,
+        ContourTopology,
+        HashSet<RegionId>,
+    ) {
         (
             Graph::try_from_parts(Vec::new(), Vec::new()).unwrap(),
             SurfaceRegistry::new(),
@@ -474,242 +313,6 @@ mod tests {
     }
 
     // -- path extrusion --
-
-    fn edge(start: [f32; 3], end: [f32; 3], curvature: &str) -> PathEdgeDto {
-        PathEdgeDto {
-            start,
-            end,
-            curvature: curvature.to_string(),
-            included_angle: default_included_angle(),
-        }
-    }
-
-    fn arc_edge(
-        start: [f32; 3],
-        end: [f32; 3],
-        curvature: &str,
-        included_angle: f32,
-    ) -> PathEdgeDto {
-        PathEdgeDto {
-            start,
-            end,
-            curvature: curvature.to_string(),
-            included_angle,
-        }
-    }
-
-    /// A full circle built from 2 true semicircles mints the identical 4
-    /// corner nodes for both (`corner_id` is purely position-derived), so
-    /// they collide on one `RegionId` and the second is silently dropped
-    /// by `diff_and_apply`'s own duplicate-cycle dedup -- this was the
-    /// actual bug behind a rendered "half circle." 4 quarter-circle arcs
-    /// (each a distinct corner pair) must not have this problem.
-    #[test]
-    fn a_full_circle_from_four_quarter_arcs_adds_four_distinct_surfaces() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let quarter = std::f32::consts::FRAC_PI_2;
-        let east = [2.0, 0.0, 0.0];
-        let north = [0.0, 0.0, 2.0];
-        let west = [-2.0, 0.0, 0.0];
-        let south = [0.0, 0.0, -2.0];
-        let request = GenerateAndApplyPathExtrusionRequest {
-            edges: vec![
-                arc_edge(east, north, "arcRight", quarter),
-                arc_edge(north, west, "arcRight", quarter),
-                arc_edge(west, south, "arcRight", quarter),
-                arc_edge(south, east, "arcRight", quarter),
-            ],
-            height: 3.0,
-            id_prefix: "tower-1".into(),
-            surface_type: "wall".into(),
-            notch: None,
-        };
-        let response = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap();
-        assert_eq!(
-            response.added_surface_keys.len(),
-            4,
-            "all four quarter-arcs must register as distinct surfaces"
-        );
-
-        for wire_key in &response.added_surface_keys {
-            let region_id = crate::mesh::region_id_from_wire(wire_key).unwrap();
-            let region = topology.region(&region_id).unwrap();
-            let base_use = &region.outer_loops()[0][0];
-            let base_edge = topology.edge(base_use.edge()).unwrap();
-            let center = match base_edge.geometry() {
-                ContourGeometry::CircularArc { center, .. } => *center,
-                ContourGeometry::Line => panic!("each quarter-arc's base edge must be a CircularArc"),
-            };
-            assert!(
-                center[0].abs() < 1e-3 && center[1].abs() < 1e-3,
-                "expected every quarter-arc's own true center at the origin, got {center:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_single_straight_edge_produces_one_panel() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let request = GenerateAndApplyPathExtrusionRequest {
-            edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
-            height: 3.0,
-            id_prefix: "path-1".into(),
-            surface_type: "wall".into(),
-            notch: None,
-        };
-        let response = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap();
-        assert_eq!(response.added_surface_keys.len(), 1);
-        assert_eq!(graph.node_count(), 4);
-    }
-
-    #[test]
-    fn repainting_the_identical_path_is_a_no_op() {
-        let (mut graph, mut surfaces, mut topology, mut known) = empty_session();
-        let request = || GenerateAndApplyPathExtrusionRequest {
-            edges: vec![edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight")],
-            height: 3.0,
-            id_prefix: "path-1".into(),
-            surface_type: "wall".into(),
-            notch: None,
-        };
-        let first = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request(),
-        )
-        .unwrap();
-        track(&mut known, &first);
-        let second = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request(),
-        )
-        .unwrap();
-        assert!(second.added_surface_keys.is_empty());
-        assert!(second.removed_surface_keys.is_empty());
-    }
-
-    #[test]
-    fn a_closed_loop_never_produces_a_cap() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let square = vec![
-            edge([0.0, 0.0, 0.0], [4.0, 0.0, 0.0], "straight"),
-            edge([4.0, 0.0, 0.0], [4.0, 0.0, 4.0], "straight"),
-            edge([4.0, 0.0, 4.0], [0.0, 0.0, 4.0], "straight"),
-            edge([0.0, 0.0, 4.0], [0.0, 0.0, 0.0], "straight"),
-        ];
-        let request = GenerateAndApplyPathExtrusionRequest {
-            edges: square,
-            height: 3.0,
-            id_prefix: "loop-1".into(),
-            surface_type: "wall".into(),
-            notch: None,
-        };
-        let response = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap();
-        assert_eq!(
-            response.added_surface_keys.len(),
-            4,
-            "four wall panels, no floor or ceiling"
-        );
-    }
-
-    #[test]
-    fn empty_edges_errors_without_mutating() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let request = GenerateAndApplyPathExtrusionRequest {
-            edges: vec![],
-            height: 3.0,
-            id_prefix: "path-1".into(),
-            surface_type: "wall".into(),
-            notch: None,
-        };
-        let error = generate_and_apply_path_extrusion(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap_err();
-        assert!(error.contains("edges"));
-        assert_eq!(graph.node_count(), 0);
-    }
-
-    // -- boundary cap --
-
-    #[test]
-    fn a_flat_quad_caps_into_one_surface() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let request = GenerateAndApplyBoundaryCapRequest {
-            points: vec![
-                [0.0, 1.0, 0.0],
-                [2.0, 1.0, 0.0],
-                [2.0, 1.0, 2.0],
-                [0.0, 1.0, 2.0],
-            ],
-            id_prefix: "cap-1".into(),
-            surface_type: "floor".into(),
-            top: false,
-        };
-        let response = generate_and_apply_boundary_cap(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap();
-        assert_eq!(response.added_surface_keys.len(), 1);
-        assert_eq!(graph.node_count(), 4);
-    }
-
-    #[test]
-    fn too_few_points_errors_without_mutating() {
-        let (mut graph, mut surfaces, mut topology, known) = empty_session();
-        let request = GenerateAndApplyBoundaryCapRequest {
-            points: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-            id_prefix: "cap-1".into(),
-            surface_type: "floor".into(),
-            top: false,
-        };
-        let error = generate_and_apply_boundary_cap(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &known,
-            request,
-        )
-        .unwrap_err();
-        assert!(error.contains("points"));
-        assert_eq!(graph.node_count(), 0);
-    }
-
-    // -- region partition --
 
     fn region_request(
         cells: Vec<(i32, i32)>,

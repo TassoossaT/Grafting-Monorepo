@@ -11,8 +11,6 @@ import { AppTabletopRuntime, type TabletopRuntime } from "./tabletop-runtime.ts"
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
   readonly initialTokens?: readonly TokenProjection[];
-  /** When true, seeds one demo terrain cell and wall upon start. Defaults to false (clean board). */
-  readonly seedDefaultMap?: boolean;
   readonly renderPort?: SceneRenderPort;
   readonly constructionPort?: ConstructionSessionPort;
   readonly terrainNoisePort?: TerrainNoisePort;
@@ -29,6 +27,5 @@ export function createTabletopRuntime(
     input.constructionPort ?? createConstructionSessionAdapter(),
     input.terrainNoisePort ?? createTerrainNoiseAdapter(),
     initialTokens,
-    input.seedDefaultMap ?? false,
   );
 }

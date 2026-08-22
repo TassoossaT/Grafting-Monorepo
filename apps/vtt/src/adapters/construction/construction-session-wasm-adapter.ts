@@ -24,17 +24,12 @@ import type {
   ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
-  ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionUnfilledLoop,
   DiffOutcome,
-  GenerateBoundaryCapRequest,
-  GeneratePathExtrusionRequest,
   GenerateRegionPartitionRequest,
-  GenerateTerrainCellRequest,
   RegionEditOutcome,
-  RemoveEdgeRequest,
   RemoveSurfaceRequest,
   SurfaceMeshResult,
 } from "@/ports";
@@ -160,14 +155,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     this.#session = new ConstructionSession();
   }
 
-  addNode(id: string, position: ConstructionPosition): void {
-    this.#require().add_node_json(JSON.stringify({ id, position: toWirePosition(position) }));
-  }
-
-  addEdge(id: string, source: string, target: string): void {
-    this.#require().add_edge_json(JSON.stringify({ id, source, target }));
-  }
-
   // ---- The atomic edit vocabulary ----
 
   moveVertex(nodeId: string, position: ConstructionPosition): RegionEditOutcome {
@@ -206,18 +193,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
-  addRegion(request: {
-    readonly regionId: string;
-    readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
-    readonly holes?: readonly (readonly ConstructionOrientedEdgeUse[])[];
-    readonly surfaceType: string;
-    readonly physical: boolean;
-  }): RegionEditOutcome {
-    return this.#regionEdit(
-      this.#require().add_region_json(JSON.stringify({ holes: [], ...request })),
-    );
-  }
-
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {
     const wire = JSON.parse(
       this.#require().add_patch_json(
@@ -252,17 +227,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }));
   }
 
-  addContourEdge(request: {
-    readonly edgeId: string;
-    readonly startNodeId: string;
-    readonly endNodeId: string;
-    readonly geometry: ConstructionEdgeGeometry;
-  }): void {
-    this.#require().add_contour_edge_json(
-      JSON.stringify({ ...request, geometry: toWireGeometry(request.geometry) }),
-    );
-  }
-
   moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome {
     return this.#regionEdit(
       this.#require().move_region_json(JSON.stringify({ surfaceKey, delta: toWirePosition(delta) })),
@@ -271,12 +235,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome {
     return this.#regionEdit(this.#require().delete_region_json(JSON.stringify({ surfaceKey })));
-  }
-
-  deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome {
-    const responseJson = this.#require().delete_regions_json(JSON.stringify({ surfaceKeys }));
-    const wire = JSON.parse(responseJson) as { exposedLoops: readonly (readonly RegionEdgeWire[])[] };
-    return { ...this.#regionEdit(responseJson), exposedLoops: wire.exposedLoops };
   }
 
   getFootprintCoverage(
@@ -316,23 +274,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
-  cutRegion(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly cutPath: readonly ConstructionOrientedEdgeUse[];
-    readonly firstRegionId: string;
-    readonly secondRegionId: string;
-  }): RegionEditOutcome {
-    return this.#regionEdit(this.#require().cut_region_json(JSON.stringify(request)));
-  }
-
-  addHole(surfaceKey: ConstructionSurfaceKey, hole: readonly ConstructionOrientedEdgeUse[]): RegionEditOutcome {
-    return this.#regionEdit(this.#require().add_hole_json(JSON.stringify({ surfaceKey, hole })));
-  }
-
-  removeHole(surfaceKey: ConstructionSurfaceKey, index: number): RegionEditOutcome {
-    return this.#regionEdit(this.#require().remove_hole_json(JSON.stringify({ surfaceKey, index })));
-  }
-
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
@@ -358,24 +299,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return fromWireOutcome(JSON.parse(responseJson) as RegionEditOutcomeWire);
   }
 
-  setTerrainMesh(
-    width: number,
-    height: number,
-    layers: number,
-    primitive: "passage" | "boundary" | "surface",
-    deformationXy: number,
-    deformationZ: number,
-  ): void {
-    this.#require().set_terrain_mesh(width, height, layers, primitiveToWire(primitive), deformationXy, deformationZ);
-  }
-
-  generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey {
-    const response = JSON.parse(this.#require().generate_and_apply_terrain_cell_json(JSON.stringify(request))) as {
-      surfaceKey: readonly string[];
-    };
-    return response.surfaceKey;
-  }
-
   applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome {
     const wire = {
       operationId: request.operationId,
@@ -391,21 +314,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#pathBrushOutcome(session.apply_path_brush_json(JSON.stringify(wire)));
   }
 
-  previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[] {
-    const wire = {
-      operationId: request.operationId,
-      samples: request.samples.map((sample) => [sample.x, sample.z]),
-      brushShape: request.brushShape,
-      depth: request.depth,
-      sourceSurfaceTypes: request.sourceSurfaceTypes,
-      targetSurfaceType: request.targetSurfaceType,
-    };
-    const session = this.#require() as ConstructionSession & {
-      preview_path_brush_json(requestJson: string): string;
-    };
-    const response = JSON.parse(session.preview_path_brush_json(JSON.stringify(wire))) as readonly SurfaceMeshWire[];
-    return response.map(toMeshResult);
-  }
   undoPathBrush(operationId: string): void {
     const session = this.#require() as ConstructionSession & { undo_path_brush(operationId: string): void };
     session.undo_path_brush(operationId);
@@ -415,32 +323,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const session = this.#require() as ConstructionSession & { redo_path_brush(operationId: string): void };
     session.redo_path_brush(operationId);
   }
-  generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome {
-    const wire = {
-      edges: request.edges.map((edge) => ({
-        start: toWirePosition(edge.start),
-        end: toWirePosition(edge.end),
-        curvature: curvatureToWire(edge.curvature),
-        includedAngle: edge.includedAngle,
-      })),
-      height: request.height,
-      idPrefix: request.idPrefix,
-      surfaceType: request.surfaceType,
-      notch: request.notch,
-    };
-    return this.#diffOutcome(this.#require().generate_and_apply_path_extrusion_json(JSON.stringify(wire)));
-  }
-
-  generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome {
-    const wire = {
-      points: request.points.map(toWirePosition),
-      idPrefix: request.idPrefix,
-      surfaceType: request.surfaceType,
-      top: request.top,
-    };
-    return this.#diffOutcome(this.#require().generate_and_apply_boundary_cap_json(JSON.stringify(wire)));
-  }
-
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome {
     const wire = {
       cells: request.cells,
@@ -460,10 +342,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   removeSurface(request: RemoveSurfaceRequest): void {
     this.#require().remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey }));
-  }
-
-  removeEdge(request: RemoveEdgeRequest): void {
-    this.#require().remove_edge_json(JSON.stringify({ edgeId: request.edgeId }));
   }
 
   cloudFor(request: CloudRequest): CloudOutcome {

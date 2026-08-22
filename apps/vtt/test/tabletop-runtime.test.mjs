@@ -12,15 +12,29 @@ function createFakeTerrainNoisePort() {
   };
 }
 
+/** A patch with nothing in it: what a test hands over when only the fake's own reply matters. */
+const EMPTY_PATCH = { nodes: [], edges: [], regions: [] };
+
+/**
+ * Putting geometry on the table is a fixture concern, not something the
+ * runtime does for you: it starts empty, and a test that needs surfaces adds
+ * them the way a tool would -- one patch.
+ */
 function createTabletopRuntime(options) {
-  return new AppTabletopRuntime(
+  const runtime = new AppTabletopRuntime(
     options.tableId,
     options.renderPort,
     options.constructionPort,
     options.terrainNoisePort ?? createFakeTerrainNoisePort(),
     options.initialTokens ?? [],
-    options.seedDefaultMap ?? false,
   );
+  if (options.seedFakeMap !== true) return runtime;
+  const start = runtime.start.bind(runtime);
+  runtime.start = async () => {
+    await start();
+    runtime.addPatch(EMPTY_PATCH, "programmatic", `seed:${options.tableId}`);
+  };
+  return runtime;
 }
 
 function createFakeRenderPort() {
@@ -86,6 +100,8 @@ function emptyRegionEdit() {
 
 function createFakeConstructionPort() {
   let started = false;
+  /** What the next `addPatch` reports as created. Unset means the fake's own two surfaces. */
+  let nextCreatedSurfaceKeys;
   const livePositions = new Map([
     ["fake:terrain:n0", { x: 0, y: 0, z: 0 }],
     ["fake:terrain:n1", { x: 1, y: 0, z: 0 }],
@@ -105,15 +121,15 @@ function createFakeConstructionPort() {
       if (started) throw new Error("construction session is already started");
       started = true;
     },
-    addNode() {
+    addPatch() {
       requireStarted();
+      const created = nextCreatedSurfaceKeys ?? [FAKE_TERRAIN_SURFACE_KEY, FAKE_WALL_SURFACE_KEY];
+      nextCreatedSurfaceKeys = undefined;
+      return { ...emptyRegionEdit(), createdSurfaceKeys: created, skippedRegionIds: [] };
     },
-    addEdge() {
-      requireStarted();
-    },
-    addSurface() {
-      requireStarted();
-      return [];
+    /** Test seam: the keys the next `addPatch` claims to have created. */
+    createsNext(keys) {
+      nextCreatedSurfaceKeys = keys;
     },
     moveVertex(nodeId, position) {
       requireStarted();
@@ -140,9 +156,6 @@ function createFakeConstructionPort() {
       requireStarted();
       return emptyRegionEdit();
     },
-    addContourEdge() {
-      requireStarted();
-    },
     moveRegion() {
       requireStarted();
       return emptyRegionEdit();
@@ -155,18 +168,6 @@ function createFakeConstructionPort() {
       requireStarted();
       return emptyRegionEdit();
     },
-    cutRegion() {
-      requireStarted();
-      return emptyRegionEdit();
-    },
-    addHole() {
-      requireStarted();
-      return emptyRegionEdit();
-    },
-    removeHole() {
-      requireStarted();
-      return emptyRegionEdit();
-    },
     getRegionTopology() {
       requireStarted();
       return undefined;
@@ -174,17 +175,6 @@ function createFakeConstructionPort() {
     getAllRegionTopologies() {
       requireStarted();
       return [];
-    },
-    setTerrainMesh() {
-      requireStarted();
-    },
-    generateTerrainCell() {
-      requireStarted();
-      return FAKE_TERRAIN_SURFACE_KEY;
-    },
-    generatePathExtrusion() {
-      requireStarted();
-      return { addedSurfaceKeys: [FAKE_WALL_SURFACE_KEY], removedSurfaceKeys: [], removedNodeIds: [] };
     },
     applyPathBrush() {
       requireStarted();
@@ -194,10 +184,6 @@ function createFakeConstructionPort() {
         surfaceIds: { created: [], preserved: [], replaced: [], removed: [] },
         invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
       };
-    },
-    previewPathBrush() {
-      requireStarted();
-      return [];
     },
     undoPathBrush() {
       requireStarted();
@@ -295,11 +281,11 @@ test("by default, starting a tabletop runtime initializes a clean, empty board",
   assert.equal(snapshot.map.nodePositions.size, 0);
 });
 
-test("starting a table with seedDefaultMap seeds a generated terrain cell and wall through the construction port", async () => {
+test("a patch's created surfaces each become one map entry", async () => {
   const renderPort = createFakeRenderPort();
   const runtime = createTabletopRuntime({
     tableId: "table-map",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort,
     constructionPort: createFakeConstructionPort(),
   });
@@ -320,10 +306,10 @@ test("starting a table with seedDefaultMap seeds a generated terrain cell and wa
   assert.ok(mapChanges[0].chunk.mesh.positions.length > 0, "the seeded chunk carries real mesh data");
 });
 
-test("starting a table with seedDefaultMap also seeds every node's position from the construction port", async () => {
+test("a patch also folds every node's position in from the construction port", async () => {
   const runtime = createTabletopRuntime({
     tableId: "table-nodes",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort: createFakeRenderPort(),
     constructionPort: createFakeConstructionPort(),
   });
@@ -342,7 +328,7 @@ test("moving a vertex updates its position and re-uploads the map chunk it belon
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-move-node",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort,
     constructionPort,
   });
@@ -374,7 +360,7 @@ test("moving a vertex bumps the revision of every surface the engine reports as 
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-affected-surfaces",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort: createFakeRenderPort(),
     constructionPort,
   });
@@ -403,12 +389,12 @@ test("moving a vertex removes a chunk that no longer has any surface in it", asy
     constructionPort,
   });
   await runtime.start();
-  // No seeded wall here on purpose -- `seedDefaultMap` puts both the seeded
-  // terrain cell and wall in the same near-origin chunk, so moving only the
-  // terrain surface away would leave the wall still occupying that chunk
-  // and it would never actually empty out. `generateTerrainCell` alone puts
-  // exactly one surface in the chunk under test.
-  runtime.generateTerrainCell({}, "local", "seed-cell");
+  // No wall here on purpose -- the fake's terrain cell and wall land in the
+  // same near-origin chunk, so moving only the terrain surface away would
+  // leave the wall still occupying that chunk and it would never actually
+  // empty out. One surface alone is what makes the chunk under test emptiable.
+  constructionPort.createsNext([FAKE_TERRAIN_SURFACE_KEY]);
+  runtime.addPatch(EMPTY_PATCH, "local", "seed-cell");
   const seededChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
 
   const move = constructionPort.moveVertex.bind(constructionPort);
@@ -467,15 +453,15 @@ test("editing one surface never touches the render chunk of an unrelated, untouc
       },
     ];
   };
-  constructionPort.generateTerrainCell = () => farKey;
-  runtime.generateTerrainCell({}, "local", "far-cell");
+  constructionPort.createsNext([farKey]);
+  runtime.addPatch(EMPTY_PATCH, "local", "far-cell");
   const farChunkId = renderPort.changes.find((change) => change.type === "map-chunk-upserted").chunk.chunkId;
   const eventsBeforeSecondEdit = renderPort.changes.length;
 
   // A second, unrelated surface elsewhere on the map -- this is the only
   // thing this edit is allowed to touch.
-  constructionPort.generateTerrainCell = () => nearKey;
-  runtime.generateTerrainCell({}, "local", "near-cell");
+  constructionPort.createsNext([nearKey]);
+  runtime.addPatch(EMPTY_PATCH, "local", "near-cell");
 
   const eventsForFarChunkSinceSecondEdit = renderPort.changes
     .slice(eventsBeforeSecondEdit)
@@ -520,15 +506,15 @@ test("one surface key returning several disjoint mesh pieces uploads every piece
       mesh: { positions: new Float32Array([900, 0, 900, 901, 0, 900, 901, 0, 901, 900, 0, 901]) },
     },
   ];
-  constructionPort.generateTerrainCell = () => regionKey;
-  runtime.generateTerrainCell({}, "local", "multi-piece-cell");
+  constructionPort.createsNext([regionKey]);
+  runtime.addPatch(EMPTY_PATCH, "local", "multi-piece-cell");
 
   const upserted = renderPort.changes.filter((change) => change.type === "map-chunk-upserted");
   const chunkIds = new Set(upserted.map((change) => change.chunk.chunkId));
   assert.equal(chunkIds.size, 2, "both mesh pieces must land in (and upload) their own chunk");
 });
 
-test("generateTerrainCell folds the new surface and its nodes into the map", async () => {
+test("addPatch folds the new surface and its nodes into the map", async () => {
   const renderPort = createFakeRenderPort();
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
@@ -539,7 +525,7 @@ test("generateTerrainCell folds the new surface and its nodes into the map", asy
   await runtime.start();
 
   const extraKey = ["fake:terrain2:n0", "fake:terrain2:n1"];
-  constructionPort.generateTerrainCell = () => extraKey;
+  constructionPort.createsNext([extraKey]);
   constructionPort.getAllSurfaceMeshes = () => [
     {
       surfaceKey: extraKey,
@@ -553,8 +539,8 @@ test("generateTerrainCell folds the new surface and its nodes into the map", asy
     { id: "fake:terrain2:n1", position: { x: 6, y: 0, z: 5 } },
   ];
 
-  const returned = runtime.generateTerrainCell({}, "local", "generate-1");
-  assert.deepEqual(returned, extraKey);
+  const outcome = runtime.addPatch(EMPTY_PATCH, "local", "generate-1");
+  assert.deepEqual(outcome.createdSurfaceKeys, [extraKey]);
 
   const map = runtime.getSnapshot().map;
   const surfaceRef = surfaceRefFromNodeSet(extraKey);
@@ -562,7 +548,7 @@ test("generateTerrainCell folds the new surface and its nodes into the map", asy
   assert.deepEqual(map.nodePositions.get("fake:terrain2:n0").position, { x: 5, y: 0, z: 5 });
 });
 
-test("generatePathExtrusion folds every added surface into the map", async () => {
+test("addPatch folds every created surface into the map, with its own type and physical flag", async () => {
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-generate-wall",
@@ -572,7 +558,7 @@ test("generatePathExtrusion folds every added surface into the map", async () =>
   await runtime.start();
 
   const pieceKey = ["fake:wall2:a", "fake:wall2:b"];
-  constructionPort.generatePathExtrusion = () => ({ addedSurfaceKeys: [pieceKey], removedSurfaceKeys: [], removedNodeIds: [] });
+  constructionPort.createsNext([pieceKey]);
   constructionPort.getAllSurfaceMeshes = () => [
     {
       surfaceKey: pieceKey,
@@ -586,8 +572,8 @@ test("generatePathExtrusion folds every added surface into the map", async () =>
     { id: "fake:wall2:b", position: { x: 8, y: 3, z: 0 } },
   ];
 
-  const outcome = runtime.generatePathExtrusion({}, "local", "generate-2");
-  assert.deepEqual(outcome, { addedSurfaceKeys: [pieceKey], removedSurfaceKeys: [], removedNodeIds: [] });
+  const outcome = runtime.addPatch(EMPTY_PATCH, "local", "generate-2");
+  assert.deepEqual(outcome.createdSurfaceKeys, [pieceKey]);
 
   const map = runtime.getSnapshot().map;
   const surfaceRef = surfaceRefFromNodeSet(pieceKey);
@@ -599,7 +585,7 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-path-brush",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort: createFakeRenderPort(),
     constructionPort,
   });
@@ -647,14 +633,13 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
   assert.equal(map.byId.get(surfaceRefFromNodeSet(pathKey)).type, "path");
   assert.deepEqual(map.nodePositions.get("fake:path:c").position, { x: 0, y: -0.1, z: 1 });
 });
-test("generating construction requires a ready tabletop runtime", async () => {
+test("registering a patch requires a ready tabletop runtime", async () => {
   const runtime = createTabletopRuntime({
     tableId: "table-generate-not-ready",
     renderPort: createFakeRenderPort(),
     constructionPort: createFakeConstructionPort(),
   });
-  assert.throws(() => runtime.generateTerrainCell({}, "local", "c"), /ready/);
-  assert.throws(() => runtime.generatePathExtrusion({}, "local", "c"), /ready/);
+  assert.throws(() => runtime.addPatch(EMPTY_PATCH, "local", "c"), /ready/);
 });
 
 test("moving a vertex requires a ready tabletop runtime", async () => {
@@ -780,7 +765,7 @@ test("startup publishes one SurfaceRef pick proxy per semantic surface", async (
   const renderPort = createFakeRenderPort();
   const runtime = createTabletopRuntime({
     tableId: "table-surface-picks",
-    seedDefaultMap: true,
+    seedFakeMap: true,
     renderPort,
     constructionPort: createFakeConstructionPort(),
   });
@@ -797,39 +782,3 @@ test("startup publishes one SurfaceRef pick proxy per semantic surface", async (
   ].sort());
 });
 
-test("path preview uses the exact Rust mesh and mode-registry source policy", async () => {
-  const constructionPort = createFakeConstructionPort();
-  let received;
-  constructionPort.previewPathBrush = (request) => {
-    received = request;
-    return [{
-      surfaceKey: ["preview:a", "preview:b", "preview:c"],
-      surfaceType: "path",
-      physical: true,
-      mesh: {
-        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, -0.2, 1]),
-        indices: new Uint32Array([0, 1, 2]),
-      },
-    }];
-  };
-  const runtime = createTabletopRuntime({
-    tableId: "table-preview",
-    renderPort: createFakeRenderPort(),
-    constructionPort,
-  });
-  await runtime.start();
-
-  const preview = runtime.previewPathBrush({
-    operationId: "preview-1",
-    targetType: "path",
-    brushShape: { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 },
-    brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }, { x: 2, y: 0, z: 0.5 }] },
-    parameters: { width: 1.5, depth: 0.2, falloff: 1, strength: 1 },
-  });
-
-  assert.equal(preview.kind, "mesh");
-  assert.deepEqual([...preview.indices], [0, 1, 2]);
-  assert.deepEqual(received.sourceSurfaceTypes, ["terrain", "terrain-grass", "path"]);
-  assert.equal(received.samples.length, 2);
-  assert.deepEqual(received.brushShape, { kind: "square", size: 1.5, rotationRadians: Math.PI / 4 });
-});

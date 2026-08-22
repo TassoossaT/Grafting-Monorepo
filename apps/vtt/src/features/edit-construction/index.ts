@@ -1,19 +1,3 @@
-export {
-  createGeneratePathExtrusionOperation,
-  createGenerateTerrainCellOperation,
-  createMoveNodeOperation,
-} from "./construction-operations.ts";
-export type {
-  ConstructionOperation,
-  ConstructionOperationContext,
-  GeneratePathExtrusionOperation,
-  GenerateTerrainCellOperation,
-  MoveNodeOperation,
-  MoveNodePayload,
-  OperationId,
-  ParticipantId,
-  RevisionPrecondition,
-} from "./construction-operations.ts";
 export { createEditHistoryStack } from "./edit-history.ts";
 export type { ConstructionHistoryEntry, EditHistoryStack, EditHistoryState, PathBrushHistoryEntry, RegionEditHistoryEntry } from "./edit-history.ts";
 export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
@@ -35,6 +19,8 @@ export type {
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
 export type {
   BrushGestureRegion,
+  ConstructionOperationContext,
+  RevisionPrecondition,
   BrushGestureSample,
   BrushShape,
   PathBrushEffect,

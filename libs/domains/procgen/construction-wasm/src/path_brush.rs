@@ -15,11 +15,11 @@ use std::collections::HashSet;
 use grafting_graph_core::{ContourTopology, NodeId, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_surface_transformations::{
     BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
-    swept_brush_contains, validate_request,
+    validate_request,
 };
 
 use crate::editing::SessionGraph;
-use crate::mesh::{self, SurfaceMeshDto, region_id_to_wire};
+use crate::mesh::region_id_to_wire;
 use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
 
 // `rename_all` on an internally-tagged enum (`tag = "kind"`) only renames
@@ -81,39 +81,6 @@ pub struct ApplyPathBrushRequest {
     target_surface_type: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResolveBrushCellsRequest {
-    samples: Vec<[f32; 2]>,
-    brush_shape: BrushShapeRequest,
-    width: usize,
-    height: usize,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResolveBrushCellsResponse {
-    cells: Vec<usize>,
-}
-
-/// Resolves grid cells through the same authoritative swept footprint as path clipping.
-pub fn resolve_brush_cells(
-    request: ResolveBrushCellsRequest,
-) -> Result<ResolveBrushCellsResponse, String> {
-    if request.samples.is_empty() || request.width == 0 || request.height == 0 {
-        return Err("brush cell resolution requires samples and positive grid dimensions".into());
-    }
-    let shape = request.brush_shape.into_domain();
-    let mut cells = Vec::new();
-    for z in 0..request.height {
-        for x in 0..request.width {
-            if swept_brush_contains(&shape, &request.samples, [x as f32 + 0.5, z as f32 + 0.5]) {
-                cells.push(z * request.width + x);
-            }
-        }
-    }
-    Ok(ResolveBrushCellsResponse { cells })
-}
 /// Wire-ready identity lifecycle delta.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -176,50 +143,6 @@ pub fn apply_path_brush(
         plan,
     )?;
     Ok(response_from_outcome(outcome))
-}
-
-/// Builds the exact target-surface preview on cloned state; confirmed state is untouched.
-pub fn preview_path_brush(
-    graph: &SessionGraph,
-    surfaces: &SurfaceRegistry,
-    topology: &ContourTopology,
-    known_regions: &HashSet<RegionId>,
-    request: ApplyPathBrushRequest,
-) -> Result<Vec<SurfaceMeshDto>, String> {
-    let target_type = request.target_surface_type.clone();
-    let mut preview_graph = graph.clone();
-    let mut preview_surfaces = surfaces.clone();
-    let mut preview_topology = topology.clone();
-    let mut preview_known_regions = known_regions.clone();
-
-    let domain_request = domain_request(&request);
-    let plan = plan_path_brush_region_merge(
-        &preview_graph,
-        &preview_surfaces,
-        &preview_topology,
-        &domain_request,
-    )?;
-    let consumed = consumed_nodes(&preview_topology, &plan);
-    let depth = domain_request.depth;
-    apply_region_merge(
-        &mut preview_graph,
-        &mut preview_surfaces,
-        &mut preview_topology,
-        &mut preview_known_regions,
-        &domain_request.operation_id,
-        domain_request.target_type.clone(),
-        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
-        plan,
-    )?;
-    Ok(mesh::all_surface_meshes(
-        &preview_graph,
-        &preview_surfaces,
-        &preview_topology,
-        &preview_known_regions,
-    )
-    .into_iter()
-    .filter(|surface| surface.surface_type == target_type)
-    .collect())
 }
 
 /// Path-brush's own contribution to the generic region-merge pipeline: its
@@ -345,21 +268,6 @@ fn nearest_source_height(graph: &SessionGraph, nodes: &[NodeId], point: [f32; 2]
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn terrain_cells_use_the_same_rotated_shape_and_continuous_sweep() {
-        let resolved = resolve_brush_cells(ResolveBrushCellsRequest {
-            samples: vec![[0.5, 0.5], [4.5, 0.5]],
-            brush_shape: BrushShapeRequest::Square {
-                size: 1.0,
-                rotation_radians: 0.2,
-            },
-            width: 5,
-            height: 2,
-        })
-        .unwrap();
-        assert_eq!(resolved.cells, vec![0, 1, 2, 3, 4]);
-    }
 
     /// The wire format every real caller sends (`BrushShape` on the TS
     /// side never changed) is camelCase throughout, including
