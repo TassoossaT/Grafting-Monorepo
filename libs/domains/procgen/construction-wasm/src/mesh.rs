@@ -1,6 +1,6 @@
 //! Pure inner functions deriving a triangulated mesh (positions/normals/
 //! indices) for a currently-known surface, via
-//! `grafting-procgen-surface-mesh::triangulate_surface`. Same split as
+//! `grafting-procgen-surface-mesh::triangulate_region`. Same split as
 //! `editing.rs`: `session.rs`'s `#[wasm_bindgen]` methods are thin JSON
 //! wrappers over these, natively unit-testable with zero Wasm involvement.
 
