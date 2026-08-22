@@ -140,23 +140,6 @@ pub fn encode_domain_event(event: &DomainEvent) -> Vec<u8>
 pub fn decode_domain_event(bytes: &[u8]) -> Result<DomainEvent, WireError>
 pub fn encode_snapshot(snapshot: &Snapshot) -> Vec<u8>
 pub fn decode_snapshot(bytes: &[u8]) -> Result<Snapshot, WireError>
-
-// tests/generated_v1/command_v1_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_COMMAND_PAYLOAD: u8 = 0;
-pub const ENUM_MAX_COMMAND_PAYLOAD: u8 = 4;
-pub const ENUM_VALUES_COMMAND_PAYLOAD: [CommandPayload; 5] = [
-pub struct CommandPayload(pub u8);
-pub const NONE: Self = Self(0);
-pub const Increment: Self = Self(1);
-pub const Decrement: Self = Self(2);
-pub const Reset: Self = Self(3);
-pub const RollAndAdd: Self = Self(4);
-pub const ENUM_MIN: u8 = 0;
-pub const ENUM_MAX: u8 = 4;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
 ```
 
 ### `generation-wasm` (`libs/domains/procgen/generation-wasm`)
