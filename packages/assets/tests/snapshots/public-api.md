@@ -624,6 +624,212 @@ export interface InMemoryImageSource {
 export declare const inMemoryImageResolver: ResourceResolver<typeof IN_MEMORY_IMAGE_KIND>;
 
 import type { ResourceResolver } from "../contracts/resolver.js";
+/** The kind {@link createEncodedImageResolver} claims. */
+export declare const ENCODED_IMAGE_KIND = "encoded-image";
+/**
+ * Where an encoded image's bytes come from.
+ *
+ * The same two cases as the glTF resolver, for the same reason: bytes that were
+ * generated, uploaded by a user, or read from storage this package knows
+ * nothing about must work exactly as well as a fetch. Which one a definition
+ * uses is invisible to everything upstream of the resolver.
+ */
+export type EncodedImageBytes = 
+/** Encoded bytes of a PNG, JPEG, WebP -- whatever the decoder accepts. */
+{
+    readonly bytes: Uint8Array;
+}
+/** A location to fetch the bytes from. */
+ | {
+    readonly url: string;
+};
+/**
+ * How a colour channel's values are to be read.
+ *
+ * Declared per image, never assumed, because a PBR material is not one texture.
+ * Base colour is authored in sRGB; normal, roughness, ambient occlusion and
+ * height are linear data that merely happen to be stored in an image. Decoding
+ * a normal map as sRGB does not fail -- it produces lighting that is subtly and
+ * consistently wrong, which is the kind of defect that survives review and is
+ * obvious only on screen.
+ *
+ * There is no safe default across a material's maps, so the declaration carries
+ * it and this resolver never guesses. `"srgb"` is the fallback only because a
+ * lone texture with nothing said about it is far more often colour.
+ */
+export type ImageColorSpace = "srgb" | "linear";
+/** What an encoded image definition puts in its `source`. */
+export type EncodedImageSource = EncodedImageBytes & {
+    /**
+     * How this image's values are read. Defaults to `"srgb"`.
+     *
+     * Set `"linear"` for every map that carries data rather than colour.
+     */
+    readonly colorSpace?: ImageColorSpace;
+    /**
+     * Media type handed to the decoder, when the bytes do not carry one.
+     *
+     * Only needed for a decoder that cannot sniff the format itself; the platform
+     * one can.
+     */
+    readonly mediaType?: string;
+};
+/** A decoded image, in the shape {@link ImageResource}'s decoded form needs. */
+export interface DecodedImage {
+    /** DOM image types only. No renderer texture type is exposed. */
+    readonly source: ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+    /**
+     * Width in pixels.
+     *
+     * Reported by the decoder rather than read back off {@link source}, so a
+     * decoder whose output does not expose its own dimensions still works.
+     */
+    readonly width: number;
+    /** Height in pixels. Reported by the decoder, as {@link width} is. */
+    readonly height: number;
+}
+/** How the resolver reaches the platform. Both default to the global. */
+export interface EncodedImageResolverOptions {
+    /**
+     * Fetches a URL. Defaults to the global `fetch`.
+     *
+     * Supplied from outside so a consumer can add auth headers, a cache policy,
+     * or a retry -- none of which this package should have opinions about.
+     */
+    readonly fetch?: (url: string, init: {
+        signal: AbortSignal;
+    }) => Promise<Response>;
+    /**
+     * Turns encoded bytes into a decoded image. Defaults to `createImageBitmap`.
+     *
+     * The one step that genuinely varies by environment: a worker, an SSR
+     * context, and a format the platform cannot decode natively each need their
+     * own, and a package that hardcoded the browser's would be unusable in all
+     * three. It is also what lets this resolver be tested with no network and no
+     * real bitmap, which `AGENTS.md` requires -- no test may depend on an asset
+     * that is not produced in-process.
+     */
+    readonly decode?: (bytes: Uint8Array, mediaType: string | undefined) => Promise<DecodedImage>;
+}
+/**
+ * Loads an authored image the store did not create.
+ *
+ * The counterpart to `inMemoryImageResolver`, which adopts an image a caller
+ * already decoded. That one is right for a generated texture and is
+ * deliberately zero-dependency; this one is what lets a consumer *declare* a
+ * texture and acquire it, with the fetch, the decode, the abort handling and
+ * the disposal all owned here instead of repeated at every call site.
+ *
+ * Nothing about where images live is decided here. A definition names bytes or
+ * a URL, and both arrive from a `CatalogSource` the consumer supplies -- which
+ * is what makes this work for asset binaries that are never committed.
+ */
+export declare function createEncodedImageResolver(options?: EncodedImageResolverOptions): ResourceResolver<typeof ENCODED_IMAGE_KIND>;
+
+import type { ResourceResolver } from "../contracts/resolver.js";
+/** The kind {@link createEncodedImageResolver} claims. */
+export declare const ENCODED_IMAGE_KIND = "encoded-image";
+/**
+ * Where an encoded image's bytes come from.
+ *
+ * The same two cases as the glTF resolver, for the same reason: bytes that were
+ * generated, uploaded by a user, or read from storage this package knows
+ * nothing about must work exactly as well as a fetch. Which one a definition
+ * uses is invisible to everything upstream of the resolver.
+ */
+export type EncodedImageBytes = 
+/** Encoded bytes of a PNG, JPEG, WebP -- whatever the decoder accepts. */
+{
+    readonly bytes: Uint8Array;
+}
+/** A location to fetch the bytes from. */
+ | {
+    readonly url: string;
+};
+/**
+ * How a colour channel's values are to be read.
+ *
+ * Declared per image, never assumed, because a PBR material is not one texture.
+ * Base colour is authored in sRGB; normal, roughness, ambient occlusion and
+ * height are linear data that merely happen to be stored in an image. Decoding
+ * a normal map as sRGB does not fail -- it produces lighting that is subtly and
+ * consistently wrong, which is the kind of defect that survives review and is
+ * obvious only on screen.
+ *
+ * There is no safe default across a material's maps, so the declaration carries
+ * it and this resolver never guesses. `"srgb"` is the fallback only because a
+ * lone texture with nothing said about it is far more often colour.
+ */
+export type ImageColorSpace = "srgb" | "linear";
+/** What an encoded image definition puts in its `source`. */
+export type EncodedImageSource = EncodedImageBytes & {
+    /**
+     * How this image's values are read. Defaults to `"srgb"`.
+     *
+     * Set `"linear"` for every map that carries data rather than colour.
+     */
+    readonly colorSpace?: ImageColorSpace;
+    /**
+     * Media type handed to the decoder, when the bytes do not carry one.
+     *
+     * Only needed for a decoder that cannot sniff the format itself; the platform
+     * one can.
+     */
+    readonly mediaType?: string;
+};
+/** A decoded image, in the shape {@link ImageResource}'s decoded form needs. */
+export interface DecodedImage {
+    /** DOM image types only. No renderer texture type is exposed. */
+    readonly source: ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+    /**
+     * Width in pixels.
+     *
+     * Reported by the decoder rather than read back off {@link source}, so a
+     * decoder whose output does not expose its own dimensions still works.
+     */
+    readonly width: number;
+    /** Height in pixels. Reported by the decoder, as {@link width} is. */
+    readonly height: number;
+}
+/** How the resolver reaches the platform. Both default to the global. */
+export interface EncodedImageResolverOptions {
+    /**
+     * Fetches a URL. Defaults to the global `fetch`.
+     *
+     * Supplied from outside so a consumer can add auth headers, a cache policy,
+     * or a retry -- none of which this package should have opinions about.
+     */
+    readonly fetch?: (url: string, init: {
+        signal: AbortSignal;
+    }) => Promise<Response>;
+    /**
+     * Turns encoded bytes into a decoded image. Defaults to `createImageBitmap`.
+     *
+     * The one step that genuinely varies by environment: a worker, an SSR
+     * context, and a format the platform cannot decode natively each need their
+     * own, and a package that hardcoded the browser's would be unusable in all
+     * three. It is also what lets this resolver be tested with no network and no
+     * real bitmap, which `AGENTS.md` requires -- no test may depend on an asset
+     * that is not produced in-process.
+     */
+    readonly decode?: (bytes: Uint8Array, mediaType: string | undefined) => Promise<DecodedImage>;
+}
+/**
+ * Loads an authored image the store did not create.
+ *
+ * The counterpart to `inMemoryImageResolver`, which adopts an image a caller
+ * already decoded. That one is right for a generated texture and is
+ * deliberately zero-dependency; this one is what lets a consumer *declare* a
+ * texture and acquire it, with the fetch, the decode, the abort handling and
+ * the disposal all owned here instead of repeated at every call site.
+ *
+ * Nothing about where images live is decided here. A definition names bytes or
+ * a URL, and both arrive from a `CatalogSource` the consumer supplies -- which
+ * is what makes this work for asset binaries that are never committed.
+ */
+export declare function createEncodedImageResolver(options?: EncodedImageResolverOptions): ResourceResolver<typeof ENCODED_IMAGE_KIND>;
+
+import type { ResourceResolver } from "../contracts/resolver.js";
 /** The kind {@link gltfMeshResolver} claims. */
 export declare const GLTF_MESH_KIND = "gltf-mesh";
 /**
