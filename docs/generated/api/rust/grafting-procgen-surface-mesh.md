@@ -17,6 +17,24 @@ mesh. Callers resolve node positions from their authoritative graph.
 
 ### `pub grafting_procgen_surface_mesh::TriangulatedMesh::positions: alloc::vec::Vec<[f32; 3]>`
 
+### `pub grafting_procgen_surface_mesh::TriangulatedMesh::uvs: alloc::vec::Vec<[f32; 2]>`
+
+Where each vertex sits on the surface's own flat extent, **in world
+units** -- not normalised to `0..1`.
+
+Metres rather than a unit box is the whole point. A normalised box
+stretches: the same texture would cover a 2 m panel and a 10 m one
+identically, so a caller would have to undo the normalisation with the
+panel's size to get a uniform result, and two panels meeting at a
+corner would disagree about where the pattern is. In metres, scale is
+uniform everywhere for free, and a caller divides by whatever its own
+tile size happens to be.
+
+An upright face measures along its rail and up; a flat one measures in
+world `x` and `z`. Both anchor on something the graph already fixes, so
+re-deriving a mesh yields the same coordinates and neighbours that share
+an anchor agree across the edge between them.
+
 ### `pub mod grafting_procgen_surface_mesh`
 
 Turns a construction `Surface`'s node cycle -- an ordered ring of 3D
@@ -49,10 +67,17 @@ same map with an infinite radius. Unrolled, it is an ordinary 2D polygon
 that `earcut` triangulates like any other -- openings included, which a
 strip built facet by facet could never punch.
 
-The 3D positions never move: the unrolled coordinates exist only so
-`earcut` has somewhere flat to work, and `earcut` introduces no vertices
-of its own. Only the normals are derived from the frame, per vertex, so
-a curve shades as a curve.
+The 3D positions never move: the unrolled coordinates are where `earcut`
+works, and `earcut` introduces no vertices of its own. The normals are
+derived from the frame, per vertex, so a curve shades as a curve.
+
+Those unrolled coordinates also leave the crate, as [`TriangulatedMesh`]'s
+`uvs`. They are metres of the surface's own extent, not a normalised
+`0..1` box, which is what makes them usable for more than one thing:
+anything laid out over a surface -- a tiling texture, a course of
+replicated units -- needs the same origin, the same two directions, and
+the same extent in metres, so emitting the frame once means both land on
+the same grid.
 
 ### `pub struct grafting_procgen_surface_mesh::TriangulatedMesh`
 

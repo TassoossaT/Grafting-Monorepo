@@ -119,6 +119,12 @@ interface SurfaceMeshWire {
   readonly physical: boolean;
   readonly positions: readonly number[];
   readonly normals: readonly number[];
+  /**
+   * Flat `uv` pairs in world units -- how far along the surface's own extent
+   * each vertex sits, in metres, rather than normalised to `0..1`. See
+   * `grafting_procgen_surface_mesh::TriangulatedMesh::uvs`.
+   */
+  readonly uvs: readonly number[];
   readonly indices: readonly number[];
 }
 
@@ -130,6 +136,7 @@ function toMeshResult(wire: SurfaceMeshWire): SurfaceMeshResult {
     mesh: {
       positions: Float32Array.from(wire.positions),
       normals: Float32Array.from(wire.normals),
+      uvs: Float32Array.from(wire.uvs),
       indices: Uint32Array.from(wire.indices),
     },
   };
