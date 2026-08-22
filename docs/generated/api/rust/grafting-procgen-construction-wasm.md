@@ -17,6 +17,13 @@ Adds a brand-new edge. See `editing::add_edge`.
 
 Adds a brand-new node. See `editing::add_node`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_patch_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Registers a whole generated patch -- nodes, shared boundary edges,
+and the regions over them -- in one call. See
+`region_editing::apply_add_patch` for why a generator must name its
+own edges rather than let each face mint its own.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Registers a region from already-registered edges, so a new face can
@@ -211,6 +218,14 @@ surface key always returns exactly one. See `mesh::surface_mesh`.
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::undo_path_brush(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Restores the state immediately before the latest matching path-brush operation.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::unfilled_loops_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Every closed loop of free boundary, among the nodes the request
+names, that another such loop encloses -- a hole in the surface whose
+rim already exists. The caller passes the region it just touched;
+boundary elsewhere on the map is none of its business. See
+`enclosure::unfilled_loops`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::vector_into_abi(vector: alloc::boxed::Box<[grafting_procgen_construction_wasm::ConstructionSession]>) -> Self::Abi`
 

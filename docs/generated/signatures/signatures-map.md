@@ -1630,6 +1630,40 @@ export interface GuardCheckInput {
   command?: string;
   }
 
+// src/issue-commands.ts
+export interface IssueListInput {
+  type?: string;
+  area?: string;
+  status?: string;
+  priority?: string;
+  limit?: number;
+  }
+export interface IssueViewInput {
+  id: number | string;
+  }
+export interface IssueNewInput {
+  title: string;
+  type: "task" | "refinement" | "chore" | "bug" | "epic" | string;
+  area?: string;
+  priority?: "P0-critical" | "P1-high" | "P2-medium" | "P3-low" | string;
+  status?: string;
+  milestone?: string;
+  body?: string;
+export interface IssueUpdateInput {
+  id: number | string;
+  status?: string;
+  priority?: string;
+  comment?: string;
+  }
+export interface CompactIssue {
+  id: number;
+  title: string;
+  type?: string;
+  area?: string;
+  priority?: string;
+  status?: string;
+  milestone?: string;
+
 // src/task-commands.ts
 export interface CliError {
   ok: false;
@@ -2947,7 +2981,7 @@ export type {
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
-export type { ConstructionToolFeedback } from "./tools/tool-context.ts";
+export type { ConstructionToolFeedback } from "./tools/index.ts";
 
 // src/composition/tabletop/tabletop-runtime.ts
 export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
@@ -2979,7 +3013,7 @@ export interface TabletopRuntime {
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
-// src/composition/tabletop/tools/brush-tool.ts
+// src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
   readonly shape: BrushShape;
@@ -2999,7 +3033,7 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   shape: resolveBrushShape(params),
   });
 
-// src/composition/tabletop/tools/edit-region-tool.ts
+// src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
   defaultParams: () => ({}),
@@ -3008,7 +3042,56 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
   active = undefined;
   const grabbed = grabbedTarget(ctx, sample);
 
-// src/composition/tabletop/tools/house-room-delete-tool.ts
+// src/composition/tabletop/tools/core/navigate-tool.ts
+export const navigateTool: ConstructionTool<"navigate"> = {
+  id: "navigate",
+  defaultParams: () => ({}),
+  };
+
+// src/composition/tabletop/tools/core/tool-context.ts
+export interface PointerSample {
+  readonly point: ConstructionPosition;
+  readonly nodeId?: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolGesture {
+  readonly start: PointerSample;
+  readonly current: PointerSample;
+  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
+  readonly samples: readonly PointerSample[];
+  }
+export interface ConstructionToolFeedback {
+  readonly tone: "info" | "success" | "error";
+  readonly message: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolContext {
+  readonly runtime: TabletopRuntime;
+  readonly history: EditHistoryStack;
+  readonly tableId: string;
+  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
+  nextSequence(): number;
+  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
+  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
+export interface ConstructionTool<Id extends ConstructionToolId> {
+  readonly id: Id;
+  defaultParams(): ToolParamsFor<Id>;
+  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
+  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
+  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
+  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
+export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
+  const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
+  return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
+  }
+
+// src/composition/tabletop/tools/core/tool-registry.ts
+export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
+  return TOOL_REGISTRY[id];
+  }
+
+// src/composition/tabletop/tools/house/house-room-delete-tool.ts
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   id: "house-room-delete",
   defaultParams: () => ({}),
@@ -3016,11 +3099,8 @@ export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   onClick(ctx: ToolContext, sample: PointerSample): void {
   const directHit = findWallSurfaceAt(ctx, sample.point);
 
-// src/composition/tabletop/tools/interior-partition.ts
-export interface Vec2 {
-  readonly x: number;
-  readonly z: number;
-  }
+// src/composition/tabletop/tools/house/interior-partition.ts
+export type Vec2 = PointXZ;
 export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { readonly cells: readonly CellCoordinate[]; readonly origin: Vec2 } {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -3035,7 +3115,7 @@ export function isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly 
   const map = ctx.runtime.getSnapshot().map;
   const positions = surfaceKey.map((id) => map.nodePositions.get(id)?.position).filter((position): position is ConstructionPosition => position !== undefined);
 
-// src/composition/tabletop/tools/interior-wall-tool.ts
+// src/composition/tabletop/tools/house/interior-wall-tool.ts
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   id: "interior-wall",
   defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
@@ -3043,7 +3123,159 @@ export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
   const room = findEnclosingRoom(ctx, sample.point, "largest");
 
-// src/composition/tabletop/tools/irregular-grid.ts
+// src/composition/tabletop/tools/house/room-lookup.ts
+export interface DerivedRoom {
+  readonly bottomCycle: readonly ConstructionNodeId[];
+  readonly topCycle: readonly ConstructionNodeId[];
+  readonly polygon: readonly Vec2[];
+  }
+export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
+  const spans = wallSpans(ctx);
+
+// src/composition/tabletop/tools/paths/path-brush-tool.ts
+export const pathBrushTool = createBrushTool<"path-brush">({
+  id: "path-brush",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
+  previewColor: () => PATH_PREVIEW_COLOR,
+
+  applyRegion(region, ctx, params) {
+  const sequence = ctx.nextSequence();
+
+// src/composition/tabletop/tools/shapes/geometry-2d.ts
+export interface PointXZ {
+  readonly x: number;
+  readonly z: number;
+  }
+export function xzDistance(a: PointXZ, b: PointXZ): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.hypot(dx, dz);
+export function xzDistanceSq(a: PointXZ, b: PointXZ): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return dx * dx + dz * dz;
+  }
+export function projectOntoLineXZ(
+  point: PointXZ,
+  a: PointXZ,
+  b: PointXZ,
+  ): { readonly t: number; readonly perp: number; readonly x: number; readonly z: number } {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lengthSq = abx * abx + abz * abz;
+export function distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lengthSq = abx * abx + abz * abz;
+  if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
+export function pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+  const pi = polygon[i];
+  const pj = polygon[j];
+  if (pi === undefined || pj === undefined) continue;
+  const crosses = pi.z > point.z !== pj.z > point.z;
+  if (!crosses) continue;
+export function distanceToPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): number {
+  let best = Infinity;
+  for (let i = 0; i < polygon.length; i += 1) {
+  const a = polygon[i];
+  const b = polygon[(i + 1) % polygon.length];
+  if (a === undefined || b === undefined) continue;
+  best = Math.min(best, distanceToSegmentXZ(point, a, b));
+export function angleFromToXZ(a: PointXZ, b: PointXZ): number {
+  return Math.atan2(b.z - a.z, b.x - a.x);
+export function polygonAreaXZ(polygon: readonly PointXZ[]): number {
+  let sum = 0;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+  const pi = polygon[i];
+  const pj = polygon[j];
+  if (pi === undefined || pj === undefined) continue;
+  sum += (pj.x + pi.x) * (pj.z - pi.z);
+export function pinnedToBaseline<T extends ConstructionPosition>(
+  baseline: { readonly y: number },
+  point: T,
+  ): T {
+  return { ...point, y: baseline.y };
+
+// src/composition/tabletop/tools/shapes/preview-shapes.ts
+export function quadAround(
+  center: ConstructionPosition,
+  halfExtent: number,
+  color: number,
+  opacity = 0.35,
+  ): PreviewDescriptor {
+  const y = center.y;
+  return {
+export function segmentBetween(
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return {
+  kind: "segments",
+export function segmentsPreview(
+  positions: Float32Array | readonly number[],
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return {
+  kind: "segments",
+  color,
+export function polylineSegmentsPreview(
+  points: readonly ConstructionPosition[],
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor | undefined {
+  if (points.length < 2) return undefined;
+  const positions = new Float32Array((points.length - 1) * 6);
+export function footprintQuad(
+  corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const positions = new Float32Array(12);
+export type BrushOutlineShape =
+export function brushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
+export function brushSweptOutlinePolygons(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+  ): MultiPolygon {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const capsules = strokeCapsules(samples, radius);
+export function brushSweptRegionFill(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const first = samples[0];
+  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
+export function circleOutline(
+  center: ConstructionPosition,
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return circularBrushStrokeOutline([center], radius, color, opacity);
+export function circularBrushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  const positions: number[] = [];
+  if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+
+// src/composition/tabletop/tools/terrain/irregular-grid.ts
 export interface Vec2 {
   readonly x: number;
   readonly y: number;
@@ -3102,103 +3334,7 @@ export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
 export function boundaryVertices(mesh: QuadMesh): Set<number> {
   const counts = new Map<string, number>();
 
-// src/composition/tabletop/tools/navigate-tool.ts
-export const navigateTool: ConstructionTool<"navigate"> = {
-  id: "navigate",
-  defaultParams: () => ({}),
-  };
-
-// src/composition/tabletop/tools/path-brush-tool.ts
-export const pathBrushTool = createBrushTool<"path-brush">({
-  id: "path-brush",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_PREVIEW_COLOR,
-
-  applyRegion(region, ctx, params) {
-  const sequence = ctx.nextSequence();
-
-// src/composition/tabletop/tools/path-fitting.ts
-export interface FittedEdge {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly curvature: "straight" | "arc-left" | "arc-right";
-  }
-export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
-  if (points.length < 2) return [];
-  const indices = cornerIndices(points, cornerEpsilon);
-
-// src/composition/tabletop/tools/preview-shapes.ts
-export function quadAround(
-  center: ConstructionPosition,
-  halfExtent: number,
-  color: number,
-  opacity = 0.35,
-  ): PreviewDescriptor {
-  const y = center.y;
-  return {
-export function segmentBetween(
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  return {
-  kind: "segments",
-export function footprintQuad(
-  corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
-  color: number,
-  opacity = 0.3,
-  ): PreviewDescriptor {
-  const positions = new Float32Array(12);
-export type BrushOutlineShape =
-export function brushStrokeOutline(
-  samples: readonly ConstructionPosition[],
-  shape: BrushOutlineShape,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
-export function brushSweptOutlinePolygons(
-  samples: readonly ConstructionPosition[],
-  radius: number,
-  ): MultiPolygon {
-  const first = samples[0];
-  if (first === undefined) return [];
-  const capsules = strokeCapsules(samples, radius);
-export function brushSweptRegionFill(
-  samples: readonly ConstructionPosition[],
-  shape: BrushOutlineShape,
-  color: number,
-  opacity = 0.3,
-  ): PreviewDescriptor {
-  const first = samples[0];
-  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
-export function circleOutline(
-  center: ConstructionPosition,
-  radius: number,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  return circularBrushStrokeOutline([center], radius, color, opacity);
-export function circularBrushStrokeOutline(
-  samples: readonly ConstructionPosition[],
-  radius: number,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  const positions: number[] = [];
-  if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
-
-// src/composition/tabletop/tools/room-lookup.ts
-export interface DerivedRoom {
-  readonly bottomCycle: readonly ConstructionNodeId[];
-  readonly topCycle: readonly ConstructionNodeId[];
-  readonly polygon: readonly Vec2[];
-  }
-export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
-  const spans = wallSpans(ctx);
-
-// src/composition/tabletop/tools/terrain-restack.ts
+// src/composition/tabletop/tools/terrain/terrain-restack.ts
 export const ELEVATION_STEP = 0.5;
 export interface RestackOutcome {
   readonly raisedFaces: number;
@@ -3220,7 +3356,7 @@ export function restackTerrain(
   ): RestackOutcome {
   const resolved = resolveCoverage(paintedType, covered);
 
-// src/composition/tabletop/tools/terrain-sculpt-tool.ts
+// src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
@@ -3230,46 +3366,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   gesture.samples.map((sample) => sample.point),
   { kind: "circle", radius: REVEAL_RADIUS },
 
-// src/composition/tabletop/tools/tool-context.ts
-export interface PointerSample {
-  readonly point: ConstructionPosition;
-  readonly nodeId?: string;
-  readonly surfaceRef?: string;
-  }
-export interface ToolGesture {
-  readonly start: PointerSample;
-  readonly current: PointerSample;
-  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
-  readonly samples: readonly PointerSample[];
-  }
-export interface ConstructionToolFeedback {
-  readonly tone: "info" | "success" | "error";
-  readonly message: string;
-  readonly surfaceRef?: string;
-  }
-export interface ToolContext {
-  readonly runtime: TabletopRuntime;
-  readonly history: EditHistoryStack;
-  readonly tableId: string;
-  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
-  nextSequence(): number;
-  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
-  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
-export interface ConstructionTool<Id extends ConstructionToolId> {
-  readonly id: Id;
-  defaultParams(): ToolParamsFor<Id>;
-  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
-  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
-  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
-  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
-  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
-
-// src/composition/tabletop/tools/tool-registry.ts
-export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
-  return TOOL_REGISTRY[id];
-  }
-
-// src/composition/tabletop/tools/tower-geometry.ts
+// src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
   const points = circlePoints(center, radius);
 export function previewOutline(center: ConstructionPosition, radius: number, segments: number): Float32Array {
@@ -3277,17 +3374,27 @@ export function previewOutline(center: ConstructionPosition, radius: number, seg
   for (let step = 0; step < segments; step += 1) {
   const from = pointOnCircle(center, radius, (step / segments) * Math.PI * 2);
 
-// src/composition/tabletop/tools/tower-stamp-tool.ts
+// src/composition/tabletop/tools/tower/tower-stamp-tool.ts
 export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   id: "tower-stamp",
   defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
 
   previewFor(gesture: ToolGesture, params: TowerStampParams) {
-  return {
-  kind: "segments",
-  color: WALL_COLOR[params.wallType],
+  return segmentsPreview(
+  previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
+  WALL_COLOR[params.wallType],
 
-// src/composition/tabletop/tools/wall-brush-tool.ts
+// src/composition/tabletop/tools/walls/path-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly curvature: "straight" | "arc-left" | "arc-right";
+  }
+export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const indices = cornerIndices(points, cornerEpsilon);
+
+// src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
@@ -3297,28 +3404,20 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   if (path === undefined || path.length === 0) return undefined;
 
 
-// src/composition/tabletop/tools/wall-line-tool.ts
+// src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
   previewFor(gesture: ToolGesture, params: WallBrushParams) {
   if (anchor === undefined) return undefined;
-  return {
-  kind: "segments",
+  return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
 
-// src/composition/tabletop/tools/wall-shared.ts
+// src/composition/tabletop/tools/walls/wall-shared.ts
 export const WALL_HEIGHT = 3;
 export const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
 export function idPrefixFor(ctx: ToolContext): string {
-  return `${ctx.tableId}:wall-brush`;
-  }
-export function pinnedToBaseline(baseline: ConstructionPosition, point: ConstructionPosition): ConstructionPosition {
-  return { ...point, y: baseline.y };
-export function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
-  const dx = a.x - b.x;
-  const dz = a.z - b.z;
-  return Math.hypot(dx, dz);
+  return scopedToolId(ctx, "wall-brush");
 export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition {
   for (const span of wallSpans(ctx)) {
   const spanLength = xzDistance(span.a, span.b);
@@ -3327,7 +3426,7 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
 
-// src/composition/tabletop/tools/wall-spans.ts
+// src/composition/tabletop/tools/walls/wall-spans.ts
 export interface WallSpan {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
@@ -3885,7 +3984,7 @@ export interface InteriorGenerateParams {
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
   readonly trianglesPerSide: number;
   /**
   * `0` = cells relaxed hard toward square (regular-looking, like a normal
