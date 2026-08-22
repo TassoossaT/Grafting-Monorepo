@@ -622,6 +622,19 @@ Returns the identifier text.
 
 Creates a surface-type identifier from caller-chosen text.
 
+### `pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, hole: grafting_graph_core::ContourLoop) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`AddHole`: registers one more inner loop on an existing region -- what a
+door or a window is. A hole is not a marker: it is a real loop of
+registered [`ContourEdge`]s with real graph nodes, validated by the same
+closure and manifold rules as any outer loop, and consumed directly by
+triangulation.
+
+The loop is left with one use free on every edge, which is what lets a
+second region take the opening as its own outer boundary. A hole and the
+face filling it are then joined the same way any two faces are: they
+share the rim.
+
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `DeleteRegion` for a single region -- [`delete_regions`] with one entry,
@@ -692,6 +705,15 @@ candidate node no surviving region's boundary still touches. Candidates
 are scoped to the nodes the caller's own edit could have orphaned, never
 the whole graph, so a node staged for an unrelated in-flight operation is
 never collected.
+
+### `pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+
+`RemoveHole`: drops one of a region's inner loops by index, then runs the
+shared orphan cleanup over the nodes that loop used.
+
+A node the filling face still stands on survives, because that face still
+references it -- closing an opening whose face is already gone is what
+actually reclaims the rim.
 
 ### `pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 

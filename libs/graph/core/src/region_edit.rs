@@ -439,6 +439,77 @@ pub fn move_region<N, E>(
     Ok(outcome)
 }
 
+/// `AddHole`: registers one more inner loop on an existing region -- what a
+/// door or a window is. A hole is not a marker: it is a real loop of
+/// registered [`ContourEdge`]s with real graph nodes, validated by the same
+/// closure and manifold rules as any outer loop, and consumed directly by
+/// triangulation.
+///
+/// The loop is left with one use free on every edge, which is what lets a
+/// second region take the opening as its own outer boundary. A hole and the
+/// face filling it are then joined the same way any two faces are: they
+/// share the rim.
+pub fn add_hole(
+    topology: &mut ContourTopology,
+    region: &RegionId,
+    hole: ContourLoop,
+) -> Result<RegionEditOutcome, RegionEditError> {
+    let current = topology
+        .region(region)
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?;
+    let outer_loops = current.outer_loops().to_vec();
+    let mut holes = current.holes().to_vec();
+    holes.push(hole);
+    topology.replace_region_loops(region, outer_loops, holes)?;
+    Ok(RegionEditOutcome {
+        affected_regions: vec![region.clone()],
+        ..RegionEditOutcome::default()
+    })
+}
+
+/// `RemoveHole`: drops one of a region's inner loops by index, then runs the
+/// shared orphan cleanup over the nodes that loop used.
+///
+/// A node the filling face still stands on survives, because that face still
+/// references it -- closing an opening whose face is already gone is what
+/// actually reclaims the rim.
+pub fn remove_hole<N, E>(
+    graph: &mut Graph<N, E>,
+    topology: &mut ContourTopology,
+    region: &RegionId,
+    index: usize,
+) -> Result<RegionEditOutcome, RegionEditError> {
+    let current = topology
+        .region(region)
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?;
+    if index >= current.holes().len() {
+        return Err(RegionEditError::UnknownHole {
+            region: region.clone(),
+            index,
+        });
+    }
+    let outer_loops = current.outer_loops().to_vec();
+    let mut holes = current.holes().to_vec();
+    let dropped = holes.remove(index);
+    let candidates = loop_nodes(topology, &dropped);
+    topology.replace_region_loops(region, outer_loops, holes)?;
+    let removed_nodes = prune_orphans(graph, topology, &candidates)?;
+    Ok(RegionEditOutcome {
+        affected_regions: vec![region.clone()],
+        removed_nodes,
+        ..RegionEditOutcome::default()
+    })
+}
+
+/// Every node either endpoint of `loop_`'s own edges stands on.
+fn loop_nodes(topology: &ContourTopology, loop_: &ContourLoop) -> Vec<NodeId> {
+    loop_
+        .iter()
+        .filter_map(|use_| topology.edge(use_.edge()))
+        .flat_map(|edge| [edge.start_node().clone(), edge.end_node().clone()])
+        .collect()
+}
+
 /// What a removal left behind: the edit's own outcome, plus the rim the
 /// hole is now bounded by.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

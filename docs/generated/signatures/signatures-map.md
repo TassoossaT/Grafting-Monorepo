@@ -17,15 +17,8 @@ pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String>
 
 // src/editing.rs
 pub type SessionGraph = Graph<[f32; 3], ()>;
-pub struct SurfaceKeyResponse
-pub struct AddNodeRequest
-pub fn add_node(graph: &mut SessionGraph, request: AddNodeRequest) -> Result<(), String>
-pub struct AddEdgeRequest
-pub fn add_edge(graph: &mut SessionGraph, request: AddEdgeRequest) -> Result<(), String>
 pub struct RemoveSurfaceRequest
 pub fn remove_surface(
-pub struct RemoveEdgeRequest
-pub fn remove_edge(graph: &mut SessionGraph, request: RemoveEdgeRequest) -> Result<(), String>
 
 // src/enclosure.rs
 pub struct UnfilledLoopsRequest
@@ -47,13 +40,7 @@ pub struct ClassifyPointsResponse
 pub fn classify_points(
 
 // src/generation.rs
-pub struct PathEdgeDto
-pub struct EdgeNotchDto
-pub struct GenerateAndApplyPathExtrusionRequest
 pub struct DiffResponse
-pub fn generate_and_apply_path_extrusion(
-pub struct GenerateAndApplyBoundaryCapRequest
-pub fn generate_and_apply_boundary_cap(
 pub struct CellCoordDto
 pub struct GenerateAndApplyRegionPartitionRequest
 pub fn generate_and_apply_region_partition(
@@ -69,15 +56,11 @@ pub fn surface_mesh(
 
 // src/path_brush.rs
 pub struct ApplyPathBrushRequest
-pub struct ResolveBrushCellsRequest
-pub struct ResolveBrushCellsResponse
-pub fn resolve_brush_cells(
 pub struct IdentityDeltaResponse
 pub struct SurfaceIdentityDeltaResponse
 pub struct InvalidationResponse
 pub struct ApplyPathBrushResponse
 pub fn apply_path_brush(
-pub fn preview_path_brush(
 
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
@@ -93,8 +76,8 @@ pub struct RetypeEdgeRequest
 pub fn apply_retype_edge(
 pub struct MoveEdgeRequest
 pub fn apply_move_edge(
-pub struct AddContourEdgeRequest
-pub fn add_contour_edge(
+pub struct MoveRegionRequest
+pub fn apply_move_region(
 
 // src/region_merge.rs
 pub struct RegionMergeOutcome
@@ -103,24 +86,19 @@ pub fn apply_region_merge(
 // src/session.rs
 pub struct ConstructionSession
 pub fn new() -> ConstructionSession
-pub fn add_node_json(&mut self, request_json: &str) -> Result<(), JsValue>
-pub fn add_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue>
-pub fn remove_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn add_contour_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
-
-// src/terrain.rs
-pub struct CornerHeightModuleDto
-pub struct GenerateAndApplyTerrainCellRequest
-pub fn generate_and_apply_terrain_cell(
+pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn classify_points_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn duplicate_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -1683,6 +1661,12 @@ export interface MeshResource {
   /** Optional flat `uv` pairs, two floats per vertex. */
   readonly uvs?: Float32Array;
   /** Optional triangle indices. Positions are read sequentially when omitted. */
+export interface MeshPartsResource {
+  /** One entry per primitive, already in the asset's own world space. */
+  readonly parts: readonly MeshResource[];
+  /** Union of every part's bounds, so extent is available without merging. */
+  readonly bounds: Aabb;
+  }
 export type ImageResource =
 
 // src/contracts/store.ts
@@ -1720,7 +1704,14 @@ export interface AssetStore {
 
 // src/index.ts
 export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
-export type { Aabb, ImageResource, MeshResource, Vec3 } from "./contracts/resource.js";
+export type {
+  Aabb,
+  ImageResource,
+  MeshPartsResource,
+  MeshResource,
+  Vec3,
+  } from "./contracts/resource.js";
+
 export type { AssetDefinition, AssetProvenance } from "./contracts/definition.js";
 export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
 export type {
@@ -1733,6 +1724,16 @@ export type {
   StoreEvent,
 export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
 export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
+export type { GltfMeshSource } from "./resolvers/gltf-mesh.js";
+
+// src/resolvers/gltf-mesh.ts
+export const GLTF_MESH_KIND = "gltf-mesh";
+export type GltfMeshSource =
+export const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND> = {
+  kind: GLTF_MESH_KIND,
+  async load(definition: AssetDefinition<typeof GLTF_MESH_KIND>): Promise<never> {
+  const source = definition.source as GltfMeshSource | undefined;
+  if (source === undefined) throw new Error(`"${definition.ref}" declares no glTF source`);
 
 // src/resolvers/in-memory-image.ts
 export const IN_MEMORY_IMAGE_KIND = "in-memory-image";
@@ -3039,45 +3040,14 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
   readonly initialTokens?: readonly TokenProjection[];
-  /** When true, seeds one demo terrain cell and wall upon start. Defaults to false (clean board). */
-  readonly seedDefaultMap?: boolean;
   readonly renderPort?: SceneRenderPort;
   readonly constructionPort?: ConstructionSessionPort;
   readonly terrainNoisePort?: TerrainNoisePort;
+  }
 export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
-
-// src/composition/tabletop/default-map-seed.ts
-export function buildGeneratePathExtrusionOperation(
-  tableId: string,
-  salt: string,
-  context: ConstructionOperationContext,
-  edges: readonly PathEdgeSpec[],
-  height: number,
-  surfaceType: string,
-  notch?: EdgeNotchSpec,
-export function buildGenerateTerrainCellOperation(
-  tableId: string,
-  salt: string,
-  context: ConstructionOperationContext,
-  cell: number,
-  module: CornerHeightModule,
-  surfaceType: string,
-  ): GenerateTerrainCellOperation {
-export interface DefaultMapSeed {
-  readonly terrainCell: GenerateTerrainCellOperation;
-  readonly wall: GeneratePathExtrusionOperation;
-  }
-export function defaultMapSeed(tableId: string, initiatedBy: string): DefaultMapSeed {
-  const terrainCell = buildGenerateTerrainCellOperation(
-  tableId,
-  "seed",
-  { operationId: `${tableId}:seed:terrain-cell`, tableId, initiatedBy },
-  0,
-  { name: "flat", cornerHeights: [1, 1, 1, 1] },
-  "terrain",
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
@@ -3088,7 +3058,7 @@ export type {
   TabletopRuntimeStatus,
   TabletopSnapshot,
   } from "./tabletop-runtime.ts";
-  export { buildGeneratePathExtrusionOperation, buildGenerateTerrainCellOperation } from "./default-map-seed.ts";
+
 export type {
   EditHistoryStack,
   EditHistoryState,
@@ -3100,10 +3070,6 @@ export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from 
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
 // src/composition/tabletop/tabletop-runtime.ts
-export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
-export const TERRAIN_GRID_HEIGHT = CONSTRUCTION_GRID_EXTENT;
-export const TERRAIN_GRID_LAYERS = 1;
-export const TERRAIN_CELL_COUNT = TERRAIN_GRID_WIDTH * TERRAIN_GRID_HEIGHT * TERRAIN_GRID_LAYERS;
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 export interface TabletopSnapshot {
   readonly revision: number;
@@ -3189,10 +3155,10 @@ export interface ToolContext {
   readonly runtime: TabletopRuntime;
   readonly history: EditHistoryStack;
   readonly tableId: string;
-  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
-  nextSequence(): number;
-  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
-  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
+  /**
+  * Whether the grid magnet is on. A fact about the session, not a
+  * behaviour: the dispatcher has already rounded every ground point to a
+  * grid intersection by the time a tool sees it, and this only says so, so
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
@@ -3512,9 +3478,18 @@ export interface FittedEdge {
   readonly end: ConstructionPosition;
   readonly geometry: ConstructionEdgeGeometry;
   }
-export function fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[] {
+export interface FitOptions {
+  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
+  readonly arcs?: boolean;
+  }
+export function fitPath(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  options: FitOptions = {},
+  ): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const indices = cornerIndices(points, Math.max(0, tolerance));
+  const arcs = options.arcs ?? true;
+  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
 
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool = createBrushTool<"wall-brush">({
@@ -3550,14 +3525,20 @@ export interface WallContour {
 export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
   return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+export interface EdgeClaims {
+  /** Every direction each boundary edge is currently walked in, by edge id. */
+  readonly existing: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>;
+  /** Namespace for an edge this run has to keep to itself. Must be unique per run. */
+  readonly runPrefix: string;
+  }
 export function wallPatch(
   tableId: string,
   contour: WallContour,
   surfaceType: string,
+  claims: EdgeClaims,
   physical = true,
   ): ConstructionPatch {
   const { columns, geometries, closed } = contour;
-  const stepCount = closed ? columns.length : columns.length - 1;
 
 // src/composition/tabletop/tools/walls/wall-shared.ts
 export const WALL_HEIGHT = 3;
@@ -3798,64 +3779,6 @@ export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
   if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
 
-// src/features/edit-construction/construction-operations.ts
-export type OperationId = string;
-export type ParticipantId = string;
-export interface RevisionPrecondition {
-  readonly scope: string;
-  readonly revision: number;
-  }
-export interface ConstructionOperationContext {
-  readonly operationId: OperationId;
-  readonly tableId: string;
-  readonly initiatedBy: ParticipantId;
-  }
-export interface GenerateTerrainCellOperation {
-  readonly operationId: OperationId;
-  readonly tableId: string;
-  readonly initiatedBy: ParticipantId;
-  readonly kind: "construction.generate-terrain-cell@1";
-  readonly expected: readonly RevisionPrecondition[];
-  readonly payload: GenerateTerrainCellRequest;
-  }
-export interface GeneratePathExtrusionOperation {
-  readonly operationId: OperationId;
-  readonly tableId: string;
-  readonly initiatedBy: ParticipantId;
-  readonly kind: "construction.generate-path-extrusion@1";
-  readonly expected: readonly RevisionPrecondition[];
-  readonly payload: GeneratePathExtrusionRequest;
-  }
-export interface MoveNodePayload {
-  readonly nodeId: ConstructionNodeId;
-  readonly position: ConstructionPosition;
-  }
-export interface MoveNodeOperation {
-  readonly operationId: OperationId;
-  readonly tableId: string;
-  readonly initiatedBy: ParticipantId;
-  readonly kind: "construction.move-node@1";
-  readonly expected: readonly RevisionPrecondition[];
-  readonly payload: MoveNodePayload;
-  }
-export type ConstructionOperation = GenerateTerrainCellOperation | GeneratePathExtrusionOperation | MoveNodeOperation;
-export function createGenerateTerrainCellOperation(
-  payload: GenerateTerrainCellRequest,
-  context: ConstructionOperationContext,
-  ): GenerateTerrainCellOperation {
-  const normalized = operationContext(context);
-export function createGeneratePathExtrusionOperation(
-  payload: GeneratePathExtrusionRequest,
-  context: ConstructionOperationContext,
-  ): GeneratePathExtrusionOperation {
-  const normalized = operationContext(context);
-export function createMoveNodeOperation(
-  payload: MoveNodePayload,
-  context: ConstructionOperationContext,
-  expected: readonly RevisionPrecondition[] = [],
-  ): MoveNodeOperation {
-  const normalized = operationContext(context);
-
 // src/features/edit-construction/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
@@ -3927,14 +3850,6 @@ export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutco
   );
 
 // src/features/edit-construction/index.ts
-export type {
-  ConstructionOperation,
-  ConstructionOperationContext,
-  GeneratePathExtrusionOperation,
-  GenerateTerrainCellOperation,
-  MoveNodeOperation,
-  MoveNodePayload,
-  OperationId,
 export type { ConstructionHistoryEntry, EditHistoryStack, EditHistoryState, PathBrushHistoryEntry, RegionEditHistoryEntry } from "./edit-history.ts";
 export type {
   BrushShapeKind,
@@ -3946,12 +3861,12 @@ export type {
   PreviewDescriptor,
 export type {
   BrushGestureRegion,
+  ConstructionOperationContext,
+  RevisionPrecondition,
   BrushGestureSample,
   BrushShape,
   PathBrushEffect,
   PathFormationParameters,
-  SurfaceEditModeDefinition,
-  SurfaceEditTargetScope,
 export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type {
@@ -4105,6 +4020,15 @@ export function allowed(role: EditRole, axes: readonly EditAxis[], cascade?: Rol
 export type { EditGesture };
 
 // src/features/edit-construction/surface-edit-contract.ts
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+  }
+export interface ConstructionOperationContext {
+  readonly operationId: string;
+  readonly tableId: string;
+  readonly initiatedBy: string;
+  }
 export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
 export interface BrushGestureSample {
   readonly x: number;

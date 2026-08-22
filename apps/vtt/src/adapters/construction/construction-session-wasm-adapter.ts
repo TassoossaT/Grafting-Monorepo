@@ -193,6 +193,17 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
+  addHole(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly hole: readonly ConstructionOrientedEdgeUse[];
+  }): RegionEditOutcome {
+    return this.#regionEdit(this.#require().add_hole_json(JSON.stringify(request)));
+  }
+
+  removeHole(request: { readonly surfaceKey: ConstructionSurfaceKey; readonly index: number }): RegionEditOutcome {
+    return this.#regionEdit(this.#require().remove_hole_json(JSON.stringify(request)));
+  }
+
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {
     const wire = JSON.parse(
       this.#require().add_patch_json(

@@ -1,0 +1,39 @@
+# Line-ending normalisation.
+#
+# Without this file, a Windows checkout with `core.autocrlf=true` holds CRLF
+# while every generator in `tools/scripts/` writes LF. The result is that
+# `graph:map:check`, `graph:signatures:check` and the API doc checks all report
+# a file as stale when its content is byte-identical -- a false positive that
+# appears only on Windows and never in CI.
+#
+# That is worse than noise. It makes a genuine staleness indistinguishable from
+# a phantom one, so the habit becomes ignoring the check, which is how real
+# drift reached `master` more than once.
+#
+# `eol=lf` on the working tree (not merely on the index) is what makes a
+# generated file compare identically on every platform.
+* text=auto eol=lf
+
+# Windows shell scripts are the exception: the interpreters want CRLF, and
+# `ia-graft.cmd` is the launcher every agent workflow in this repository runs.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never touch, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.wasm binary
+*.glb binary
+*.ktx2 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary

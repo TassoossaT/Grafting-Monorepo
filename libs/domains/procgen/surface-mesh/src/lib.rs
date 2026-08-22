@@ -97,20 +97,27 @@ pub fn triangulate_region(
         .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
         .collect::<Option<Vec<_>>>()?;
 
-    // A hole only ever cleanly nests inside a *single* outer loop when that
-    // outer loop is one connected piece the hole was actually carved out
-    // of. A region can legitimately have several disjoint outer loops at
-    // once (several unrelated surfaces consumed by the same merge, never
-    // sharing an edge to collapse into one ring -- see `region_merge.rs`),
-    // and a hole spanning across more than one of them, or landing outside
-    // all of them, doesn't correspond to any single owner. That must not
-    // fail the *entire* region's mesh -- every other, cleanly-owned piece
-    // still has to render -- so an unresolvable hole is simply dropped
-    // (that one piece renders as its own full, unnotched loop) rather than
-    // this whole function returning `None`.
+    // With one outer loop there is nothing to decide: every hole belongs to
+    // it, because there is nowhere else for a hole of this region to be.
+    // Asking anyway would only add a way to be wrong -- ray casting is
+    // unreliable for a point sitting exactly on the boundary it is being
+    // tested against.
+    //
+    // Several disjoint outer loops at once only arise from a merge
+    // (unrelated surfaces consumed together, never sharing an edge to
+    // collapse into one ring -- see `region_merge.rs`). There a hole really
+    // can belong to one piece and not another, and one spanning across
+    // them, or landing outside them all, corresponds to no single owner.
+    // That must not fail the whole region's mesh -- every
+    // cleanly-owned piece still has to render -- so an unresolvable hole is
+    // dropped (that piece renders as its own full, unnotched loop) rather
+    // than this function returning `None`.
     let owners: Vec<Option<usize>> = holes
         .iter()
         .map(|hole| {
+            if outers.len() == 1 {
+                return Some(0);
+            }
             hole.first().and_then(|point| {
                 outers
                     .iter()
@@ -906,6 +913,66 @@ mod tests {
             assert!(
                 (radius - 2.0).abs() < 1e-2,
                 "a welded panel still meshes on its own cylinder: {point:?}"
+            );
+        }
+    }
+
+    /// A window in a straight wall, kept as a regression on the whole
+    /// chain: the opening reaches the mesh, and the mesh leaves it open.
+    ///
+    /// It used to be dropped twice over -- the containment test that
+    /// assigns a hole to an outer loop could never place one for an upright
+    /// panel, whose ring collapses to a line in XZ, and the strip that meshed
+    /// such panels had nowhere to punch it anyway. Unrolling settles both:
+    /// the face carries its own openings, flat, before earcut ever sees it.
+    #[test]
+    fn a_vertical_face_keeps_the_hole_punched_in_it() {
+        let graph = graph_with_positions(&[
+            ("o0", [0.0, 0.0, 0.0]),
+            ("o1", [4.0, 0.0, 0.0]),
+            ("o2", [4.0, 3.0, 0.0]),
+            ("o3", [0.0, 3.0, 0.0]),
+            ("h0", [1.0, 1.0, 0.0]),
+            ("h1", [1.0, 2.0, 0.0]),
+            ("h2", [3.0, 2.0, 0.0]),
+            ("h3", [3.0, 1.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let outer = line_loop(&mut topology, &graph, "outer", &["o0", "o1", "o2", "o3"]);
+        let hole = line_loop(&mut topology, &graph, "hole", &["h0", "h1", "h2", "h3"]);
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![outer], vec![hole])
+            .unwrap();
+        let positions = graph
+            .snapshot()
+            .nodes()
+            .iter()
+            .map(|node| (node.id().as_str().to_owned(), *node.data()))
+            .collect::<HashMap<_, _>>();
+
+        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+            positions.get(id.as_str()).copied()
+        })
+        .unwrap()
+        .pop()
+        .unwrap();
+
+        for triangle in mesh.indices.chunks_exact(3) {
+            let centroid = triangle.iter().fold([0.0; 3], |sum, index| {
+                let point = mesh.positions[*index as usize];
+                [
+                    sum[0] + point[0] / 3.0,
+                    sum[1] + point[1] / 3.0,
+                    sum[2] + point[2] / 3.0,
+                ]
+            });
+            assert!(
+                centroid[0] <= 1.0
+                    || centroid[0] >= 3.0
+                    || centroid[1] <= 1.0
+                    || centroid[1] >= 2.0,
+                "a triangle covered the opening: {centroid:?}"
             );
         }
     }
