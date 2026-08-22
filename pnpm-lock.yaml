@@ -128,19 +128,19 @@ importers:
 
   libs/domains/procgen/construction-wasm: {}
 
-  libs/domains/procgen/construction-wasm/pkg: {}
-
   libs/domains/procgen/discretize: {}
 
   libs/domains/procgen/generation-wasm: {}
-
-  libs/domains/procgen/generation-wasm/pkg: {}
 
   libs/domains/procgen/tileset-wfc: {}
 
   libs/isekai/wasm-bridge: {}
 
   packages/assets:
+    dependencies:
+      '@gltf-transform/core':
+        specifier: 4.4.2
+        version: 4.4.2
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -619,6 +619,9 @@ packages:
 
   '@gerrit0/mini-shiki@3.23.0':
     resolution: {integrity: sha512-bEMORlG0cqdjVyCEuU0cDQbORWX+kYCeo0kV1lbxF5bt4r7SID2l9bqsxJEM0zndaxpOUT7riCyIVEuqq/Ynxg==}
+
+  '@gltf-transform/core@4.4.2':
+    resolution: {integrity: sha512-qsWKwNSwK+2s834Mt4xbYcyHqCrgNFP7hIv5s487JxebngRfDgelpghNF+kSswGb2/NuapasfK3UViFoSJJoMg==}
 
   '@hono/node-server@2.0.12':
     resolution: {integrity: sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==}
@@ -2766,6 +2769,9 @@ packages:
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
+  property-graph@4.1.0:
+    resolution: {integrity: sha512-AvPcP7XECNWy4LGmFQ77k7un4lSKM4eS29PTvW4ck95uYeLxXPWJM7hLuBqK91FaHqCcgJvIUCuNJjjxKE7VKQ==}
+
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
@@ -3725,6 +3731,10 @@ snapshots:
       '@shikijs/themes': 3.23.0
       '@shikijs/types': 3.23.0
       '@shikijs/vscode-textmate': 10.0.2
+
+  '@gltf-transform/core@4.4.2':
+    dependencies:
+      property-graph: 4.1.0
 
   '@hono/node-server@2.0.12(hono@4.12.33)':
     dependencies:
@@ -5865,6 +5875,8 @@ snapshots:
       loose-envify: 1.4.0
       object-assign: 4.1.1
       react-is: 16.13.1
+
+  property-graph@4.1.0: {}
 
   proxy-addr@2.0.7:
     dependencies:

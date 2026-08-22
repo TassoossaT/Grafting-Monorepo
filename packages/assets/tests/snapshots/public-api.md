@@ -4,7 +4,7 @@ Package: `@grafting/assets`
 TypeScript: `5.9.3`  
 Source entry point: `src/index.ts`  
 Documentation policy: every exported declaration and public member requires TSDoc  
-Forbidden public modules: none
+Forbidden public modules: `@gltf-transform/core`
 
 ## Declaration entry point
 
@@ -601,4 +601,86 @@ export interface InMemoryImageSource {
  * one-line fix instead of an audit of every call site.
  */
 export declare const inMemoryImageResolver: ResourceResolver<typeof IN_MEMORY_IMAGE_KIND>;
+
+import type { ResourceResolver } from "../contracts/resolver.js";
+/** The kind {@link gltfMeshResolver} claims. */
+export declare const GLTF_MESH_KIND = "gltf-mesh";
+/**
+ * What a glTF mesh definition puts in its `source`.
+ *
+ * Two forms rather than one, because the two real situations differ: content
+ * fetched from wherever a catalogue points, and content already in hand —
+ * generated, uploaded by a user, or read from storage the store knows nothing
+ * about.
+ */
+export type GltfMeshSource = 
+/** Bytes of a `.glb`, or of a self-contained `.gltf`, already in memory. */
+{
+    readonly bytes: Uint8Array;
+}
+/** A location to fetch the bytes from. */
+ | {
+    readonly url: string;
+};
+/**
+ * Loads authored geometry from a glTF 2.0 asset.
+ *
+ * Opening the container is the easy part; the work is resolving accessors --
+ * component types, byte strides, sparse accessors, 16- versus 32-bit indices.
+ * `@gltf-transform/core` does that, and is used here rather than three's
+ * `GLTFLoader` for one structural reason: it depends on no renderer, so the
+ * store stays usable by consumers that never chose three (`ADR-0011`).
+ *
+ * No glTF type escapes this module. The result is a plain {@link MeshResource},
+ * as every other resolver produces.
+ *
+ * **This first version brings geometry only.** Materials, textures, animation
+ * clips and scene hierarchy are deliberately out: each becomes its own
+ * registered kind later, without changing a single contract — the property
+ * open kinds were chosen for. Every primitive in every scene is flattened into
+ * one mesh with node transforms applied, which is what a consumer drawing a
+ * prop or a unit prototype actually wants.
+ */
+export declare const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND>;
+
+import type { ResourceResolver } from "../contracts/resolver.js";
+/** The kind {@link gltfMeshResolver} claims. */
+export declare const GLTF_MESH_KIND = "gltf-mesh";
+/**
+ * What a glTF mesh definition puts in its `source`.
+ *
+ * Two forms rather than one, because the two real situations differ: content
+ * fetched from wherever a catalogue points, and content already in hand —
+ * generated, uploaded by a user, or read from storage the store knows nothing
+ * about.
+ */
+export type GltfMeshSource = 
+/** Bytes of a `.glb`, or of a self-contained `.gltf`, already in memory. */
+{
+    readonly bytes: Uint8Array;
+}
+/** A location to fetch the bytes from. */
+ | {
+    readonly url: string;
+};
+/**
+ * Loads authored geometry from a glTF 2.0 asset.
+ *
+ * Opening the container is the easy part; the work is resolving accessors --
+ * component types, byte strides, sparse accessors, 16- versus 32-bit indices.
+ * `@gltf-transform/core` does that, and is used here rather than three's
+ * `GLTFLoader` for one structural reason: it depends on no renderer, so the
+ * store stays usable by consumers that never chose three (`ADR-0011`).
+ *
+ * No glTF type escapes this module. The result is a plain {@link MeshResource},
+ * as every other resolver produces.
+ *
+ * **This first version brings geometry only.** Materials, textures, animation
+ * clips and scene hierarchy are deliberately out: each becomes its own
+ * registered kind later, without changing a single contract — the property
+ * open kinds were chosen for. Every primitive in every scene is flattened into
+ * one mesh with node transforms applied, which is what a consumer drawing a
+ * prop or a unit prototype actually wants.
+ */
+export declare const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND>;
 ```

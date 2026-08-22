@@ -331,6 +331,15 @@ Upward axis.
 
 Depth axis.
 
+### `type assets.GltfMeshSource = { bytes: Uint8Array } | { url: string }`
+
+What a glTF mesh definition puts in its `source`.
+
+Two forms rather than one, because the two real situations differ: content
+fetched from wherever a catalogue points, and content already in hand —
+generated, uploaded by a user, or read from storage the store knows nothing
+about.
+
 ### `type assets.ImageResource = { colorSpace: "srgb" | "linear"; form: "decoded"; height: number; source: ImageBitmap | HTMLImageElement | HTMLCanvasElement; width: number } | { form: "compressed"; format: string; levels: readonly { data: Uint8Array; height: number; width: number }[] }`
 
 An image ready for a renderer to consume.
@@ -382,6 +391,30 @@ What happens to a resource's bytes when its last holder releases.
 ### `type assets.StoreEvent = { ref: ResourceRef; type: "declared" } | { ref: ResourceRef; type: "load-started" } | { ref: ResourceRef; type: "load-succeeded" } | { error: string; ref: ResourceRef; type: "load-failed" } | { ref: ResourceRef; type: "disposed" }`
 
 Something the store did, for diagnostics and tests.
+
+### `variable assets.GLTF_MESH_KIND: "gltf-mesh"`
+
+The kind gltfMeshResolver claims.
+
+### `variable assets.gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND>`
+
+Loads authored geometry from a glTF 2.0 asset.
+
+Opening the container is the easy part; the work is resolving accessors --
+component types, byte strides, sparse accessors, 16- versus 32-bit indices.
+`@gltf-transform/core` does that, and is used here rather than three's
+`GLTFLoader` for one structural reason: it depends on no renderer, so the
+store stays usable by consumers that never chose three (`ADR-0011`).
+
+No glTF type escapes this module. The result is a plain MeshResource,
+as every other resolver produces.
+
+**This first version brings geometry only.** Materials, textures, animation
+clips and scene hierarchy are deliberately out: each becomes its own
+registered kind later, without changing a single contract — the property
+open kinds were chosen for. Every primitive in every scene is flattened into
+one mesh with node transforms applied, which is what a consumer drawing a
+prop or a unit prototype actually wants.
 
 ### `variable assets.IN_MEMORY_IMAGE_KIND: "in-memory-image"`
 

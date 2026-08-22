@@ -33,9 +33,15 @@ model. Every capability added here should be checked against that failure.
   `apps/vtt/src/ports/scene-render-port.ts` documents making.
 - **No format parser in the core.** glTF, KTX2 and Basis arrive as registered
   resolvers, with their vendor confined to the owning module (`ADR-0011`).
-  Putting a decoder in the core makes every consumer pay for one it may never
-  call. The core's own `package.json` has no runtime dependency, and that is a
-  property to preserve, not an accident.
+  Nothing under `src/contracts/` or `src/store/` may import a parser.
+
+  The package is centralised by owner decision (2026-08-22): every resource
+  type lives here rather than in satellite packages. So a parser dependency in
+  `package.json` is expected — what must stay true is that a consumer who never
+  imports a format resolver never pays for it. `sideEffects: false` plus ESM is
+  what makes that hold, so neither may be dropped. `@gltf-transform/core` is
+  the first such dependency, chosen over three's `GLTFLoader` precisely because
+  it needs no renderer.
 - **No hardcoded location.** No URL, path, or bundled manifest. Where content
   lives is a `CatalogSource` and a `ResourceResolver`, both supplied from
   outside. Asset binaries are deliberately not versioned in this repository, so
