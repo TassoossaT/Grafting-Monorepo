@@ -65,6 +65,11 @@ function line(start, end) {
   return { start, end, geometry: { kind: "line" } };
 }
 
+/** A declared edge's geometry, with absent meaning the straight chord it stands for. */
+function geometryOf(edge) {
+  return edge.geometry ?? { kind: "line" };
+}
+
 /**
  * Turns a patch back into the region topologies the engine would report for
  * it, so a second run can be committed against what a first one actually
@@ -180,13 +185,13 @@ test("a curved step carries its arc on the boundary edge, mirrored on the top ra
   );
 
   const { patch } = patches[0];
-  const arcs = patch.edges.filter((edge) => edge.geometry.kind === "arc");
+  const arcs = patch.edges.filter((edge) => geometryOf(edge).kind === "arc");
   assert.equal(arcs.length, 2, "the base and the top rail, both curved -- verticals stay straight");
-  for (const edge of arcs) assert.deepEqual(edge.geometry.center, [2, 0]);
+  for (const edge of arcs) assert.deepEqual(geometryOf(edge).center, [2, 0]);
   // Both rails are stored bottom-column-first, so both sweep the same way:
   // the top rail is walked backwards *by the face*, and reversing a use is
   // what flips the sweep, not storing a second, opposite curve.
-  for (const edge of arcs) assert.equal(edge.geometry.clockwise, true);
+  for (const edge of arcs) assert.equal(geometryOf(edge).clockwise, true);
 });
 
 test("a corner landing on an existing panel's corner uses that panel's own nodes", () => {
@@ -356,7 +361,7 @@ test("with the grid magnet on, a staircase of snapped samples commits only strai
 
   const { patch } = patches[0];
   for (const edge of patch.edges) {
-    assert.equal(edge.geometry.kind, "line", "a snapped stroke has no hand in it to read curvature out of");
+    assert.equal(geometryOf(edge).kind, "line", "a snapped stroke has no hand in it to read curvature out of");
   }
 });
 

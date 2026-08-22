@@ -623,6 +623,10 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `reference vtt.tools.angleFromToXZ`
 
+### `reference vtt.tools.BoundaryEdges`
+
+### `reference vtt.tools.boundaryUsage`
+
 ### `reference vtt.tools.BrushableToolId`
 
 ### `reference vtt.tools.BrushOutlineShape`
@@ -651,6 +655,8 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `reference vtt.tools.ConstructionToolFeedback`
 
+### `reference vtt.tools.createBoundaryEdges`
+
 ### `reference vtt.tools.createBrushTool`
 
 ### `reference vtt.tools.DerivedRoom`
@@ -658,6 +664,8 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `reference vtt.tools.distanceToPolygonBoundaryXZ`
 
 ### `reference vtt.tools.distanceToSegmentXZ`
+
+### `reference vtt.tools.EdgeSharing`
 
 ### `reference vtt.tools.editRegionTool`
 
@@ -748,6 +756,41 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `reference vtt.tools.xzDistance`
 
 ### `reference vtt.tools.xzDistanceSq`
+
+### `interface vtt.boundary-edges.BoundaryEdges`
+
+Collects the boundary edges one patch declares, and the uses that walk them.
+
+### `method vtt.boundary-edges.BoundaryEdges.all(): readonly ConstructionPatchEdge[]`
+
+Every edge declared so far, each exactly once.
+
+### `method vtt.boundary-edges.BoundaryEdges.use(from: string, to: string, geometry?: ConstructionEdgeGeometry): ConstructionOrientedEdgeUse`
+
+Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord.
+
+### `type vtt.boundary-edges.EdgeSharing = { existingUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>; kind: "private-when-full"; runPrefix: string } | { kind: "refuse-when-full" }`
+
+What a generator does when the shared edge it wants has no room left.
+
+An edge bounds two faces, one on each side, and the engine refuses a
+third use or a second one facing the same way. Whether that refusal is
+correct depends entirely on what the type means by it, so the type says.
+
+### `function vtt.boundary-edges.boundaryUsage(ctx: ToolContext): ReadonlyMap<string, readonly boolean[]>`
+
+Every direction each boundary edge on the table is currently walked in.
+
+Read once per commit by a `"private-when-full"` generator, so it can tell
+which boundary it may join from which it has to keep to itself. A
+`"refuse-when-full"` generator never needs this and should not pay for
+the scan.
+
+### `function vtt.boundary-edges.createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges`
+
+### `function vtt.boundary-edges.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
+
+The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
 
 ### `interface vtt.brush-tool.BrushRegion`
 
@@ -1422,24 +1465,6 @@ onto a free stroke, or onto another straight run, by resolving its corner
 onto that run's own column -- by connection, not by landing on the same
 coordinate.
 
-### `interface vtt.wall-patch.EdgeClaims`
-
-What the graph already holds, so a run can tell a boundary it may join
-from one it must keep to itself.
-
-An edge bounds at most two faces, one on each side, and the engine
-refuses a third use or a second one facing the same way. That rule is
-about a *surface*; it is not about walls, and any number of walls may
-legitimately meet at one column.
-
-### `property vtt.wall-patch.EdgeClaims.existing: ReadonlyMap<string, readonly boolean[]>`
-
-Every direction each boundary edge is currently walked in, by edge id.
-
-### `property vtt.wall-patch.EdgeClaims.runPrefix: string`
-
-Namespace for an edge this run has to keep to itself. Must be unique per run.
-
 ### `interface vtt.wall-patch.WallColumn`
 
 One extremity of a wall run: the two nodes of that extremity's own
@@ -1483,11 +1508,7 @@ and what each step curves like.
 
 Geometry of the step from column `i` to column `i + 1`, in that direction.
 
-### `function vtt.wall-patch.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
-
-The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
-
-### `function vtt.wall-patch.wallPatch(tableId: string, contour: WallContour, surfaceType: string, claims: EdgeClaims, physical: boolean): ConstructionPatch`
+### `function vtt.wall-patch.wallPatch(tableId: string, contour: WallContour, surfaceType: string, sharing: EdgeSharing, physical: boolean): ConstructionPatch`
 
 Turns a wall run into one patch: every node it introduces, the shared
 edges between them, and one upright panel per step.
@@ -1500,6 +1521,8 @@ instead of a ring some projection has to guess a plane for.
 Everything about what a wall *is* lives here, in TypeScript. The engine is
 told which nodes exist, which edges connect them, and which faces sit over
 those edges -- it is never told that any of it is a wall.
+
+### `reference vtt.wall-patch.reverseGeometry`
 
 ### `variable vtt.wall-shared.WALL_COLOR: Record<WallParams["wallType"], number>`
 
