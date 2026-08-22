@@ -2,7 +2,8 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { segmentBetween } from "../shapes/preview-shapes.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing } from "./wall-shared.ts";
 
 /**
@@ -36,26 +37,18 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
 
   previewFor(gesture: ToolGesture, params: WallBrushParams) {
     if (anchor === undefined) return undefined;
-    return {
-      kind: "segments",
-      color: WALL_COLOR[params.wallType],
-      opacity: 0.7,
-      positions: Float32Array.from([
-        anchor.x, anchor.y, anchor.z,
-        gesture.current.point.x, gesture.current.point.y, gesture.current.point.z,
-      ]),
-    };
+    return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample): void {
-    anchor = resolveWallCrossing(ctx, sample.point, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
+    anchor = resolveWallCrossing(ctx, sample.point, scopedToolId(ctx, "wall-crossing", ctx.nextSequence()));
   },
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallBrushParams): void {
     if (anchor === undefined) return;
 
     const pinned = pinnedToBaseline(anchor, gesture.current.point);
-    const end = resolveWallCrossing(ctx, pinned, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`);
+    const end = resolveWallCrossing(ctx, pinned, scopedToolId(ctx, "wall-crossing", ctx.nextSequence()));
     const sequence = ctx.nextSequence();
     ctx.runtime.generatePathExtrusion(
       {
@@ -65,7 +58,7 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
         surfaceType: params.wallType,
       },
       "local",
-      `${ctx.tableId}:wall-line:${sequence}`,
+      scopedToolId(ctx, "wall-line", sequence),
     );
 
     anchor = undefined;

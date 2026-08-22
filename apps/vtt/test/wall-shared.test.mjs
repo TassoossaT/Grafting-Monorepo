@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findWallSurfaceAt, resolveWallCrossing } from "../src/composition/tabletop/tools/wall-shared.ts";
+import { findWallSurfaceAt, resolveWallCrossing } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { panelTopology } from "./wall-spans-fixture.mjs";
 
 const TABLE_ID = "table-1";

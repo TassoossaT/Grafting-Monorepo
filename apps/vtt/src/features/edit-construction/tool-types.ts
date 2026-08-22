@@ -42,7 +42,7 @@ export interface WallBrushParams {
  * space into a `cellSize` grid and hands it to the same region-partition
  * algorithm `ConstructionSessionPort.generateRegionPartition` already
  * exposes (the Rust side the retired "Pintar Casa" brush used to drive one
- * cell at a time) -- see `composition/tabletop/tools/interior-wall-tool.ts`.
+ * cell at a time) -- see `composition/tabletop/tools/house/interior-wall-tool.ts`.
  * A region larger than `maxRegionCells` auto-splits into more than one
  * room, so the same enclosed footprint can regenerate into a different
  * layout just by changing `seed`/`maxRegionCells`. No floor/ceiling
@@ -62,10 +62,10 @@ export interface InteriorGenerateParams {
 /**
  * A single seeded, self-contained hexagon of irregular terrain, submitted as
  * graph nodes/surfaces in one shot -- see
- * `composition/tabletop/tools/terrain-sculpt-tool.ts`.
+ * `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`.
  */
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
   readonly trianglesPerSide: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
@@ -88,7 +88,7 @@ export interface TerrainSculptParams {
  * -- not drawn. This is the "buildings get known geometry, never freehand
  * curves" half of the owner's own split (free brush stays free for
  * fences/paths; a building shape like a tower is a preset instead), see
- * `composition/tabletop/tools/tower-stamp-tool.ts`. `radius` is
+ * `composition/tabletop/tools/tower/tower-stamp-tool.ts`. `radius` is
  * deliberately restricted to {@link TOWER_RADIUS_PRESETS} -- a small,
  * closed catalog, not a free numeric field -- so every tower on a table is
  * one of a few known sizes a later room-generation pass (Note 0008) can

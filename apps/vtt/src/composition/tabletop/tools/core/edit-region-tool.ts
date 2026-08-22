@@ -1,8 +1,9 @@
 import { planEdit, type AtomicEditOp, type EditTarget } from "@/features/edit-construction";
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
-import { surfaceRefFromNodeSet } from "../../../entities/map/index.ts";
+import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
+import { distanceToSegmentXZ } from "../shapes/geometry-2d.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
@@ -26,18 +27,7 @@ interface GrabbedTarget {
   readonly target: EditTarget;
 }
 
-function xzDistanceToSegment(
-  point: ConstructionPosition,
-  a: ConstructionPosition,
-  b: ConstructionPosition,
-): number {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const lengthSq = abx * abx + abz * abz;
-  if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lengthSq));
-  return Math.hypot(point.x - (a.x + t * abx), point.z - (a.z + t * abz));
-}
+const xzDistanceToSegment = distanceToSegmentXZ;
 
 /**
  * What the pointer grabbed: the node handle it hit, else the boundary edge

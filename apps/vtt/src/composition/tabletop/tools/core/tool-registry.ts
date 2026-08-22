@@ -1,15 +1,15 @@
 import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
-import { houseRoomDeleteTool } from "./house-room-delete-tool.ts";
-import { interiorWallTool } from "./interior-wall-tool.ts";
+import { houseRoomDeleteTool } from "../house/house-room-delete-tool.ts";
+import { interiorWallTool } from "../house/interior-wall-tool.ts";
 import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
-import { pathBrushTool } from "./path-brush-tool.ts";
-import { terrainSculptTool } from "./terrain-sculpt-tool.ts";
-import { towerStampTool } from "./tower-stamp-tool.ts";
-import { wallBrushTool } from "./wall-brush-tool.ts";
-import { wallLineTool } from "./wall-line-tool.ts";
+import { pathBrushTool } from "../paths/path-brush-tool.ts";
+import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
+import { towerStampTool } from "../tower/tower-stamp-tool.ts";
+import { wallBrushTool } from "../walls/wall-brush-tool.ts";
+import { wallLineTool } from "../walls/wall-line-tool.ts";
 
 /**
  * The single place that knows "which tool is which." Every other file in

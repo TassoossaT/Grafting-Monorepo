@@ -3,8 +3,8 @@ import type { BrushShape, PreviewDescriptor, ToolParamsFor } from "@/features/ed
 import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
-import type { BrushOutlineShape } from "./preview-shapes.ts";
-import { brushSweptRegionFill } from "./preview-shapes.ts";
+import type { BrushOutlineShape } from "../shapes/preview-shapes.ts";
+import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 
 /**
  * The one geometric fact a brush produces: its shape plus every sample the
