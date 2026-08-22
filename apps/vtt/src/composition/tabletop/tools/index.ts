@@ -8,6 +8,13 @@ export {
   type ToolGesture,
 } from "./core/tool-context.ts";
 export { brushReach, createBrushTool, type BrushRegion, type BrushToolSpec, type BrushableToolId } from "./core/brush-tool.ts";
+export {
+  boundaryUsage,
+  createBoundaryEdges,
+  reverseGeometry,
+  type BoundaryEdges,
+  type EdgeSharing,
+} from "./core/boundary-edges.ts";
 export { navigateTool } from "./core/navigate-tool.ts";
 export { editRegionTool } from "./core/edit-region-tool.ts";
 
@@ -26,7 +33,7 @@ export {
   pinnedToBaseline,
   xzDistance,
 } from "./walls/wall-shared.ts";
-export { wallPatch, reverseGeometry, type WallColumn, type WallContour } from "./walls/wall-patch.ts";
+export { wallPatch, type WallColumn, type WallContour } from "./walls/wall-patch.ts";
 export { wallSpans, type WallSpan } from "./walls/wall-spans.ts";
 export { fitPath, type FittedEdge } from "./walls/path-fitting.ts";
 
