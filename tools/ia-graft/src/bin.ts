@@ -7,6 +7,7 @@ import { delegateEdit } from "./delegate-edit-commands.ts";
 import { delegateResearch } from "./delegate-research-commands.ts";
 import { runDocCheck } from "./doc-check.ts";
 import { runGuardCheck } from "./guard-command.ts";
+import { issueList, issueNew, issueUpdate, issueView } from "./issue-commands.ts";
 import { runMcpServer } from "./mcp-server.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
@@ -153,6 +154,39 @@ function flagInput(subcommand: string | undefined, argv: string[]): unknown | un
   if (subcommand === "research") {
     return { taskId, topic: readValue(argv, "--topic"), outputFile: readValue(argv, "--output-file"), effort: readValue(argv, "--effort") };
   }
+  if (subcommand === "list") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      type: readValue(argv, "--type"),
+      area: readValue(argv, "--area"),
+      status: readValue(argv, "--status"),
+      priority: readValue(argv, "--priority"),
+      limit: rawLimit ? Number(rawLimit) : undefined,
+    };
+  }
+  if (subcommand === "view") {
+    return { id: readValue(argv, "--id") ?? argv[2] };
+  }
+  if (subcommand === "new") {
+    return {
+      title: readValue(argv, "--title"),
+      type: readValue(argv, "--type") || "task",
+      area: readValue(argv, "--area"),
+      priority: readValue(argv, "--priority"),
+      status: readValue(argv, "--status"),
+      milestone: readValue(argv, "--milestone"),
+      parent: readValue(argv, "--parent"),
+      body: readValue(argv, "--body"),
+    };
+  }
+  if (subcommand === "update") {
+    return {
+      id: readValue(argv, "--id") ?? argv[2],
+      status: readValue(argv, "--status"),
+      priority: readValue(argv, "--priority"),
+      comment: readValue(argv, "--comment"),
+    };
+  }
   return undefined;
 }
 function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
@@ -190,6 +224,13 @@ async function main(argv: string[]): Promise<void> {
       printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
     }
 
+    if (group === "issue") {
+      const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
+      if (subcommand === "list") printAndExit(await issueList(root, input as Parameters<typeof issueList>[1]));
+      if (subcommand === "view") printAndExit(await issueView(root, input as Parameters<typeof issueView>[1]));
+      if (subcommand === "new") printAndExit(await issueNew(root, input as Parameters<typeof issueNew>[1]));
+      if (subcommand === "update") printAndExit(await issueUpdate(root, input as Parameters<typeof issueUpdate>[1]));
+    }
 
     if (group === "delegate") {
       const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
@@ -218,7 +259,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
