@@ -38,12 +38,24 @@ export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: 
 }
 
 /**
+ * A resolved covering as this adapter needs to see it. Structurally matches
+ * `entities/map`'s `SurfaceCovering`; declared here so the adapter depends on a
+ * shape rather than on a product slice.
+ */
+export interface ResolvedCovering {
+  readonly kind: string;
+  readonly key: string;
+  /** `undefined` for a covering that draws no surface mesh. */
+  readonly surface: { readonly color: number } | undefined;
+}
+
+/**
  * Resolves a surface's visual fill. Supplied by the caller rather than imported
  * so this adapter stays a translator: `entities/map` owns the policy, and no
  * adapter here reaches upstream into a product slice to ask what something
  * should look like.
  */
-export type CoveringResolver = (surfaceType: string, physical: boolean) => RenderCovering;
+export type CoveringResolver = (surfaceType: string, physical: boolean) => ResolvedCovering;
 
 /** Merges one spatial chunk's current member surfaces into the one `RenderMapChunk` buffer `SceneRenderPort.applyConfirmed` expects -- `undefined` for an empty bucket (the caller should remove the chunk instead of upserting it). See {@link chunkSurfaceMeshes}'s own doc for why a chunk is always a full re-merge of its members, never a per-surface patch. */
 export function mergeChunkBucket(
@@ -55,9 +67,15 @@ export function mergeChunkBucket(
   if (first === undefined) return undefined;
   // Safe to read the covering off any one member: `chunkKeyForSurface` keys the
   // bucket by covering, so every member of a chunk resolves to the same one.
+  const covering = resolveCovering(first.surfaceType, first.physical);
+  // A covering that draws no mesh produces no chunk at all -- the same result an
+  // empty bucket gives, and handled by the same caller path. This is what makes
+  // "invisible" free: no buffer, no draw call, and no notion of `none` anywhere
+  // downstream of here.
+  if (covering.surface === undefined) return undefined;
   return {
     chunkId,
-    covering: resolveCovering(first.surfaceType, first.physical),
+    covering: { kind: covering.kind, key: covering.key, color: covering.surface.color },
     mesh: mergeMeshChunks(members.map((surface) => surface.mesh)),
   };
 }

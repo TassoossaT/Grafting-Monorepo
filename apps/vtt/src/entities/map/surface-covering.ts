@@ -35,6 +35,23 @@ export type CoveringKind = string;
  */
 export const PAINTED_COVERING_KIND: CoveringKind = "painted";
 
+/**
+ * A covering that draws nothing at all.
+ *
+ * The surface still exists: it keeps its identity, its `physical` fact, and its
+ * pick proxy, so it stays selectable, draggable and undoable. It simply is not
+ * drawn -- which is what an open doorway, a barred gate or a pierced window
+ * needs, since anything drawn in the opening would defeat the point of the
+ * opening. See `ADR-0022`'s asset layer and the transformation plan's phase 3.
+ */
+export const NONE_COVERING_KIND: CoveringKind = "none";
+
+/** How a covering fills the surface mesh, or `undefined` when it draws none. */
+export interface SurfaceFill {
+  /** Flat classification color, until a real material/asset pipeline exists (`E4.2`). */
+  readonly color: number;
+}
+
 /** A surface's resolved visual fill. */
 export interface SurfaceCovering {
   /** Which covering kind fills the surface. */
@@ -48,8 +65,15 @@ export interface SurfaceCovering {
    * classifications for both.
    */
   readonly key: string;
-  /** Flat classification color, until a real material/asset pipeline exists (`E4.2`). */
-  readonly color: number;
+  /**
+   * How the surface mesh itself is drawn, or `undefined` when this covering
+   * draws no mesh.
+   *
+   * Absence is the representation on purpose: a covering that draws nothing
+   * emits no chunk, so "invisible" costs no buffer, no draw call and no special
+   * case downstream -- the render port never learns that `none` exists.
+   */
+  readonly surface: SurfaceFill | undefined;
 }
 
 /**
@@ -79,18 +103,36 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   }
 }
 
-/**
- * Resolves the covering for one surface.
- *
- * The single decision point this module exists for. Today every surface
- * resolves to {@link PAINTED_COVERING_KIND}, reproducing the previous
- * behaviour exactly; changing that is a change here and nowhere else.
- */
-export function resolveSurfaceCovering(surfaceType: string, physical: boolean): SurfaceCovering {
-  const color = colorForSurfaceType(surfaceType, physical);
+/** The covering that draws nothing. One value, since it carries no parameters. */
+export const NONE_COVERING: SurfaceCovering = Object.freeze({
+  kind: NONE_COVERING_KIND,
+  key: NONE_COVERING_KIND,
+  surface: undefined,
+});
+
+/** A painted covering of one flat color. */
+export function paintedCovering(color: number): SurfaceCovering {
   return {
     kind: PAINTED_COVERING_KIND,
     key: `${PAINTED_COVERING_KIND}:${color.toString(16)}`,
-    color,
+    surface: { color },
   };
+}
+
+/**
+ * Resolves the covering for one surface.
+ *
+ * The single decision point this module exists for.
+ *
+ * Every surface still resolves to a painted covering, which keeps behaviour
+ * identical to before this layer existed. {@link NONE_COVERING} is reachable
+ * and fully wired -- a surface resolving to it renders nothing while staying
+ * pickable -- but nothing selects it yet, because nothing authors the surfaces
+ * that need it: the construction tools go through `straight_cycle_region`,
+ * which produces a single outer loop and no holes, so no opening exists to
+ * leave unfilled. The policy lands with hole authoring; the mechanism is ready
+ * for it now.
+ */
+export function resolveSurfaceCovering(surfaceType: string, physical: boolean): SurfaceCovering {
+  return paintedCovering(colorForSurfaceType(surfaceType, physical));
 }

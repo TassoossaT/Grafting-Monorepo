@@ -17,9 +17,12 @@ test("the VTT adapter names the product while the renderer receives generic mesh
     positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]),
     indices: new Uint16Array([0, 1, 2]),
   };
+  // Mirrors what `mergeChunkBucket` hands the port: a covering that has
+  // already been narrowed to one that draws, so the mesh appearance is present.
+  const resolved = resolveSurfaceCovering("terrain", true);
   const item = mapChunkSceneItem({
     chunkId: "0:0",
-    covering: resolveSurfaceCovering("terrain", true),
+    covering: { kind: resolved.kind, key: resolved.key, color: resolved.surface.color },
     mesh,
   });
 
@@ -62,7 +65,7 @@ test("every surface currently resolves to the painted covering, preserving prior
   ]) {
     const covering = resolveSurfaceCovering(type, physical);
     assert.equal(covering.kind, PAINTED_COVERING_KIND);
-    assert.equal(covering.color, colorForSurfaceType(type, physical));
+    assert.equal(covering.surface?.color, colorForSurfaceType(type, physical));
   }
 });
 

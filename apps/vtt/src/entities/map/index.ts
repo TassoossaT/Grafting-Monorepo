@@ -15,8 +15,11 @@ export type {
   SurfaceRef,
 } from "./map-projection.ts";
 export {
+  NONE_COVERING,
+  NONE_COVERING_KIND,
   PAINTED_COVERING_KIND,
   colorForSurfaceType,
+  paintedCovering,
   resolveSurfaceCovering,
 } from "./surface-covering.ts";
-export type { CoveringKind, SurfaceCovering } from "./surface-covering.ts";
+export type { CoveringKind, SurfaceCovering, SurfaceFill } from "./surface-covering.ts";
