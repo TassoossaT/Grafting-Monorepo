@@ -21,9 +21,20 @@ function centroidOf(mesh: RenderMeshData): Vec3 {
   return { x: x / vertexCount, y: y / vertexCount, z: z / vertexCount };
 }
 
-/** Which spatial chunk bucket one surface's mesh lands in -- shared by the full re-chunk below and `tabletop-runtime.ts`'s own incremental sync, so both agree on chunk membership. */
-export function chunkKeyForSurface(surface: SurfaceMeshResult): string {
-  return chunkKeyFor(centroidOf(surface.mesh));
+/**
+ * Which chunk one surface's mesh lands in -- shared by the full re-chunk below
+ * and `tabletop-runtime.ts`'s own incremental sync, so both agree on chunk
+ * membership.
+ *
+ * The key is spatial bucket **and** covering, not bucket alone. Bucketing by
+ * position only meant a bucket holding a wall and a terrain cell merged them
+ * into one buffer, which can carry exactly one appearance -- so one of the two
+ * silently rendered as the other. Splitting the key is what makes a chunk a set
+ * of surfaces that genuinely can share a draw.
+ */
+export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
+  const covering = resolveCovering(surface.surfaceType, surface.physical);
+  return `${chunkKeyFor(centroidOf(surface.mesh))}|${covering.key}`;
 }
 
 /**
@@ -42,10 +53,10 @@ export function mergeChunkBucket(
 ): RenderMapChunk | undefined {
   const [first] = members;
   if (first === undefined) return undefined;
+  // Safe to read the covering off any one member: `chunkKeyForSurface` keys the
+  // bucket by covering, so every member of a chunk resolves to the same one.
   return {
     chunkId,
-    surfaceType: first.surfaceType,
-    physical: first.physical,
     covering: resolveCovering(first.surfaceType, first.physical),
     mesh: mergeMeshChunks(members.map((surface) => surface.mesh)),
   };
@@ -57,15 +68,9 @@ export function mergeChunkBucket(
  * buffer (via `@grafting/render-3d`'s existing `mergeMeshChunks`), producing
  * the `RenderMapChunk`s `SceneRenderPort.applyConfirmed` expects.
  *
- * **Known defect, not yet fixed here:** a chunk that mixes surface types (a
- * wall and a terrain cell landing in the same bucket) takes its *first*
- * surface's `surfaceType`/`physical`, so both render with whichever
- * classification happened to land first. Harmless only while every covering is
- * the same flat placeholder; the fix is to key chunks by
- * `(spatialBucket x covering.key)` rather than by bucket alone -- see phase 2
- * of `docs/architecture/vtt-surface-covering-transformation-plan.md`.
- * `SurfaceCovering.key` exists for exactly that and is deliberately unused so
- * far.
+ * Surfaces that look different never share a chunk: {@link chunkKeyForSurface}
+ * keys by covering as well as position, so the merged buffer always has exactly
+ * one appearance to carry.
  */
 export function chunkSurfaceMeshes(
   surfaces: readonly SurfaceMeshResult[],
@@ -73,7 +78,7 @@ export function chunkSurfaceMeshes(
 ): readonly RenderMapChunk[] {
   const byChunk = new Map<string, SurfaceMeshResult[]>();
   for (const surface of surfaces) {
-    const chunkId = chunkKeyForSurface(surface);
+    const chunkId = chunkKeyForSurface(surface, resolveCovering);
     const bucket = byChunk.get(chunkId);
     if (bucket === undefined) byChunk.set(chunkId, [surface]);
     else bucket.push(surface);

@@ -19,8 +19,6 @@ test("the VTT adapter names the product while the renderer receives generic mesh
   };
   const item = mapChunkSceneItem({
     chunkId: "0:0",
-    surfaceType: "terrain",
-    physical: true,
     covering: resolveSurfaceCovering("terrain", true),
     mesh,
   });
@@ -37,11 +35,9 @@ test("the adapter draws the covering it is handed and derives nothing", () => {
   const mesh = { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) };
   const item = mapChunkSceneItem({
     chunkId: "1:1",
-    surfaceType: "terrain",
-    physical: true,
-    // Deliberately inconsistent with `surfaceType`: the adapter must not
-    // second-guess the resolved covering by re-deriving a color of its own.
-    covering: { kind: PAINTED_COVERING_KIND, color: 0x123456 },
+    // An appearance no resolver would produce: the adapter must draw what it
+    // is handed rather than deriving a color of its own.
+    covering: { kind: PAINTED_COVERING_KIND, key: "handed-in", color: 0x123456 },
     mesh,
   });
 

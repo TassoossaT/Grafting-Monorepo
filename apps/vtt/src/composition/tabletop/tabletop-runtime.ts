@@ -535,7 +535,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       pieces.forEach((mesh, index) => {
         const memberKey = `${surfaceRef}#${index}`;
         nextMembers.add(memberKey);
-        const newChunkId = chunkKeyForSurface(mesh);
+        const newChunkId = chunkKeyForSurface(mesh, resolveSurfaceCovering);
         const oldChunkId = this.#memberChunk.get(memberKey);
         if (oldChunkId !== undefined && oldChunkId !== newChunkId) {
           this.#chunkMembers.get(oldChunkId)?.delete(memberKey);
