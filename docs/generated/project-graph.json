@@ -2402,7 +2402,9 @@
             "publicApi": {
               "entryPoint": "src/index.ts",
               "baseline": "tests/snapshots/public-api.md",
-              "forbiddenModules": []
+              "forbiddenModules": [
+                "@gltf-transform/core"
+              ]
             }
           },
           "implicitDependencies": []

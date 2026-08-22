@@ -11,28 +11,33 @@
 //! `earcut` crate (ear-clipping, handles concave simple polygons) rather
 //! than a fan, which only triangulates convex/star-shaped rings correctly.
 //!
-//! A curved `Surface` (see [`grafting_graph_core::SurfaceCurvature`]) keeps
-//! exactly 4 graph-cycle corners, the same as a straight one -- the actual
-//! arc only exists here, tessellated into a strip of quads right before
-//! triangulation, never persisted back onto the graph. Tessellation
-//! resolution is this crate's own fixed [`ARC_TESSELLATION_TOLERANCE`], not
-//! a value a caller supplies or the graph stores -- controlling render
-//! resolution is a rendering concern, not a construction-time one.
+//! A curved face keeps exactly the corners a straight one has -- the arc
+//! only exists here, approximated right before triangulation and never
+//! persisted back onto the graph. Tessellation resolution is this crate's
+//! own fixed [`ARC_TESSELLATION_TOLERANCE`], not a value a caller supplies
+//! or the graph stores: controlling render resolution is a rendering
+//! concern, not a construction-time one.
 //!
-//! That strip is built directly (a triangle per half of each tessellated
-//! quad segment), **not** by flattening the curve into one many-point ring
-//! and handing it to `earcut` -- a curved wall's mesh is a section of a
-//! cylinder, so its vertices do not lie on one flat plane, and `earcut`'s
-//! own 3D-to-2D projection assumes (near-)planarity. Folding a real curve
-//! onto that best-fit plane self-intersects in 2D for anything but the
-//! shallowest arc, producing triangles that visibly cut across the surface
-//! instead of following it.
+//! An **upright** face -- a wall panel, straight or curved -- gets there by
+//! being unrolled rather than projected. Its ring does not lie on a plane
+//! when it curves, so a best-fit plane folds it onto itself and emits
+//! triangles that visibly cut across the surface. But the panel is a
+//! developable surface: a section of a cylinder flattens without distortion
+//! into "distance along the rail" and "height", and a straight panel is the
+//! same map with an infinite radius. Unrolled, it is an ordinary 2D polygon
+//! that `earcut` triangulates like any other -- openings included, which a
+//! strip built facet by facet could never punch.
+//!
+//! The 3D positions never move: the unrolled coordinates exist only so
+//! `earcut` has somewhere flat to work, and `earcut` introduces no vertices
+//! of its own. Only the normals are derived from the frame, per vertex, so
+//! a curve shades as a curve.
 
 use earcut::{Earcut, utils3d};
 
 use grafting_graph_core::{
-    ArcBulge, ContourEdge, ContourGeometry, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse,
-    SurfaceCurvature, SurfaceRegion,
+    ContourEdge, ContourGeometry, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse,
+    SurfaceRegion,
 };
 
 /// Maximum deviation, in world units, between a tessellated arc's chords and
@@ -42,8 +47,8 @@ use grafting_graph_core::{
 /// about tessellation resolution.
 const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
 
-/// How far apart, in world units, a side edge's two endpoints may be in XZ
-/// and still count as one vertical line for [`ruled_strip_mesh`]. Only ever
+/// How far apart, in world units, an edge's two endpoints may be in XZ and
+/// still count as one upright side for [`upright_face_mesh`]. Only ever
 /// compared against values that are meant to be exactly equal (the same
 /// contour point at two heights), so this absorbs float round-trip drift,
 /// not any real slant.
@@ -60,49 +65,6 @@ pub struct TriangulatedMesh {
     pub indices: Vec<u32>,
 }
 
-/// Triangulates a simple (hole-free) polygon given by `positions` -- an
-/// ordered ring, e.g. `Surface::cycle()`'s node ids resolved to their
-/// current graph positions. When `curvature` is given and `positions` is
-/// exactly the 4-corner shape [`crate`]'s own doc describes (bottom start,
-/// bottom end, top end, top start), the two curved edges are tessellated
-/// into a many-point ring first, at [`ARC_TESSELLATION_TOLERANCE`]. Returns `None` for
-/// fewer than 3 positions or a degenerate (collinear/zero-area) ring; both
-/// are states a caller may see transiently mid-edit, not error conditions
-/// to propagate.
-pub fn triangulate_surface(
-    positions: &[[f32; 3]],
-    curvature: Option<SurfaceCurvature>,
-) -> Option<TriangulatedMesh> {
-    if let Some(curvature) = curvature {
-        if positions.len() == 4 {
-            return triangulate_curved_quad(positions, curvature);
-        }
-    }
-
-    if positions.len() < 3 {
-        return None;
-    }
-
-    let mut projected: Vec<[f32; 2]> = Vec::new();
-    if !utils3d::project3d_to_2d(positions, positions.len(), &mut projected) {
-        return None;
-    }
-
-    let mut earcut = Earcut::new();
-    let mut indices: Vec<u32> = Vec::new();
-    earcut.earcut(projected, &[] as &[u32], &mut indices);
-    if indices.is_empty() {
-        return None;
-    }
-
-    let normal = face_normal(positions).unwrap_or([0.0, 0.0, 1.0]);
-    Some(TriangulatedMesh {
-        positions: positions.to_vec(),
-        normals: vec![normal; positions.len()],
-        indices,
-    })
-}
-
 /// Derives transient meshes for every outer loop in an analytic contour
 /// region. Lines and circular arcs remain analytic in graph state; this is
 /// the first point where an arc is approximated for GPU consumption.
@@ -116,26 +78,13 @@ pub fn triangulate_region(
     region: &SurfaceRegion,
     mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
 ) -> Option<Vec<TriangulatedMesh>> {
-    // A vertical ruled strip's own boundary ring lies on no single plane
-    // (see [`ruled_strip_mesh`]), so it can never survive the projection-
-    // and-earcut path below. Detected per outer loop, from the loop's own
-    // analytic edges, before anything has been flattened.
-    //
-    // Skipped when the region carries holes, because the strip is built
-    // facet by facet and has no way to punch one. A *flat* upright face
-    // falls back to projection-and-earcut, which handles holes correctly.
-    // A **curved** one with a hole has neither: its ring is not planar, so
-    // the fallback misplaces triangles. Openings in curved walls are
-    // refused upstream rather than meshed wrongly here.
-    let mut strips: Vec<Option<TriangulatedMesh>> = if region.holes().is_empty() {
-        region
-            .outer_loops()
-            .iter()
-            .map(|loop_| ruled_strip_mesh(topology, loop_, &mut resolve_position))
-            .collect()
-    } else {
-        vec![None; region.outer_loops().len()]
-    };
+    // An upright face is unrolled, not projected: its ring lies on no plane
+    // once it curves, and it carries its own openings through with it. See
+    // [`upright_face_mesh`], which reports `None` for anything that is not
+    // one, leaving the flat path below exactly as it was.
+    if let Some(mesh) = upright_face_mesh(topology, region, &mut resolve_position) {
+        return Some(vec![mesh]);
+    }
 
     let outers = region
         .outer_loops()
@@ -150,17 +99,16 @@ pub fn triangulate_region(
 
     // With one outer loop there is nothing to decide: every hole belongs to
     // it, because there is nowhere else for a hole of this region to be.
-    // That is the ordinary case and, crucially, the only one a *vertical*
-    // face can be in -- an upright panel's ring collapses to a line in XZ,
-    // so the containment test below would place none of its own openings
-    // and every window would silently vanish.
+    // Asking anyway would only add a way to be wrong -- ray casting is
+    // unreliable for a point sitting exactly on the boundary it is being
+    // tested against.
     //
     // Several disjoint outer loops at once only arise from a merge
     // (unrelated surfaces consumed together, never sharing an edge to
-    // collapse into one ring -- see `region_merge.rs`), and those are flat.
-    // There a hole really can belong to one piece and not another, and one
-    // spanning across them, or landing outside them all, corresponds to no
-    // single owner. That must not fail the whole region's mesh -- every
+    // collapse into one ring -- see `region_merge.rs`). There a hole really
+    // can belong to one piece and not another, and one spanning across
+    // them, or landing outside them all, corresponds to no single owner.
+    // That must not fail the whole region's mesh -- every
     // cleanly-owned piece still has to render -- so an unresolvable hole is
     // dropped (that piece renders as its own full, unnotched loop) rather
     // than this function returning `None`.
@@ -182,9 +130,6 @@ pub fn triangulate_region(
         .iter()
         .enumerate()
         .map(|(index, outer)| {
-            if let Some(strip) = strips[index].take() {
-                return Some(strip);
-            }
             let owned_holes = holes
                 .iter()
                 .zip(owners.iter())
@@ -254,16 +199,11 @@ fn triangulate_contour_loops<'a>(
         hole_indices.push(positions.len() as u32);
         positions.extend(hole.iter().copied());
     }
-    // A region's own contour geometry (`ContourGeometry::CircularArc`) is
-    // always authored in the XZ plane (see `grafting_graph_core::contour`'s
-    // own "spatial policy" doc), but the *surface* it bounds is not -- a
-    // vertical wall or tower panel has constant X or Z and only varies in
-    // Y, which a naive `[x, z]` drop projects onto a degenerate
-    // (near-zero-area) line. `project3d_to_2d` derives the ring's own
-    // best-fit plane instead, the same general projection
-    // `triangulate_surface`'s own flat (non-curved) path already uses --
-    // for an XZ-planar region (terrain, a path-brush stroke) that best-fit
-    // plane so happens to already be XZ, so this changes no existing output.
+    // This is the path for a face that really does lie on a plane, so the
+    // ring's own best-fit plane is the right place to flatten it: for an
+    // XZ-planar region (terrain, a path-brush stroke) that plane already is
+    // XZ. An upright face never reaches here -- it is unrolled instead, by
+    // `upright_face_mesh`, because a curved one lies on no plane at all.
     let mut projected: Vec<[f32; 2]> = Vec::new();
     if !utils3d::project3d_to_2d(&positions, positions.len(), &mut projected) {
         return None;
@@ -299,129 +239,237 @@ fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool {
     inside
 }
 
-/// A loop of four contour edges whose two side edges are vertical -- both
-/// endpoints at the same XZ point, differing only in Y -- and at least one
-/// of whose two rails is a circular arc describes a *ruled strip*: a
-/// section of a cylinder, not a flat polygon. Its boundary ring genuinely
-/// lies on no single plane, so [`triangulate_contour_loops`]'s own
-/// projection has no plane to find and folds the ring onto itself, emitting
-/// triangles that visibly cut across the surface -- the same failure this
-/// crate's own top-level doc describes for the non-analytic path.
+/// The flat frame an upright face unrolls into: one coordinate running
+/// along its rail, one running up it.
 ///
-/// This builds the strip directly instead: the bottom rail's own
-/// tessellated polyline, those same XZ points lifted to the top rail's own
-/// heights, then [`ruled_strip`].
+/// A wall panel is developable, so this map loses nothing. `Chord` is the
+/// straight case and `Cylinder` the curved one, and they are the same idea
+/// -- a chord is an arc whose radius has gone to infinity.
+#[derive(Debug, Clone, Copy)]
+enum UnrollFrame {
+    Chord {
+        origin: [f32; 2],
+        direction: [f32; 2],
+    },
+    Cylinder {
+        center: [f32; 2],
+        radius: f32,
+        start_angle: f32,
+        clockwise: bool,
+    },
+}
+
+impl UnrollFrame {
+    /// Builds the frame from the rail's own geometry and where that rail starts.
+    fn of(geometry: &ContourGeometry, start: [f32; 3], end: [f32; 3]) -> Option<Self> {
+        match geometry {
+            ContourGeometry::Line => {
+                let (dx, dz) = (end[0] - start[0], end[2] - start[2]);
+                let length = (dx * dx + dz * dz).sqrt();
+                (length > f32::EPSILON).then_some(Self::Chord {
+                    origin: [start[0], start[2]],
+                    direction: [dx / length, dz / length],
+                })
+            }
+            ContourGeometry::CircularArc { center, clockwise } => {
+                let radius = distance_xz(*center, [start[0], start[2]]);
+                (radius > f32::EPSILON).then_some(Self::Cylinder {
+                    center: *center,
+                    radius,
+                    start_angle: angle_xz(*center, [start[0], start[2]]),
+                    clockwise: *clockwise,
+                })
+            }
+        }
+    }
+
+    /// `point` as (distance along the rail, height). Distance grows the way
+    /// the rail is walked, so the whole face lands on one side of the origin.
+    fn unroll(&self, point: [f32; 3]) -> [f32; 2] {
+        match self {
+            Self::Chord { origin, direction } => [
+                (point[0] - origin[0]) * direction[0] + (point[2] - origin[1]) * direction[1],
+                point[1],
+            ],
+            Self::Cylinder {
+                center,
+                radius,
+                start_angle,
+                clockwise,
+            } => {
+                let swept = sweep(
+                    *start_angle,
+                    angle_xz(*center, [point[0], point[2]]),
+                    *clockwise,
+                );
+                [radius * swept, point[1]]
+            }
+        }
+    }
+
+    /// The outward horizontal direction at `point` -- radial for a cylinder,
+    /// constant for a chord. Sign is settled once for the whole face by
+    /// [`upright_face_mesh`], from the winding its own triangles came out with.
+    fn normal_at(&self, point: [f32; 3]) -> [f32; 3] {
+        match self {
+            Self::Chord { direction, .. } => [-direction[1], 0.0, direction[0]],
+            Self::Cylinder { center, .. } => {
+                let (dx, dz) = (point[0] - center[0], point[2] - center[1]);
+                let length = (dx * dx + dz * dz).sqrt();
+                if length <= f32::EPSILON {
+                    [0.0, 0.0, 1.0]
+                } else {
+                    [dx / length, 0.0, dz / length]
+                }
+            }
+        }
+    }
+}
+
+fn distance_xz(a: [f32; 2], b: [f32; 2]) -> f32 {
+    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
+}
+
+fn angle_xz(center: [f32; 2], point: [f32; 2]) -> f32 {
+    (point[1] - center[1]).atan2(point[0] - center[0])
+}
+
+/// Sweep from `from` to `to` in the given direction, always non-negative.
+fn sweep(from: f32, to: f32, clockwise: bool) -> f32 {
+    let raw = if clockwise { from - to } else { to - from };
+    let full = std::f32::consts::TAU;
+    let wrapped = raw % full;
+    if wrapped < 0.0 {
+        wrapped + full
+    } else {
+        wrapped
+    }
+}
+
+/// The rail an upright face is unrolled along, and whether the loop had the
+/// shape of an upright face at all.
+struct UprightRail {
+    frame: UnrollFrame,
+}
+
+/// Reads a loop as an upright face: a run along the base, one side rising,
+/// a run back along the top, one side coming down.
 ///
-/// The condition is a statement about a region's own geometry, not about
-/// whatever produced it -- any region shaped this way takes this path.
-/// `None` whenever the shape does not match, which leaves the loop on the
-/// general path completely unchanged.
-fn ruled_strip_mesh(
+/// Recognised by structure rather than by counting edges, so a panel whose
+/// base has since been subdivided -- a T-junction welding another wall onto
+/// its side -- is still the same upright face it always was.
+fn upright_rail(
     topology: &ContourTopology,
     loop_: &ContourLoop,
     resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
-) -> Option<TriangulatedMesh> {
-    if loop_.len() != 4 {
-        return None;
-    }
-    let mut edges: Vec<(ContourEdge, [f32; 3], [f32; 3])> = Vec::with_capacity(4);
+) -> Option<UprightRail> {
+    let mut walked: Vec<(ContourEdge, [f32; 3], [f32; 3])> = Vec::with_capacity(loop_.len());
     for use_ in loop_ {
         let edge = traversed_edge(topology, use_)?;
         let start = resolve_position(edge.start_node())?;
         let end = resolve_position(edge.end_node())?;
-        edges.push((edge, start, end));
+        walked.push((edge, start, end));
     }
 
-    let is_vertical = |entry: &(ContourEdge, [f32; 3], [f32; 3])| {
-        let (edge, start, end) = entry;
-        matches!(edge.geometry(), ContourGeometry::Line)
-            && (start[0] - end[0]).abs() <= VERTICAL_SIDE_EPSILON
+    let is_upright = |(_, start, end): &(ContourEdge, [f32; 3], [f32; 3])| {
+        (start[0] - end[0]).abs() <= VERTICAL_SIDE_EPSILON
             && (start[2] - end[2]).abs() <= VERTICAL_SIDE_EPSILON
+            && (start[1] - end[1]).abs() > VERTICAL_SIDE_EPSILON
     };
-    if !is_vertical(&edges[1]) || !is_vertical(&edges[3]) {
-        return None;
-    }
-    let is_curved = |entry: &(ContourEdge, [f32; 3], [f32; 3])| {
-        matches!(entry.0.geometry(), ContourGeometry::CircularArc { .. })
-    };
-    if !is_curved(&edges[0]) && !is_curved(&edges[2]) {
+    let sides: Vec<usize> = walked
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| is_upright(entry).then_some(index))
+        .collect();
+    // Exactly two sides is what makes the rest a base run and a top run. One
+    // or three is some other shape entirely, and none is a flat face.
+    if sides.len() != 2 {
         return None;
     }
 
-    let (bottom_edge, bottom_start, bottom_end) = &edges[0];
-    let (_, top_start, top_end) = &edges[2];
-    let planar = bottom_edge.tessellate(
-        [bottom_start[0], bottom_start[2]],
-        [bottom_end[0], bottom_end[2]],
-        ARC_TESSELLATION_TOLERANCE,
-    );
-    let count = planar.len();
-    if count < 2 {
-        return None;
-    }
+    // The run leaving the lower end of the first side is the base.
+    let (first, second) = (sides[0], sides[1]);
+    let after_first = &walked[first + 1..second];
+    let after_second = walked[second + 1..]
+        .iter()
+        .chain(walked[..first].iter())
+        .collect::<Vec<_>>();
+    let mean_height = |run: &[&(ContourEdge, [f32; 3], [f32; 3])]| -> Option<f32> {
+        (!run.is_empty())
+            .then(|| run.iter().map(|(_, start, _)| start[1]).sum::<f32>() / run.len() as f32)
+    };
+    let first_run: Vec<&(ContourEdge, [f32; 3], [f32; 3])> = after_first.iter().collect();
+    let base = match (mean_height(&first_run), mean_height(&after_second)) {
+        (Some(one), Some(other)) if one <= other => first_run,
+        (Some(_), Some(_)) => after_second,
+        _ => return None,
+    };
 
-    // The top rail runs the opposite way round the loop, so the corner
-    // above the bottom rail's own *start* is the top rail's own *end*.
-    let mut bottom_rail = Vec::with_capacity(count);
-    let mut top_rail = Vec::with_capacity(count);
-    for (index, point) in planar.iter().enumerate() {
-        let t = index as f32 / (count - 1) as f32;
-        bottom_rail.push([
-            point[0],
-            bottom_start[1] + (bottom_end[1] - bottom_start[1]) * t,
-            point[1],
-        ]);
-        top_rail.push([
-            point[0],
-            top_end[1] + (top_start[1] - top_end[1]) * t,
-            point[1],
-        ]);
-    }
-    ruled_strip(&bottom_rail, &top_rail)
+    let (edge, start, end) = base.first()?;
+    Some(UprightRail {
+        frame: UnrollFrame::of(edge.geometry(), *start, *end)?,
+    })
 }
 
-/// Triangulates two equal-length rails into a strip: consecutive rail pairs
-/// interleaved bottom-then-top, two triangles per facet between them, and
-/// each triangle carrying the real cross product of its own edges as its
-/// normal (not an idealized "radially outward" formula), so shading stays
-/// correct whichever way the strip bends. `None` for fewer than 2 pairs or
-/// rails of differing length.
-fn ruled_strip(bottom: &[[f32; 3]], top: &[[f32; 3]]) -> Option<TriangulatedMesh> {
-    let count = bottom.len();
-    if count < 2 || top.len() != count {
+/// Meshes an upright face -- a wall panel, straight or curved, opened or
+/// solid -- by unrolling it flat and triangulating there.
+///
+/// `None` for anything that is not one, which leaves every other region on
+/// the ordinary projection path untouched. A region with more than one outer
+/// loop is never one: those come from a merge, and a merge is flat.
+fn upright_face_mesh(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<TriangulatedMesh> {
+    let [outer_loop] = region.outer_loops() else {
+        return None;
+    };
+    let rail = upright_rail(topology, outer_loop, resolve_position)?;
+
+    let outer = tessellate_contour_loop(topology, outer_loop, resolve_position)?;
+    let holes = region
+        .holes()
+        .iter()
+        .map(|loop_| tessellate_contour_loop(topology, loop_, resolve_position))
+        .collect::<Option<Vec<_>>>()?;
+
+    let mut positions = outer;
+    let mut hole_indices = Vec::new();
+    for hole in &holes {
+        if hole.len() < 3 {
+            return None;
+        }
+        hole_indices.push(positions.len() as u32);
+        positions.extend(hole.iter().copied());
+    }
+
+    let unrolled: Vec<[f32; 2]> = positions
+        .iter()
+        .map(|point| rail.frame.unroll(*point))
+        .collect();
+    let mut earcut = Earcut::new();
+    let mut indices: Vec<u32> = Vec::new();
+    earcut.earcut(unrolled, &hole_indices, &mut indices);
+    if indices.is_empty() {
         return None;
     }
 
-    let mut positions = Vec::with_capacity(count * 2);
-    for index in 0..count {
-        positions.push(bottom[index]);
-        positions.push(top[index]);
-    }
-
-    let mut normals = vec![[0.0, 0.0, 1.0]; positions.len()];
-    let mut indices = Vec::with_capacity((count - 1) * 6);
-    for index in 0..count - 1 {
-        let bottom_a = index * 2;
-        let top_a = bottom_a + 1;
-        let bottom_b = bottom_a + 2;
-        let top_b = bottom_a + 3;
-
-        let facet_normal = unit_normal(cross(
-            sub(positions[bottom_b], positions[bottom_a]),
-            sub(positions[top_a], positions[bottom_a]),
-        ));
-        for vertex in [bottom_a, top_a, bottom_b, top_b] {
-            normals[vertex] = facet_normal;
+    // Which way the face actually faces is settled by the winding its own
+    // triangles came out with, so the frame supplies the direction and the
+    // geometry supplies the sign -- once, for the whole face.
+    let mut normals: Vec<[f32; 3]> = positions
+        .iter()
+        .map(|point| rail.frame.normal_at(*point))
+        .collect();
+    if let Some(reference) = winding_normal(&positions, &indices) {
+        let anchor = indices[0] as usize;
+        let radial = normals[anchor];
+        if dot(reference, radial) < 0.0 {
+            for normal in &mut normals {
+                *normal = [-normal[0], -normal[1], -normal[2]];
+            }
         }
-
-        indices.extend_from_slice(&[
-            bottom_a as u32,
-            bottom_b as u32,
-            top_a as u32,
-            top_a as u32,
-            bottom_b as u32,
-            top_b as u32,
-        ]);
     }
 
     Some(TriangulatedMesh {
@@ -431,118 +479,26 @@ fn ruled_strip(bottom: &[[f32; 3]], top: &[[f32; 3]]) -> Option<TriangulatedMesh
     })
 }
 
-/// Triangulates a curved quad (see [`crate`]'s own doc for the 4-corner
-/// shape) as a ruled strip: the bottom edge's own tessellated arc paired
-/// with the same arc mirrored at the top's own height, two triangles per
-/// facet between consecutive pairs. Each triangle's own normal is the real
-/// cross product of its own edges (not an idealized "radially outward"
-/// formula), so it stays correct regardless of which way `curvature.bulge`
-/// faces. `None` only if [`tessellate_arc`] returns fewer than 2 points --
-/// unreachable in practice, since [`ARC_TESSELLATION_TOLERANCE`] always
-/// yields at least a 2-point (start, end) polyline.
-fn triangulate_curved_quad(
-    positions: &[[f32; 3]],
-    curvature: SurfaceCurvature,
-) -> Option<TriangulatedMesh> {
-    let (bottom_start, bottom_end, top_end, top_start) =
-        (positions[0], positions[1], positions[2], positions[3]);
-
-    let bottom_arc = tessellate_arc(
-        bottom_start,
-        bottom_end,
-        curvature.center,
-        curvature.bulge,
-        ARC_TESSELLATION_TOLERANCE,
-    );
-    let mut top_arc: Vec<[f32; 3]> = bottom_arc
-        .iter()
-        .map(|point| [point[0], top_end[1], point[2]])
-        .collect();
-    if let Some(first) = top_arc.first_mut() {
-        *first = top_start;
+/// The normal of the first triangle with real area -- what the winding says
+/// the face is facing.
+fn winding_normal(positions: &[[f32; 3]], indices: &[u32]) -> Option<[f32; 3]> {
+    for triangle in indices.chunks_exact(3) {
+        let [a, b, c] = [
+            positions[triangle[0] as usize],
+            positions[triangle[1] as usize],
+            positions[triangle[2] as usize],
+        ];
+        let normal = cross(sub(b, a), sub(c, a));
+        let length = (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt();
+        if length > f32::EPSILON {
+            return Some([normal[0] / length, normal[1] / length, normal[2] / length]);
+        }
     }
-    if let Some(last) = top_arc.last_mut() {
-        *last = top_end;
-    }
-
-    ruled_strip(&bottom_arc, &top_arc)
+    None
 }
 
-fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
-    let length = (vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2]).sqrt();
-    if length <= f32::EPSILON {
-        return [0.0, 0.0, 1.0];
-    }
-    [vector[0] / length, vector[1] / length, vector[2] / length]
-}
-
-/// Tessellates one circular-arc edge into a polyline, `start` to `end` in
-/// order, around `center` (in the same XZ plane as `start`/`end`). The
-/// facet count is derived from `tolerance` (the maximum allowed deviation,
-/// in world units, between a chord and the true circle) rather than being a
-/// caller-chosen input -- see this module's own top-level doc. The first
-/// and last points are forced to the exact input `start`/`end` (not just
-/// approximately equal after the trig round-trip), so a tessellated arc's
-/// own endpoints weld byte-identically with whatever straight edge or other
-/// arc shares that same corner.
-///
-/// General to any circular arc, not only a semicircle: the arc's own swept
-/// angle is not a separate stored input (matching
-/// `grafting_graph_core::SurfaceCurvature`'s own doc that `(start, end,
-/// center, bulge)` is a curved edge's complete description) -- it is
-/// recovered from `center`'s own offset off the chord, via the same
-/// apothem relationship `grafting_procgen_structure_generation::extrusion`'s
-/// own `arc_center` uses to place `center` in the first place.
-fn tessellate_arc(
-    start: [f32; 3],
-    end: [f32; 3],
-    center: [f32; 2],
-    bulge: ArcBulge,
-    tolerance: f32,
-) -> Vec<[f32; 3]> {
-    let y = start[1];
-    let (sx, sz) = (start[0], start[2]);
-    let (ex, ez) = (end[0], end[2]);
-    let (mx, mz) = (center[0], center[1]);
-    let chord_length = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt();
-    let radius = ((sx - mx).powi(2) + (sz - mz).powi(2))
-        .sqrt()
-        .max(f32::EPSILON);
-    let (ux, uz) = ((ex - sx) / chord_length, (ez - sz) / chord_length);
-    let (nx, nz) = (-uz, ux);
-    let sign: f32 = match bulge {
-        ArcBulge::Left => 1.0,
-        ArcBulge::Right => -1.0,
-    };
-
-    let (midx, midz) = ((sx + ex) / 2.0, (sz + ez) / 2.0);
-    let apothem = -sign * ((mx - midx) * nx + (mz - midz) * nz);
-    let included_angle = 2.0 * (chord_length / 2.0).atan2(apothem);
-
-    // Max angular step such that a chord's own sagitta stays under `tolerance`.
-    let clamped_tolerance = tolerance.max(f32::EPSILON).min(radius);
-    let max_step = 2.0 * (1.0 - clamped_tolerance / radius).clamp(-1.0, 1.0).acos();
-    let facets = (included_angle.abs() / max_step.max(f32::EPSILON))
-        .ceil()
-        .max(1.0) as usize;
-
-    let mut points: Vec<[f32; 3]> = Vec::with_capacity(facets + 1);
-    for step in 0..=facets {
-        if step == 0 {
-            points.push(start);
-            continue;
-        }
-        if step == facets {
-            points.push(end);
-            continue;
-        }
-        let t = step as f32 / facets as f32;
-        let theta = std::f32::consts::FRAC_PI_2 + included_angle * (0.5 - t);
-        let x = mx + radius * theta.cos() * ux + sign * radius * theta.sin() * nx;
-        let z = mz + radius * theta.cos() * uz + sign * radius * theta.sin() * nz;
-        points.push([x, y, z]);
-    }
-    points
+fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
 /// Flat face normal for shading: the first non-degenerate cross product
@@ -628,227 +584,6 @@ mod tests {
     }
 
     #[test]
-    fn fewer_than_three_positions_is_none() {
-        assert_eq!(triangulate_surface(&[], None), None);
-        assert_eq!(
-            triangulate_surface(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], None),
-            None
-        );
-    }
-
-    #[test]
-    fn collinear_positions_are_none() {
-        let collinear = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]];
-        assert_eq!(triangulate_surface(&collinear, None), None);
-    }
-
-    #[test]
-    fn triangle_produces_one_face() {
-        let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let mesh = triangulate_surface(&triangle, None).expect("valid triangle");
-        assert_eq!(mesh.positions, triangle);
-        assert_eq!(mesh.normals.len(), 3);
-        assert_eq!(mesh.indices.len(), 3);
-        for normal in &mesh.normals {
-            let length =
-                (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-            assert!(
-                (length - 1.0).abs() < 1e-4,
-                "normal not unit length: {normal:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn axis_aligned_quad_produces_two_faces() {
-        let quad = [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-        ];
-        let mesh = triangulate_surface(&quad, None).expect("valid quad");
-        assert_eq!(mesh.positions, quad);
-        assert_eq!(mesh.indices.len(), 6, "two triangles = six indices");
-        for normal in &mesh.normals {
-            assert!(
-                (normal[2].abs() - 1.0).abs() < 1e-4,
-                "quad in the XY plane should have a Z-aligned normal, got {normal:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn concave_hexagon_triangulates_without_fan_artifacts() {
-        // An "L"-shaped hexagon: convex fan triangulation from vertex 0
-        // would produce a triangle crossing outside the polygon; earcut
-        // must not.
-        let hexagon = [
-            [0.0, 0.0, 0.0],
-            [2.0, 0.0, 0.0],
-            [2.0, 1.0, 0.0],
-            [1.0, 1.0, 0.0],
-            [1.0, 2.0, 0.0],
-            [0.0, 2.0, 0.0],
-        ];
-        let mesh = triangulate_surface(&hexagon, None).expect("valid concave hexagon");
-        assert_eq!(mesh.positions, hexagon);
-        // A simple hexagon triangulates into exactly 4 triangles (n - 2).
-        assert_eq!(mesh.indices.len(), 12);
-        for index in &mesh.indices {
-            assert!((*index as usize) < hexagon.len());
-        }
-    }
-
-    #[test]
-    fn a_curved_quads_four_corners_tessellate_into_a_bottom_top_strip() {
-        // Same 4-corner shape `extrusion.rs::quad_piece` mints for a
-        // semicircle edge: bottom start, bottom end, top end, top start.
-        let corners = [
-            [0.0, 0.0, 0.0],
-            [4.0, 0.0, 0.0],
-            [4.0, 3.0, 0.0],
-            [0.0, 3.0, 0.0],
-        ];
-        let curvature = SurfaceCurvature {
-            center: [2.0, 0.0],
-            bulge: ArcBulge::Left,
-        };
-        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
-        // Interleaved bottom/top pairs -- always an even position count, at
-        // least the 2 pairs (4 points) a degenerate single-segment strip needs.
-        assert!(mesh.positions.len() >= 4 && mesh.positions.len() % 2 == 0);
-        let last = mesh.positions.len();
-        assert_eq!(
-            mesh.positions[0],
-            [0.0, 0.0, 0.0],
-            "first pair's bottom is the edge's own start"
-        );
-        assert_eq!(
-            mesh.positions[1],
-            [0.0, 3.0, 0.0],
-            "first pair's top is directly above the start"
-        );
-        assert_eq!(
-            mesh.positions[last - 2],
-            [4.0, 0.0, 0.0],
-            "last pair's bottom is the edge's own end"
-        );
-        assert_eq!(
-            mesh.positions[last - 1],
-            [4.0, 3.0, 0.0],
-            "last pair's top is directly above the end"
-        );
-        // Two triangles (6 indices) per quad segment between consecutive pairs.
-        assert_eq!(mesh.indices.len(), (last / 2 - 1) * 6);
-        for index in &mesh.indices {
-            assert!((*index as usize) < mesh.positions.len());
-        }
-        assert_eq!(mesh.normals.len(), mesh.positions.len());
-        for normal in &mesh.normals {
-            let length =
-                (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
-            assert!(
-                (length - 1.0).abs() < 1e-4,
-                "normal not unit length: {normal:?}"
-            );
-        }
-    }
-
-    /// A minor (< 180°) arc, whose own `center` is off the chord (the exact
-    /// case a semicircle-only formula could never place correctly -- see
-    /// `extrusion.rs::arc_center`'s own doc) tessellates its own midpoint at
-    /// the correct radius from `center`, not the chord's own midpoint.
-    #[test]
-    fn a_minor_arc_tessellates_through_its_own_true_circle() {
-        // A regular triangle inscribed in a radius-2 circle centered at the
-        // origin: one 120° edge from (2,0) to (-1, 1.7320508), bulging Right
-        // (see `extrusion.rs`'s own matching test for the derivation).
-        let bottom = [2.0, 0.0, 0.0];
-        let end = [-1.0, 0.0, 1.7320508];
-        let corners = [
-            bottom,
-            end,
-            [end[0], 3.0, end[2]],
-            [bottom[0], 3.0, bottom[2]],
-        ];
-        let curvature = SurfaceCurvature {
-            center: [0.0, 0.0],
-            bulge: ArcBulge::Right,
-        };
-        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
-
-        // Every bottom point (even indices) must sit on the true circle:
-        // distance 2 from the origin, not from the chord.
-        for bottom in mesh.positions.iter().step_by(2) {
-            let distance_from_center = (bottom[0].powi(2) + bottom[2].powi(2)).sqrt();
-            assert!(
-                (distance_from_center - 2.0).abs() < 1e-3,
-                "expected the true circle's own radius (2.0), got {distance_from_center}"
-            );
-        }
-
-        for triangle in mesh.indices.chunks_exact(3) {
-            let [a, b, c] = [
-                triangle[0] as usize,
-                triangle[1] as usize,
-                triangle[2] as usize,
-            ];
-            let area = cross(
-                sub(mesh.positions[b], mesh.positions[a]),
-                sub(mesh.positions[c], mesh.positions[a]),
-            );
-            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
-            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
-        }
-    }
-
-    /// Every triangle in a curved quad's own strip must be a real,
-    /// non-degenerate triangle (nonzero area) -- the regression case for the
-    /// old earcut-on-a-flattened-ring approach, which could fold the strip
-    /// onto itself and emit triangles that visibly cut across the surface.
-    #[test]
-    fn every_triangle_in_a_curved_strip_has_nonzero_area() {
-        let corners = [
-            [0.0, 0.0, 0.0],
-            [4.0, 0.0, 0.0],
-            [4.0, 3.0, 0.0],
-            [0.0, 3.0, 0.0],
-        ];
-        let curvature = SurfaceCurvature {
-            center: [2.0, 0.0],
-            bulge: ArcBulge::Left,
-        };
-        let mesh = triangulate_surface(&corners, Some(curvature)).expect("valid curved quad");
-        for triangle in mesh.indices.chunks_exact(3) {
-            let [a, b, c] = [
-                triangle[0] as usize,
-                triangle[1] as usize,
-                triangle[2] as usize,
-            ];
-            let edge_ab = sub(mesh.positions[b], mesh.positions[a]);
-            let edge_ac = sub(mesh.positions[c], mesh.positions[a]);
-            let area = cross(edge_ab, edge_ac);
-            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
-            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
-        }
-    }
-
-    #[test]
-    fn curvature_is_ignored_when_positions_are_not_a_four_corner_quad() {
-        let triangle = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
-        let curvature = SurfaceCurvature {
-            center: [0.5, 0.0],
-            bulge: ArcBulge::Left,
-        };
-        let mesh = triangulate_surface(&triangle, Some(curvature)).expect("valid triangle");
-        assert_eq!(
-            mesh.positions, triangle,
-            "curvature only applies to the 4-corner quad shape a curved edge mints"
-        );
-    }
-
-    #[test]
     fn analytic_arc_region_tessellates_only_in_the_mesh() {
         let graph = graph_with_positions(&[
             ("east", [2.0, 0.0, 0.0]),
@@ -909,72 +644,75 @@ mod tests {
         assert!(!meshes[0].indices.is_empty());
     }
 
-    /// A curved *wall panel* region -- a bottom arc, a vertical side, the
-    /// same arc back along the top, another vertical side -- is a section of
-    /// a cylinder whose ring lies on no plane. It must take the ruled-strip
-    /// path, not projection-and-earcut: every triangle real, and the facet
-    /// normals genuinely turning along the arc rather than one flat normal
-    /// shared by the whole panel.
-    #[test]
-    fn a_curved_wall_panel_region_meshes_as_a_ruled_strip() {
-        let graph = graph_with_positions(&[
-            ("bottom-start", [2.0, 0.0, 0.0]),
-            ("bottom-end", [-2.0, 0.0, 0.0]),
-            ("top-end", [-2.0, 3.0, 0.0]),
-            ("top-start", [2.0, 3.0, 0.0]),
-        ]);
-        let mut topology = ContourTopology::new();
-        let arc = |clockwise: bool| ContourGeometry::CircularArc {
-            center: [0.0, 0.0],
-            clockwise,
+    /// One upright wall panel, straight or curved, described the way a
+    /// generator declares it: a base run, a side rising, a run back along
+    /// the top, a side coming down. `curved` swaps the rails' geometry and
+    /// nothing else -- which is the whole point, since the construction is
+    /// the same either way.
+    fn upright_panel(
+        topology: &mut ContourTopology,
+        graph: &PositionGraph,
+        prefix: &str,
+        curved: Option<[f32; 2]>,
+    ) -> ContourLoop {
+        let rail = |clockwise: bool| match curved {
+            Some(center) => ContourGeometry::CircularArc { center, clockwise },
+            None => ContourGeometry::Line,
         };
         let spec: [(&str, &str, &str, ContourGeometry); 4] = [
-            ("base", "bottom-start", "bottom-end", arc(false)),
+            ("base", "bottom-start", "bottom-end", rail(false)),
             ("right", "bottom-end", "top-end", ContourGeometry::Line),
-            ("top", "top-end", "top-start", arc(true)),
+            ("top", "top-end", "top-start", rail(true)),
             ("left", "top-start", "bottom-start", ContourGeometry::Line),
         ];
-        let loop_ = spec
-            .iter()
-            .map(|(id, start, end, geometry)| {
-                let edge_id = ContourEdgeId::new(*id).unwrap();
+        spec.iter()
+            .map(|(name, start, end, geometry)| {
+                let edge_id = ContourEdgeId::new(format!("{prefix}-{name}")).unwrap();
                 topology
                     .add_edge(
-                        &graph,
+                        graph,
                         ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry),
                     )
                     .unwrap();
                 OrientedEdgeUse::forward(edge_id)
             })
-            .collect();
-        let region_id = RegionId::new("panel").unwrap();
-        topology
-            .add_region(region_id.clone(), vec![loop_], Vec::new())
-            .unwrap();
-        let positions = graph
+            .collect()
+    }
+
+    /// A half-circle panel of radius 2, three units tall, standing on the
+    /// origin.
+    fn curved_panel_graph() -> PositionGraph {
+        graph_with_positions(&[
+            ("bottom-start", [2.0, 0.0, 0.0]),
+            ("bottom-end", [-2.0, 0.0, 0.0]),
+            ("top-end", [-2.0, 3.0, 0.0]),
+            ("top-start", [2.0, 3.0, 0.0]),
+        ])
+    }
+
+    fn positions_of(graph: &PositionGraph) -> HashMap<String, [f32; 3]> {
+        graph
             .snapshot()
             .nodes()
             .iter()
             .map(|node| (node.id().as_str().to_owned(), *node.data()))
-            .collect::<HashMap<_, _>>();
+            .collect()
+    }
 
-        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+    fn mesh_of(
+        topology: &ContourTopology,
+        region_id: &RegionId,
+        positions: &HashMap<String, [f32; 3]>,
+    ) -> TriangulatedMesh {
+        triangulate_region(topology, topology.region(region_id).unwrap(), |id| {
             positions.get(id.as_str()).copied()
         })
         .unwrap()
         .pop()
-        .unwrap();
+        .unwrap()
+    }
 
-        // Interleaved bottom/top pairs, both rails on the true circle.
-        assert!(mesh.positions.len() >= 4 && mesh.positions.len() % 2 == 0);
-        for point in &mesh.positions {
-            let radius = (point[0].powi(2) + point[2].powi(2)).sqrt();
-            assert!(
-                (radius - 2.0).abs() < 1e-2,
-                "point left the true cylinder: {point:?}"
-            );
-            assert!(point[1] == 0.0 || point[1] == 3.0);
-        }
+    fn assert_every_triangle_has_area(mesh: &TriangulatedMesh) {
         for triangle in mesh.indices.chunks_exact(3) {
             let [a, b, c] = [
                 triangle[0] as usize,
@@ -985,9 +723,35 @@ mod tests {
                 sub(mesh.positions[b], mesh.positions[a]),
                 sub(mesh.positions[c], mesh.positions[a]),
             );
-            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
+            let length = (area[0].powi(2) + area[1].powi(2) + area[2].powi(2)).sqrt();
             assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
         }
+    }
+
+    /// A curved panel is a section of a cylinder, so a best-fit plane folds
+    /// it onto itself. Unrolled, it triangulates like any flat polygon and
+    /// every vertex stays exactly where it was.
+    #[test]
+    fn a_curved_upright_panel_meshes_on_its_own_true_cylinder() {
+        let graph = curved_panel_graph();
+        let mut topology = ContourTopology::new();
+        let loop_ = upright_panel(&mut topology, &graph, "panel", Some([0.0, 0.0]));
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        for point in &mesh.positions {
+            let radius = (point[0].powi(2) + point[2].powi(2)).sqrt();
+            assert!(
+                (radius - 2.0).abs() < 1e-2,
+                "point left the cylinder: {point:?}"
+            );
+            assert!(point[1] == 0.0 || point[1] == 3.0);
+        }
+        assert_every_triangle_has_area(&mesh);
         assert!(
             mesh.normals.iter().any(|normal| {
                 let first = mesh.normals[0];
@@ -998,50 +762,169 @@ mod tests {
         for normal in &mesh.normals {
             assert!(
                 normal[1].abs() < 1e-3,
-                "a vertical panel's own normals stay horizontal, got {normal:?}"
+                "an upright panel's normals stay horizontal, got {normal:?}"
             );
         }
     }
 
-    /// A *flat* vertical panel -- same shape, straight rails -- has a
-    /// perfectly good plane, so it must stay on the general path and keep
-    /// its own four-corner ring rather than being widened into a strip.
+    /// The straight panel is the same map with an infinite radius, so it
+    /// takes the same path -- and comes out as the four corners and two
+    /// triangles it always was.
     #[test]
-    fn a_flat_vertical_panel_region_stays_on_the_general_path() {
+    fn a_straight_upright_panel_takes_the_same_path_and_stays_four_corners() {
         let graph = graph_with_positions(&[
-            ("a", [0.0, 0.0, 0.0]),
-            ("b", [4.0, 0.0, 0.0]),
-            ("c", [4.0, 3.0, 0.0]),
-            ("d", [0.0, 3.0, 0.0]),
+            ("bottom-start", [0.0, 0.0, 0.0]),
+            ("bottom-end", [4.0, 0.0, 0.0]),
+            ("top-end", [4.0, 3.0, 0.0]),
+            ("top-start", [0.0, 3.0, 0.0]),
         ]);
         let mut topology = ContourTopology::new();
-        let loop_ = line_loop(&mut topology, &graph, "flat", &["a", "b", "c", "d"]);
-        let region_id = RegionId::new("flat-panel").unwrap();
+        let loop_ = upright_panel(&mut topology, &graph, "flat", None);
+        let region_id = RegionId::new("flat").unwrap();
         topology
             .add_region(region_id.clone(), vec![loop_], Vec::new())
             .unwrap();
-        let positions = graph
-            .snapshot()
-            .nodes()
-            .iter()
-            .map(|node| (node.id().as_str().to_owned(), *node.data()))
-            .collect::<HashMap<_, _>>();
 
-        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
-            positions.get(id.as_str()).copied()
-        })
-        .unwrap()
-        .pop()
-        .unwrap();
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
 
         assert_eq!(mesh.positions.len(), 4);
         assert_eq!(mesh.indices.len(), 6);
+        assert_every_triangle_has_area(&mesh);
+        let first = mesh.normals[0];
+        for normal in &mesh.normals {
+            assert!(normal[1].abs() < 1e-3);
+            assert!(
+                (normal[0] - first[0]).abs() < 1e-4 && (normal[2] - first[2]).abs() < 1e-4,
+                "a flat panel shades as one face"
+            );
+        }
     }
 
-    /// An upright panel's ring collapses to a line in XZ, so the
-    /// containment test that assigns a hole to its outer loop could never
-    /// place one: every window in a wall was dropped, and the wall rendered
-    /// solid. With one outer loop there is nothing to decide.
+    /// The reason for unrolling at all: an opening is an ordinary hole in an
+    /// ordinary 2D polygon once the panel is flat, so a curved wall can carry
+    /// a window. A strip built facet by facet had nowhere to put one.
+    #[test]
+    fn a_curved_upright_panel_carries_an_opening() {
+        let mut nodes = vec![
+            ("bottom-start", [2.0, 0.0, 0.0]),
+            ("bottom-end", [-2.0, 0.0, 0.0]),
+            ("top-end", [-2.0, 3.0, 0.0]),
+            ("top-start", [2.0, 3.0, 0.0]),
+        ];
+        // Four rim corners on the same cylinder, between a quarter and a
+        // half turn round it, one and two units up.
+        let rim: Vec<(String, [f32; 3])> = [(0.6_f32, 1.0_f32), (1.1, 1.0), (1.1, 2.0), (0.6, 2.0)]
+            .iter()
+            .enumerate()
+            .map(|(index, (angle, height))| {
+                (
+                    format!("rim{index}"),
+                    [2.0 * angle.cos(), *height, 2.0 * angle.sin()],
+                )
+            })
+            .collect();
+        let owned: Vec<(&str, [f32; 3])> = rim
+            .iter()
+            .map(|(id, position)| (id.as_str(), *position))
+            .collect();
+        nodes.extend(owned);
+        let graph = graph_with_positions(&nodes);
+
+        let mut topology = ContourTopology::new();
+        let outer = upright_panel(&mut topology, &graph, "panel", Some([0.0, 0.0]));
+        let hole = line_loop(
+            &mut topology,
+            &graph,
+            "rim",
+            &["rim0", "rim1", "rim2", "rim3"],
+        );
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![outer], vec![hole])
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_every_triangle_has_area(&mesh);
+        for triangle in mesh.indices.chunks_exact(3) {
+            let centroid = triangle.iter().fold([0.0; 3], |sum, index| {
+                let point = mesh.positions[*index as usize];
+                [
+                    sum[0] + point[0] / 3.0,
+                    sum[1] + point[1] / 3.0,
+                    sum[2] + point[2] / 3.0,
+                ]
+            });
+            let angle = centroid[2].atan2(centroid[0]);
+            assert!(
+                !(0.6..=1.1).contains(&angle) || !(1.0..=2.0).contains(&centroid[1]),
+                "a triangle covered the opening: {centroid:?}"
+            );
+        }
+    }
+
+    /// A panel whose base has since been subdivided -- a T-junction welding
+    /// another wall onto its side -- is still the same upright face, so it
+    /// must still unroll rather than fall back to a plane.
+    #[test]
+    fn a_panel_with_a_welded_base_is_still_an_upright_face() {
+        let graph = graph_with_positions(&[
+            ("bottom-start", [2.0, 0.0, 0.0]),
+            ("mid", [0.0, 0.0, 2.0]),
+            ("bottom-end", [-2.0, 0.0, 0.0]),
+            ("top-end", [-2.0, 3.0, 0.0]),
+            ("top-start", [2.0, 3.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let arc = |clockwise: bool| ContourGeometry::CircularArc {
+            center: [0.0, 0.0],
+            clockwise,
+        };
+        let spec: [(&str, &str, &str, ContourGeometry); 5] = [
+            ("base-a", "bottom-start", "mid", arc(false)),
+            ("base-b", "mid", "bottom-end", arc(false)),
+            ("right", "bottom-end", "top-end", ContourGeometry::Line),
+            ("top", "top-end", "top-start", arc(true)),
+            ("left", "top-start", "bottom-start", ContourGeometry::Line),
+        ];
+        let loop_: ContourLoop = spec
+            .iter()
+            .map(|(name, start, end, geometry)| {
+                let edge_id = ContourEdgeId::new(*name).unwrap();
+                topology
+                    .add_edge(
+                        &graph,
+                        ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry),
+                    )
+                    .unwrap();
+                OrientedEdgeUse::forward(edge_id)
+            })
+            .collect();
+        let region_id = RegionId::new("welded").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_every_triangle_has_area(&mesh);
+        for point in &mesh.positions {
+            let radius = (point[0].powi(2) + point[2].powi(2)).sqrt();
+            assert!(
+                (radius - 2.0).abs() < 1e-2,
+                "a welded panel still meshes on its own cylinder: {point:?}"
+            );
+        }
+    }
+
+    /// A window in a straight wall, kept as a regression on the whole
+    /// chain: the opening reaches the mesh, and the mesh leaves it open.
+    ///
+    /// It used to be dropped twice over -- the containment test that
+    /// assigns a hole to an outer loop could never place one for an upright
+    /// panel, whose ring collapses to a line in XZ, and the strip that meshed
+    /// such panels had nowhere to punch it anyway. Unrolling settles both:
+    /// the face carries its own openings, flat, before earcut ever sees it.
     #[test]
     fn a_vertical_face_keeps_the_hole_punched_in_it() {
         let graph = graph_with_positions(&[
