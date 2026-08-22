@@ -1,64 +1,64 @@
-name: "🔍 Refinamento / RFC / Spike (Architecture & Spec)"
-description: "Discussão, refinamento de arquitetura, spike técnico ou definição de contratos antes da codificação."
+name: "🔍 Technical Refinement / RFC / Spike"
+description: "Architecture discussion, technical spike, trade-off evaluation, or contract definition before coding."
 title: "[Refine]: "
 labels: ["type: refinement", "status: refinement"]
 body:
   - type: markdown
     attributes:
       value: |
-        ### 🧠 Refinamento Técnico & Arquitetura
-        Utilize este formulário para documentar o processo de refinamento de uma ideia, spike arquitetural ou tomada de decisão técnica.
-        O objetivo do refinamento é sanar dúvidas abertas e transformar o problema em uma ou mais tarefas prontas para implementação (`Ready for Dev`).
+        ### 🧠 Technical Refinement & Architecture Spike
+        Use this form to document technical discussions, spikes, and contract designs.
+        The goal of refinement is to resolve open questions and convert the problem into actionable tasks (`Ready for Dev`).
 
   - type: textarea
     id: problem_statement
     attributes:
-      label: "❓ Declaração do Problema"
-      description: "Qual desafio técnico, arquitetural ou de design precisamos resolver? Qual a dor atual?"
-      placeholder: "Ex: Precisamos suportar sincronização de estado com baixa latência entre o cliente Web e o backend sem duplicar lógica de física..."
+      label: "❓ Problem Statement"
+      description: "What architectural, technical, or product problem are we solving? What is the current limitation?"
+      placeholder: "e.g. We need to synchronize simulation state between Web and native clients with sub-16ms latency without duplicating physics calculations..."
     validations:
       required: true
 
   - type: textarea
     id: proposed_design
     attributes:
-      label: "📐 Proposta Técnica e Alternativas Consideradas"
-      description: "Quais opções foram analisadas? Qual a arquitetura sugerida e quais os trade-offs?"
-      placeholder: "Opção A: FlatBuffers via WebSocket com state delta\nOpção B: WebTransport com buffer binário\nTrade-offs de memória e compatibilidade..."
+      label: "📐 Proposed Design & Alternatives Considered"
+      description: "What approaches were analyzed? What is the recommended design and what are the trade-offs?"
+      placeholder: "Option A: FlatBuffers over WebSocket with delta compression\nOption B: WebTransport binary streams\nTrade-offs in memory consumption and browser compatibility..."
     validations:
       required: true
 
   - type: dropdown
     id: architectural_impact
     attributes:
-      label: "🏛️ Impacto Arquitetural"
-      description: "Qual o nível de impacto na arquitetura do monorepo?"
+      label: "🏛️ Architectural Impact"
+      description: "Level of impact on the monorepo architecture and decisions."
       options:
-        - "Requer novo ADR ou atualização de decisão aberta (docs/adr/)"
-        - "Alteração/adição de contrato FlatBuffers / ABI de interoperabilidade"
-        - "Criação de novo pacote em packages/* ou crate em libs/*"
-        - "Refatoração interna sem quebra de contrato público"
-        - "Spike exploratório em apps/architecture-studio/lab"
+        - "Requires new ADR or modification of an OPEN decision gate (docs/adr/)"
+        - "FlatBuffers contract change / Cross-runtime ABI addition"
+        - "New package in packages/* or crate in libs/*"
+        - "Internal refactoring without public contract breakage"
+        - "Exploratory spike in apps/architecture-studio/lab"
     validations:
       required: true
 
   - type: textarea
     id: open_questions
     attributes:
-      label: "🤔 Dúvidas Abertas e Riscos"
-      description: "Quais questões precisam de validação ou decisão antes de iniciar o desenvolvimento?"
-      placeholder: "- Qual o limite aceitável de footprint de memória em WebAssembly?\n- Precisamos manter retrocompatibilidade com v1?"
+      label: "🤔 Open Questions & Risks"
+      description: "What needs validation or decision before this is ready for development?"
+      placeholder: "- What is the maximum acceptable memory footprint on WebAssembly targets?\n- Do we need backward compatibility for v1 schema?"
     validations:
       required: false
 
   - type: checkboxes
     id: ready_for_dev_checklist
     attributes:
-      label: "🚦 Checklist para 'Ready for Dev' (Definição de Pronto para Desenvolvimento)"
-      description: "Marque os itens à medida que forem resolvidos durante a discussão:"
+      label: "🚦 'Ready for Dev' Criteria Checklist"
+      description: "Check off items as they are resolved during the refinement discussion:"
       options:
-        - label: "Escopo e limites de pacotes claramente definidos"
-        - label: "Contratos de dados / interfaces públicas acordados"
-        - label: "Decisões e trade-offs documentados (ou ADR criado)"
-        - label: "Critérios de aceitação e testes planejados"
-        - label: "Decomposto em Tasks acionáveis ([Task]) no GitHub Project"
+        - label: "Scope and package boundaries are clearly bounded"
+        - label: "Data contracts / public interfaces are agreed upon"
+        - label: "Decisions and trade-offs documented (or ADR drafted)"
+        - label: "Acceptance criteria and test strategy defined"
+        - label: "Decomposed into actionable implementation tasks ([Task])"

@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 📖 Master Source & Arquitetura
+  - name: 📖 Master Source & Architecture
     url: https://github.com/TassoossaT/Grafting-Monorepo/blob/master/GRAFTING_MASTER_SOURCE.md
-    about: Consulte a fonte canônica de arquitetura e decisões do projeto.
-  - name: 🤖 Contrato Operacional de Agentes (AGENTS.md)
+    about: Read the canonical architecture and decision router.
+  - name: 🤖 Agent Operational Contract (AGENTS.md)
     url: https://github.com/TassoossaT/Grafting-Monorepo/blob/master/AGENTS.md
-    about: Regras de execução, restrições mandatórias e fluxo via ia-graft.
-  - name: ✅ Definição de Concluído (DoD)
+    about: Review execution rules, mandatory constraints, and ia-graft workflow.
+  - name: ✅ Definition of Done (DoD)
     url: https://github.com/TassoossaT/Grafting-Monorepo/blob/master/docs/DEFINITION_OF_DONE.md
-    about: Critérios mandatórios para aprovação e merge de PRs.
+    about: Mandatory criteria for pull request review and merge.

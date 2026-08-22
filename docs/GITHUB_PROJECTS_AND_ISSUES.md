@@ -1,66 +1,82 @@
-# Guia de Gestão: GitHub Projects e GitHub Issues no Grafting Monorepo
+# Project Management Guide: GitHub Projects & Issues in Grafting Monorepo
 
-Este documento estabelece o padrão oficial para gestão de tarefas, refinamentos técnicos, manutenções e defeitos no **Grafting Monorepo**, integrando **GitHub Issues**, **GitHub Projects (v2)** e o fluxo de desenvolvimento do CLI [`ia-graft`](../tools/ia-graft/README.md).
-
----
-
-## 1. Por que migrar do controle manual em `.md` para GitHub Projects?
-
-| Aspecto | Arquivos `.md` soltos | GitHub Projects + Issues |
-| :--- | :--- | :--- |
-| **Visibilidade** | Difícil acompanhar o estado em tempo real sem ler diffs e arquivos. | Quadro Kanban, Tabela e Roadmap visíveis para todo o time em tempo real. |
-| **Rastreabilidade** | Links manuais para commits e PRs, propensos a esquecimento. | Vínculo bidirecional nativo entre Issue, Branch, Pull Request e Commits. |
-| **Fluxo de Refinamento** | Discussões fragmentadas em notas ou commits. | Formulário dedicado de Refinamento com checklist de *Ready for Dev* e histórico de discussões. |
-| **Automação** | Nenhuma automação nativa. | Movimentação automática de colunas ao abrir PR, mesclar ou fechar tasks. |
-| **Campos Customizados** | Texto livre sem padronização. | Campos tipados (Status, Prioridade, Área/Módulo, Estimativa/Tamanho, Iteração). |
+This guide establishes the standard project management and task lifecycle architecture for **Grafting Monorepo**, integrating **GitHub Issues (Issue Forms)**, **GitHub Projects (v2)**, and the [`ia-graft`](../tools/ia-graft/README.md) CLI developer workflow.
 
 ---
 
-## 2. Tipologia de Issues e Templates Disponíveis
+## 1. Replacing Scattered `.md` Tracking with GitHub Projects
 
-O repositório conta com **Issue Forms** estruturados em `.github/ISSUE_TEMPLATE/`:
+### What is Replaced vs. What Stays in Markdown
 
-### 🚀 1. Tarefa / Feature (`[Task]`) — `01_task.yml`
-- **Uso:** Implementação de nova funcionalidade, componente ou tarefa técnica bem delimitada.
-- **Campos obrigatórios:** Objetivo, Módulo/Área, Escopo Técnico, Critérios de Aceite e Checklist de Conformidade com [`GRAFTING_MASTER_SOURCE.md`](../GRAFTING_MASTER_SOURCE.md) e [`AGENTS.md`](../AGENTS.md).
-- **Labels padrão:** `type: task`, `status: backlog`.
+```
+┌───────────────────────────────────────────────────────────┐
+│                    PROJECT ARTIFACTS                      │
+├─────────────────────────────┬─────────────────────────────┤
+│     OPERATIONAL / DYNAMIC   │    CANONICAL / INVARIANT    │
+│   (Migrate to GitHub Proj)  │   (MUST stay in Git .md)    │
+├─────────────────────────────┼─────────────────────────────┤
+│ • Epics, Tasks & Chores     │ • GRAFTING_MASTER_SOURCE.md │
+│ • Sprints & Backlog lists   │ • Architectural Decisions   │
+│ • Ticket Refinement threads │   (docs/adr/ADR-*.md)       │
+│ • Bug triage & severity     │ • Agent Policy (AGENTS.md)  │
+│ • Assignees & PR linkages   │ • Schema / ABI contracts    │
+└─────────────────────────────┴─────────────────────────────┘
+```
 
-### 🔍 2. Refinamento / RFC / Spike (`[Refine]`) — `02_refinement.yml`
-- **Uso:** Discussão arquitetural, exploração de trade-offs, spikes em `/lab` ou definição de contratos de dados antes de iniciar o código.
-- **Campos obrigatórios:** Declaração do Problema, Proposta Técnica & Alternativas, Impacto Arquitetural, Dúvidas Abertas e Checklist de *Ready for Dev*.
-- **Labels padrão:** `type: refinement`, `status: refinement`.
-
-### 🛠️ 3. Manutenção / Tooling (`[Chore]`) — `03_chore.yml`
-- **Uso:** Atualização de dependências (Cargo, pnpm, uv, .NET), melhorias no CLI `ia-graft`, automações de CI/CD ou refatoração interna.
-- **Campos obrigatórios:** Motivação, Escopo, Mudanças Planejadas e Checklist de Validação.
-- **Labels padrão:** `type: chore`, `status: backlog`.
-
-### 🐛 4. Relato de Bug (`[Bug]`) — `04_bug_report.yml`
-- **Uso:** Defeitos, falhas de compilação, quebra de contratos de API/ABI ou erros de teste.
-- **Campos obrigatórios:** Resumo, Passos de Reprodução, Esperado vs Observado, Severidade (P0 a P3) e Logs/Stacktrace.
-- **Labels padrão:** `type: bug`, `status: triage`.
+- **Ephemeral / Dynamic Tracking (Moved to GitHub Projects & Issues):**
+  - Task backlogs, sprint planning, ticket status, assignment, PR linking, and refinement discussions belong in GitHub Issues and Projects. Managing these in `.md` files creates merge conflicts, stale text, and poor visibility.
+- **Durable / Architectural Truth (Retained in Git `.md` files):**
+  - Core architecture (`GRAFTING_MASTER_SOURCE.md`), Architecture Decision Records (`docs/adr/`), and agent operational policies (`AGENTS.md`) **must remain committed in git** to guarantee versioned immutability alongside source code.
+  - When an issue refinement settles a new architectural standard, the conclusion is committed as an ADR (e.g. `docs/adr/ADR-0018-xyz.md`) and linked to the issue.
 
 ---
 
-## 3. Configuração do GitHub Projects (Passo a Passo)
+## 2. Issue Taxonomy & Issue Forms
 
-Para criar o quadro central do projeto:
+All work items are created via structured **GitHub Issue Forms** in [`.github/ISSUE_TEMPLATE/`](../.github/ISSUE_TEMPLATE/):
 
-### Passo 1: Criar o Projeto no GitHub
-1. No repositório ou organização no GitHub, acesse a aba **Projects** -> **New project**.
-2. Selecione o template **Board** (ou **Team Planning**) e nomeie como `Grafting Monorepo Board`.
+### 🚀 1. Feature / Implementation Task (`[Task]`) — `01_task.yml`
+- **Purpose:** Concrete implementation tasks and new features.
+- **Required fields:** Context & Objective, Target Module/Area, Technical Scope, Acceptance Criteria, and DoD Checklist.
+- **Default labels:** `type: task`, `status: backlog`.
 
-### Passo 2: Configurar os Campos Customizados (Custom Fields)
-Acesse as configurações do projeto (**⚙️ Project Settings** -> **Fields**) e crie os seguintes campos:
+### 🔍 2. Technical Refinement / RFC / Spike (`[Refine]`) — `02_refinement.yml`
+- **Purpose:** Architecture discussions, trade-off evaluations, spike research, or contract drafting before writing code.
+- **Required fields:** Problem Statement, Proposed Design & Alternatives, Architectural Impact (ADRs/ABIs), Open Questions & Risks, and *Ready for Dev* checklist.
+- **Default labels:** `type: refinement`, `status: refinement`.
 
-1. **`Status`** (Single select - padrão):
-   - 📥 `Triage` (Itens recém-chegados)
-   - 🔍 `Refinement` (Em discussão/refinamento técnico)
-   - 🚦 `Ready for Dev` (Refinado e pronto para execução)
-   - 🚧 `In Progress` (Em desenvolvimento ativo)
-   - 🧐 `In Review` (PR aberto / em revisão)
-   - ⛔ `Blocked` (Bloqueado por decisão ou dependência)
-   - ✅ `Done` (Mesclado e concluído)
+### 🛠️ 3. Maintenance / Tooling (`[Chore]`) — `03_chore.yml`
+- **Purpose:** Dependency bumps (Cargo, pnpm, uv, .NET), `ia-graft` CLI enhancements, CI/CD workflow updates, or internal refactoring.
+- **Required fields:** Motivation, Scope, Planned Changes, and Validation Checklist.
+- **Default labels:** `type: chore`, `status: backlog`.
+
+### 🐛 4. Bug Report (`[Bug]`) — `04_bug_report.yml`
+- **Purpose:** Defect reporting, test failures, compilation breaks, or contract regressions.
+- **Required fields:** Summary, Reproduction Steps, Expected vs. Actual Behavior, Severity (P0-P3), and Logs/Stacktrace.
+- **Default labels:** `type: bug`, `status: triage`.
+
+---
+
+## 3. GitHub Projects (v2) Setup Guide
+
+To create and configure the board in GitHub:
+
+### Step 1: Create the Project Board
+1. In the GitHub repository or organization, navigate to the **Projects** tab.
+2. Click **New project** -> Select **Board** (or **Team Planning**).
+3. Name it **`Grafting Monorepo Board`**.
+
+### Step 2: Configure Custom Fields
+Go to **⚙️ Project Settings** -> **Fields** and define the following custom fields:
+
+1. **`Status`** (Single select - default):
+   - 📥 `Triage` (Newly filed items)
+   - 🔍 `Refinement` (Under active technical refinement)
+   - 🚦 `Ready for Dev` (Refined, acceptance criteria set, ready for implementation)
+   - 🚧 `In Progress` (Actively being developed in a task branch/worktree)
+   - 🧐 `In Review` (PR opened, CI running, awaiting review)
+   - ⛔ `Blocked` (Blocked by dependency or open decision gate)
+   - ✅ `Done` (Merged into master and verified)
 
 2. **`Area`** (Single select):
    - `libs/graph`
@@ -79,20 +95,20 @@ Acesse as configurações do projeto (**⚙️ Project Settings** -> **Fields**)
    - 🟢 `P3 - Low`
 
 4. **`Size`** (Single select):
-   - `XS` (Até 2h / ajuste pontual)
-   - `S` (Meio dia / 1 pacote)
-   - `M` (1 a 2 dias / módulo)
-   - `L` (3 a 5 dias / multi-pacote)
-   - `XL` (Spike grande ou Epic)
+   - `XS` (< 2 hours / localized tweak)
+   - `S` (Half day / single package)
+   - `M` (1–2 days / module feature)
+   - `L` (3–5 days / multi-package)
+   - `XL` (Major initiative / epic)
 
-5. **`Iteration / Sprint`** (Iteration field):
-   - Ciclos quinzenais de entrega.
+5. **`Iteration`** (Iteration field):
+   - 2-week sprint cycles (e.g. `Sprint 1`, `Sprint 2`).
 
 ---
 
-## 4. Estrutura das 4 Views Essenciais no GitHub Projects
+## 4. The 4 Essential Project Views
 
-No topo do Project, configure as 4 abas/visões recomendadas:
+Configure the following 4 tabs at the top of your GitHub Project:
 
 ```
 ┌─────────────────┬──────────────────────────┬──────────────────────┬─────────────────┐
@@ -101,70 +117,89 @@ No topo do Project, configure as 4 abas/visões recomendadas:
 ```
 
 1. **📋 1. Kanban Flow (Board View)**
-   - Layout: **Board**
-   - Agrupado por: **`Status`** (colunas da esquerda para a direita: `Refinement` → `Ready for Dev` → `In Progress` → `In Review` → `Done`).
-   - Visibilidade: Visão do dia a dia do desenvolvimento.
+   - **Layout:** Board
+   - **Group by:** `Status` (`Refinement` → `Ready for Dev` → `In Progress` → `In Review` → `Done`)
+   - **Use case:** Daily development and task progression.
 
 2. **🔍 2. Refinement & Backlog (Table View)**
-   - Layout: **Table**
-   - Filtro: `Status: Refinement, Ready for Dev` ou `is:issue`
-   - Campos visíveis: `Title`, `Area`, `Priority`, `Size`, `Assignees`.
-   - Ordenado por: `Priority` desc.
-   - Visibilidade: Sessões de planejamento e refinamento técnico de arquitetura.
+   - **Layout:** Table
+   - **Filter:** `Status: Refinement, Ready for Dev`
+   - **Visible Fields:** `Title`, `Area`, `Priority`, `Size`, `Assignees`
+   - **Sort by:** `Priority` descending
+   - **Use case:** Planning sessions, architecture spikes, and estimating work.
 
-3. **🗺️ 3. Roadmap / Milestones (Roadmap View)**
-   - Layout: **Roadmap**
-   - Agrupado por: **Iteration** ou **Milestone**.
-   - Visibilidade: Planejamento temporal e entregas futuras.
+3. **🗺️ 3. Roadmap & Iterations (Roadmap View)**
+   - **Layout:** Roadmap
+   - **Group by:** `Iteration` or `Milestone`
+   - **Use case:** Milestone delivery tracking and long-term scheduling.
 
-4. **🐛 4. Bugs & Triagem (Table / Board)**
-   - Layout: **Table**
-   - Filtro: `label:"type: bug"`
-   - Visibilidade: Monitoramento de estabilidade e débitos críticos.
-
----
-
-## 5. Automações Nativas do GitHub Projects
-
-Nas configurações do GitHub Project (**Workflows** no menu do projeto), ative as automações nativas:
-
-1. **Auto-add to project**:
-   - Adicionar automaticamente qualquer nova Issue ou PR do repositório `Grafting-Monorepo` ao Project com status `Triage` ou `Backlog`.
-2. **Item closed**:
-   - Quando uma Issue for fechada, mover automaticamente para `Done`.
-3. **Pull Request merged**:
-   - Quando um PR vinculado for mesclado na `master`, mover a Issue correspondente para `Done`.
-4. **Pull Request opened**:
-   - Quando um PR vinculado for aberto, mover o card para `In Review`.
+4. **🐛 4. Bugs & Triaging (Table View)**
+   - **Layout:** Table
+   - **Filter:** `label:"type: bug"`
+   - **Use case:** Tracking defects, broken builds, and regression resolution.
 
 ---
 
-## 6. Ciclo de Vida e Integração com o `ia-graft`
+## 5. What Else Does GitHub Support for Full Automation?
 
-O fluxo entre o GitHub Projects e o desenvolvimento de código respeita rigorosamente o contrato do [`AGENTS.md`](../AGENTS.md):
+Having issue templates and a project board is the foundation. GitHub provides several native capabilities to achieve **100% automation**:
+
+### 1. Built-in Project Workflows (No Code / Configured in GitHub UI)
+Inside the Project Board (**⚙️ Project Settings** -> **Workflows**):
+- **Auto-add to project:** Automatically adds any new Issue or PR created in `TassoossaT/Grafting-Monorepo` to the board with status `Triage` or `Backlog`.
+- **Auto-move on PR open:** Automatically moves the card to `In Review` when a linked PR is submitted.
+- **Auto-close on PR merge:** Automatically moves the card to `Done` when the PR is merged into `master`.
+
+### 2. Task Lists & Sub-issue Hierarchy (GitHub Markdown)
+You can break large Epics into sub-tasks using GitHub task list syntax in any issue description:
+```markdown
+### Sub-tasks
+- [ ] #101 Implement Rust core graph traversal
+- [ ] #102 Add FlatBuffers schema for graph nodes
+- [ ] #103 Expose WASM bindings in libs/isekai
+```
+GitHub renders a live progress bar (e.g. `2 of 3 tasks completed`) and tracks child issue completion directly in the Project board.
+
+### 3. GitHub Discussions (RFCs & Early Ideation)
+For open-ended brainstorming, RFC community feedback, and Q&A *before* an issue is ready for structured refinement, use **GitHub Discussions**. Discussions can be converted to an Issue with a single click once they solidify into an actionable proposal.
+
+### 4. GitHub Project Insights & Burn-down Charts
+Under the **Insights** tab in Projects v2, you can configure real-time charts:
+- **Burn-down / Burn-up:** Track completed story points or issue count over an iteration.
+- **Velocity:** Measure completed items per sprint.
+- **Work by Area:** Cumulative bar chart of issues grouped by `Area` (`libs/graph`, `libs/engine`, etc.).
+
+---
+
+## 6. End-to-End Workflow with `ia-graft`
+
+The following diagram illustrates how an item moves from an idea to merged code:
 
 ```mermaid
 flowchart TD
-    A["💡 Ideia / Demanda"] --> B["📝 Abrir Issue (02_refinement.yml)"]
-    B --> C{"🔍 Refinamento Técnico<br/>(Discussão de Arquitetura & ADRs)"}
-    C -->|Dúvidas sanadas & Checklist OK| D["🚦 Mover para 'Ready for Dev'"]
-    D --> E["⚙️ Criar Task: .\ia-graft.cmd task new --id TASK-ID"]
-    E --> F["💻 Desenvolvimento isolado em .worktrees/TASK-ID"]
-    F --> G["🧪 Verificação: .\ia-graft.cmd task test"]
-    G --> H["📦 Submeter PR: .\ia-graft.cmd task done --title '...' --body 'Closes #N'"]
-    H --> I["🧐 Card move para 'In Review'"]
-    I --> J["✅ Revisão humana & Merge na master"]
-    J --> K["🎉 Card move para 'Done' & Issue fechada automaticamente"]
+    A["💡 Idea / RFC"] --> B["📝 Open Issue (02_refinement.yml)"]
+    B --> C{"🔍 Refinement Discussion<br/>(Architecture, ADRs, Trade-offs)"}
+    C -->|Checklist Complete| D["🚦 Move to 'Ready for Dev' & Spawn [Task] Issues"]
+    D --> E["💻 Start Work: .\ia-graft.cmd task new --id TASK-ID"]
+    E --> F["🔨 Develop inside .worktrees/TASK-ID"]
+    F --> G["🧪 Verify: .\ia-graft.cmd task test --id TASK-ID --command '...'"]
+    G --> H["📦 Submit PR: .\ia-graft.cmd task done --id TASK-ID --title '...' --body 'Closes #N'"]
+    H --> I["🧐 Project card automatically moves to 'In Review'"]
+    I --> J["✅ Human Review & Merge to master"]
+    J --> K["🎉 Project card automatically moves to 'Done' & Issue closes"]
 ```
 
-### Exemplo Prático de Nomenclatura:
-- **Issue no GitHub:** `#42 - Adicionar serialização FlatBuffers para nós de grafo`
-- **Comando `ia-graft`:**
-  ```cmd
-  .\ia-graft.cmd task new --id TASK-42-GRAPH-FLATBUFFERS
-  ```
-- **Finalização e PR:**
-  ```cmd
-  .\ia-graft.cmd task done --id TASK-42-GRAPH-FLATBUFFERS --title "feat(graph): add flatbuffers node serialization" --body "Closes #42"
-  ```
-- **Resultado:** O GitHub vincula a branch, o PR e a Issue, fechando o card e atualizando o quadro sem intervenção manual.
+### Command Reference:
+```cmd
+:: 1. Create a task branch and isolated worktree linked to Issue #42
+.\ia-graft.cmd task new --id TASK-42-GRAPH-TRAVERSAL
+
+:: 2. Incremental atomic commit with AI co-authorship
+.\ia-graft.cmd task commit --id TASK-42-GRAPH-TRAVERSAL --message "feat(graph): add BFS node traversal" --agent gemini
+
+:: 3. Run validation tests
+.\ia-graft.cmd task test --id TASK-42-GRAPH-TRAVERSAL --command "cargo test --workspace"
+
+:: 4. Submit stacked/direct PR referencing the issue
+.\ia-graft.cmd task done --id TASK-42-GRAPH-TRAVERSAL --title "feat(graph): add BFS node traversal" --body "Closes #42"
+```
