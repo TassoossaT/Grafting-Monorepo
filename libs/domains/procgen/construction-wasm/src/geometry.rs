@@ -8,15 +8,15 @@
 //! closed loop's own prior geometry for diffing.
 //!
 //! Also holds `connected_component`, `ADR-0022`'s "cloud" query: the
-//! connected component of same-`type` surfaces reachable from a seed by
+//! connected component of same-`type` regions reachable from a seed by
 //! shared graph nodes. Graph adjacency never depends on `type` (see the
 //! ADR); this is the one place that reads `type` at all, and only to
-//! filter which already-adjacent surfaces belong to one cloud, never to
+//! filter which already-adjacent regions belong to one cloud, never to
 //! decide adjacency itself.
 
 use std::collections::{HashSet, VecDeque};
 
-use grafting_graph_core::{SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry, SurfaceType};
 
 /// True if `point` lies on (within `EPS`) one of `polygon`'s own edges, or
 /// strictly inside it (standard ray-casting, which handles a concave --
@@ -60,52 +60,47 @@ fn on_segment(point: (f32, f32), a: (f32, f32), b: (f32, f32), eps: f32) -> bool
     dot >= -eps && dot <= len_sq + eps
 }
 
-/// The connected component of `known_surfaces` reachable from `seed` by
-/// repeatedly stepping to another known surface of the same `same_type`
-/// that shares at least one graph node with a surface already in the
-/// component. Empty if `seed` itself is not a known surface of
-/// `same_type`. A different-type seam a candidate surface sits across
-/// stays un-crossed (that surface's own type differs), matching the ADR's
-/// "seams between different-type clouds stay connected but are not part
-/// of either cloud" rule -- crossing it is a follow-up (texture blending),
-/// not this query's job.
+/// The connected component of same-`type` regions reachable from `seed` by
+/// shared graph nodes -- `ADR-0022`'s "cloud" query. Empty if `seed` itself
+/// is not a known region of `same_type`.
+///
+/// Adjacency comes from the topology, never from `type`: two regions are
+/// neighbours because a node is on both their boundaries. `type` only
+/// filters which already-adjacent regions belong to one cloud, matching the
+/// ADR's rule that a seam between different-type clouds stays connected
+/// without being part of either.
 pub(crate) fn connected_component(
     surfaces: &SurfaceRegistry,
-    known_surfaces: &HashSet<SurfaceKey>,
-    seed: &SurfaceKey,
+    topology: &ContourTopology,
+    known_regions: &HashSet<RegionId>,
+    seed: &RegionId,
     same_type: &SurfaceType,
-) -> HashSet<SurfaceKey> {
-    let mut visited: HashSet<SurfaceKey> = HashSet::new();
-    let mut queue: VecDeque<SurfaceKey> = VecDeque::new();
+) -> HashSet<RegionId> {
+    let matches = |id: &RegionId| {
+        known_regions.contains(id)
+            && surfaces
+                .region_surface(id)
+                .is_some_and(|surface| surface.surface_type() == same_type)
+    };
 
-    let seed_matches = surfaces
-        .surface(seed)
-        .map(|surface| surface.surface_type() == same_type)
-        .unwrap_or(false);
-    if seed_matches && known_surfaces.contains(seed) {
+    let mut visited: HashSet<RegionId> = HashSet::new();
+    let mut queue: VecDeque<RegionId> = VecDeque::new();
+    if matches(seed) {
         visited.insert(seed.clone());
         queue.push_back(seed.clone());
     }
 
     while let Some(current) = queue.pop_front() {
-        let cycle = surfaces
-            .surface(&current)
-            .expect("every queued key was already confirmed to exist")
-            .cycle()
-            .to_vec();
-        for node_id in &cycle {
-            for candidate in surfaces.surfaces_referencing(node_id) {
-                if visited.contains(candidate) || !known_surfaces.contains(candidate) {
+        let Ok(nodes) = topology.region_nodes(&current) else {
+            continue;
+        };
+        for node_id in &nodes {
+            for candidate in topology.regions_touching_node(node_id) {
+                if visited.contains(&candidate) || !matches(&candidate) {
                     continue;
                 }
-                let matches = surfaces
-                    .surface(candidate)
-                    .map(|surface| surface.surface_type() == same_type)
-                    .unwrap_or(false);
-                if matches {
-                    visited.insert(candidate.clone());
-                    queue.push_back(candidate.clone());
-                }
+                visited.insert(candidate.clone());
+                queue.push_back(candidate);
             }
         }
     }
@@ -116,122 +111,103 @@ pub(crate) fn connected_component(
 #[cfg(test)]
 mod cloud_tests {
     use super::*;
-    use grafting_graph_core::{Graph, Node, NodeId};
+    use grafting_graph_core::{Graph, Node, NodeId, straight_cycle_region};
 
     use crate::editing::SessionGraph;
 
-    #[test]
-    fn two_same_type_surfaces_sharing_a_node_form_one_cloud() {
+    /// Two triangles sharing one node, each registered as its own region --
+    /// the shape every cloud test needs. `shared` is on both boundaries,
+    /// which is the only reason they are neighbours.
+    fn two_regions(
+        left_type: &str,
+        right_type: &str,
+    ) -> (SurfaceRegistry, ContourTopology, RegionId, RegionId) {
         let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
-        let mut surfaces = SurfaceRegistry::new();
-        let mut known = HashSet::new();
-
         for id in ["shared", "a2", "a3", "b2", "b3"] {
             graph
                 .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
                 .unwrap();
         }
-
-        let key_a = surfaces
-            .add_surface(
-                &graph,
-                vec![
-                    NodeId::new("shared").unwrap(),
-                    NodeId::new("a2").unwrap(),
-                    NodeId::new("a3").unwrap(),
-                ],
-                SurfaceType::new("terrain"),
-                true,
-            )
-            .unwrap();
-        let key_b = surfaces
-            .add_surface(
-                &graph,
-                vec![
-                    NodeId::new("shared").unwrap(),
-                    NodeId::new("b2").unwrap(),
-                    NodeId::new("b3").unwrap(),
-                ],
-                SurfaceType::new("terrain"),
-                true,
-            )
-            .unwrap();
-        known.insert(key_a.clone());
-        known.insert(key_b.clone());
-
-        let cloud = connected_component(&surfaces, &known, &key_a, &SurfaceType::new("terrain"));
-        assert!(cloud.contains(&key_a));
-        assert!(cloud.contains(&key_b));
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+        let register = |topology: &mut ContourTopology,
+                        surfaces: &mut SurfaceRegistry,
+                        id: &str,
+                        cycle: [&str; 3],
+                        surface_type: &str| {
+            let region_id = RegionId::new(id).unwrap();
+            let nodes: Vec<NodeId> = cycle.iter().map(|id| NodeId::new(*id).unwrap()).collect();
+            straight_cycle_region(topology, &graph, region_id.clone(), &nodes).unwrap();
+            surfaces
+                .add_region_surface(
+                    topology,
+                    region_id.clone(),
+                    SurfaceType::new(surface_type),
+                    true,
+                )
+                .unwrap();
+            region_id
+        };
+        let left = register(
+            &mut topology,
+            &mut surfaces,
+            "left",
+            ["shared", "a2", "a3"],
+            left_type,
+        );
+        let right = register(
+            &mut topology,
+            &mut surfaces,
+            "right",
+            ["shared", "b2", "b3"],
+            right_type,
+        );
+        (surfaces, topology, left, right)
     }
 
     #[test]
-    fn a_different_type_surface_across_the_seam_is_excluded() {
-        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
-        let mut surfaces = SurfaceRegistry::new();
-        let mut known = HashSet::new();
+    fn two_same_type_regions_sharing_a_node_form_one_cloud() {
+        let (surfaces, topology, left, right) = two_regions("terrain", "terrain");
+        let known = HashSet::from([left.clone(), right.clone()]);
 
-        for id in ["shared", "a2", "a3", "b2", "b3"] {
-            graph
-                .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
-                .unwrap();
-        }
-
-        let key_a = surfaces
-            .add_surface(
-                &graph,
-                vec![
-                    NodeId::new("shared").unwrap(),
-                    NodeId::new("a2").unwrap(),
-                    NodeId::new("a3").unwrap(),
-                ],
-                SurfaceType::new("terrain"),
-                true,
-            )
-            .unwrap();
-        let key_b = surfaces
-            .add_surface(
-                &graph,
-                vec![
-                    NodeId::new("shared").unwrap(),
-                    NodeId::new("b2").unwrap(),
-                    NodeId::new("b3").unwrap(),
-                ],
-                SurfaceType::new("path"),
-                true,
-            )
-            .unwrap();
-        known.insert(key_a.clone());
-        known.insert(key_b.clone());
-
-        let cloud = connected_component(&surfaces, &known, &key_a, &SurfaceType::new("terrain"));
-        assert!(cloud.contains(&key_a));
-        assert!(!cloud.contains(&key_b));
+        let cloud = connected_component(
+            &surfaces,
+            &topology,
+            &known,
+            &left,
+            &SurfaceType::new("terrain"),
+        );
+        assert!(cloud.contains(&left));
+        assert!(cloud.contains(&right));
     }
 
     #[test]
-    fn a_seed_not_in_known_surfaces_yields_an_empty_cloud() {
-        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
-        let mut surfaces = SurfaceRegistry::new();
-        for id in ["a", "b", "c"] {
-            graph
-                .add_node(Node::new(NodeId::new(id).unwrap(), [0.0; 3]))
-                .unwrap();
-        }
-        let key = surfaces
-            .add_surface(
-                &graph,
-                vec![
-                    NodeId::new("a").unwrap(),
-                    NodeId::new("b").unwrap(),
-                    NodeId::new("c").unwrap(),
-                ],
-                SurfaceType::new("wall"),
-                true,
-            )
-            .unwrap();
+    fn a_different_type_region_across_the_seam_is_excluded() {
+        let (surfaces, topology, left, right) = two_regions("terrain", "path");
+        let known = HashSet::from([left.clone(), right.clone()]);
 
-        let cloud =
-            connected_component(&surfaces, &HashSet::new(), &key, &SurfaceType::new("wall"));
+        let cloud = connected_component(
+            &surfaces,
+            &topology,
+            &known,
+            &left,
+            &SurfaceType::new("terrain"),
+        );
+        assert!(cloud.contains(&left));
+        assert!(!cloud.contains(&right));
+    }
+
+    #[test]
+    fn a_seed_that_is_not_a_known_region_yields_an_empty_cloud() {
+        let (surfaces, topology, left, _right) = two_regions("terrain", "terrain");
+
+        let cloud = connected_component(
+            &surfaces,
+            &topology,
+            &HashSet::new(),
+            &left,
+            &SurfaceType::new("terrain"),
+        );
         assert!(cloud.is_empty());
     }
 }

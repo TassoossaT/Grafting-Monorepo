@@ -12,11 +12,10 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use grafting_graph_core::{
-    ContourTopology, FormationInputs, Graph, GraphPrimitive, PrismGridMesh, RegionId, SurfaceKey,
+    ContourTopology, FormationInputs, Graph, GraphPrimitive, PrismGridMesh, RegionId,
     SurfaceRegistry, SurfaceType,
 };
 
-use crate::dto::{surface_key_from_wire, surface_key_to_wire};
 use crate::editing::{self, SessionGraph};
 use crate::enclosure;
 use crate::footprint;
@@ -45,7 +44,6 @@ fn to_js_error(message: String) -> JsValue {
 struct ConstructionState {
     graph: SessionGraph,
     surfaces: SurfaceRegistry,
-    known_surfaces: HashSet<SurfaceKey>,
     topology: ContourTopology,
     known_regions: HashSet<RegionId>,
 }
@@ -65,12 +63,6 @@ pub struct ConstructionSession {
     surfaces: SurfaceRegistry,
     topology: ContourTopology,
     terrain_mesh: Option<PrismGridMesh>,
-    /// This crate's own bookkeeping of every surface key currently
-    /// registered, purely so [`Self::snapshot_json`] can enumerate them --
-    /// `SurfaceRegistry` itself exposes no "all surfaces" iterator, and
-    /// adding one would be a `grafting-graph-core` change, out of this
-    /// crate's scope.
-    known_surfaces: HashSet<SurfaceKey>,
     known_regions: HashSet<RegionId>,
     path_brush_undo: Vec<PathBrushHistoryEntry>,
     path_brush_redo: Vec<PathBrushHistoryEntry>,
@@ -94,7 +86,6 @@ impl ConstructionSession {
             surfaces: SurfaceRegistry::new(),
             topology: ContourTopology::new(),
             terrain_mesh: None,
-            known_surfaces: HashSet::new(),
             known_regions: HashSet::new(),
             path_brush_undo: Vec::new(),
             path_brush_redo: Vec::new(),
@@ -117,12 +108,6 @@ impl ConstructionSession {
         }
     }
 
-    fn forget(&mut self, wire_key: &[String]) {
-        let key = surface_key_from_wire(wire_key)
-            .expect("wire-formatted key was produced internally and must parse back");
-        self.known_surfaces.remove(&key);
-    }
-
     // ---- Bootstrapping ----
 
     /// Adds a brand-new node. See `editing::add_node`.
@@ -137,29 +122,14 @@ impl ConstructionSession {
         editing::add_edge(&mut self.graph, request).map_err(to_js_error)
     }
 
-    /// Registers a brand-new surface, as an analytic region. See
-    /// `editing::add_surface`.
-    pub fn add_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = editing::add_surface(
-            &self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            request,
-        )
-        .map_err(to_js_error)?;
-        let region_id = mesh::region_id_from_wire(&response.surface_key).map_err(to_js_error)?;
-        self.known_regions.insert(region_id);
-        serialize(&response)
-    }
-
     /// Unregisters a surface outright -- no hole-repair, no cascading. See
     /// `editing::remove_surface`.
     pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue> {
         let request: editing::RemoveSurfaceRequest = parse(request_json)?;
-        let key = request.surface_key.clone();
-        editing::remove_surface(&mut self.surfaces, request).map_err(to_js_error)?;
-        self.forget(&key);
+        let region_id = mesh::region_id_from_wire(&request.surface_key).map_err(to_js_error)?;
+        editing::remove_surface(&mut self.surfaces, &mut self.topology, request)
+            .map_err(to_js_error)?;
+        self.known_regions.remove(&region_id);
         Ok(())
     }
 
@@ -194,13 +164,9 @@ impl ConstructionSession {
     /// `RemoveVertex`. See `region_editing::apply_remove_vertex`.
     pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_remove_vertex(
-            &mut self.graph,
-            &mut self.topology,
-            &self.surfaces,
-            request,
-        )
-        .map_err(to_js_error)?;
+        let response =
+            region_editing::apply_remove_vertex(&mut self.graph, &mut self.topology, request)
+                .map_err(to_js_error)?;
         self.track(&response);
         serialize(&response)
     }
@@ -259,8 +225,9 @@ impl ConstructionSession {
     /// the neighbour's. See `region_editing::apply_add_region`.
     pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_add_region(&mut self.topology, &mut self.surfaces, request)
-            .map_err(to_js_error)?;
+        let response =
+            region_editing::apply_add_region(&mut self.topology, &mut self.surfaces, request)
+                .map_err(to_js_error)?;
         self.track(&response);
         serialize(&response)
     }
@@ -319,7 +286,8 @@ impl ConstructionSession {
     pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
         let response =
-            enclosure::unfilled_loops(&self.graph, &self.topology, &self.surfaces, request).map_err(to_js_error)?;
+            enclosure::unfilled_loops(&self.graph, &self.topology, &self.surfaces, request)
+                .map_err(to_js_error)?;
         serialize(&response)
     }
 
@@ -370,13 +338,9 @@ impl ConstructionSession {
     /// `RemoveHole`. See `region_editing::apply_remove_hole`.
     pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_remove_hole(
-            &mut self.graph,
-            &mut self.topology,
-            &self.surfaces,
-            request,
-        )
-        .map_err(to_js_error)?;
+        let response =
+            region_editing::apply_remove_hole(&mut self.graph, &mut self.topology, request)
+                .map_err(to_js_error)?;
         self.track(&response);
         serialize(&response)
     }
@@ -451,7 +415,6 @@ impl ConstructionSession {
         let before = ConstructionState {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
-            known_surfaces: self.known_surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
         };
@@ -459,7 +422,6 @@ impl ConstructionSession {
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
-            &mut self.known_surfaces,
             &mut self.known_regions,
             request,
         )
@@ -467,7 +429,6 @@ impl ConstructionSession {
         let after = ConstructionState {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
-            known_surfaces: self.known_surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
         };
@@ -493,7 +454,6 @@ impl ConstructionSession {
             &self.graph,
             &self.surfaces,
             &self.topology,
-            &self.known_surfaces,
             &self.known_regions,
             request,
         )
@@ -515,7 +475,6 @@ impl ConstructionSession {
         }
         self.graph = entry.before.graph.clone();
         self.surfaces = entry.before.surfaces.clone();
-        self.known_surfaces = entry.before.known_surfaces.clone();
         self.topology = entry.before.topology.clone();
         self.known_regions = entry.before.known_regions.clone();
         self.path_brush_redo.push(entry);
@@ -537,7 +496,6 @@ impl ConstructionSession {
         }
         self.graph = entry.after.graph.clone();
         self.surfaces = entry.after.surfaces.clone();
-        self.known_surfaces = entry.after.known_surfaces.clone();
         self.topology = entry.after.topology.clone();
         self.known_regions = entry.after.known_regions.clone();
         self.path_brush_undo.push(entry);
@@ -655,19 +613,21 @@ impl ConstructionSession {
 
     // ---- Clouds ----
 
-    /// The connected component of same-`type` surfaces reachable from
+    /// The connected component of same-`type` regions reachable from
     /// `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
     /// `geometry::connected_component`.
     pub fn cloud_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: CloudRequest = parse(request_json)?;
-        let seed = surface_key_from_wire(&request.seed).map_err(to_js_error)?;
+        let seed = mesh::region_id_from_wire(&request.seed).map_err(to_js_error)?;
         let cloud = connected_component(
             &self.surfaces,
-            &self.known_surfaces,
+            &self.topology,
+            &self.known_regions,
             &seed,
             &SurfaceType::new(request.surface_type),
         );
-        let surface_keys: Vec<Vec<String>> = cloud.iter().map(surface_key_to_wire).collect();
+        let mut surface_keys: Vec<Vec<String>> = cloud.iter().map(region_id_to_wire).collect();
+        surface_keys.sort();
         serialize(&CloudResponse { surface_keys })
     }
 
@@ -680,7 +640,6 @@ impl ConstructionSession {
         let meshes = mesh::all_surface_meshes(
             &self.graph,
             &self.surfaces,
-            &self.known_surfaces,
             &self.topology,
             &self.known_regions,
         );
@@ -722,17 +681,7 @@ impl ConstructionSession {
                 target: edge.target().as_str().to_owned(),
             })
             .collect();
-        let mut surfaces = self
-            .known_surfaces
-            .iter()
-            .filter_map(|key| {
-                self.surfaces.surface(key).map(|surface| SurfaceSnapshot {
-                    surface_key: surface_key_to_wire(key),
-                    surface_type: surface.surface_type().as_str().to_owned(),
-                    physical: surface.physical(),
-                })
-            })
-            .collect::<Vec<_>>();
+        let mut surfaces: Vec<SurfaceSnapshot> = Vec::new();
         let mut region_ids = self.known_regions.iter().collect::<Vec<_>>();
         region_ids.sort();
         surfaces.extend(region_ids.into_iter().filter_map(|region_id| {
@@ -1055,7 +1004,12 @@ mod tests {
             .apply_path_brush_json(&request)
             .expect("a loop stroke fully covering its only terrain cell must still apply");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+        assert!(
+            !parsed["surfaceIds"]["created"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
 
         let meshes_json = session
             .all_surface_meshes_json()
@@ -1129,7 +1083,12 @@ mod tests {
             .apply_path_brush_json(&second)
             .expect("second, overlapping path brush stroke must still apply");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(!parsed["surfaceIds"]["created"].as_array().unwrap().is_empty());
+        assert!(
+            !parsed["surfaceIds"]["created"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         assert!(
             parsed["surfaceIds"]["removed"]
                 .as_array()
@@ -1160,7 +1119,9 @@ mod tests {
     #[test]
     fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
         let mut session = ConstructionSession::new();
-        session.set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .set_terrain_mesh(4, 4, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
         for cell in 0..16 {
             let x = cell % 4;
             let z = cell / 4;
@@ -1242,13 +1203,49 @@ mod tests {
         corner("q-h", 1.0, 2.0);
         corner("q-i", 2.0, 2.0);
 
+        // Every face is declared as a patch over shared, caller-named edges
+        // -- the only way a generator creates anything. Naming each edge
+        // after its own node pair is what makes two neighbouring quads meet
+        // along one edge instead of two coincident ones.
         let mut quad = |cycle: [&str; 4]| {
-            session
-                .add_surface_json(
-                    &serde_json::json!({"cycle": cycle, "surfaceType": "terrain", "physical": true})
-                        .to_string(),
+            let segment = |from: &str, to: &str| {
+                let forward = from < to;
+                let (start, end) = if forward { (from, to) } else { (to, from) };
+                (
+                    format!("seg:{start}~{end}"),
+                    start.to_string(),
+                    end.to_string(),
+                    forward,
                 )
-                .expect("quad surface adds");
+            };
+            let steps: Vec<_> = (0..4)
+                .map(|index| segment(cycle[index], cycle[(index + 1) % 4]))
+                .collect();
+            let edges: Vec<_> = steps
+                .iter()
+                .map(|(id, start, end, _)| {
+                    serde_json::json!({"edgeId": id, "startNodeId": start, "endNodeId": end})
+                })
+                .collect();
+            let boundary: Vec<_> = steps
+                .iter()
+                .map(|(id, _, _, forward)| serde_json::json!({"edgeId": id, "reversed": !forward}))
+                .collect();
+            session
+                .add_patch_json(
+                    &serde_json::json!({
+                        "nodes": [],
+                        "edges": edges,
+                        "regions": [{
+                            "regionId": cycle.join("|"),
+                            "boundary": boundary,
+                            "surfaceType": "terrain",
+                            "physical": true,
+                        }],
+                    })
+                    .to_string(),
+                )
+                .expect("quad patch adds");
         };
         quad(["q-a", "q-b", "q-e", "q-d"]);
         quad(["q-b", "q-c", "q-f", "q-e"]);
@@ -1281,7 +1278,10 @@ mod tests {
             "only the shared center node has every one of its own edges cancel out: {response}"
         );
         assert!(
-            session.graph.node(&grafting_graph_core::NodeId::new("q-e").unwrap()).is_none(),
+            session
+                .graph
+                .node(&grafting_graph_core::NodeId::new("q-e").unwrap())
+                .is_none(),
             "the reported orphan must actually be gone from the graph"
         );
         for surviving in ["q-a", "q-b", "q-c", "q-d", "q-f", "q-g", "q-h", "q-i"] {
@@ -1313,7 +1313,11 @@ mod tests {
 
         let meshes_json = session.all_surface_meshes_json().unwrap();
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(meshes.len(), 1, "the pure-arc region must produce exactly one mesh: {meshes_json}");
+        assert_eq!(
+            meshes.len(),
+            1,
+            "the pure-arc region must produce exactly one mesh: {meshes_json}"
+        );
         assert!(
             !meshes[0]["indices"].as_array().unwrap().is_empty(),
             "the pure-arc region's mesh must have real triangles, not be empty: {meshes_json}"
@@ -1353,7 +1357,11 @@ mod tests {
 
         let meshes_json = session.all_surface_meshes_json().unwrap();
         let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-        assert_eq!(meshes.len(), 1, "the looped stroke must produce exactly one mesh: {meshes_json}");
+        assert_eq!(
+            meshes.len(),
+            1,
+            "the looped stroke must produce exactly one mesh: {meshes_json}"
+        );
         assert!(
             !meshes[0]["indices"].as_array().unwrap().is_empty(),
             "the looped stroke's mesh must have real triangles, not be empty: {meshes_json}"
@@ -1420,7 +1428,9 @@ mod tests {
     #[test]
     fn many_random_overlapping_strokes_never_leave_an_unmeshable_surface() {
         let mut session = ConstructionSession::new();
-        session.set_terrain_mesh(6, 6, 1, 2, 0.0, 0.0).expect("valid dimensions");
+        session
+            .set_terrain_mesh(6, 6, 1, 2, 0.0, 0.0)
+            .expect("valid dimensions");
         for cell in 0..36 {
             let x = cell % 6;
             let z = cell / 6;
@@ -1435,8 +1445,12 @@ mod tests {
         for stroke in 0..80 {
             let shape = match rng.next() % 3 {
                 0 => serde_json::json!({"kind": "circle", "radius": rng.range(0.3, 1.5)}),
-                1 => serde_json::json!({"kind": "square", "size": rng.range(0.6, 3.0), "rotationRadians": rng.range(0.0, 6.28)}),
-                _ => serde_json::json!({"kind": "hexagon", "radius": rng.range(0.3, 1.5), "rotationRadians": rng.range(0.0, 6.28)}),
+                1 => {
+                    serde_json::json!({"kind": "square", "size": rng.range(0.6, 3.0), "rotationRadians": rng.range(0.0, 6.28)})
+                }
+                _ => {
+                    serde_json::json!({"kind": "hexagon", "radius": rng.range(0.3, 1.5), "rotationRadians": rng.range(0.0, 6.28)})
+                }
             };
             let sample_count = 1 + (rng.next() % 3) as usize;
             let samples: Vec<[f32; 2]> = (0..sample_count)
@@ -1458,7 +1472,6 @@ mod tests {
                 &mut session.graph,
                 &mut session.surfaces,
                 &mut session.topology,
-                &mut session.known_surfaces,
                 &mut session.known_regions,
                 request,
             ) {
@@ -1484,7 +1497,9 @@ mod tests {
                     &session.graph,
                     &session.surfaces,
                     &session.topology,
-                    mesh::SurfaceMeshRequest { surface_key: surface_key.clone() },
+                    mesh::SurfaceMeshRequest {
+                        surface_key: surface_key.clone(),
+                    },
                 ) {
                     panic!(
                         "stroke {stroke} created {surface_key:?} but it doesn't mesh: {message}\nstroke request: {request_json}\nstroke response: {response_json}"

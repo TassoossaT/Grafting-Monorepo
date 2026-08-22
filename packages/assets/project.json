@@ -1,0 +1,86 @@
+{
+  "name": "assets",
+  "root": "packages/assets",
+  "projectType": "library",
+  "tags": ["scope:shared", "lang:typescript", "platform:web", "type:lib"],
+  "metadata": {
+    "graphIr": {
+      "id": "assets",
+      "kind": "lib",
+      "tags": ["scope:shared", "lang:typescript", "platform:web", "type:lib"]
+    },
+    "publicApi": {
+      "entryPoint": "src/index.ts",
+      "baseline": "tests/snapshots/public-api.md",
+      "forbiddenModules": []
+    }
+  },
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/assets check" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/assets build" },
+      "cache": true,
+      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/pnpm-lock.yaml"],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "watch": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/assets watch" },
+      "continuous": true,
+      "cache": false
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "pnpm --filter @grafting/assets test" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/tests/**/*.test.mjs",
+        "{projectRoot}/package.json",
+        "{projectRoot}/tsconfig.json",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ],
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "api-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/assets api-check"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/package.json",
+        "{projectRoot}/project.json",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/tests/snapshots/public-api.md",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+        "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+        "{workspaceRoot}/pnpm-lock.yaml"
+      ]
+    },
+    "docs-generate": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs assets" },
+      "cache": false
+    },
+    "docs-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "node tools/scripts/generate-api-docs.mjs assets --check" },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/project.json",
+        "{workspaceRoot}/docs/generated/api/ts/assets.api.md",
+        "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+        "sharedGlobals"
+      ]
+    }
+  }
+}

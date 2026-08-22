@@ -32,7 +32,8 @@ use std::fmt;
 
 use crate::{
     ContourEdge, ContourEdgeId, ContourError, ContourGeometry, ContourLoop, ContourTopology, Graph,
-    GraphError, Node, NodeId, OrientedEdgeUse, RegionId, SurfaceError, SurfaceRegistry, SurfaceType,
+    GraphError, Node, NodeId, OrientedEdgeUse, RegionId, SurfaceError, SurfaceRegistry,
+    SurfaceType,
 };
 
 /// Structural failure of an atomic region edit.
@@ -113,7 +114,10 @@ impl fmt::Display for RegionEditError {
                 "region {region} must have exactly one outer loop and no holes to be cut"
             ),
             Self::InvalidIdentifier { id } => {
-                write!(formatter, "derived identifier {id:?} is not a valid identity")
+                write!(
+                    formatter,
+                    "derived identifier {id:?} is not a valid identity"
+                )
             }
             Self::UnknownHole { region, index } => {
                 write!(formatter, "region {region} has no hole at index {index}")
@@ -179,14 +183,13 @@ fn extend_sorted<T: Ord>(target: &mut Vec<T>, extra: Vec<T>) {
 
 /// The one shared end-of-transaction cleanup every removing primitive runs:
 /// drop every contour edge no region uses anymore, then delete every
-/// candidate node nothing references -- neither a surviving region's
-/// boundary nor a legacy [`crate::Surface`]. Candidates are scoped to the
-/// nodes the caller's own edit could have orphaned, never the whole graph,
-/// so a node staged for an unrelated in-flight operation is never collected.
+/// candidate node no surviving region's boundary still touches. Candidates
+/// are scoped to the nodes the caller's own edit could have orphaned, never
+/// the whole graph, so a node staged for an unrelated in-flight operation is
+/// never collected.
 pub fn prune_orphans<N, E>(
     graph: &mut Graph<N, E>,
     topology: &mut ContourTopology,
-    surfaces: &SurfaceRegistry,
     candidates: &[NodeId],
 ) -> Result<Vec<NodeId>, RegionEditError> {
     topology.prune_unused_edges();
@@ -195,9 +198,6 @@ pub fn prune_orphans<N, E>(
     let unique: BTreeSet<NodeId> = candidates.iter().cloned().collect();
     for id in unique {
         if in_use.contains(&id) {
-            continue;
-        }
-        if surfaces.surfaces_referencing(&id).next().is_some() {
             continue;
         }
         if graph.node(&id).is_none() {
@@ -288,7 +288,6 @@ pub fn insert_vertex<N, E>(
 pub fn remove_vertex<N, E>(
     graph: &mut Graph<N, E>,
     topology: &mut ContourTopology,
-    surfaces: &SurfaceRegistry,
     node: &NodeId,
     welded_edge: ContourEdgeId,
 ) -> Result<RegionEditOutcome, RegionEditError> {
@@ -373,7 +372,7 @@ pub fn remove_vertex<N, E>(
         topology.replace_region_loops(region_id, outer_loops, holes)?;
     }
 
-    let removed_nodes = prune_orphans(graph, topology, surfaces, &[node.clone()])?;
+    let removed_nodes = prune_orphans(graph, topology, &[node.clone()])?;
     Ok(RegionEditOutcome {
         affected_regions: affected,
         removed_nodes,
@@ -452,9 +451,7 @@ pub fn add_hole(
 ) -> Result<RegionEditOutcome, RegionEditError> {
     let current = topology
         .region(region)
-        .ok_or_else(|| ContourError::UnknownRegion {
-            id: region.clone(),
-        })?;
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?;
     let outer_loops = current.outer_loops().to_vec();
     let mut holes = current.holes().to_vec();
     holes.push(hole);
@@ -470,15 +467,12 @@ pub fn add_hole(
 pub fn remove_hole<N, E>(
     graph: &mut Graph<N, E>,
     topology: &mut ContourTopology,
-    surfaces: &SurfaceRegistry,
     region: &RegionId,
     index: usize,
 ) -> Result<RegionEditOutcome, RegionEditError> {
     let current = topology
         .region(region)
-        .ok_or_else(|| ContourError::UnknownRegion {
-            id: region.clone(),
-        })?;
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?;
     if index >= current.holes().len() {
         return Err(RegionEditError::UnknownHole {
             region: region.clone(),
@@ -490,7 +484,7 @@ pub fn remove_hole<N, E>(
     let dropped = holes.remove(index);
     let candidates = loop_nodes(topology, &dropped);
     topology.replace_region_loops(region, outer_loops, holes)?;
-    let removed_nodes = prune_orphans(graph, topology, surfaces, &candidates)?;
+    let removed_nodes = prune_orphans(graph, topology, &candidates)?;
     Ok(RegionEditOutcome {
         affected_regions: vec![region.clone()],
         removed_nodes,
@@ -544,7 +538,12 @@ pub fn delete_regions<N, E>(
         let region = topology
             .region(id)
             .ok_or_else(|| ContourError::UnknownRegion { id: id.clone() })?;
-        for use_ in region.outer_loops().iter().chain(region.holes().iter()).flatten() {
+        for use_ in region
+            .outer_loops()
+            .iter()
+            .chain(region.holes().iter())
+            .flatten()
+        {
             touched_edges.push(use_.edge().clone());
             neighbors.extend(topology.regions_using_edge(use_.edge()));
         }
@@ -562,7 +561,7 @@ pub fn delete_regions<N, E>(
             surfaces.remove_region_surface(id)?;
         }
     }
-    let removed_nodes = prune_orphans(graph, topology, surfaces, &candidate_nodes)?;
+    let removed_nodes = prune_orphans(graph, topology, &candidate_nodes)?;
 
     // Each rim use is oriented **opposite** to how the surviving neighbour
     // walks it, so a caller can stitch a face onto the rim by using these
@@ -631,9 +630,7 @@ pub fn duplicate_region<N, E>(
 ) -> Result<RegionEditOutcome, RegionEditError> {
     let source = topology
         .region(region)
-        .ok_or_else(|| ContourError::UnknownRegion {
-            id: region.clone(),
-        })?
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?
         .clone();
 
     let mut created_nodes = Vec::new();
@@ -693,7 +690,12 @@ pub fn duplicate_region<N, E>(
 
     let copy_region = suffixed_region(region, spec.suffix)?;
     topology.add_region(copy_region.clone(), outer_loops, holes)?;
-    surfaces.add_region_surface(topology, copy_region.clone(), spec.surface_type, spec.physical)?;
+    surfaces.add_region_surface(
+        topology,
+        copy_region.clone(),
+        spec.surface_type,
+        spec.physical,
+    )?;
     Ok(RegionEditOutcome {
         created_regions: vec![copy_region],
         created_nodes,
@@ -722,9 +724,7 @@ pub fn cut_region(
 ) -> Result<RegionEditOutcome, RegionEditError> {
     let source = topology
         .region(region)
-        .ok_or_else(|| ContourError::UnknownRegion {
-            id: region.clone(),
-        })?
+        .ok_or_else(|| ContourError::UnknownRegion { id: region.clone() })?
         .clone();
     if source.outer_loops().len() != 1 || !source.holes().is_empty() {
         return Err(RegionEditError::CutShapeUnsupported {
@@ -848,8 +848,7 @@ fn suffixed_node(id: &NodeId, suffix: &str) -> Result<NodeId, RegionEditError> {
 }
 
 fn suffixed_edge(id: &ContourEdgeId, suffix: &str) -> Result<ContourEdgeId, RegionEditError> {
-    ContourEdgeId::new(format!("{id}{suffix}"))
-        .map_err(|_| invalid_identifier(id.as_str(), suffix))
+    ContourEdgeId::new(format!("{id}{suffix}")).map_err(|_| invalid_identifier(id.as_str(), suffix))
 }
 
 fn suffixed_region(id: &RegionId, suffix: &str) -> Result<RegionId, RegionEditError> {
@@ -923,15 +922,11 @@ mod tests {
 
     /// The exact gap that made a path-brush-created node look frozen while a
     /// tower's node moved: the retired `move_node` resolved affected
-    /// surfaces through the legacy registry, which holds no entry at all for
-    /// a region.
+    /// A region's own boundary is what `move_vertex` reports against --
+    /// there is no node-set index anywhere for it to miss.
     #[test]
-    fn move_vertex_sees_a_region_the_legacy_node_set_query_never_could() {
-        let (mut graph, topology, surfaces, _region) = quad();
-        assert!(
-            surfaces.surfaces_referencing(&nid("a")).next().is_none(),
-            "a region-backed surface registers no node-set key at all"
-        );
+    fn move_vertex_reports_every_region_whose_boundary_touches_the_node() {
+        let (mut graph, topology, _surfaces, _region) = quad();
         let outcome = move_vertex(&mut graph, &topology, &nid("a"), |_| {}).unwrap();
         assert_eq!(outcome.affected_regions.len(), 1);
     }
@@ -956,7 +951,12 @@ mod tests {
             topology.edge(&eid("quad-0")).is_none(),
             "the replaced edge is reclaimed, never left orphaned"
         );
-        assert!(topology.region_nodes(&region).unwrap().contains(&nid("mid")));
+        assert!(
+            topology
+                .region_nodes(&region)
+                .unwrap()
+                .contains(&nid("mid"))
+        );
     }
 
     /// The "carve a movable notch out of a straight edge" case the design
@@ -1002,7 +1002,7 @@ mod tests {
 
     #[test]
     fn remove_vertex_is_the_inverse_of_insert_vertex_and_leaves_no_orphans() {
-        let (mut graph, mut topology, surfaces, region) = quad();
+        let (mut graph, mut topology, _surfaces, region) = quad();
         insert_vertex(
             &mut graph,
             &mut topology,
@@ -1013,14 +1013,7 @@ mod tests {
         )
         .unwrap();
 
-        let outcome = remove_vertex(
-            &mut graph,
-            &mut topology,
-            &surfaces,
-            &nid("mid"),
-            eid("welded"),
-        )
-        .unwrap();
+        let outcome = remove_vertex(&mut graph, &mut topology, &nid("mid"), eid("welded")).unwrap();
 
         assert_eq!(outcome.affected_regions, vec![region.clone()]);
         assert_eq!(outcome.removed_nodes, vec![nid("mid")]);
@@ -1035,21 +1028,14 @@ mod tests {
 
     #[test]
     fn remove_vertex_rejects_a_junction_instead_of_guessing_a_weld() {
-        let (mut graph, mut topology, surfaces, _region) = quad();
+        let (mut graph, mut topology, _surfaces, _region) = quad();
         topology
             .add_edge(
                 &graph,
                 ContourEdge::new(eid("spur"), nid("a"), nid("c"), ContourGeometry::Line),
             )
             .unwrap();
-        let error = remove_vertex(
-            &mut graph,
-            &mut topology,
-            &surfaces,
-            &nid("a"),
-            eid("welded"),
-        )
-        .unwrap_err();
+        let error = remove_vertex(&mut graph, &mut topology, &nid("a"), eid("welded")).unwrap_err();
         assert_eq!(
             error,
             RegionEditError::NotWeldable {
@@ -1087,7 +1073,7 @@ mod tests {
 
     #[test]
     fn add_and_remove_hole_run_through_the_same_validation_as_an_outer_loop() {
-        let (mut graph, mut topology, surfaces, region) = quad();
+        let (mut graph, mut topology, _surfaces, region) = quad();
         let names = ["h0", "h1", "h2", "h3"];
         for (id, position) in [
             ("h0", [0.25_f32, 0.0, 0.25_f32]),
@@ -1121,7 +1107,7 @@ mod tests {
         add_hole(&mut topology, &region, hole).unwrap();
         assert_eq!(topology.region(&region).unwrap().holes().len(), 1);
 
-        let outcome = remove_hole(&mut graph, &mut topology, &surfaces, &region, 0).unwrap();
+        let outcome = remove_hole(&mut graph, &mut topology, &region, 0).unwrap();
         assert!(topology.region(&region).unwrap().holes().is_empty());
         assert_eq!(
             outcome.removed_nodes,
@@ -1156,7 +1142,12 @@ mod tests {
     /// the wrong fixture for this.
     ///
     /// `regions[row][column]` is `face{column}_{row}`.
-    fn lattice() -> (TestGraph, ContourTopology, SurfaceRegistry, Vec<Vec<RegionId>>) {
+    fn lattice() -> (
+        TestGraph,
+        ContourTopology,
+        SurfaceRegistry,
+        Vec<Vec<RegionId>>,
+    ) {
         const SIDE: usize = 4;
         let mut nodes = Vec::new();
         for row in 0..=SIDE {
@@ -1322,7 +1313,10 @@ mod tests {
             !rim.contains(&eid("v2_1")),
             "v2_1 sat between the two removed faces and is interior to the removal"
         );
-        assert!(topology.edge(&eid("v2_1")).is_none(), "and it was reclaimed");
+        assert!(
+            topology.edge(&eid("v2_1")).is_none(),
+            "and it was reclaimed"
+        );
         assert_eq!(rim.len(), 6, "two merged faces leave one six-edge rim");
     }
 
@@ -1483,7 +1477,11 @@ mod tests {
         for id in [rid("left"), rid("right")] {
             assert_eq!(topology.region(&id).unwrap().outer_loops()[0].len(), 4);
             assert_eq!(
-                surfaces.region_surface(&id).unwrap().surface_type().as_str(),
+                surfaces
+                    .region_surface(&id)
+                    .unwrap()
+                    .surface_type()
+                    .as_str(),
                 "wall",
                 "both halves inherit the original's semantics"
             );

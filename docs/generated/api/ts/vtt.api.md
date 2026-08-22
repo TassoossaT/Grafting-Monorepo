@@ -764,6 +764,8 @@ trick can remove.
 
 ### `reference vtt.tools.BrushOutlineShape`
 
+### `reference vtt.tools.brushReach`
+
 ### `reference vtt.tools.BrushRegion`
 
 ### `reference vtt.tools.brushSweptOutlinePolygons`
@@ -776,7 +778,11 @@ trick can remove.
 
 ### `reference vtt.tools.cellsInPolygon`
 
-### `reference vtt.tools.circleEdges`
+### `reference vtt.tools.circleContour`
+
+### `reference vtt.tools.commitWallContour`
+
+### `reference vtt.tools.commitWallStroke`
 
 ### `reference vtt.tools.ConstructionTool`
 
@@ -805,8 +811,6 @@ trick can remove.
 ### `reference vtt.tools.houseRoomDeleteTool`
 
 ### `reference vtt.tools.HouseVec2`
-
-### `reference vtt.tools.idPrefixFor`
 
 ### `reference vtt.tools.idPrefixForRoom`
 
@@ -840,9 +844,9 @@ trick can remove.
 
 ### `reference vtt.tools.QuadMesh`
 
-### `reference vtt.tools.resolveWallCrossing`
-
 ### `reference vtt.tools.restackTerrain`
+
+### `reference vtt.tools.reverseGeometry`
 
 ### `reference vtt.tools.scopedToolId`
 
@@ -866,7 +870,13 @@ trick can remove.
 
 ### `reference vtt.tools.wallBrushTool`
 
+### `reference vtt.tools.WallColumn`
+
+### `reference vtt.tools.WallContour`
+
 ### `reference vtt.tools.wallLineTool`
+
+### `reference vtt.tools.wallPatch`
 
 ### `reference vtt.tools.WallSpan`
 
@@ -903,9 +913,16 @@ fine; the brush never tracks what was already applied.
 
 ### `method vtt.brush-tool.BrushToolSpec.previewColor(params: ToolParamsFor<Id>): number`
 
-### `type vtt.brush-tool.BrushableToolId = "path-brush"`
+### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush"`
 
 Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids createBrushTool can wire up.
+
+### `function vtt.brush-tool.brushReach(shape: BrushShape): number`
+
+How far a brush shape reaches from its own center. What that reach *means*
+is the calling tool's business -- a footprint to carve for one, a fitting
+tolerance for another -- but the number itself is a property of the shape,
+so it is derived once here rather than per tool.
 
 ### `function vtt.brush-tool.createBrushTool(spec: BrushToolSpec<Id>): ConstructionTool<Id>`
 
@@ -1424,25 +1441,21 @@ else it was asked to.
 
 Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls.
 
-### `function vtt.tower-geometry.circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[]`
+### `function vtt.tower-geometry.circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[]`
 
-The CIRCLE_SEGMENTS committed edges one tower stamp sends to
-`generatePathExtrusion` -- a full circle built from CIRCLE_SEGMENTS
-true circular arcs, **never exactly 2** true semicircles: two semicircle
-edges closing the same circle share both their own endpoints, and a
-curved edge's own 4 corner nodes are purely position-derived
-(`extrusion.rs`'s own `corner_id`), so both would mint the identical node
-set and collide on one `grafting_graph_core::SurfaceKey` -- the engine
-silently keeps only the first and drops the second, which read as "only
-half the circle draws." CIRCLE_SEGMENTS arcs of `2*PI /
-CIRCLE_SEGMENTS` each keep every edge's own corner pair unique. Each arc
-is tagged `"arc-right"`, not `"arc-left"` -- for points generated in
-increasing-angle (counterclockwise) order, `"arc-right"` is the tag whose
-own true circle center actually lands back on `center` (verified in
-`extrusion.rs`'s and `generation.rs`'s own matching tests); `"arc-left"`
-would still produce 4 valid, non-colliding surfaces (this tag only
-affects which side of the chord the arc bulges toward, not corner
-identity), just not the circle actually requested.
+A closed circular wall run: CIRCLE_SEGMENTS corners around the
+circle and one true circular arc between each pair, every arc sharing the
+one real center.
+
+This is the whole of the tower preset. It produces contour edges in the
+same vocabulary a free stroke is fitted into, so the preset commits
+through exactly the same wall builder with no geometry, no ids and no
+generation of its own -- a preset decides where the corners go and how
+each step curves, and stops there.
+
+Corners run counter-clockwise (increasing angle), and each arc sweeps the
+short way between consecutive corners, which is the quarter turn that
+actually lies on the requested circle.
 
 ### `function vtt.tower-geometry.previewOutline(center: ConstructionPosition, radius: number, segments: number): Float32Array`
 
@@ -1454,99 +1467,160 @@ lands on the same position as `pointAt(0)`'s (`0`).
 
 ### `variable vtt.tower-stamp-tool.towerStampTool: ConstructionTool<"tower-stamp">`
 
-One click stamps a closed circular wall footprint at a known radius (one
-of TOWER_RADIUS_PRESETS, never a freehand drag) -- the "buildings
-get known geometry" half of the owner's own split between this and the
-free-form brush's own curve-fitting (`wall-brush-tool.ts`,
-`path-fitting.ts`). Committed as exactly 4 `"arc-right"` quarter-circle
-edges (circleEdges, `tower-geometry.ts`) -- not 2 semicircles,
-which would mint the identical 4 corner nodes for both and collide on one
-`SurfaceKey` (see `circleEdges`'s own doc) -- so the footprint reaches the
-graph as 4 distinct true-circle `Surface`s, not a polygon approximation.
-Shares the same wall id-prefix (`idPrefixFor`) every other wall tool
-uses, so a tower stamped against an existing structure still welds by
-position wherever its own circle happens to touch it.
+One click stamps a closed circular wall run at a known radius (one of
+`TOWER_RADIUS_PRESETS`, never a freehand drag).
+
+A tower is not its own kind of structure and has no code of its own: it is
+the ordinary wall type, committed through the ordinary wall builder, from
+a contour a preset happened to compute instead of a hand drawing it. That
+is the entire difference -- so a tower welds onto a drawn wall, gets
+edited by the same handles, and is subject to the same rules, for free.
 
 ### `interface vtt.path-fitting.FittedEdge`
 
-One fitted edge of a stroke: an endpoint pair plus which of the engine's own known curvatures (never a free curve) it was classified as.
-
-### `property vtt.path-fitting.FittedEdge.curvature: "straight" | "arc-left" | "arc-right"`
+One fitted edge of a stroke: an endpoint pair plus the contour geometry
+that actually explains the samples between them -- a straight chord, or a
+true circular arc through them. This is the graph's own edge vocabulary
+(`ConstructionEdgeGeometry`), not a private tag a generator has to
+translate, so a fitted edge is already the thing that gets declared.
 
 ### `property vtt.path-fitting.FittedEdge.end: ConstructionPosition`
 
+### `property vtt.path-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
+
 ### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
 
-### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[]`
+### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[]`
 
 Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
-into a short list of fitted edges drawn only from the engine's own known
-vocabulary (`"straight" | "arc-left" | "arc-right"`, see `wall-shared.ts`'s
-own `PathEdgeSpec` doc) -- this is `wall-brush-tool.ts`'s "fragmentar em
-contornos conhecidos" step: corners are found first (Ramer-Douglas-Peucker,
-cornerIndices), then each run between corners is classified
-(classifySegment) as whichever known shape actually matches it.
-`cornerEpsilon` (world units) is the RDP tolerance -- how far the raw
-stroke must wander off *both* a straight line and the best-fit semicircle
-before that counts as a real corner rather than hand tremor or ordinary
-curvature. Fewer than 2 points fits to nothing.
+into a short list of fitted edges: corners are found first
+(Ramer-Douglas-Peucker, cornerIndices), then each run between
+corners is classified (classifySegment) as a straight chord or
+the true circle through it.
 
-Known v1 limitation: a stroke that genuinely mixes a straight run with a
-true semicircular turn (not just a straight run alone, or a curve alone)
-finds the straight/curve boundary correctly, but the curved remainder can
-fall back to several short straight chords instead of being recognized as
-one arc -- cornerIndices's top-down splitting picks its first cut
-at the point of maximum deviation from the *whole* stroke's own outer
-chord (usually the curve's own apex), which can land before the full
-curved span is ever tested as one candidate arc in its own right. Still a
-large improvement over one straight panel per raw pointer sample; see
-`path-fitting.test.mjs`'s own test for this exact case.
+`tolerance` (world units) is the whole correction dial -- how far the raw
+stroke must wander off *both* a straight line and its best-fit arc before
+that counts as a real corner rather than hand tremor or ordinary
+curvature. At `0` the contour is committed literally; the larger it gets,
+the more freely a shaky stroke is straightened into clean runs. Fewer
+than 2 points fits to nothing.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
-A true drag brush: press to anchor the stroke's first corner, drag to lay
-down wall panels continuously along wherever the pointer travels, release
-to end the stroke. Free-form on purpose: there is no notion of "closing a
-structure" here at all, and no floor/ceiling cap of any kind (not
-implemented yet; see `generateBoundaryCap`'s own doc for why bolting one
-onto this tool isn't safe today anyway). What actually reaches the graph
-is never the raw stroke, though -- every `onPointerMove` tick appends one
-more raw sample (throttled by the dispatcher, gated by
-RAW_SAMPLE_MIN_DISTANCE) to `rawPath`, then re-fits *all* of it
-(`fitPath`, `path-fitting.ts`) into a short list of straight/arc edges
-from the engine's own known vocabulary and commits that instead -- "eu
-quero... fragmentar em contornos conhecidos ao longo do grafo," not the
-literal wobble of the mouse. Every tick resends the whole fitted path
-(`GeneratePathExtrusionRequest`'s own doc on why that's cheap), so an
-already-drawn run can still be corrected as later samples make its true
-shape clearer. Landing on the side of an existing wall (not near one of
-its own corners) splits it and welds this stroke's corner onto the split,
-forming a T-junction -- see `resolveWallCrossing`'s own doc. See
-`wall-line-tool.ts` for the always-exactly-straight, no-fitting
-counterpart.
+A free wall stroke, built on the same brush every other brush uses: press,
+drag, and on release the whole swept region is handed over once. Nothing
+is committed mid-drag and nothing is resent per tick -- what the pointer
+traced is corrected into contour edges and declared as one patch.
+
+The brush footprint is the correction dial rather than a footprint to
+paint. Its reach is fed straight to the fitter as tolerance: at radius 0
+the drawn contour is committed literally, and the wider the brush the more
+freely a shaky stroke is straightened into clean runs and true arcs. That
+is why a wall brush is meant to be a small circle -- it is not covering
+ground, it is saying how literally to take the hand.
+
+Everything a wall is lives in TypeScript from here down (`wall-shared.ts`,
+`wall-patch.ts`): corners resolve to columns, columns share edges, and the
+engine is handed nodes, edges and faces without ever being told they are a
+wall.
 
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
-A straight wall drawn by press-drag-release, the same gesture as
-`wall-brush-tool.ts`'s free-form stroke -- the pointer's own path is
-followed live for the preview, exactly like the brush -- but wherever the
-drag wanders, only `anchor` (the press point) and the release point ever
-reach the graph: one exact straight segment between them, corrected
-straight regardless of how the mouse wobbled in between. That correction
-is this tool's entire reason to exist, distinct from the brush, which
-commits every wobble as its own panel. Shares wall height/color/id-prefix
-(`wall-shared.ts`) so a straight run welds onto a free-form stroke (or
-another straight run) wherever their corners happen to coincide -- welding
-is still automatic by position. Either endpoint landing on the side of an
-existing wall (not near one of its own corners) splits it and snaps that
-endpoint onto the split, forming a T-junction -- see `resolveWallCrossing`'s
-own doc.
+A straight wall drawn by press-drag-release. Wherever the drag wanders,
+only the press point and the release point reach the graph: one exact
+straight contour edge between them. That correction is this tool's entire
+reason to exist, distinct from the free brush, whose own correction is a
+fit with a tolerance rather than a guarantee.
 
-### `variable vtt.wall-shared.WALL_COLOR: Record<WallBrushParams["wallType"], number>`
+Beyond that it is the same wall as every other: the same contour commit,
+the same column resolution, the same shared edges. A run drawn here welds
+onto a free stroke, or onto another straight run, by resolving its corner
+onto that run's own column -- by connection, not by landing on the same
+coordinate.
+
+### `interface vtt.wall-patch.WallColumn`
+
+One extremity of a wall run: the two nodes of that extremity's own
+vertical edge, bottom and top.
+
+A wall is four vertices and four edges, and the four vertices are the four
+extremities -- two columns, this one and the next. Whatever else ends up
+along an edge later (a T-junction insert splitting it into a series of
+micro-edges) changes none of that: what separates one wall from another is
+a division running side to side, never a vertex sitting on the way.
+
+The height of the wall is the length of this column's own vertical edge,
+which is the distance between `bottom` and `top`. There is no stored
+height anywhere -- the graph holds the two nodes and their connection, and
+the distance is a consequence.
+
+### `property vtt.wall-patch.WallColumn.bottom: ConstructionPosition`
+
+### `property vtt.wall-patch.WallColumn.bottomNodeId: string`
+
+### `property vtt.wall-patch.WallColumn.top: ConstructionPosition`
+
+### `property vtt.wall-patch.WallColumn.topNodeId: string`
+
+### `interface vtt.wall-patch.WallContour`
+
+A whole wall run, ready to be declared: the columns it passes through, and
+the contour geometry of each step between them, in the direction the run
+travels.
+
+`closed` makes the last column step back onto the first -- which is all a
+tower or a house outline is. There is no separate closed-shape builder and
+no preset-specific geometry: a preset only decides where the columns are
+and what each step curves like.
+
+### `property vtt.wall-patch.WallContour.closed: boolean`
+
+### `property vtt.wall-patch.WallContour.columns: readonly WallColumn[]`
+
+### `property vtt.wall-patch.WallContour.geometries: readonly ConstructionEdgeGeometry[]`
+
+Geometry of the step from column `i` to column `i + 1`, in that direction.
+
+### `function vtt.wall-patch.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
+
+The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
+
+### `function vtt.wall-patch.wallPatch(tableId: string, contour: WallContour, surfaceType: string, physical: boolean): ConstructionPatch`
+
+Turns a wall run into one patch: every node it introduces, the shared
+edges between them, and one upright panel per step.
+
+Each panel is declared in the order base, far column, top, near column --
+the two columns being the vertical edges. That ordering is not decoration:
+it is what makes a curved panel readable as a ruled strip downstream
+instead of a ring some projection has to guess a plane for.
+
+Everything about what a wall *is* lives here, in TypeScript. The engine is
+told which nodes exist, which edges connect them, and which faces sit over
+those edges -- it is never told that any of it is a wall.
+
+### `variable vtt.wall-shared.WALL_COLOR: Record<WallParams["wallType"], number>`
 
 ### `variable vtt.wall-shared.WALL_HEIGHT: 3`
 
-Fixed wall height for a brush/line-drawn segment, shared by both wall tools.
+Default length of a panel's own vertical edge, for callers with no height parameter of their own.
+
+### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string): void`
+
+Commits a fitted run of contour edges as walls, in one transaction.
+
+This is the only path a wall is ever built by. A free stroke, a straight
+drag and a tower preset differ in nothing but the contour they hand over:
+they all resolve their corners the same way, share the same edges, and
+declare the same faces. Nothing here knows which tool called it, and
+nothing downstream is told any of it is a wall.
+
+### `function vtt.wall-shared.commitWallStroke(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number, params: WallParams, domain: string): void`
+
+Fits a raw stroke and commits it, the free-brush entry point --
+`tolerance` is the brush's own radius, so a radius of 0 commits the drawn
+contour literally and a wider brush corrects a shakier stroke into clean
+straight runs and true arcs.
 
 ### `function vtt.wall-shared.findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined`
 
@@ -1555,35 +1629,6 @@ within WALL_PICK_TOLERANCE), or `undefined` if none qualify --
 `house-room-delete-tool.ts`'s single-surface delete: a click that lands
 directly on a wall removes just that one panel, distinct from a click on
 open floor inside a room, which removes every wall bounding it instead.
-
-### `function vtt.wall-shared.idPrefixFor(ctx: ToolContext): string`
-
-A single stable prefix for every wall structure on this table, shared by
-`wall-brush-tool.ts` and `wall-line-tool.ts` -- a wall's corner ids are
-derived purely from XZ position (`extrude_path`'s own doc), so anything
-sharing this one prefix welds together for free wherever its corners
-happen to coincide, without either tool needing to know about the other
--- "ligar casas" (E7's own wording) comes for free, and a free-form
-stroke can weld onto a precise straight run and vice versa.
-
-### `function vtt.wall-shared.resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition`
-
-If `point` lands within CROSSING_TOLERANCE of an existing wall
-panel's own centerline, and far enough (per CROSSING_END_MARGIN)
-from either of that panel's own corners to be a genuine mid-span crossing
-rather than basically hitting a corner already: subdivides that panel's
-bottom and top runs at the projected point through `insertVertex`, and
-returns the projected point snapped to the existing wall's own
-baseline/top Y -- so the caller's own new wall welds onto the freshly
-minted nodes by position, forming a T-junction ("quando eu crio uma a
-partir da lateral de outra... da um snap neles para que eles grudem um no
-outro").
-
-The crossed panel stays one region with more boundary, rather than being
-replaced by two. Splitting it was only ever a way to get nodes at the
-crossing point, which is exactly what an insert does directly -- and
-unlike a split, it cannot desynchronize the panel's own two runs. Returns
-`point` unchanged (a plain no-op) if no wall panel qualifies.
 
 ### `reference vtt.wall-shared.pinnedToBaseline`
 
@@ -2105,6 +2150,8 @@ for it now.
 
 ### `reference vtt.edit-construction.WallBrushParams`
 
+### `reference vtt.edit-construction.WallParams`
+
 ### `reference vtt.edit-construction.ZERO_DELTA`
 
 ### `interface vtt.atomic-edit.EditGesture`
@@ -2371,10 +2418,11 @@ One file per structure type, each pairing creation-shape knowledge with
 the role table that shape implies -- the whole TS-owned half of
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
-Types sharing a generation call share a definition rather than restating
-one: every `extrude_path` product (wall, tower, door jamb) is the same
-upright panel, and every procedurally swept product (terrain, path) is the
-same non-enumerable boundary. Splitting them per product name would be
+Types sharing a shape share a definition rather than restating one: every
+upright panel (wall, tower, door jamb) is one type built by one builder --
+a tower is a wall someone stamped a circle of, not a kind of its own --
+and every procedurally swept product (terrain, path) is the same
+non-enumerable boundary. Splitting them per product name would be
 duplication, not per-type policy.
 
 ### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
@@ -2843,9 +2891,22 @@ Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPoi
 
 ### `property vtt.tool-types.ToolParamsByTool.wall-brush: WallBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.wall-line: WallBrushParams`
+### `property vtt.tool-types.ToolParamsByTool.wall-line: WallParams`
 
 ### `interface vtt.tool-types.TowerStampParams`
+
+What every wall-producing tool needs and nothing else: which wall type,
+and how tall. There is one wall type in the engine, so a free stroke, a
+straight run and a tower preset all commit through the same builder with
+the same parameters -- a preset is a shape, never its own kind of wall.
+
+`height` is the length of each panel's own vertical edge, which is all a
+height ever is here: the graph stores the two horizontal edges and their
+connection, and the distance between them is this number.
+
+### `property vtt.tool-types.TowerStampParams.height: number`
+
+Length of a panel's own vertical edge, in world units.
 
 ### `property vtt.tool-types.TowerStampParams.radius: 1.5 | 2.5 | 4`
 
@@ -2853,7 +2914,46 @@ Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPoi
 
 ### `interface vtt.tool-types.WallBrushParams`
 
+A free wall stroke. The brush footprint is not a footprint here -- it is
+the *fitting tolerance*: a radius of 0 commits the contour literally, and
+a larger radius lets a shakier stroke be corrected into clean straight
+runs and true arcs. That is the whole reason a wall brush carries a shape
+at all, and why its radius floor is 0 rather than the path brush's own.
+
+### `property vtt.tool-types.WallBrushParams.height: number`
+
+Length of a panel's own vertical edge, in world units.
+
+### `property vtt.tool-types.WallBrushParams.radius: number`
+
+Circle/hexagon radius, or square half-size, in world units.
+
+### `property vtt.tool-types.WallBrushParams.rotationDegrees: number`
+
+Rotation around world Y; ignored by circles.
+
+### `property vtt.tool-types.WallBrushParams.shape: BrushShapeKind`
+
+Convex footprint shared by terrain and path brushes.
+
 ### `property vtt.tool-types.WallBrushParams.wallType: "wall-white" | "wall-gray"`
+
+### `interface vtt.tool-types.WallParams`
+
+What every wall-producing tool needs and nothing else: which wall type,
+and how tall. There is one wall type in the engine, so a free stroke, a
+straight run and a tower preset all commit through the same builder with
+the same parameters -- a preset is a shape, never its own kind of wall.
+
+`height` is the length of each panel's own vertical edge, which is all a
+height ever is here: the graph stores the two horizontal edges and their
+connection, and the distance between them is this number.
+
+### `property vtt.tool-types.WallParams.height: number`
+
+Length of a panel's own vertical edge, in world units.
+
+### `property vtt.tool-types.WallParams.wallType: "wall-white" | "wall-gray"`
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
@@ -3244,11 +3344,19 @@ free-versus-shared distinction to read.
 
 ### `interface vtt.construction-session-port.ConstructionPatchEdge`
 
-One straight boundary segment of a generated patch, named by its caller.
+One boundary segment of a generated patch, named by its caller.
+
+`geometry` is optional and defaults to a straight chord, which is what
+every flat-ground patch declares. It matters because a patch is the only
+way a generator names a **shared** edge: an arc two faces meet along has
+no other way to reach the graph curved, so a curved wall panel and its
+neighbour would otherwise be forced back onto an unshared edge each.
 
 ### `property vtt.construction-session-port.ConstructionPatchEdge.edgeId: string`
 
 ### `property vtt.construction-session-port.ConstructionPatchEdge.endNodeId: string`
+
+### `property vtt.construction-session-port.ConstructionPatchEdge.geometry?: ConstructionEdgeGeometry`
 
 ### `property vtt.construction-session-port.ConstructionPatchEdge.startNodeId: string`
 
@@ -3383,13 +3491,9 @@ must not mint a second copy.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
 
-Registers a region from **already-registered** edges. Unlike
-addSurface, which derives a region from a node cycle and always
-mints fresh edges, this lets a new face *share* an existing boundary --
-the only way to actually join it to its neighbour rather than laying a
-coincident copy of that edge beside it.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey`
+Registers a region from **already-registered** edges, so a new face can
+*share* an existing boundary -- the only way to actually join it to its
+neighbour rather than laying a coincident copy of that edge beside it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
 

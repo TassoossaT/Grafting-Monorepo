@@ -24,7 +24,18 @@ function outlineShapeFor(shape: BrushShape): BrushOutlineShape {
 }
 
 /** Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids {@link createBrushTool} can wire up. */
-export type BrushableToolId = "path-brush";
+export type BrushableToolId = "path-brush" | "wall-brush";
+
+/**
+ * How far a brush shape reaches from its own center. What that reach *means*
+ * is the calling tool's business -- a footprint to carve for one, a fitting
+ * tolerance for another -- but the number itself is a property of the shape,
+ * so it is derived once here rather than per tool.
+ */
+export function brushReach(shape: BrushShape): number {
+  if (shape.kind === "square") return shape.size / 2;
+  return shape.radius;
+}
 
 export interface BrushToolSpec<Id extends BrushableToolId> {
   readonly id: Id;

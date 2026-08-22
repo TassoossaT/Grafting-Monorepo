@@ -142,7 +142,6 @@ fn a_generated_wall_panel_survives_an_insert_and_weld_round_trip() {
     let outcome = remove_vertex(
         &mut graph,
         &mut topology,
-        &surfaces,
         &NodeId::new("interop-1:mid").unwrap(),
         ContourEdgeId::new("interop-1:welded").unwrap(),
     )

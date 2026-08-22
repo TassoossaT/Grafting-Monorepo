@@ -98,11 +98,20 @@ export interface ConstructionPatchRegion {
   readonly physical: boolean;
 }
 
-/** One straight boundary segment of a generated patch, named by its caller. */
+/**
+ * One boundary segment of a generated patch, named by its caller.
+ *
+ * `geometry` is optional and defaults to a straight chord, which is what
+ * every flat-ground patch declares. It matters because a patch is the only
+ * way a generator names a **shared** edge: an arc two faces meet along has
+ * no other way to reach the graph curved, so a curved wall panel and its
+ * neighbour would otherwise be forced back onto an unshared edge each.
+ */
 export interface ConstructionPatchEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
+  readonly geometry?: ConstructionEdgeGeometry;
 }
 
 /**
@@ -399,7 +408,6 @@ export interface ConstructionSessionPort {
 
   addNode(id: ConstructionNodeId, position: ConstructionPosition): void;
   addEdge(id: ConstructionEdgeId, source: ConstructionNodeId, target: ConstructionNodeId): void;
-  addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey;
 
   // ---- The atomic edit vocabulary ----
   //
@@ -430,12 +438,10 @@ export interface ConstructionSessionPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
-  /**
-   * Registers a region from **already-registered** edges. Unlike
-   * {@link addSurface}, which derives a region from a node cycle and always
-   * mints fresh edges, this lets a new face *share* an existing boundary --
-   * the only way to actually join it to its neighbour rather than laying a
-   * coincident copy of that edge beside it.
+/**
+   * Registers a region from **already-registered** edges, so a new face can
+   * *share* an existing boundary -- the only way to actually join it to its
+   * neighbour rather than laying a coincident copy of that edge beside it.
    */
   addRegion(request: {
     readonly regionId: string;

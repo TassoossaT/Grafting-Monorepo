@@ -5,6 +5,128 @@ Derived workspace signature index for AI agents (Tier 2 micro-context). Regenera
 
 ## Rust Core & Bridges
 
+### `construction-wasm` (`libs/domains/procgen/construction-wasm`)
+
+```rust
+// src/diff_apply.rs
+pub struct DiffOutcome
+pub fn diff_and_apply(
+
+// src/dto.rs
+pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String>
+pub fn surface_key_from_wire(ids: &[String]) -> Result<SurfaceKey, String>
+pub fn surface_key_to_wire(key: &SurfaceKey) -> Vec<String>
+
+// src/editing.rs
+pub type SessionGraph = Graph<[f32; 3], ()>;
+pub struct SurfaceSpecDto
+pub struct SurfaceKeyResponse
+pub struct AddNodeRequest
+pub fn add_node(graph: &mut SessionGraph, request: AddNodeRequest) -> Result<(), String>
+pub struct AddEdgeRequest
+pub fn add_edge(graph: &mut SessionGraph, request: AddEdgeRequest) -> Result<(), String>
+pub fn add_surface(
+pub struct RemoveSurfaceRequest
+pub fn remove_surface(
+pub struct RemoveEdgeRequest
+pub fn remove_edge(graph: &mut SessionGraph, request: RemoveEdgeRequest) -> Result<(), String>
+
+// src/enclosure.rs
+pub struct UnfilledLoopsRequest
+pub struct BoundaryUseDto
+pub struct NeighbourFaceDto
+pub struct UnfilledLoopDto
+pub struct UnfilledLoopsResponse
+pub fn unfilled_loops(
+
+// src/footprint.rs
+pub enum CoverageKind
+pub struct FootprintCoverageRequest
+pub struct CoveredRegionDto
+pub struct FootprintCoverageResponse
+pub fn footprint_coverage(
+pub struct ClassifyPointsRequest
+pub struct PointHitDto
+pub struct ClassifyPointsResponse
+pub fn classify_points(
+
+// src/generation.rs
+pub struct PathEdgeDto
+pub struct EdgeNotchDto
+pub struct GenerateAndApplyPathExtrusionRequest
+pub struct DiffResponse
+pub fn generate_and_apply_path_extrusion(
+pub struct GenerateAndApplyBoundaryCapRequest
+pub fn generate_and_apply_boundary_cap(
+pub struct CellCoordDto
+pub struct GenerateAndApplyRegionPartitionRequest
+pub fn generate_and_apply_region_partition(
+
+// src/mesh.rs
+pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
+pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
+pub struct SurfaceMeshDto
+pub struct SurfaceMeshRequest
+pub fn all_surface_meshes(
+pub fn surface_mesh(
+
+// src/path_brush.rs
+pub struct ApplyPathBrushRequest
+pub struct ResolveBrushCellsRequest
+pub struct ResolveBrushCellsResponse
+pub fn resolve_brush_cells(
+pub struct IdentityDeltaResponse
+pub struct SurfaceIdentityDeltaResponse
+pub struct InvalidationResponse
+pub struct ApplyPathBrushResponse
+pub fn apply_path_brush(
+pub fn preview_path_brush(
+
+// src/region_editing.rs
+pub struct OrientedEdgeUseDto
+pub enum ContourGeometryDto
+pub struct RegionEditOutcomeDto
+pub struct MoveVertexRequest
+pub fn apply_move_vertex(
+pub struct InsertVertexRequest
+pub fn apply_insert_vertex(
+pub struct RemoveVertexRequest
+pub fn apply_remove_vertex(
+pub struct RetypeEdgeRequest
+pub fn apply_retype_edge(
+pub struct MoveEdgeRequest
+pub fn apply_move_edge(
+pub struct AddContourEdgeRequest
+pub fn add_contour_edge(
+
+// src/region_merge.rs
+pub struct RegionMergeOutcome
+pub fn apply_region_merge(
+
+// src/session.rs
+pub struct ConstructionSession
+pub fn new() -> ConstructionSession
+pub fn add_node_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn add_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn add_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn remove_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn add_contour_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
+
+// src/terrain.rs
+pub struct CornerHeightModuleDto
+pub struct GenerateAndApplyTerrainCellRequest
+pub fn generate_and_apply_terrain_cell(
+```
+
 ### `discretize` (`libs/domains/procgen/discretize`)
 
 ```rust
@@ -251,6 +373,81 @@ pub mod engine;
 pub mod handle;
 pub mod job;
 pub fn debug_memory() -> JsValue
+```
+
+### `structure-generation` (`libs/domains/procgen/structure-generation`)
+
+```rust
+// src/boundary.rs
+pub fn cap_boundary(points: &[[f32; 3]], id_prefix: &str, surface_type: SurfaceType, top: bool) -> StructurePiece
+
+// src/extrusion.rs
+pub enum EdgeCurvature
+pub struct PathEdge
+pub struct EdgeNotch
+pub struct StructurePiece
+pub enum ExtrusionError
+pub fn extrude_path(
+
+// src/region_partition.rs
+pub struct CellCoord
+pub struct Region
+pub fn partition_cells_into_regions(cells: &[CellCoord], max_region_cells: usize, seed: u64) -> Vec<Region>
+pub enum Axis
+pub struct BoundaryRun
+pub fn boundary_runs(cells: &[CellCoord], regions: &[Region]) -> Vec<BoundaryRun>
+```
+
+### `surface-mesh` (`libs/domains/procgen/surface-mesh`)
+
+```rust
+// src/lib.rs
+pub struct TriangulatedMesh
+pub fn triangulate_surface(
+pub fn triangulate_region(
+```
+
+### `surface-transformations` (`libs/domains/procgen/surface-transformations`)
+
+```rust
+// src/analytic_brush.rs
+pub struct AnalyticBrushContour
+pub type BoundaryVertex = (NodeId, ContourGeometry);
+pub struct RegionMergePlan
+pub fn consumed_surface_keys(&self) -> &[SurfaceKey]
+pub fn consumed_region_ids(&self) -> &[RegionId]
+pub fn consumed_boundaries(&self) -> &[Vec<BoundaryVertex>]
+pub fn contour(&self) -> &AnalyticBrushContour
+pub fn vertices(&self) -> &[[f32; 2]]
+pub fn edge_geometries(&self) -> &[ContourGeometry]
+pub fn compact_analytic_brush_contour(
+pub fn plan_region_merge(
+
+// src/lib.rs
+pub enum BrushShape
+pub struct PathBrushRequest
+pub enum PathBrushFailure
+pub fn plan_path_brush(
+pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
+pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
+```
+
+### `terrain-generation` (`libs/domains/procgen/terrain-generation`)
+
+```rust
+// src/bilinear.rs
+pub type QuadCorners = [[f32; 3]; CORNER_COUNT];
+pub fn bilinear_point(corners: QuadCorners, u: f32, v: f32) -> [f32; 3]
+
+// src/generate.rs
+pub enum TerrainGenerationError
+pub struct TerrainCellGeneration
+pub fn generate_terrain_cell_surface(
+
+// src/module.rs
+pub const CORNER_COUNT: usize = 4;
+pub struct CornerHeightModule
+pub fn rotate_corner_heights(heights: [f32; CORNER_COUNT], turns: usize) -> [f32; CORNER_COUNT]
 ```
 
 ### `tileset-wfc` (`libs/domains/procgen/tileset-wfc`)
@@ -1412,6 +1609,167 @@ export function buildTransitionTerrain(
   const levelHeight = options.levelHeight ?? 0.25;
   const baseHeight = options.baseHeight ?? -0.6;
   const occupancy = cornerOccupancy(mesh, levels);
+```
+
+### `assets` (`packages/assets`)
+
+```ts
+// src/contracts/definition.ts
+export interface AssetProvenance {
+  /** Pack name, author, or `"generated"` for something the product produced. */
+  readonly origin: string;
+  /** SPDX identifier where one applies, otherwise the licence's own name. */
+  readonly license: string;
+  /** Attribution text to reproduce, when the licence requires it. */
+  readonly attribution?: string;
+  /** Where the original can be found. Documentation only -- never identity. */
+export interface AssetDefinition<TKind extends ResourceKind = ResourceKind> {
+  /** Stable, opaque identity. */
+  readonly ref: ResourceRef<TKind>;
+  /** Which resolver interprets {@link source}. */
+  readonly kind: TKind;
+  /**
+  * Content revision. A definition whose revision changes loads as a distinct
+  * entry, so live holders keep serving the old one until they release and a
+
+// src/contracts/ref.ts
+export type ResourceRef<TKind extends ResourceKind = ResourceKind> = string & {
+  readonly [kindBrand]: TKind;
+  };
+export type ResourceKind = string;
+export interface ResourceKinds {}
+
+  /**
+  * The resource a kind produces, or `unknown` for a kind nothing has declared.
+  *
+  * `unknown` rather than `any` on purpose: an unregistered kind stays usable but
+  * forces the caller to narrow, instead of silently disabling type checking.
+  */
+export type ResourceOf<TKind extends ResourceKind> = TKind extends keyof ResourceKinds
+export function resourceRef<TKind extends ResourceKind>(value: string): ResourceRef<TKind> {
+  return value as ResourceRef<TKind>;
+  }
+
+// src/contracts/resolver.ts
+export interface ResourceResolver<TKind extends ResourceKind = ResourceKind> {
+  /** The kind this resolver claims. One resolver per kind. */
+  readonly kind: TKind;
+  /**
+  * Produces the resource. Rejecting is an ordinary outcome, not a crash: the
+  * store records the failure and the caller falls back.
+  *
+  * `signal` aborts when the last holder releases before the load finishes.
+export interface CatalogSource {
+  /** Identifies this source in diagnostics. */
+  readonly id: string;
+  /** Everything this source declares. */
+  list(signal: AbortSignal): Promise<readonly AssetDefinition[]>;
+  }
+
+// src/contracts/resource.ts
+export interface Vec3 {
+  /** Rightward axis. */
+  readonly x: number;
+  /** Upward axis. */
+  readonly y: number;
+  /** Depth axis. */
+  readonly z: number;
+  }
+export interface Aabb {
+  /** Corner with the smallest coordinate on every axis. */
+  readonly min: Vec3;
+  /** Corner with the largest coordinate on every axis. */
+  readonly max: Vec3;
+  }
+export interface MeshResource {
+  /** Flat `xyz` triples, three floats per vertex. */
+  readonly positions: Float32Array;
+  /** Optional flat `xyz` normal triples. */
+  readonly normals?: Float32Array;
+  /** Optional flat `uv` pairs, two floats per vertex. */
+  readonly uvs?: Float32Array;
+  /** Optional triangle indices. Positions are read sequentially when omitted. */
+export type ImageResource =
+
+// src/contracts/store.ts
+export interface ResourceHandle<TResource> {
+  /** Which resource this handle claims. */
+  readonly ref: ResourceRef;
+  /** Which revision of the definition this handle serves. */
+  readonly revision: number;
+  /**
+  * The resource if it is ready, `undefined` while loading or after a failure.
+  * Never throws -- a render loop must be able to call this every frame.
+export type ResourceStatus =
+export interface InventoryEntry {
+  /** The declared resource this row describes. */
+  readonly ref: ResourceRef;
+  /** Which resolver would load it. */
+  readonly kind: ResourceKind;
+  /** What the store currently knows about it. */
+  readonly status: ResourceStatus;
+  }
+export type StoreEvent =
+export type RetentionPolicy =
+export interface AssetStoreOptions {
+  /** Defaults to `{ kind: "immediate" }`. */
+  readonly retention?: RetentionPolicy;
+  }
+export interface AssetStore {
+  /** Declares a resource, replacing any prior declaration of the same ref. */
+  define(definition: AssetDefinition): void;
+  /** Declares everything a {@link CatalogSource} lists. */
+  load(source: CatalogSource, signal?: AbortSignal): Promise<number>;
+  /** Registers the resolver for one kind. Throws if that kind is already claimed. */
+  registerResolver<TKind extends ResourceKind>(resolver: ResourceResolver<TKind>): void;
+
+
+// src/index.ts
+export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
+export type { Aabb, ImageResource, MeshResource, Vec3 } from "./contracts/resource.js";
+export type { AssetDefinition, AssetProvenance } from "./contracts/definition.js";
+export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
+export type {
+  AssetStore,
+  AssetStoreOptions,
+  InventoryEntry,
+  ResourceHandle,
+  ResourceStatus,
+  RetentionPolicy,
+  StoreEvent,
+export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
+export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
+
+// src/resolvers/in-memory-image.ts
+export const IN_MEMORY_IMAGE_KIND = "in-memory-image";
+export interface InMemoryImageSource {
+  /** The already-decoded image. Ownership passes to the store. */
+  readonly source: ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+  /** Width in pixels, used to report the decoded memory cost. */
+  readonly width: number;
+  /** Height in pixels, used to report the decoded memory cost. */
+  readonly height: number;
+  /** Defaults to `"srgb"`, which is what colour textures are authored in. */
+export const inMemoryImageResolver: ResourceResolver<typeof IN_MEMORY_IMAGE_KIND> = {
+  kind: IN_MEMORY_IMAGE_KIND,
+  async load(definition: AssetDefinition<typeof IN_MEMORY_IMAGE_KIND>): Promise<never> {
+  const input = definition.source as InMemoryImageSource | undefined;
+  if (input?.source === undefined) {
+  throw new Error(`"${definition.ref}" declares no image source`);
+
+// src/resolvers/primitive-mesh.ts
+export const PRIMITIVE_MESH_KIND = "primitive-mesh";
+export type PrimitiveMeshSource =
+export const primitiveMeshResolver: ResourceResolver<typeof PRIMITIVE_MESH_KIND> = {
+  kind: PRIMITIVE_MESH_KIND,
+  async load(definition: AssetDefinition<typeof PRIMITIVE_MESH_KIND>): Promise<never> {
+  const source = definition.source as PrimitiveMeshSource | undefined;
+  if (source === undefined) throw new Error(`"${definition.ref}" declares no primitive source`);
+
+// src/store/create-store.ts
+export function createAssetStore(options: AssetStoreOptions = {}): AssetStore {
+  const retention = options.retention ?? IMMEDIATE;
+  const definitions = new Map<string, AssetDefinition>();
 ```
 
 ### `ia-graft` (`tools/ia-graft`)

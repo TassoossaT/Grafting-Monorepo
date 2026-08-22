@@ -619,6 +619,7 @@ mod tests {
                     edge_id: horizontal(column, row),
                     start_node_id: node_name(column, row),
                     end_node_id: node_name(column + 1, row),
+                    geometry: None,
                 });
             }
         }
@@ -628,6 +629,7 @@ mod tests {
                     edge_id: vertical(column, row),
                     start_node_id: node_name(column, row),
                     end_node_id: node_name(column, row + 1),
+                    geometry: None,
                 });
             }
         }
@@ -764,7 +766,12 @@ mod tests {
                 use_.edge_id
             );
         }
-        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
     }
 
     /// Two separate patches are not each other's holes, however close they
@@ -800,21 +807,25 @@ mod tests {
                         edge_id: "fa".into(),
                         start_node_id: "f0".into(),
                         end_node_id: "f1".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fb".into(),
                         start_node_id: "f1".into(),
                         end_node_id: "f2".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fc".into(),
                         start_node_id: "f2".into(),
                         end_node_id: "f3".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fd".into(),
                         start_node_id: "f3".into(),
                         end_node_id: "f0".into(),
+                        geometry: None,
                     },
                 ],
                 regions: vec![PatchRegionDto {
@@ -832,7 +843,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
     }
 
     /// The scope is the answer, not a speed-up. A stroke somewhere else on
@@ -996,6 +1012,7 @@ mod tests {
                     edge_id: format!("{prefix}e{index}"),
                     start_node_id: format!("{prefix}{index}"),
                     end_node_id: format!("{prefix}{}", (index + 1) % 4),
+                    geometry: None,
                 })
                 .collect::<Vec<_>>()
         };
@@ -1016,9 +1033,11 @@ mod tests {
 
         let loop_of = |prefix: &str, reversed: bool| {
             (0..4)
-                .map(|index| OrientedEdgeUse::forward(
-                    ContourEdgeId::new(format!("{prefix}e{index}")).unwrap(),
-                ))
+                .map(|index| {
+                    OrientedEdgeUse::forward(
+                        ContourEdgeId::new(format!("{prefix}e{index}")).unwrap(),
+                    )
+                })
                 .map(|use_| {
                     if reversed {
                         OrientedEdgeUse::reversed(use_.edge().clone())
@@ -1030,14 +1049,21 @@ mod tests {
         };
         let floor = RegionId::new("floor").unwrap();
         topology
-            .add_region(floor.clone(), vec![loop_of("o", false)], vec![loop_of("i", false)])
+            .add_region(
+                floor.clone(),
+                vec![loop_of("o", false)],
+                vec![loop_of("i", false)],
+            )
             .unwrap();
         surfaces
             .add_region_surface(&topology, floor, SurfaceType::new("floor"), true)
             .unwrap();
 
         assert!(
-            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty(),
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty(),
             "the declared hole is somebody's doorway, not a gap to seal"
         );
     }
@@ -1079,26 +1105,31 @@ mod tests {
                         edge_id: "xa".into(),
                         start_node_id: "n1_1".into(),
                         end_node_id: "extra".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "xb".into(),
                         start_node_id: "extra".into(),
                         end_node_id: "n1_0".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "ya".into(),
                         start_node_id: "y0".into(),
                         end_node_id: "y1".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "yb".into(),
                         start_node_id: "y1".into(),
                         end_node_id: "y2".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "yc".into(),
                         start_node_id: "y2".into(),
                         end_node_id: "y0".into(),
+                        geometry: None,
                     },
                 ],
                 regions: vec![

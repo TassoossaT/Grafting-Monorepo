@@ -13,7 +13,7 @@ use std::collections::HashSet;
 
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourTopology, Edge, EdgeId, Node, NodeId, OrientedEdgeUse,
-    RegionId, SurfaceKey, SurfaceRegistry, SurfaceType,
+    RegionId, SurfaceRegistry, SurfaceType,
 };
 use grafting_procgen_surface_transformations::RegionMergePlan;
 
@@ -31,8 +31,6 @@ pub struct RegionMergeOutcome {
     pub remainder_region: Option<RegionId>,
     /// The new region this merge created.
     pub new_region: RegionId,
-    /// Every existing surface this merge consumed.
-    pub consumed_surface_keys: Vec<SurfaceKey>,
     /// Every existing analytic region this merge consumed and removed.
     pub consumed_region_ids: Vec<RegionId>,
     /// Every node this merge deleted outright because nothing -- no
@@ -61,35 +59,26 @@ pub fn apply_region_merge(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
     topology: &mut ContourTopology,
-    known_surfaces: &mut HashSet<SurfaceKey>,
     known_regions: &mut HashSet<RegionId>,
     operation_id: &str,
     new_region_type: SurfaceType,
     height_for: impl Fn(&SessionGraph, [f32; 2]) -> f32,
     plan: RegionMergePlan,
 ) -> Result<RegionMergeOutcome, String> {
-    let has_remainder =
-        !plan.consumed_surface_keys().is_empty() || !plan.consumed_region_ids().is_empty();
+    let has_remainder = !plan.consumed_region_ids().is_empty();
     let new_region = RegionId::new(format!("region-merge-{operation_id}-new"))
         .map_err(|error| error.to_string())?;
     let remainder_region_and_type = if has_remainder {
         let remainder_region = RegionId::new(format!("region-merge-{operation_id}-remainder"))
             .map_err(|error| error.to_string())?;
-        // A leftover remainder keeps whichever consumed item's own type --
-        // a plain surface's or an existing region's alike, whichever this
-        // merge actually found something to consume from.
+        // A leftover remainder keeps the type of whatever this merge
+        // actually consumed.
         let remainder_type = plan
-            .consumed_surface_keys()
+            .consumed_region_ids()
             .first()
-            .and_then(|key| surfaces.surface(key))
-            .map(|surface| surface.surface_type().clone())
-            .or_else(|| {
-                plan.consumed_region_ids()
-                    .first()
-                    .and_then(|id| surfaces.region_surface(id))
-                    .map(|region_surface| region_surface.surface_type().clone())
-            })
-            .ok_or("region merge has no consumed surface or region")?;
+            .and_then(|id| surfaces.region_surface(id))
+            .map(|region_surface| region_surface.surface_type().clone())
+            .ok_or("region merge has no consumed region")?;
         Some((remainder_region, remainder_type))
     } else {
         None
@@ -136,7 +125,12 @@ pub fn apply_region_merge(
         let generic_id = EdgeId::new(format!("region-merge-{operation_id}-edge-{index}"))
             .map_err(|error| error.to_string())?;
         graph
-            .add_edge(Edge::new(generic_id.clone(), start.clone(), end.clone(), ()))
+            .add_edge(Edge::new(
+                generic_id.clone(),
+                start.clone(),
+                end.clone(),
+                (),
+            ))
             .map_err(|error| error.to_string())?;
         created_edge_ids.push(generic_id);
         let contour_id =
@@ -151,23 +145,24 @@ pub fn apply_region_merge(
         new_loop.push(OrientedEdgeUse::forward(contour_id));
     }
 
-    let remainder_region = if let Some((remainder_region, remainder_type)) = remainder_region_and_type {
-        let hole = new_loop
-            .iter()
-            .rev()
-            .map(|use_| OrientedEdgeUse::reversed(use_.edge().clone()))
-            .collect();
-        topology
-            .add_region(remainder_region.clone(), remainder_loops, vec![hole])
-            .map_err(|error| error.to_string())?;
-        surfaces
-            .add_region_surface(topology, remainder_region.clone(), remainder_type, true)
-            .map_err(|error| error.to_string())?;
-        known_regions.insert(remainder_region.clone());
-        Some(remainder_region)
-    } else {
-        None
-    };
+    let remainder_region =
+        if let Some((remainder_region, remainder_type)) = remainder_region_and_type {
+            let hole = new_loop
+                .iter()
+                .rev()
+                .map(|use_| OrientedEdgeUse::reversed(use_.edge().clone()))
+                .collect();
+            topology
+                .add_region(remainder_region.clone(), remainder_loops, vec![hole])
+                .map_err(|error| error.to_string())?;
+            surfaces
+                .add_region_surface(topology, remainder_region.clone(), remainder_type, true)
+                .map_err(|error| error.to_string())?;
+            known_regions.insert(remainder_region.clone());
+            Some(remainder_region)
+        } else {
+            None
+        };
     topology
         .add_region(new_region.clone(), vec![new_loop], Vec::new())
         .map_err(|error| error.to_string())?;
@@ -177,20 +172,9 @@ pub fn apply_region_merge(
     known_regions.insert(new_region.clone());
 
     // Every node a consumed surface or region touched -- resolved *before*
-    // that item is actually retired, since a plain `Surface`/`SurfaceRegion`
-    // only exists long enough to read its own cycle/loops back out of the
-    // removal call itself.
+    // that item is actually retired, since a `SurfaceRegion` only exists
+    // long enough to read its own loops back out of the removal call itself.
     let mut candidate_nodes = HashSet::<NodeId>::new();
-
-    let mut consumed_surface_keys = Vec::with_capacity(plan.consumed_surface_keys().len());
-    for key in plan.consumed_surface_keys() {
-        known_surfaces.remove(key);
-        let removed_surface = surfaces
-            .remove_surface(key)
-            .map_err(|error| error.to_string())?;
-        candidate_nodes.extend(removed_surface.cycle().iter().cloned());
-        consumed_surface_keys.push(key.clone());
-    }
 
     // A consumed region's own edges may still be shared with an adjacent
     // region (`ContourTopology::remove_region`'s own doc), so this only
@@ -230,8 +214,7 @@ pub fn apply_region_merge(
     let mut removed_node_ids = Vec::new();
     let mut removed_edge_ids = Vec::new();
     for node_id in candidate_nodes {
-        let still_used_by_surface = surfaces.surfaces_referencing(&node_id).next().is_some();
-        if still_used_by_surface || nodes_in_use.contains(&node_id) {
+        if nodes_in_use.contains(&node_id) {
             continue;
         }
         let snapshot = graph.snapshot();
@@ -252,7 +235,6 @@ pub fn apply_region_merge(
         created_edge_ids,
         remainder_region,
         new_region,
-        consumed_surface_keys,
         consumed_region_ids,
         removed_node_ids,
         removed_edge_ids,

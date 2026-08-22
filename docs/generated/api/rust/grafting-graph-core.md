@@ -11,11 +11,6 @@ bulges toward -- see [`SurfaceCurvature`]'s own doc for what this
 disambiguates and why it is the one piece of information a center point
 alone can never supply.
 
-### `pub enum grafting_graph_core::ConstructionError`
-
-Structural error from a domain-level construction operation -- either
-the graph mutation or the surface bookkeeping it coordinates can fail.
-
 ### `pub enum grafting_graph_core::ContourError`
 
 Structural error from contour edge or region registration.
@@ -44,10 +39,6 @@ Failure to construct a stable graph identifier.
 
 Invalid input or arithmetic failure from the grouped-grid heuristic.
 
-### `pub enum grafting_graph_core::PlanIdentityKind`
-
-The identity category whose states overlap in an invalid plan.
-
 ### `pub enum grafting_graph_core::RegionEditError`
 
 Structural failure of an atomic region edit.
@@ -55,15 +46,6 @@ Structural failure of an atomic region edit.
 ### `pub enum grafting_graph_core::SurfaceError`
 
 Structural error from surface registration or lookup.
-
-### `pub enum grafting_graph_core::TransformationPlanFailure`
-
-A planning failure. No variant applies a mutation or represents a partial
-result: callers must leave the confirmed graph and surface registry intact.
-
-### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self`
-
-### `pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self`
 
 ### `pub fn grafting_graph_core::ContourEdge::bounds(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> grafting_graph_core::ContourBounds`
 
@@ -462,36 +444,6 @@ Nodes sorted by stable node identity.
 
 Creates validated grouped-grid dimensions.
 
-### `pub fn grafting_graph_core::IdentityDelta<I>::clone(&self) -> grafting_graph_core::IdentityDelta<I>`
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::created(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
-
-Identities newly introduced by the plan.
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::eq(&self, other: &grafting_graph_core::IdentityDelta<I>) -> bool`
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::is_empty(&self) -> bool`
-
-Whether this category has no lifecycle changes.
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::new(kind: grafting_graph_core::PlanIdentityKind, created: alloc::collections::btree::set::BTreeSet<I>, preserved: alloc::collections::btree::set::BTreeSet<I>, replaced: alloc::collections::btree::set::BTreeSet<I>, removed: alloc::collections::btree::set::BTreeSet<I>) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
-
-Validates mutually exclusive identity lifecycle states.
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::preserved(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
-
-Identities retained because they still connect unaffected geometry.
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::removed(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
-
-Identities removed by the plan.
-
-### `pub fn grafting_graph_core::IdentityDelta<I>::replaced(&self) -> &alloc::collections::btree::set::BTreeSet<I>`
-
-Identities superseded inside the remodeled region.
-
 ### `pub fn grafting_graph_core::LayoutPosition::node_id(&self) -> &grafting_graph_core::NodeId`
 
 Stable node identity associated with this position.
@@ -519,26 +471,6 @@ Positions sorted by stable node identity.
 ### `pub fn grafting_graph_core::LayoutSnapshot::width(&self) -> u32`
 
 Width required to contain every position and the configured padding.
-
-### `pub fn grafting_graph_core::LocalInvalidationScope::changed_surfaces(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
-
-Surfaces directly changed by the plan.
-
-### `pub fn grafting_graph_core::LocalInvalidationScope::direct_dependencies(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
-
-Direct transformer dependencies, excluding unrelated clouds.
-
-### `pub fn grafting_graph_core::LocalInvalidationScope::is_empty(&self) -> bool`
-
-Whether the plan identifies no local refresh work.
-
-### `pub fn grafting_graph_core::LocalInvalidationScope::new(changed_surfaces: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, topology_repair_neighbors: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>, direct_dependencies: alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>) -> Self`
-
-Creates a local invalidation scope without scanning unrelated clouds.
-
-### `pub fn grafting_graph_core::LocalInvalidationScope::topology_repair_neighbors(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::SurfaceKey>`
-
-Adjacent surfaces inspected for topology repair or fragment cleanup.
 
 ### `pub fn grafting_graph_core::Node<N>::clone(&self) -> grafting_graph_core::Node<N>`
 
@@ -636,33 +568,6 @@ The stable analytic-region identity this surface decorates.
 
 This region surface's open, extensible type identifier.
 
-### `pub fn grafting_graph_core::Surface::curvature(&self) -> core::option::Option<grafting_graph_core::SurfaceCurvature>`
-
-This surface's own curvature, if any -- see [`SurfaceCurvature`]'s
-own doc.
-
-### `pub fn grafting_graph_core::Surface::cycle(&self) -> &[grafting_graph_core::NodeId]`
-
-Nodes forming this surface's cycle, in mesh-derivation order.
-
-### `pub fn grafting_graph_core::Surface::physical(&self) -> bool`
-
-Whether this surface currently blocks movement or acts as ground --
-nothing about vision or rendering, that belongs to the asset layer
-(`ADR-0022`).
-
-### `pub fn grafting_graph_core::Surface::surface_type(&self) -> &grafting_graph_core::SurfaceType`
-
-This surface's open, extensible type identifier.
-
-### `pub fn grafting_graph_core::SurfaceKey::from_cycle(cycle: &[grafting_graph_core::NodeId]) -> Self`
-
-Derives the order-independent identity of a node cycle.
-
-### `pub fn grafting_graph_core::SurfaceKey::nodes(&self) -> &alloc::collections::btree::set::BTreeSet<grafting_graph_core::NodeId>`
-
-Returns the node set this identity is derived from.
-
 ### `pub fn grafting_graph_core::SurfaceRegion::holes(&self) -> &[grafting_graph_core::ContourLoop]`
 
 This region's holes.
@@ -680,13 +585,6 @@ This region's outer boundary loops.
 Registers semantic attributes for an already-validated analytic
 contour region. [`ContourTopology`] owns edges, loops, and manifold
 validation; this registry owns the construction meaning of that region.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::add_surface<N, E>(&mut self, graph: &grafting_graph_core::Graph<N, E>, cycle: alloc::vec::Vec<grafting_graph_core::NodeId>, surface_type: grafting_graph_core::SurfaceType, physical: bool) -> core::result::Result<grafting_graph_core::SurfaceKey, grafting_graph_core::SurfaceError>`
-
-Registers a new surface from a node cycle, validated against
-`graph`. Errors if the cycle is empty, references a node the graph
-does not have, or duplicates an already-registered node-set
-identity.
 
 ### `pub fn grafting_graph_core::SurfaceRegistry::new() -> Self`
 
@@ -706,22 +604,6 @@ Removes semantic attributes for one analytic region. The caller owns
 the matching [`ContourTopology::remove_region`](crate::ContourTopology::remove_region)
 operation, so shared contour edges remain available to adjacent regions.
 
-### `pub fn grafting_graph_core::SurfaceRegistry::remove_surface(&mut self, key: &grafting_graph_core::SurfaceKey) -> core::result::Result<grafting_graph_core::Surface, grafting_graph_core::SurfaceError>`
-
-Removes a surface by its node-set identity, returning it.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::set_curvature(&mut self, key: &grafting_graph_core::SurfaceKey, curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
-
-Updates a surface's curvature (see [`SurfaceCurvature`]'s own doc).
-Touches no node and no cycle, for the same reason as
-[`set_type`](Self::set_type) -- a curved wall's own graph topology
-never encodes its curve, only this attribute does.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::set_physical(&mut self, key: &grafting_graph_core::SurfaceKey, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
-
-Updates a surface's `physical` flag. Touches no node and no cycle,
-for the same reason as [`set_type`](Self::set_type).
-
 ### `pub fn grafting_graph_core::SurfaceRegistry::set_region_physical(&mut self, region_id: &grafting_graph_core::RegionId, physical: bool) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
 
 Updates an analytic region surface's physical flag.
@@ -729,32 +611,6 @@ Updates an analytic region surface's physical flag.
 ### `pub fn grafting_graph_core::SurfaceRegistry::set_region_type(&mut self, region_id: &grafting_graph_core::RegionId, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
 
 Updates an analytic region surface's type.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::set_type(&mut self, key: &grafting_graph_core::SurfaceKey, surface_type: grafting_graph_core::SurfaceType) -> core::result::Result<(), grafting_graph_core::SurfaceError>`
-
-Updates a surface's type. Touches no node and no cycle -- per
-`ADR-0022`, `type` is not derived from node positions, so this never
-requires a mesh recompute.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::surface(&self, key: &grafting_graph_core::SurfaceKey) -> core::option::Option<&grafting_graph_core::Surface>`
-
-Looks up a surface by its node-set identity.
-
-### `pub fn grafting_graph_core::SurfaceRegistry::surface_keys(&self) -> alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
-
-Registered surface identities in deterministic identity order.
-
-The registry's internal storage is intentionally unordered. Callers
-that need to examine a local domain snapshot therefore start from this
-ordered list and resolve each record through [`surface`](Self::surface).
-
-### `pub fn grafting_graph_core::SurfaceRegistry::surfaces_referencing(&self, node: &grafting_graph_core::NodeId) -> impl core::iter::traits::iterator::Iterator<Item = &grafting_graph_core::SurfaceKey>`
-
-Every surface referencing `node`, in deterministic identity order --
-the instant lookup `ADR-0022`'s `Move` operation needs to know which
-surfaces to recompute, without a full scan.
-
-### `pub fn grafting_graph_core::SurfaceReplacementPlan<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::SurfaceType::as_ref(&self) -> &str`
 
@@ -766,26 +622,6 @@ Returns the identifier text.
 
 Creates a surface-type identifier from caller-chosen text.
 
-### `pub fn grafting_graph_core::TransformationPlan::edge_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>`
-
-Edge lifecycle changes.
-
-### `pub fn grafting_graph_core::TransformationPlan::invalidation(&self) -> &grafting_graph_core::LocalInvalidationScope`
-
-Local derived-state refresh scope.
-
-### `pub fn grafting_graph_core::TransformationPlan::new(node_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>, edge_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::EdgeId>, surface_ids: grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>, invalidation: grafting_graph_core::LocalInvalidationScope) -> core::result::Result<Self, grafting_graph_core::TransformationPlanFailure>`
-
-Creates a plan only when it has structural changes and a local refresh scope.
-
-### `pub fn grafting_graph_core::TransformationPlan::node_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::NodeId>`
-
-Node lifecycle changes.
-
-### `pub fn grafting_graph_core::TransformationPlan::surface_ids(&self) -> &grafting_graph_core::IdentityDelta<grafting_graph_core::SurfaceKey>`
-
-Surface lifecycle changes.
-
 ### `pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, hole: grafting_graph_core::ContourLoop) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `AddHole`: registers one more inner loop on an existing region -- what a
@@ -793,17 +629,6 @@ door or a window is. A hole is not a marker: it is a real loop of
 registered [`ContourEdge`]s with real graph nodes, validated by the same
 closure and manifold rules as any outer loop, and consumed directly by
 triangulation.
-
-### `pub fn grafting_graph_core::apply_surface_replacement_plan<N: core::clone::Clone, E: core::clone::Clone>(graph: &mut grafting_graph_core::Graph<N, E>, surfaces: &mut grafting_graph_core::SurfaceRegistry, plan: grafting_graph_core::SurfaceReplacementPlan<N, E>) -> core::result::Result<grafting_graph_core::TransformationPlan, grafting_graph_core::ConstructionError>`
-
-Applies a complete local surface replacement atomically.
-
-The generic graph capability owns transactionality; domain transformers own
-intersection, formation, and the cycles supplied in the batch. The current
-graph and registry are cloned, all mutations are attempted on the clone,
-and only a fully valid result replaces the confirmed state. This requires
-cloneable caller payloads but avoids exposing the graph backend or making a
-bridge reimplement partial-rollback logic.
 
 ### `pub fn grafting_graph_core::cut_region(topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, cut_path: &[grafting_graph_core::OrientedEdgeUse], first: grafting_graph_core::RegionId, second: grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -881,21 +706,21 @@ construction, since both regions reference the very same edges.
 region whose boundary touches it. Topology is untouched, so this can only
 fail when the node does not exist.
 
-### `pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>`
+### `pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>`
 
 The one shared end-of-transaction cleanup every removing primitive runs:
 drop every contour edge no region uses anymore, then delete every
-candidate node nothing references -- neither a surviving region's
-boundary nor a legacy [`crate::Surface`]. Candidates are scoped to the
-nodes the caller's own edit could have orphaned, never the whole graph,
-so a node staged for an unrelated in-flight operation is never collected.
+candidate node no surviving region's boundary still touches. Candidates
+are scoped to the nodes the caller's own edit could have orphaned, never
+the whole graph, so a node staged for an unrelated in-flight operation is
+never collected.
 
-### `pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+### `pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `RemoveHole`: drops one of a region's inner loops by index, then runs the
 shared orphan cleanup over the nodes that loop used.
 
-### `pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &grafting_graph_core::SurfaceRegistry, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+### `pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `RemoveVertex`: welds a node's two neighboring boundary edges into one,
 the exact inverse of [`insert_vertex`]. Requires exactly two incident
@@ -914,10 +739,10 @@ an arc's own center/sweep -- without touching either endpoint.
 
 Builds a single-outer-loop, hole-free [`SurfaceRegion`] out of straight
 [`ContourGeometry::Line`] edges from an existing node cycle -- the
-migration bridge for a straight surface that used to be described only
-as [`Surface::cycle`](crate::Surface::cycle). Produces edge ids of the
-form `"{region_id}-{index}"`; callers that need stable, caller-chosen
-edge ids should build the loop directly instead.
+plainest way to register a face. Produces edge ids of the form
+`"{region_id}-{index}"`, which nothing else can ever name -- a caller
+that needs a face to *share* its boundary with a neighbour must name the
+edges itself and build the loop directly instead.
 
 Registers the produced edges and region into `topology`, validated
 against `graph` exactly as any other region would be.
@@ -929,14 +754,6 @@ Bulges toward the chord's left side, facing from the arc's own start to its end.
 ### `pub grafting_graph_core::ArcBulge::Right`
 
 Bulges toward the chord's right side, facing from the arc's own start to its end.
-
-### `pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)`
-
-The underlying graph query or mutation failed.
-
-### `pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)`
-
-The underlying surface registry mutation failed.
 
 ### `pub grafting_graph_core::ContourBounds::max: grafting_graph_core::ContourPoint`
 
@@ -1211,18 +1028,6 @@ A grouping edge identity was not present in the graph.
 
 Missing grouping edge identity.
 
-### `pub grafting_graph_core::PlanIdentityKind::Edge`
-
-Stable graph-edge identities.
-
-### `pub grafting_graph_core::PlanIdentityKind::Node`
-
-Stable graph-node identities.
-
-### `pub grafting_graph_core::PlanIdentityKind::Surface`
-
-Surface identities derived from their node sets.
-
 ### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
 
 8 corner vertex indices per cell [V0..V7].
@@ -1372,7 +1177,7 @@ describe -- see this struct's own doc.
 
 ### `pub grafting_graph_core::SurfaceCurvature::center: [f32; 2]`
 
-The arc's own center, in the same XZ plane as the surface's corners.
+The arc's own center, in the same XZ plane as the face's corners.
 
 ### `pub grafting_graph_core::SurfaceError::DuplicateRegionSurface`
 
@@ -1381,26 +1186,6 @@ Two semantic surface records cannot decorate the same analytic region.
 ### `pub grafting_graph_core::SurfaceError::DuplicateRegionSurface::id: grafting_graph_core::RegionId`
 
 Stable region identity that already has semantic attributes.
-
-### `pub grafting_graph_core::SurfaceError::DuplicateSurface`
-
-Two surfaces cannot share the exact same node-set identity.
-
-### `pub grafting_graph_core::SurfaceError::DuplicateSurface::key: grafting_graph_core::SurfaceKey`
-
-Identity that already had a registered surface.
-
-### `pub grafting_graph_core::SurfaceError::EmptyCycle`
-
-A cycle must reference at least one node.
-
-### `pub grafting_graph_core::SurfaceError::UnknownNode`
-
-A cycle referenced a node that is not present in the graph.
-
-### `pub grafting_graph_core::SurfaceError::UnknownNode::id: grafting_graph_core::NodeId`
-
-Identity that could not be resolved.
 
 ### `pub grafting_graph_core::SurfaceError::UnknownRegion`
 
@@ -1420,38 +1205,6 @@ registered in this registry.
 
 Stable region identity that could not be resolved.
 
-### `pub grafting_graph_core::SurfaceError::UnknownSurface`
-
-A query or update referenced a surface that is not registered.
-
-### `pub grafting_graph_core::SurfaceError::UnknownSurface::key: grafting_graph_core::SurfaceKey`
-
-Identity that could not be resolved.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::added_edges: alloc::vec::Vec<grafting_graph_core::Edge<E>>`
-
-New graph edges required by replacement surface cycles.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::added_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
-
-New graph nodes required by replacement surface cycles.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::added_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceSpec>`
-
-Replacement surfaces to register after the graph records exist.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::removed_surfaces: alloc::vec::Vec<grafting_graph_core::SurfaceKey>`
-
-Existing surfaces to remove before registering replacements.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::transformation: grafting_graph_core::TransformationPlan`
-
-Phase-A lifecycle and invalidation contract for this replacement.
-
-### `pub grafting_graph_core::SurfaceReplacementPlan::updated_nodes: alloc::vec::Vec<grafting_graph_core::Node<N>>`
-
-Existing graph nodes whose payload changes while identity is preserved.
-
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
@@ -1468,22 +1221,6 @@ Whether the new surface blocks movement or acts as ground.
 ### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
 
 The new surface's open, extensible type identifier.
-
-### `pub grafting_graph_core::TransformationPlanFailure::EmptyInvalidationScope`
-
-A non-empty plan must describe the local surface scope it invalidates.
-
-### `pub grafting_graph_core::TransformationPlanFailure::NoChanges`
-
-A no-op must not become a committed operation.
-
-### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates`
-
-One identity appeared in more than one lifecycle state.
-
-### `pub grafting_graph_core::TransformationPlanFailure::OverlappingIdentityStates::kind: grafting_graph_core::PlanIdentityKind`
-
-The category containing the duplicate lifecycle entry.
 
 ### `pub mod grafting_graph_core`
 
@@ -1502,9 +1239,8 @@ An edge's 2D axis-aligned bounding box, in the XZ plane.
 
 An oriented curve between two graph nodes, with explicit geometry.
 
-Position data is resolved by the caller (mirroring [`Surface`](crate::Surface)'s
-own separation between topology and geometry) -- every method that needs
-an endpoint's actual location takes it as a parameter rather than storing
+Position data is resolved by the caller -- every method that needs an
+endpoint's actual location takes it as a parameter rather than storing
 it, since this crate does not interpret the opaque node payload `N`.
 
 ### `pub struct grafting_graph_core::ContourEdgeId(_)`
@@ -1551,10 +1287,6 @@ Immutable, deterministically ordered graph data safe to pass to adapters.
 
 Caller-controlled dimensions for the deterministic grouped-grid heuristic.
 
-### `pub struct grafting_graph_core::IdentityDelta<I>`
-
-Deterministic lifecycle classification for one kind of stable identity.
-
 ### `pub struct grafting_graph_core::LayoutPosition`
 
 Position assigned to one stable node by a graph layout snapshot.
@@ -1562,10 +1294,6 @@ Position assigned to one stable node by a graph layout snapshot.
 ### `pub struct grafting_graph_core::LayoutSnapshot`
 
 Immutable deterministic output from a grouped-grid layout operation.
-
-### `pub struct grafting_graph_core::LocalInvalidationScope`
-
-The surface scope a successful local transformation requires consumers to refresh.
 
 ### `pub struct grafting_graph_core::Node<N>`
 
@@ -1593,9 +1321,11 @@ outcomes without re-normalizing.
 
 ### `pub struct grafting_graph_core::RegionId(_)`
 
-Stable identity of a [`SurfaceRegion`], independent of its node set --
-the replacement for [`SurfaceKey`](crate::SurfaceKey)'s node-set identity,
-which cannot distinguish two regions sharing nodes but differing edges.
+Stable identity of a [`SurfaceRegion`], independent of its node set.
+
+Identity deliberately does not come from the nodes a boundary touches:
+two regions can share every node and still be different faces, because
+what separates them is which edges they run along.
 
 ### `pub struct grafting_graph_core::RegionRemoval`
 
@@ -1606,51 +1336,29 @@ hole is now bounded by.
 
 The semantic attributes assigned to an analytic [`SurfaceRegion`](crate::SurfaceRegion).
 
-Unlike [`Surface`], this record deliberately has no node-cycle identity: its
-stable identity is the [`RegionId`] registered by [`ContourTopology`]. This
-migration bridge lets legacy polygon surfaces and analytic contour regions
-coexist while consumers move to region-authoring APIs.
-
-### `pub struct grafting_graph_core::Surface`
-
-The semantic record `ADR-0022` defines: `{ type, physical, mesh }` minus
-`mesh`, which is derived on demand by the caller from [`cycle`](Self::cycle)
-and a [`Graph`]'s current node positions, not stored here.
+This record deliberately has no node-cycle identity: its stable identity
+is the [`RegionId`] registered by [`ContourTopology`]. A face is what its
+boundary says it is, so nothing here re-derives identity from the set of
+nodes that boundary happens to touch.
 
 ### `pub struct grafting_graph_core::SurfaceCurvature`
 
-A surface's optional curvature: this surface's own boundary is not a
-flat polygon but has (at least) one true circular arc in it, fully
-determined by an edge's own two endpoints plus `center` -- radius is
-`center`'s distance to either endpoint (validated equal by the caller
-deriving this), and `bulge` is the one remaining bit of information no
-arrangement of points can supply on its own: which of the two arcs a
-shared center and two endpoints could describe (the "short way" or the
-"long way" around) is a discrete choice, not a continuous coordinate.
-Together, `(start, end, center, bulge)` is the minimal complete
-description of an arbitrary circular-arc segment.
+The curvature a *generator* reports for one face it produced: the face's
+boundary is not a flat polygon but has one true circular arc in it,
+fully determined by the edge's own two endpoints plus `center` -- radius
+is `center`'s distance to either endpoint, and `bulge` is the one
+remaining bit no arrangement of points can supply: which of the two arcs
+a shared center and two endpoints could describe (the "short way" or the
+"long way" round) is a discrete choice, not a continuous coordinate.
+Together, `(start, end, center, bulge)` completely describes an
+arbitrary circular-arc segment.
 
-Deliberately **not** used to mint extra graph nodes -- a curved wall's
-own cycle stays exactly its flat corners (4, for a simple wall panel),
-the same as a straight one. `curvature` is metadata a mesh generator
-(`grafting-procgen-surface-mesh`) reads at render/re-triangulation time
-to tessellate the true curve, not something baked into the graph's own
-topology -- see `grafting_procgen_structure_generation::extrusion`'s own
-doc for why minting one graph node per tessellated facet was the wrong
-call (every downstream consumer that treats "one wall run" as "one
-`Surface`" -- redundant-duplicate detection, a room's own wall-follower,
-T-junction splitting -- got extra internal seams to mis-treat as
-boundaries).
-
-### `pub struct grafting_graph_core::SurfaceKey(_)`
-
-A surface's identity: the unordered set of nodes forming its cycle.
-
-`ADR-0022`: "referencing a surface by its node-set identity, never
-restating its geometry." Two surfaces cannot coexist on the exact same
-node set -- a real, named limitation of this v1, not an oversight; a
-second surface on the same footprint (e.g. a floor and a ceiling
-sharing one boundary) needs at least one differing node today.
+This travels on a [`SurfaceSpec`](crate::SurfaceSpec) only, and never
+reaches graph state: whatever applies the spec turns it into a
+[`ContourGeometry::CircularArc`](crate::ContourGeometry) on the boundary
+edge that is actually curved, which is where curvature belongs. It
+mints no extra nodes either -- a curved panel's corners are its four
+flat corners, the same as a straight one.
 
 ### `pub struct grafting_graph_core::SurfaceRegion`
 
@@ -1662,26 +1370,13 @@ its node set -- see this module's own doc.
 
 ### `pub struct grafting_graph_core::SurfaceRegistry`
 
-Tracks every construction [`Surface`] and the reverse node -> surfaces
-index `ADR-0022`'s reactive-redraw behavior needs: an instant lookup of
-which surfaces reference a given node, without a full scan.
-
-### `pub struct grafting_graph_core::SurfaceReplacementPlan<N, E>`
-
-Generic replacement batch produced by a domain transformer.
-
-The batch contains only graph records and semantic surface records. It has
-no product type branches or geometry interpretation: a caller computes the
-local cycles and supplies the already-validated [`TransformationPlan`].
-[`apply_surface_replacement_plan`] validates the entire replacement on a
-private graph/registry copy before publishing it, so callers never observe
-a partial surface transformation.
+Tracks the construction meaning of every analytic contour region:
+`{ type, physical }` per [`RegionId`], with the geometry itself owned by
+[`ContourTopology`] and the mesh derived on demand.
 
 ### `pub struct grafting_graph_core::SurfaceSpec`
 
-A surface's non-identity attributes, for a transformer registering a new
-surface as one step of a larger [`SurfaceReplacementPlan`] rather than
-standalone via [`SurfaceRegistry::add_surface`].
+One face a generator produced, described rather than registered.
 
 ### `pub struct grafting_graph_core::SurfaceType(_)`
 
@@ -1691,10 +1386,6 @@ Deliberately not a fixed/closed enum -- the same mistake already
 corrected for `map_state.fbs`'s `BoundaryKind` (`ADR-0022`,
 `DEC-052`/`ADR-0014`'s "no product concept hardcoded into
 infrastructure").
-
-### `pub struct grafting_graph_core::TransformationPlan`
-
-A validated, data-only batch describing one future atomic transformation.
 
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 

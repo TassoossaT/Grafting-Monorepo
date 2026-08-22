@@ -30,11 +30,6 @@ Registers a region from already-registered edges, so a new face can
 *share* a boundary instead of laying a coincident copy of it beside
 the neighbour's. See `region_editing::apply_add_region`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Registers a brand-new surface, as an analytic region. See
-`editing::add_surface`.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::all_region_topologies_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Every registered region's boundary -- the edit-mode bootstrap call.
@@ -60,7 +55,7 @@ generator consults so it only builds over open ground. See
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::cloud_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-The connected component of same-`type` surfaces reachable from
+The connected component of same-`type` regions reachable from
 `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
 `geometry::connected_component`.
 
