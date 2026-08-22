@@ -28,10 +28,17 @@
 //! that `earcut` triangulates like any other -- openings included, which a
 //! strip built facet by facet could never punch.
 //!
-//! The 3D positions never move: the unrolled coordinates exist only so
-//! `earcut` has somewhere flat to work, and `earcut` introduces no vertices
-//! of its own. Only the normals are derived from the frame, per vertex, so
-//! a curve shades as a curve.
+//! The 3D positions never move: the unrolled coordinates are where `earcut`
+//! works, and `earcut` introduces no vertices of its own. The normals are
+//! derived from the frame, per vertex, so a curve shades as a curve.
+//!
+//! Those unrolled coordinates also leave the crate, as [`TriangulatedMesh`]'s
+//! `uvs`. They are metres of the surface's own extent, not a normalised
+//! `0..1` box, which is what makes them usable for more than one thing:
+//! anything laid out over a surface -- a tiling texture, a course of
+//! replicated units -- needs the same origin, the same two directions, and
+//! the same extent in metres, so emitting the frame once means both land on
+//! the same grid.
 
 use earcut::{Earcut, utils3d};
 
@@ -62,6 +69,22 @@ const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
 pub struct TriangulatedMesh {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
+    /// Where each vertex sits on the surface's own flat extent, **in world
+    /// units** -- not normalised to `0..1`.
+    ///
+    /// Metres rather than a unit box is the whole point. A normalised box
+    /// stretches: the same texture would cover a 2 m panel and a 10 m one
+    /// identically, so a caller would have to undo the normalisation with the
+    /// panel's size to get a uniform result, and two panels meeting at a
+    /// corner would disagree about where the pattern is. In metres, scale is
+    /// uniform everywhere for free, and a caller divides by whatever its own
+    /// tile size happens to be.
+    ///
+    /// An upright face measures along its rail and up; a flat one measures in
+    /// world `x` and `z`. Both anchor on something the graph already fixes, so
+    /// re-deriving a mesh yields the same coordinates and neighbours that share
+    /// an anchor agree across the edge between them.
+    pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<u32>,
 }
 
@@ -211,9 +234,23 @@ fn triangulate_contour_loops<'a>(
     let mut earcut = Earcut::new();
     let mut indices = Vec::new();
     earcut.earcut(projected, &hole_indices, &mut indices);
+    // World `xz` rather than the best-fit basis just used for triangulation:
+    // that basis is whatever the ring's own fit produced, so it can rotate or
+    // flip between two rebuilds of the same face and would slide the pattern
+    // sitting on it. World `xz` is fixed once for the entire map, which makes
+    // every horizontal face agree with every other one without any of them
+    // knowing about the others.
+    //
+    // A face tilted off horizontal foreshortens under this, since `xz` is its
+    // shadow rather than its surface. Nothing produces one today -- upright
+    // faces unroll instead, and everything left is XZ-planar -- and a real
+    // tilted case wants the plane's own basis anchored to something stable,
+    // which is a frame that does not exist yet rather than a fix to this one.
+    let uvs = positions.iter().map(|point| [point[0], point[2]]).collect();
     (!indices.is_empty()).then(|| TriangulatedMesh {
         normals: vec![face_normal(outer).unwrap_or([0.0, 1.0, 0.0]); positions.len()],
         positions,
+        uvs,
         indices,
     })
 }
@@ -444,13 +481,18 @@ fn upright_face_mesh(
         positions.extend(hole.iter().copied());
     }
 
+    // The flat place `earcut` works, and the face's texture coordinates, are
+    // the same numbers: distance along the rail and height, both in metres.
+    // So this is kept rather than consumed -- deriving it twice, or deriving
+    // it again downstream from a frame that would have to be re-established
+    // there, would be two ways to compute one thing.
     let unrolled: Vec<[f32; 2]> = positions
         .iter()
         .map(|point| rail.frame.unroll(*point))
         .collect();
     let mut earcut = Earcut::new();
     let mut indices: Vec<u32> = Vec::new();
-    earcut.earcut(unrolled, &hole_indices, &mut indices);
+    earcut.earcut(unrolled.iter().copied(), &hole_indices, &mut indices);
     if indices.is_empty() {
         return None;
     }
@@ -475,6 +517,7 @@ fn upright_face_mesh(
     Some(TriangulatedMesh {
         positions,
         normals,
+        uvs: unrolled,
         indices,
     })
 }
@@ -1025,6 +1068,248 @@ mod tests {
                     || centroid[2] <= -0.5
                     || centroid[2] >= 0.5,
                 "triangle centroid entered the analytic hole: {centroid:?}"
+            );
+        }
+    }
+
+    /// Every mesh carries one `uv` per vertex, whatever path built it. A
+    /// caller reading them positionally would otherwise index past the end on
+    /// some surfaces and not others.
+    fn assert_one_uv_per_vertex(mesh: &TriangulatedMesh) {
+        assert_eq!(
+            mesh.uvs.len(),
+            mesh.positions.len(),
+            "uvs and positions must stay index-aligned"
+        );
+    }
+
+    /// The panel is 4 m long and 3 m tall, so its coordinates run 0..4 and
+    /// 0..3 -- not 0..1. Anything laid out over the surface reads its own size
+    /// straight off them, which is what lets one texture keep the same
+    /// real-world scale on a panel of any length.
+    #[test]
+    fn an_upright_panel_measures_its_uvs_in_metres() {
+        let graph = graph_with_positions(&[
+            ("bottom-start", [0.0, 0.0, 0.0]),
+            ("bottom-end", [4.0, 0.0, 0.0]),
+            ("top-end", [4.0, 3.0, 0.0]),
+            ("top-start", [0.0, 3.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let loop_ = upright_panel(&mut topology, &graph, "flat", None);
+        let region_id = RegionId::new("flat").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_one_uv_per_vertex(&mesh);
+        // The rail runs along +x from the origin, so here the unrolled
+        // coordinate is the world coordinate -- the simplest case there is,
+        // and the one that pins the units down.
+        for (point, uv) in mesh.positions.iter().zip(mesh.uvs.iter()) {
+            assert!(
+                (uv[0] - point[0]).abs() < 1e-4 && (uv[1] - point[1]).abs() < 1e-4,
+                "expected {point:?} to measure as itself, got {uv:?}"
+            );
+        }
+        let widest = mesh.uvs.iter().fold(0.0_f32, |max, uv| max.max(uv[0]));
+        let tallest = mesh.uvs.iter().fold(0.0_f32, |max, uv| max.max(uv[1]));
+        assert!((widest - 4.0).abs() < 1e-4, "4 m panel measured {widest}");
+        assert!((tallest - 3.0).abs() < 1e-4, "3 m panel measured {tallest}");
+    }
+
+    /// A half-circle of radius 2 is 2*pi ~ 6.28 m of wall, even though its
+    /// ends are only 4 m apart. Measuring the chord would squash whatever is
+    /// laid over the curve, by more the tighter it bends -- the difference
+    /// between a curved wall's pattern matching its neighbour's and visibly
+    /// shrinking into the bend.
+    #[test]
+    fn a_curved_panel_measures_along_the_arc_not_the_chord() {
+        let graph = curved_panel_graph();
+        let mut topology = ContourTopology::new();
+        let loop_ = upright_panel(&mut topology, &graph, "panel", Some([0.0, 0.0]));
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_one_uv_per_vertex(&mesh);
+        let arc_length = 2.0 * std::f32::consts::PI;
+        let furthest = mesh.uvs.iter().fold(0.0_f32, |max, uv| max.max(uv[0]));
+        assert!(
+            (furthest - arc_length).abs() < 1e-2,
+            "expected {arc_length} m of arc, measured {furthest}"
+        );
+        // Stated separately from the tolerance above so a change that quietly
+        // reverts to the chord fails on the claim rather than on a margin.
+        assert!(furthest > 5.0, "measured the 4 m chord, not the arc");
+        // Height is height either way: only the horizontal axis unrolls.
+        for (point, uv) in mesh.positions.iter().zip(mesh.uvs.iter()) {
+            assert!((uv[1] - point[1]).abs() < 1e-4, "height moved: {uv:?}");
+        }
+    }
+
+    /// Welding another wall onto this one's side subdivides its base, which
+    /// changes the ring without changing the wall. The coordinates must not
+    /// move: if they did, every surface would slide its pattern the moment a
+    /// neighbour touched it, and editing one wall would visibly disturb the
+    /// wall beside it.
+    #[test]
+    fn welding_a_node_into_the_base_leaves_the_uvs_where_they_were() {
+        let plain = {
+            let graph = curved_panel_graph();
+            let mut topology = ContourTopology::new();
+            let loop_ = upright_panel(&mut topology, &graph, "panel", Some([0.0, 0.0]));
+            let region_id = RegionId::new("panel").unwrap();
+            topology
+                .add_region(region_id.clone(), vec![loop_], Vec::new())
+                .unwrap();
+            mesh_of(&topology, &region_id, &positions_of(&graph))
+        };
+
+        let welded = {
+            let graph = graph_with_positions(&[
+                ("bottom-start", [2.0, 0.0, 0.0]),
+                ("mid", [0.0, 0.0, 2.0]),
+                ("bottom-end", [-2.0, 0.0, 0.0]),
+                ("top-end", [-2.0, 3.0, 0.0]),
+                ("top-start", [2.0, 3.0, 0.0]),
+            ]);
+            let mut topology = ContourTopology::new();
+            let arc = |clockwise: bool| ContourGeometry::CircularArc {
+                center: [0.0, 0.0],
+                clockwise,
+            };
+            let spec: [(&str, &str, &str, ContourGeometry); 5] = [
+                ("base-a", "bottom-start", "mid", arc(false)),
+                ("base-b", "mid", "bottom-end", arc(false)),
+                ("right", "bottom-end", "top-end", ContourGeometry::Line),
+                ("top", "top-end", "top-start", arc(true)),
+                ("left", "top-start", "bottom-start", ContourGeometry::Line),
+            ];
+            let loop_: ContourLoop = spec
+                .iter()
+                .map(|(name, start, end, geometry)| {
+                    let edge_id = ContourEdgeId::new(*name).unwrap();
+                    topology
+                        .add_edge(
+                            &graph,
+                            ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry),
+                        )
+                        .unwrap();
+                    OrientedEdgeUse::forward(edge_id)
+                })
+                .collect();
+            let region_id = RegionId::new("welded").unwrap();
+            topology
+                .add_region(region_id.clone(), vec![loop_], Vec::new())
+                .unwrap();
+            mesh_of(&topology, &region_id, &positions_of(&graph))
+        };
+
+        // Tessellation puts different vertex counts on the two rings, so the
+        // comparison is by where a vertex sits in the world, not by index.
+        let mut compared = 0;
+        for (point, uv) in welded.positions.iter().zip(welded.uvs.iter()) {
+            let Some(before) = plain
+                .positions
+                .iter()
+                .zip(plain.uvs.iter())
+                .find(|(other, _)| {
+                    (other[0] - point[0]).abs() < 1e-3
+                        && (other[1] - point[1]).abs() < 1e-3
+                        && (other[2] - point[2]).abs() < 1e-3
+                })
+                .map(|(_, other_uv)| *other_uv)
+            else {
+                continue;
+            };
+            assert!(
+                (before[0] - uv[0]).abs() < 1e-3 && (before[1] - uv[1]).abs() < 1e-3,
+                "welding moved {point:?} from {before:?} to {uv:?}"
+            );
+            compared += 1;
+        }
+        assert!(
+            compared >= 4,
+            "expected the shared corners to be compared, matched only {compared}"
+        );
+    }
+
+    /// An opening is measured in the same coordinates as the wall it sits in,
+    /// because it is a hole in the same unrolled polygon. That is what makes a
+    /// pattern run continuously past a door instead of restarting on the far
+    /// side of it.
+    #[test]
+    fn an_opening_is_measured_in_the_walls_own_coordinates() {
+        let graph = graph_with_positions(&[
+            ("o0", [0.0, 0.0, 0.0]),
+            ("o1", [4.0, 0.0, 0.0]),
+            ("o2", [4.0, 3.0, 0.0]),
+            ("o3", [0.0, 3.0, 0.0]),
+            ("h0", [1.0, 1.0, 0.0]),
+            ("h1", [1.0, 2.0, 0.0]),
+            ("h2", [3.0, 2.0, 0.0]),
+            ("h3", [3.0, 1.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let outer = line_loop(&mut topology, &graph, "outer", &["o0", "o1", "o2", "o3"]);
+        let hole = line_loop(&mut topology, &graph, "hole", &["h0", "h1", "h2", "h3"]);
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![outer], vec![hole])
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_one_uv_per_vertex(&mesh);
+        let rim: Vec<[f32; 2]> = mesh
+            .positions
+            .iter()
+            .zip(mesh.uvs.iter())
+            .filter(|(point, _)| {
+                (0.9..=3.1).contains(&point[0]) && (0.9..=2.1).contains(&point[1])
+            })
+            .map(|(_, uv)| *uv)
+            .collect();
+        assert_eq!(rim.len(), 4, "the four rim corners");
+        for uv in &rim {
+            assert!(
+                (1.0..=3.0).contains(&uv[0]) && (1.0..=2.0).contains(&uv[1]),
+                "the opening left the wall's own measurements: {uv:?}"
+            );
+        }
+    }
+
+    /// A horizontal face measures in world `x` and `z`. Two floors laid side
+    /// by side therefore agree about where a pattern sits without either one
+    /// knowing the other exists.
+    #[test]
+    fn a_flat_region_measures_its_uvs_in_world_xz() {
+        let graph = graph_with_positions(&[
+            ("o0", [-2.0, 0.0, -2.0]),
+            ("o1", [2.0, 0.0, -2.0]),
+            ("o2", [2.0, 0.0, 2.0]),
+            ("o3", [-2.0, 0.0, 2.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let outer = line_loop(&mut topology, &graph, "outer", &["o0", "o1", "o2", "o3"]);
+        let region_id = RegionId::new("floor").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![outer], Vec::new())
+            .unwrap();
+
+        let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+        assert_one_uv_per_vertex(&mesh);
+        for (point, uv) in mesh.positions.iter().zip(mesh.uvs.iter()) {
+            assert!(
+                (uv[0] - point[0]).abs() < 1e-4 && (uv[1] - point[2]).abs() < 1e-4,
+                "expected world xz for {point:?}, got {uv:?}"
             );
         }
     }

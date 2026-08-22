@@ -40,6 +40,10 @@ pub struct SurfaceMeshDto {
     pub physical: bool,
     pub positions: Vec<f32>,
     pub normals: Vec<f32>,
+    /// Flat `uv` pairs, in world units -- see
+    /// `grafting_procgen_surface_mesh::TriangulatedMesh::uvs` for why these
+    /// are metres of the surface's own extent rather than a `0..1` box.
+    pub uvs: Vec<f32>,
     pub indices: Vec<u32>,
 }
 
@@ -81,6 +85,7 @@ pub fn all_surface_meshes(
             physical: surface.physical(),
             positions: mesh.positions.into_iter().flatten().collect(),
             normals: mesh.normals.into_iter().flatten().collect(),
+            uvs: mesh.uvs.into_iter().flatten().collect(),
             indices: mesh.indices,
         }));
     }
@@ -126,6 +131,7 @@ pub fn surface_mesh(
                 physical: surface.physical(),
                 positions: mesh.positions.into_iter().flatten().collect(),
                 normals: mesh.normals.into_iter().flatten().collect(),
+                uvs: mesh.uvs.into_iter().flatten().collect(),
                 indices: mesh.indices,
             })
             .collect());
