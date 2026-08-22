@@ -16,7 +16,7 @@ const readJson = async (relPath) => JSON.parse(await readFile(resolve(root, relP
 async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git"]) {
   if (!existsSync(directory)) return [];
   const results = [];
-  const entries = await readdir(directory, { withFileTypes: true });
+  const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of entries) {
     if (excludeDirs.includes(entry.name)) continue;
@@ -27,7 +27,7 @@ async function findFiles(directory, extensions, excludeDirs = ["node_modules", "
       results.push(fullPath);
     }
   }
-  return results;
+  return results.sort((a, b) => a.localeCompare(b));
 }
 
 function extractTsSignatures(content) {
