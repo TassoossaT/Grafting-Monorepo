@@ -173,6 +173,27 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// `AddHole` -- opens one more inner loop on a face. See
+    /// `region_editing::apply_add_hole`.
+    pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            region_editing::apply_add_hole(&mut self.topology, request).map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
+    /// `RemoveHole` -- closes one back up. See
+    /// `region_editing::apply_remove_hole`.
+    pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response =
+            region_editing::apply_remove_hole(&mut self.graph, &mut self.topology, request)
+                .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
+
     /// `DeleteRegion`. See `region_editing::apply_delete_region`.
     pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;

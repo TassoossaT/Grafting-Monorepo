@@ -94,6 +94,16 @@ export interface ConstructionCoveredRegion {
 export interface ConstructionPatchRegion {
   readonly regionId: string;
   readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  /**
+   * Inner loops this face is opened by -- a door, a window, any opening.
+   * Absent means a solid face, which is what almost every patch declares.
+   *
+   * An opening leaves one use free on every edge of its own rim, so a
+   * second face can take that rim as its own boundary and stand in the
+   * opening. Declaring both in one patch is the point: half of it is a
+   * wall with an opening nobody is standing in.
+   */
+  readonly holes?: readonly (readonly ConstructionOrientedEdgeUse[])[];
   readonly surfaceType: string;
   readonly physical: boolean;
 }
@@ -342,6 +352,20 @@ export interface ConstructionSessionPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
+  /**
+   * Opens one more inner loop on an existing face -- what a door or a
+   * window is an opening for. The loop must already be registered, and it
+   * keeps one free use per edge so a face can stand in it.
+   */
+  addHole(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly hole: readonly ConstructionOrientedEdgeUse[];
+  }): RegionEditOutcome;
+  /** Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore. */
+  removeHole(request: {
+    readonly surfaceKey: ConstructionSurfaceKey;
+    readonly index: number;
+  }): RegionEditOutcome;
   /**
    * Registers a whole generated patch in one transaction -- see
    * {@link ConstructionPatch} for why a generator names its own edges.

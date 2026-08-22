@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    delete_region, duplicate_region, insert_vertex, move_edge, move_region, move_vertex,
-    remove_vertex, retype_edge,
+    add_hole, delete_region, duplicate_region, insert_vertex, move_edge, move_region, move_vertex,
+    remove_hole, remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -647,6 +647,241 @@ mod tests {
         assert_eq!(graph.node_count(), 0);
     }
 
+    /// The whole of what an opening is: the wall keeps one face and gains an
+    /// inner loop, and a second face takes that very loop as its own
+    /// boundary. The rim is shared -- used once by the wall as a hole, once
+    /// by the filling face, walked the other way -- so the two are joined
+    /// exactly the way any two faces are, and moving a rim node moves both.
+    ///
+    /// Declared in one transaction on purpose: half of it is a wall with an
+    /// opening nobody stands in.
+    #[test]
+    fn a_face_may_be_opened_and_the_opening_filled_in_one_patch() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+
+        let panel = ["p0", "p1", "p2", "p3"];
+        let rim = ["h0", "h1", "h2", "h3"];
+        let positions = [
+            ("p0", [0.0, 0.0, 0.0]),
+            ("p1", [4.0, 0.0, 0.0]),
+            ("p2", [4.0, 3.0, 0.0]),
+            ("p3", [0.0, 3.0, 0.0]),
+            ("h0", [1.0, 1.0, 0.0]),
+            ("h1", [3.0, 1.0, 0.0]),
+            ("h2", [3.0, 2.0, 0.0]),
+            ("h3", [1.0, 2.0, 0.0]),
+        ];
+        let ring = |names: [&str; 4], prefix: &str| {
+            (0..4)
+                .map(|index| PatchEdgeDto {
+                    edge_id: format!("{prefix}-{index}"),
+                    start_node_id: names[index].to_owned(),
+                    end_node_id: names[(index + 1) % 4].to_owned(),
+                    geometry: None,
+                })
+                .collect::<Vec<_>>()
+        };
+        // Walking a ring the other way is not just flipping each use: the
+        // order reverses too, or the loop stops being closed.
+        let uses = |prefix: &str, reversed: bool| {
+            let mut walk = (0..4)
+                .map(|index| OrientedEdgeUseDto {
+                    edge_id: format!("{prefix}-{index}"),
+                    reversed,
+                })
+                .collect::<Vec<_>>();
+            if reversed {
+                walk.reverse();
+            }
+            walk
+        };
+
+        let response = apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: positions
+                    .iter()
+                    .map(|(id, position)| PatchNodeDto {
+                        id: (*id).to_owned(),
+                        position: *position,
+                    })
+                    .collect(),
+                edges: ring(panel, "panel")
+                    .into_iter()
+                    .chain(ring(rim, "rim"))
+                    .collect(),
+                regions: vec![
+                    PatchRegionDto {
+                        region_id: "wall".into(),
+                        boundary: uses("panel", false),
+                        holes: vec![uses("rim", false)],
+                        surface_type: "wall-white".into(),
+                        physical: true,
+                    },
+                    PatchRegionDto {
+                        region_id: "window".into(),
+                        // The other way round the very same rim: the free
+                        // side the hole left is the side this face takes.
+                        boundary: uses("rim", true),
+                        holes: Vec::new(),
+                        surface_type: "window".into(),
+                        physical: false,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        assert!(
+            response.skipped_region_ids.is_empty(),
+            "neither face was refused: {:?}",
+            response.skipped_region_ids
+        );
+
+        let wall = topology.region(&RegionId::new("wall").unwrap()).unwrap();
+        assert_eq!(
+            wall.outer_loops().len(),
+            1,
+            "a wall with a window is still one wall"
+        );
+        assert_eq!(wall.holes().len(), 1);
+
+        let window = topology.region(&RegionId::new("window").unwrap()).unwrap();
+        assert_eq!(window.outer_loops().len(), 1);
+        assert!(window.holes().is_empty());
+
+        for index in 0..4 {
+            let edge = ContourEdgeId::new(format!("rim-{index}")).unwrap();
+            assert_eq!(
+                topology.usage_count(&edge),
+                2,
+                "the rim bounds the wall on one side and the window on the other"
+            );
+        }
+        assert_eq!(
+            surfaces
+                .region_surface(&RegionId::new("window").unwrap())
+                .unwrap()
+                .surface_type()
+                .as_str(),
+            "window",
+            "the opening is a face with its own type, not a marker on the wall"
+        );
+    }
+
+    /// A face can carry more than one opening, and closing one leaves the
+    /// others standing.
+    #[test]
+    fn a_face_may_carry_several_openings_and_close_them_one_at_a_time() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+
+        let mut nodes = vec![
+            PatchNodeDto {
+                id: "p0".into(),
+                position: [0.0, 0.0, 0.0],
+            },
+            PatchNodeDto {
+                id: "p1".into(),
+                position: [6.0, 0.0, 0.0],
+            },
+            PatchNodeDto {
+                id: "p2".into(),
+                position: [6.0, 3.0, 0.0],
+            },
+            PatchNodeDto {
+                id: "p3".into(),
+                position: [0.0, 3.0, 0.0],
+            },
+        ];
+        let mut edges = (0..4)
+            .map(|index| PatchEdgeDto {
+                edge_id: format!("panel-{index}"),
+                start_node_id: format!("p{index}"),
+                end_node_id: format!("p{}", (index + 1) % 4),
+                geometry: None,
+            })
+            .collect::<Vec<_>>();
+        let mut holes = Vec::new();
+        for (opening, left) in [("a", 1.0_f32), ("b", 4.0_f32)] {
+            let corners = [
+                (format!("{opening}0"), [left, 1.0, 0.0]),
+                (format!("{opening}1"), [left + 1.0, 1.0, 0.0]),
+                (format!("{opening}2"), [left + 1.0, 2.0, 0.0]),
+                (format!("{opening}3"), [left, 2.0, 0.0]),
+            ];
+            for (id, position) in &corners {
+                nodes.push(PatchNodeDto {
+                    id: id.clone(),
+                    position: *position,
+                });
+            }
+            for index in 0..4 {
+                edges.push(PatchEdgeDto {
+                    edge_id: format!("{opening}-{index}"),
+                    start_node_id: corners[index].0.clone(),
+                    end_node_id: corners[(index + 1) % 4].0.clone(),
+                    geometry: None,
+                });
+            }
+            holes.push(
+                (0..4)
+                    .map(|index| OrientedEdgeUseDto {
+                        edge_id: format!("{opening}-{index}"),
+                        reversed: false,
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        }
+
+        apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes,
+                edges,
+                regions: vec![PatchRegionDto {
+                    region_id: "wall".into(),
+                    boundary: (0..4)
+                        .map(|index| OrientedEdgeUseDto {
+                            edge_id: format!("panel-{index}"),
+                            reversed: false,
+                        })
+                        .collect(),
+                    holes,
+                    surface_type: "wall-white".into(),
+                    physical: true,
+                }],
+            },
+        )
+        .unwrap();
+
+        let wall = RegionId::new("wall").unwrap();
+        assert_eq!(topology.region(&wall).unwrap().holes().len(), 2);
+
+        apply_remove_hole(
+            &mut graph,
+            &mut topology,
+            RemoveHoleRequest {
+                surface_key: vec!["@region".into(), "wall".into()],
+                index: 0,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            topology.region(&wall).unwrap().holes().len(),
+            1,
+            "closing one opening leaves the other standing"
+        );
+    }
+
     /// A patch is the only way a generator names a **shared** edge, so an
     /// arc that two faces meet along has to be declarable here -- otherwise
     /// curvature is only reachable through a path that mints an unshared
@@ -712,6 +947,49 @@ mod tests {
     }
 }
 
+// ---- Holes ----
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddHoleRequest {
+    pub surface_key: Vec<String>,
+    pub hole: Vec<OrientedEdgeUseDto>,
+}
+
+/// `AddHole` -- what a door or a window is an opening for. Structurally
+/// nothing new: a hole is a second real loop of registered edges, validated
+/// by the same closure and manifold rules as any outer loop, and it leaves
+/// one use free on each of them so a face can take the opening as its own
+/// boundary.
+pub fn apply_add_hole(
+    topology: &mut ContourTopology,
+    request: AddHoleRequest,
+) -> Result<RegionEditOutcomeDto, String> {
+    let region = region_id_from_wire(&request.surface_key)?;
+    let hole = parse_loop(request.hole)?;
+    let outcome = add_hole(topology, &region, hole).map_err(|error| error.to_string())?;
+    Ok(outcome.into())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveHoleRequest {
+    pub surface_key: Vec<String>,
+    pub index: usize,
+}
+
+/// `RemoveHole`: closes one opening back up.
+pub fn apply_remove_hole(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    request: RemoveHoleRequest,
+) -> Result<RegionEditOutcomeDto, String> {
+    let region = region_id_from_wire(&request.surface_key)?;
+    let outcome =
+        remove_hole(graph, topology, &region, request.index).map_err(|error| error.to_string())?;
+    Ok(outcome.into())
+}
+
 // ---- Batched patch registration (shared edges) ----
 
 #[derive(Debug, Deserialize)]
@@ -742,6 +1020,13 @@ pub struct PatchEdgeDto {
 pub struct PatchRegionDto {
     pub region_id: String,
     pub boundary: Vec<OrientedEdgeUseDto>,
+    /// Inner loops this face is opened by -- see
+    /// [`apply_add_hole`]. Absent means a solid face, which is what almost
+    /// every patch declares. A generator that opens a face and fills the
+    /// opening in the same breath needs both in one transaction, or the
+    /// half-built state is briefly a face with a hole nobody stands in.
+    #[serde(default)]
+    pub holes: Vec<Vec<OrientedEdgeUseDto>>,
     pub surface_type: String,
     pub physical: bool,
 }
@@ -832,13 +1117,24 @@ pub fn apply_add_patch(
             continue;
         }
         let boundary = parse_loop(region.boundary)?;
-        if !boundary_has_room(topology, &boundary) {
+        let holes = region
+            .holes
+            .into_iter()
+            .map(parse_loop)
+            .collect::<Result<Vec<_>, _>>()?;
+        // Every loop the face declares has to fit, inner ones included: an
+        // opening consumes a use on its rim exactly the way an outer
+        // boundary does.
+        if !boundary_has_room(topology, &boundary)
+            || !holes.iter().all(|hole| boundary_has_room(topology, hole))
+        {
             skipped_region_ids.push(id.as_str().to_owned());
             orphaned.extend(boundary.iter().map(|use_| use_.edge().clone()));
+            orphaned.extend(holes.iter().flatten().map(|use_| use_.edge().clone()));
             continue;
         }
         topology
-            .add_region(id.clone(), vec![boundary], Vec::new())
+            .add_region(id.clone(), vec![boundary], holes)
             .map_err(|error| error.to_string())?;
         surfaces
             .add_region_surface(
