@@ -102,8 +102,31 @@ jobs:
           pnpm exec nx run-many --target=api-check --all
 
       - name: Docs, Graph IR, and API baseline validation
-        # Validates that committed repo map, manifest, signatures, and Graph IR do not drift
-        run: pnpm run docs:check
+        # Regenerates every derived artifact and fails on any difference, rather
+        # than running each `--check` in turn.
+        #
+        # The `--check` scripts report *which file* drifted; this reports *what
+        # changed in it*, which is the difference between "signatures-map.md is
+        # stale" and a diff a reviewer can act on. `master` went red three times
+        # on 2026-08-22 for exactly that message, because nothing regenerates
+        # these files and the error named no cause.
+        #
+        # Regenerating also closes the gap `tools/scripts/README.md` records --
+        # `project-graph.json` was never refreshed by anything, so every
+        # artifact downstream of it was rebuilt from a stale input. `graph:project`
+        # now runs first, inside `docs:generate`.
+        run: |
+          pnpm run docs:generate
+          if ! git diff --exit-code -- docs/generated; then
+            echo "::error::Generated artifacts are stale. Run 'pnpm run docs:generate' and commit the result."
+            exit 1
+          fi
+
+      - name: Public API baselines
+        # Kept separate from the regeneration above: a baseline is a reviewed
+        # contract, never regenerated automatically. Drift here must fail and be
+        # updated deliberately (DEC-051).
+        run: pnpm exec nx run-many --target=api-check --all
 
       - uses: astral-sh/setup-uv@v5
         with:
