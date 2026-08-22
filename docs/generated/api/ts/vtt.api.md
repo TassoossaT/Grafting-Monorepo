@@ -16,9 +16,9 @@
 
 ### `reference vtt.rendering.clipPlaneForCameraHeight`
 
-### `reference vtt.rendering.colorForSurfaceType`
-
 ### `reference vtt.rendering.CONSTRUCTION_GRID_EXTENT`
+
+### `reference vtt.rendering.CoveringResolver`
 
 ### `reference vtt.rendering.createRender3dSceneAdapter`
 
@@ -119,22 +119,51 @@ Turns a tool's plain RenderPreviewDescriptor into a scene item on
 the dedicated preview layer -- never pickable, drawn above everything
 (tokens included) so a ghost is never occluded by real geometry.
 
-### `function vtt.map-chunk-batching.chunkKeyForSurface(surface: SurfaceMeshResult): string`
+### `interface vtt.map-chunk-batching.ResolvedCovering`
 
-Which spatial chunk bucket one surface's mesh lands in -- shared by the full re-chunk below and `tabletop-runtime.ts`'s own incremental sync, so both agree on chunk membership.
+A resolved covering as this adapter needs to see it. Structurally matches
+`entities/map`'s `SurfaceCovering`; declared here so the adapter depends on a
+shape rather than on a product slice.
 
-### `function vtt.map-chunk-batching.chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): readonly RenderMapChunk[]`
+### `property vtt.map-chunk-batching.ResolvedCovering.key: string`
+
+### `property vtt.map-chunk-batching.ResolvedCovering.kind: string`
+
+### `property vtt.map-chunk-batching.ResolvedCovering.surface: { color: number } | undefined`
+
+`undefined` for a covering that draws no surface mesh.
+
+### `type vtt.map-chunk-batching.CoveringResolver = (surfaceType: string, physical: boolean) => ResolvedCovering`
+
+Resolves a surface's visual fill. Supplied by the caller rather than imported
+so this adapter stays a translator: `entities/map` owns the policy, and no
+adapter here reaches upstream into a product slice to ask what something
+should look like.
+
+### `function vtt.map-chunk-batching.chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string`
+
+Which chunk one surface's mesh lands in -- shared by the full re-chunk below
+and `tabletop-runtime.ts`'s own incremental sync, so both agree on chunk
+membership.
+
+The key is spatial bucket **and** covering, not bucket alone. Bucketing by
+position only meant a bucket holding a wall and a terrain cell merged them
+into one buffer, which can carry exactly one appearance -- so one of the two
+silently rendered as the other. Splitting the key is what makes a chunk a set
+of surfaces that genuinely can share a draw.
+
+### `function vtt.map-chunk-batching.chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[], resolveCovering: CoveringResolver): readonly RenderMapChunk[]`
 
 Buckets triangulated construction surfaces into spatial chunks (via the
 existing chunkKeyFor) and merges each bucket's meshes into one
 buffer (via `@grafting/render-3d`'s existing `mergeMeshChunks`), producing
-the `RenderMapChunk`s `SceneRenderPort.applyConfirmed` expects. A chunk
-that mixes surface types (e.g. a wall and a terrain cell landing in the
-same bucket) takes its first surface's `surfaceType`/`physical` for
-classification -- `colorForSurfaceType`'s flat placeholder coloring
-doesn't yet need finer granularity than that (see `E4.2`).
+the `RenderMapChunk`s `SceneRenderPort.applyConfirmed` expects.
 
-### `function vtt.map-chunk-batching.mergeChunkBucket(chunkId: string, members: readonly SurfaceMeshResult[]): RenderMapChunk | undefined`
+Surfaces that look different never share a chunk: chunkKeyForSurface
+keys by covering as well as position, so the merged buffer always has exactly
+one appearance to carry.
+
+### `function vtt.map-chunk-batching.mergeChunkBucket(chunkId: string, members: readonly SurfaceMeshResult[], resolveCovering: CoveringResolver): RenderMapChunk | undefined`
 
 Merges one spatial chunk's current member surfaces into the one `RenderMapChunk` buffer `SceneRenderPort.applyConfirmed` expects -- `undefined` for an empty bucket (the caller should remove the chunk instead of upserting it). See chunkSurfaceMeshes's own doc for why a chunk is always a full re-merge of its members, never a per-surface patch.
 
@@ -172,14 +201,16 @@ calls once pointer/camera control exists.
 
 ### `variable vtt.map-chunk-scene-item.MAP_SURFACE_VISUAL_KIND: "vtt-map-surface"`
 
-### `function vtt.map-chunk-scene-item.colorForSurfaceType(surfaceType: string, physical: boolean): number`
-
-Flat classification color, no texture -- matches `@grafting/render-3d`'s
-own `heightfieldVisual` default. A real material/asset pipeline is `E4.2`;
-this exists only so generated geometry is visually distinguishable while
-nothing else renders it.
-
 ### `function vtt.map-chunk-scene-item.mapChunkSceneItem(chunk: RenderMapChunk): SceneItem<MapChunkVisualParams>`
+
+Translates one already-classified map chunk into a scene item.
+
+Deciding what a surface looks like is not this module's job: the chunk
+arrives with its covering already resolved by `entities/map`, and this
+function only carries it across the renderer boundary. It used to derive the
+color itself from `surfaceType`, which put product presentation policy
+downstream of the port meant to feed it -- see
+`docs/architecture/vtt-surface-covering-transformation-plan.md`.
 
 ### `interface vtt.map-surface-pick-scene-item.MapSurfacePickData`
 
@@ -1682,6 +1713,10 @@ stroke or a click actually generates) lives entirely in `tools/*.ts`.
 
 ### `reference vtt.map.applyMapProjectionDelta`
 
+### `reference vtt.map.colorForSurfaceType`
+
+### `reference vtt.map.CoveringKind`
+
 ### `reference vtt.map.createMapProjection`
 
 ### `reference vtt.map.createSurfaceProjection`
@@ -1697,6 +1732,20 @@ stroke or a click actually generates) lives entirely in `tools/*.ts`.
 ### `reference vtt.map.NodePositionEntry`
 
 ### `reference vtt.map.NodeRef`
+
+### `reference vtt.map.NONE_COVERING`
+
+### `reference vtt.map.NONE_COVERING_KIND`
+
+### `reference vtt.map.PAINTED_COVERING_KIND`
+
+### `reference vtt.map.paintedCovering`
+
+### `reference vtt.map.resolveSurfaceCovering`
+
+### `reference vtt.map.SurfaceCovering`
+
+### `reference vtt.map.SurfaceFill`
 
 ### `reference vtt.map.SurfaceProjection`
 
@@ -1769,6 +1818,101 @@ a different order agree on the same ref -- mirroring
 `docs/architecture/vtt-product-model.md` §4.1, a `SurfaceRef` is "derived
 by an adapter from canonical node-set identity"; this is that pure
 derivation, called from the adapter layer.
+
+### `interface vtt.surface-covering.SurfaceCovering`
+
+A surface's resolved visual fill.
+
+### `property vtt.surface-covering.SurfaceCovering.key: string`
+
+Batching identity: two surfaces sharing this key may merge into one render
+buffer, and two that do not share it must not.
+
+Spatial bucketing alone is not enough -- a bucket holding a wall and a
+terrain cell would otherwise merge them and take one of their
+classifications for both.
+
+### `property vtt.surface-covering.SurfaceCovering.kind: string`
+
+Which covering kind fills the surface.
+
+### `property vtt.surface-covering.SurfaceCovering.surface: SurfaceFill | undefined`
+
+How the surface mesh itself is drawn, or `undefined` when this covering
+draws no mesh.
+
+Absence is the representation on purpose: a covering that draws nothing
+emits no chunk, so "invisible" costs no buffer, no draw call and no special
+case downstream -- the render port never learns that `none` exists.
+
+### `interface vtt.surface-covering.SurfaceFill`
+
+How a covering fills the surface mesh, or `undefined` when it draws none.
+
+### `property vtt.surface-covering.SurfaceFill.color: number`
+
+Flat classification color, until a real material/asset pipeline exists (`E4.2`).
+
+### `type vtt.surface-covering.CoveringKind = string`
+
+Which covering fills a surface.
+
+Deliberately an open string rather than a union: `DEC-052`/`ADR-0014` forbid
+baking product concepts into infrastructure, and `ADR-0022` already had to
+correct one closed enum (`BoundaryKind`). New kinds -- an unfilled opening, a
+repeated unit asset, a decal -- must cost a registration, never an edit to a
+type every consumer recompiles against.
+
+### `variable vtt.surface-covering.NONE_COVERING: SurfaceCovering`
+
+The covering that draws nothing. One value, since it carries no parameters.
+
+### `variable vtt.surface-covering.NONE_COVERING_KIND: CoveringKind`
+
+A covering that draws nothing at all.
+
+The surface still exists: it keeps its identity, its `physical` fact, and its
+pick proxy, so it stays selectable, draggable and undoable. It simply is not
+drawn -- which is what an open doorway, a barred gate or a pierced window
+needs, since anything drawn in the opening would defeat the point of the
+opening. See `ADR-0022`'s asset layer and the transformation plan's phase 3.
+
+### `variable vtt.surface-covering.PAINTED_COVERING_KIND: CoveringKind`
+
+The only kind this phase ships: the surface mesh is drawn, flat-shaded.
+
+Named rather than assumed because it is about to stop being the only
+possibility. A covering that draws nothing (`"none"`, for a barred gate or an
+open doorway) and one that places repeated unit geometry are the next two,
+and neither is a special case of this one.
+
+### `function vtt.surface-covering.colorForSurfaceType(surfaceType: string, physical: boolean): number`
+
+Flat classification color for a surface type.
+
+A placeholder, and deliberately so: it exists only to make generated geometry
+visually distinguishable while nothing else renders it. Moved here from the
+render adapter unchanged -- same inputs, same colors -- because deciding what
+a product's surfaces look like is product policy, not renderer translation.
+
+### `function vtt.surface-covering.paintedCovering(color: number): SurfaceCovering`
+
+A painted covering of one flat color.
+
+### `function vtt.surface-covering.resolveSurfaceCovering(surfaceType: string, physical: boolean): SurfaceCovering`
+
+Resolves the covering for one surface.
+
+The single decision point this module exists for.
+
+Every surface still resolves to a painted covering, which keeps behaviour
+identical to before this layer existed. NONE_COVERING is reachable
+and fully wired -- a surface resolving to it renders nothing while staying
+pickable -- but nothing selects it yet, because nothing authors the surfaces
+that need it: the construction tools go through `straight_cycle_region`,
+which produces a single outer loop and no holes, so no opening exists to
+leave unfilled. The policy lands with hole authoring; the mechanism is ready
+for it now.
 
 ### `reference vtt.token.applyTokenProjectionDelta`
 
@@ -2606,7 +2750,7 @@ App-owned metadata for a mode, without renderer or Rust types.
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.label: string`
 
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "gesture-preview" | "none"`
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "none" | "gesture-preview"`
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.scopePolicy: "local" | "explicit-global"`
 
@@ -3053,6 +3197,8 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.RemoveEdgeRequest`
 
 ### `reference vtt.ports.RemoveSurfaceRequest`
+
+### `reference vtt.ports.RenderCovering`
 
 ### `reference vtt.ports.RenderDependencyRevision`
 
@@ -3797,6 +3943,23 @@ resolved the same way SceneRenderPort.pick already resolves a
 hit. `"center"` (the default) keeps orbiting around wherever the camera
 is already looking.
 
+### `interface vtt.scene-render-port.RenderCovering`
+
+The resolved visual fill a chunk was built for. Structurally mirrors
+`entities/map`'s `SurfaceCovering` but is declared locally, matching how
+RenderMeshData and RenderToken already keep this port free of
+dependencies in either direction.
+
+### `property vtt.scene-render-port.RenderCovering.color: number`
+
+### `property vtt.scene-render-port.RenderCovering.key: string`
+
+Batching identity. Surfaces sharing it may merge into one buffer; surfaces
+that do not must not, because a merged buffer carries exactly one
+appearance.
+
+### `property vtt.scene-render-port.RenderCovering.kind: string`
+
 ### `interface vtt.scene-render-port.RenderDependencyRevision`
 
 ### `property vtt.scene-render-port.RenderDependencyRevision.layer: RenderLayerKey`
@@ -3807,17 +3970,22 @@ is already looking.
 
 ### `interface vtt.scene-render-port.RenderMapChunk`
 
-One spatially-bucketed unit of map geometry. `surfaceType`/`physical` echo
-`grafting-procgen-construction-wasm`'s `Surface` fields directly -- this
-port does not invent its own classification vocabulary.
-
 ### `property vtt.scene-render-port.RenderMapChunk.chunkId: string`
 
+### `property vtt.scene-render-port.RenderMapChunk.covering: RenderCovering`
+
+What fills this chunk visually. Resolved upstream, in the app's own
+covering layer -- the render adapter draws it and decides nothing.
+
+This replaced the chunk's former `surfaceType`/`physical` pair. Those were
+construction classification, carried into the render port only so the
+adapter could re-derive an appearance from them; once the appearance
+arrives resolved, they had no consumer left. Dropping them also removes the
+defect they enabled -- a merged chunk could only carry one classification,
+so a bucket mixing surfaces silently rendered some of them as the wrong
+thing.
+
 ### `property vtt.scene-render-port.RenderMapChunk.mesh: RenderMeshData`
-
-### `property vtt.scene-render-port.RenderMapChunk.physical: boolean`
-
-### `property vtt.scene-render-port.RenderMapChunk.surfaceType: string`
 
 ### `interface vtt.scene-render-port.RenderMeshData`
 

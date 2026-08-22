@@ -9,6 +9,7 @@ export type {
   ConfirmedTokenRenderChange,
   RenderDependencyRevision,
   RenderLayerKey,
+  RenderCovering,
   RenderMapChunk,
   RenderMeshData,
   RenderNodeHandle,

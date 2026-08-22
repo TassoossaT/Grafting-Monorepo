@@ -53,10 +53,38 @@ export interface RenderMeshData {
  * `grafting-procgen-construction-wasm`'s `Surface` fields directly -- this
  * port does not invent its own classification vocabulary.
  */
+/**
+ * The resolved visual fill a chunk was built for. Structurally mirrors
+ * `entities/map`'s `SurfaceCovering` but is declared locally, matching how
+ * {@link RenderMeshData} and {@link RenderToken} already keep this port free of
+ * dependencies in either direction.
+ */
+export interface RenderCovering {
+  readonly kind: string;
+  /**
+   * Batching identity. Surfaces sharing it may merge into one buffer; surfaces
+   * that do not must not, because a merged buffer carries exactly one
+   * appearance.
+   */
+  readonly key: string;
+  readonly color: number;
+}
+
 export interface RenderMapChunk {
   readonly chunkId: string;
-  readonly surfaceType: string;
-  readonly physical: boolean;
+  /**
+   * What fills this chunk visually. Resolved upstream, in the app's own
+   * covering layer -- the render adapter draws it and decides nothing.
+   *
+   * This replaced the chunk's former `surfaceType`/`physical` pair. Those were
+   * construction classification, carried into the render port only so the
+   * adapter could re-derive an appearance from them; once the appearance
+   * arrives resolved, they had no consumer left. Dropping them also removes the
+   * defect they enabled -- a merged chunk could only carry one classification,
+   * so a bucket mixing surfaces silently rendered some of them as the wrong
+   * thing.
+   */
+  readonly covering: RenderCovering;
   readonly mesh: RenderMeshData;
 }
 

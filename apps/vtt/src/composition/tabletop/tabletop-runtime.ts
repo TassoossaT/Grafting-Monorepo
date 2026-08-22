@@ -10,6 +10,7 @@ import {
   applyMapProjectionDelta,
   createMapProjection,
   createSurfaceProjection,
+  resolveSurfaceCovering,
   surfaceRefFromNodeSet,
   type MapProjection,
 } from "../../entities/map/index.ts";
@@ -534,7 +535,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       pieces.forEach((mesh, index) => {
         const memberKey = `${surfaceRef}#${index}`;
         nextMembers.add(memberKey);
-        const newChunkId = chunkKeyForSurface(mesh);
+        const newChunkId = chunkKeyForSurface(mesh, resolveSurfaceCovering);
         const oldChunkId = this.#memberChunk.get(memberKey);
         if (oldChunkId !== undefined && oldChunkId !== newChunkId) {
           this.#chunkMembers.get(oldChunkId)?.delete(memberKey);
@@ -572,7 +573,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     for (const chunkId of dirtyChunkIds) {
       const bucket = this.#chunkMembers.get(chunkId);
-      const chunk = bucket === undefined ? undefined : mergeChunkBucket(chunkId, [...bucket.values()]);
+      const chunk = bucket === undefined ? undefined : mergeChunkBucket(chunkId, [...bucket.values()], resolveSurfaceCovering);
       if (chunk === undefined) {
         this.#chunkMembers.delete(chunkId);
         const revision = this.#chunkRevisions.get(chunkId);

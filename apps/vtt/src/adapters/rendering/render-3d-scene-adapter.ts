@@ -169,7 +169,21 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       kind: MAP_SURFACE_PICK_VISUAL_KIND,
       describe: (params) => ({
         geometry: { shape: "mesh", data: params.mesh },
-        material: { surface: "unlit", color: 0xffffff, opacity: 0, doubleSided: true },
+        // `depthWrite: false` is load-bearing, not tidiness. `opacity: 0` only
+        // stops the proxy being *seen*; the renderer still defaults
+        // `depthWrite` to true, so it would keep writing depth and occlude
+        // whatever is behind it. That was harmless while every surface also
+        // drew a visible chunk in the same place -- but a surface covered by
+        // `none` draws nothing, and the proxy would then hide the geometry
+        // behind an opening. That is precisely the see-through the `none`
+        // covering exists to provide, defeated by an object nobody can see.
+        material: {
+          surface: "unlit",
+          color: 0xffffff,
+          opacity: 0,
+          doubleSided: true,
+          depthWrite: false,
+        },
       }),
       equals: (left, right) => left.mesh === right.mesh,
     });
