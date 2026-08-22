@@ -15,7 +15,13 @@
 export { resourceRef } from "./contracts/ref.js";
 export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
 
-export type { Aabb, ImageResource, MeshResource, Vec3 } from "./contracts/resource.js";
+export type {
+  Aabb,
+  ImageResource,
+  MeshPartsResource,
+  MeshResource,
+  Vec3,
+} from "./contracts/resource.js";
 
 export type { AssetDefinition, AssetProvenance } from "./contracts/definition.js";
 
@@ -38,3 +44,6 @@ export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
 
 export { IN_MEMORY_IMAGE_KIND, inMemoryImageResolver } from "./resolvers/in-memory-image.js";
 export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
+
+export { GLTF_MESH_KIND, gltfMeshResolver } from "./resolvers/gltf-mesh.js";
+export type { GltfMeshSource } from "./resolvers/gltf-mesh.js";

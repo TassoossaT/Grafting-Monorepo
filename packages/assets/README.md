@@ -86,14 +86,20 @@ Everything this package does not know arrives by registration.
 
 ## Shipped resolvers
 
-Both are zero-dependency, and deliberately so: asset binaries are not
-versioned in this repository, so a fresh clone has none and CI must not reach
-for an external host. Something has to be loadable with nothing but code.
-
-- **`primitiveMeshResolver`** — a box or plane from parameters. The permanent
-  fallback when a real asset is missing, not merely a starting point.
+- **`primitiveMeshResolver`** — a box or plane from parameters, with no file
+  and no dependency. The permanent fallback when a real asset is missing, not
+  merely a starting point: asset binaries are not versioned in this repository,
+  so a fresh clone has none and CI must not reach for an external host.
+  Something has to be loadable from code alone.
 - **`inMemoryImageResolver`** — adopts an already-decoded image and takes over
-  closing it.
+  closing it. Also zero-dependency.
+- **`gltfMeshResolver`** — authored geometry from a glTF 2.0 asset, by bytes or
+  URL. Uses `@gltf-transform/core` rather than three's `GLTFLoader`, because it
+  needs no renderer; a store that imported one would only be usable by
+  consumers that had already chosen it.
+
+Only the glTF resolver carries a dependency, and only consumers that import it
+pay for the parser — `sideEffects: false` and ESM let a bundler drop both.
 
 ## Retention
 
