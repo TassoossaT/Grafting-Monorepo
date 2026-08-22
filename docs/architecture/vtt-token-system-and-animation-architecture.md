@@ -7,6 +7,55 @@
 
 ---
 
+## 0. Amendments (2026-08-22)
+
+Two owner corrections. The sections below are otherwise unchanged and still
+describe the intended behaviour — what changes is **where the code lives**.
+
+### 0.1 `@grafting/tokens` is not a package; it belongs to `apps/vtt`
+
+Section 3.3 scopes that package as "the complete tactical tabletop miniature":
+a health ring, a player signature tint, an active-turn glow, a flight-elevation
+badge. That is product vocabulary end to end — a health ring can only be
+described by naming what the consumer is building.
+
+`ADR-0014`/`DEC-052` forbid exactly this in a capability package, and
+`packages/render-3d/AGENTS.md` says it in a list that names the case
+literally: *"No product concept. No type, module, field, or special case named
+after a token, character, wall, spell, fog…"*.
+
+So the token — what it has, its actions, its effects, its states — is composed
+in `apps/vtt`, per `ADR-0023`'s slice rules. What stays generic still splits
+out cleanly:
+
+| Capability | Home |
+| --- | --- |
+| Y-axis billboard, decals, particles, outline, post-processing | `@grafting/render-3d` |
+| Parabolic hop, tilt, spring damping, timelines, clip crossfade | generic motion math; a package only once a real implementation needs one |
+| Token identity, actions, rings, auras, turn state, elevation badge | **`apps/vtt`** |
+| Loading meshes, clips and textures | `@grafting/assets` |
+
+`@grafting/animator-fx` remains a legitimate candidate — "parabolic arc with
+spring damping" names no product — but nothing requires creating it before its
+first real implementation exists (`S4.3`: no empty tree ahead of time).
+
+### 0.2 Asset loading moves out of T3.3
+
+Task `T3.3` gives `Miniature3DVisual` its own GLTF loading. That is superseded:
+loading, caching, reference counting and disposal belong to `@grafting/assets`
+(issue #178, PR #179), with glTF arriving there as a registered resolver.
+
+The reason is concrete rather than tidiness. `T3.3` needs the mesh from a
+`.glb` and `T2.3`'s `SkeletalClipMixer` needs the animation clips from the
+*same* file; if each loads independently that is two decodes and twice the
+memory, with disposal owned by neither. Routing both through one store also
+puts `ImageBitmap` closing in a single place — the defect three.js shipped for
+years (`Texture.dispose()` leaving the bitmap open, mrdoob/three.js#23953).
+
+`Miniature3DVisual` therefore receives a resource handle, never a file path.
+
+---
+
 ## 1. Executive Summary & Design Vision
 
 This document establishes the architecture for the **Token & Animation Ecosystem** within the Grafting Monorepo VTT.
