@@ -13,7 +13,7 @@ const outputPath = resolve(root, "docs/generated/signatures/signatures-map.md");
 
 const readJson = async (relPath) => JSON.parse(await readFile(resolve(root, relPath), "utf8"));
 
-async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git"]) {
+async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git", "Generated", "generated", "pkg"]) {
   if (!existsSync(directory)) return [];
   const results = [];
   const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
