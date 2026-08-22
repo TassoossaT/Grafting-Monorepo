@@ -1,0 +1,54 @@
+name: "🛠️ Maintenance / Tooling (Chore)"
+description: "Dependency updates, script enhancements, CI/CD, tooling refactoring, or code maintenance."
+title: "[Chore]: "
+labels: ["type: chore", "status: backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🔧 Maintenance, Tooling & Infrastructure
+        Use this form to track developer infrastructure, tooling, dependency bumps, or internal refactoring.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "🎯 Description & Motivation"
+      description: "What needs to be updated, refactored, or improved and why?"
+      placeholder: "e.g. Update Cargo.lock dependencies or enhance ia-graft CLI flags..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: "📦 Maintenance Scope"
+      description: "Select the primary subsystem."
+      options:
+        - "Tooling / ia-graft CLI (tools/ia-graft)"
+        - "CI/CD & Workflows (.github/workflows)"
+        - "Dependency Updates (Cargo / pnpm / uv / .NET)"
+        - "Internal Scripts & Validation (tools/scripts)"
+        - "Code Cleanup / Refactoring without behavior change"
+        - "Documentation & Guidelines"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_changes
+    attributes:
+      label: "📝 Planned Changes"
+      description: "Specific implementation steps or affected files."
+      placeholder: "- Update lockfile\n- Adjust script in tools/scripts/..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: validation_checklist
+    attributes:
+      label: "🧪 Validation Checklist"
+      description: "Ensure native workspace toolchains and validation checks pass:"
+      options:
+        - label: "Cargo workspace (`cargo check --workspace` & `cargo test --workspace`)"
+        - label: "Nx targets (`pnpm exec nx run-many --target=check --all`)"
+        - label: "Python/uv checks (`uv lock --check` & `uv run --package automation pytest`)"
+        - label: "Documentation baseline checks (`pnpm run docs:check`)"

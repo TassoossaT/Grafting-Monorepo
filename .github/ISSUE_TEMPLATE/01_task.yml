@@ -1,0 +1,81 @@
+name: "🚀 Task / Feature Implementation"
+description: "Propose or specify an implementation task or new feature."
+title: "[Task]: "
+labels: ["type: task", "status: backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 📋 Task / Feature Specification
+        Use this form to document implementation tasks in the monorepo.
+        Ensure alignment with `GRAFTING_MASTER_SOURCE.md` and `AGENTS.md`.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: "🎯 Context & Objective"
+      description: "Clearly describe what needs to be implemented and the technical or product motivation."
+      placeholder: "e.g. Implement FlatBuffers serialization for graph nodes in grafting-graph-core..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "📦 Target Area / Module"
+      description: "Select the primary package or subsystem impacted."
+      options:
+        - "libs/graph (grafting-graph-core, graph-ir)"
+        - "libs/engine (simulation, physics, query)"
+        - "libs/isekai (interop, wasm, protocol)"
+        - "libs/domains (procgen, vtt-domains)"
+        - "apps/architecture-studio"
+        - "apps/vtt"
+        - "packages/* (isekai-web-client, etc.)"
+        - "dotnet/* (interop, protocol, tests)"
+        - "tools/* (ia-graft, scripts, tooling)"
+        - "docs (ADRs, specs, architecture)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical_scope
+    attributes:
+      label: "🛠️ Technical Scope & Architecture"
+      description: "Implementation details, affected files/packages, data contracts (FlatBuffers/ABI), and boundaries."
+      placeholder: "- Package: libs/graph/core\n- Introduce `GraphNode` struct and traversal algorithms\n- Keep Rust as the single canonical source (no duplicate logic in TS/C#)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "✅ Acceptance Criteria"
+      description: "Objective checklist defining when this task is considered complete."
+      value: |
+        - [ ] Feature implemented according to architectural requirements
+        - [ ] Unit and/or integration tests added and passing
+        - [ ] Verified via `ia-graft task test`
+        - [ ] Public API/ABI baseline checks pass (`pnpm run docs:check`)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dod_compliance
+    attributes:
+      label: "🛡️ Definition of Done & Policy Compliance"
+      description: "Confirm compliance with the monorepo operational contract:"
+      options:
+        - label: "Complies with `AGENTS.md` and `GRAFTING_MASTER_SOURCE.md` rules"
+          required: true
+        - label: "Graph structures, algorithms, and core logic are strictly hosted in Rust (`grafting-graph-core`)"
+          required: false
+        - label: "No vendor types or implementation leaks across public module boundaries"
+          required: false
+
+  - type: input
+    id: related_refinement
+    attributes:
+      label: "🔗 Related Refinement Issue / ADR"
+      description: "Link to previous refinement issue or relevant ADR in docs/adr/ (if applicable)."
+      placeholder: "#42 or docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md"
