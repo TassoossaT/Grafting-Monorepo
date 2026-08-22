@@ -1,0 +1,102 @@
+# GitHub Labels Taxonomy for Grafting Monorepo
+# Usado para categorizar Issues e Pull Requests no GitHub Projects
+
+# --- Tipos de Itens (Type) ---
+- name: "type: task"
+  color: "0E8A16" # Verde
+  description: "Tarefa técnica ou implementação de nova feature"
+
+- name: "type: refinement"
+  color: "1D76DB" # Azul
+  description: "Refinamento técnico, RFC, spike ou especificação de arquitetura"
+
+- name: "type: chore"
+  color: "FBCA04" # Amarelo
+  description: "Manutenção, dependências, tooling, scripts ou refatoração interna"
+
+- name: "type: bug"
+  color: "D93F0B" # Vermelho
+  description: "Comportamento anômalo, erro em testes, crash ou quebra de contrato"
+
+- name: "type: epic"
+  color: "5319E7" # Roxo
+  description: "Iniciativa de alto nível composta por múltiplas tasks e refinamentos"
+
+# --- Status do Fluxo de Trabalho (Status) ---
+- name: "status: triage"
+  color: "EDEDED" # Cinza claro
+  description: "Item recém-criado aguardando triagem inicial"
+
+- name: "status: refinement"
+  color: "BFD4F2" # Azul claro
+  description: "Em discussão técnica, spike ou definição de contratos"
+
+- name: "status: ready-for-dev"
+  color: "0052CC" # Azul escuro
+  description: "Refinado e pronto para ser puxado para desenvolvimento"
+
+- name: "status: in-progress"
+  color: "FEF2C0" # Amarelo claro
+  description: "Em desenvolvimento ativo"
+
+- name: "status: in-review"
+  color: "D4C5F9" # Lilás
+  description: "Pull Request aberto aguardando revisão e validação"
+
+- name: "status: blocked"
+  color: "B60205" # Vermelho escuro
+  description: "Bloqueado por dependência externa ou decisão arquitetural pendente"
+
+- name: "status: done"
+  color: "0E8A16" # Verde
+  description: "Concluído e mesclado"
+
+# --- Prioridade (Priority) ---
+- name: "priority: P0-critical"
+  color: "B60205" # Vermelho escuro
+  description: "Crítico / Bloqueante (ação imediata)"
+
+- name: "priority: P1-high"
+  color: "D93F0B" # Laranja escuro
+  description: "Alta prioridade para a iteração atual"
+
+- name: "priority: P2-medium"
+  color: "FBCA04" # Amarelo
+  description: "Prioridade normal"
+
+- name: "priority: P3-low"
+  color: "C2E0C6" # Verde claro
+  description: "Baixa prioridade / Nice to have"
+
+# --- Módulos / Áreas (Area) ---
+- name: "area: graph-core"
+  color: "006B75"
+  description: "libs/graph (grafting-graph-core, graph-ir)"
+
+- name: "area: engine"
+  color: "0052CC"
+  description: "libs/engine (simulation, physics, query)"
+
+- name: "area: isekai"
+  color: "5319E7"
+  description: "libs/isekai, packages/isekai-web-client, dotnet interoperability"
+
+- name: "area: domains"
+  color: "0E8A16"
+  description: "libs/domains (procgen, vtt-domains)"
+
+- name: "area: apps"
+  color: "F9D0C4"
+  description: "apps/architecture-studio, apps/vtt"
+
+- name: "area: tooling"
+  color: "C5DEF5"
+  description: "tools/ia-graft, scripts de automação e validação"
+
+- name: "area: docs"
+  color: "BFD4F2"
+  description: "GRAFTING_MASTER_SOURCE.md, ADRs, especificações e documentação"
+
+- name: "area: ci-cd"
+  color: "E99695"
+  description: "GitHub Actions Workflows e automações de release"

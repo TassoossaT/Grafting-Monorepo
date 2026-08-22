@@ -1,0 +1,64 @@
+name: "🔍 Refinamento / RFC / Spike (Architecture & Spec)"
+description: "Discussão, refinamento de arquitetura, spike técnico ou definição de contratos antes da codificação."
+title: "[Refine]: "
+labels: ["type: refinement", "status: refinement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🧠 Refinamento Técnico & Arquitetura
+        Utilize este formulário para documentar o processo de refinamento de uma ideia, spike arquitetural ou tomada de decisão técnica.
+        O objetivo do refinamento é sanar dúvidas abertas e transformar o problema em uma ou mais tarefas prontas para implementação (`Ready for Dev`).
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: "❓ Declaração do Problema"
+      description: "Qual desafio técnico, arquitetural ou de design precisamos resolver? Qual a dor atual?"
+      placeholder: "Ex: Precisamos suportar sincronização de estado com baixa latência entre o cliente Web e o backend sem duplicar lógica de física..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_design
+    attributes:
+      label: "📐 Proposta Técnica e Alternativas Consideradas"
+      description: "Quais opções foram analisadas? Qual a arquitetura sugerida e quais os trade-offs?"
+      placeholder: "Opção A: FlatBuffers via WebSocket com state delta\nOpção B: WebTransport com buffer binário\nTrade-offs de memória e compatibilidade..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architectural_impact
+    attributes:
+      label: "🏛️ Impacto Arquitetural"
+      description: "Qual o nível de impacto na arquitetura do monorepo?"
+      options:
+        - "Requer novo ADR ou atualização de decisão aberta (docs/adr/)"
+        - "Alteração/adição de contrato FlatBuffers / ABI de interoperabilidade"
+        - "Criação de novo pacote em packages/* ou crate em libs/*"
+        - "Refatoração interna sem quebra de contrato público"
+        - "Spike exploratório em apps/architecture-studio/lab"
+    validations:
+      required: true
+
+  - type: textarea
+    id: open_questions
+    attributes:
+      label: "🤔 Dúvidas Abertas e Riscos"
+      description: "Quais questões precisam de validação ou decisão antes de iniciar o desenvolvimento?"
+      placeholder: "- Qual o limite aceitável de footprint de memória em WebAssembly?\n- Precisamos manter retrocompatibilidade com v1?"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: ready_for_dev_checklist
+    attributes:
+      label: "🚦 Checklist para 'Ready for Dev' (Definição de Pronto para Desenvolvimento)"
+      description: "Marque os itens à medida que forem resolvidos durante a discussão:"
+      options:
+        - label: "Escopo e limites de pacotes claramente definidos"
+        - label: "Contratos de dados / interfaces públicas acordados"
+        - label: "Decisões e trade-offs documentados (ou ADR criado)"
+        - label: "Critérios de aceitação e testes planejados"
+        - label: "Decomposto em Tasks acionáveis ([Task]) no GitHub Project"

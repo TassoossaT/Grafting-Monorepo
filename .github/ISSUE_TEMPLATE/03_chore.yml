@@ -1,0 +1,54 @@
+name: "🛠️ Manutenção / Tooling (Chore)"
+description: "Atualização de dependências, melhorias de scripts, CI/CD, refatoração de tooling ou manutenção."
+title: "[Chore]: "
+labels: ["type: chore", "status: backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🔧 Manutenção, Tooling & Infraestrutura
+        Utilize este formulário para registrar tarefas de infraestrutura de desenvolvimento, tooling, dependências ou refatoração interna.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "🎯 Descrição e Motivação"
+      description: "O que precisa ser atualizado, refatorado ou melhorado e qual a razão?"
+      placeholder: "Ex: Atualizar dependência X no Cargo.lock para corrigir vulnerabilidade ou adicionar flag ao CLI ia-graft..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: "📦 Escopo da Manutenção"
+      description: "Selecione o subsistema principal."
+      options:
+        - "Tooling / CLI ia-graft (tools/ia-graft)"
+        - "CI/CD & Automações (.github/workflows)"
+        - "Atualização de Dependências (Cargo / pnpm / uv / .NET)"
+        - "Scripts & Validações Internas (tools/scripts)"
+        - "Refatoração de Código sem Mudança de Comportamento"
+        - "Documentação Geral & Guias"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_changes
+    attributes:
+      label: "📝 Mudanças Planejadas"
+      description: "Passos práticos de implementação."
+      placeholder: "- Atualizar lockfile\n- Ajustar script em tools/scripts/..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: validation_checklist
+    attributes:
+      label: "🧪 Checklist de Validação"
+      description: "Garantir que as ferramentas e validações nativas continuem íntegras:"
+      options:
+        - label: "Cargo workspace (`cargo check --workspace` e `cargo test --workspace`)"
+        - label: "Nx targets (`pnpm exec nx run-many --target=check --all`)"
+        - label: "Python/uv checks (`uv lock --check` e `uv run --package automation pytest`)"
+        - label: "Validação de documentação (`pnpm run docs:check`)"

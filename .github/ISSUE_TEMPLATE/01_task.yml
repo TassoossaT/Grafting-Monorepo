@@ -1,0 +1,81 @@
+name: "🚀 Tarefa / Feature (Task)"
+description: "Propor ou registrar uma tarefa técnica ou implementação de funcionalidade."
+title: "[Task]: "
+labels: ["type: task", "status: backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 📋 Registro de Tarefa / Feature
+        Utilize este formulário para documentar tarefas de implementação no monorepo.
+        Certifique-se de alinhar com o `GRAFTING_MASTER_SOURCE.md` e as diretrizes do `AGENTS.md`.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: "🎯 Objetivo e Contexto"
+      description: "Descreva de forma clara o que deve ser implementado e qual o valor/motivação técnica ou de produto."
+      placeholder: "Ex: Implementar serialização de nós de grafo para o formato FlatBuffers v2..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: "📦 Módulo / Área Afetada"
+      description: "Selecione o pacote ou subsistema principal impactado."
+      options:
+        - "libs/graph (grafting-graph-core, graph-ir)"
+        - "libs/engine (simulation, physics, query)"
+        - "libs/isekai (interop, wasm, protocol)"
+        - "libs/domains (procgen, vtt-domains)"
+        - "apps/architecture-studio"
+        - "apps/vtt"
+        - "packages/* (isekai-web-client, etc.)"
+        - "dotnet/* (interop, protocol, tests)"
+        - "tools/* (ia-graft, scripts, tooling)"
+        - "docs (ADRs, specs, arquitetura)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical_scope
+    attributes:
+      label: "🛠️ Escopo Técnico e Arquitetura"
+      description: "Detalhes de implementação, arquivos/pacotes envolvidos, contratos (FlatBuffers/ABI) e limites de responsabilidade."
+      placeholder: "- Pacote: libs/graph/core\n- Adicionar struct `GraphNode` e métodos de travessia\n- Não duplicar lógica em TS/C# (Rust é canônico)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "✅ Critérios de Aceite (Acceptance Criteria)"
+      description: "Lista de verificações objetivas que devem ser atendidas para considerar a tarefa concluída."
+      value: |
+        - [ ] Funcionalidade implementada conforme especificado
+        - [ ] Testes unitários e/ou integração passando
+        - [ ] Verificação via `ia-graft task test` executada com sucesso
+        - [ ] Contratos de API/ABI validados (sem quebras não documentadas)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dod_compliance
+    attributes:
+      label: "🛡️ Conformidade e Definição de Pronto (DoD)"
+      description: "Confirme os itens abaixo para garantir a conformidade com as regras do monorepo:"
+      options:
+        - label: "Alinhado com as regras do `AGENTS.md` e `GRAFTING_MASTER_SOURCE.md`"
+          required: true
+        - label: "Lógica de grafos/algoritmos centralizada no Rust (`grafting-graph-core`) sem duplicação"
+          required: false
+        - label: "Nenhuma dependência externa/vendor vazando nos contratos públicos de API"
+          required: false
+
+  - type: input
+    id: related_refinement
+    attributes:
+      label: "🔗 Issue de Refinamento / ADR Relacionado"
+      description: "Número da Issue de refinamento anterior ou link para ADR em docs/adr/ (se houver)."
+      placeholder: "#12 ou docs/adr/ADR-0013-rust-graph-core-and-api-contracts.md"

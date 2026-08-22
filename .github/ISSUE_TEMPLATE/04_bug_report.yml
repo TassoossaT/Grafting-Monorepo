@@ -1,0 +1,60 @@
+name: "🐛 Relato de Bug (Bug Report)"
+description: "Notificar um comportamento incorreto, erro de build, quebra de contrato ou falha em testes."
+title: "[Bug]: "
+labels: ["type: bug", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🐞 Registro de Defeito / Bug
+        Descreva o problema encontrado com o máximo de detalhes objetivos para facilitar a reprodução e correção.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: "📌 Descrição do Problema"
+      description: "Uma explicação clara e concisa do que ocorreu."
+      placeholder: "Ex: Erro de compilação FlatBuffers ao gerar contratos para TypeScript..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: "🔁 Passos para Reproduzir"
+      description: "Como reproduzir o comportamento anômalo?"
+      placeholder: |
+        1. Executar comando '...'
+        2. Navegar até '...'
+        3. Observar erro '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_vs_actual
+    attributes:
+      label: "🎯 Comportamento Esperado vs Observado"
+      description: "O que deveria ter acontecido e o que de fato aconteceu?"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "⚠️ Severidade / Prioridade"
+      options:
+        - "P0 - Crítico (CI quebrado, crash impeditivo, bloqueio de pipeline)"
+        - "P1 - Alto (Funcionalidade principal indisponível sem workaround)"
+        - "P2 - Médio (Falha com workaround conhecido)"
+        - "P3 - Baixo (Inconsistência menor, visual ou detalhe de log)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_and_context
+    attributes:
+      label: "📋 Logs, Stacktraces e Contexto"
+      description: "Cole aqui saídas de terminal, logs do CI ou contexto adicional."
+      render: shell
+    validations:
+      required: false
