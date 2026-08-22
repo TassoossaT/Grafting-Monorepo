@@ -975,6 +975,14 @@ What every tool implementation is handed to act -- the runtime to call, undo/red
 
 ### `property vtt.tool-context.ToolContext.runtime: TabletopRuntime`
 
+### `property vtt.tool-context.ToolContext.snapToGrid: boolean`
+
+Whether the grid magnet is on. A fact about the session, not a
+behaviour: the dispatcher has already rounded every ground point to a
+grid intersection by the time a tool sees it, and this only says so, so
+a tool that reads meaning into where its samples came from can. What
+any tool does with it is that tool's own business.
+
 ### `property vtt.tool-context.ToolContext.tableId: string`
 
 ### `method vtt.tool-context.ToolContext.nextSequence(): number`
@@ -1445,6 +1453,14 @@ a contour a preset happened to compute instead of a hand drawing it. That
 is the entire difference -- so a tower welds onto a drawn wall, gets
 edited by the same handles, and is subject to the same rules, for free.
 
+### `interface vtt.path-fitting.FitOptions`
+
+What a caller may vary about a fit. `arcs` defaults to on.
+
+### `property vtt.path-fitting.FitOptions.arcs?: boolean`
+
+When false, every span is fitted as a straight chord and no circle is ever considered.
+
 ### `interface vtt.path-fitting.FittedEdge`
 
 One fitted edge of a stroke: an endpoint pair plus the contour geometry
@@ -1459,7 +1475,7 @@ translate, so a fitted edge is already the thing that gets declared.
 
 ### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
 
-### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[]`
+### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
 
 Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
 into a short list of fitted edges: corners are found first
@@ -1473,6 +1489,11 @@ that counts as a real corner rather than hand tremor or ordinary
 curvature. At `0` the contour is committed literally; the larger it gets,
 the more freely a shaky stroke is straightened into clean runs. Fewer
 than 2 points fits to nothing.
+
+With `arcs` off every span is a chord, however round the samples look.
+That is for a caller whose samples are no longer a hand -- points landing
+on exact grid intersections, say -- where the circle through any three of
+them is a real circle that nobody drew.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
@@ -1506,6 +1527,24 @@ the same column resolution, the same shared edges. A run drawn here welds
 onto a free stroke, or onto another straight run, by resolving its corner
 onto that run's own column -- by connection, not by landing on the same
 coordinate.
+
+### `interface vtt.wall-patch.EdgeClaims`
+
+What the graph already holds, so a run can tell a boundary it may join
+from one it must keep to itself.
+
+An edge bounds at most two faces, one on each side, and the engine
+refuses a third use or a second one facing the same way. That rule is
+about a *surface*; it is not about walls, and any number of walls may
+legitimately meet at one column.
+
+### `property vtt.wall-patch.EdgeClaims.existing: ReadonlyMap<string, readonly boolean[]>`
+
+Every direction each boundary edge is currently walked in, by edge id.
+
+### `property vtt.wall-patch.EdgeClaims.runPrefix: string`
+
+Namespace for an edge this run has to keep to itself. Must be unique per run.
 
 ### `interface vtt.wall-patch.WallColumn`
 
@@ -1554,7 +1593,7 @@ Geometry of the step from column `i` to column `i + 1`, in that direction.
 
 The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
 
-### `function vtt.wall-patch.wallPatch(tableId: string, contour: WallContour, surfaceType: string, physical: boolean): ConstructionPatch`
+### `function vtt.wall-patch.wallPatch(tableId: string, contour: WallContour, surfaceType: string, claims: EdgeClaims, physical: boolean): ConstructionPatch`
 
 Turns a wall run into one patch: every node it introduces, the shared
 edges between them, and one upright panel per step.
@@ -1580,9 +1619,9 @@ Commits a fitted run of contour edges as walls, in one transaction.
 
 This is the only path a wall is ever built by. A free stroke, a straight
 drag and a tower preset differ in nothing but the contour they hand over:
-they all resolve their corners the same way, share the same edges, and
-declare the same faces. Nothing here knows which tool called it, and
-nothing downstream is told any of it is a wall.
+they all resolve their corners the same way, claim their edges the same
+way, and declare the same faces. Nothing here knows which tool called it,
+and nothing downstream is told any of it is a wall.
 
 ### `function vtt.wall-shared.commitWallStroke(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number, params: WallParams, domain: string): void`
 
@@ -1590,6 +1629,13 @@ Fits a raw stroke and commits it, the free-brush entry point --
 `tolerance` is the brush's own radius, so a radius of 0 commits the drawn
 contour literally and a wider brush corrects a shakier stroke into clean
 straight runs and true arcs.
+
+With the grid magnet on, the stroke is already a sequence of exact grid
+intersections: the hand is no longer what the samples describe, so there
+is no hand tremor to read curvature out of, and the circle through any
+three staircase points is a real circle that was never drawn. Arcs are
+off in that mode for that reason -- snapped means deliberate, and what
+was placed deliberately is what gets built.
 
 ### `function vtt.wall-shared.findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined`
 

@@ -13,6 +13,12 @@ export interface FittedEdge {
   readonly geometry: ConstructionEdgeGeometry;
 }
 
+/** What a caller may vary about a fit. `arcs` defaults to on. */
+export interface FitOptions {
+  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
+  readonly arcs?: boolean;
+}
+
 /**
  * Perpendicular distance (XZ only) from `point` to the infinite line through
  * `a`/`b` -- the classic Ramer-Douglas-Peucker measure, not a distance to
@@ -123,6 +129,7 @@ function computeResiduals(
   points: readonly ConstructionPosition[],
   startIndex: number,
   endIndex: number,
+  arcs: boolean,
 ): { readonly straightResidual: number; readonly arcResidual: number; readonly arc: ArcCandidate | undefined } {
   const start = points[startIndex];
   const end = points[endIndex];
@@ -137,7 +144,7 @@ function computeResiduals(
   // circle through three points, which always exists. Curvature has to be
   // corroborated by at least one other sample before it means anything.
   const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
-  if (apex === undefined || chordLength < 1e-6 || endIndex - startIndex < 3) {
+  if (!arcs || apex === undefined || chordLength < 1e-6 || endIndex - startIndex < 3) {
     return { straightResidual, arcResidual: Infinity, arc: undefined };
   }
 
@@ -166,11 +173,15 @@ function computeResiduals(
  * own corner-finding (split at the point of max chord-deviation, recurse
  * both halves). Always keeps the first and last index.
  */
-function cornerIndices(points: readonly ConstructionPosition[], tolerance: number): readonly number[] {
+function cornerIndices(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  arcs: boolean,
+): readonly number[] {
   function recurse(startIndex: number, endIndex: number): number[] {
     if (endIndex - startIndex < 2) return [startIndex, endIndex];
 
-    const { straightResidual, arcResidual } = computeResiduals(points, startIndex, endIndex);
+    const { straightResidual, arcResidual } = computeResiduals(points, startIndex, endIndex, arcs);
     if (straightResidual <= tolerance || arcResidual <= tolerance) return [startIndex, endIndex];
 
     const start = points[startIndex];
@@ -213,13 +224,18 @@ const LINE: ConstructionEdgeGeometry = { kind: "line" };
  * ({@link ARC_RESIDUAL_MAX_RATIO}) and meaningfully better than treating the
  * same run as straight ({@link ARC_MUST_BEAT_STRAIGHT_RATIO}).
  */
-function classifySegment(points: readonly ConstructionPosition[], startIndex: number, endIndex: number): FittedEdge {
+function classifySegment(
+  points: readonly ConstructionPosition[],
+  startIndex: number,
+  endIndex: number,
+  arcs: boolean,
+): FittedEdge {
   const start = points[startIndex];
   const end = points[endIndex];
   if (start === undefined || end === undefined) throw new Error("classifySegment: index out of range");
   if (endIndex - startIndex < 2) return { start, end, geometry: LINE };
 
-  const { straightResidual, arcResidual, arc } = computeResiduals(points, startIndex, endIndex);
+  const { straightResidual, arcResidual, arc } = computeResiduals(points, startIndex, endIndex, arcs);
   if (arc === undefined) return { start, end, geometry: LINE };
 
   const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
@@ -242,16 +258,26 @@ function classifySegment(points: readonly ConstructionPosition[], startIndex: nu
  * curvature. At `0` the contour is committed literally; the larger it gets,
  * the more freely a shaky stroke is straightened into clean runs. Fewer
  * than 2 points fits to nothing.
+ *
+ * With `arcs` off every span is a chord, however round the samples look.
+ * That is for a caller whose samples are no longer a hand -- points landing
+ * on exact grid intersections, say -- where the circle through any three of
+ * them is a real circle that nobody drew.
  */
-export function fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[] {
+export function fitPath(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  options: FitOptions = {},
+): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const indices = cornerIndices(points, Math.max(0, tolerance));
+  const arcs = options.arcs ?? true;
+  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
   const edges: FittedEdge[] = [];
   for (let index = 0; index + 1 < indices.length; index += 1) {
     const startIndex = indices[index];
     const endIndex = indices[index + 1];
     if (startIndex === undefined || endIndex === undefined || startIndex === endIndex) continue;
-    edges.push(classifySegment(points, startIndex, endIndex));
+    edges.push(classifySegment(points, startIndex, endIndex, arcs));
   }
   return edges;
 }

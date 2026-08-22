@@ -1,10 +1,16 @@
 import type { WallParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ConstructionEdgeGeometry,
+  ConstructionEdgeId,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "./path-fitting.ts";
-import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
+import { wallPatch, type EdgeClaims, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
 export { xzDistance, pinnedToBaseline };
@@ -17,6 +23,8 @@ const CROSSING_END_MARGIN = 0.3;
 const CORNER_WELD_TOLERANCE = 0.25;
 /** Perpendicular distance (world units) within which a click counts as picking a wall panel directly, for `findWallSurfaceAt` -- a bit more forgiving than {@link CROSSING_TOLERANCE} since this is a deliberate click on the panel itself, not a drawing snap, and (unlike crossing detection) there is no exclusion near a panel's own corners: picking right at a corner should still delete whichever panel is closest. */
 const WALL_PICK_TOLERANCE = 0.2;
+/** How close (world units, XZ) two consecutive corners may be before the step between them is no wall at all -- a stroke held still, or a grid snap folding several samples onto one intersection. */
+const DEGENERATE_STEP_TOLERANCE = 1e-3;
 /** How close (world units, XZ) a run's own last corner must land to its first for the run to be treated as closed -- what turns a stroke drawn all the way round into a closed loop of panels rather than one with a seam. */
 const CONTOUR_CLOSE_TOLERANCE = 0.5;
 
@@ -166,15 +174,65 @@ function resolveColumn(
   };
 }
 
-/** The corner points of a fitted run, and whether the run closed back onto itself. */
-function cornersOf(fitted: readonly FittedEdge[]): { readonly points: readonly ConstructionPosition[]; readonly closed: boolean } {
-  const first = fitted[0];
-  const last = fitted[fitted.length - 1];
-  if (first === undefined || last === undefined) return { points: [], closed: false };
+/**
+ * Every direction each boundary edge on the table is currently walked in.
+ *
+ * Read once per commit, so a run can tell which boundary it may join and
+ * which it has to keep to itself -- see [`EdgeClaims`]. Without it a run
+ * that tried to reference a column already bounded on both sides had its
+ * whole panel refused, silently, which is what made joining two separate
+ * walls work in one drawing direction and do nothing in the other.
+ */
+function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
+  const uses = new Map<ConstructionEdgeId, boolean[]>();
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) {
+        const recorded = uses.get(use.edgeId);
+        if (recorded === undefined) uses.set(use.edgeId, [use.reversed]);
+        else recorded.push(use.reversed);
+      }
+    }
+  }
+  return uses;
+}
 
-  const points = [first.start, ...fitted.map((edge) => edge.end)];
-  const closed = points.length > 3 && xzDistance(last.end, first.start) <= CONTOUR_CLOSE_TOLERANCE;
-  return { points: closed ? points.slice(0, -1) : points, closed };
+/**
+ * The columns a fitted run passes through and the geometry of each step
+ * between them, with degenerate steps dropped and closure resolved.
+ *
+ * A corner landing on the one before it is not a corner: it is the same
+ * place twice, which a held pointer or a grid snap folding several samples
+ * onto one intersection both produce. Kept, it would declare a panel of no
+ * width between two columns standing at one spot.
+ */
+function contourOf(fitted: readonly FittedEdge[]): {
+  readonly points: readonly ConstructionPosition[];
+  readonly geometries: readonly ConstructionEdgeGeometry[];
+  readonly closed: boolean;
+} {
+  const first = fitted[0];
+  if (first === undefined) return { points: [], geometries: [], closed: false };
+
+  const points: ConstructionPosition[] = [first.start];
+  const geometries: ConstructionEdgeGeometry[] = [];
+  for (const edge of fitted) {
+    const previous = points[points.length - 1];
+    if (previous !== undefined && xzDistance(previous, edge.end) <= DEGENERATE_STEP_TOLERANCE) continue;
+    points.push(edge.end);
+    geometries.push(edge.geometry);
+  }
+
+  // A run that came back to where it started has no seam: its last step
+  // lands on the first column rather than on a fifth one of its own.
+  const last = points[points.length - 1];
+  const start = points[0];
+  const closed =
+    points.length > 3 &&
+    last !== undefined &&
+    start !== undefined &&
+    xzDistance(last, start) <= CONTOUR_CLOSE_TOLERANCE;
+  return { points: closed ? points.slice(0, -1) : points, geometries, closed };
 }
 
 /**
@@ -182,9 +240,9 @@ function cornersOf(fitted: readonly FittedEdge[]): { readonly points: readonly C
  *
  * This is the only path a wall is ever built by. A free stroke, a straight
  * drag and a tower preset differ in nothing but the contour they hand over:
- * they all resolve their corners the same way, share the same edges, and
- * declare the same faces. Nothing here knows which tool called it, and
- * nothing downstream is told any of it is a wall.
+ * they all resolve their corners the same way, claim their edges the same
+ * way, and declare the same faces. Nothing here knows which tool called it,
+ * and nothing downstream is told any of it is a wall.
  */
 export function commitWallContour(
   ctx: ToolContext,
@@ -197,13 +255,23 @@ export function commitWallContour(
   const causeId = scopedToolId(ctx, domain, sequence);
   const idPrefix = scopedToolId(ctx, `wall-${sequence}`);
 
-  const { points, closed } = cornersOf(fitted);
+  const { points, geometries, closed } = contourOf(fitted);
   if (points.length < 2) return;
 
   const columns = points.map((point, index) => resolveColumn(ctx, point, params.height, idPrefix, index, causeId));
-  const contour: WallContour = { columns, geometries: fitted.map((edge) => edge.geometry), closed };
+  const contour: WallContour = { columns, geometries, closed };
+  const claims: EdgeClaims = { existing: boundaryUsage(ctx), runPrefix: idPrefix };
 
-  ctx.runtime.addPatch(wallPatch(ctx.tableId, contour, params.wallType), "local", causeId);
+  const outcome = ctx.runtime.addPatch(wallPatch(ctx.tableId, contour, params.wallType, claims), "local", causeId);
+  // A refused panel used to be the whole of this bug and left no trace at
+  // all. Claiming edges against the live graph should make it unreachable
+  // now, so say so out loud rather than letting it go quiet again.
+  if (outcome.skippedRegionIds.length > 0) {
+    ctx.reportFeedback({
+      tone: "error",
+      message: `Parede: ${outcome.skippedRegionIds.length} face nao coube sobre o que ja existe ali.`,
+    });
+  }
 }
 
 /**
@@ -211,6 +279,13 @@ export function commitWallContour(
  * `tolerance` is the brush's own radius, so a radius of 0 commits the drawn
  * contour literally and a wider brush corrects a shakier stroke into clean
  * straight runs and true arcs.
+ *
+ * With the grid magnet on, the stroke is already a sequence of exact grid
+ * intersections: the hand is no longer what the samples describe, so there
+ * is no hand tremor to read curvature out of, and the circle through any
+ * three staircase points is a real circle that was never drawn. Arcs are
+ * off in that mode for that reason -- snapped means deliberate, and what
+ * was placed deliberately is what gets built.
  */
 export function commitWallStroke(
   ctx: ToolContext,
@@ -222,5 +297,5 @@ export function commitWallStroke(
   const first = samples[0];
   if (first === undefined) return;
   const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  commitWallContour(ctx, fitPath(pinned, tolerance), params, domain);
+  commitWallContour(ctx, fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid }), params, domain);
 }

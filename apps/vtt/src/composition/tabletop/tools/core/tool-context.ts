@@ -29,6 +29,14 @@ export interface ToolContext {
   readonly runtime: TabletopRuntime;
   readonly history: EditHistoryStack;
   readonly tableId: string;
+  /**
+   * Whether the grid magnet is on. A fact about the session, not a
+   * behaviour: the dispatcher has already rounded every ground point to a
+   * grid intersection by the time a tool sees it, and this only says so, so
+   * a tool that reads meaning into where its samples came from can. What
+   * any tool does with it is that tool's own business.
+   */
+  readonly snapToGrid: boolean;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
