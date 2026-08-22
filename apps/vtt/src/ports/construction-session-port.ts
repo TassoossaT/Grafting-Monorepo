@@ -408,7 +408,6 @@ export interface ConstructionSessionPort {
 
   addNode(id: ConstructionNodeId, position: ConstructionPosition): void;
   addEdge(id: ConstructionEdgeId, source: ConstructionNodeId, target: ConstructionNodeId): void;
-  addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey;
 
   // ---- The atomic edit vocabulary ----
   //
@@ -439,12 +438,10 @@ export interface ConstructionSessionPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
-  /**
-   * Registers a region from **already-registered** edges. Unlike
-   * {@link addSurface}, which derives a region from a node cycle and always
-   * mints fresh edges, this lets a new face *share* an existing boundary --
-   * the only way to actually join it to its neighbour rather than laying a
-   * coincident copy of that edge beside it.
+/**
+   * Registers a region from **already-registered** edges, so a new face can
+   * *share* an existing boundary -- the only way to actually join it to its
+   * neighbour rather than laying a coincident copy of that edge beside it.
    */
   addRegion(request: {
     readonly regionId: string;

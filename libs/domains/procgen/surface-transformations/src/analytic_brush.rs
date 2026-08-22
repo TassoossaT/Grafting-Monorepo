@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use grafting_graph_core::ContourGeometry;
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourLoop, ContourTopology, Graph, NodeId, RegionId,
-    SurfaceKey, SurfaceRegistry, SurfaceType,
+    SurfaceRegistry, SurfaceType,
 };
 
 use crate::stroke::{StrokePrimitive, fit_stroke};
@@ -58,18 +58,12 @@ pub type BoundaryVertex = (NodeId, ContourGeometry);
 /// just sits there orphaned forever.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegionMergePlan {
-    consumed_surface_keys: Vec<SurfaceKey>,
     consumed_region_ids: Vec<RegionId>,
     consumed_boundaries: Vec<Vec<BoundaryVertex>>,
     contour: AnalyticBrushContour,
 }
 
 impl RegionMergePlan {
-    /// Existing plain surfaces the new contour destroys.
-    pub fn consumed_surface_keys(&self) -> &[SurfaceKey] {
-        &self.consumed_surface_keys
-    }
-
     /// Existing analytic regions the new contour destroys.
     pub fn consumed_region_ids(&self) -> &[RegionId] {
         &self.consumed_region_ids
@@ -242,11 +236,16 @@ fn tessellate_primitive(primitive: &StrokePrimitive, tolerance: f32) -> Vec<[f32
             let radius = radius.max(f32::EPSILON);
             let tolerance = tolerance.max(f32::EPSILON).min(radius);
             let max_step = 2.0 * (1.0 - tolerance / radius).clamp(-1.0, 1.0).acos();
-            let steps = (sweep_angle.abs() / max_step.max(f32::EPSILON)).ceil().max(1.0) as usize;
+            let steps = (sweep_angle.abs() / max_step.max(f32::EPSILON))
+                .ceil()
+                .max(1.0) as usize;
             (0..=steps)
                 .map(|index| {
                     let angle = start_angle + sweep_angle * (index as f32 / steps as f32);
-                    [center[0] + radius * angle.cos(), center[1] + radius * angle.sin()]
+                    [
+                        center[0] + radius * angle.cos(),
+                        center[1] + radius * angle.sin(),
+                    ]
                 })
                 .collect()
         }
@@ -268,7 +267,12 @@ fn contour_polygon(contour: &AnalyticBrushContour, tolerance: f32) -> Vec<[f32; 
     for (index, geometry) in contour.edge_geometries().iter().copied().enumerate() {
         let from = vertices[index];
         let to = vertices[(index + 1) % vertices.len()];
-        let edge = ContourEdge::new(scratch_id.clone(), scratch_start.clone(), scratch_end.clone(), geometry);
+        let edge = ContourEdge::new(
+            scratch_id.clone(),
+            scratch_start.clone(),
+            scratch_end.clone(),
+            geometry,
+        );
         let mut points = edge.tessellate(from, to, tolerance);
         points.pop(); // shared with the next edge's own start vertex
         polygon.extend(points);
@@ -340,7 +344,12 @@ fn region_loop_polygon(
         } else {
             *edge.geometry()
         };
-        let scratch = ContourEdge::new(edge.id().clone(), start_id.clone(), end_id.clone(), geometry);
+        let scratch = ContourEdge::new(
+            edge.id().clone(),
+            start_id.clone(),
+            end_id.clone(),
+            geometry,
+        );
         let mut points = scratch.tessellate(from, to, tolerance);
         points.pop(); // shared with the next edge's own start vertex
         polygon.extend(points);
@@ -385,66 +394,36 @@ pub fn plan_region_merge(
 ) -> Result<RegionMergePlan, PathBrushFailure> {
     let boundary_polygon = contour_polygon(&contour, CONTOUR_POLYGON_TOLERANCE);
 
-    let consumed_surface_keys = surfaces
-        .surface_keys()
-        .into_iter()
-        .filter(|key| {
-            surfaces.surface(key).is_some_and(|surface| {
-                if !is_eligible(surface.surface_type()) {
-                    return false;
-                }
-                let mut positions = Vec::with_capacity(surface.cycle().len());
-                for node_id in surface.cycle() {
-                    match graph.node(node_id) {
-                        Some(node) => {
-                            let position = node.data();
-                            positions.push([position[0], position[2]]);
-                        }
-                        // A missing node makes this surface invalid regardless
-                        // of location -- stay eligible so the boundary-edge
-                        // pass below still reports `InvalidSourceSurface` for
-                        // it, instead of this spatial filter silently hiding
-                        // that error.
-                        None => return true,
-                    }
-                }
-                positions
-                    .iter()
-                    .any(|&position| polygon_contains_point(&boundary_polygon, position))
-                    || boundary_polygon
-                        .iter()
-                        .any(|&vertex| polygon_contains_point(&positions, vertex))
-            })
-        })
-        .collect::<Vec<_>>();
-
-    // Existing analytic regions -- a previous stroke's own remainder or
-    // target region, most commonly -- are exactly as consumable as a plain
-    // surface. Without this, a later stroke can never touch, cut, or
-    // remove what an earlier one already created.
+    // A later stroke has to be able to touch, cut, or remove what an
+    // earlier one created, so every existing region the contour overlaps is
+    // consumable -- most commonly a previous stroke's own remainder.
     let consumed_region_ids = surfaces
         .region_surface_ids()
         .into_iter()
         .filter(|region_id| {
-            surfaces.region_surface(region_id).is_some_and(|region_surface| {
-                if !is_eligible(region_surface.surface_type()) {
-                    return false;
-                }
-                let Some(region) = topology.region(region_id) else {
-                    return false;
-                };
-                region.outer_loops().iter().any(|loop_| {
-                    let Some(positions) = region_loop_polygon(topology, graph, loop_, CONTOUR_POLYGON_TOLERANCE) else {
-                        return true; // missing node -- stay eligible, same posture as the plain-surface pass above
+            surfaces
+                .region_surface(region_id)
+                .is_some_and(|region_surface| {
+                    if !is_eligible(region_surface.surface_type()) {
+                        return false;
+                    }
+                    let Some(region) = topology.region(region_id) else {
+                        return false;
                     };
-                    positions
-                        .iter()
-                        .any(|&position| polygon_contains_point(&boundary_polygon, position))
-                        || boundary_polygon
+                    region.outer_loops().iter().any(|loop_| {
+                        let Some(positions) =
+                            region_loop_polygon(topology, graph, loop_, CONTOUR_POLYGON_TOLERANCE)
+                        else {
+                            return true; // missing node -- stay eligible, same posture as the plain-surface pass above
+                        };
+                        positions
                             .iter()
-                            .any(|&vertex| polygon_contains_point(&positions, vertex))
+                            .any(|&position| polygon_contains_point(&boundary_polygon, position))
+                            || boundary_polygon
+                                .iter()
+                                .any(|&vertex| polygon_contains_point(&positions, vertex))
+                    })
                 })
-            })
         })
         .collect::<Vec<_>>();
 
@@ -454,9 +433,9 @@ pub fn plan_region_merge(
     // "nothing to consume" case, not a failure.
     let mut edges = BTreeMap::<(NodeId, NodeId), (NodeId, NodeId, ContourGeometry)>::new();
     let push_edge = |edges: &mut BTreeMap<(NodeId, NodeId), (NodeId, NodeId, ContourGeometry)>,
-                          start: NodeId,
-                          end: NodeId,
-                          geometry: ContourGeometry| {
+                     start: NodeId,
+                     end: NodeId,
+                     geometry: ContourGeometry| {
         let key = if start <= end {
             (start.clone(), end.clone())
         } else {
@@ -466,29 +445,6 @@ pub fn plan_region_merge(
             edges.insert(key, (start, end, geometry));
         }
     };
-
-    for key in &consumed_surface_keys {
-        let surface = surfaces
-            .surface(key)
-            .expect("surface keys came from the same registry");
-        if surface.cycle().len() < 3
-            || surface
-                .cycle()
-                .iter()
-                .any(|node_id| graph.node(node_id).is_none())
-        {
-            return Err(PathBrushFailure::InvalidSourceSurface { key: key.clone() });
-        }
-        for (start, end) in surface
-            .cycle()
-            .iter()
-            .cloned()
-            .zip(surface.cycle().iter().cloned().cycle().skip(1))
-            .take(surface.cycle().len())
-        {
-            push_edge(&mut edges, start, end, ContourGeometry::Line);
-        }
-    }
 
     for region_id in &consumed_region_ids {
         let region = topology
@@ -500,9 +456,17 @@ pub fn plan_region_merge(
                     .edge(use_.edge())
                     .expect("a region's own edge uses always resolve in the same topology");
                 let (start, end, geometry) = if use_.is_reversed() {
-                    (edge.end_node().clone(), edge.start_node().clone(), edge.reversed_geometry())
+                    (
+                        edge.end_node().clone(),
+                        edge.start_node().clone(),
+                        edge.reversed_geometry(),
+                    )
                 } else {
-                    (edge.start_node().clone(), edge.end_node().clone(), *edge.geometry())
+                    (
+                        edge.start_node().clone(),
+                        edge.end_node().clone(),
+                        *edge.geometry(),
+                    )
                 };
                 push_edge(&mut edges, start, end, geometry);
             }
@@ -514,15 +478,17 @@ pub fn plan_region_merge(
         let mut boundary = vec![(start.clone(), first_geometry)];
         let mut current = first_end;
         while current != start {
-            let next = edges.iter().find_map(|(key, (edge_start, edge_end, geometry))| {
-                if edge_start == &current {
-                    Some((key.clone(), edge_end.clone(), *geometry))
-                } else if edge_end == &current {
-                    Some((key.clone(), edge_start.clone(), reverse_geometry(*geometry)))
-                } else {
-                    None
-                }
-            });
+            let next = edges
+                .iter()
+                .find_map(|(key, (edge_start, edge_end, geometry))| {
+                    if edge_start == &current {
+                        Some((key.clone(), edge_end.clone(), *geometry))
+                    } else if edge_end == &current {
+                        Some((key.clone(), edge_start.clone(), reverse_geometry(*geometry)))
+                    } else {
+                        None
+                    }
+                });
             let Some((key, following, geometry)) = next else {
                 return Err(PathBrushFailure::RequiresNormalizedBrushUnion);
             };
@@ -535,7 +501,6 @@ pub fn plan_region_merge(
         }
     }
     Ok(RegionMergePlan {
-        consumed_surface_keys,
         consumed_region_ids,
         consumed_boundaries: boundaries,
         contour,
@@ -660,8 +625,7 @@ fn polygon(vertices: Vec<[f32; 2]>) -> Result<AnalyticBrushContour, PathBrushFai
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BrushShape, PathBrushRequest};
-    use grafting_graph_core::SurfaceType;
+    use grafting_graph_core::{Node, SurfaceType};
 
     fn request(samples: Vec<[f32; 2]>, shape: BrushShape) -> PathBrushRequest {
         PathBrushRequest {
@@ -803,108 +767,132 @@ mod tests {
         assert_eq!(contour.vertices().len(), contour.edge_geometries().len());
     }
 
-    #[test]
-    fn terrain_faces_collapse_to_their_outer_boundary_once() {
-        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
+    /// Registers one analytic region over `cycle`, the only kind of face
+    /// there is -- what a real generator's patch produces.
+    fn region(
+        graph: &Graph<[f32; 3], ()>,
+        topology: &mut ContourTopology,
+        surfaces: &mut SurfaceRegistry,
+        id: &str,
+        cycle: &[&str],
+        surface_type: &str,
+    ) -> RegionId {
+        let nodes: Vec<NodeId> = cycle.iter().map(|id| NodeId::new(*id).unwrap()).collect();
+        let region_id = RegionId::new(id).unwrap();
+        grafting_graph_core::straight_cycle_region(topology, graph, region_id.clone(), &nodes)
+            .unwrap();
+        surfaces
+            .add_region_surface(
+                topology,
+                region_id.clone(),
+                SurfaceType::new(surface_type),
+                true,
+            )
+            .unwrap();
+        region_id
+    }
 
-        let graph = Graph::try_from_parts(
-            vec![
-                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
-                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
-                Node::new(NodeId::new("c").unwrap(), [2.0, 0.0, 0.0]),
-                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
-                Node::new(NodeId::new("e").unwrap(), [1.0, 0.0, 1.0]),
-                Node::new(NodeId::new("f").unwrap(), [2.0, 0.0, 1.0]),
-            ],
+    fn graph_of(nodes: &[(&str, [f32; 3])]) -> Graph<[f32; 3], ()> {
+        Graph::try_from_parts(
+            nodes
+                .iter()
+                .map(|(id, position)| Node::new(NodeId::new(*id).unwrap(), *position))
+                .collect(),
             vec![],
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    #[test]
+    fn adjacent_faces_collapse_to_their_outer_boundary_once() {
+        let graph = graph_of(&[
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [2.0, 0.0, 0.0]),
+            ("d", [0.0, 0.0, 1.0]),
+            ("e", [1.0, 0.0, 1.0]),
+            ("f", [2.0, 0.0, 1.0]),
+        ]);
+        let mut topology = ContourTopology::new();
         let mut surfaces = SurfaceRegistry::new();
-        for cycle in [vec!["a", "b", "e", "d"], vec!["b", "c", "f", "e"]] {
-            surfaces
-                .add_surface(
-                    &graph,
-                    cycle
-                        .into_iter()
-                        .map(|id| NodeId::new(id).unwrap())
-                        .collect(),
-                    SurfaceType::new("terrain"),
-                    true,
-                )
-                .unwrap();
-        }
+        region(
+            &graph,
+            &mut topology,
+            &mut surfaces,
+            "left",
+            &["a", "b", "e", "d"],
+            "terrain",
+        );
+        region(
+            &graph,
+            &mut topology,
+            &mut surfaces,
+            "right",
+            &["b", "c", "f", "e"],
+            "terrain",
+        );
+
         let contour = compact_analytic_brush_contour(&request(
             vec![[0.25, 0.5], [1.75, 0.5]],
             BrushShape::Circle { radius: 0.1 },
         ))
         .unwrap();
-        let plan = plan_region_merge(&graph, &surfaces, &ContourTopology::new(), contour, |surface_type| {
+        let plan = plan_region_merge(&graph, &surfaces, &topology, contour, |surface_type| {
             surface_type == &SurfaceType::new("terrain")
         })
         .unwrap();
-        assert_eq!(plan.consumed_surface_keys().len(), 2);
+        assert_eq!(plan.consumed_region_ids().len(), 2);
         assert_eq!(plan.consumed_boundaries().len(), 1);
         assert_eq!(plan.consumed_boundaries()[0].len(), 6);
     }
 
-    /// A same-typed surface far from the stroke must never become a source --
+    /// A same-typed face far from the stroke must never become a source --
     /// this is the exact bug report: painting a path anywhere used to swallow
-    /// *every* terrain surface on the whole table into one region, since the
+    /// *every* terrain face on the whole table into one region, since the
     /// old filter only checked `surface_type`, never location.
     #[test]
     fn a_terrain_face_far_from_the_stroke_is_left_out_of_the_plan() {
-        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
-
-        let graph = Graph::try_from_parts(
-            vec![
-                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
-                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
-                Node::new(NodeId::new("c").unwrap(), [1.0, 0.0, 1.0]),
-                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
-                Node::new(NodeId::new("p").unwrap(), [1000.0, 0.0, 1000.0]),
-                Node::new(NodeId::new("q").unwrap(), [1001.0, 0.0, 1000.0]),
-                Node::new(NodeId::new("r").unwrap(), [1001.0, 0.0, 1001.0]),
-                Node::new(NodeId::new("s").unwrap(), [1000.0, 0.0, 1001.0]),
-            ],
-            vec![],
-        )
-        .unwrap();
+        let graph = graph_of(&[
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [1.0, 0.0, 1.0]),
+            ("d", [0.0, 0.0, 1.0]),
+            ("p", [1000.0, 0.0, 1000.0]),
+            ("q", [1001.0, 0.0, 1000.0]),
+            ("r", [1001.0, 0.0, 1001.0]),
+            ("s", [1000.0, 0.0, 1001.0]),
+        ]);
+        let mut topology = ContourTopology::new();
         let mut surfaces = SurfaceRegistry::new();
-        let near_key = surfaces
-            .add_surface(
-                &graph,
-                ["a", "b", "c", "d"]
-                    .into_iter()
-                    .map(|id| NodeId::new(id).unwrap())
-                    .collect(),
-                SurfaceType::new("terrain"),
-                true,
-            )
-            .unwrap();
-        let far_key = surfaces
-            .add_surface(
-                &graph,
-                ["p", "q", "r", "s"]
-                    .into_iter()
-                    .map(|id| NodeId::new(id).unwrap())
-                    .collect(),
-                SurfaceType::new("terrain"),
-                true,
-            )
-            .unwrap();
+        let near = region(
+            &graph,
+            &mut topology,
+            &mut surfaces,
+            "near",
+            &["a", "b", "c", "d"],
+            "terrain",
+        );
+        let far = region(
+            &graph,
+            &mut topology,
+            &mut surfaces,
+            "far",
+            &["p", "q", "r", "s"],
+            "terrain",
+        );
 
         let contour = compact_analytic_brush_contour(&request(
             vec![[0.25, 0.5], [0.75, 0.5]],
             BrushShape::Circle { radius: 0.1 },
         ))
         .unwrap();
-        let plan = plan_region_merge(&graph, &surfaces, &ContourTopology::new(), contour, |surface_type| {
+        let plan = plan_region_merge(&graph, &surfaces, &topology, contour, |surface_type| {
             surface_type == &SurfaceType::new("terrain")
         })
         .unwrap();
 
-        assert_eq!(plan.consumed_surface_keys(), &[near_key]);
-        assert!(!plan.consumed_surface_keys().contains(&far_key));
+        assert_eq!(plan.consumed_region_ids(), &[near]);
+        assert!(!plan.consumed_region_ids().contains(&far));
     }
 
     /// `plan_region_merge` knows nothing about "path" -- it takes whatever
@@ -913,30 +901,22 @@ mod tests {
     /// must work exactly the same as the terrain-only tests above.
     #[test]
     fn eligibility_is_the_callers_predicate_not_a_hardcoded_surface_type() {
-        use grafting_graph_core::{Graph, Node, SurfaceRegistry};
-
-        let graph = Graph::try_from_parts(
-            vec![
-                Node::new(NodeId::new("a").unwrap(), [0.0, 0.0, 0.0]),
-                Node::new(NodeId::new("b").unwrap(), [1.0, 0.0, 0.0]),
-                Node::new(NodeId::new("c").unwrap(), [1.0, 0.0, 1.0]),
-                Node::new(NodeId::new("d").unwrap(), [0.0, 0.0, 1.0]),
-            ],
-            vec![],
-        )
-        .unwrap();
+        let graph = graph_of(&[
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [1.0, 0.0, 1.0]),
+            ("d", [0.0, 0.0, 1.0]),
+        ]);
+        let mut topology = ContourTopology::new();
         let mut surfaces = SurfaceRegistry::new();
-        let key = surfaces
-            .add_surface(
-                &graph,
-                ["a", "b", "c", "d"]
-                    .into_iter()
-                    .map(|id| NodeId::new(id).unwrap())
-                    .collect(),
-                SurfaceType::new("roof"),
-                true,
-            )
-            .unwrap();
+        let roof = region(
+            &graph,
+            &mut topology,
+            &mut surfaces,
+            "roof",
+            &["a", "b", "c", "d"],
+            "roof",
+        );
 
         let contour = compact_analytic_brush_contour(&request(
             vec![[0.25, 0.5], [0.75, 0.5]],
@@ -944,26 +924,25 @@ mod tests {
         ))
         .unwrap();
 
-        let excluded = plan_region_merge(&graph, &surfaces, &ContourTopology::new(), contour.clone(), |surface_type| {
-            surface_type == &SurfaceType::new("terrain")
-        })
+        let excluded = plan_region_merge(
+            &graph,
+            &surfaces,
+            &topology,
+            contour.clone(),
+            |surface_type| surface_type == &SurfaceType::new("terrain"),
+        )
         .unwrap();
-        assert!(excluded.consumed_surface_keys().is_empty());
+        assert!(excluded.consumed_region_ids().is_empty());
 
-        let included = plan_region_merge(&graph, &surfaces, &ContourTopology::new(), contour, |_| true).unwrap();
-        assert_eq!(included.consumed_surface_keys(), &[key]);
+        let included = plan_region_merge(&graph, &surfaces, &topology, contour, |_| true).unwrap();
+        assert_eq!(included.consumed_region_ids(), &[roof]);
     }
 
     /// A path is a structure like any other -- it must be plannable with no
-    /// eligible terrain underneath it at all, the same way terrain
-    /// generation doesn't require anything pre-existing either. This used to
-    /// fail outright (`PathBrushFailure::NoChanges`) whenever there was
-    /// nothing to consume, treating "no terrain here" as an error instead of
-    /// the ordinary case it is.
+    /// eligible ground underneath it at all, the same way terrain generation
+    /// does not require anything pre-existing either.
     #[test]
     fn a_stroke_with_no_terrain_underneath_still_plans_a_target_only_contour() {
-        use grafting_graph_core::{Graph, SurfaceRegistry};
-
         let graph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let surfaces = SurfaceRegistry::new();
 
@@ -972,12 +951,16 @@ mod tests {
             BrushShape::Circle { radius: 0.25 },
         ))
         .unwrap();
-        let plan = plan_region_merge(&graph, &surfaces, &ContourTopology::new(), contour, |surface_type| {
-            surface_type == &SurfaceType::new("terrain")
-        })
+        let plan = plan_region_merge(
+            &graph,
+            &surfaces,
+            &ContourTopology::new(),
+            contour,
+            |surface_type| surface_type == &SurfaceType::new("terrain"),
+        )
         .unwrap();
 
-        assert!(plan.consumed_surface_keys().is_empty());
+        assert!(plan.consumed_region_ids().is_empty());
         assert!(plan.consumed_boundaries().is_empty());
         assert!(!plan.contour().vertices().is_empty());
     }

@@ -27,7 +27,6 @@ import type {
   ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
-  ConstructionSurfaceSpec,
   ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateBoundaryCapRequest,
@@ -119,10 +118,6 @@ function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology 
   };
 }
 
-function toWireSpec(spec: ConstructionSurfaceSpec): { cycle: readonly string[]; surfaceType: string; physical: boolean } {
-  return { cycle: spec.cycle, surfaceType: spec.surfaceType, physical: spec.physical };
-}
-
 interface SurfaceMeshWire {
   readonly surfaceKey: readonly string[];
   readonly surfaceType: string;
@@ -171,13 +166,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   addEdge(id: string, source: string, target: string): void {
     this.#require().add_edge_json(JSON.stringify({ id, source, target }));
-  }
-
-  addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey {
-    const response = JSON.parse(this.#require().add_surface_json(JSON.stringify(toWireSpec(spec)))) as {
-      surfaceKey: readonly string[];
-    };
-    return response.surfaceKey;
   }
 
   // ---- The atomic edit vocabulary ----

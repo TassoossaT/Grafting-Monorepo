@@ -15,13 +15,10 @@
 //! two independent `ContourEdge`s, each with its own `center`/radius, since
 //! geometry now lives per edge instead of once per whole surface.
 //!
-//! This module is additive: it does not replace [`Surface`](crate::Surface)
-//! or [`SurfaceRegistry`](crate::SurfaceRegistry). [`straight_cycle_region`]
-//! is the migration bridge acceptance criterion -- an existing straight
-//! node cycle maps onto a [`SurfaceRegion`] of `Line` edges with no visual
-//! change. Consumers (procgen brush/extrusion crates, the WASM boundary, TS
-//! ports) migrate to authoring [`SurfaceRegion`]s directly in follow-on work;
-//! that migration is explicitly out of scope here.
+//! This is the only face model there is. [`SurfaceRegistry`] holds what a
+//! region *means* (`{ type, physical }`); this module holds what it *is*.
+//! [`straight_cycle_region`] builds one from a plain node cycle, for a
+//! caller that has no boundary to share.
 //!
 //! Position data itself stays out of this crate -- like `Surface`, geometry
 //! here is resolved against caller-supplied endpoint positions, never an
@@ -86,9 +83,11 @@ impl AsRef<str> for ContourEdgeId {
     }
 }
 
-/// Stable identity of a [`SurfaceRegion`], independent of its node set --
-/// the replacement for [`SurfaceKey`](crate::SurfaceKey)'s node-set identity,
-/// which cannot distinguish two regions sharing nodes but differing edges.
+/// Stable identity of a [`SurfaceRegion`], independent of its node set.
+///
+/// Identity deliberately does not come from the nodes a boundary touches:
+/// two regions can share every node and still be different faces, because
+/// what separates them is which edges they run along.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RegionId(String);
 
@@ -178,9 +177,8 @@ fn sweep(from: f32, to: f32, clockwise: bool) -> f32 {
 
 /// An oriented curve between two graph nodes, with explicit geometry.
 ///
-/// Position data is resolved by the caller (mirroring [`Surface`](crate::Surface)'s
-/// own separation between topology and geometry) -- every method that needs
-/// an endpoint's actual location takes it as a parameter rather than storing
+/// Position data is resolved by the caller -- every method that needs an
+/// endpoint's actual location takes it as a parameter rather than storing
 /// it, since this crate does not interpret the opaque node payload `N`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContourEdge {
@@ -1082,9 +1080,9 @@ impl ContourTopology {
             };
             let mut walked: ContourLoop = vec![seed];
             while cursor != origin {
-                let found = remaining
-                    .iter()
-                    .position(|candidate| ends(candidate).is_some_and(|(start, _)| start == cursor));
+                let found = remaining.iter().position(|candidate| {
+                    ends(candidate).is_some_and(|(start, _)| start == cursor)
+                });
                 let Some(index) = found else { break };
                 let next = remaining.remove(index);
                 let Some((_, end)) = ends(&next) else { break };
@@ -1316,10 +1314,10 @@ impl ContourTopology {
 
 /// Builds a single-outer-loop, hole-free [`SurfaceRegion`] out of straight
 /// [`ContourGeometry::Line`] edges from an existing node cycle -- the
-/// migration bridge for a straight surface that used to be described only
-/// as [`Surface::cycle`](crate::Surface::cycle). Produces edge ids of the
-/// form `"{region_id}-{index}"`; callers that need stable, caller-chosen
-/// edge ids should build the loop directly instead.
+/// plainest way to register a face. Produces edge ids of the form
+/// `"{region_id}-{index}"`, which nothing else can ever name -- a caller
+/// that needs a face to *share* its boundary with a neighbour must name the
+/// edges itself and build the loop directly instead.
 ///
 /// Registers the produced edges and region into `topology`, validated
 /// against `graph` exactly as any other region would be.

@@ -14,16 +14,8 @@ mod layout;
 mod model;
 mod region_edit;
 mod surface;
-mod transformation_plan;
 
-pub use construction::{
-    ConstructionError, SurfaceReplacementPlan, SurfaceSpec, apply_surface_replacement_plan,
-};
-pub use region_edit::{
-    DuplicateRegionSpec, RegionEditError, RegionEditOutcome, RegionRemoval, add_hole, cut_region,
-    delete_region, delete_regions, duplicate_region, insert_vertex, move_edge, move_region,
-    move_vertex, prune_orphans, remove_hole, remove_vertex, retype_edge,
-};
+pub use construction::SurfaceSpec;
 pub use contour::{
     ContourBounds, ContourEdge, ContourEdgeId, ContourError, ContourGeometry,
     ContourIdentifierError, ContourLoop, ContourPoint, ContourTopology, OrientedEdgeUse, RegionId,
@@ -34,12 +26,11 @@ pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
     IdentifierError, Node, NodeId, PrismGridMesh,
 };
-pub use surface::{
-    ArcBulge, RegionSurface, Surface, SurfaceCurvature, SurfaceError, SurfaceKey, SurfaceRegistry,
-    SurfaceType,
+pub use region_edit::{
+    DuplicateRegionSpec, RegionEditError, RegionEditOutcome, RegionRemoval, add_hole, cut_region,
+    delete_region, delete_regions, duplicate_region, insert_vertex, move_edge, move_region,
+    move_vertex, prune_orphans, remove_hole, remove_vertex, retype_edge,
 };
-
-pub use transformation_plan::{
-    IdentityDelta, LocalInvalidationScope, PlanIdentityKind, TransformationPlan,
-    TransformationPlanFailure,
+pub use surface::{
+    ArcBulge, RegionSurface, SurfaceCurvature, SurfaceError, SurfaceRegistry, SurfaceType,
 };

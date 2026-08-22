@@ -26,10 +26,6 @@ forward, not assuming straight lines.
 
 Existing analytic regions the new contour destroys.
 
-### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::consumed_surface_keys(&self) -> &[grafting_graph_core::surface::SurfaceKey]`
-
-Existing plain surfaces the new contour destroys.
-
 ### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::contour(&self) -> &grafting_procgen_surface_transformations::AnalyticBrushContour`
 
 The new region's own contour, unchanged from what the caller built.
@@ -42,17 +38,6 @@ Consecutive fitted primitives become one continuous tube with round joins
 and caps. The result is never a list of overlapping per-segment
 footprints, so a dense gesture has no more topology than its fitted
 lines/arcs require.
-
-### `pub fn grafting_procgen_surface_transformations::plan_path_brush(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_graph_core::construction::SurfaceReplacementPlan<[f32; 3], ()>, grafting_procgen_surface_transformations::PathBrushFailure>`
-
-Plans a continuous terrain-to-path transformation without mutating state.
-
-The complete pointer batch is first fitted to straight lines and true arcs,
-so input frequency never controls graph density. Existing small terrain
-cells are retyped in place and their shared nodes receive the analytic
-U-shaped profile. Only a genuinely coarse source polygon is partitioned
-against the sweep; its cut positions are interned and all resulting changes
-are published as one atomic replacement plan.
 
 ### `pub fn grafting_procgen_surface_transformations::plan_region_merge(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, topology: &grafting_graph_core::contour::ContourTopology, contour: grafting_procgen_surface_transformations::AnalyticBrushContour, is_eligible: impl core::ops::function::Fn(&grafting_graph_core::surface::SurfaceType) -> bool) -> core::result::Result<grafting_procgen_surface_transformations::RegionMergePlan, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -142,21 +127,9 @@ Samples, shape, or depth are missing, non-finite, or not positive where required
 
 The request identity could not become a graph identifier.
 
-### `pub grafting_procgen_surface_transformations::PathBrushFailure::InvalidSourceSurface`
-
-An eligible source surface could not be triangulated safely.
-
-### `pub grafting_procgen_surface_transformations::PathBrushFailure::InvalidSourceSurface::key: grafting_graph_core::surface::SurfaceKey`
-
-Surface that could not participate in the transformation.
-
 ### `pub grafting_procgen_surface_transformations::PathBrushFailure::NoChanges`
 
 No source surface had a semantic delta, so no operation may be committed.
-
-### `pub grafting_procgen_surface_transformations::PathBrushFailure::Plan(grafting_graph_core::transformation_plan::TransformationPlanFailure)`
-
-The generic plan contract rejected the generated lifecycle data.
 
 ### `pub grafting_procgen_surface_transformations::PathBrushFailure::RequiresNormalizedBrushUnion`
 
@@ -191,9 +164,9 @@ Type assigned to the painted local region.
 
 Deterministic planning for local construction-surface transformations.
 
-This crate owns authoritative brush/surface intersection, topology rebuilding,
-and path formation. It never mutates a graph: callers receive one atomic
-[`SurfaceReplacementPlan`] for the whole confirmed stroke.
+This crate owns authoritative brush/surface intersection, contour
+formation, and merge planning. It never mutates a graph: callers receive
+one plan for the whole confirmed stroke and apply it themselves.
 
 ### `pub struct grafting_procgen_surface_transformations::AnalyticBrushContour`
 

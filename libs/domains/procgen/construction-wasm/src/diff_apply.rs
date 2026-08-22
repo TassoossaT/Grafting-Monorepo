@@ -67,7 +67,9 @@ fn arc_geometry_for_curvature(
 ) -> ContourGeometry {
     let (sx, sz) = (start[0], start[2]);
     let (ex, ez) = (end[0], end[2]);
-    let chord = ((ex - sx).powi(2) + (ez - sz).powi(2)).sqrt().max(f32::EPSILON);
+    let chord = ((ex - sx).powi(2) + (ez - sz).powi(2))
+        .sqrt()
+        .max(f32::EPSILON);
     let (ux, uz) = ((ex - sx) / chord, (ez - sz) / chord);
     let (nx, nz) = (-uz, ux);
     let sign: f32 = match curvature.bulge {
@@ -78,7 +80,10 @@ fn arc_geometry_for_curvature(
     let radius = ((sx - center[0]).powi(2) + (sz - center[1]).powi(2))
         .sqrt()
         .max(f32::EPSILON);
-    let reference_mid = [center[0] + sign * radius * nx, center[1] + sign * radius * nz];
+    let reference_mid = [
+        center[0] + sign * radius * nx,
+        center[1] + sign * radius * nz,
+    ];
 
     let angle_of = |p: [f32; 2]| (p[1] - center[1]).atan2(p[0] - center[0]);
     let sweep = |from: f32, to: f32, clockwise: bool| {
@@ -91,10 +96,14 @@ fn arc_geometry_for_curvature(
         let total = sweep(start_angle, end_angle, clockwise).max(f32::EPSILON);
         let signed = if clockwise { -total } else { total };
         let angle = start_angle + signed * 0.5;
-        [center[0] + radius * angle.cos(), center[1] + radius * angle.sin()]
+        [
+            center[0] + radius * angle.cos(),
+            center[1] + radius * angle.sin(),
+        ]
     };
     let dist2 = |a: [f32; 2], b: [f32; 2]| (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2);
-    let clockwise = dist2(midpoint_for(true), reference_mid) < dist2(midpoint_for(false), reference_mid);
+    let clockwise =
+        dist2(midpoint_for(true), reference_mid) < dist2(midpoint_for(false), reference_mid);
     ContourGeometry::CircularArc { center, clockwise }
 }
 
@@ -149,7 +158,10 @@ fn register_region(
         let edge_id = ContourEdgeId::new(format!("{region_id}-{index}"))
             .map_err(|error| error.to_string())?;
         topology
-            .add_edge(graph, ContourEdge::new(edge_id.clone(), start, end, geometry))
+            .add_edge(
+                graph,
+                ContourEdge::new(edge_id.clone(), start, end, geometry),
+            )
             .map_err(|error| error.to_string())?;
         loop_.push(OrientedEdgeUse::forward(edge_id));
     }
@@ -197,7 +209,9 @@ pub fn diff_and_apply(
 
     let mut removed_surface_keys = Vec::with_capacity(to_remove.len());
     for id in &to_remove {
-        topology.remove_region(id).map_err(|error| error.to_string())?;
+        topology
+            .remove_region(id)
+            .map_err(|error| error.to_string())?;
         surfaces
             .remove_region_surface(id)
             .map_err(|error| error.to_string())?;
@@ -260,9 +274,8 @@ pub fn diff_and_apply(
     topology.prune_unused_edges();
 
     // Orphan cleanup: any node still claimed by the caller's own scope
-    // that nothing -- a legacy `Surface` or a surviving analytic region --
-    // references anymore (a removed run's own private jamb/facet nodes,
-    // most commonly) is deleted.
+    // that no surviving region's boundary references anymore (a removed
+    // run's own private jamb/facet nodes, most commonly) is deleted.
     let nodes_in_use = topology.nodes_in_use();
     let snapshot = graph.snapshot();
     let scoped_node_ids: Vec<NodeId> = snapshot
@@ -273,8 +286,7 @@ pub fn diff_and_apply(
         .collect();
     let mut removed_node_ids = Vec::new();
     for id in &scoped_node_ids {
-        let still_used = surfaces.surfaces_referencing(id).next().is_some() || nodes_in_use.contains(id);
-        if still_used {
+        if nodes_in_use.contains(id) {
             continue;
         }
         graph.remove_node(id).map_err(|error| error.to_string())?;

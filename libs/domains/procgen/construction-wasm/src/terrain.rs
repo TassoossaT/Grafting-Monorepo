@@ -121,10 +121,15 @@ pub fn generate_and_apply_terrain_cell(
             .add_edge(edge)
             .expect("checked above: id is free, endpoints were just added");
     }
-    let region_id = region_id_from_cycle(&generation.surface.cycle)
-        .expect("pre-validated: cycle is non-empty");
-    straight_cycle_region(topology, graph, region_id.clone(), &generation.surface.cycle)
-        .expect("pre-validated: nodes exist (just added)");
+    let region_id =
+        region_id_from_cycle(&generation.surface.cycle).expect("pre-validated: cycle is non-empty");
+    straight_cycle_region(
+        topology,
+        graph,
+        region_id.clone(),
+        &generation.surface.cycle,
+    )
+    .expect("pre-validated: nodes exist (just added)");
     surfaces
         .add_region_surface(
             topology,
@@ -250,12 +255,7 @@ mod tests {
         // Nothing else was added -- the collision was caught before any commit.
         assert_eq!(graph.node_count(), 1);
         assert_eq!(graph.edge_count(), 0);
-        assert!(
-            surfaces
-                .surfaces_referencing(&NodeId::new("cell0-0").unwrap())
-                .next()
-                .is_none()
-        );
+        assert!(surfaces.region_surface_ids().is_empty());
     }
 
     #[test]
