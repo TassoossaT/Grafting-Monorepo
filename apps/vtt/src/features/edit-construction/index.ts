@@ -30,6 +30,7 @@ export type {
   ToolParamsFor,
   TowerStampParams,
   WallBrushParams,
+  WallParams,
 } from "./tool-types.ts";
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
 export type {

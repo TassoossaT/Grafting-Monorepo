@@ -16,16 +16,17 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * the role table that shape implies -- the whole TS-owned half of
  * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
  *
- * Types sharing a generation call share a definition rather than restating
- * one: every `extrude_path` product (wall, tower, door jamb) is the same
- * upright panel, and every procedurally swept product (terrain, path) is the
- * same non-enumerable boundary. Splitting them per product name would be
+ * Types sharing a shape share a definition rather than restating one: every
+ * upright panel (wall, tower, door jamb) is one type built by one builder --
+ * a tower is a wall someone stamped a circle of, not a kind of its own --
+ * and every procedurally swept product (terrain, path) is the same
+ * non-enumerable boundary. Splitting them per product name would be
  * duplication, not per-type policy.
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
-  panelStructureType("wall-white", "Parede branca", "generatePathExtrusion, one upright panel per drawn edge"),
-  panelStructureType("wall-gray", "Parede cinza", "generatePathExtrusion, one upright panel per drawn edge"),
-  panelStructureType("door", "Porta", "generatePathExtrusion's own notch piece, the same upright panel shape"),
+  panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
+  panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped"),
+  panelStructureType("door", "Porta", "generateRegionPartition's own notch piece, the same upright panel shape"),
   panelStructureType("floor", "Piso", "generateRegionPartition's per-region cap"),
   panelStructureType("ceiling", "Teto", "generateRegionPartition's per-region cap"),
   organicStructureType(

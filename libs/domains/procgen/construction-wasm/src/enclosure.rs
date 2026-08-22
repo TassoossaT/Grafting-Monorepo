@@ -619,6 +619,7 @@ mod tests {
                     edge_id: horizontal(column, row),
                     start_node_id: node_name(column, row),
                     end_node_id: node_name(column + 1, row),
+                    geometry: None,
                 });
             }
         }
@@ -628,6 +629,7 @@ mod tests {
                     edge_id: vertical(column, row),
                     start_node_id: node_name(column, row),
                     end_node_id: node_name(column, row + 1),
+                    geometry: None,
                 });
             }
         }
@@ -800,21 +802,25 @@ mod tests {
                         edge_id: "fa".into(),
                         start_node_id: "f0".into(),
                         end_node_id: "f1".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fb".into(),
                         start_node_id: "f1".into(),
                         end_node_id: "f2".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fc".into(),
                         start_node_id: "f2".into(),
                         end_node_id: "f3".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "fd".into(),
                         start_node_id: "f3".into(),
                         end_node_id: "f0".into(),
+                        geometry: None,
                     },
                 ],
                 regions: vec![PatchRegionDto {
@@ -996,6 +1002,7 @@ mod tests {
                     edge_id: format!("{prefix}e{index}"),
                     start_node_id: format!("{prefix}{index}"),
                     end_node_id: format!("{prefix}{}", (index + 1) % 4),
+                    geometry: None,
                 })
                 .collect::<Vec<_>>()
         };
@@ -1079,26 +1086,31 @@ mod tests {
                         edge_id: "xa".into(),
                         start_node_id: "n1_1".into(),
                         end_node_id: "extra".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "xb".into(),
                         start_node_id: "extra".into(),
                         end_node_id: "n1_0".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "ya".into(),
                         start_node_id: "y0".into(),
                         end_node_id: "y1".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "yb".into(),
                         start_node_id: "y1".into(),
                         end_node_id: "y2".into(),
+                        geometry: None,
                     },
                     PatchEdgeDto {
                         edge_id: "yc".into(),
                         start_node_id: "y2".into(),
                         end_node_id: "y0".into(),
+                        geometry: None,
                     },
                 ],
                 regions: vec![

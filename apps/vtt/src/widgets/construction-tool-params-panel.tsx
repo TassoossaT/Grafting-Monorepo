@@ -10,6 +10,7 @@ import type {
   ToolParamsByTool,
   TowerStampParams,
   WallBrushParams,
+  WallParams,
 } from "@/features/edit-construction";
 import { TOWER_RADIUS_PRESETS } from "@/features/edit-construction";
 
@@ -68,13 +69,14 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
   );
 }
 
-function WallBrushFields(props: {
-  readonly params: WallBrushParams;
-  readonly onChange: (next: WallBrushParams) => void;
+/** Type and height -- everything every wall tool shares, and all a wall carries. Height is the length of a panel's own vertical edge. */
+function WallFields<Params extends WallParams>(props: {
+  readonly params: Params;
+  readonly onChange: (next: Params) => void;
 }) {
   const { params, onChange } = props;
   return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
+    <>
       <div className="gm-material-grid">
         <SelectableChip
           label="Bloco Branco"
@@ -89,6 +91,29 @@ function WallBrushFields(props: {
           onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
         />
       </div>
+      {sliderRow("Altura", params.height, 0.5, 10, 0.5, (height) => onChange({ ...params, height }))}
+    </>
+  );
+}
+
+function WallLineFields(props: { readonly params: WallParams; readonly onChange: (next: WallParams) => void }) {
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <WallFields params={props.params} onChange={props.onChange} />
+    </div>
+  );
+}
+
+/** The brush radius here is the fitting tolerance, not a footprint -- 0 commits the drawn contour literally, wider corrects a shakier stroke into straight runs and true arcs. Hence a floor of 0, unlike the path brush. */
+function WallBrushFields(props: {
+  readonly params: WallBrushParams;
+  readonly onChange: (next: WallBrushParams) => void;
+}) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <WallFields params={params} onChange={onChange} />
+      <BrushShapeFields params={params} radiusMin={0} radiusMax={2} onChange={onChange} />
     </div>
   );
 }
@@ -149,6 +174,7 @@ function TowerStampFields(props: {
           onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
         />
       </div>
+      {sliderRow("Altura", params.height, 0.5, 10, 0.5, (height) => onChange({ ...params, height }))}
       <div className="gm-material-grid">
         {TOWER_RADIUS_PRESETS.map((radius) => (
           <SelectableChip
@@ -239,7 +265,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
-        <WallBrushFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
+        <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : activeTool === "interior-wall" ? (
         <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
       ) : activeTool === "tower-stamp" ? (

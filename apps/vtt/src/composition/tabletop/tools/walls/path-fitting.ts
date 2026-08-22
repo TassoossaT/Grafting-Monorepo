@@ -1,10 +1,16 @@
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports";
 
-/** One fitted edge of a stroke: an endpoint pair plus which of the engine's own known curvatures (never a free curve) it was classified as. */
+/**
+ * One fitted edge of a stroke: an endpoint pair plus the contour geometry
+ * that actually explains the samples between them -- a straight chord, or a
+ * true circular arc through them. This is the graph's own edge vocabulary
+ * (`ConstructionEdgeGeometry`), not a private tag a generator has to
+ * translate, so a fitted edge is already the thing that gets declared.
+ */
 export interface FittedEdge {
   readonly start: ConstructionPosition;
   readonly end: ConstructionPosition;
-  readonly curvature: "straight" | "arc-left" | "arc-right";
+  readonly geometry: ConstructionEdgeGeometry;
 }
 
 /**
@@ -21,97 +27,161 @@ function perpendicularDistance(point: ConstructionPosition, a: ConstructionPosit
   return Math.abs((point.x - a.x) * dz - (point.z - a.z) * dx) / length;
 }
 
+/** Angle of `point` around `center`, in the same XZ convention the graph's own arc evaluation uses (`atan2(z, x)`). */
+function angleAround(center: readonly [number, number], point: ConstructionPosition): number {
+  return Math.atan2(point.z - center[1], point.x - center[0]);
+}
+
+/** Counter-clockwise sweep from `from` to `to`, always in `[0, 2*PI)`. */
+function counterClockwiseSweep(from: number, to: number): number {
+  const sweep = (to - from) % (Math.PI * 2);
+  return sweep < 0 ? sweep + Math.PI * 2 : sweep;
+}
+
+/**
+ * The center of the unique circle through three XZ points, or `undefined`
+ * when they are collinear (no circle, or one of infinite radius -- either
+ * way the span is a straight chord, not an arc).
+ */
+function circumcenterXz(
+  a: ConstructionPosition,
+  b: ConstructionPosition,
+  c: ConstructionPosition,
+): readonly [number, number] | undefined {
+  const determinant = 2 * ((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x));
+  if (Math.abs(determinant) < 1e-9) return undefined;
+  const aLengthSq = a.x * a.x + a.z * a.z;
+  const bLengthSq = b.x * b.x + b.z * b.z;
+  const cLengthSq = c.x * c.x + c.z * c.z;
+  const x = ((bLengthSq - aLengthSq) * (c.z - a.z) - (cLengthSq - aLengthSq) * (b.z - a.z)) / determinant;
+  const z = ((cLengthSq - aLengthSq) * (b.x - a.x) - (bLengthSq - aLengthSq) * (c.x - a.x)) / determinant;
+  return [x, z];
+}
+
+/** A candidate arc for one span: the true circle through its endpoints and one interior point, plus which way it must sweep to actually pass through that point. */
+interface ArcCandidate {
+  readonly center: readonly [number, number];
+  readonly radius: number;
+  readonly clockwise: boolean;
+}
+
+/**
+ * The circular arc running `start` to `end` **through** `via`.
+ *
+ * The sweep direction is not a preference to be guessed from which side a
+ * stroke leans: an arc either passes through the point that was drawn or it
+ * does not, and only one of the two ways around the circle does. That makes
+ * this general to any included angle -- a quarter turn, a semicircle, a
+ * nearly-closed loop -- rather than only the 180-degree case a
+ * chord-midpoint center can express.
+ */
+function arcThrough(
+  start: ConstructionPosition,
+  via: ConstructionPosition,
+  end: ConstructionPosition,
+): ArcCandidate | undefined {
+  const center = circumcenterXz(start, via, end);
+  if (center === undefined) return undefined;
+  const radius = Math.hypot(start.x - center[0], start.z - center[1]);
+  if (!Number.isFinite(radius) || radius < 1e-6) return undefined;
+
+  const startAngle = angleAround(center, start);
+  const toEnd = counterClockwiseSweep(startAngle, angleAround(center, end));
+  const toVia = counterClockwiseSweep(startAngle, angleAround(center, via));
+  return { center, radius, clockwise: toVia > toEnd };
+}
+
+/** The interior sample that wanders furthest off the span's own chord -- where any real curvature is most visible, and the point an arc has to be made to pass through. */
+function furthestFromChord(
+  points: readonly ConstructionPosition[],
+  startIndex: number,
+  endIndex: number,
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+): { readonly point: ConstructionPosition; readonly index: number; readonly distance: number } | undefined {
+  let best: { point: ConstructionPosition; index: number; distance: number } | undefined;
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const point = points[index];
+    if (point === undefined) continue;
+    const distance = perpendicularDistance(point, start, end);
+    if (best === undefined || distance > best.distance) best = { point, index, distance };
+  }
+  return best;
+}
+
 /**
  * How well `points[startIndex..endIndex]` is explained by treating `start`
- * (`points[startIndex]`) and `end` (`points[endIndex]`) as one edge --
- * `straightResidual` (worst perpendicular distance from the chord) and
- * `arcResidual` (worst distance from the *exact* semicircle the chord
- * determines, per `extrusion.rs`'s own doc: radius is half the chord,
- * center is its midpoint, never a free parameter). `bulge` is which side of
- * the chord the interior points actually lean toward, meaningful only when
- * `arcResidual` ends up the better fit. Shared by {@link cornerIndices}
- * (deciding *where* a real corner is) and {@link classifySegment} (deciding
- * straight vs. arc for one already-corner-bounded span) so the two never
- * disagree about what "fits" means.
+ * and `end` as one edge: `straightResidual` (worst perpendicular distance
+ * from the chord) and `arcResidual` (worst radial distance from the true
+ * circle through the endpoints and the span's own furthest interior point).
+ *
+ * Shared by {@link cornerIndices} (deciding *where* a real corner is) and
+ * {@link classifySegment} (deciding straight vs. arc for one already
+ * corner-bounded span) so the two never disagree about what "fits" means.
  */
 function computeResiduals(
   points: readonly ConstructionPosition[],
   startIndex: number,
   endIndex: number,
-): { straightResidual: number; arcResidual: number; radius: number; bulge: "arc-left" | "arc-right" } {
+): { readonly straightResidual: number; readonly arcResidual: number; readonly arc: ArcCandidate | undefined } {
   const start = points[startIndex];
   const end = points[endIndex];
-  if (start === undefined || end === undefined) return { straightResidual: 0, arcResidual: Infinity, radius: 0, bulge: "arc-left" };
+  if (start === undefined || end === undefined) return { straightResidual: 0, arcResidual: Infinity, arc: undefined };
 
-  let straightResidual = 0;
-  for (let index = startIndex + 1; index < endIndex; index += 1) {
-    const point = points[index];
-    if (point === undefined) continue;
-    straightResidual = Math.max(straightResidual, perpendicularDistance(point, start, end));
+  const apex = furthestFromChord(points, startIndex, endIndex, start, end);
+  const straightResidual = apex?.distance ?? 0;
+
+  // An arc is *made* to pass through the apex, so a span holding a single
+  // interior point fits one exactly, at zero residual, no matter how the
+  // hand actually moved. That is not evidence of curvature -- it is the
+  // circle through three points, which always exists. Curvature has to be
+  // corroborated by at least one other sample before it means anything.
+  const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
+  if (apex === undefined || chordLength < 1e-6 || endIndex - startIndex < 3) {
+    return { straightResidual, arcResidual: Infinity, arc: undefined };
   }
 
-  const dx = end.x - start.x;
-  const dz = end.z - start.z;
-  const chordLength = Math.hypot(dx, dz);
-  if (chordLength < 1e-6) return { straightResidual, arcResidual: Infinity, radius: 0, bulge: "arc-left" };
+  const arc = arcThrough(start, apex.point, end);
+  if (arc === undefined) return { straightResidual, arcResidual: Infinity, arc: undefined };
 
-  const nx = -dz / chordLength;
-  const nz = dx / chordLength;
-  const center: ConstructionPosition = { x: (start.x + end.x) / 2, y: start.y, z: (start.z + end.z) / 2 };
-  const radius = chordLength / 2;
-
-  let bulgeSum = 0;
   let arcResidual = 0;
   for (let index = startIndex + 1; index < endIndex; index += 1) {
     const point = points[index];
     if (point === undefined) continue;
-    bulgeSum += (point.x - start.x) * nx + (point.z - start.z) * nz;
-    const distanceFromCenter = Math.hypot(point.x - center.x, point.z - center.z);
-    arcResidual = Math.max(arcResidual, Math.abs(distanceFromCenter - radius));
+    const distanceFromCenter = Math.hypot(point.x - arc.center[0], point.z - arc.center[1]);
+    arcResidual = Math.max(arcResidual, Math.abs(distanceFromCenter - arc.radius));
   }
-
-  return { straightResidual, arcResidual, radius, bulge: bulgeSum >= 0 ? "arc-left" : "arc-right" };
+  return { straightResidual, arcResidual, arc };
 }
 
 /**
  * Ramer-Douglas-Peucker corner detection, extended to accept a curved span
  * as a single edge: `points[startIndex..endIndex]` needs no split at all if
- * it's already well explained by *either* a straight chord or the exact
- * semicircle that chord determines ({@link computeResiduals}) -- plain RDP
- * (straight-only) would otherwise slice a genuinely smooth arc into many
- * false corners, since a curve's own interior points routinely sit far from
- * its straight chord even though no real corner is there. Only when
- * *neither* shape explains the span within `epsilon` does this fall back to
- * classic RDP's own corner-finding (split at the point of max
- * chord-deviation, recurse both halves). Always keeps the first and last
- * index.
+ * it is already well explained by *either* a straight chord or the true
+ * circle through it ({@link computeResiduals}) -- plain RDP (straight-only)
+ * would otherwise slice a genuinely smooth arc into many false corners,
+ * since a curve's own interior points routinely sit far from its straight
+ * chord even though no real corner is there. Only when *neither* shape
+ * explains the span within `tolerance` does this fall back to classic RDP's
+ * own corner-finding (split at the point of max chord-deviation, recurse
+ * both halves). Always keeps the first and last index.
  */
-function cornerIndices(points: readonly ConstructionPosition[], epsilon: number): readonly number[] {
+function cornerIndices(points: readonly ConstructionPosition[], tolerance: number): readonly number[] {
   function recurse(startIndex: number, endIndex: number): number[] {
     if (endIndex - startIndex < 2) return [startIndex, endIndex];
 
     const { straightResidual, arcResidual } = computeResiduals(points, startIndex, endIndex);
-    if (straightResidual <= epsilon || arcResidual <= epsilon) return [startIndex, endIndex];
+    if (straightResidual <= tolerance || arcResidual <= tolerance) return [startIndex, endIndex];
 
     const start = points[startIndex];
     const end = points[endIndex];
     if (start === undefined || end === undefined) return [startIndex, endIndex];
 
-    let maxDistance = -1;
-    let maxIndex = -1;
-    for (let index = startIndex + 1; index < endIndex; index += 1) {
-      const point = points[index];
-      if (point === undefined) continue;
-      const distance = perpendicularDistance(point, start, end);
-      if (distance > maxDistance) {
-        maxDistance = distance;
-        maxIndex = index;
-      }
-    }
-    if (maxIndex === -1) return [startIndex, endIndex];
+    const apex = furthestFromChord(points, startIndex, endIndex, start, end);
+    if (apex === undefined) return [startIndex, endIndex];
 
-    const left = recurse(startIndex, maxIndex);
-    const right = recurse(maxIndex, endIndex);
+    const left = recurse(startIndex, apex.index);
+    const right = recurse(apex.index, endIndex);
     return [...left.slice(0, -1), ...right];
   }
 
@@ -119,70 +189,63 @@ function cornerIndices(points: readonly ConstructionPosition[], epsilon: number)
 }
 
 /**
- * How much smaller a segment's own best-fit-semicircle residual must be
- * than its best-fit-straight-line residual before it's worth calling a
- * curve at all -- below this, a straight edge already reads as intentional
- * and a curve would just be fitting hand tremor.
+ * How much smaller a span's own best-fit-arc residual must be than its
+ * best-fit-straight-line residual before it is worth calling a curve at all
+ * -- below this, a straight edge already reads as intentional and a curve
+ * would just be fitting hand tremor.
  */
 const ARC_MUST_BEAT_STRAIGHT_RATIO = 0.6;
 /**
- * How far (as a fraction of the semicircle's own radius) the raw samples
- * may sit from the exact arc and still count as a genuine semicircle, not
- * a free-form wobble the engine's fixed vocabulary (see `extrusion.rs`'s
- * own doc) has no shape for -- if even the best-fit semicircle's own
- * residual exceeds this, the segment falls back to straight rather than
- * committing a curve that doesn't actually match what was drawn.
+ * How far the raw samples may sit from the fitted circle and still count as
+ * a genuine arc, as a fraction of whichever is smaller: the arc's own
+ * radius, or the span's own chord. Scaling by the smaller of the two is
+ * what keeps a nearly-straight span -- which fits an enormous circle --
+ * from being handed an enormous allowance and committed as a curve.
  */
 const ARC_RESIDUAL_MAX_RATIO = 0.3;
 
+const LINE: ConstructionEdgeGeometry = { kind: "line" };
+
 /**
- * Classifies one already-corner-bounded run of raw samples as `"straight"`
- * or the exact semicircle ({@link computeResiduals}) that best matches it --
- * never a free curve. The fit is accepted only if that exact semicircle's
- * own worst-case residual is both small in absolute terms
+ * Classifies one already-corner-bounded run of raw samples as a straight
+ * chord or the true circular arc through it. The arc is accepted only if
+ * its own worst-case residual is both small in absolute terms
  * ({@link ARC_RESIDUAL_MAX_RATIO}) and meaningfully better than treating the
- * same run as straight ({@link ARC_MUST_BEAT_STRAIGHT_RATIO}) -- otherwise
- * this falls back to straight, since the engine has no shape between the
- * two.
+ * same run as straight ({@link ARC_MUST_BEAT_STRAIGHT_RATIO}).
  */
 function classifySegment(points: readonly ConstructionPosition[], startIndex: number, endIndex: number): FittedEdge {
   const start = points[startIndex];
   const end = points[endIndex];
   if (start === undefined || end === undefined) throw new Error("classifySegment: index out of range");
-  if (endIndex - startIndex < 2) return { start, end, curvature: "straight" };
+  if (endIndex - startIndex < 2) return { start, end, geometry: LINE };
 
-  const { straightResidual, arcResidual, radius, bulge } = computeResiduals(points, startIndex, endIndex);
-  const arcFitsWellEnough = arcResidual < radius * ARC_RESIDUAL_MAX_RATIO && arcResidual < straightResidual * ARC_MUST_BEAT_STRAIGHT_RATIO;
-  return { start, end, curvature: arcFitsWellEnough ? bulge : "straight" };
+  const { straightResidual, arcResidual, arc } = computeResiduals(points, startIndex, endIndex);
+  if (arc === undefined) return { start, end, geometry: LINE };
+
+  const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
+  const allowance = Math.min(arc.radius, chordLength) * ARC_RESIDUAL_MAX_RATIO;
+  const arcFitsWellEnough = arcResidual < allowance && arcResidual < straightResidual * ARC_MUST_BEAT_STRAIGHT_RATIO;
+  if (!arcFitsWellEnough) return { start, end, geometry: LINE };
+  return { start, end, geometry: { kind: "arc", center: arc.center, clockwise: arc.clockwise } };
 }
 
 /**
  * Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
- * into a short list of fitted edges drawn only from the engine's own known
- * vocabulary (`"straight" | "arc-left" | "arc-right"`, see `wall-shared.ts`'s
- * own `PathEdgeSpec` doc) -- this is `wall-brush-tool.ts`'s "fragmentar em
- * contornos conhecidos" step: corners are found first (Ramer-Douglas-Peucker,
- * {@link cornerIndices}), then each run between corners is classified
- * ({@link classifySegment}) as whichever known shape actually matches it.
- * `cornerEpsilon` (world units) is the RDP tolerance -- how far the raw
- * stroke must wander off *both* a straight line and the best-fit semicircle
- * before that counts as a real corner rather than hand tremor or ordinary
- * curvature. Fewer than 2 points fits to nothing.
+ * into a short list of fitted edges: corners are found first
+ * (Ramer-Douglas-Peucker, {@link cornerIndices}), then each run between
+ * corners is classified ({@link classifySegment}) as a straight chord or
+ * the true circle through it.
  *
- * Known v1 limitation: a stroke that genuinely mixes a straight run with a
- * true semicircular turn (not just a straight run alone, or a curve alone)
- * finds the straight/curve boundary correctly, but the curved remainder can
- * fall back to several short straight chords instead of being recognized as
- * one arc -- {@link cornerIndices}'s top-down splitting picks its first cut
- * at the point of maximum deviation from the *whole* stroke's own outer
- * chord (usually the curve's own apex), which can land before the full
- * curved span is ever tested as one candidate arc in its own right. Still a
- * large improvement over one straight panel per raw pointer sample; see
- * `path-fitting.test.mjs`'s own test for this exact case.
+ * `tolerance` (world units) is the whole correction dial -- how far the raw
+ * stroke must wander off *both* a straight line and its best-fit arc before
+ * that counts as a real corner rather than hand tremor or ordinary
+ * curvature. At `0` the contour is committed literally; the larger it gets,
+ * the more freely a shaky stroke is straightened into clean runs. Fewer
+ * than 2 points fits to nothing.
  */
-export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
+export function fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const indices = cornerIndices(points, cornerEpsilon);
+  const indices = cornerIndices(points, Math.max(0, tolerance));
   const edges: FittedEdge[] = [];
   for (let index = 0; index + 1 < indices.length; index += 1) {
     const startIndex = indices[index];

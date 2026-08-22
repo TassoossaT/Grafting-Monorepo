@@ -32,9 +32,30 @@ export interface PathBrushParams extends BrushShapeParams {
   readonly depth: number;
 }
 
-export interface WallBrushParams {
+/**
+ * What every wall-producing tool needs and nothing else: which wall type,
+ * and how tall. There is one wall type in the engine, so a free stroke, a
+ * straight run and a tower preset all commit through the same builder with
+ * the same parameters -- a preset is a shape, never its own kind of wall.
+ *
+ * `height` is the length of each panel's own vertical edge, which is all a
+ * height ever is here: the graph stores the two horizontal edges and their
+ * connection, and the distance between them is this number.
+ */
+export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
+  /** Length of a panel's own vertical edge, in world units. */
+  readonly height: number;
 }
+
+/**
+ * A free wall stroke. The brush footprint is not a footprint here -- it is
+ * the *fitting tolerance*: a radius of 0 commits the contour literally, and
+ * a larger radius lets a shakier stroke be corrected into clean straight
+ * runs and true arcs. That is the whole reason a wall brush carries a shape
+ * at all, and why its radius floor is 0 rather than the path brush's own.
+ */
+export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
 /**
  * One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
@@ -95,8 +116,7 @@ export interface TerrainSculptParams {
  * reason about, not an arbitrary one a careless drag produced.
  */
 export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
-export interface TowerStampParams {
-  readonly wallType: "wall-white" | "wall-gray";
+export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
 }
 
@@ -107,7 +127,7 @@ export interface ToolParamsByTool {
   readonly "edit-region": NoToolParams;
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
-  readonly "wall-line": WallBrushParams;
+  readonly "wall-line": WallParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly "house-room-delete": NoToolParams;
@@ -120,10 +140,10 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white" }),
-  "wall-line": Object.freeze({ wallType: "wall-white" }),
+  "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
+  "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
-  "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
+  "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
     trianglesPerSide: 10,

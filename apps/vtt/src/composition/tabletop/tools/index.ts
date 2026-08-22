@@ -7,7 +7,7 @@ export {
   type ToolContext,
   type ToolGesture,
 } from "./core/tool-context.ts";
-export { createBrushTool, type BrushRegion, type BrushToolSpec, type BrushableToolId } from "./core/brush-tool.ts";
+export { brushReach, createBrushTool, type BrushRegion, type BrushToolSpec, type BrushableToolId } from "./core/brush-tool.ts";
 export { navigateTool } from "./core/navigate-tool.ts";
 export { editRegionTool } from "./core/edit-region-tool.ts";
 
@@ -20,12 +20,13 @@ export { wallBrushTool } from "./walls/wall-brush-tool.ts";
 export {
   WALL_COLOR,
   WALL_HEIGHT,
+  commitWallContour,
+  commitWallStroke,
   findWallSurfaceAt,
-  idPrefixFor,
   pinnedToBaseline,
-  resolveWallCrossing,
   xzDistance,
 } from "./walls/wall-shared.ts";
+export { wallPatch, reverseGeometry, type WallColumn, type WallContour } from "./walls/wall-patch.ts";
 export { wallSpans, type WallSpan } from "./walls/wall-spans.ts";
 export { fitPath, type FittedEdge } from "./walls/path-fitting.ts";
 
@@ -35,7 +36,7 @@ export { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall, type Vec2 as
 export { findEnclosingRoom, type DerivedRoom } from "./house/room-lookup.ts";
 
 export { towerStampTool } from "./tower/tower-stamp-tool.ts";
-export { circleEdges, previewOutline } from "./tower/tower-geometry.ts";
+export { circleContour, previewOutline } from "./tower/tower-geometry.ts";
 
 export { pathBrushTool } from "./paths/path-brush-tool.ts";
 
