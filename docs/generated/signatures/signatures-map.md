@@ -14,18 +14,14 @@ pub fn diff_and_apply(
 
 // src/dto.rs
 pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String>
-pub fn surface_key_from_wire(ids: &[String]) -> Result<SurfaceKey, String>
-pub fn surface_key_to_wire(key: &SurfaceKey) -> Vec<String>
 
 // src/editing.rs
 pub type SessionGraph = Graph<[f32; 3], ()>;
-pub struct SurfaceSpecDto
 pub struct SurfaceKeyResponse
 pub struct AddNodeRequest
 pub fn add_node(graph: &mut SessionGraph, request: AddNodeRequest) -> Result<(), String>
 pub struct AddEdgeRequest
 pub fn add_edge(graph: &mut SessionGraph, request: AddEdgeRequest) -> Result<(), String>
-pub fn add_surface(
 pub struct RemoveSurfaceRequest
 pub fn remove_surface(
 pub struct RemoveEdgeRequest
@@ -109,7 +105,6 @@ pub struct ConstructionSession
 pub fn new() -> ConstructionSession
 pub fn add_node_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn add_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
-pub fn add_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn remove_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
@@ -120,6 +115,7 @@ pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn add_contour_edge_json(&mut self, request_json: &str) -> Result<(), JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn add_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/terrain.rs
 pub struct CornerHeightModuleDto
@@ -242,15 +238,6 @@ pub grafting_graph_core::ArcBulge::Right
 pub fn grafting_graph_core::ArcBulge::clone(&self) -> grafting_graph_core::ArcBulge
 pub fn grafting_graph_core::ArcBulge::eq(&self, other: &grafting_graph_core::ArcBulge) -> bool
 pub fn grafting_graph_core::ArcBulge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::ConstructionError
-pub grafting_graph_core::ConstructionError::Graph(grafting_graph_core::GraphError)
-pub grafting_graph_core::ConstructionError::Surface(grafting_graph_core::SurfaceError)
-pub fn grafting_graph_core::ConstructionError::clone(&self) -> grafting_graph_core::ConstructionError
-pub fn grafting_graph_core::ConstructionError::eq(&self, other: &grafting_graph_core::ConstructionError) -> bool
-pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::GraphError) -> Self
-pub fn grafting_graph_core::ConstructionError::from(error: grafting_graph_core::SurfaceError) -> Self
-pub fn grafting_graph_core::ConstructionError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::ConstructionError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum grafting_graph_core::ContourError
 pub grafting_graph_core::ContourError::DuplicateEdge
 pub grafting_graph_core::ContourError::DuplicateEdge::id: grafting_graph_core::ContourEdgeId
@@ -270,6 +257,15 @@ pub grafting_graph_core::ContourError::UnknownEdgeIdentity::id: grafting_graph_c
 pub grafting_graph_core::ContourError::UnknownNode
 pub grafting_graph_core::ContourError::UnknownNode::id: grafting_graph_core::NodeId
 pub grafting_graph_core::ContourError::UnknownRegion
+pub grafting_graph_core::ContourError::UnknownRegion::id: grafting_graph_core::RegionId
+pub fn grafting_graph_core::ContourError::clone(&self) -> grafting_graph_core::ContourError
+pub fn grafting_graph_core::ContourError::eq(&self, other: &grafting_graph_core::ContourError) -> bool
+pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::ContourError) -> Self
+pub fn grafting_graph_core::ContourError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::ContourError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum grafting_graph_core::ContourGeometry
+pub grafting_graph_core::ContourGeometry::CircularArc
+pub grafting_graph_core::ContourGeometry::CircularArc::center: grafting_graph_core::ContourPoint
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -414,7 +410,6 @@ pub fn triangulate_region(
 pub struct AnalyticBrushContour
 pub type BoundaryVertex = (NodeId, ContourGeometry);
 pub struct RegionMergePlan
-pub fn consumed_surface_keys(&self) -> &[SurfaceKey]
 pub fn consumed_region_ids(&self) -> &[RegionId]
 pub fn consumed_boundaries(&self) -> &[Vec<BoundaryVertex>]
 pub fn contour(&self) -> &AnalyticBrushContour
@@ -427,7 +422,6 @@ pub fn plan_region_merge(
 pub enum BrushShape
 pub struct PathBrushRequest
 pub enum PathBrushFailure
-pub fn plan_path_brush(
 pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
 pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
 ```
@@ -2916,17 +2910,27 @@ export function constructionPreviewSceneItem(
   kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
 
 // src/adapters/rendering/map-chunk-batching.ts
-export function chunkKeyForSurface(surface: SurfaceMeshResult): string {
-  return chunkKeyFor(centroidOf(surface.mesh));
-export function mergeChunkBucket(chunkId: string, members: readonly SurfaceMeshResult[]): RenderMapChunk | undefined {
+export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
+  const covering = resolveCovering(surface.surfaceType, surface.physical);
+export interface ResolvedCovering {
+  readonly kind: string;
+  readonly key: string;
+  /** `undefined` for a covering that draws no surface mesh. */
+  readonly surface: { readonly color: number } | undefined;
+  }
+export type CoveringResolver = (surfaceType: string, physical: boolean) => ResolvedCovering;
+export function mergeChunkBucket(
+  chunkId: string,
+  members: readonly SurfaceMeshResult[],
+  resolveCovering: CoveringResolver,
+  ): RenderMapChunk | undefined {
   const [first] = members;
   if (first === undefined) return undefined;
-  return {
-  chunkId,
-  surfaceType: first.surfaceType,
-  physical: first.physical,
-  mesh: mergeMeshChunks(members.map((surface) => surface.mesh)),
-export function chunkSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): readonly RenderMapChunk[] {
+  // Safe to read the covering off any one member: `chunkKeyForSurface` keys the
+export function chunkSurfaceMeshes(
+  surfaces: readonly SurfaceMeshResult[],
+  resolveCovering: CoveringResolver,
+  ): readonly RenderMapChunk[] {
   const byChunk = new Map<string, SurfaceMeshResult[]>();
 export function mergeSurfaceMeshes(surfaces: readonly SurfaceMeshResult[]): RenderMeshData {
   return mergeMeshChunks(surfaces.map((surface) => surface.mesh));
@@ -2947,21 +2951,13 @@ export interface MapChunkVisualParams {
   readonly mesh: RenderMeshData;
   readonly color: number;
   }
-export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
-  if (!physical) return 0x3a6b8a;
-  switch (surfaceType) {
-  case "wall":
-  case "wall-white":
-  return 0xe2e8f0; // White / light gray block prototype
-  case "wall-gray":
-  return 0x64748b; // Slate gray block prototype
 export function mapChunkSceneItem(chunk: RenderMapChunk): SceneItem<MapChunkVisualParams> {
   return {
   id: `map-chunk:${chunk.chunkId}`,
   layer: MAP_LAYER_ID,
   visual: {
   kind: MAP_SURFACE_VISUAL_KIND,
-  params: { mesh: chunk.mesh, color: colorForSurfaceType(chunk.surfaceType, chunk.physical) },
+  params: { mesh: chunk.mesh, color: chunk.covering.color },
   },
 
 // src/adapters/rendering/map-surface-pick-scene-item.ts
@@ -3138,7 +3134,11 @@ export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
   readonly shape: BrushShape;
   }
-export type BrushableToolId = "path-brush";
+export type BrushableToolId = "path-brush" | "wall-brush";
+export function brushReach(shape: BrushShape): number {
+  if (shape.kind === "square") return shape.size / 2;
+  return shape.radius;
+  }
 export interface BrushToolSpec<Id extends BrushableToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
@@ -3487,8 +3487,10 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   { kind: "circle", radius: REVEAL_RADIUS },
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
-export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
-  const points = circlePoints(center, radius);
+export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
+  const corners = Array.from({ length: CIRCLE_SEGMENTS }, (_unused, step) =>
+  pointOnCircle(center, radius, (step / CIRCLE_SEGMENTS) * Math.PI * 2),
+  );
 export function previewOutline(center: ConstructionPosition, radius: number, segments: number): Float32Array {
   const points: number[] = [];
   for (let step = 0; step < segments; step += 1) {
@@ -3508,43 +3510,78 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
 export interface FittedEdge {
   readonly start: ConstructionPosition;
   readonly end: ConstructionPosition;
-  readonly curvature: "straight" | "arc-left" | "arc-right";
+  readonly geometry: ConstructionEdgeGeometry;
   }
-export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
+export function fitPath(points: readonly ConstructionPosition[], tolerance: number): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const indices = cornerIndices(points, cornerEpsilon);
+  const indices = cornerIndices(points, Math.max(0, tolerance));
 
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
-export const wallBrushTool: ConstructionTool<"wall-brush"> = {
+export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
+  previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
 
-  previewFor(gesture: ToolGesture, params: WallBrushParams) {
-  const path = rawPath;
-  if (path === undefined || path.length === 0) return undefined;
-
+  applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
+  commitWallStroke(ctx, region.samples, brushReach(region.shape), params, "wall-brush");
 
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
-  previewFor(gesture: ToolGesture, params: WallBrushParams) {
+  previewFor(gesture: ToolGesture, params: WallParams) {
   if (anchor === undefined) return undefined;
   return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
 
+// src/composition/tabletop/tools/walls/wall-patch.ts
+export interface WallColumn {
+  readonly bottomNodeId: ConstructionNodeId;
+  readonly topNodeId: ConstructionNodeId;
+  readonly bottom: ConstructionPosition;
+  readonly top: ConstructionPosition;
+  }
+export interface WallContour {
+  readonly columns: readonly WallColumn[];
+  /** Geometry of the step from column `i` to column `i + 1`, in that direction. */
+  readonly geometries: readonly ConstructionEdgeGeometry[];
+  readonly closed: boolean;
+  }
+export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
+  if (geometry.kind === "line") return geometry;
+  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+export function wallPatch(
+  tableId: string,
+  contour: WallContour,
+  surfaceType: string,
+  physical = true,
+  ): ConstructionPatch {
+  const { columns, geometries, closed } = contour;
+  const stepCount = closed ? columns.length : columns.length - 1;
+
 // src/composition/tabletop/tools/walls/wall-shared.ts
 export const WALL_HEIGHT = 3;
-export const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
-export function idPrefixFor(ctx: ToolContext): string {
-  return scopedToolId(ctx, "wall-brush");
-export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition {
-  for (const span of wallSpans(ctx)) {
-  const spanLength = xzDistance(span.a, span.b);
+export const WALL_COLOR: Record<WallParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
 export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined {
   let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
+export function commitWallContour(
+  ctx: ToolContext,
+  fitted: readonly FittedEdge[],
+  params: WallParams,
+  domain: string,
+  ): void {
+  if (fitted.length === 0) return;
+  const sequence = ctx.nextSequence();
+export function commitWallStroke(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+  params: WallParams,
+  domain: string,
+  ): void {
+  const first = samples[0];
 
 // src/composition/tabletop/tools/walls/wall-spans.ts
 export interface WallSpan {
@@ -3589,6 +3626,7 @@ export type {
   NodePositionEntry,
   NodeRef,
   SurfaceProjection,
+export type { CoveringKind, SurfaceCovering, SurfaceFill } from "./surface-covering.ts";
 
 // src/entities/map/map-projection.ts
 export type SurfaceRef = string;
@@ -3638,6 +3676,44 @@ export function applyMapProjectionDelta(
   const entry = createNodePositionEntry({
   nodeRef: delta.nodeRef,
   position: delta.position,
+
+// src/entities/map/surface-covering.ts
+export type CoveringKind = string;
+export const PAINTED_COVERING_KIND: CoveringKind = "painted";
+export const NONE_COVERING_KIND: CoveringKind = "none";
+export interface SurfaceFill {
+  /** Flat classification color, until a real material/asset pipeline exists (`E4.2`). */
+  readonly color: number;
+  }
+export interface SurfaceCovering {
+  /** Which covering kind fills the surface. */
+  readonly kind: CoveringKind;
+  /**
+  * Batching identity: two surfaces sharing this key may merge into one render
+  * buffer, and two that do not share it must not.
+  *
+  * Spatial bucketing alone is not enough -- a bucket holding a wall and a
+export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
+  if (!physical) return 0x3a6b8a;
+  switch (surfaceType) {
+  case "wall":
+  case "wall-white":
+  return 0xe2e8f0; // White / light gray block prototype
+  case "wall-gray":
+  return 0x64748b; // Slate gray block prototype
+export const NONE_COVERING: SurfaceCovering = Object.freeze({
+  kind: NONE_COVERING_KIND,
+  key: NONE_COVERING_KIND,
+  surface: undefined,
+  });
+export function paintedCovering(color: number): SurfaceCovering {
+  return {
+  kind: PAINTED_COVERING_KIND,
+  key: `${PAINTED_COVERING_KIND}:${color.toString(16)}`,
+  surface: { color },
+  };
+export function resolveSurfaceCovering(surfaceType: string, physical: boolean): SurfaceCovering {
+  return paintedCovering(colorForSurfaceType(surfaceType, physical));
 
 // src/entities/token/index.ts
 export type {
@@ -4092,9 +4168,19 @@ export interface BrushShapeParams {
 export interface PathBrushParams extends BrushShapeParams {
   readonly depth: number;
   }
-export interface WallBrushParams {
+export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
+  /** Length of a panel's own vertical edge, in world units. */
+  readonly height: number;
   }
+export interface WallBrushParams extends WallParams, BrushShapeParams {}
+
+  /**
+  * One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
+  * own wall-follower algorithm, not limited to rectangles) rasterizes that
+  * space into a `cellSize` grid and hands it to the same region-partition
+  * algorithm `ConstructionSessionPort.generateRegionPartition` already
+  * exposes (the Rust side the retired "Pintar Casa" brush used to drive one
 export interface InteriorGenerateParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** World-space side length of one grid cell. */
@@ -4112,8 +4198,7 @@ export interface TerrainSculptParams {
   * variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
   * own `relax()` step is what pulls cells toward square in the first place --
 export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
-export interface TowerStampParams {
-  readonly wallType: "wall-white" | "wall-gray";
+export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
   }
 export type NoToolParams = Record<string, never>;
@@ -4122,7 +4207,7 @@ export interface ToolParamsByTool {
   readonly "edit-region": NoToolParams;
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
-  readonly "wall-line": WallBrushParams;
+  readonly "wall-line": WallParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
@@ -4130,10 +4215,10 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white" }),
-  "wall-line": Object.freeze({ wallType: "wall-white" }),
+  "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
+  "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
-  "tower-stamp": Object.freeze({ wallType: "wall-white", radius: TOWER_RADIUS_PRESETS[1] }),
+  "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
 export type PreviewDescriptor =
 
 // src/features/navigate-camera/attach-camera-navigation.ts
@@ -4271,6 +4356,7 @@ export interface ConstructionPatchEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
+  readonly geometry?: ConstructionEdgeGeometry;
   }
 export interface ConstructionPatch {
   readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
@@ -4316,12 +4402,22 @@ export interface RenderMeshData {
   readonly uvs?: Float32Array;
   readonly indices?: Uint16Array | Uint32Array;
   }
+export interface RenderCovering {
+  readonly kind: string;
+  /**
+  * Batching identity. Surfaces sharing it may merge into one buffer; surfaces
+  * that do not must not, because a merged buffer carries exactly one
+  * appearance.
+  */
+  readonly key: string;
 export interface RenderMapChunk {
   readonly chunkId: string;
-  readonly surfaceType: string;
-  readonly physical: boolean;
-  readonly mesh: RenderMeshData;
-  }
+  /**
+  * What fills this chunk visually. Resolved upstream, in the app's own
+  * covering layer -- the render adapter draws it and decides nothing.
+  *
+  * This replaced the chunk's former `surfaceType`/`physical` pair. Those were
+  * construction classification, carried into the render port only so the
 export interface RenderSurfacePickTarget {
   readonly surfaceRef: string;
   readonly mesh: RenderMeshData;
@@ -4333,8 +4429,6 @@ export interface RenderNodeHandle {
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type ConfirmedNodeHandleRenderChange =
 export type ConfirmedRenderChange =
-export interface ScenePickResult {
-  readonly point: { readonly x: number; readonly y: number; readonly z: number };
 
 // src/ports/terrain-noise-port.ts
 export interface TerrainNoisePort {
