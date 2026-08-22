@@ -1,6 +1,429 @@
 {
   "graph": {
     "nodes": {
+      "surface-transformations": {
+        "name": "surface-transformations",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/surface-transformations",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-surface-transformations"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-surface-transformations"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-surface-transformations"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-surface-transformations.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-surface-transformations --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "surface-transformations",
+          "projectType": "library",
+          "tags": [
+            "scope:procgen",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "id": "surface-transformations",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "structure-generation": {
+        "name": "structure-generation",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/structure-generation",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-structure-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-structure-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-structure-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-structure-generation.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-structure-generation --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "structure-generation",
+          "projectType": "library",
+          "tags": [
+            "scope:procgen",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "id": "structure-generation",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "terrain-generation": {
+        "name": "terrain-generation",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/terrain-generation",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-terrain-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-terrain-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-generation"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-terrain-generation.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-terrain-generation --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "terrain-generation",
+          "projectType": "library",
+          "tags": [
+            "scope:procgen",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "id": "terrain-generation",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
+      "construction-wasm": {
+        "name": "construction-wasm",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/construction-wasm",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-construction-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{projectRoot}/package.json",
+                "^default",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "outputs": [
+                "{projectRoot}/pkg"
+              ],
+              "options": {
+                "command": "wasm-pack build --target web --out-dir pkg",
+                "cwd": "libs/domains/procgen/construction-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-construction-wasm && wasm-pack test --node libs/domains/procgen/construction-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "postinstall": {
+              "executor": "nx:run-script",
+              "metadata": {
+                "scriptContent": "wasm-pack build --target web --out-dir pkg",
+                "runCommand": "pnpm run postinstall"
+              },
+              "options": {
+                "script": "postinstall"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-construction-wasm"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-construction-wasm.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-construction-wasm --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "construction-wasm",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:procgen",
+            "lang:rust",
+            "platform:web",
+            "type:lib"
+          ],
+          "metadata": {
+            "targetGroups": {
+              "NPM Scripts": [
+                "postinstall"
+              ]
+            },
+            "description": "grafting-procgen-construction-wasm compiled to Wasm via wasm-pack, co-located with its Rust source (DEC-055/ADR-0017). No domain logic here -- see src/ for the Rust source. `pkg/` is generated by this package's own postinstall script and gitignored; consumers depend on this like any other workspace package (workspace:*), no separate technical package involved.",
+            "js": {
+              "packageName": "@grafting/procgen-construction-wasm",
+              "packageVersion": "0.0.0",
+              "packageMain": "./pkg/grafting_procgen_construction_wasm.js",
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "construction-wasm",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:web",
+                "type:lib"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "generation-wasm": {
         "name": "generation-wasm",
         "type": "lib",
@@ -9,6 +432,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -24,6 +450,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -46,6 +475,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -136,6 +568,99 @@
           "implicitDependencies": []
         }
       },
+      "surface-mesh": {
+        "name": "surface-mesh",
+        "type": "lib",
+        "data": {
+          "root": "libs/domains/procgen/surface-mesh",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo check -p grafting-procgen-surface-mesh"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.lock",
+                "{workspaceRoot}/rust-toolchain.toml"
+              ],
+              "options": {
+                "command": "cargo test -p grafting-procgen-surface-mesh"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-surface-mesh"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/Cargo.toml",
+                "{workspaceRoot}/Cargo.toml",
+                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
+                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-surface-mesh.md",
+                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
+                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-surface-mesh --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "surface-mesh",
+          "projectType": "library",
+          "tags": [
+            "scope:procgen",
+            "lang:rust",
+            "platform:cross",
+            "type:lib"
+          ],
+          "metadata": {
+            "graphIr": {
+              "id": "surface-mesh",
+              "kind": "lib",
+              "tags": [
+                "scope:procgen",
+                "lang:rust",
+                "platform:cross"
+              ]
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "tileset-wfc": {
         "name": "tileset-wfc",
         "type": "lib",
@@ -144,6 +669,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -159,6 +687,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -181,6 +712,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -309,6 +843,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -324,6 +861,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -346,6 +886,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -444,10 +987,10 @@
           "targets": {
             "build": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "engine-domain-core:generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/System.sln",
@@ -495,6 +1038,9 @@
           "targets": {
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -511,11 +1057,16 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/dotnet/Grafting.Isekai.Interop.Tests/**/*",
                 "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+                "{workspaceRoot}/target/release/libgrafting_isekai_capi.so",
+                "{workspaceRoot}/target/release/libgrafting_isekai_capi.dylib",
                 "{workspaceRoot}/System.sln",
                 "{workspaceRoot}/Directory.Build.props",
                 "{workspaceRoot}/Directory.Packages.props",
@@ -561,10 +1112,10 @@
           "targets": {
             "check": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "isekai-wasm-bridge:build"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -578,10 +1129,10 @@
             },
             "test": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "isekai-wasm-bridge:build"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/pnpm-lock.yaml"
@@ -660,13 +1211,13 @@
           "targets": {
             "check": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "generation-wasm:build",
                 "isekai-wasm-bridge:build",
                 "discretize:build",
                 "ui:build"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/docs/generated/grafting.graph.json",
@@ -680,13 +1231,13 @@
             },
             "build": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "generation-wasm:build",
                 "isekai-wasm-bridge:build",
                 "discretize:build",
                 "ui:build"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/docs/generated/grafting.graph.json",
@@ -703,10 +1254,10 @@
             },
             "test": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "ui:build"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
                 "{projectRoot}/test/**/*",
@@ -870,6 +1421,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -885,6 +1439,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -958,6 +1515,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -973,6 +1533,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1048,10 +1611,10 @@
           "targets": {
             "check": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1066,10 +1629,10 @@
             },
             "test": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1088,6 +1651,7 @@
               "inputs": [
                 "{projectRoot}/contracts/*.fbs",
                 "{workspaceRoot}/tools/flatc-version.txt",
+                "{workspaceRoot}/tools/scripts/generate-contracts.mjs",
                 "{workspaceRoot}/tools/scripts/generate-contracts.ps1",
                 "{workspaceRoot}/tools/scripts/get-flatc-csharp.ps1"
               ],
@@ -1097,7 +1661,7 @@
                 "{workspaceRoot}/dotnet/Grafting.Isekai.Protocol/Generated"
               ],
               "options": {
-                "command": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/scripts/generate-contracts.ps1"
+                "command": "node tools/scripts/generate-contracts.mjs"
               },
               "configurations": {},
               "parallelism": true
@@ -1162,6 +1726,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1177,6 +1744,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1185,7 +1755,9 @@
                 "{workspaceRoot}/rust-toolchain.toml"
               ],
               "outputs": [
-                "{workspaceRoot}/target/release/grafting_isekai_capi.dll"
+                "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+                "{workspaceRoot}/target/release/libgrafting_isekai_capi.so",
+                "{workspaceRoot}/target/release/libgrafting_isekai_capi.dylib"
               ],
               "options": {
                 "command": "cargo build --release -p grafting-isekai-capi"
@@ -1195,6 +1767,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1270,10 +1845,10 @@
           "targets": {
             "check": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "engine-domain-core:generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1288,10 +1863,10 @@
             },
             "build": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "engine-domain-core:generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
                 "{projectRoot}/Cargo.toml",
@@ -1313,10 +1888,10 @@
             },
             "test": {
               "cache": true,
-              "executor": "nx:run-commands",
               "dependsOn": [
                 "engine-domain-core:generate"
               ],
+              "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
                 "{workspaceRoot}/Cargo.toml",
@@ -1417,6 +1992,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1430,6 +2008,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1446,6 +2027,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -1570,6 +2154,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1583,6 +2170,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1599,6 +2189,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -1655,6 +2248,166 @@
           "implicitDependencies": []
         }
       },
+      "assets": {
+        "name": "assets",
+        "type": "lib",
+        "data": {
+          "root": "packages/assets",
+          "targets": {
+            "check": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/assets check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/**/*",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/assets build"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "test": {
+              "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "executor": "nx:run-commands",
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/tests/**/*.test.mjs",
+                "{projectRoot}/package.json",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/assets test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "watch": {
+              "executor": "nx:run-commands",
+              "continuous": true,
+              "cache": false,
+              "options": {
+                "command": "pnpm --filter @grafting/assets watch"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "api-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/project.json",
+                "{projectRoot}/tsconfig.json",
+                "{projectRoot}/tests/snapshots/public-api.md",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.mjs",
+                "{workspaceRoot}/tools/scripts/check-typescript-public-api.test.mjs",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "options": {
+                "command": "node --test tools/scripts/check-typescript-public-api.test.mjs && pnpm --filter @grafting/assets api-check"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-generate": {
+              "executor": "nx:run-commands",
+              "cache": false,
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs assets"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "docs-check": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/project.json",
+                "{workspaceRoot}/docs/generated/api/ts/assets.api.md",
+                "{workspaceRoot}/tools/scripts/generate-api-docs.mjs",
+                "sharedGlobals"
+              ],
+              "options": {
+                "command": "node tools/scripts/generate-api-docs.mjs assets --check"
+              },
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "assets",
+          "projectType": "library",
+          "tags": [
+            "npm:private",
+            "scope:shared",
+            "lang:typescript",
+            "platform:web",
+            "type:lib"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "description": "Product-agnostic resource store: identity, declaration, caching, reference counting and deterministic disposal for renderable content. Formats and catalogues arrive as registered resolvers, so nothing about where content lives is baked in.",
+            "js": {
+              "packageName": "@grafting/assets",
+              "packageVersion": "0.0.0",
+              "packageExports": {
+                ".": {
+                  "types": "./dist/index.d.ts",
+                  "import": "./dist/index.js"
+                }
+              },
+              "isInPackageManagerWorkspaces": true
+            },
+            "graphIr": {
+              "id": "assets",
+              "kind": "lib",
+              "tags": [
+                "scope:shared",
+                "lang:typescript",
+                "platform:web",
+                "type:lib"
+              ]
+            },
+            "publicApi": {
+              "entryPoint": "src/index.ts",
+              "baseline": "tests/snapshots/public-api.md",
+              "forbiddenModules": []
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "graph-core": {
         "name": "graph-core",
         "type": "lib",
@@ -1663,6 +2416,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1678,6 +2434,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1725,8 +2484,11 @@
               "cache": true,
               "inputs": [
                 "{projectRoot}/src/lib.rs",
+                "{projectRoot}/src/contour.rs",
                 "{projectRoot}/src/layout.rs",
                 "{projectRoot}/src/model.rs",
+                "{projectRoot}/src/surface.rs",
+                "{projectRoot}/src/transformation_plan.rs",
                 "{projectRoot}/tests/public_api_contract.rs",
                 "{projectRoot}/tests/public_api_snapshot.rs",
                 "{projectRoot}/tests/snapshots/public-api.txt",
@@ -1815,6 +2577,9 @@
           "targets": {
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -1898,6 +2663,9 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1911,6 +2679,9 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -1928,6 +2699,9 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -1941,6 +2715,24 @@
               ],
               "options": {
                 "command": "pnpm --filter @grafting/ui test"
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "compile": {
+              "executor": "nx:run-commands",
+              "cache": true,
+              "inputs": [
+                "{projectRoot}/src/**/*",
+                "{projectRoot}/package.json",
+                "{projectRoot}/tsconfig.json",
+                "{workspaceRoot}/pnpm-lock.yaml"
+              ],
+              "outputs": [
+                "{projectRoot}/dist"
+              ],
+              "options": {
+                "command": "pnpm --filter @grafting/ui build"
               },
               "configurations": {},
               "parallelism": true
@@ -2053,6 +2845,7 @@
               "entryPoint": "src/index.ts",
               "baseline": "tests/snapshots/public-api.md",
               "forbiddenModules": [
+                "@floating-ui/react",
                 "antd",
                 "react-dom",
                 "react-grid-layout",
@@ -2076,6 +2869,12 @@
           "targets": {
             "check": {
               "cache": true,
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -2090,6 +2889,12 @@
             },
             "build": {
               "cache": true,
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/**/*",
@@ -2106,6 +2911,12 @@
             },
             "test": {
               "cache": true,
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "executor": "nx:run-commands",
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -2120,6 +2931,12 @@
             },
             "dev": {
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "cache": false,
               "options": {
                 "command": "pnpm --filter @grafting/vtt dev"
@@ -2129,6 +2946,12 @@
             },
             "docs-generate": {
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "cache": false,
               "options": {
                 "command": "node tools/scripts/generate-api-docs.mjs vtt"
@@ -2138,6 +2961,12 @@
             },
             "docs-check": {
               "executor": "nx:run-commands",
+              "dependsOn": [
+                "render-3d:build",
+                "construction-wasm:build",
+                "generation-wasm:build",
+                "ui:compile"
+              ],
               "cache": true,
               "inputs": [
                 "{projectRoot}/src/**/*",
@@ -2162,6 +2991,12 @@
             "platform:web",
             "type:app"
           ],
+          "implicitDependencies": [
+            "render-3d",
+            "construction-wasm",
+            "generation-wasm",
+            "ui"
+          ],
           "metadata": {
             "targetGroups": {},
             "js": {
@@ -2178,8 +3013,7 @@
                 "platform:web"
               ]
             }
-          },
-          "implicitDependencies": []
+          }
         }
       },
       "grafting": {
@@ -2190,6 +3024,9 @@
           "targets": {
             "build": {
               "cache": false,
+              "dependsOn": [
+                "^build"
+              ],
               "executor": "nx:run-commands",
               "options": {
                 "command": "pnpm run workspace:build"
@@ -2446,7 +3283,12 @@
       }
     },
     "dependencies": {
+      "surface-transformations": [],
+      "structure-generation": [],
+      "terrain-generation": [],
+      "construction-wasm": [],
       "generation-wasm": [],
+      "surface-mesh": [],
       "tileset-wfc": [],
       "discretize": [],
       "isekai-dotnet-protocol": [
@@ -2557,6 +3399,7 @@
       ],
       "render-3d": [],
       "x6-canvas": [],
+      "assets": [],
       "graph-core": [],
       "ia-graft": [],
       "ui": [
@@ -2566,7 +3409,48 @@
           "type": "static"
         }
       ],
-      "vtt": [],
+      "vtt": [
+        {
+          "source": "vtt",
+          "target": "render-3d",
+          "type": "implicit"
+        },
+        {
+          "source": "vtt",
+          "target": "construction-wasm",
+          "type": "implicit"
+        },
+        {
+          "source": "vtt",
+          "target": "generation-wasm",
+          "type": "implicit"
+        },
+        {
+          "source": "vtt",
+          "target": "ui",
+          "type": "implicit"
+        },
+        {
+          "source": "vtt",
+          "target": "construction-wasm",
+          "type": "static"
+        },
+        {
+          "source": "vtt",
+          "target": "generation-wasm",
+          "type": "static"
+        },
+        {
+          "source": "vtt",
+          "target": "render-3d",
+          "type": "static"
+        },
+        {
+          "source": "vtt",
+          "target": "ui",
+          "type": "static"
+        }
+      ],
       "grafting": []
     }
   }

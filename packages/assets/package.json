@@ -1,0 +1,25 @@
+{
+  "name": "@grafting/assets",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Product-agnostic resource store: identity, declaration, caching, reference counting and deterministic disposal for renderable content. Formats and catalogues arrive as registered resolvers, so nothing about where content lives is baked in.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test tests/*.test.mjs",
+    "api-check": "node ../../tools/scripts/check-typescript-public-api.mjs ."
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
