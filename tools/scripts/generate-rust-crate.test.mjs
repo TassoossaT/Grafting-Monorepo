@@ -96,11 +96,15 @@ test("scaffoldCrateFiles produces a real crate: correct content, cargo check pas
   // ("valid crate and graph") -- proven, not assumed. Confirmed
   // empirically before writing this test that Nx's default project
   // discovery finds a scratch project.json placed here.
-  const nxProjectsRaw = execFileSync("nx", ["show", "projects", "--json"], {
-    cwd: root,
-    encoding: "utf8",
-    shell: true,
-  });
+  const nxProjectsRaw = execFileSync(
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    ["exec", "nx", "show", "projects", "--json"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      shell: true,
+    },
+  );
   const nxProjects = JSON.parse(nxProjectsRaw.trim().split("\n").pop());
   assert.ok(nxProjects.includes(nxProjectName), `expected Nx to discover ${nxProjectName}, got: ${nxProjectsRaw}`);
 });

@@ -75,11 +75,15 @@ test("scaffoldDomainFiles produces a complete slice: crate + tests + contract + 
   await writeFile(resolve(targetDir, "Cargo.toml"), `${cargoTomlOriginal}\n[workspace]\n`);
   execFileSync("cargo", ["check"], { cwd: targetDir, stdio: "pipe" });
 
-  const nxProjectsRaw = execFileSync("nx", ["show", "projects", "--json"], {
-    cwd: root,
-    encoding: "utf8",
-    shell: true,
-  });
+  const nxProjectsRaw = execFileSync(
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    ["exec", "nx", "show", "projects", "--json"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      shell: true,
+    },
+  );
   const nxProjects = JSON.parse(nxProjectsRaw.trim().split("\n").pop());
   assert.ok(nxProjects.includes(nxProjectName), `expected Nx to discover ${nxProjectName}, got: ${nxProjectsRaw}`);
 });
