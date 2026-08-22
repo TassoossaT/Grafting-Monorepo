@@ -114,3 +114,19 @@ test("a wider tolerance corrects the same shaky stroke into one straight run", (
   assert.equal(edges.length, 1);
   assert.equal(edges[0].geometry.kind, "line");
 });
+
+test("with arcs off, a perfectly traced circle still fits as straight chords", () => {
+  const points = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8);
+  const edges = fitPath(points, TOLERANCE, { arcs: false });
+  assert.ok(edges.length >= 1);
+  for (const edge of edges) assert.equal(edge.geometry.kind, "line");
+  assert.deepEqual(edges[0].start, points[0]);
+  assert.deepEqual(edges[edges.length - 1].end, points[points.length - 1]);
+});
+
+test("with arcs off, corners are still found -- only curvature is refused", () => {
+  const points = [point(0, 0), point(2, 0), point(4, 0), point(4, 2), point(4, 4)];
+  const edges = fitPath(points, TOLERANCE, { arcs: false });
+  assert.equal(edges.length, 2);
+  assert.deepEqual(edges[0].end, points[2], "the corner is where it always was");
+});

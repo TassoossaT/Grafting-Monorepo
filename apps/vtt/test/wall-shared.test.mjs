@@ -12,7 +12,15 @@ const TABLE_ID = "table-1";
 const PARAMS = { wallType: "wall-white", height: 3 };
 const WALL = panelTopology("wall-1", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } });
 
-function contextFor(topologies) {
+/**
+ * Shared by every context in this file, the way the real runtime's own
+ * counter is shared by every gesture on a table. Two contexts with private
+ * counters would mint the same node ids for two different runs, which is a
+ * property of the fixture, never of the code under test.
+ */
+let sequence = 0;
+
+function contextFor(topologies, snapToGrid = false) {
   const weldCalls = [];
   const patches = [];
   return {
@@ -43,10 +51,8 @@ function contextFor(topologies) {
       },
       history: undefined,
       tableId: TABLE_ID,
-      nextSequence: (() => {
-        let n = 0;
-        return () => ++n;
-      })(),
+      snapToGrid,
+      nextSequence: () => (sequence += 1),
       reportSelection: () => {},
       reportFeedback: () => {},
     },
@@ -57,6 +63,49 @@ function contextFor(topologies) {
 
 function line(start, end) {
   return { start, end, geometry: { kind: "line" } };
+}
+
+/**
+ * Turns a patch back into the region topologies the engine would report for
+ * it, so a second run can be committed against what a first one actually
+ * built -- the only way to reproduce two runs meeting on one column.
+ */
+function topologiesFrom(patch) {
+  const edgeById = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  const positionById = new Map(patch.nodes.map((node) => [node.id, node.position]));
+  return patch.regions.map((region) => {
+    const loop = region.boundary.map((use) => {
+      const edge = edgeById.get(use.edgeId);
+      return {
+        edgeId: use.edgeId,
+        reversed: use.reversed,
+        startNodeId: edge.startNodeId,
+        endNodeId: edge.endNodeId,
+        geometry: edge.geometry ?? { kind: "line" },
+      };
+    });
+    const ids = [...new Set(loop.flatMap((edge) => [edge.startNodeId, edge.endNodeId]))];
+    return {
+      surfaceKey: ["@region", region.regionId],
+      surfaceType: region.surfaceType,
+      physical: region.physical,
+      outerLoops: [loop],
+      holes: [],
+      nodes: ids.map((id) => ({ id, position: positionById.get(id) })),
+    };
+  });
+}
+
+/** The edge use a panel walks along `column`'s own vertical, by the node ids of that column. */
+function verticalUse(patch, bottomNodeId, topNodeId) {
+  const edgeById = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  return patch.regions
+    .flatMap((region) => region.boundary)
+    .find((use) => {
+      const edge = edgeById.get(use.edgeId);
+      const ends = [edge.startNodeId, edge.endNodeId];
+      return ends.includes(bottomNodeId) && ends.includes(topNodeId);
+    });
 }
 
 test("a run on empty ground mints its own columns and declares one panel per step", () => {
@@ -204,6 +253,128 @@ test("a stroke commits nothing when it never moved", () => {
   const { ctx, patches } = contextFor([]);
   commitWallStroke(ctx, [{ x: 1, y: 0, z: 1 }], 0.4, PARAMS, "wall-brush");
   assert.equal(patches.length, 0);
+});
+
+/**
+ * Drawing a run *into* the far end of an existing wall used to declare a
+ * panel bounded by that column's vertical walked the same way the existing
+ * panel already walks it. An edge bounds two faces, one per side, so the
+ * engine refused the whole face and reported it as skipped -- silently, as
+ * far as the drawing went. Joining two separate walls therefore worked in
+ * one direction and did nothing in the other.
+ */
+test("a run ending on an existing wall's far column still declares its panel", () => {
+  const built = contextFor([]);
+  commitWallContour(built.ctx, [line({ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 })], PARAMS, "wall-line");
+  const wallA = built.patches[0].patch;
+  const farColumn = wallA.nodes.filter((node) => node.position.x === 4);
+  const [farBottom, farTop] = [
+    farColumn.find((node) => node.position.y === 0).id,
+    farColumn.find((node) => node.position.y === 3).id,
+  ];
+
+  const linking = contextFor(topologiesFrom(wallA));
+  commitWallContour(
+    linking.ctx,
+    [line({ x: 4, y: 0, z: 4 }, { x: 4, y: 0, z: 0 })],
+    PARAMS,
+    "wall-line",
+  );
+
+  assert.equal(linking.patches.length, 1);
+  const { patch } = linking.patches[0];
+  assert.equal(patch.regions.length, 1, "the linking panel must be declared, not refused");
+  const ids = patch.nodes.map((node) => node.id);
+  assert.ok(ids.includes(farBottom), "the run is built on the existing column's own nodes");
+  assert.ok(ids.includes(farTop));
+
+  const shared = verticalUse(wallA, farBottom, farTop);
+  const claimed = verticalUse(patch, farBottom, farTop);
+  assert.notEqual(
+    claimed.edgeId,
+    shared.edgeId,
+    "with no room on the shared edge the run keeps its own over the same nodes -- the column is what joins them",
+  );
+});
+
+test("a run leaving an existing wall's far column shares that column's own edge", () => {
+  const built = contextFor([]);
+  commitWallContour(built.ctx, [line({ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 })], PARAMS, "wall-line");
+  const wallA = built.patches[0].patch;
+  const farColumn = wallA.nodes.filter((node) => node.position.x === 4);
+  const [farBottom, farTop] = [
+    farColumn.find((node) => node.position.y === 0).id,
+    farColumn.find((node) => node.position.y === 3).id,
+  ];
+
+  const linking = contextFor(topologiesFrom(wallA));
+  commitWallContour(
+    linking.ctx,
+    [line({ x: 4, y: 0, z: 0 }, { x: 4, y: 0, z: 4 })],
+    PARAMS,
+    "wall-line",
+  );
+
+  const { patch } = linking.patches[0];
+  assert.equal(patch.regions.length, 1);
+  assert.equal(
+    verticalUse(patch, farBottom, farTop).edgeId,
+    verticalUse(wallA, farBottom, farTop).edgeId,
+    "where the edge has room the two panels still meet along one edge",
+  );
+});
+
+test("three panels may meet at one column", () => {
+  const built = contextFor([]);
+  commitWallContour(built.ctx, [line({ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 })], PARAMS, "wall-line");
+  let topologies = topologiesFrom(built.patches[0].patch);
+
+  for (const target of [{ x: 4, y: 0, z: 4 }, { x: 4, y: 0, z: -4 }, { x: 8, y: 0, z: 0 }]) {
+    const run = contextFor(topologies);
+    commitWallContour(run.ctx, [line({ x: 4, y: 0, z: 0 }, target)], PARAMS, "wall-line");
+    assert.equal(run.patches[0].patch.regions.length, 1, `a panel toward ${target.z} must be declared`);
+    topologies = [...topologies, ...topologiesFrom(run.patches[0].patch)];
+  }
+  assert.equal(topologies.length, 4, "four panels now meet at that column");
+});
+
+test("with the grid magnet on, a staircase of snapped samples commits only straight runs", () => {
+  const { ctx, patches } = contextFor([], true);
+  // Exactly what the dispatcher hands over once every ground point is
+  // rounded to an intersection: a staircase, whose every three points sit
+  // on some circle nobody drew.
+  const staircase = [
+    { x: 0, y: 0, z: 0 },
+    { x: 1, y: 0, z: 0 },
+    { x: 1, y: 0, z: 1 },
+    { x: 2, y: 0, z: 1 },
+    { x: 2, y: 0, z: 2 },
+    { x: 3, y: 0, z: 2 },
+  ];
+
+  commitWallStroke(ctx, staircase, 0.3, PARAMS, "wall-brush");
+
+  const { patch } = patches[0];
+  for (const edge of patch.edges) {
+    assert.equal(edge.geometry.kind, "line", "a snapped stroke has no hand in it to read curvature out of");
+  }
+});
+
+test("repeated samples on one intersection do not become a panel of no width", () => {
+  const { ctx, patches } = contextFor([], true);
+  const held = [
+    { x: 0, y: 0, z: 0 },
+    { x: 0, y: 0, z: 0 },
+    { x: 0, y: 0, z: 0 },
+    { x: 2, y: 0, z: 0 },
+    { x: 2, y: 0, z: 0 },
+  ];
+
+  commitWallStroke(ctx, held, 0.3, PARAMS, "wall-brush");
+
+  const { patch } = patches[0];
+  assert.equal(patch.regions.length, 1);
+  assert.equal(patch.nodes.length, 4, "two columns, not one per repeated sample");
 });
 
 test("findWallSurfaceAt returns the panel a point lands directly on, even near its own corner", () => {

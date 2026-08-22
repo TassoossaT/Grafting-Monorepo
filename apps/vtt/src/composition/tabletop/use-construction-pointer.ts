@@ -102,6 +102,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
+      get snapToGrid() {
+        return optionsRef.current.snapToGrid;
+      },
       nextSequence,
       reportSelection: (info) => optionsRef.current.onSelectionChange(info),
       reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),

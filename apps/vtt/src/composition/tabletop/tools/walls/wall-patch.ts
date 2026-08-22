@@ -1,5 +1,6 @@
 import type {
   ConstructionEdgeGeometry,
+  ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -56,20 +57,55 @@ export function reverseGeometry(geometry: ConstructionEdgeGeometry): Constructio
 }
 
 /**
+ * What the graph already holds, so a run can tell a boundary it may join
+ * from one it must keep to itself.
+ *
+ * An edge bounds at most two faces, one on each side, and the engine
+ * refuses a third use or a second one facing the same way. That rule is
+ * about a *surface*; it is not about walls, and any number of walls may
+ * legitimately meet at one column.
+ */
+export interface EdgeClaims {
+  /** Every direction each boundary edge is currently walked in, by edge id. */
+  readonly existing: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>;
+  /** Namespace for an edge this run has to keep to itself. Must be unique per run. */
+  readonly runPrefix: string;
+}
+
+/**
  * Collects the edges a contour needs, naming each one after the *pair of
  * nodes* it runs between rather than after whichever face declared it first.
  *
  * Lexicographic order picks the same representative from either side, which
- * is the whole mechanism -- it is what lets two panels meeting at a corner
- * reference one vertical edge used twice instead of two coincident edges
- * used once each. Coincident is not connected; sharing the edge is.
+ * is what lets two panels meeting at a corner reference one vertical edge
+ * used twice instead of two coincident edges used once each.
+ *
+ * Sharing is an optimisation, though, never the connection itself. What
+ * joins two walls is referencing the same *nodes*; an edge only bounds two
+ * faces, so a column where a third panel arrives -- or where two arrive
+ * facing the same way -- simply has no room left on that edge. When that
+ * happens this mints a run-private edge over the very same nodes instead.
+ * The walls stay joined, because they were joined by the column, and
+ * nothing is silently dropped for want of a name.
  */
-class SharedEdges {
+class BoundaryEdges {
   readonly #tableId: string;
-  readonly #edges = new Map<string, ConstructionPatchEdge>();
+  readonly #claims: EdgeClaims;
+  readonly #edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
+  readonly #claimed = new Map<ConstructionEdgeId, boolean[]>();
 
-  constructor(tableId: string) {
+  constructor(tableId: string, claims: EdgeClaims) {
     this.#tableId = tableId;
+    this.#claims = claims;
+  }
+
+  /** Whether `edgeId` can take one more use walked this way -- counting what the graph holds and what this run has already claimed. */
+  #hasRoom(edgeId: ConstructionEdgeId, reversed: boolean): boolean {
+    const graphUses = this.#claims.existing.get(edgeId) ?? [];
+    const runUses = this.#claimed.get(edgeId) ?? [];
+    const uses = [...graphUses, ...runUses];
+    if (uses.length >= 2) return false;
+    return uses[0] === undefined || uses[0] !== reversed;
   }
 
   /** Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. */
@@ -81,7 +117,17 @@ class SharedEdges {
     const forward = from < to;
     const start = forward ? from : to;
     const end = forward ? to : from;
-    const edgeId = `${this.#tableId}:seg:${start}~${end}`;
+    const reversed = !forward;
+
+    let edgeId: ConstructionEdgeId = `${this.#tableId}:seg:${start}~${end}`;
+    if (!this.#hasRoom(edgeId, reversed)) {
+      edgeId = `${this.#claims.runPrefix}:seg:${start}~${end}`;
+      for (let suffix = 2; !this.#hasRoom(edgeId, reversed); suffix += 1) {
+        edgeId = `${this.#claims.runPrefix}:seg:${start}~${end}:${suffix}`;
+      }
+    }
+
+    this.#claimed.set(edgeId, [...(this.#claimed.get(edgeId) ?? []), reversed]);
     if (!this.#edges.has(edgeId)) {
       this.#edges.set(edgeId, {
         edgeId,
@@ -90,7 +136,7 @@ class SharedEdges {
         geometry: forward ? geometry : reverseGeometry(geometry),
       });
     }
-    return { edgeId, reversed: !forward };
+    return { edgeId, reversed };
   }
 
   all(): readonly ConstructionPatchEdge[] {
@@ -115,6 +161,7 @@ export function wallPatch(
   tableId: string,
   contour: WallContour,
   surfaceType: string,
+  claims: EdgeClaims,
   physical = true,
 ): ConstructionPatch {
   const { columns, geometries, closed } = contour;
@@ -127,7 +174,7 @@ export function wallPatch(
     nodes.push({ id: column.topNodeId, position: column.top });
   }
 
-  const edges = new SharedEdges(tableId);
+  const edges = new BoundaryEdges(tableId, claims);
   const regions: ConstructionPatchRegion[] = [];
 
   for (let step = 0; step < stepCount; step += 1) {
