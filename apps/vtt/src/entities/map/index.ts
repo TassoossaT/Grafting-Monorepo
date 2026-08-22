@@ -14,3 +14,9 @@ export type {
   SurfaceProjection,
   SurfaceRef,
 } from "./map-projection.ts";
+export {
+  PAINTED_COVERING_KIND,
+  colorForSurfaceType,
+  resolveSurfaceCovering,
+} from "./surface-covering.ts";
+export type { CoveringKind, SurfaceCovering } from "./surface-covering.ts";

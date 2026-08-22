@@ -53,10 +53,26 @@ export interface RenderMeshData {
  * `grafting-procgen-construction-wasm`'s `Surface` fields directly -- this
  * port does not invent its own classification vocabulary.
  */
+/**
+ * The resolved visual fill a chunk was built for. Structurally mirrors
+ * `entities/map`'s `SurfaceCovering` but is declared locally, matching how
+ * {@link RenderMeshData} and {@link RenderToken} already keep this port free of
+ * dependencies in either direction.
+ */
+export interface RenderCovering {
+  readonly kind: string;
+  readonly color: number;
+}
+
 export interface RenderMapChunk {
   readonly chunkId: string;
   readonly surfaceType: string;
   readonly physical: boolean;
+  /**
+   * What fills this chunk visually. Resolved upstream, in the app's own
+   * covering layer -- the render adapter draws it and decides nothing.
+   */
+  readonly covering: RenderCovering;
   readonly mesh: RenderMeshData;
 }
 
