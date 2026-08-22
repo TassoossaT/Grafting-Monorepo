@@ -93,12 +93,12 @@ pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
-pub fn classify_points_json(&self, request_json: &str) -> Result<String, JsValue>
-pub fn duplicate_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -377,7 +377,6 @@ pub fn boundary_runs(cells: &[CellCoord], regions: &[Region]) -> Vec<BoundaryRun
 ```rust
 // src/lib.rs
 pub struct TriangulatedMesh
-pub fn triangulate_surface(
 pub fn triangulate_region(
 ```
 
@@ -3095,6 +3094,24 @@ export interface TabletopRuntime {
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
+// src/composition/tabletop/tools/core/boundary-edges.ts
+export type EdgeSharing =
+export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
+  const uses = new Map<ConstructionEdgeId, boolean[]>();
+export interface BoundaryEdges {
+  /** Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord. */
+  use(
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+  geometry?: ConstructionEdgeGeometry,
+  ): ConstructionOrientedEdgeUse;
+  /** Every edge declared so far, each exactly once. */
+export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
+  if (geometry.kind === "line") return geometry;
+  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
+  const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
+
 // src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
@@ -3522,20 +3539,11 @@ export interface WallContour {
   readonly geometries: readonly ConstructionEdgeGeometry[];
   readonly closed: boolean;
   }
-export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
-  if (geometry.kind === "line") return geometry;
-  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
-export interface EdgeClaims {
-  /** Every direction each boundary edge is currently walked in, by edge id. */
-  readonly existing: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>;
-  /** Namespace for an edge this run has to keep to itself. Must be unique per run. */
-  readonly runPrefix: string;
-  }
 export function wallPatch(
   tableId: string,
   contour: WallContour,
   surfaceType: string,
-  claims: EdgeClaims,
+  sharing: EdgeSharing,
   physical = true,
   ): ConstructionPatch {
   const { columns, geometries, closed } = contour;
@@ -4273,9 +4281,11 @@ export interface ConstructionCoveredRegion {
 export interface ConstructionPatchRegion {
   readonly regionId: string;
   readonly boundary: readonly ConstructionOrientedEdgeUse[];
-  readonly surfaceType: string;
-  readonly physical: boolean;
-  }
+  /**
+  * Inner loops this face is opened by -- a door, a window, any opening.
+  * Absent means a solid face, which is what almost every patch declares.
+  *
+  * An opening leaves one use free on every edge of its own rim, so a
 export interface ConstructionPatchEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
