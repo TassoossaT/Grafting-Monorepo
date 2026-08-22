@@ -12,6 +12,7 @@ import type { CatalogSource, ResourceResolver } from "./resolver.js";
  * holds what.
  */
 export interface ResourceHandle<TResource> {
+  /** Which resource this handle claims. */
   readonly ref: ResourceRef;
   /** Which revision of the definition this handle serves. */
   readonly revision: number;
@@ -44,8 +45,11 @@ export type ResourceStatus =
 
 /** One row of {@link AssetStore.inventory}. */
 export interface InventoryEntry {
+  /** The declared resource this row describes. */
   readonly ref: ResourceRef;
+  /** Which resolver would load it. */
   readonly kind: ResourceKind;
+  /** What the store currently knows about it. */
   readonly status: ResourceStatus;
 }
 
@@ -115,6 +119,7 @@ export interface AssetStore {
    */
   peek(ref: ResourceRef): AssetDefinition | undefined;
 
+  /** What the store currently knows about one reference. */
   status(ref: ResourceRef): ResourceStatus;
   /**
    * Every declared resource with its state, holder count and reported size.

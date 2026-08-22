@@ -11,14 +11,19 @@
 
 /** A point or extent in resource-local space. */
 export interface Vec3 {
+  /** Rightward axis. */
   readonly x: number;
+  /** Upward axis. */
   readonly y: number;
+  /** Depth axis. */
   readonly z: number;
 }
 
 /** An axis-aligned bounding box in resource-local space. */
 export interface Aabb {
+  /** Corner with the smallest coordinate on every axis. */
   readonly min: Vec3;
+  /** Corner with the largest coordinate on every axis. */
   readonly max: Vec3;
 }
 

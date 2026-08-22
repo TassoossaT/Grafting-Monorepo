@@ -7,8 +7,11 @@ export const IN_MEMORY_IMAGE_KIND = "in-memory-image";
 
 /** What an in-memory image definition puts in its `source`. */
 export interface InMemoryImageSource {
+  /** The already-decoded image. Ownership passes to the store. */
   readonly source: ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+  /** Width in pixels, used to report the decoded memory cost. */
   readonly width: number;
+  /** Height in pixels, used to report the decoded memory cost. */
   readonly height: number;
   /** Defaults to `"srgb"`, which is what colour textures are authored in. */
   readonly colorSpace?: "srgb" | "linear";

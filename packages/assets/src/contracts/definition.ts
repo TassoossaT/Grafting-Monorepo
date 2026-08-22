@@ -55,5 +55,6 @@ export interface AssetDefinition<TKind extends ResourceKind = ResourceKind> {
    * must not become a backdoor into deciding them.
    */
   readonly dimensions?: Vec3;
+  /** Where this came from and what may be done with it. Required, never inferred. */
   readonly provenance: AssetProvenance;
 }
