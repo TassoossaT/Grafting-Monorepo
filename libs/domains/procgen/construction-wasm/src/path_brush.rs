@@ -12,13 +12,12 @@ use serde::{Deserialize, Serialize};
 
 use std::collections::HashSet;
 
-use grafting_graph_core::{ContourTopology, RegionId, SurfaceKey, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{ContourTopology, NodeId, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_surface_transformations::{
     BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
     swept_brush_contains, validate_request,
 };
 
-use crate::dto::surface_key_to_wire;
 use crate::editing::SessionGraph;
 use crate::mesh::{self, SurfaceMeshDto, region_id_to_wire};
 use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
@@ -34,7 +33,9 @@ use crate::region_merge::{RegionMergeOutcome, apply_region_merge};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum BrushShapeRequest {
-    Circle { radius: f32 },
+    Circle {
+        radius: f32,
+    },
     Square {
         size: f32,
         #[serde(rename = "rotationRadians")]
@@ -157,19 +158,17 @@ pub fn apply_path_brush(
     graph: &mut SessionGraph,
     surfaces: &mut SurfaceRegistry,
     topology: &mut ContourTopology,
-    known_surfaces: &mut HashSet<SurfaceKey>,
     known_regions: &mut HashSet<RegionId>,
     request: ApplyPathBrushRequest,
 ) -> Result<ApplyPathBrushResponse, String> {
     let domain_request = domain_request(&request);
     let plan = plan_path_brush_region_merge(graph, surfaces, topology, &domain_request)?;
-    let consumed = plan.consumed_surface_keys().to_vec();
+    let consumed = consumed_nodes(topology, &plan);
     let depth = domain_request.depth;
     let outcome = apply_region_merge(
         graph,
         surfaces,
         topology,
-        known_surfaces,
         known_regions,
         &domain_request.operation_id,
         domain_request.target_type.clone(),
@@ -184,7 +183,6 @@ pub fn preview_path_brush(
     graph: &SessionGraph,
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
-    known_surfaces: &HashSet<SurfaceKey>,
     known_regions: &HashSet<RegionId>,
     request: ApplyPathBrushRequest,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
@@ -192,18 +190,21 @@ pub fn preview_path_brush(
     let mut preview_graph = graph.clone();
     let mut preview_surfaces = surfaces.clone();
     let mut preview_topology = topology.clone();
-    let mut preview_known_surfaces = known_surfaces.clone();
     let mut preview_known_regions = known_regions.clone();
 
     let domain_request = domain_request(&request);
-    let plan = plan_path_brush_region_merge(&preview_graph, &preview_surfaces, &preview_topology, &domain_request)?;
-    let consumed = plan.consumed_surface_keys().to_vec();
+    let plan = plan_path_brush_region_merge(
+        &preview_graph,
+        &preview_surfaces,
+        &preview_topology,
+        &domain_request,
+    )?;
+    let consumed = consumed_nodes(&preview_topology, &plan);
     let depth = domain_request.depth;
     apply_region_merge(
         &mut preview_graph,
         &mut preview_surfaces,
         &mut preview_topology,
-        &mut preview_known_surfaces,
         &mut preview_known_regions,
         &domain_request.operation_id,
         domain_request.target_type.clone(),
@@ -213,7 +214,6 @@ pub fn preview_path_brush(
     Ok(mesh::all_surface_meshes(
         &preview_graph,
         &preview_surfaces,
-        &preview_known_surfaces,
         &preview_topology,
         &preview_known_regions,
     )
@@ -267,26 +267,41 @@ fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse 
 
     ApplyPathBrushResponse {
         node_ids: IdentityDeltaResponse {
-            created: outcome.created_node_ids.iter().map(ToString::to_string).collect(),
+            created: outcome
+                .created_node_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
-            removed: outcome.removed_node_ids.iter().map(ToString::to_string).collect(),
+            removed: outcome
+                .removed_node_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
         },
         edge_ids: IdentityDeltaResponse {
-            created: outcome.created_edge_ids.iter().map(ToString::to_string).collect(),
+            created: outcome
+                .created_edge_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             preserved: Vec::new(),
             replaced: Vec::new(),
-            removed: outcome.removed_edge_ids.iter().map(ToString::to_string).collect(),
+            removed: outcome
+                .removed_edge_ids
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
         },
         surface_ids: SurfaceIdentityDeltaResponse {
             created: created_surfaces,
             preserved: Vec::new(),
             replaced: Vec::new(),
             removed: outcome
-                .consumed_surface_keys
+                .consumed_region_ids
                 .iter()
-                .map(surface_key_to_wire)
-                .chain(outcome.consumed_region_ids.iter().map(region_id_to_wire))
+                .map(region_id_to_wire)
                 .collect(),
         },
         invalidation: InvalidationResponse {
@@ -298,12 +313,26 @@ fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse 
 }
 
 /// Path-brush's own height rule: each new node sits `depth` below whatever
-/// consumed surface's own node happens to be nearest it -- a generic region
+/// consumed region's own node happens to be nearest it -- a generic region
 /// merge has no opinion of its own about height, this is exactly the kind
 /// of thing `apply_region_merge`'s `height_for` parameter exists for.
-fn nearest_source_height(graph: &SessionGraph, keys: &[SurfaceKey], point: [f32; 2]) -> f32 {
-    keys.iter()
-        .flat_map(|key| key.nodes())
+/// Every node on the boundary of a region this stroke is about to destroy,
+/// collected *before* the merge removes them -- the ground the new surface
+/// has to sit under.
+fn consumed_nodes(
+    topology: &ContourTopology,
+    plan: &grafting_procgen_surface_transformations::RegionMergePlan,
+) -> Vec<NodeId> {
+    plan.consumed_region_ids()
+        .iter()
+        .filter_map(|id| topology.region_nodes(id).ok())
+        .flatten()
+        .collect()
+}
+
+fn nearest_source_height(graph: &SessionGraph, nodes: &[NodeId], point: [f32; 2]) -> f32 {
+    nodes
+        .iter()
         .filter_map(|id| graph.node(id).map(|node| *node.data()))
         .min_by(|left, right| {
             let left_distance = (left[0] - point[0]).powi(2) + (left[2] - point[1]).powi(2);

@@ -3237,13 +3237,9 @@ must not mint a second copy.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
 
-Registers a region from **already-registered** edges. Unlike
-addSurface, which derives a region from a node cycle and always
-mints fresh edges, this lets a new face *share* an existing boundary --
-the only way to actually join it to its neighbour rather than laying a
-coincident copy of that edge beside it.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addSurface(spec: ConstructionSurfaceSpec): ConstructionSurfaceKey`
+Registers a region from **already-registered** edges, so a new face can
+*share* an existing boundary -- the only way to actually join it to its
+neighbour rather than laying a coincident copy of that edge beside it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
 

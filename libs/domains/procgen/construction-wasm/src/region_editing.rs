@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    add_hole, cut_region, delete_region, delete_regions, duplicate_region, insert_vertex, move_edge,
-    move_region, move_vertex, remove_hole, remove_vertex, retype_edge,
+    add_hole, cut_region, delete_region, delete_regions, duplicate_region, insert_vertex,
+    move_edge, move_region, move_vertex, remove_hole, remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -112,9 +112,21 @@ pub struct RegionEditOutcomeDto {
 impl From<RegionEditOutcome> for RegionEditOutcomeDto {
     fn from(outcome: RegionEditOutcome) -> Self {
         Self {
-            affected_surface_keys: outcome.affected_regions.iter().map(region_id_to_wire).collect(),
-            created_surface_keys: outcome.created_regions.iter().map(region_id_to_wire).collect(),
-            removed_surface_keys: outcome.removed_regions.iter().map(region_id_to_wire).collect(),
+            affected_surface_keys: outcome
+                .affected_regions
+                .iter()
+                .map(region_id_to_wire)
+                .collect(),
+            created_surface_keys: outcome
+                .created_regions
+                .iter()
+                .map(region_id_to_wire)
+                .collect(),
+            removed_surface_keys: outcome
+                .removed_regions
+                .iter()
+                .map(region_id_to_wire)
+                .collect(),
             created_node_ids: outcome
                 .created_nodes
                 .iter()
@@ -147,8 +159,10 @@ pub fn apply_move_vertex(
     request: MoveVertexRequest,
 ) -> Result<RegionEditOutcomeDto, String> {
     let id = parse_node_id(&request.node_id)?;
-    let outcome = move_vertex(graph, topology, &id, |position| *position = request.position)
-        .map_err(|error| error.to_string())?;
+    let outcome = move_vertex(graph, topology, &id, |position| {
+        *position = request.position
+    })
+    .map_err(|error| error.to_string())?;
     Ok(outcome.into())
 }
 
@@ -193,13 +207,11 @@ pub struct RemoveVertexRequest {
 pub fn apply_remove_vertex(
     graph: &mut SessionGraph,
     topology: &mut ContourTopology,
-    surfaces: &SurfaceRegistry,
     request: RemoveVertexRequest,
 ) -> Result<RegionEditOutcomeDto, String> {
     let outcome = remove_vertex(
         graph,
         topology,
-        surfaces,
         &parse_node_id(&request.node_id)?,
         parse_edge_id(&request.welded_edge_id)?,
     )
@@ -246,11 +258,16 @@ pub fn apply_move_edge(
     request: MoveEdgeRequest,
 ) -> Result<RegionEditOutcomeDto, String> {
     let delta = request.delta;
-    let outcome = move_edge(graph, topology, &parse_edge_id(&request.edge_id)?, |position| {
-        for axis in 0..3 {
-            position[axis] += delta[axis];
-        }
-    })
+    let outcome = move_edge(
+        graph,
+        topology,
+        &parse_edge_id(&request.edge_id)?,
+        |position| {
+            for axis in 0..3 {
+                position[axis] += delta[axis];
+            }
+        },
+    )
     .map_err(|error| error.to_string())?;
     Ok(outcome.into())
 }
@@ -538,12 +555,11 @@ pub struct RemoveHoleRequest {
 pub fn apply_remove_hole(
     graph: &mut SessionGraph,
     topology: &mut ContourTopology,
-    surfaces: &SurfaceRegistry,
     request: RemoveHoleRequest,
 ) -> Result<RegionEditOutcomeDto, String> {
     let region = region_id_from_wire(&request.surface_key)?;
-    let outcome = remove_hole(graph, topology, surfaces, &region, request.index)
-        .map_err(|error| error.to_string())?;
+    let outcome =
+        remove_hole(graph, topology, &region, request.index).map_err(|error| error.to_string())?;
     Ok(outcome.into())
 }
 
@@ -584,10 +600,7 @@ pub struct RegionTopologyDto {
     pub nodes: Vec<RegionNodeDto>,
 }
 
-fn loop_dto(
-    topology: &ContourTopology,
-    loop_: &ContourLoop,
-) -> Result<Vec<RegionEdgeDto>, String> {
+fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<RegionEdgeDto>, String> {
     loop_
         .iter()
         .map(|use_| {
@@ -619,7 +632,8 @@ pub fn region_topology(
     surfaces: &SurfaceRegistry,
     region: &RegionId,
 ) -> Result<Option<RegionTopologyDto>, String> {
-    let (Some(boundary), Some(surface)) = (topology.region(region), surfaces.region_surface(region))
+    let (Some(boundary), Some(surface)) =
+        (topology.region(region), surfaces.region_surface(region))
     else {
         return Ok(None);
     };
@@ -728,7 +742,7 @@ mod tests {
 
     #[test]
     fn insert_then_remove_vertex_round_trips_through_the_wire_shape() {
-        let (mut graph, mut topology, surfaces, region) = quad();
+        let (mut graph, mut topology, _surfaces, region) = quad();
         apply_insert_vertex(
             &mut graph,
             &mut topology,
@@ -746,7 +760,6 @@ mod tests {
         let response = apply_remove_vertex(
             &mut graph,
             &mut topology,
-            &surfaces,
             RemoveVertexRequest {
                 node_id: "mid".into(),
                 welded_edge_id: "welded".into(),
@@ -795,7 +808,10 @@ mod tests {
         assert_eq!(dto.outer_loops[0][0].start_node_id, "a");
         assert_eq!(dto.outer_loops[0][0].end_node_id, "b");
         assert_eq!(
-            dto.nodes.iter().map(|node| node.id.as_str()).collect::<Vec<_>>(),
+            dto.nodes
+                .iter()
+                .map(|node| node.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["a", "b", "c", "d"],
             "boundary order is stable -- what the front end's index-to-role map relies on"
         );
@@ -998,9 +1014,11 @@ pub fn apply_add_patch(
 /// where it is precise. Checked against the live topology, so faces earlier
 /// in this same batch count.
 fn boundary_has_room(topology: &ContourTopology, boundary: &ContourLoop) -> bool {
-    boundary.iter().all(|use_| match topology.usage_count(use_.edge()) {
-        0 => true,
-        1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
-        _ => false,
-    })
+    boundary
+        .iter()
+        .all(|use_| match topology.usage_count(use_.edge()) {
+            0 => true,
+            1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
+            _ => false,
+        })
 }

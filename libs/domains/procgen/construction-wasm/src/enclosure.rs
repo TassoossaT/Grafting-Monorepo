@@ -764,7 +764,12 @@ mod tests {
                 use_.edge_id
             );
         }
-        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
     }
 
     /// Two separate patches are not each other's holes, however close they
@@ -832,7 +837,12 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty());
+        assert!(
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty()
+        );
     }
 
     /// The scope is the answer, not a speed-up. A stroke somewhere else on
@@ -1016,9 +1026,11 @@ mod tests {
 
         let loop_of = |prefix: &str, reversed: bool| {
             (0..4)
-                .map(|index| OrientedEdgeUse::forward(
-                    ContourEdgeId::new(format!("{prefix}e{index}")).unwrap(),
-                ))
+                .map(|index| {
+                    OrientedEdgeUse::forward(
+                        ContourEdgeId::new(format!("{prefix}e{index}")).unwrap(),
+                    )
+                })
                 .map(|use_| {
                     if reversed {
                         OrientedEdgeUse::reversed(use_.edge().clone())
@@ -1030,14 +1042,21 @@ mod tests {
         };
         let floor = RegionId::new("floor").unwrap();
         topology
-            .add_region(floor.clone(), vec![loop_of("o", false)], vec![loop_of("i", false)])
+            .add_region(
+                floor.clone(),
+                vec![loop_of("o", false)],
+                vec![loop_of("i", false)],
+            )
             .unwrap();
         surfaces
             .add_region_surface(&topology, floor, SurfaceType::new("floor"), true)
             .unwrap();
 
         assert!(
-            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology)).unwrap().loops.is_empty(),
+            unfilled_loops(&graph, &topology, &surfaces, scope_of(&topology))
+                .unwrap()
+                .loops
+                .is_empty(),
             "the declared hole is somebody's doorway, not a gap to seal"
         );
     }
