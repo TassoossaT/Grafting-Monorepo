@@ -5,6 +5,7 @@ import { houseRoomDeleteTool } from "../house/house-room-delete-tool.ts";
 import { interiorWallTool } from "../house/interior-wall-tool.ts";
 import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
+import { openingTool } from "../openings/opening-tool.ts";
 import { pathBrushTool } from "../paths/path-brush-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
 import { towerStampTool } from "../tower/tower-stamp-tool.ts";
@@ -24,6 +25,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "wall-line": wallLineTool,
   "interior-wall": interiorWallTool,
   "tower-stamp": towerStampTool,
+  opening: openingTool,
   "house-room-delete": houseRoomDeleteTool,
   "terrain-sculpt": terrainSculptTool,
 };

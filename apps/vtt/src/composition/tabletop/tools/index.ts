@@ -42,6 +42,9 @@ export { houseRoomDeleteTool } from "./house/house-room-delete-tool.ts";
 export { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall, type Vec2 as HouseVec2 } from "./house/interior-partition.ts";
 export { findEnclosingRoom, type DerivedRoom } from "./house/room-lookup.ts";
 
+export { openingTool } from "./openings/opening-tool.ts";
+export { panelRailOf, type PanelRail } from "./openings/panel-rail.ts";
+
 export { towerStampTool } from "./tower/tower-stamp-tool.ts";
 export { circleContour, previewOutline } from "./tower/tower-geometry.ts";
 

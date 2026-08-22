@@ -28,7 +28,8 @@ export interface ConstructionDockProps {
  *    same region-partition algorithm the retired "Pintar Casa" brush used;
  *    Torre -- one click stamps a closed circular footprint at a known
  *    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
- * 2. 🚪 Aberturas (Portas & Janelas)
+ * 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
+ *    and stands a face in the opening, see `opening-tool.ts`)
  * 3. 🪜 Escadas (Conexão de elevações)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
  * 5. ⛰️ Terreno & Água (Escultura de Terreno)
@@ -63,6 +64,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isInteriorWallActive = activeTool === "interior-wall";
   const isTowerStampActive = activeTool === "tower-stamp";
   const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive;
+  const isOpeningActive = activeTool === "opening";
   const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
@@ -120,8 +122,10 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "openings",
       label: "Aberturas",
       icon: "🚪",
-      tooltip: "Portas & Janelas",
-      disabled: true,
+      tooltip: "Portas & Janelas (clique sobre uma parede para abrir)",
+      active: isOpeningActive,
+      disabled: !ready,
+      onClick: () => onToolChange("opening"),
     },
     {
       key: "stairs",

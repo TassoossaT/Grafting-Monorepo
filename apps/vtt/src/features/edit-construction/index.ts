@@ -8,6 +8,7 @@ export type {
   InteriorGenerateParams,
   PathBrushParams,
   NoToolParams,
+  OpeningParams,
   PreviewDescriptor,
   TerrainSculptParams,
   ToolParamsByTool,
