@@ -315,3 +315,19 @@ Full reasoning: `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model
 | ProcTHOR | Apache-2.0 | Reference only | Rules for semantically plausible room-type distributions and collision-aware furniture placement |
 | `streemap` | MIT OR Apache-2.0 | Standby, **top pick** | Squarified treemap subdivision for varied room floor plans; compiles clean to `wasm32-unknown-unknown` |
 
+
+## Asset and resource management (`@grafting/assets`)
+
+Source: `docs/research/asset-management-prior-art.md`. No dependency is
+proposed by that document — the package is Grafting-owned. These rows record
+the shipped systems its design was checked against, plus the one delivery
+format that is a real future candidate.
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| Godot `Resource`/`ResourceLoader` | MIT | Reference only | Closest match to the proposed design: refcounted resource, unique path identity, facade over registered per-format loaders |
+| Bevy `bevy_asset` (`AssetServer`, `Handle`) | MIT OR Apache-2.0 | Reference only | Source of the strong/weak handle split adopted into the design; weak refs read metadata without pinning bytes in memory |
+| PlayCanvas `AssetRegistry` | MIT | Reference only | Origin of the asset-record vs. runtime-resource split; added reference counting only after the fact (engine issue #440) |
+| Babylon.js `AssetsManager`/`AssetContainer` | Apache-2.0 | Reference only | Per-item load state is worth copying; `AssetContainer`'s scene coupling is explicitly rejected |
+| three.js `Cache`/`LoadingManager` | MIT | Reference only — cautionary | Opt-in per-loader caching and manual scattered disposal; the `ImageBitmap` leak (issue #23953) is the failure mode `@grafting/assets` exists to prevent. Already an indirect dependency via `@grafting/render-3d` |
+| KTX2 / Basis Universal (`KHR_texture_basisu`) | Khronos ratified spec | Standby (deferred) | 4–8× VRAM reduction by staying compressed into GPU memory; gated on a measured need. `ImageResource` must stay open to compressed textures so adopting it later is not a breaking change |
