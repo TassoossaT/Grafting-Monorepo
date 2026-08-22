@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    add_hole, cut_region, delete_region, delete_regions, duplicate_region, insert_vertex,
-    move_edge, move_region, move_vertex, remove_hole, remove_vertex, retype_edge,
+    delete_region, duplicate_region, insert_vertex, move_edge, move_region, move_vertex,
+    remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -272,37 +272,6 @@ pub fn apply_move_edge(
     Ok(outcome.into())
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddContourEdgeRequest {
-    pub edge_id: String,
-    pub start_node_id: String,
-    pub end_node_id: String,
-    pub geometry: ContourGeometryDto,
-}
-
-/// Registers a bare boundary edge, used by nothing yet -- the staging step
-/// a caller performs before [`apply_cut_region`] or [`apply_add_hole`], both
-/// of which take already-registered edges.
-pub fn add_contour_edge(
-    graph: &SessionGraph,
-    topology: &mut ContourTopology,
-    request: AddContourEdgeRequest,
-) -> Result<(), String> {
-    topology
-        .add_edge(
-            graph,
-            ContourEdge::new(
-                parse_edge_id(&request.edge_id)?,
-                parse_node_id(&request.start_node_id)?,
-                parse_node_id(&request.end_node_id)?,
-                request.geometry.into_geometry(),
-            ),
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(())
-}
-
 // ---- Region level ----
 
 #[derive(Debug, Deserialize)]
@@ -349,108 +318,6 @@ pub fn apply_delete_region(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AddRegionRequest {
-    pub region_id: String,
-    pub outer_loops: Vec<Vec<OrientedEdgeUseDto>>,
-    #[serde(default)]
-    pub holes: Vec<Vec<OrientedEdgeUseDto>>,
-    pub surface_type: String,
-    pub physical: bool,
-}
-
-/// Registers a region from **already-registered** edges, named explicitly.
-///
-/// This is what `add_surface` cannot do. That call derives a region from a
-/// node cycle and always mints fresh edges for it, so a new face built along
-/// an existing boundary ends up with its own edge *coincident* with the
-/// neighbour's rather than being the same edge. Coincident-but-separate is
-/// not a join: nothing structurally connects the two faces, and the manifold
-/// rule never notices because each edge is still used once.
-///
-/// Stitching onto the rim a removal exposed therefore has to reuse those rim
-/// edges, walked in the opposite direction -- which is exactly what makes the
-/// two faces manifold neighbours. Hence this entry point.
-pub fn apply_add_region(
-    topology: &mut ContourTopology,
-    surfaces: &mut SurfaceRegistry,
-    request: AddRegionRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = parse_region_id(&request.region_id)?;
-    let outer_loops = request
-        .outer_loops
-        .into_iter()
-        .map(parse_loop)
-        .collect::<Result<Vec<_>, _>>()?;
-    let holes = request
-        .holes
-        .into_iter()
-        .map(parse_loop)
-        .collect::<Result<Vec<_>, _>>()?;
-    topology
-        .add_region(region.clone(), outer_loops, holes)
-        .map_err(|error| error.to_string())?;
-    surfaces
-        .add_region_surface(
-            topology,
-            region.clone(),
-            SurfaceType::new(request.surface_type),
-            request.physical,
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(RegionEditOutcomeDto {
-        created_surface_keys: vec![region_id_to_wire(&region)],
-        ..RegionEditOutcomeDto::default()
-    })
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeleteRegionsRequest {
-    pub surface_keys: Vec<Vec<String>>,
-}
-
-/// One rim edge, resolved in the loop's own walk direction so a caller can
-/// stitch onto it without re-deriving orientation.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemovalResponse {
-    #[serde(flatten)]
-    pub outcome: RegionEditOutcomeDto,
-    /// Closed loops bounding the hole the removal opened -- exactly what
-    /// must be stitched back onto so the result has neither a leftover hole
-    /// nor an extra face. Empty when the removal opened no hole.
-    pub exposed_loops: Vec<Vec<RegionEdgeDto>>,
-}
-
-/// Removes a whole set of regions in one transaction and reports the rim
-/// left behind. See `grafting_graph_core::delete_regions` for why batching
-/// is a correctness condition rather than an optimization.
-pub fn apply_delete_regions(
-    graph: &mut SessionGraph,
-    topology: &mut ContourTopology,
-    surfaces: &mut SurfaceRegistry,
-    request: DeleteRegionsRequest,
-) -> Result<RemovalResponse, String> {
-    let regions = request
-        .surface_keys
-        .iter()
-        .map(|key| region_id_from_wire(key))
-        .collect::<Result<Vec<_>, _>>()?;
-    let removal =
-        delete_regions(graph, topology, surfaces, &regions).map_err(|error| error.to_string())?;
-    let exposed_loops = removal
-        .exposed_loops
-        .iter()
-        .map(|loop_| loop_dto(topology, loop_))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(RemovalResponse {
-        outcome: removal.outcome.into(),
-        exposed_loops,
-    })
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct DuplicateRegionRequest {
     pub surface_key: Vec<String>,
     /// Appended to every derived node, edge, and region id -- the same
@@ -490,76 +357,6 @@ pub fn apply_duplicate_region(
         },
     )
     .map_err(|error| error.to_string())?;
-    Ok(outcome.into())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CutRegionRequest {
-    pub surface_key: Vec<String>,
-    /// Already-registered edges (see [`add_contour_edge`]) whose two ends
-    /// both sit on the region's own outer loop.
-    pub cut_path: Vec<OrientedEdgeUseDto>,
-    pub first_region_id: String,
-    pub second_region_id: String,
-}
-
-/// `CutRegion`: both halves keep the cut as their shared, manifold boundary.
-pub fn apply_cut_region(
-    topology: &mut ContourTopology,
-    surfaces: &mut SurfaceRegistry,
-    request: CutRegionRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = region_id_from_wire(&request.surface_key)?;
-    let cut_path = parse_loop(request.cut_path)?;
-    let outcome = cut_region(
-        topology,
-        surfaces,
-        &region,
-        &cut_path,
-        parse_region_id(&request.first_region_id)?,
-        parse_region_id(&request.second_region_id)?,
-    )
-    .map_err(|error| error.to_string())?;
-    Ok(outcome.into())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddHoleRequest {
-    pub surface_key: Vec<String>,
-    pub hole: Vec<OrientedEdgeUseDto>,
-}
-
-/// `AddHole` -- what a door or a window is. Structurally nothing new: a hole
-/// is a second real loop of registered edges, validated by the same closure
-/// and manifold rules as any outer loop.
-pub fn apply_add_hole(
-    topology: &mut ContourTopology,
-    request: AddHoleRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = region_id_from_wire(&request.surface_key)?;
-    let hole = parse_loop(request.hole)?;
-    let outcome = add_hole(topology, &region, hole).map_err(|error| error.to_string())?;
-    Ok(outcome.into())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoveHoleRequest {
-    pub surface_key: Vec<String>,
-    pub index: usize,
-}
-
-/// `RemoveHole`.
-pub fn apply_remove_hole(
-    graph: &mut SessionGraph,
-    topology: &mut ContourTopology,
-    request: RemoveHoleRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = region_id_from_wire(&request.surface_key)?;
-    let outcome =
-        remove_hole(graph, topology, &region, request.index).map_err(|error| error.to_string())?;
     Ok(outcome.into())
 }
 
@@ -898,7 +695,9 @@ mod tests {
         )
         .unwrap();
 
-        let curved = topology.edge(&ContourEdgeId::new("curved").unwrap()).unwrap();
+        let curved = topology
+            .edge(&ContourEdgeId::new("curved").unwrap())
+            .unwrap();
         assert_eq!(
             *curved.geometry(),
             ContourGeometry::CircularArc {

@@ -7,7 +7,6 @@ export type {
   TabletopRuntimeStatus,
   TabletopSnapshot,
 } from "./tabletop-runtime.ts";
-export { buildGeneratePathExtrusionOperation, buildGenerateTerrainCellOperation } from "./default-map-seed.ts";
 
 // Re-exported (not imported directly by `app/`, per this layer's own
 // boundary rule -- see `test/architecture-boundaries.test.mjs`) so

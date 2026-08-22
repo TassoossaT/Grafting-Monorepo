@@ -15,6 +15,5 @@ mod path_brush;
 mod region_editing;
 mod region_merge;
 mod session;
-mod terrain;
 
 pub use session::ConstructionSession;

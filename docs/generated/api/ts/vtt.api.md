@@ -320,10 +320,6 @@ request until the tool actually commits.
 
 ### `reference vtt.tabletop.attachCameraNavigation`
 
-### `reference vtt.tabletop.buildGeneratePathExtrusionOperation`
-
-### `reference vtt.tabletop.buildGenerateTerrainCellOperation`
-
 ### `reference vtt.tabletop.CameraControlHandle`
 
 ### `reference vtt.tabletop.CameraControlOptions`
@@ -378,60 +374,20 @@ request until the tool actually commits.
 
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.renderPort?: SceneRenderPort`
 
-### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.seedDefaultMap?: boolean`
-
-When true, seeds one demo terrain cell and wall upon start. Defaults to false (clean board).
-
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.tableId: string`
 
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.terrainNoisePort?: TerrainNoisePort`
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
-### `interface vtt.default-map-seed.DefaultMapSeed`
-
-### `property vtt.default-map-seed.DefaultMapSeed.terrainCell: GenerateTerrainCellOperation`
-
-### `property vtt.default-map-seed.DefaultMapSeed.wall: GeneratePathExtrusionOperation`
-
-### `function vtt.default-map-seed.buildGeneratePathExtrusionOperation(tableId: string, salt: string, context: ConstructionOperationContext, edges: readonly PathEdgeSpec[], height: number, surfaceType: string, notch?: EdgeNotchSpec): GeneratePathExtrusionOperation`
-
-Builds (but does not apply) a `construction.generate-path-extrusion@1`
-operation with ids namespaced by `salt`, so two calls for the same table
-never collide -- shared by defaultMapSeed's one-time bootstrap
-wall and the edit-mode UI's "generate wall" trigger, which needs a fresh
-id namespace per click.
-
-### `function vtt.default-map-seed.buildGenerateTerrainCellOperation(tableId: string, salt: string, context: ConstructionOperationContext, cell: number, module: CornerHeightModule, surfaceType: string): GenerateTerrainCellOperation`
-
-Builds (but does not apply) a `construction.generate-terrain-cell@1`
-operation with ids namespaced by `salt`, mirroring
-buildGeneratePathExtrusionOperation.
-
-### `function vtt.default-map-seed.defaultMapSeed(tableId: string, initiatedBy: string): DefaultMapSeed`
-
-Builds (but does not apply) one generated terrain cell and one plain
-wall, so a fresh table has visible map geometry to render without
-waiting on `E3.7`'s pointer/edit-mode UI -- the same role the guide
-token plays for `entities/token`. Every id is namespaced by `tableId` so
-two tables never collide inside one `ConstructionSession`.
-
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
-### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[], seedDefaultMap: boolean): AppTabletopRuntime`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, _origin: ChangeOrigin, _causeId: string): void`
-
-Registers a bare boundary edge -- staging before `addRegion`.
+### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[]): AppTabletopRuntime`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 Registers a whole generated patch -- nodes, shared boundary edges, and
 the faces over them -- in one transaction. See `ConstructionPatch`.
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Registers a region from already-registered edges, so it can share a boundary.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
@@ -472,30 +428,13 @@ Hides the active tool preview, if any.
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
-
-Removes a set of regions in one transaction, reporting the rim to stitch onto.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One tick of a continuous path-brush pen (wall, fence, any other
-extruded panel run): regenerates the whole drawn path's straight/arc
-geometry from `request.edges` and applies only the difference against
-what already exists. Never generates a floor/ceiling itself -- see
-generateBoundaryCap/generateRegionPartition. See
-`ConstructionSessionPort.generatePathExtrusion`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
 
@@ -505,13 +444,6 @@ set's region partition and applies only the difference against what
 already exists -- walls/floors/ceilings can be added AND removed in
 the same call (a split moving, two regions merging). See
 `ConstructionSessionPort.generateRegionPartition`.
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateTerrainCell(request: GenerateTerrainCellRequest, origin: ChangeOrigin, causeId: string): ConstructionSurfaceKey`
-
-Generates one more terrain cell through the real engine and folds it
-into the running map -- the edit-mode UI's "add terrain" trigger,
-distinct from AppTabletopRuntime.#seedDefaultMap's one-time
-bootstrap call.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -541,15 +473,7 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined`
-
-Previews or confirms one swept convex terrain-to-path effect as a single atomic construction mutation.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void`
-
-Removes an edge outright -- no repair, no cascading. See `ConstructionSessionPort.removeEdge`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
 
@@ -577,18 +501,10 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `interface vtt.tabletop-runtime.TabletopRuntime`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }, origin: ChangeOrigin, causeId: string): void`
-
-Registers a bare boundary edge -- staging before `addRegion`.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 Registers a whole generated patch -- nodes, shared boundary edges, and
 the faces over them -- in one transaction. See `ConstructionPatch`.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.addRegion(request: { outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Registers a region from already-registered edges, so it can share a boundary.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
@@ -626,30 +542,13 @@ Hides the active tool preview, if any.
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[], origin: ChangeOrigin, causeId: string): ConstructionRemovalOutcome`
-
-Removes a set of regions in one transaction, reporting the rim to stitch onto.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One tick of a continuous path-brush pen (wall, fence, any other
-extruded panel run): regenerates the whole drawn path's straight/arc
-geometry from `request.edges` and applies only the difference against
-what already exists. Never generates a floor/ceiling itself -- see
-generateBoundaryCap/generateRegionPartition. See
-`ConstructionSessionPort.generatePathExtrusion`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
 
@@ -659,8 +558,6 @@ set's region partition and applies only the difference against what
 already exists -- walls/floors/ceilings can be added AND removed in
 the same call (a split moving, two regions merging). See
 `ConstructionSessionPort.generateRegionPartition`.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.generateTerrainCell(request: GenerateTerrainCellRequest, origin: ChangeOrigin, causeId: string): ConstructionSurfaceKey`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -690,15 +587,7 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined`
-
-Previews or confirms one swept convex terrain-to-path effect as a single atomic construction mutation.
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void`
-
-Removes an edge outright -- no repair, no cascading. See `ConstructionSessionPort.removeEdge`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
 
@@ -731,32 +620,6 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `type vtt.tabletop-runtime.TabletopRuntimeListener = () => void`
 
 ### `type vtt.tabletop-runtime.TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed"`
-
-### `variable vtt.tabletop-runtime.TERRAIN_CELL_COUNT: number`
-
-### `variable vtt.tabletop-runtime.TERRAIN_GRID_HEIGHT: 25`
-
-### `variable vtt.tabletop-runtime.TERRAIN_GRID_LAYERS: 1`
-
-### `variable vtt.tabletop-runtime.TERRAIN_GRID_WIDTH: 25`
-
-The one `setTerrainMesh` grid declared per table (`ConstructionSessionPort`
-requires exactly one call, before any `generateTerrainCell`). `cell`
-addresses this grid by index (`z * width + x` for layer 0), and each
-cell's *physical* footprint is fixed by `PrismGridMesh` itself to
-render-space `X ∈ [x, x+1]`, `Z ∈ [z, z+1]` -- there is no origin/offset
-parameter anywhere in `ConstructionSessionPort.setTerrainMesh`, so this
-grid always starts at world `(0, 0)`, not centered like the visible
-reference grid (`construction-grid-scene-item.ts`, `±CONSTRUCTION_GRID_EXTENT`).
-`generateTerrainCell` callers clamp a click into this positive quadrant, so it
-is sized to `CONSTRUCTION_GRID_EXTENT` on purpose: that makes the
-buildable quadrant exactly the positive-X/positive-Z **half** of the
-visible reference grid, not some arbitrary smaller area a player would
-have to discover by trial and error. A click in the negative half still
-clamps to its nearest edge cell rather than erroring -- a real, permanent
-limit of this API (there is no way to give a `PrismGridMesh` cell a
-negative position), not something a bigger grid or a client-side offset
-trick can remove.
 
 ### `reference vtt.tools.angleFromToXZ`
 
@@ -2060,19 +1923,11 @@ for it now.
 
 ### `reference vtt.edit-construction.ConstructionHistoryEntry`
 
-### `reference vtt.edit-construction.ConstructionOperation`
-
 ### `reference vtt.edit-construction.ConstructionOperationContext`
 
 ### `reference vtt.edit-construction.ConstructionToolId`
 
 ### `reference vtt.edit-construction.createEditHistoryStack`
-
-### `reference vtt.edit-construction.createGeneratePathExtrusionOperation`
-
-### `reference vtt.edit-construction.createGenerateTerrainCellOperation`
-
-### `reference vtt.edit-construction.createMoveNodeOperation`
 
 ### `reference vtt.edit-construction.createPathBrushEffect`
 
@@ -2108,10 +1963,6 @@ for it now.
 
 ### `reference vtt.edit-construction.forbid`
 
-### `reference vtt.edit-construction.GeneratePathExtrusionOperation`
-
-### `reference vtt.edit-construction.GenerateTerrainCellOperation`
-
 ### `reference vtt.edit-construction.HEIGHT_AXIS`
 
 ### `reference vtt.edit-construction.HORIZONTAL_AXES`
@@ -2122,19 +1973,11 @@ for it now.
 
 ### `reference vtt.edit-construction.mergeOutcomes`
 
-### `reference vtt.edit-construction.MoveNodeOperation`
-
-### `reference vtt.edit-construction.MoveNodePayload`
-
 ### `reference vtt.edit-construction.NoToolParams`
-
-### `reference vtt.edit-construction.OperationId`
 
 ### `reference vtt.edit-construction.ORGANIC_ROLES`
 
 ### `reference vtt.edit-construction.PANEL_ROLES`
-
-### `reference vtt.edit-construction.ParticipantId`
 
 ### `reference vtt.edit-construction.PATH_BRUSH_SOURCE_SURFACE_TYPES`
 
@@ -2252,93 +2095,6 @@ Which part of a region the user grabbed.
 ### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
 Converts editable shape parameters into the immutable semantic brush contract.
-
-### `interface vtt.construction-operations.ConstructionOperationContext`
-
-### `property vtt.construction-operations.ConstructionOperationContext.initiatedBy: string`
-
-### `property vtt.construction-operations.ConstructionOperationContext.operationId: string`
-
-### `property vtt.construction-operations.ConstructionOperationContext.tableId: string`
-
-### `interface vtt.construction-operations.GeneratePathExtrusionOperation`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.expected: readonly RevisionPrecondition[]`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.initiatedBy: string`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.kind: "construction.generate-path-extrusion@1"`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.operationId: string`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.payload: GeneratePathExtrusionRequest`
-
-### `property vtt.construction-operations.GeneratePathExtrusionOperation.tableId: string`
-
-### `interface vtt.construction-operations.GenerateTerrainCellOperation`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.expected: readonly RevisionPrecondition[]`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.initiatedBy: string`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.kind: "construction.generate-terrain-cell@1"`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.operationId: string`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.payload: GenerateTerrainCellRequest`
-
-### `property vtt.construction-operations.GenerateTerrainCellOperation.tableId: string`
-
-### `interface vtt.construction-operations.MoveNodeOperation`
-
-### `property vtt.construction-operations.MoveNodeOperation.expected: readonly RevisionPrecondition[]`
-
-### `property vtt.construction-operations.MoveNodeOperation.initiatedBy: string`
-
-### `property vtt.construction-operations.MoveNodeOperation.kind: "construction.move-node@1"`
-
-### `property vtt.construction-operations.MoveNodeOperation.operationId: string`
-
-### `property vtt.construction-operations.MoveNodeOperation.payload: MoveNodePayload`
-
-### `property vtt.construction-operations.MoveNodeOperation.tableId: string`
-
-### `interface vtt.construction-operations.MoveNodePayload`
-
-### `property vtt.construction-operations.MoveNodePayload.nodeId: string`
-
-### `property vtt.construction-operations.MoveNodePayload.position: ConstructionPosition`
-
-### `interface vtt.construction-operations.RevisionPrecondition`
-
-### `property vtt.construction-operations.RevisionPrecondition.revision: number`
-
-### `property vtt.construction-operations.RevisionPrecondition.scope: string`
-
-### `type vtt.construction-operations.ConstructionOperation = GenerateTerrainCellOperation | GeneratePathExtrusionOperation | MoveNodeOperation`
-
-### `type vtt.construction-operations.OperationId = string`
-
-### `type vtt.construction-operations.ParticipantId = string`
-
-### `function vtt.construction-operations.createGeneratePathExtrusionOperation(payload: GeneratePathExtrusionRequest, context: ConstructionOperationContext): GeneratePathExtrusionOperation`
-
-`construction.generate-path-extrusion@1`: same no-precondition shape as generate-terrain-cell.
-
-### `function vtt.construction-operations.createGenerateTerrainCellOperation(payload: GenerateTerrainCellRequest, context: ConstructionOperationContext): GenerateTerrainCellOperation`
-
-`construction.generate-terrain-cell@1`: no revision precondition, mirroring
-`token.place@1` -- generation creates new nodes/surfaces, it does not
-contend with an existing revision.
-
-### `function vtt.construction-operations.createMoveNodeOperation(payload: MoveNodePayload, context: ConstructionOperationContext, expected: readonly RevisionPrecondition[]): MoveNodeOperation`
-
-`construction.move-node@1`: moves an existing node to an absolute
-position. `expected` defaults to no precondition -- this task's own scope
-is single-user local editing, not multiplayer conflict resolution (see
-`docs/architecture/vtt-roadmap.md`'s "replay determinism is deliberately
-out of scope" note) -- but the parameter stays available for a later
-caller that does track a node's own revision.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -2750,6 +2506,16 @@ A world-space pointer sample collected for one brush gesture.
 
 ### `property vtt.surface-edit-contract.BrushGestureSample.z: number`
 
+### `interface vtt.surface-edit-contract.ConstructionOperationContext`
+
+Who asked for an effect, and on which table. Only `operationId` crosses to the engine; the rest is for undo/redo bookkeeping and attribution.
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.initiatedBy: string`
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.operationId: string`
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.tableId: string`
+
 ### `interface vtt.surface-edit-contract.PathBrushEffect`
 
 One semantic path-paint intent. It contains no graph mutations.
@@ -2785,6 +2551,18 @@ Parameters for the initial shallow path formation.
 ### `property vtt.surface-edit-contract.PathFormationParameters.strength: number`
 
 ### `property vtt.surface-edit-contract.PathFormationParameters.width: number`
+
+### `interface vtt.surface-edit-contract.RevisionPrecondition`
+
+A revision an effect expects to still be current when it lands.
+
+Nothing supplies one today -- every effect is built with an empty list --
+so this is the shape a concurrent-edit check would take, not a check that
+runs.
+
+### `property vtt.surface-edit-contract.RevisionPrecondition.revision: number`
+
+### `property vtt.surface-edit-contract.RevisionPrecondition.scope: string`
 
 ### `interface vtt.surface-edit-contract.SurfaceEditModeDefinition`
 
@@ -3212,8 +2990,6 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionRegionTopology`
 
-### `reference vtt.ports.ConstructionRemovalOutcome`
-
 ### `reference vtt.ports.ConstructionSessionPort`
 
 ### `reference vtt.ports.ConstructionSurfaceKey`
@@ -3222,25 +2998,11 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.ConstructionUnfilledLoop`
 
-### `reference vtt.ports.CornerHeightModule`
-
 ### `reference vtt.ports.DiffOutcome`
-
-### `reference vtt.ports.EdgeNotchSpec`
-
-### `reference vtt.ports.GenerateBoundaryCapRequest`
-
-### `reference vtt.ports.GeneratePathExtrusionRequest`
 
 ### `reference vtt.ports.GenerateRegionPartitionRequest`
 
-### `reference vtt.ports.GenerateTerrainCellRequest`
-
-### `reference vtt.ports.PathEdgeSpec`
-
 ### `reference vtt.ports.RegionEditOutcome`
-
-### `reference vtt.ports.RemoveEdgeRequest`
 
 ### `reference vtt.ports.RemoveSurfaceRequest`
 
@@ -3484,29 +3246,6 @@ end asked for a specific generated shape, so it already knows what
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.surfaceType: string`
 
-### `interface vtt.construction-session-port.ConstructionRemovalOutcome`
-
-What one atomic region edit changed. Every op in the vocabulary reports
-this same shape, so a caller batching a policy's primary op with its
-cascade merges outcomes instead of branching per op -- see
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-Surfaces whose mesh must be re-derived.
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.createdNodeIds: readonly string[]`
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.createdSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.exposedLoops: readonly (readonly ConstructionRegionEdge[])[]`
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.removedNodeIds: readonly string[]`
-
-Nodes the engine's own zero-orphan cleanup reclaimed.
-
-### `property vtt.construction-session-port.ConstructionRemovalOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
 ### `interface vtt.construction-session-port.ConstructionSessionPort`
 
 Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
@@ -3515,18 +3254,6 @@ must validate at this boundary, not rely on recovering from one) behind
 app-owned types. Mirrors the whole session ABI, not only the slice the
 current runtime wiring calls.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.addContourEdge(request: { edgeId: string; endNodeId: string; geometry: ConstructionEdgeGeometry; startNodeId: string }): void`
-
-Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addEdge(id: string, source: string, target: string): void`
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addHole(surfaceKey: ConstructionSurfaceKey, hole: readonly ConstructionOrientedEdgeUse[]): RegionEditOutcome`
-
-Adds an inner loop -- what a door or a window is.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addNode(id: string, position: ConstructionPosition): void`
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): ConstructionPatchOutcome`
 
 Registers a whole generated patch in one transaction -- see
@@ -3534,12 +3261,6 @@ ConstructionPatch for why a generator names its own edges.
 Nodes, edges, and regions already present are skipped, not rejected: a
 stroke overlapping an earlier one re-declares what they share, and that
 must not mint a second copy.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addRegion(request: { holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]; outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[]; physical: boolean; regionId: string; surfaceType: string }): RegionEditOutcome`
-
-Registers a region from **already-registered** edges, so a new face can
-*share* an existing boundary -- the only way to actually join it to its
-neighbour rather than laying a coincident copy of that edge beside it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
 
@@ -3559,20 +3280,9 @@ Indexed back to the request; a point over open ground is simply absent.
 
 `ADR-0022`'s "cloud" query.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.cutRegion(request: { cutPath: readonly ConstructionOrientedEdgeUse[]; firstRegionId: string; secondRegionId: string; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
-
-Divides one region in two along an already-registered cut path.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome`
 
 Unregisters a region, leaving zero orphaned nodes or edges behind.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome`
-
-Removes a whole set of regions in one transaction, reporting the rim the
-hole is left bounded by. Batching is a correctness condition, not an
-optimization: an edge shared by two regions both being removed is
-interior to the removal, and removing one at a time would expose it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.dispose(): Promise<void>`
 
@@ -3580,13 +3290,7 @@ interior to the removal, and removing one at a time would expose it.
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome`
-
-### `method vtt.construction-session-port.ConstructionSessionPort.generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome`
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome`
-
-### `method vtt.construction-session-port.ConstructionSessionPort.generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -3657,21 +3361,9 @@ Moves every node on a region's boundary, holes included.
 
 Moves one boundary node to an absolute position.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[]`
-
-Derives exact target meshes on cloned state; confirmed state is untouched.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoPathBrush(operationId: string): void`
 
 Restores the confirmed state immediately after that undone path-brush operation.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.removeEdge(request: RemoveEdgeRequest): void`
-
-Removes an edge outright -- no repair, no cascading.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(surfaceKey: ConstructionSurfaceKey, index: number): RegionEditOutcome`
-
-Drops one inner loop by index.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): void`
 
@@ -3684,10 +3376,6 @@ Welds a node's two neighboring edges into one -- `insertVertex`'s inverse.
 ### `method vtt.construction-session-port.ConstructionSessionPort.retypeEdge(edgeId: string, geometry: ConstructionEdgeGeometry): RegionEditOutcome`
 
 Swaps one edge's geometry without touching either endpoint.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.setTerrainMesh(width: number, height: number, layers: number, primitive: "passage" | "boundary" | "surface", deformationXy: number, deformationZ: number): void`
-
-Must be called once before generateTerrainCell.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.start(): Promise<void>`
 
@@ -3730,14 +3418,6 @@ gap should be made of.
 
 ### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
 
-### `interface vtt.construction-session-port.CornerHeightModule`
-
-### `property vtt.construction-session-port.CornerHeightModule.cornerHeights: readonly [number, number, number, number]`
-
-Exactly 4 entries, in `PrismGridMesh::cell_corners`' cyclic order.
-
-### `property vtt.construction-session-port.CornerHeightModule.name: string`
-
 ### `interface vtt.construction-session-port.DiffOutcome`
 
 Every `generate*` mutation shares this outcome shape: the whole
@@ -3749,55 +3429,6 @@ structure already held, and only the difference applied.
 ### `property vtt.construction-session-port.DiffOutcome.removedNodeIds: readonly string[]`
 
 ### `property vtt.construction-session-port.DiffOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-### `interface vtt.construction-session-port.EdgeNotchSpec`
-
-A single opening cut into a one-straight-edge path -- see `extrude_path`'s own scoping of this.
-
-### `property vtt.construction-session-port.EdgeNotchSpec.endsAt: number`
-
-### `property vtt.construction-session-port.EdgeNotchSpec.startsAt: number`
-
-### `property vtt.construction-session-port.EdgeNotchSpec.surfaceType: string`
-
-### `interface vtt.construction-session-port.GenerateBoundaryCapRequest`
-
-One closed boundary of arbitrary 3D points becomes one capping surface
-(a floor, a ceiling, or any other flat or per-vertex-height polygon).
-
-### `property vtt.construction-session-port.GenerateBoundaryCapRequest.idPrefix: string`
-
-### `property vtt.construction-session-port.GenerateBoundaryCapRequest.points: readonly ConstructionPosition[]`
-
-### `property vtt.construction-session-port.GenerateBoundaryCapRequest.surfaceType: string`
-
-### `property vtt.construction-session-port.GenerateBoundaryCapRequest.top: boolean`
-
-### `interface vtt.construction-session-port.GeneratePathExtrusionRequest`
-
-One tick of a continuous path-brush pen (wall, fence, any other
-extruded panel run): the stroke's *whole* current accumulated path (not
-just what changed since the last tick), regenerated and diffed against
-whatever this structure already holds every call. Never generates a
-floor/ceiling itself -- see GenerateBoundaryCapRequest/GenerateRegionPartitionRequest for that.
-
-### `property vtt.construction-session-port.GeneratePathExtrusionRequest.edges: readonly PathEdgeSpec[]`
-
-### `property vtt.construction-session-port.GeneratePathExtrusionRequest.height: number`
-
-### `property vtt.construction-session-port.GeneratePathExtrusionRequest.idPrefix: string`
-
-Namespaces every id this call derives. Must stay the SAME fixed value
-across every tick of one structure, and across separate strokes
-painting the same physical structure later -- that stability is what
-lets repainting the same path be a no-op instead of minting
-duplicate geometry.
-
-### `property vtt.construction-session-port.GeneratePathExtrusionRequest.notch?: EdgeNotchSpec`
-
-Only valid when `edges` is exactly one straight edge.
-
-### `property vtt.construction-session-port.GeneratePathExtrusionRequest.surfaceType: string`
 
 ### `interface vtt.construction-session-port.GenerateRegionPartitionRequest`
 
@@ -3837,41 +3468,6 @@ The same seed always reproduces the same split layout for the same cell set.
 
 ### `property vtt.construction-session-port.GenerateRegionPartitionRequest.wallType: string`
 
-### `interface vtt.construction-session-port.GenerateTerrainCellRequest`
-
-### `property vtt.construction-session-port.GenerateTerrainCellRequest.cell: number`
-
-### `property vtt.construction-session-port.GenerateTerrainCellRequest.edgeIds: readonly [string, string, string, string]`
-
-### `property vtt.construction-session-port.GenerateTerrainCellRequest.module: CornerHeightModule`
-
-### `property vtt.construction-session-port.GenerateTerrainCellRequest.nodeIds: readonly [string, string, string, string]`
-
-One id per corner slot, in cyclic order -- exactly 4 entries.
-
-### `property vtt.construction-session-port.GenerateTerrainCellRequest.surfaceType: string`
-
-### `interface vtt.construction-session-port.PathEdgeSpec`
-
-One straight or circular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints plus `includedAngle`, never a free parameter.
-
-### `property vtt.construction-session-port.PathEdgeSpec.curvature: "straight" | "arc-left" | "arc-right"`
-
-### `property vtt.construction-session-port.PathEdgeSpec.end: ConstructionPosition`
-
-### `property vtt.construction-session-port.PathEdgeSpec.includedAngle?: number`
-
-The arc's own swept angle, in radians -- ignored for `"straight"`.
-Omit for a true semicircle (`Math.PI`), the only shape wall-brush's own
-curve-fitting (`path-fitting.ts`) ever detects; a caller building a
-closed shape from 3+ arcs (a full circle, most commonly -- see
-`tower-geometry.ts`) supplies a smaller angle so no two arcs share the
-same endpoint pair (which two true semicircles closing the same circle
-always would, since a curved edge's own corner ids are purely
-position-derived).
-
-### `property vtt.construction-session-port.PathEdgeSpec.start: ConstructionPosition`
-
 ### `interface vtt.construction-session-port.RegionEditOutcome`
 
 What one atomic region edit changed. Every op in the vocabulary reports
@@ -3892,10 +3488,6 @@ Surfaces whose mesh must be re-derived.
 Nodes the engine's own zero-orphan cleanup reclaimed.
 
 ### `property vtt.construction-session-port.RegionEditOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-### `interface vtt.construction-session-port.RemoveEdgeRequest`
-
-### `property vtt.construction-session-port.RemoveEdgeRequest.edgeId: string`
 
 ### `interface vtt.construction-session-port.RemoveSurfaceRequest`
 

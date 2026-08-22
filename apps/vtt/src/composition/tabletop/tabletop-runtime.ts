@@ -30,18 +30,13 @@ import type {
   ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
-  ConstructionRemovalOutcome,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
   ConstructionUnfilledLoop,
   DiffOutcome,
-  GenerateBoundaryCapRequest,
-  GeneratePathExtrusionRequest,
   GenerateRegionPartitionRequest,
-  GenerateTerrainCellRequest,
   RegionEditOutcome,
-  RemoveEdgeRequest,
   RemoveSurfaceRequest,
   RenderMeshData,
   RenderPreviewDescriptor,
@@ -62,7 +57,6 @@ import {
   type PathBrushEffect,
 } from "../../features/edit-construction/index.ts";
 
-import { defaultMapSeed } from "./default-map-seed.ts";
 
 /**
  * A stroke must always be eligible to consume its own product type -- a
@@ -75,30 +69,6 @@ function pathBrushSourceSurfaceTypes(targetType: string): readonly string[] {
     ? PATH_BRUSH_SOURCE_SURFACE_TYPES
     : [...PATH_BRUSH_SOURCE_SURFACE_TYPES, targetType];
 }
-
-/**
- * The one `setTerrainMesh` grid declared per table (`ConstructionSessionPort`
- * requires exactly one call, before any `generateTerrainCell`). `cell`
- * addresses this grid by index (`z * width + x` for layer 0), and each
- * cell's *physical* footprint is fixed by `PrismGridMesh` itself to
- * render-space `X ∈ [x, x+1]`, `Z ∈ [z, z+1]` -- there is no origin/offset
- * parameter anywhere in `ConstructionSessionPort.setTerrainMesh`, so this
- * grid always starts at world `(0, 0)`, not centered like the visible
- * reference grid (`construction-grid-scene-item.ts`, `±CONSTRUCTION_GRID_EXTENT`).
- * `generateTerrainCell` callers clamp a click into this positive quadrant, so it
- * is sized to `CONSTRUCTION_GRID_EXTENT` on purpose: that makes the
- * buildable quadrant exactly the positive-X/positive-Z **half** of the
- * visible reference grid, not some arbitrary smaller area a player would
- * have to discover by trial and error. A click in the negative half still
- * clamps to its nearest edge cell rather than erroring -- a real, permanent
- * limit of this API (there is no way to give a `PrismGridMesh` cell a
- * negative position), not something a bigger grid or a client-side offset
- * trick can remove.
- */
-export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
-export const TERRAIN_GRID_HEIGHT = CONSTRUCTION_GRID_EXTENT;
-export const TERRAIN_GRID_LAYERS = 1;
-export const TERRAIN_CELL_COUNT = TERRAIN_GRID_WIDTH * TERRAIN_GRID_HEIGHT * TERRAIN_GRID_LAYERS;
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -161,57 +131,11 @@ export interface TabletopRuntime {
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
-  /** Removes a set of regions in one transaction, reporting the rim to stitch onto. */
-  deleteRegions(
-    surfaceKeys: readonly ConstructionSurfaceKey[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): ConstructionRemovalOutcome;
-  /** Registers a bare boundary edge -- staging before `addRegion`. */
-  addContourEdge(
-    request: {
-      readonly edgeId: string;
-      readonly startNodeId: ConstructionNodeId;
-      readonly endNodeId: ConstructionNodeId;
-      readonly geometry: ConstructionEdgeGeometry;
-    },
-    origin: ChangeOrigin,
-    causeId: string,
-  ): void;
-  /** Registers a region from already-registered edges, so it can share a boundary. */
-  addRegion(
-    request: {
-      readonly regionId: string;
-      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
-      readonly surfaceType: string;
-      readonly physical: boolean;
-    },
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
-  generateTerrainCell(
-    request: GenerateTerrainCellRequest,
-    origin: ChangeOrigin,
-    causeId: string,
-  ): ConstructionSurfaceKey;
-  /**
-   * One tick of a continuous path-brush pen (wall, fence, any other
-   * extruded panel run): regenerates the whole drawn path's straight/arc
-   * geometry from `request.edges` and applies only the difference against
-   * what already exists. Never generates a floor/ceiling itself -- see
-   * {@link generateBoundaryCap}/{@link generateRegionPartition}. See
-   * `ConstructionSessionPort.generatePathExtrusion`.
-   */
-  generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
-  /** Previews or confirms one swept convex terrain-to-path effect as a single atomic construction mutation. */
-  previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined;
   applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome;
   undoPathBrush(operationId: string, origin: ChangeOrigin): void;
   redoPathBrush(operationId: string, origin: ChangeOrigin): void;
-  /** One closed boundary of points becomes one capping surface (a floor, a ceiling, ...). See `ConstructionSessionPort.generateBoundaryCap`. */
-  generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
   /**
    * One tick of a continuous cell-painting brush ("Pintar Casa," a
    * wall-brush stroke's closure): regenerates the whole painted cell
@@ -223,8 +147,6 @@ export interface TabletopRuntime {
   generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
   /** Unregisters a surface outright -- no hole-repair, no cascading. A caller composing a bigger removal (e.g. "Apagar Cômodo") calls this once per surface it already knows belongs to that removal. See `ConstructionSessionPort.removeSurface`. */
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void;
-  /** Removes an edge outright -- no repair, no cascading. See `ConstructionSessionPort.removeEdge`. */
-  removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
   /**
@@ -329,7 +251,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #render: SceneRenderPort;
   readonly #construction: ConstructionSessionPort;
   readonly #terrainNoise: TerrainNoisePort;
-  readonly #seedDefaultMapOnStart: boolean;
   /** Last uploaded revision per `RenderMapChunk.chunkId`. */
   readonly #chunkRevisions = new Map<string, number>();
   /**
@@ -360,7 +281,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     construction: ConstructionSessionPort,
     terrainNoise: TerrainNoisePort,
     initialTokens: readonly TokenProjection[] = [],
-    seedDefaultMap = false,
   ) {
     const normalizedTableId = tableId.trim();
     if (normalizedTableId.length === 0) {
@@ -371,7 +291,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#render = render;
     this.#construction = construction;
     this.#terrainNoise = terrainNoise;
-    this.#seedDefaultMapOnStart = seedDefaultMap;
     this.#snapshot = snapshot(
       this.#tableId,
       "idle",
@@ -390,7 +309,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
     await this.#construction.start();
-    this.#construction.setTerrainMesh(TERRAIN_GRID_WIDTH, TERRAIN_GRID_HEIGHT, TERRAIN_GRID_LAYERS, "surface", 0, 0);
     await this.#terrainNoise.start();
 
     if (generation !== this.#generation) return;
@@ -408,37 +326,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
       );
     }
 
-    const map = this.#seedDefaultMapOnStart ? this.#seedDefaultMap(generation) : createMapProjection();
     this.#snapshot = snapshot(
       this.#tableId,
       this.#snapshot.status,
       this.#snapshot.revision,
       this.#snapshot.tokens,
-      map,
+      createMapProjection(),
     );
     this.#publishLifecycle("ready");
-  }
-
-  /**
-   * Generates one terrain cell and one wall-with-door through the real
-   * construction engine and renders them -- the same role the guide token
-   * plays for `entities/token`, so `pnpm nx run vtt:dev` shows map geometry
-   * without waiting on `E3.7`'s edit-mode UI. Every seeded surface starts
-   * at revision 1; there is no earlier revision to invalidate.
-   */
-  #seedDefaultMap(generation: number): MapProjection {
-    const { terrainCell, wall } = defaultMapSeed(this.#tableId, "system");
-    const terrainKey = this.#construction.generateTerrainCell(terrainCell.payload);
-    const wallOutcome = this.#construction.generatePathExtrusion(wall.payload);
-
-    const meshes = this.#construction.getAllSurfaceMeshes();
-    const causeId = `table-load:${this.#tableId}`;
-    this.#fullResyncSurfaces(meshes, "programmatic", causeId, generation);
-
-    const surfaceKeys = [terrainKey, ...wallOutcome.addedSurfaceKeys];
-    let map = this.#foldAffectedSurfaces(createMapProjection(), surfaceKeys, meshes);
-    map = this.#foldDiscoveredNodePositions(map, "programmatic", causeId, generation);
-    return map;
   }
 
   /** Upserts one surface's invisible pick proxy. `meshData` is the surface's whole pick geometry -- already merged across every mesh piece the surface currently has, if more than one. */
@@ -847,49 +742,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.classifyPoints(points);
   }
 
-  deleteRegions(
-    surfaceKeys: readonly ConstructionSurfaceKey[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): ConstructionRemovalOutcome {
-    this.#requireReady("removing regions");
-    const outcome = this.#construction.deleteRegions(surfaceKeys);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
-    return outcome;
-  }
-
-  addContourEdge(
-    request: {
-      readonly edgeId: string;
-      readonly startNodeId: ConstructionNodeId;
-      readonly endNodeId: ConstructionNodeId;
-      readonly geometry: ConstructionEdgeGeometry;
-    },
-    _origin: ChangeOrigin,
-    _causeId: string,
-  ): void {
-    // Staging only: a bare edge no region uses yet changes nothing visible,
-    // so there is no projection or render sync to run for it.
-    this.#requireReady("registering a boundary edge");
-    this.#construction.addContourEdge(request);
-  }
-
-  addRegion(
-    request: {
-      readonly regionId: string;
-      readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
-      readonly surfaceType: string;
-      readonly physical: boolean;
-    },
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome {
-    this.#requireReady("registering a region");
-    const outcome = this.#construction.addRegion(request);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
-    return outcome;
-  }
-
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
     return this.#construction.getAllRegionTopologies();
@@ -921,26 +773,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
       }
       return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
     });
-  }
-
-  /**
-   * Generates one more terrain cell through the real engine and folds it
-   * into the running map -- the edit-mode UI's "add terrain" trigger,
-   * distinct from {@link AppTabletopRuntime.#seedDefaultMap}'s one-time
-   * bootstrap call.
-   */
-  generateTerrainCell(
-    request: GenerateTerrainCellRequest,
-    origin: ChangeOrigin,
-    causeId: string,
-  ): ConstructionSurfaceKey {
-    this.#requireReady("generating terrain");
-
-    const surfaceKey = this.#construction.generateTerrainCell(request);
-    this.#applyConstructionMutation([surfaceKey], [], origin, causeId, (map) =>
-      this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation),
-    );
-    return surfaceKey;
   }
 
   /** Folds one Phase-C path-brush transformation without deriving topology in TypeScript. */
@@ -1017,31 +849,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  previewPathBrush(effect: PathBrushEffect): RenderPreviewDescriptor | undefined {
-    this.#requireReady("previewing a path brush");
-    if (effect.brushRegion.samples.length === 0) return undefined;
-    const request = {
-      operationId: effect.operationId,
-      samples: effect.brushRegion.samples,
-      brushShape: effect.brushShape,
-      depth: effect.parameters.depth,
-      targetSurfaceType: effect.targetType,
-      sourceSurfaceTypes: pathBrushSourceSurfaceTypes(effect.targetType),
-    };
-    let surfaces: readonly SurfaceMeshResult[];
-    try {
-      surfaces = this.#construction.previewPathBrush(request);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("produced no semantic change")) throw error;
-      return undefined;
-    }
-    if (surfaces.length === 0) return undefined;
-    const mesh = mergeSurfaceMeshes(surfaces);
-    if (mesh.indices === undefined) return undefined;
-    return { kind: "mesh", positions: mesh.positions, indices: mesh.indices, color: 0xc084fc, opacity: 0.5 };
-  }
-
   applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome {
     this.#requireReady("applying a path brush");
     if (effect.brushRegion.samples.length === 0) {
@@ -1077,22 +884,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#construction.redoPathBrush(operationId);
     this.#refreshConstructionProjection(origin, `redo:${operationId}`);
   }
-  generatePathExtrusion(request: GeneratePathExtrusionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
-    this.#requireReady("drawing a path");
-
-    const outcome = this.#construction.generatePathExtrusion(request);
-    this.#foldDiffOutcome(outcome, origin, causeId);
-    return outcome;
-  }
-
-  generateBoundaryCap(request: GenerateBoundaryCapRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
-    this.#requireReady("capping a boundary");
-
-    const outcome = this.#construction.generateBoundaryCap(request);
-    this.#foldDiffOutcome(outcome, origin, causeId);
-    return outcome;
-  }
-
   generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
     this.#requireReady("painting a region");
 
@@ -1111,13 +902,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
       if (previous === undefined) return map;
       return applyMapProjectionDelta(map, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
     });
-  }
-
-  removeEdge(request: RemoveEdgeRequest, origin: ChangeOrigin, causeId: string): void {
-    this.#requireReady("removing an edge");
-
-    this.#construction.removeEdge(request);
-    this.#applyConstructionMutation([], [], origin, causeId, (map) => map);
   }
 
   cloudFor(request: CloudRequest): CloudOutcome {

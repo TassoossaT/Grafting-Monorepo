@@ -622,28 +622,6 @@ Returns the identifier text.
 
 Creates a surface-type identifier from caller-chosen text.
 
-### `pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, hole: grafting_graph_core::ContourLoop) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
-
-`AddHole`: registers one more inner loop on an existing region -- what a
-door or a window is. A hole is not a marker: it is a real loop of
-registered [`ContourEdge`]s with real graph nodes, validated by the same
-closure and manifold rules as any outer loop, and consumed directly by
-triangulation.
-
-### `pub fn grafting_graph_core::cut_region(topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, cut_path: &[grafting_graph_core::OrientedEdgeUse], first: grafting_graph_core::RegionId, second: grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
-
-`CutRegion`: divides one region in two along `cut_path`, a chain of
-already-registered edges whose two ends both sit on the region's own
-outer loop. Both halves keep the cut as their shared boundary -- the
-same edges, walked in opposite directions -- which is exactly what makes
-them manifold neighbors rather than two unrelated regions that happen to
-touch.
-
-Scoped to a region with exactly one outer loop and no holes: with more
-than one, there is no unambiguous rule for which side of the cut the
-leftover loops belong to, and inventing one here would be a policy
-decision this layer does not own.
-
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `DeleteRegion` for a single region -- [`delete_regions`] with one entry,
@@ -714,11 +692,6 @@ candidate node no surviving region's boundary still touches. Candidates
 are scoped to the nodes the caller's own edit could have orphaned, never
 the whole graph, so a node staged for an unrelated in-flight operation is
 never collected.
-
-### `pub fn grafting_graph_core::remove_hole<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, index: usize) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
-
-`RemoveHole`: drops one of a region's inner loops by index, then runs the
-shared orphan cleanup over the nodes that loop used.
 
 ### `pub fn grafting_graph_core::remove_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, node: &grafting_graph_core::NodeId, welded_edge: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 

@@ -163,10 +163,6 @@ export interface ConstructionUnfilledLoop {
   readonly neighbours: readonly { readonly surfaceType: string; readonly physical: boolean }[];
 }
 
-export interface ConstructionRemovalOutcome extends RegionEditOutcome {
-  readonly exposedLoops: readonly (readonly ConstructionRegionEdge[])[];
-}
-
 /**
  * One region's live boundary, in the engine's own deterministic order. That
  * ordering is the entire contract behind index-to-role mapping: the front
@@ -180,31 +176,6 @@ export interface ConstructionRegionTopology {
   readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
   readonly holes: readonly (readonly ConstructionRegionEdge[])[];
   readonly nodes: readonly ConstructionNodeSnapshot[];
-}
-
-export interface CornerHeightModule {
-  readonly name: string;
-  /** Exactly 4 entries, in `PrismGridMesh::cell_corners`' cyclic order. */
-  readonly cornerHeights: readonly [number, number, number, number];
-}
-
-export interface GenerateTerrainCellRequest {
-  readonly cell: number;
-  readonly module: CornerHeightModule;
-  readonly surfaceType: string;
-  /** One id per corner slot, in cyclic order -- exactly 4 entries. */
-  readonly nodeIds: readonly [
-    ConstructionNodeId,
-    ConstructionNodeId,
-    ConstructionNodeId,
-    ConstructionNodeId,
-  ];
-  readonly edgeIds: readonly [
-    ConstructionEdgeId,
-    ConstructionEdgeId,
-    ConstructionEdgeId,
-    ConstructionEdgeId,
-  ];
 }
 
 /**
@@ -270,66 +241,6 @@ export interface ApplyPathBrushOutcome {
   readonly invalidation: SurfaceTransformationInvalidation;
 }
 
-/** One straight or circular-arc edge of a drawn path -- see `grafting_procgen_structure_generation::extrusion`'s own doc for why a curve is always fully derived from its two endpoints plus `includedAngle`, never a free parameter. */
-export interface PathEdgeSpec {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly curvature: "straight" | "arc-left" | "arc-right";
-  /**
-   * The arc's own swept angle, in radians -- ignored for `"straight"`.
-   * Omit for a true semicircle (`Math.PI`), the only shape wall-brush's own
-   * curve-fitting (`path-fitting.ts`) ever detects; a caller building a
-   * closed shape from 3+ arcs (a full circle, most commonly -- see
-   * `tower-geometry.ts`) supplies a smaller angle so no two arcs share the
-   * same endpoint pair (which two true semicircles closing the same circle
-   * always would, since a curved edge's own corner ids are purely
-   * position-derived).
-   */
-  readonly includedAngle?: number;
-}
-
-/** A single opening cut into a one-straight-edge path -- see `extrude_path`'s own scoping of this. */
-export interface EdgeNotchSpec {
-  readonly startsAt: number;
-  readonly endsAt: number;
-  readonly surfaceType: string;
-}
-
-/**
- * One tick of a continuous path-brush pen (wall, fence, any other
- * extruded panel run): the stroke's *whole* current accumulated path (not
- * just what changed since the last tick), regenerated and diffed against
- * whatever this structure already holds every call. Never generates a
- * floor/ceiling itself -- see {@link GenerateBoundaryCapRequest}/{@link
- * GenerateRegionPartitionRequest} for that.
- */
-export interface GeneratePathExtrusionRequest {
-  readonly edges: readonly PathEdgeSpec[];
-  readonly height: number;
-  /**
-   * Namespaces every id this call derives. Must stay the SAME fixed value
-   * across every tick of one structure, and across separate strokes
-   * painting the same physical structure later -- that stability is what
-   * lets repainting the same path be a no-op instead of minting
-   * duplicate geometry.
-   */
-  readonly idPrefix: string;
-  readonly surfaceType: string;
-  /** Only valid when `edges` is exactly one straight edge. */
-  readonly notch?: EdgeNotchSpec;
-}
-
-/**
- * One closed boundary of arbitrary 3D points becomes one capping surface
- * (a floor, a ceiling, or any other flat or per-vertex-height polygon).
- */
-export interface GenerateBoundaryCapRequest {
-  readonly points: readonly ConstructionPosition[];
-  readonly idPrefix: string;
-  readonly surfaceType: string;
-  readonly top: boolean;
-}
-
 /**
  * One tick of a continuous cell-painting brush ("Pintar Casa," a
  * wall-brush stroke's closure): the stroke's *whole* current accumulated
@@ -358,10 +269,6 @@ export interface GenerateRegionPartitionRequest {
 
 export interface RemoveSurfaceRequest {
   readonly surfaceKey: ConstructionSurfaceKey;
-}
-
-export interface RemoveEdgeRequest {
-  readonly edgeId: ConstructionEdgeId;
 }
 
 /**
@@ -406,9 +313,6 @@ export interface ConstructionSessionPort {
    */
   start(): Promise<void>;
 
-  addNode(id: ConstructionNodeId, position: ConstructionPosition): void;
-  addEdge(id: ConstructionEdgeId, source: ConstructionNodeId, target: ConstructionNodeId): void;
-
   // ---- The atomic edit vocabulary ----
   //
   // Type-agnostic by construction: nothing below knows what a wall or a
@@ -438,18 +342,6 @@ export interface ConstructionSessionPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
-/**
-   * Registers a region from **already-registered** edges, so a new face can
-   * *share* an existing boundary -- the only way to actually join it to its
-   * neighbour rather than laying a coincident copy of that edge beside it.
-   */
-  addRegion(request: {
-    readonly regionId: string;
-    readonly outerLoops: readonly (readonly ConstructionOrientedEdgeUse[])[];
-    readonly holes?: readonly (readonly ConstructionOrientedEdgeUse[])[];
-    readonly surfaceType: string;
-    readonly physical: boolean;
-  }): RegionEditOutcome;
   /**
    * Registers a whole generated patch in one transaction -- see
    * {@link ConstructionPatch} for why a generator names its own edges.
@@ -474,25 +366,10 @@ export interface ConstructionSessionPort {
    * "did this stroke put it there". An empty scope reports nothing.
    */
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
-  /** Registers a bare boundary edge -- the staging step before `cutRegion`/`addHole`. */
-  addContourEdge(request: {
-    readonly edgeId: ConstructionEdgeId;
-    readonly startNodeId: ConstructionNodeId;
-    readonly endNodeId: ConstructionNodeId;
-    readonly geometry: ConstructionEdgeGeometry;
-  }): void;
-
   /** Moves every node on a region's boundary, holes included. */
   moveRegion(surfaceKey: ConstructionSurfaceKey, delta: ConstructionPosition): RegionEditOutcome;
   /** Unregisters a region, leaving zero orphaned nodes or edges behind. */
   deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome;
-  /**
-   * Removes a whole set of regions in one transaction, reporting the rim the
-   * hole is left bounded by. Batching is a correctness condition, not an
-   * optimization: an edge shared by two regions both being removed is
-   * interior to the removal, and removing one at a time would expose it.
-   */
-  deleteRegions(surfaceKeys: readonly ConstructionSurfaceKey[]): ConstructionRemovalOutcome;
   /**
    * What a footprint currently covers, before anything is generated -- the
    * creation-side counterpart to {@link getRegionTopology}. The engine
@@ -521,51 +398,20 @@ export interface ConstructionSessionPort {
     readonly surfaceType: string;
     readonly physical: boolean;
   }): RegionEditOutcome;
-  /** Divides one region in two along an already-registered cut path. */
-  cutRegion(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly cutPath: readonly ConstructionOrientedEdgeUse[];
-    readonly firstRegionId: string;
-    readonly secondRegionId: string;
-  }): RegionEditOutcome;
-  /** Adds an inner loop -- what a door or a window is. */
-  addHole(
-    surfaceKey: ConstructionSurfaceKey,
-    hole: readonly ConstructionOrientedEdgeUse[],
-  ): RegionEditOutcome;
-  /** Drops one inner loop by index. */
-  removeHole(surfaceKey: ConstructionSurfaceKey, index: number): RegionEditOutcome;
-
   /** One region's live boundary, or `undefined` for a stale key. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
-  /** Must be called once before {@link generateTerrainCell}. */
-  setTerrainMesh(
-    width: number,
-    height: number,
-    layers: number,
-    primitive: "passage" | "boundary" | "surface",
-    deformationXy: number,
-    deformationZ: number,
-  ): void;
-  generateTerrainCell(request: GenerateTerrainCellRequest): ConstructionSurfaceKey;
   /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
   applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
-  /** Derives exact target meshes on cloned state; confirmed state is untouched. */
-  previewPathBrush(request: ApplyPathBrushRequest): readonly SurfaceMeshResult[];
   /** Restores the confirmed state immediately before that path-brush operation. */
   undoPathBrush(operationId: string): void;
   /** Restores the confirmed state immediately after that undone path-brush operation. */
   redoPathBrush(operationId: string): void;
-  generatePathExtrusion(request: GeneratePathExtrusionRequest): DiffOutcome;
-  generateBoundaryCap(request: GenerateBoundaryCapRequest): DiffOutcome;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
   /** Unregisters a surface outright -- no hole-repair, no cascading. */
   removeSurface(request: RemoveSurfaceRequest): void;
-  /** Removes an edge outright -- no repair, no cascading. */
-  removeEdge(request: RemoveEdgeRequest): void;
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 

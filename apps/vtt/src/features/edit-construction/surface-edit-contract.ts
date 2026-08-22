@@ -1,4 +1,21 @@
-import type { ConstructionOperationContext, RevisionPrecondition } from "./construction-operations.ts";
+/**
+ * A revision an effect expects to still be current when it lands.
+ *
+ * Nothing supplies one today -- every effect is built with an empty list --
+ * so this is the shape a concurrent-edit check would take, not a check that
+ * runs.
+ */
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+}
+
+/** Who asked for an effect, and on which table. Only `operationId` crosses to the engine; the rest is for undo/redo bookkeeping and attribution. */
+export interface ConstructionOperationContext {
+  readonly operationId: string;
+  readonly tableId: string;
+  readonly initiatedBy: string;
+}
 
 /** A product-owned scope supported by a surface edit mode. */
 export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
