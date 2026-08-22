@@ -61,7 +61,7 @@ const check = process.argv.includes("--check");
 const toPosix = (path) => path.replaceAll("\\", "/");
 
 async function findTsFiles(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
+  const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
   const files = [];
   for (const entry of entries) {
     const entryPath = resolve(directory, entry.name);
@@ -71,7 +71,7 @@ async function findTsFiles(directory) {
       files.push(entryPath);
     }
   }
-  return files;
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 async function readJson(path) {
@@ -83,7 +83,7 @@ async function discoverTargets() {
   for (const parent of ["packages", "apps"]) {
     const parentPath = resolve(root, parent);
     if (!existsSync(parentPath)) continue;
-    for (const entry of await readdir(parentPath, { withFileTypes: true })) {
+    for (const entry of (await readdir(parentPath, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
       if (!entry.isDirectory()) continue;
       const projectJsonPath = resolve(parentPath, entry.name, "project.json");
       if (existsSync(projectJsonPath)) projectRoots.push(resolve(parentPath, entry.name));

@@ -84,6 +84,8 @@ test("taskCommit rejects an invalid task id or a missing message before touching
 const makeRepoWithBareRemote = async (): Promise<string> => {
   const root = await makeRoot();
   execFileSync("git", ["init", "-b", "main"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
   await writeFile(join(root, ".gitignore"), ".worktrees/\nnode_modules/\n", "utf8");
   execFileSync("git", ["add", ".gitignore"], { cwd: root });
   execFileSync("git", ["commit", "-m", "root"], { cwd: root });
@@ -314,6 +316,8 @@ test("taskSweep never deletes anything when it cannot reach gh to confirm a real
   // touched," which is exactly why there is no such fallback anymore.
   const root = await makeRoot();
   execFileSync("git", ["init", "-b", "master"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
   execFileSync("git", ["commit", "--allow-empty", "-m", "root"], { cwd: root });
   const cloneRemote = await mkdtemp(join(tmpdir(), "ia-graft-remote-"));
   roots.push(cloneRemote);
@@ -485,6 +489,8 @@ test("force cleanup removes managed dependency overlays without touching their t
 test("taskNew and taskGraph derive master when it is the real default branch", async () => {
   const root = await makeRoot();
   execFileSync("git", ["init", "-b", "master"], { cwd: root });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: root });
   execFileSync("git", ["commit", "--allow-empty", "-m", "root"], { cwd: root });
   const cloneRemote = await mkdtemp(join(tmpdir(), "ia-graft-remote-"));
   roots.push(cloneRemote);

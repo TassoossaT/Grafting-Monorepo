@@ -29,6 +29,7 @@
     },
     "test": {
       "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
       "options": {
         "command": "dotnet test dotnet/Grafting.Isekai.Interop.Tests"
       },
@@ -37,6 +38,8 @@
         "{projectRoot}/**/*",
         "{workspaceRoot}/dotnet/Grafting.Isekai.Interop.Tests/**/*",
         "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+        "{workspaceRoot}/target/release/libgrafting_isekai_capi.so",
+        "{workspaceRoot}/target/release/libgrafting_isekai_capi.dylib",
         "{workspaceRoot}/System.sln",
         "{workspaceRoot}/Directory.Build.props",
         "{workspaceRoot}/Directory.Packages.props",

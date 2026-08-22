@@ -498,9 +498,9 @@ One region's live boundary -- what a handle/hit-test layer reads.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getSnapshot(): TabletopSnapshot`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getUnfilledLoops(scope: readonly string[]): readonly ConstructionUnfilledLoop[]`
 
-Every closed loop of boundary with no face on it -- a hole whose rim already exists.
+Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -647,9 +647,9 @@ One region's live boundary -- what a handle/hit-test layer reads.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getSnapshot(): TabletopSnapshot`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+### `method vtt.tabletop-runtime.TabletopRuntime.getUnfilledLoops(scope: readonly string[]): readonly ConstructionUnfilledLoop[]`
 
-Every closed loop of boundary with no face on it -- a hole whose rim already exists.
+Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -727,6 +727,124 @@ limit of this API (there is no way to give a `PrismGridMesh` cell a
 negative position), not something a bigger grid or a client-side offset
 trick can remove.
 
+### `reference vtt.tools.angleFromToXZ`
+
+### `reference vtt.tools.BrushableToolId`
+
+### `reference vtt.tools.BrushOutlineShape`
+
+### `reference vtt.tools.BrushRegion`
+
+### `reference vtt.tools.brushSweptOutlinePolygons`
+
+### `reference vtt.tools.brushSweptRegionFill`
+
+### `reference vtt.tools.BrushToolSpec`
+
+### `reference vtt.tools.buildIrregularQuadGrid`
+
+### `reference vtt.tools.cellsInPolygon`
+
+### `reference vtt.tools.circleEdges`
+
+### `reference vtt.tools.ConstructionTool`
+
+### `reference vtt.tools.ConstructionToolFeedback`
+
+### `reference vtt.tools.createBrushTool`
+
+### `reference vtt.tools.DerivedRoom`
+
+### `reference vtt.tools.distanceToPolygonBoundaryXZ`
+
+### `reference vtt.tools.distanceToSegmentXZ`
+
+### `reference vtt.tools.editRegionTool`
+
+### `reference vtt.tools.findEnclosingRoom`
+
+### `reference vtt.tools.findWallSurfaceAt`
+
+### `reference vtt.tools.fitPath`
+
+### `reference vtt.tools.FittedEdge`
+
+### `reference vtt.tools.footprintQuad`
+
+### `reference vtt.tools.houseRoomDeleteTool`
+
+### `reference vtt.tools.HouseVec2`
+
+### `reference vtt.tools.idPrefixFor`
+
+### `reference vtt.tools.idPrefixForRoom`
+
+### `reference vtt.tools.interiorWallTool`
+
+### `reference vtt.tools.IrregularGridVec2`
+
+### `reference vtt.tools.isRedundantPerimeterWall`
+
+### `reference vtt.tools.navigateTool`
+
+### `reference vtt.tools.pathBrushTool`
+
+### `reference vtt.tools.pinnedToBaseline`
+
+### `reference vtt.tools.PointerSample`
+
+### `reference vtt.tools.pointInPolygonXZ`
+
+### `reference vtt.tools.PointXZ`
+
+### `reference vtt.tools.polygonAreaXZ`
+
+### `reference vtt.tools.polylineSegmentsPreview`
+
+### `reference vtt.tools.previewOutline`
+
+### `reference vtt.tools.projectOntoLineXZ`
+
+### `reference vtt.tools.quadAround`
+
+### `reference vtt.tools.QuadMesh`
+
+### `reference vtt.tools.resolveWallCrossing`
+
+### `reference vtt.tools.restackTerrain`
+
+### `reference vtt.tools.scopedToolId`
+
+### `reference vtt.tools.segmentBetween`
+
+### `reference vtt.tools.segmentsPreview`
+
+### `reference vtt.tools.terrainSculptTool`
+
+### `reference vtt.tools.ToolContext`
+
+### `reference vtt.tools.toolFor`
+
+### `reference vtt.tools.ToolGesture`
+
+### `reference vtt.tools.towerStampTool`
+
+### `reference vtt.tools.WALL_COLOR`
+
+### `reference vtt.tools.WALL_HEIGHT`
+
+### `reference vtt.tools.wallBrushTool`
+
+### `reference vtt.tools.wallLineTool`
+
+### `reference vtt.tools.WallSpan`
+
+### `reference vtt.tools.wallSpans`
+
+### `reference vtt.tools.xzDistance`
+
+### `reference vtt.tools.xzDistanceSq`
+
 ### `interface vtt.brush-tool.BrushRegion`
 
 The one geometric fact a brush produces: its shape plus every sample the
@@ -773,6 +891,103 @@ Only `applyRegion` differs between brushes; the brush -- preview included
 
 ### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
 
+### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
+
+No-op: in `navigate` mode the pointer drives camera orbit/pan
+(`attachCameraNavigation`, wired independently in `tabletop-entry.tsx`),
+not any construction effect. Exists so `tool-registry.ts` has an entry for
+every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
+"no tool selected" special case.
+
+### `interface vtt.tool-context.ConstructionTool`
+
+One construction tool's behavior, generic over its own parameter shape.
+Every hook is optional -- a tool implements only the lifecycle stages it
+actually uses (a click-only tool has no `onPointerUp`, it commits
+on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
+only caller and never branches on `id` -- it just invokes whichever hook
+the active tool defines.
+
+### `property vtt.tool-context.ConstructionTool.id: Id`
+
+### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.tool-context.ConstructionTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
+
+### `method vtt.tool-context.ConstructionTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Left-button press. Continuous tools (brushes, move-node) start their gesture here.
+
+### `method vtt.tool-context.ConstructionTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
+
+### `method vtt.tool-context.ConstructionTool.onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
+
+### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
+
+The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `interface vtt.tool-context.ConstructionToolFeedback`
+
+### `property vtt.tool-context.ConstructionToolFeedback.message: string`
+
+### `property vtt.tool-context.ConstructionToolFeedback.surfaceRef?: string`
+
+### `property vtt.tool-context.ConstructionToolFeedback.tone: "error" | "info" | "success"`
+
+### `interface vtt.tool-context.PointerSample`
+
+What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
+
+### `property vtt.tool-context.PointerSample.nodeId?: string`
+
+### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
+
+### `property vtt.tool-context.PointerSample.surfaceRef?: string`
+
+### `interface vtt.tool-context.ToolContext`
+
+What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
+
+### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
+
+### `property vtt.tool-context.ToolContext.runtime: TabletopRuntime`
+
+### `property vtt.tool-context.ToolContext.tableId: string`
+
+### `method vtt.tool-context.ToolContext.nextSequence(): number`
+
+A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`.
+
+### `method vtt.tool-context.ToolContext.reportFeedback(feedback: ConstructionToolFeedback | undefined): void`
+
+### `method vtt.tool-context.ToolContext.reportSelection(info: { id: string; point: ConstructionPosition } | undefined): void`
+
+Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector.
+
+### `interface vtt.tool-context.ToolGesture`
+
+A gesture in progress (or, for a stationary hover, one where `start === current`).
+
+### `property vtt.tool-context.ToolGesture.current: PointerSample`
+
+### `property vtt.tool-context.ToolGesture.samples: readonly PointerSample[]`
+
+Ordered samples accumulated by the dispatcher; preview-only until pointer release.
+
+### `property vtt.tool-context.ToolGesture.start: PointerSample`
+
+### `function vtt.tool-context.scopedToolId(ctx: string | ToolContext, domain: string, suffix?: string | number): string`
+
+Builds a deterministic scoped operation/prefix ID for a given tool/domain on a table.
+
+### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
+
 ### `variable vtt.house-room-delete-tool.houseRoomDeleteTool: ConstructionTool<"house-room-delete">`
 
 Two behaviors, picked by what the click actually landed on: a click
@@ -785,13 +1000,9 @@ roomSurfaceKeys turning that loop into one `removeSurface` call
 per wall -- no composite "delete a room" call anywhere in the stack. A
 click that hits neither (open exterior space) is a no-op.
 
-### `interface vtt.interior-partition.Vec2`
+### `type vtt.interior-partition.Vec2 = PointXZ`
 
-### `property vtt.interior-partition.Vec2.x: number`
-
-### `property vtt.interior-partition.Vec2.z: number`
-
-### `function vtt.interior-partition.cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { cells: readonly CellCoordinate[]; origin: Vec2 }`
+### `function vtt.interior-partition.cellsInPolygon(polygon: readonly PointXZ[], cellSize: number): { cells: readonly CellCoordinate[]; origin: PointXZ }`
 
 Every integer grid cell (in a local, `origin`-relative grid) whose own center falls inside `polygon`, plus the world-space `origin` that grid is anchored to.
 
@@ -799,7 +1010,7 @@ Every integer grid cell (in a local, `origin`-relative grid) whose own center fa
 
 A stable id prefix for one specific enclosed room, derived from its own boundary nodes -- re-clicking the same room regenerates/diffs against its own prior attempt (e.g. after changing `seed`) instead of stacking a duplicate.
 
-### `function vtt.interior-partition.isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly string[], polygon: readonly Vec2[], tolerance: number): boolean`
+### `function vtt.interior-partition.isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly string[], polygon: readonly PointXZ[], tolerance: number): boolean`
 
 True if a wall panel's own midpoint (between its two vertical posts, not
 its 4 individual corners) sits within `tolerance` of the room's own true
@@ -831,13 +1042,152 @@ a different layout in place rather than stacking a duplicate. The
 engine's own floor/ceiling caps are NOT implemented as a front concept
 yet, but are not suppressed here either (`generate_and_apply_region_partition`
 has no opt-out for them -- see `apps/vtt/notes/0008-region-partition-needs-rework.md`,
-which is the tracked follow-up, not a job for this tool to patch around).
-Only wall panels that merely duplicate the room's own existing boundary
-(the algorithm always redraws its own outer perimeter, a rectilinear
-approximation of a possibly non-rectangular real boundary) get stripped
-back out client-side -- see `isRedundantPerimeterWall`'s own doc
-(`interior-partition.ts`). A click outside any enclosed space is a plain
-no-op.
+item 2).
+
+### `interface vtt.room-lookup.DerivedRoom`
+
+### `property vtt.room-lookup.DerivedRoom.bottomCycle: readonly string[]`
+
+### `property vtt.room-lookup.DerivedRoom.polygon: readonly PointXZ[]`
+
+### `property vtt.room-lookup.DerivedRoom.topCycle: readonly string[]`
+
+### `function vtt.room-lookup.findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest"): DerivedRoom | undefined`
+
+The smallest (or, with `preference: "largest"`, the largest) closed wall
+loop containing `click`, or `undefined` if no enclosed area was found
+there. Algorithm: every wall is an edge between its two bottom corner
+nodes (`wallSpans`). Tracing a planar graph's faces from a directed edge
+by always continuing to the next neighbour (sorted by angle) immediately
+after the reverse of the edge just arrived on is the standard
+"wall-follower" construction for extracting bounded regions from a
+straight-line graph -- but getting its clockwise/counter-clockwise
+convention right by construction is easy to get backwards. Rather than
+rely on that, this tries *both* directions of every wall as a starting
+edge and keeps whichever closed loops actually contain the click point
+(point-in-polygon) -- correct regardless of winding convention. Robust
+to a T-junction on one side (the loop just gets an extra colinear vertex
+there, which doesn't change area/containment).
+
+`preference` picks which of those candidate loops to return when more
+than one contains the click (nested rooms, or a room already subdivided
+by interior walls): `"smallest"` (the default -- right for
+`house-room-delete-tool.ts`'s "Apagar Cômodo," which must only ever
+touch the one room actually clicked) picks the innermost. `"largest"` is
+right for `interior-wall-tool.ts`'s "Gerar Interiores": a click inside a
+room it already subdivided must still resolve to that structure's own
+*outermost* boundary, not whatever smaller cell the click happens to
+land in after a prior generation -- otherwise regenerating (e.g. after
+changing the seed) only ever re-subdivides an already-subdivided sliver
+instead of the whole footprint again.
+
+### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
+
+Path-brush's own effect: the brush hands it a region, it decides that
+means "form a path here" and calls the analytic Rust plan for the whole
+region -- once, on commit, never incrementally. Preview is the plain
+generic swept-region outline every brush tool gets (no custom
+`previewRegion`) -- a path is a structure like any other, not a special
+case that needs to inspect what's underneath before it can even be
+drawn. What surface type ends up under the brush is something `applyRegion`
+(and the Rust plan it calls) sorts out at commit time, the same way
+terrain generation already does, not something the preview needs to
+pre-validate.
+
+### `interface vtt.geometry-2d.PointXZ`
+
+Shared 2D geometry algorithms in the tabletop's ground plane (XZ).
+On the tabletop, X and Z represent the ground plane where Y represents height.
+
+### `property vtt.geometry-2d.PointXZ.x: number`
+
+### `property vtt.geometry-2d.PointXZ.z: number`
+
+### `function vtt.geometry-2d.angleFromToXZ(a: PointXZ, b: PointXZ): number`
+
+Angle in radians from point `a` to point `b` on the XZ plane (-PI to PI).
+
+### `function vtt.geometry-2d.distanceToPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): number`
+
+Minimum distance from `point` to the boundary edges of a polygon on the XZ plane.
+
+### `function vtt.geometry-2d.distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): number`
+
+Shortest distance from `point` to the clamped finite segment `[a, b]` on the XZ plane.
+
+### `function vtt.geometry-2d.pinnedToBaseline(baseline: { y: number }, point: T): T`
+
+Pins `point`'s Y coordinate to `baseline`'s Y coordinate.
+
+### `function vtt.geometry-2d.pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean`
+
+Ray-casting algorithm to test if a 2D point lies inside a polygon on the XZ plane.
+
+### `function vtt.geometry-2d.polygonAreaXZ(polygon: readonly PointXZ[]): number`
+
+2D polygon area on the XZ plane via Shoelace formula.
+
+### `function vtt.geometry-2d.projectOntoLineXZ(point: PointXZ, a: PointXZ, b: PointXZ): { perp: number; t: number; x: number; z: number }`
+
+Projects `point` onto the infinite line through `a` and `b` on the XZ plane.
+- `t`: normalized position along the segment (0 at `a`, 1 at `b`, can be <0 or >1 outside the segment).
+- `perp`: perpendicular distance from `point` to the infinite line.
+- `x`, `z`: coordinates of the projected point on the line.
+
+### `function vtt.geometry-2d.xzDistance(a: PointXZ, b: PointXZ): number`
+
+2D Euclidean distance on the XZ plane.
+
+### `function vtt.geometry-2d.xzDistanceSq(a: PointXZ, b: PointXZ): number`
+
+Squared 2D Euclidean distance on the XZ plane (avoids square root for comparisons).
+
+### `type vtt.preview-shapes.BrushOutlineShape = { kind: "circle"; radius: number } | { kind: "square"; radius: number; rotationRadians: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
+
+### `function vtt.preview-shapes.brushStrokeOutline(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
+
+Preview-only outline for any convex brush shape supported by the Rust contract.
+
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number): MultiPolygon`
+
+The swept area of a circular brush stroke, as real 2D polygons (XZ).
+
+Shared with brushSweptRegionFill on purpose: the ghost the user
+saw while dragging and the footprint the engine is then asked about must
+be the identical shape, or the stroke would affect ground the preview
+never highlighted.
+
+### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
+
+### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
+
+A renderer-neutral circular brush outline shared by terrain and surface transformations.
+
+### `function vtt.preview-shapes.circularBrushStrokeOutline(samples: readonly ConstructionPosition[], radius: number, color: number, opacity: number): PreviewDescriptor`
+
+Preview-only outline of the same circular brush swept over ordered samples.
+Positions are explicit segment pairs because the render port's `segments`
+primitive does not imply a line strip.
+
+### `function vtt.preview-shapes.footprintQuad(corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition], color: number, opacity: number): PreviewDescriptor`
+
+A filled ghost over an arbitrary rectangular footprint (not necessarily axis-aligned to `center`) -- a stamped footprint's proposed outline.
+
+### `function vtt.preview-shapes.polylineSegmentsPreview(points: readonly ConstructionPosition[], color: number, opacity: number): PreviewDescriptor | undefined`
+
+Builds an open polyline preview connecting consecutive points.
+
+### `function vtt.preview-shapes.quadAround(center: ConstructionPosition, halfExtent: number, color: number, opacity: number): PreviewDescriptor`
+
+A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- a hover cursor or stamp footprint.
+
+### `function vtt.preview-shapes.segmentBetween(start: ConstructionPosition, end: ConstructionPosition, color: number, opacity: number): PreviewDescriptor`
+
+An open line ghost from `start` to `end` -- a wall-brush's centerline while dragging.
+
+### `function vtt.preview-shapes.segmentsPreview(positions: Float32Array<ArrayBufferLike> | readonly number[], color: number, opacity: number): PreviewDescriptor`
+
+Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
 ### `interface vtt.irregular-grid.FaceMesh`
 
@@ -1005,138 +1355,6 @@ Required before relaxation rather than merely tidy: each face produced its
 own copy of every shared edge midpoint, and until those are one vertex,
 smoothing moves each copy independently and tears the mesh apart.
 
-### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
-
-No-op: in `navigate` mode the pointer drives camera orbit/pan
-(`attachCameraNavigation`, wired independently in `tabletop-entry.tsx`),
-not any construction effect. Exists so `tool-registry.ts` has an entry for
-every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
-"no tool selected" special case.
-
-### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
-
-Path-brush's own effect: the brush hands it a region, it decides that
-means "form a path here" and calls the analytic Rust plan for the whole
-region -- once, on commit, never incrementally. Preview is the plain
-generic swept-region outline every brush tool gets (no custom
-`previewRegion`) -- a path is a structure like any other, not a special
-case that needs to inspect what's underneath before it can even be
-drawn. What surface type ends up under the brush is something `applyRegion`
-(and the Rust plan it calls) sorts out at commit time, the same way
-terrain generation already does, not something the preview needs to
-pre-validate.
-
-### `interface vtt.path-fitting.FittedEdge`
-
-One fitted edge of a stroke: an endpoint pair plus which of the engine's own known curvatures (never a free curve) it was classified as.
-
-### `property vtt.path-fitting.FittedEdge.curvature: "straight" | "arc-left" | "arc-right"`
-
-### `property vtt.path-fitting.FittedEdge.end: ConstructionPosition`
-
-### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
-
-### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[]`
-
-Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
-into a short list of fitted edges drawn only from the engine's own known
-vocabulary (`"straight" | "arc-left" | "arc-right"`, see `wall-shared.ts`'s
-own `PathEdgeSpec` doc) -- this is `wall-brush-tool.ts`'s "fragmentar em
-contornos conhecidos" step: corners are found first (Ramer-Douglas-Peucker,
-cornerIndices), then each run between corners is classified
-(classifySegment) as whichever known shape actually matches it.
-`cornerEpsilon` (world units) is the RDP tolerance -- how far the raw
-stroke must wander off *both* a straight line and the best-fit semicircle
-before that counts as a real corner rather than hand tremor or ordinary
-curvature. Fewer than 2 points fits to nothing.
-
-Known v1 limitation: a stroke that genuinely mixes a straight run with a
-true semicircular turn (not just a straight run alone, or a curve alone)
-finds the straight/curve boundary correctly, but the curved remainder can
-fall back to several short straight chords instead of being recognized as
-one arc -- cornerIndices's top-down splitting picks its first cut
-at the point of maximum deviation from the *whole* stroke's own outer
-chord (usually the curve's own apex), which can land before the full
-curved span is ever tested as one candidate arc in its own right. Still a
-large improvement over one straight panel per raw pointer sample; see
-`path-fitting.test.mjs`'s own test for this exact case.
-
-### `type vtt.preview-shapes.BrushOutlineShape = { kind: "circle"; radius: number } | { kind: "square"; radius: number; rotationRadians: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
-
-### `function vtt.preview-shapes.brushStrokeOutline(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
-
-Preview-only outline for any convex brush shape supported by the Rust contract.
-
-### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number): MultiPolygon`
-
-The swept area of a circular brush stroke, as real 2D polygons (XZ).
-
-Shared with brushSweptRegionFill on purpose: the ghost the user
-saw while dragging and the footprint the engine is then asked about must
-be the identical shape, or the stroke would affect ground the preview
-never highlighted.
-
-### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
-
-### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
-
-A renderer-neutral circular brush outline shared by terrain and surface transformations.
-
-### `function vtt.preview-shapes.circularBrushStrokeOutline(samples: readonly ConstructionPosition[], radius: number, color: number, opacity: number): PreviewDescriptor`
-
-Preview-only outline of the same circular brush swept over ordered samples.
-Positions are explicit segment pairs because the render port's `segments`
-primitive does not imply a line strip.
-
-### `function vtt.preview-shapes.footprintQuad(corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition], color: number, opacity: number): PreviewDescriptor`
-
-A filled ghost over an arbitrary rectangular footprint (not necessarily axis-aligned to `center`) -- a stamped footprint's proposed outline.
-
-### `function vtt.preview-shapes.quadAround(center: ConstructionPosition, halfExtent: number, color: number, opacity: number): PreviewDescriptor`
-
-A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- a hover cursor or stamp footprint.
-
-### `function vtt.preview-shapes.segmentBetween(start: ConstructionPosition, end: ConstructionPosition, color: number, opacity: number): PreviewDescriptor`
-
-An open line ghost from `start` to `end` -- a wall-brush's centerline while dragging.
-
-### `interface vtt.room-lookup.DerivedRoom`
-
-### `property vtt.room-lookup.DerivedRoom.bottomCycle: readonly string[]`
-
-### `property vtt.room-lookup.DerivedRoom.polygon: readonly Vec2[]`
-
-### `property vtt.room-lookup.DerivedRoom.topCycle: readonly string[]`
-
-### `function vtt.room-lookup.findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest"): DerivedRoom | undefined`
-
-The smallest (or, with `preference: "largest"`, the largest) closed wall
-loop containing `click`, or `undefined` if no enclosed area was found
-there. Algorithm: every wall is an edge between its two bottom corner
-nodes (`wallSpans`). Tracing a planar graph's faces from a directed edge
-by always continuing to the next neighbour (sorted by angle) immediately
-after the reverse of the edge just arrived on is the standard
-"wall-follower" construction for extracting bounded regions from a
-straight-line graph -- but getting its clockwise/counter-clockwise
-convention right by construction is easy to get backwards. Rather than
-rely on that, this tries *both* directions of every wall as a starting
-edge and keeps whichever closed loops actually contain the click point
-(point-in-polygon) -- correct regardless of winding convention. Robust
-to a T-junction on one side (the loop just gets an extra colinear vertex
-there, which doesn't change area/containment).
-
-`preference` picks which of those candidate loops to return when more
-than one contains the click (nested rooms, or a room already subdivided
-by interior walls): `"smallest"` (the default -- right for
-`house-room-delete-tool.ts`'s "Apagar Cômodo," which must only ever
-touch the one room actually clicked) picks the innermost. `"largest"` is
-right for `interior-wall-tool.ts`'s "Gerar Interiores": a click inside a
-room it already subdivided must still resolve to that structure's own
-*outermost* boundary, not whatever smaller cell the click happens to
-land in after a prior generation -- otherwise regenerating (e.g. after
-changing the seed) only ever re-subdivides an already-subdivided sliver
-instead of the whole footprint again.
-
 ### `interface vtt.terrain-restack.RestackOutcome`
 
 ### `property vtt.terrain-restack.RestackOutcome.movedVertices: number`
@@ -1174,91 +1392,6 @@ else it was asked to.
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
 Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls.
-
-### `interface vtt.tool-context.ConstructionTool`
-
-One construction tool's behavior, generic over its own parameter shape.
-Every hook is optional -- a tool implements only the lifecycle stages it
-actually uses (a click-only tool has no `onPointerUp`, it commits
-on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
-only caller and never branches on `id` -- it just invokes whichever hook
-the active tool defines.
-
-### `property vtt.tool-context.ConstructionTool.id: Id`
-
-### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
-
-### `method vtt.tool-context.ConstructionTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
-
-### `method vtt.tool-context.ConstructionTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-Left-button press. Continuous tools (brushes, move-node) start their gesture here.
-
-### `method vtt.tool-context.ConstructionTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
-
-Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
-
-### `method vtt.tool-context.ConstructionTool.onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
-
-Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
-
-### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
-
-The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
-
-### `interface vtt.tool-context.ConstructionToolFeedback`
-
-### `property vtt.tool-context.ConstructionToolFeedback.message: string`
-
-### `property vtt.tool-context.ConstructionToolFeedback.surfaceRef?: string`
-
-### `property vtt.tool-context.ConstructionToolFeedback.tone: "error" | "info" | "success"`
-
-### `interface vtt.tool-context.PointerSample`
-
-What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
-
-### `property vtt.tool-context.PointerSample.nodeId?: string`
-
-### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
-
-### `property vtt.tool-context.PointerSample.surfaceRef?: string`
-
-### `interface vtt.tool-context.ToolContext`
-
-What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
-
-### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
-
-### `property vtt.tool-context.ToolContext.runtime: TabletopRuntime`
-
-### `property vtt.tool-context.ToolContext.tableId: string`
-
-### `method vtt.tool-context.ToolContext.nextSequence(): number`
-
-A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`.
-
-### `method vtt.tool-context.ToolContext.reportFeedback(feedback: ConstructionToolFeedback | undefined): void`
-
-### `method vtt.tool-context.ToolContext.reportSelection(info: { id: string; point: ConstructionPosition } | undefined): void`
-
-Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector.
-
-### `interface vtt.tool-context.ToolGesture`
-
-A gesture in progress (or, for a stationary hover, one where `start === current`).
-
-### `property vtt.tool-context.ToolGesture.current: PointerSample`
-
-### `property vtt.tool-context.ToolGesture.samples: readonly PointerSample[]`
-
-Ordered samples accumulated by the dispatcher; preview-only until pointer release.
-
-### `property vtt.tool-context.ToolGesture.start: PointerSample`
-
-### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
 ### `function vtt.tower-geometry.circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[]`
 
@@ -1302,6 +1435,41 @@ graph as 4 distinct true-circle `Surface`s, not a polygon approximation.
 Shares the same wall id-prefix (`idPrefixFor`) every other wall tool
 uses, so a tower stamped against an existing structure still welds by
 position wherever its own circle happens to touch it.
+
+### `interface vtt.path-fitting.FittedEdge`
+
+One fitted edge of a stroke: an endpoint pair plus which of the engine's own known curvatures (never a free curve) it was classified as.
+
+### `property vtt.path-fitting.FittedEdge.curvature: "straight" | "arc-left" | "arc-right"`
+
+### `property vtt.path-fitting.FittedEdge.end: ConstructionPosition`
+
+### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
+
+### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[]`
+
+Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
+into a short list of fitted edges drawn only from the engine's own known
+vocabulary (`"straight" | "arc-left" | "arc-right"`, see `wall-shared.ts`'s
+own `PathEdgeSpec` doc) -- this is `wall-brush-tool.ts`'s "fragmentar em
+contornos conhecidos" step: corners are found first (Ramer-Douglas-Peucker,
+cornerIndices), then each run between corners is classified
+(classifySegment) as whichever known shape actually matches it.
+`cornerEpsilon` (world units) is the RDP tolerance -- how far the raw
+stroke must wander off *both* a straight line and the best-fit semicircle
+before that counts as a real corner rather than hand tremor or ordinary
+curvature. Fewer than 2 points fits to nothing.
+
+Known v1 limitation: a stroke that genuinely mixes a straight run with a
+true semicircular turn (not just a straight run alone, or a curve alone)
+finds the straight/curve boundary correctly, but the curved remainder can
+fall back to several short straight chords instead of being recognized as
+one arc -- cornerIndices's top-down splitting picks its first cut
+at the point of maximum deviation from the *whole* stroke's own outer
+chord (usually the curve's own apex), which can land before the full
+curved span is ever tested as one candidate arc in its own right. Still a
+large improvement over one straight panel per raw pointer sample; see
+`path-fitting.test.mjs`'s own test for this exact case.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
@@ -1367,13 +1535,6 @@ happen to coincide, without either tool needing to know about the other
 -- "ligar casas" (E7's own wording) comes for free, and a free-form
 stroke can weld onto a precise straight run and vice versa.
 
-### `function vtt.wall-shared.pinnedToBaseline(baseline: ConstructionPosition, point: ConstructionPosition): ConstructionPosition`
-
-Pins `point`'s Y to `baseline`'s -- a later drag/click sample landing on a
-different surface (a step, a sloped terrain tile) must not desync a
-path's baseline, or `extrude_path` rejects the whole thing as
-`InconsistentBaseline`.
-
 ### `function vtt.wall-shared.resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition`
 
 If `point` lands within CROSSING_TOLERANCE of an existing wall
@@ -1393,7 +1554,9 @@ crossing point, which is exactly what an insert does directly -- and
 unlike a split, it cannot desynchronize the panel's own two runs. Returns
 `point` unchanged (a plain no-op) if no wall panel qualifies.
 
-### `function vtt.wall-shared.xzDistance(a: ConstructionPosition, b: ConstructionPosition): number`
+### `reference vtt.wall-shared.pinnedToBaseline`
+
+### `reference vtt.wall-shared.xzDistance`
 
 ### `interface vtt.wall-spans.WallSpan`
 
@@ -2451,7 +2614,7 @@ own wall-follower algorithm, not limited to rectangles) rasterizes that
 space into a `cellSize` grid and hands it to the same region-partition
 algorithm `ConstructionSessionPort.generateRegionPartition` already
 exposes (the Rust side the retired "Pintar Casa" brush used to drive one
-cell at a time) -- see `composition/tabletop/tools/interior-wall-tool.ts`.
+cell at a time) -- see `composition/tabletop/tools/house/interior-wall-tool.ts`.
 A region larger than `maxRegionCells` auto-splits into more than one
 room, so the same enclosed footprint can regenerate into a different
 layout just by changing `seed`/`maxRegionCells`. No floor/ceiling
@@ -2492,7 +2655,7 @@ Convex footprint shared by terrain and path brushes.
 
 A single seeded, self-contained hexagon of irregular terrain, submitted as
 graph nodes/surfaces in one shot -- see
-`composition/tabletop/tools/terrain-sculpt-tool.ts`.
+`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`.
 
 ### `property vtt.tool-types.TerrainSculptParams.heightScale: number`
 
@@ -2516,7 +2679,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.TerrainSculptParams.trianglesPerSide: number`
 
-Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost.
+Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
@@ -2580,7 +2743,7 @@ A closed circular wall footprint, stamped in one click at a known radius
 -- not drawn. This is the "buildings get known geometry, never freehand
 curves" half of the owner's own split (free brush stays free for
 fences/paths; a building shape like a tower is a preset instead), see
-`composition/tabletop/tools/tower-stamp-tool.ts`. `radius` is
+`composition/tabletop/tools/tower/tower-stamp-tool.ts`. `radius` is
 deliberately restricted to TOWER_RADIUS_PRESETS -- a small,
 closed catalog, not a free numeric field -- so every tower on a table is
 one of a few known sizes a later room-generation pass (Note 0008) can
@@ -3163,14 +3326,21 @@ analytic-region key (a merged path-brush source/target region) can
 legitimately triangulate into several disjoint pieces (one per outer
 loop), and every one of them must be rendered, not just the first.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(): readonly ConstructionUnfilledLoop[]`
+### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(scope: readonly string[]): readonly ConstructionUnfilledLoop[]`
 
-Every closed loop of boundary that some other loop encloses and no face
-fills -- a hole in the surface whose rim already exists.
+Every closed loop of boundary **among `scope`'s nodes** that another
+such loop encloses and no face fills -- a hole in the surface whose rim
+already exists.
 
 Structural, not geometric: it reports only loops the registered edges
 already close, never a gap guessed from proximity. Filling one adds no
 edge and no node, because the boundary was there all along.
+
+`scope` is the region the caller just touched, and narrowing to it is
+what makes the answer right rather than merely cheap: free boundary
+elsewhere on the map bounds shapes nobody is editing, and a courtyard
+between two unrelated patches reads as a hole from every angle except
+"did this stroke put it there". An empty scope reports nothing.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.insertVertex(request: { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }): RegionEditOutcome`
 
@@ -3253,6 +3423,14 @@ The loop's edges, each already oriented for the face that would fill it
 -- opposite the single region still using it. Registrable verbatim.
 
 ### `property vtt.construction-session-port.ConstructionUnfilledLoop.centroid: ConstructionPosition`
+
+### `property vtt.construction-session-port.ConstructionUnfilledLoop.neighbours: readonly { physical: boolean; surfaceType: string }[]`
+
+The face on the far side of each boundary edge, in the loop's own walk
+order and with repeats -- so a caller filling the gap can make it match
+the ground around it instead of whatever the current brush happens to
+be set to. Reported, never applied: the engine has no opinion on what a
+gap should be made of.
 
 ### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
 

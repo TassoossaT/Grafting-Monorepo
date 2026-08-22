@@ -48,57 +48,6 @@ pub fn validate_structure(&self) -> Result<(), CommandError>
 // src/event.rs
 pub enum DomainEvent
 
-// src/generated/command_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_COMMAND_PAYLOAD: u8 = 0;
-pub const ENUM_MAX_COMMAND_PAYLOAD: u8 = 4;
-pub const ENUM_VALUES_COMMAND_PAYLOAD: [CommandPayload; 5] = [
-pub struct CommandPayload(pub u8);
-pub const NONE: Self = Self(0);
-pub const Increment: Self = Self(1);
-pub const Decrement: Self = Self(2);
-pub const Reset: Self = Self(3);
-pub const RollAndAdd: Self = Self(4);
-pub const ENUM_MIN: u8 = 0;
-pub const ENUM_MAX: u8 = 4;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
-
-// src/generated/domain_event_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_DOMAIN_EVENT_PAYLOAD: u8 = 0;
-pub const ENUM_MAX_DOMAIN_EVENT_PAYLOAD: u8 = 4;
-pub const ENUM_VALUES_DOMAIN_EVENT_PAYLOAD: [DomainEventPayload; 5] = [
-pub struct DomainEventPayload(pub u8);
-pub const NONE: Self = Self(0);
-pub const Incremented: Self = Self(1);
-pub const Decremented: Self = Self(2);
-pub const WasReset: Self = Self(3);
-pub const RolledAndAdded: Self = Self(4);
-pub const ENUM_MIN: u8 = 0;
-pub const ENUM_MAX: u8 = 4;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
-
-// src/generated/snapshot_generated.rs
-pub mod grafting
-pub mod contracts
-pub enum StateTableOffset
-pub struct StateTable<'a>
-pub const VT_VALUE: ::flatbuffers::VOffsetT = 4;
-pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-pub fn value(&self) -> i64
-pub struct StateTableArgs
-pub struct StateTableBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a>
-pub fn add_value(&mut self, value: i64)
-pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> StateTableBuilder<'a, 'b, A>
-pub fn finish(self) -> ::flatbuffers::WIPOffset<StateTable<'a>>
-pub enum SnapshotMessageOffset
-pub struct SnapshotMessage<'a>
-pub const VT_STATE: ::flatbuffers::VOffsetT = 4;
-
 // src/hash.rs
 pub struct StateHash(pub [u8; 32]);
 pub fn to_hex(&self) -> String
@@ -140,23 +89,6 @@ pub fn encode_domain_event(event: &DomainEvent) -> Vec<u8>
 pub fn decode_domain_event(bytes: &[u8]) -> Result<DomainEvent, WireError>
 pub fn encode_snapshot(snapshot: &Snapshot) -> Vec<u8>
 pub fn decode_snapshot(bytes: &[u8]) -> Result<Snapshot, WireError>
-
-// tests/generated_v1/command_v1_generated.rs
-pub mod grafting
-pub mod contracts
-pub const ENUM_MIN_COMMAND_PAYLOAD: u8 = 0;
-pub const ENUM_MAX_COMMAND_PAYLOAD: u8 = 4;
-pub const ENUM_VALUES_COMMAND_PAYLOAD: [CommandPayload; 5] = [
-pub struct CommandPayload(pub u8);
-pub const NONE: Self = Self(0);
-pub const Increment: Self = Self(1);
-pub const Decrement: Self = Self(2);
-pub const Reset: Self = Self(3);
-pub const RollAndAdd: Self = Self(4);
-pub const ENUM_MIN: u8 = 0;
-pub const ENUM_MAX: u8 = 4;
-pub const ENUM_VALUES: &'static [Self] = &[
-pub fn variant_name(self) -> Option<&'static str>
 ```
 
 ### `generation-wasm` (`libs/domains/procgen/generation-wasm`)
@@ -1630,6 +1562,40 @@ export interface GuardCheckInput {
   command?: string;
   }
 
+// src/issue-commands.ts
+export interface IssueListInput {
+  type?: string;
+  area?: string;
+  status?: string;
+  priority?: string;
+  limit?: number;
+  }
+export interface IssueViewInput {
+  id: number | string;
+  }
+export interface IssueNewInput {
+  title: string;
+  type: "task" | "refinement" | "chore" | "bug" | "epic" | string;
+  area?: string;
+  priority?: "P0-critical" | "P1-high" | "P2-medium" | "P3-low" | string;
+  status?: string;
+  milestone?: string;
+  body?: string;
+export interface IssueUpdateInput {
+  id: number | string;
+  status?: string;
+  priority?: string;
+  comment?: string;
+  }
+export interface CompactIssue {
+  id: number;
+  title: string;
+  type?: string;
+  area?: string;
+  priority?: string;
+  status?: string;
+  milestone?: string;
+
 // src/task-commands.ts
 export interface CliError {
   ok: false;
@@ -1706,176 +1672,6 @@ export interface TaskContextInput {
 ### `isekai-web-client` (`packages/isekai-web-client`)
 
 ```ts
-// src/generated/grafting/contracts/command-message.ts
-export class CommandMessage {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):CommandMessage {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/command-payload.ts
-export enum CommandPayload {
-  NONE = 0,
-  Increment = 1,
-  Decrement = 2,
-  Reset = 3,
-  RollAndAdd = 4
-  }
-export function unionToCommandPayload(
-  type: CommandPayload,
-  accessor: (obj:Decrement|Increment|Reset|RollAndAdd) => Decrement|Increment|Reset|RollAndAdd|null
-  ): Decrement|Increment|Reset|RollAndAdd|null {
-  switch(CommandPayload[type]) {
-  case 'NONE': return null;
-  case 'Increment': return accessor(new Increment())! as Increment;
-  case 'Decrement': return accessor(new Decrement())! as Decrement;
-export function unionListToCommandPayload(
-  type: CommandPayload,
-  accessor: (index: number, obj:Decrement|Increment|Reset|RollAndAdd) => Decrement|Increment|Reset|RollAndAdd|null,
-  index: number
-  ): Decrement|Increment|Reset|RollAndAdd|null {
-  switch(CommandPayload[type]) {
-  case 'NONE': return null;
-  case 'Increment': return accessor(index, new Increment())! as Increment;
-
-// src/generated/grafting/contracts/decrement.ts
-export class Decrement {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Decrement {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/decremented.ts
-export class Decremented {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Decremented {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/domain-event-message.ts
-export class DomainEventMessage {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):DomainEventMessage {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/domain-event-payload.ts
-export enum DomainEventPayload {
-  NONE = 0,
-  Incremented = 1,
-  Decremented = 2,
-  WasReset = 3,
-  RolledAndAdded = 4
-  }
-export function unionToDomainEventPayload(
-  type: DomainEventPayload,
-  accessor: (obj:Decremented|Incremented|RolledAndAdded|WasReset) => Decremented|Incremented|RolledAndAdded|WasReset|null
-  ): Decremented|Incremented|RolledAndAdded|WasReset|null {
-  switch(DomainEventPayload[type]) {
-  case 'NONE': return null;
-  case 'Incremented': return accessor(new Incremented())! as Incremented;
-  case 'Decremented': return accessor(new Decremented())! as Decremented;
-export function unionListToDomainEventPayload(
-  type: DomainEventPayload,
-  accessor: (index: number, obj:Decremented|Incremented|RolledAndAdded|WasReset) => Decremented|Incremented|RolledAndAdded|WasReset|null,
-  index: number
-  ): Decremented|Incremented|RolledAndAdded|WasReset|null {
-  switch(DomainEventPayload[type]) {
-  case 'NONE': return null;
-  case 'Incremented': return accessor(index, new Incremented())! as Incremented;
-
-// src/generated/grafting/contracts/increment.ts
-export class Increment {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Increment {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/incremented.ts
-export class Incremented {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Incremented {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/reset.ts
-export class Reset {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Reset {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/roll-and-add.ts
-export class RollAndAdd {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):RollAndAdd {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/rolled-and-added.ts
-export class RolledAndAdded {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):RolledAndAdded {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/snapshot-message.ts
-export class SnapshotMessage {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):SnapshotMessage {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/state-table.ts
-export class StateTable {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):StateTable {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
-// src/generated/grafting/contracts/was-reset.ts
-export class WasReset {
-  bb: flatbuffers.ByteBuffer|null = null;
-  bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):WasReset {
-  this.bb_pos = i;
-  this.bb = bb;
-  return this;
-  }
-
 // src/index.ts
 export interface IncrementResult {
   newValue: bigint;
@@ -2947,7 +2743,7 @@ export type {
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
-export type { ConstructionToolFeedback } from "./tools/tool-context.ts";
+export type { ConstructionToolFeedback } from "./tools/index.ts";
 
 // src/composition/tabletop/tabletop-runtime.ts
 export const TERRAIN_GRID_WIDTH = CONSTRUCTION_GRID_EXTENT;
@@ -2979,7 +2775,7 @@ export interface TabletopRuntime {
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
-// src/composition/tabletop/tools/brush-tool.ts
+// src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
   readonly shape: BrushShape;
@@ -2999,7 +2795,7 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   shape: resolveBrushShape(params),
   });
 
-// src/composition/tabletop/tools/edit-region-tool.ts
+// src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
   defaultParams: () => ({}),
@@ -3008,7 +2804,56 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
   active = undefined;
   const grabbed = grabbedTarget(ctx, sample);
 
-// src/composition/tabletop/tools/house-room-delete-tool.ts
+// src/composition/tabletop/tools/core/navigate-tool.ts
+export const navigateTool: ConstructionTool<"navigate"> = {
+  id: "navigate",
+  defaultParams: () => ({}),
+  };
+
+// src/composition/tabletop/tools/core/tool-context.ts
+export interface PointerSample {
+  readonly point: ConstructionPosition;
+  readonly nodeId?: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolGesture {
+  readonly start: PointerSample;
+  readonly current: PointerSample;
+  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
+  readonly samples: readonly PointerSample[];
+  }
+export interface ConstructionToolFeedback {
+  readonly tone: "info" | "success" | "error";
+  readonly message: string;
+  readonly surfaceRef?: string;
+  }
+export interface ToolContext {
+  readonly runtime: TabletopRuntime;
+  readonly history: EditHistoryStack;
+  readonly tableId: string;
+  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
+  nextSequence(): number;
+  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
+  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
+export interface ConstructionTool<Id extends ConstructionToolId> {
+  readonly id: Id;
+  defaultParams(): ToolParamsFor<Id>;
+  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
+  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
+  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
+  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
+export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
+  const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
+  return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
+  }
+
+// src/composition/tabletop/tools/core/tool-registry.ts
+export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
+  return TOOL_REGISTRY[id];
+  }
+
+// src/composition/tabletop/tools/house/house-room-delete-tool.ts
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   id: "house-room-delete",
   defaultParams: () => ({}),
@@ -3016,11 +2861,8 @@ export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   onClick(ctx: ToolContext, sample: PointerSample): void {
   const directHit = findWallSurfaceAt(ctx, sample.point);
 
-// src/composition/tabletop/tools/interior-partition.ts
-export interface Vec2 {
-  readonly x: number;
-  readonly z: number;
-  }
+// src/composition/tabletop/tools/house/interior-partition.ts
+export type Vec2 = PointXZ;
 export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { readonly cells: readonly CellCoordinate[]; readonly origin: Vec2 } {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -3035,7 +2877,7 @@ export function isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly 
   const map = ctx.runtime.getSnapshot().map;
   const positions = surfaceKey.map((id) => map.nodePositions.get(id)?.position).filter((position): position is ConstructionPosition => position !== undefined);
 
-// src/composition/tabletop/tools/interior-wall-tool.ts
+// src/composition/tabletop/tools/house/interior-wall-tool.ts
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   id: "interior-wall",
   defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
@@ -3043,7 +2885,159 @@ export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
   const room = findEnclosingRoom(ctx, sample.point, "largest");
 
-// src/composition/tabletop/tools/irregular-grid.ts
+// src/composition/tabletop/tools/house/room-lookup.ts
+export interface DerivedRoom {
+  readonly bottomCycle: readonly ConstructionNodeId[];
+  readonly topCycle: readonly ConstructionNodeId[];
+  readonly polygon: readonly Vec2[];
+  }
+export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
+  const spans = wallSpans(ctx);
+
+// src/composition/tabletop/tools/paths/path-brush-tool.ts
+export const pathBrushTool = createBrushTool<"path-brush">({
+  id: "path-brush",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
+  previewColor: () => PATH_PREVIEW_COLOR,
+
+  applyRegion(region, ctx, params) {
+  const sequence = ctx.nextSequence();
+
+// src/composition/tabletop/tools/shapes/geometry-2d.ts
+export interface PointXZ {
+  readonly x: number;
+  readonly z: number;
+  }
+export function xzDistance(a: PointXZ, b: PointXZ): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.hypot(dx, dz);
+export function xzDistanceSq(a: PointXZ, b: PointXZ): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return dx * dx + dz * dz;
+  }
+export function projectOntoLineXZ(
+  point: PointXZ,
+  a: PointXZ,
+  b: PointXZ,
+  ): { readonly t: number; readonly perp: number; readonly x: number; readonly z: number } {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lengthSq = abx * abx + abz * abz;
+export function distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lengthSq = abx * abx + abz * abz;
+  if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
+export function pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+  const pi = polygon[i];
+  const pj = polygon[j];
+  if (pi === undefined || pj === undefined) continue;
+  const crosses = pi.z > point.z !== pj.z > point.z;
+  if (!crosses) continue;
+export function distanceToPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): number {
+  let best = Infinity;
+  for (let i = 0; i < polygon.length; i += 1) {
+  const a = polygon[i];
+  const b = polygon[(i + 1) % polygon.length];
+  if (a === undefined || b === undefined) continue;
+  best = Math.min(best, distanceToSegmentXZ(point, a, b));
+export function angleFromToXZ(a: PointXZ, b: PointXZ): number {
+  return Math.atan2(b.z - a.z, b.x - a.x);
+export function polygonAreaXZ(polygon: readonly PointXZ[]): number {
+  let sum = 0;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+  const pi = polygon[i];
+  const pj = polygon[j];
+  if (pi === undefined || pj === undefined) continue;
+  sum += (pj.x + pi.x) * (pj.z - pi.z);
+export function pinnedToBaseline<T extends ConstructionPosition>(
+  baseline: { readonly y: number },
+  point: T,
+  ): T {
+  return { ...point, y: baseline.y };
+
+// src/composition/tabletop/tools/shapes/preview-shapes.ts
+export function quadAround(
+  center: ConstructionPosition,
+  halfExtent: number,
+  color: number,
+  opacity = 0.35,
+  ): PreviewDescriptor {
+  const y = center.y;
+  return {
+export function segmentBetween(
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return {
+  kind: "segments",
+export function segmentsPreview(
+  positions: Float32Array | readonly number[],
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return {
+  kind: "segments",
+  color,
+export function polylineSegmentsPreview(
+  points: readonly ConstructionPosition[],
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor | undefined {
+  if (points.length < 2) return undefined;
+  const positions = new Float32Array((points.length - 1) * 6);
+export function footprintQuad(
+  corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const positions = new Float32Array(12);
+export type BrushOutlineShape =
+export function brushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
+export function brushSweptOutlinePolygons(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+  ): MultiPolygon {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const capsules = strokeCapsules(samples, radius);
+export function brushSweptRegionFill(
+  samples: readonly ConstructionPosition[],
+  shape: BrushOutlineShape,
+  color: number,
+  opacity = 0.3,
+  ): PreviewDescriptor {
+  const first = samples[0];
+  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
+export function circleOutline(
+  center: ConstructionPosition,
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  return circularBrushStrokeOutline([center], radius, color, opacity);
+export function circularBrushStrokeOutline(
+  samples: readonly ConstructionPosition[],
+  radius: number,
+  color: number,
+  opacity = 0.7,
+  ): PreviewDescriptor {
+  const positions: number[] = [];
+  if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+
+// src/composition/tabletop/tools/terrain/irregular-grid.ts
 export interface Vec2 {
   readonly x: number;
   readonly y: number;
@@ -3102,96 +3096,29 @@ export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
 export function boundaryVertices(mesh: QuadMesh): Set<number> {
   const counts = new Map<string, number>();
 
-// src/composition/tabletop/tools/navigate-tool.ts
-export const navigateTool: ConstructionTool<"navigate"> = {
-  id: "navigate",
-  defaultParams: () => ({}),
-  };
+// src/composition/tabletop/tools/terrain/terrain-restack.ts
+export const ELEVATION_STEP = 0.5;
+export interface RestackOutcome {
+  readonly raisedFaces: number;
+  /** Distinct nodes actually moved -- shared corners count once. */
+  readonly movedVertices: number;
+  /**
+  * Why some covered faces were left alone -- a wall the brush centred on,
+  * most commonly. Reported rather than thrown: refusing the *whole* stroke
+  * over one such face was the earlier behaviour, and it meant painting
+export function facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[] {
+  return resolved
+  .filter((entry) => entry.interaction.kind === "restack" && entry.covered.coverage === "centroid")
+  .map((entry) => entry.covered);
+export function restackTerrain(
+  ctx: ToolContext,
+  paintedType: string,
+  covered: readonly ConstructionCoveredRegion[],
+  causeId: string,
+  ): RestackOutcome {
+  const resolved = resolveCoverage(paintedType, covered);
 
-// src/composition/tabletop/tools/path-brush-tool.ts
-export const pathBrushTool = createBrushTool<"path-brush">({
-  id: "path-brush",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_PREVIEW_COLOR,
-
-  applyRegion(region, ctx, params) {
-  const sequence = ctx.nextSequence();
-
-// src/composition/tabletop/tools/path-fitting.ts
-export interface FittedEdge {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly curvature: "straight" | "arc-left" | "arc-right";
-  }
-export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
-  if (points.length < 2) return [];
-  const indices = cornerIndices(points, cornerEpsilon);
-
-// src/composition/tabletop/tools/preview-shapes.ts
-export function quadAround(
-  center: ConstructionPosition,
-  halfExtent: number,
-  color: number,
-  opacity = 0.35,
-  ): PreviewDescriptor {
-  const y = center.y;
-  return {
-export function segmentBetween(
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  return {
-  kind: "segments",
-export function footprintQuad(
-  corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],
-  color: number,
-  opacity = 0.3,
-  ): PreviewDescriptor {
-  const positions = new Float32Array(12);
-export type BrushOutlineShape =
-export function brushStrokeOutline(
-  samples: readonly ConstructionPosition[],
-  shape: BrushOutlineShape,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
-export function brushSweptRegionFill(
-  samples: readonly ConstructionPosition[],
-  shape: BrushOutlineShape,
-  color: number,
-  opacity = 0.3,
-  ): PreviewDescriptor {
-  const first = samples[0];
-  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
-export function circleOutline(
-  center: ConstructionPosition,
-  radius: number,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  return circularBrushStrokeOutline([center], radius, color, opacity);
-export function circularBrushStrokeOutline(
-  samples: readonly ConstructionPosition[],
-  radius: number,
-  color: number,
-  opacity = 0.7,
-  ): PreviewDescriptor {
-  const positions: number[] = [];
-  if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
-
-// src/composition/tabletop/tools/room-lookup.ts
-export interface DerivedRoom {
-  readonly bottomCycle: readonly ConstructionNodeId[];
-  readonly topCycle: readonly ConstructionNodeId[];
-  readonly polygon: readonly Vec2[];
-  }
-export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
-  const spans = wallSpans(ctx);
-
-// src/composition/tabletop/tools/terrain-sculpt-tool.ts
+// src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
@@ -3201,46 +3128,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   gesture.samples.map((sample) => sample.point),
   { kind: "circle", radius: REVEAL_RADIUS },
 
-// src/composition/tabletop/tools/tool-context.ts
-export interface PointerSample {
-  readonly point: ConstructionPosition;
-  readonly nodeId?: string;
-  readonly surfaceRef?: string;
-  }
-export interface ToolGesture {
-  readonly start: PointerSample;
-  readonly current: PointerSample;
-  /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
-  readonly samples: readonly PointerSample[];
-  }
-export interface ConstructionToolFeedback {
-  readonly tone: "info" | "success" | "error";
-  readonly message: string;
-  readonly surfaceRef?: string;
-  }
-export interface ToolContext {
-  readonly runtime: TabletopRuntime;
-  readonly history: EditHistoryStack;
-  readonly tableId: string;
-  /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
-  nextSequence(): number;
-  /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
-  reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
-export interface ConstructionTool<Id extends ConstructionToolId> {
-  readonly id: Id;
-  defaultParams(): ToolParamsFor<Id>;
-  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
-  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
-  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
-  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
-  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
-
-// src/composition/tabletop/tools/tool-registry.ts
-export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
-  return TOOL_REGISTRY[id];
-  }
-
-// src/composition/tabletop/tools/tower-geometry.ts
+// src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
   const points = circlePoints(center, radius);
 export function previewOutline(center: ConstructionPosition, radius: number, segments: number): Float32Array {
@@ -3248,17 +3136,27 @@ export function previewOutline(center: ConstructionPosition, radius: number, seg
   for (let step = 0; step < segments; step += 1) {
   const from = pointOnCircle(center, radius, (step / segments) * Math.PI * 2);
 
-// src/composition/tabletop/tools/tower-stamp-tool.ts
+// src/composition/tabletop/tools/tower/tower-stamp-tool.ts
 export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   id: "tower-stamp",
   defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
 
   previewFor(gesture: ToolGesture, params: TowerStampParams) {
-  return {
-  kind: "segments",
-  color: WALL_COLOR[params.wallType],
+  return segmentsPreview(
+  previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
+  WALL_COLOR[params.wallType],
 
-// src/composition/tabletop/tools/wall-brush-tool.ts
+// src/composition/tabletop/tools/walls/path-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly curvature: "straight" | "arc-left" | "arc-right";
+  }
+export function fitPath(points: readonly ConstructionPosition[], cornerEpsilon: number): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const indices = cornerIndices(points, cornerEpsilon);
+
+// src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
@@ -3268,28 +3166,20 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
   if (path === undefined || path.length === 0) return undefined;
 
 
-// src/composition/tabletop/tools/wall-line-tool.ts
+// src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
   previewFor(gesture: ToolGesture, params: WallBrushParams) {
   if (anchor === undefined) return undefined;
-  return {
-  kind: "segments",
+  return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
 
-// src/composition/tabletop/tools/wall-shared.ts
+// src/composition/tabletop/tools/walls/wall-shared.ts
 export const WALL_HEIGHT = 3;
 export const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
 export function idPrefixFor(ctx: ToolContext): string {
-  return `${ctx.tableId}:wall-brush`;
-  }
-export function pinnedToBaseline(baseline: ConstructionPosition, point: ConstructionPosition): ConstructionPosition {
-  return { ...point, y: baseline.y };
-export function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
-  const dx = a.x - b.x;
-  const dz = a.z - b.z;
-  return Math.hypot(dx, dz);
+  return scopedToolId(ctx, "wall-brush");
 export function resolveWallCrossing(ctx: ToolContext, point: ConstructionPosition, causeId: string): ConstructionPosition {
   for (const span of wallSpans(ctx)) {
   const spanLength = xzDistance(span.a, span.b);
@@ -3298,7 +3188,7 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
 
-// src/composition/tabletop/tools/wall-spans.ts
+// src/composition/tabletop/tools/walls/wall-spans.ts
 export interface WallSpan {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
@@ -3632,12 +3522,21 @@ export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget 
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type {
   CascadeContext,
+  CreationInteraction,
+  CreationInteractionKind,
   EditResolution,
   EditRole,
+  ResolvedCoverage,
   RolePolicy,
-  StructureTypeDefinition,
-  } from "./structure-types/index.ts";
 
+// src/features/edit-construction/structure-types/creation-interaction.ts
+export type CreationInteraction =
+export type CreationInteractionKind = CreationInteraction["kind"];
+export const IGNORE: CreationInteraction = Object.freeze({ kind: "ignore" });
+export const CUT: CreationInteraction = Object.freeze({ kind: "cut" });
+export const RESTACK: CreationInteraction = Object.freeze({ kind: "restack" });
+export function forbid(reason: string): CreationInteraction {
+  return Object.freeze({ kind: "forbid", reason });
 
 // src/features/edit-construction/structure-types/index.ts
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
@@ -3645,6 +3544,28 @@ export function structureTypeFor(surfaceType: string): StructureTypeDefinition |
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
 export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
   const definition = structureTypeFor(topology.surfaceType);
+export function resolveCreationInteraction(
+  paintedType: string,
+  coveredType: string,
+  ): CreationInteraction {
+  const definition = structureTypeFor(paintedType);
+export interface ResolvedCoverage {
+  readonly covered: ConstructionCoveredRegion;
+  readonly interaction: CreationInteraction;
+  }
+export function resolveCoverage(
+  paintedType: string,
+  covered: readonly ConstructionCoveredRegion[],
+  ): readonly ResolvedCoverage[] {
+  return covered.map((entry) => ({
+  covered: entry,
+  interaction: resolveCreationInteraction(paintedType, entry.surfaceType),
+  }));
+export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
+  for (const entry of resolved) {
+  if (entry.interaction.kind === "forbid") return entry.interaction.reason;
+  }
+export type { CreationInteraction, CreationInteractionKind } from "./creation-interaction.ts";
 export type {
   CascadeContext,
   EditResolution,
@@ -3678,9 +3599,16 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
+  interactionOver: (coveredType: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
-  surfaceType,
+export function terrainInteractionOver(coveredType: string): CreationInteraction {
+  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
+  return forbid(`terrain cannot be created above "${coveredType}"`);
+export function pathInteractionOver(coveredType: string): CreationInteraction {
+  if (coveredType === "path") return IGNORE;
+  return CUT;
+  }
 
 // src/features/edit-construction/structure-types/panel-structure.ts
 export const PANEL_ROLES = {
@@ -3700,6 +3628,9 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case PANEL_ROLES.bottomCorner:
   return allowed(role, HORIZONTAL_AXES, pairedTopCorners);
+export function panelInteractionOver(_coveredType: string): CreationInteraction {
+  return IGNORE;
+  }
 export function panelStructureType(
   surfaceType: string,
   label: string,
@@ -3815,7 +3746,7 @@ export interface InteriorGenerateParams {
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
+  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
   readonly trianglesPerSide: number;
   /**
   * `0` = cells relaxed hard toward square (regular-looking, like a normal
@@ -3963,35 +3894,30 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly endNodeId: ConstructionNodeId;
   readonly geometry: ConstructionEdgeGeometry;
   }
-export interface ConstructionRegionTopology {
+export type ConstructionCoverageKind =
+export interface ConstructionCoveredRegion {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
   readonly physical: boolean;
-  readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
-  readonly holes: readonly (readonly ConstructionRegionEdge[])[];
-  readonly nodes: readonly ConstructionNodeSnapshot[];
-  }
-export interface CornerHeightModule {
-  readonly name: string;
-  /** Exactly 4 entries, in `PrismGridMesh::cell_corners`' cyclic order. */
-  readonly cornerHeights: readonly [number, number, number, number];
-  }
-export interface GenerateTerrainCellRequest {
-  readonly cell: number;
-  readonly module: CornerHeightModule;
+  readonly coverage: ConstructionCoverageKind;
+  /** World-space centroid; `y` is the height the face currently sits at. */
+  readonly centroid: ConstructionPosition;
+  readonly nodeIds: readonly ConstructionNodeId[];
+export interface ConstructionPatchRegion {
+  readonly regionId: string;
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
   readonly surfaceType: string;
-  /** One id per corner slot, in cyclic order -- exactly 4 entries. */
-  readonly nodeIds: readonly [
-  ConstructionNodeId,
-  ConstructionNodeId,
-export interface CellCoordinate {
-  readonly x: number;
-  readonly z: number;
+  readonly physical: boolean;
   }
-export interface DiffOutcome {
-  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedNodeIds: readonly ConstructionNodeId[];
+export interface ConstructionPatchEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  }
+export interface ConstructionPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+  readonly regions: readonly ConstructionPatchRegion[];
   }
 
 // src/ports/index.ts
@@ -4357,149 +4283,5 @@ public static partial EngineStatus engine_buffer_release(ulong engine, ulong buf
 
 ### `isekai-dotnet-protocol` (`dotnet/Grafting.Isekai.Protocol`)
 
-```csharp
-// Generated/Grafting/Contracts/CommandMessage.cs
-public struct CommandMessage : IFlatbufferObject
-public static void ValidateVersion()
-public static CommandMessage GetRootAsCommandMessage(ByteBuffer _bb)
-public static CommandMessage GetRootAsCommandMessage(ByteBuffer _bb, CommandMessage obj)
-public static bool VerifyCommandMessage(ByteBuffer _bb)
-public static Offset<Grafting.Contracts.CommandMessage> CreateCommandMessage(FlatBufferBuilder builder,
-public static void StartCommandMessage(FlatBufferBuilder builder)
-public static void AddPayloadType(FlatBufferBuilder builder, Grafting.Contracts.CommandPayload payloadType)
-public static void AddPayload(FlatBufferBuilder builder, int payloadOffset)
-public static Offset<Grafting.Contracts.CommandMessage> EndCommandMessage(FlatBufferBuilder builder)
-public static void FinishCommandMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.CommandMessage> offset)
-public static void FinishSizePrefixedCommandMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.CommandMessage> offset)
-
-// Generated/Grafting/Contracts/CommandPayload.cs
-public enum CommandPayload : byte
-
-// Generated/Grafting/Contracts/Decrement.cs
-public struct Decrement : IFlatbufferObject
-public static void ValidateVersion()
-public static Decrement GetRootAsDecrement(ByteBuffer _bb)
-public static Decrement GetRootAsDecrement(ByteBuffer _bb, Decrement obj)
-public static Offset<Grafting.Contracts.Decrement> CreateDecrement(FlatBufferBuilder builder,
-public static void StartDecrement(FlatBufferBuilder builder)
-public static void AddAmount(FlatBufferBuilder builder, long amount)
-public static Offset<Grafting.Contracts.Decrement> EndDecrement(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/Decremented.cs
-public struct Decremented : IFlatbufferObject
-public static void ValidateVersion()
-public static Decremented GetRootAsDecremented(ByteBuffer _bb)
-public static Decremented GetRootAsDecremented(ByteBuffer _bb, Decremented obj)
-public static Offset<Grafting.Contracts.Decremented> CreateDecremented(FlatBufferBuilder builder,
-public static void StartDecremented(FlatBufferBuilder builder)
-public static void AddAmount(FlatBufferBuilder builder, long amount)
-public static void AddNewValue(FlatBufferBuilder builder, long newValue)
-public static Offset<Grafting.Contracts.Decremented> EndDecremented(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/DomainEventMessage.cs
-public struct DomainEventMessage : IFlatbufferObject
-public static void ValidateVersion()
-public static DomainEventMessage GetRootAsDomainEventMessage(ByteBuffer _bb)
-public static DomainEventMessage GetRootAsDomainEventMessage(ByteBuffer _bb, DomainEventMessage obj)
-public static bool VerifyDomainEventMessage(ByteBuffer _bb)
-public static Offset<Grafting.Contracts.DomainEventMessage> CreateDomainEventMessage(FlatBufferBuilder builder,
-public static void StartDomainEventMessage(FlatBufferBuilder builder)
-public static void AddPayloadType(FlatBufferBuilder builder, Grafting.Contracts.DomainEventPayload payloadType)
-public static void AddPayload(FlatBufferBuilder builder, int payloadOffset)
-public static Offset<Grafting.Contracts.DomainEventMessage> EndDomainEventMessage(FlatBufferBuilder builder)
-public static void FinishDomainEventMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.DomainEventMessage> offset)
-public static void FinishSizePrefixedDomainEventMessageBuffer(FlatBufferBuilder builder, Offset<Grafting.Contracts.DomainEventMessage> offset)
-
-// Generated/Grafting/Contracts/DomainEventPayload.cs
-public enum DomainEventPayload : byte
-
-// Generated/Grafting/Contracts/Increment.cs
-public struct Increment : IFlatbufferObject
-public static void ValidateVersion()
-public static Increment GetRootAsIncrement(ByteBuffer _bb)
-public static Increment GetRootAsIncrement(ByteBuffer _bb, Increment obj)
-public static Offset<Grafting.Contracts.Increment> CreateIncrement(FlatBufferBuilder builder,
-public static void StartIncrement(FlatBufferBuilder builder)
-public static void AddAmount(FlatBufferBuilder builder, long amount)
-public static void AddSequenceHint(FlatBufferBuilder builder, ulong sequenceHint)
-public static Offset<Grafting.Contracts.Increment> EndIncrement(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/Incremented.cs
-public struct Incremented : IFlatbufferObject
-public static void ValidateVersion()
-public static Incremented GetRootAsIncremented(ByteBuffer _bb)
-public static Incremented GetRootAsIncremented(ByteBuffer _bb, Incremented obj)
-public static Offset<Grafting.Contracts.Incremented> CreateIncremented(FlatBufferBuilder builder,
-public static void StartIncremented(FlatBufferBuilder builder)
-public static void AddAmount(FlatBufferBuilder builder, long amount)
-public static void AddNewValue(FlatBufferBuilder builder, long newValue)
-public static Offset<Grafting.Contracts.Incremented> EndIncremented(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/Reset.cs
-public struct Reset : IFlatbufferObject
-public static void ValidateVersion()
-public static Reset GetRootAsReset(ByteBuffer _bb)
-public static Reset GetRootAsReset(ByteBuffer _bb, Reset obj)
-public static void StartReset(FlatBufferBuilder builder)
-public static Offset<Grafting.Contracts.Reset> EndReset(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/RollAndAdd.cs
-public struct RollAndAdd : IFlatbufferObject
-public static void ValidateVersion()
-public static RollAndAdd GetRootAsRollAndAdd(ByteBuffer _bb)
-public static RollAndAdd GetRootAsRollAndAdd(ByteBuffer _bb, RollAndAdd obj)
-public static Offset<Grafting.Contracts.RollAndAdd> CreateRollAndAdd(FlatBufferBuilder builder,
-public static void StartRollAndAdd(FlatBufferBuilder builder)
-public static void AddMin(FlatBufferBuilder builder, long min)
-public static void AddMax(FlatBufferBuilder builder, long max)
-public static Offset<Grafting.Contracts.RollAndAdd> EndRollAndAdd(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/RolledAndAdded.cs
-public struct RolledAndAdded : IFlatbufferObject
-public static void ValidateVersion()
-public static RolledAndAdded GetRootAsRolledAndAdded(ByteBuffer _bb)
-public static RolledAndAdded GetRootAsRolledAndAdded(ByteBuffer _bb, RolledAndAdded obj)
-public static Offset<Grafting.Contracts.RolledAndAdded> CreateRolledAndAdded(FlatBufferBuilder builder,
-public static void StartRolledAndAdded(FlatBufferBuilder builder)
-public static void AddRolled(FlatBufferBuilder builder, long rolled)
-public static void AddNewValue(FlatBufferBuilder builder, long newValue)
-public static Offset<Grafting.Contracts.RolledAndAdded> EndRolledAndAdded(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/SnapshotMessage.cs
-public struct SnapshotMessage : IFlatbufferObject
-public static void ValidateVersion()
-public static SnapshotMessage GetRootAsSnapshotMessage(ByteBuffer _bb)
-public static SnapshotMessage GetRootAsSnapshotMessage(ByteBuffer _bb, SnapshotMessage obj)
-public static bool VerifySnapshotMessage(ByteBuffer _bb)
-public static Offset<Grafting.Contracts.SnapshotMessage> CreateSnapshotMessage(FlatBufferBuilder builder,
-public static void StartSnapshotMessage(FlatBufferBuilder builder)
-public static void AddState(FlatBufferBuilder builder, Offset<Grafting.Contracts.StateTable> stateOffset)
-public static void AddRngSeed(FlatBufferBuilder builder, VectorOffset rngSeedOffset)
-public static VectorOffset CreateRngSeedVector(FlatBufferBuilder builder, byte[] data)
-public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, byte[] data)
-public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, ArraySegment<byte> data)
-public static VectorOffset CreateRngSeedVectorBlock(FlatBufferBuilder builder, IntPtr dataPtr, int sizeInBytes)
-public static void StartRngSeedVector(FlatBufferBuilder builder, int numElems)
-public static void AddRngWordPos(FlatBufferBuilder builder, ulong rngWordPos)
-
-// Generated/Grafting/Contracts/StateTable.cs
-public struct StateTable : IFlatbufferObject
-public static void ValidateVersion()
-public static StateTable GetRootAsStateTable(ByteBuffer _bb)
-public static StateTable GetRootAsStateTable(ByteBuffer _bb, StateTable obj)
-public static Offset<Grafting.Contracts.StateTable> CreateStateTable(FlatBufferBuilder builder,
-public static void StartStateTable(FlatBufferBuilder builder)
-public static void AddValue(FlatBufferBuilder builder, long value)
-public static Offset<Grafting.Contracts.StateTable> EndStateTable(FlatBufferBuilder builder)
-
-// Generated/Grafting/Contracts/WasReset.cs
-public struct WasReset : IFlatbufferObject
-public static void ValidateVersion()
-public static WasReset GetRootAsWasReset(ByteBuffer _bb)
-public static WasReset GetRootAsWasReset(ByteBuffer _bb, WasReset obj)
-public static Offset<Grafting.Contracts.WasReset> CreateWasReset(FlatBufferBuilder builder,
-public static void StartWasReset(FlatBufferBuilder builder)
-public static void AddPreviousValue(FlatBufferBuilder builder, long previousValue)
-public static Offset<Grafting.Contracts.WasReset> EndWasReset(FlatBufferBuilder builder)
-```
+_No public signatures exported or discovered._
 

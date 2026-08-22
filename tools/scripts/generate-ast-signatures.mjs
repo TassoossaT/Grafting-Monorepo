@@ -13,10 +13,10 @@ const outputPath = resolve(root, "docs/generated/signatures/signatures-map.md");
 
 const readJson = async (relPath) => JSON.parse(await readFile(resolve(root, relPath), "utf8"));
 
-async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git"]) {
+async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git", "Generated", "generated", "pkg"]) {
   if (!existsSync(directory)) return [];
   const results = [];
-  const entries = await readdir(directory, { withFileTypes: true });
+  const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of entries) {
     if (excludeDirs.includes(entry.name)) continue;
@@ -27,7 +27,7 @@ async function findFiles(directory, extensions, excludeDirs = ["node_modules", "
       results.push(fullPath);
     }
   }
-  return results;
+  return results.sort((a, b) => a.localeCompare(b));
 }
 
 function extractTsSignatures(content) {
@@ -163,11 +163,11 @@ async function generate() {
       if (tag === "lang:typescript") {
         const files = await findFiles(projPath, [".ts", ".d.ts"]);
         for (const file of files) {
-          if (file.endsWith(".test.ts") || file.endsWith(".spec.ts")) continue;
+          const relFile = relative(projPath, file).replaceAll("\\", "/");
+          if (relFile.endsWith(".test.ts") || relFile.endsWith(".spec.ts") || relFile.includes("/tests/") || relFile.startsWith("tests/")) continue;
           const content = await readFile(file, "utf8");
           const extracted = extractTsSignatures(content);
           if (extracted.length > 0) {
-            const relFile = relative(projPath, file).replaceAll("\\", "/");
             sigs.push(`// ${relFile}\n` + extracted.slice(0, 15).join("\n"));
           }
         }
@@ -181,11 +181,11 @@ async function generate() {
         } else {
           const files = await findFiles(projPath, [".rs"]);
           for (const file of files) {
-            if (file.includes("/tests/") || file.endsWith("_test.rs")) continue;
+            const relFile = relative(projPath, file).replaceAll("\\", "/");
+            if (relFile.includes("/tests/") || relFile.startsWith("tests/") || relFile.endsWith("_test.rs")) continue;
             const content = await readFile(file, "utf8");
             const extracted = extractRustSignatures(content);
             if (extracted.length > 0) {
-              const relFile = relative(projPath, file).replaceAll("\\", "/");
               sigs.push(`// ${relFile}\n` + extracted.slice(0, 15).join("\n"));
             }
           }

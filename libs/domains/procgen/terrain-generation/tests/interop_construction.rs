@@ -1,29 +1,47 @@
 //! Proves this crate's generated output is a real, valid operand for
-//! `grafting-graph-core`'s `construction` operations -- the actual bar
-//! `docs/architecture/vtt-roadmap.md`'s E3.3 sets ("feeding these
-//! now-complete node operations rather than reinventing them"), not just
-//! internal self-consistency.
+//! `grafting-graph-core`'s atomic `region_edit` vocabulary, mirroring
+//! `grafting-procgen-structure-generation`'s own interop tests.
 
-use grafting_graph_core::{Edge, EdgeId, Graph, Node, NodeId, SurfaceRegistry, SurfaceType, merge_surfaces, move_node};
-use grafting_procgen_terrain_generation::{CornerHeightModule, TerrainCellGeneration, generate_terrain_cell_surface};
+use grafting_graph_core::{
+    ContourTopology, Edge, EdgeId, Graph, Node, NodeId, RegionId, SurfaceRegistry, SurfaceType,
+    delete_region, move_vertex, straight_cycle_region,
+};
+use grafting_procgen_terrain_generation::{
+    CornerHeightModule, TerrainCellGeneration, generate_terrain_cell_surface,
+};
 
-/// First-time creation: the composition every generation crate leaves to
-/// its caller (`grafting_graph_core::construction`'s 5 operations all
-/// require pre-existing state, per that crate's own doc comments).
+type SessionGraph = Graph<[f32; 3], ()>;
+
+/// Registers one generated terrain cell the way a session does: graph records
+/// first, then an analytic region over its own cycle, then the region's semantic surface.
 fn apply(
-    graph: &mut Graph<[f32; 3], ()>,
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
     surfaces: &mut SurfaceRegistry,
+    region_id: &str,
     generation: TerrainCellGeneration,
-) -> grafting_graph_core::SurfaceKey {
+) -> RegionId {
     for node in generation.nodes {
-        graph.add_node(node).unwrap();
+        if graph.node(node.id()).is_none() {
+            graph.add_node(node).unwrap();
+        }
     }
     for edge in generation.edges {
-        graph.add_edge(edge).unwrap();
+        if graph.edge(edge.id()).is_none() {
+            graph.add_edge(edge).unwrap();
+        }
     }
+    let id = RegionId::new(region_id).unwrap();
+    straight_cycle_region(topology, graph, id.clone(), &generation.surface.cycle).unwrap();
     surfaces
-        .add_surface(graph, generation.surface.cycle, generation.surface.surface_type, generation.surface.physical)
-        .unwrap()
+        .add_region_surface(
+            topology,
+            id.clone(),
+            generation.surface.surface_type,
+            generation.surface.physical,
+        )
+        .unwrap();
+    id
 }
 
 fn mesh() -> grafting_graph_core::PrismGridMesh {
@@ -42,37 +60,42 @@ fn cell_edge_id(cell: usize, slot: usize) -> EdgeId {
     EdgeId::new(format!("cell{cell}-e{slot}")).unwrap()
 }
 
-#[test]
-fn a_generated_surface_is_reported_affected_by_move_node() {
-    let mesh = mesh();
-    let module = flat();
-    let generation =
-        generate_terrain_cell_surface(&mesh, 0, &module, |slot| cell_node_id(0, slot), |slot| cell_edge_id(0, slot), SurfaceType::new("terrain"))
-            .unwrap();
-    let moved_node = generation.nodes[0].id().clone();
-
-    let mut graph = Graph::try_from_parts(vec![], vec![]).unwrap();
-    let mut surfaces = SurfaceRegistry::new();
-    let key = apply(&mut graph, &mut surfaces, generation);
-
-    let affected = move_node(&mut graph, &surfaces, &moved_node, |position| position[2] += 1.0).unwrap();
-    assert_eq!(affected, vec![key]);
+fn session() -> (SessionGraph, ContourTopology, SurfaceRegistry) {
+    (
+        Graph::try_from_parts(vec![], vec![]).unwrap(),
+        ContourTopology::new(),
+        SurfaceRegistry::new(),
+    )
 }
 
 #[test]
-fn two_adjacent_cells_sharing_a_node_id_can_be_merged() {
-    // A 2x1x1 mesh: cells 0 and 1 are adjacent along X, so cell 0's
-    // East-side corners (slots 1, 2) share `PrismGridMesh` vertex indices
-    // with cell 1's West-side corners (slots 0, 3). Mapping both to the
-    // *same* NodeId at those slots is the seam-sharing case this test
-    // exercises -- a caller opting into a seamless join.
+fn a_generated_surface_is_reported_affected_by_move_vertex() {
+    let mesh = mesh();
+    let module = flat();
+    let generation = generate_terrain_cell_surface(
+        &mesh,
+        0,
+        &module,
+        |slot| cell_node_id(0, slot),
+        |slot| cell_edge_id(0, slot),
+        SurfaceType::new("terrain"),
+    )
+    .unwrap();
+    let moved_node = generation.nodes[0].id().clone();
+
+    let (mut graph, mut topology, mut surfaces) = session();
+    let region = apply(&mut graph, &mut topology, &mut surfaces, "cell-0", generation);
+
+    let outcome = move_vertex(&mut graph, &topology, &moved_node, |position| position[2] += 1.0).unwrap();
+    assert_eq!(outcome.affected_regions, vec![region]);
+}
+
+#[test]
+fn two_adjacent_cells_sharing_a_node_id_are_both_affected_by_move_vertex() {
     let mesh = mesh();
     let module = flat();
 
     let shared_id = |cell: usize, slot: usize| -> NodeId {
-        // Cell 0 slots 1/2 and cell 1 slots 0/3 sit at the same physical
-        // vertex column; give them one shared identity, everything else
-        // its own per-cell identity.
         match (cell, slot) {
             (0, 1) => NodeId::new("shared-0").unwrap(),
             (0, 2) => NodeId::new("shared-1").unwrap(),
@@ -82,66 +105,57 @@ fn two_adjacent_cells_sharing_a_node_id_can_be_merged() {
         }
     };
 
-    let generation0 =
-        generate_terrain_cell_surface(&mesh, 0, &module, |slot| shared_id(0, slot), |slot| cell_edge_id(0, slot), SurfaceType::new("terrain"))
-            .unwrap();
-    let generation1 =
-        generate_terrain_cell_surface(&mesh, 1, &module, |slot| shared_id(1, slot), |slot| cell_edge_id(1, slot), SurfaceType::new("terrain"))
-            .unwrap();
-
-    let mut graph = Graph::try_from_parts(vec![], vec![]).unwrap();
-    let mut surfaces = SurfaceRegistry::new();
-
-    // Cell 0's nodes/edges include the two shared ids; cell 1 must not
-    // re-add them.
-    let cell0_nodes: Vec<Node<[f32; 3]>> = generation0.nodes;
-    let cell0_edges: Vec<Edge<()>> = generation0.edges;
-    for node in cell0_nodes {
-        graph.add_node(node).unwrap();
-    }
-    for edge in cell0_edges {
-        graph.add_edge(edge).unwrap();
-    }
-    let key0 = surfaces
-        .add_surface(&graph, generation0.surface.cycle, generation0.surface.surface_type, generation0.surface.physical)
-        .unwrap();
-
-    for node in generation1.nodes {
-        if graph.node(node.id()).is_none() {
-            graph.add_node(node).unwrap();
-        }
-    }
-    for edge in generation1.edges {
-        if graph.edge(edge.id()).is_none() {
-            graph.add_edge(edge).unwrap();
-        }
-    }
-    let key1 = surfaces
-        .add_surface(&graph, generation1.surface.cycle, generation1.surface.surface_type, generation1.surface.physical)
-        .unwrap();
-
-    let shared = NodeId::new("shared-0").unwrap();
-    let referencing: Vec<_> = surfaces.surfaces_referencing(&shared).cloned().collect();
-    assert!(referencing.contains(&key0));
-    assert!(referencing.contains(&key1));
-
-    let merged_cycle: Vec<NodeId> = vec![
-        shared_id(0, 0),
-        shared_id(0, 1),
-        shared_id(1, 1),
-        shared_id(1, 2),
-        shared_id(1, 3),
-        shared_id(0, 3),
-    ];
-    let merged = merge_surfaces(
-        &graph,
-        &mut surfaces,
-        &key0,
-        &key1,
-        grafting_graph_core::SurfaceSpec { cycle: merged_cycle, surface_type: SurfaceType::new("terrain"), physical: true, curvature: None },
+    let generation0 = generate_terrain_cell_surface(
+        &mesh,
+        0,
+        &module,
+        |slot| shared_id(0, slot),
+        |slot| cell_edge_id(0, slot),
+        SurfaceType::new("terrain"),
     )
     .unwrap();
-    assert!(surfaces.surface(&merged).is_some());
-    assert!(surfaces.surface(&key0).is_none());
-    assert!(surfaces.surface(&key1).is_none());
+    let generation1 = generate_terrain_cell_surface(
+        &mesh,
+        1,
+        &module,
+        |slot| shared_id(1, slot),
+        |slot| cell_edge_id(1, slot),
+        SurfaceType::new("terrain"),
+    )
+    .unwrap();
+
+    let (mut graph, mut topology, mut surfaces) = session();
+    let region0 = apply(&mut graph, &mut topology, &mut surfaces, "cell-0", generation0);
+    let region1 = apply(&mut graph, &mut topology, &mut surfaces, "cell-1", generation1);
+
+    let shared = NodeId::new("shared-0").unwrap();
+    let outcome = move_vertex(&mut graph, &topology, &shared, |position| position[2] += 0.5).unwrap();
+
+    assert_eq!(outcome.affected_regions.len(), 2);
+    assert!(outcome.affected_regions.contains(&region0));
+    assert!(outcome.affected_regions.contains(&region1));
+}
+
+#[test]
+fn deleting_a_generated_terrain_region_cleans_up_unshared_nodes() {
+    let mesh = mesh();
+    let module = flat();
+    let generation = generate_terrain_cell_surface(
+        &mesh,
+        0,
+        &module,
+        |slot| cell_node_id(0, slot),
+        |slot| cell_edge_id(0, slot),
+        SurfaceType::new("terrain"),
+    )
+    .unwrap();
+
+    let (mut graph, mut topology, mut surfaces) = session();
+    let region = apply(&mut graph, &mut topology, &mut surfaces, "cell-0", generation);
+
+    let outcome = delete_region(&mut graph, &mut topology, &mut surfaces, &region).unwrap();
+    assert_eq!(outcome.removed_regions, vec![region.clone()]);
+    assert_eq!(outcome.removed_nodes.len(), 4);
+    assert_eq!(graph.node_count(), 0);
+    assert!(surfaces.region_surface(&region).is_none());
 }
