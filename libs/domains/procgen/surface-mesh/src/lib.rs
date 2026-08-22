@@ -31,7 +31,8 @@
 use earcut::{Earcut, utils3d};
 
 use grafting_graph_core::{
-    ArcBulge, ContourEdge, ContourLoop, ContourTopology, NodeId, SurfaceCurvature, SurfaceRegion,
+    ArcBulge, ContourEdge, ContourGeometry, ContourLoop, ContourTopology, NodeId, OrientedEdgeUse,
+    SurfaceCurvature, SurfaceRegion,
 };
 
 /// Maximum deviation, in world units, between a tessellated arc's chords and
@@ -40,6 +41,13 @@ use grafting_graph_core::{
 /// value: nothing upstream of rendering has a legitimate reason to care
 /// about tessellation resolution.
 const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
+
+/// How far apart, in world units, a side edge's two endpoints may be in XZ
+/// and still count as one vertical line for [`ruled_strip_mesh`]. Only ever
+/// compared against values that are meant to be exactly equal (the same
+/// contour point at two heights), so this absorbs float round-trip drift,
+/// not any real slant.
+const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
 
 /// A triangulated mesh derived from one surface's node cycle. Vertices stay
 /// in the caller-supplied cycle order (no Steiner points are introduced for
@@ -108,6 +116,21 @@ pub fn triangulate_region(
     region: &SurfaceRegion,
     mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
 ) -> Option<Vec<TriangulatedMesh>> {
+    // A vertical ruled strip's own boundary ring lies on no single plane
+    // (see [`ruled_strip_mesh`]), so it can never survive the projection-
+    // and-earcut path below. Detected per outer loop, from the loop's own
+    // analytic edges, before anything has been flattened. Skipped outright
+    // when the region carries holes: a strip has no interior to punch.
+    let mut strips: Vec<Option<TriangulatedMesh>> = if region.holes().is_empty() {
+        region
+            .outer_loops()
+            .iter()
+            .map(|loop_| ruled_strip_mesh(topology, loop_, &mut resolve_position))
+            .collect()
+    } else {
+        vec![None; region.outer_loops().len()]
+    };
+
     let outers = region
         .outer_loops()
         .iter()
@@ -145,6 +168,9 @@ pub fn triangulate_region(
         .iter()
         .enumerate()
         .map(|(index, outer)| {
+            if let Some(strip) = strips[index].take() {
+                return Some(strip);
+            }
             let owned_holes = holes
                 .iter()
                 .zip(owners.iter())
@@ -154,6 +180,24 @@ pub fn triangulate_region(
         .collect()
 }
 
+/// One loop entry resolved into an edge that runs the way the loop
+/// traverses it -- a reversed use is rebuilt with its endpoints swapped and
+/// its geometry mirrored, so every caller downstream can read `start_node`
+/// and `end_node` literally.
+fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge> {
+    let edge = topology.edge(use_.edge())?;
+    Some(if use_.is_reversed() {
+        ContourEdge::new(
+            edge.id().clone(),
+            edge.end_node().clone(),
+            edge.start_node().clone(),
+            edge.reversed_geometry(),
+        )
+    } else {
+        edge.clone()
+    })
+}
+
 fn tessellate_contour_loop(
     topology: &ContourTopology,
     loop_: &ContourLoop,
@@ -161,17 +205,7 @@ fn tessellate_contour_loop(
 ) -> Option<Vec<[f32; 3]>> {
     let mut positions = Vec::new();
     for use_ in loop_ {
-        let edge = topology.edge(use_.edge())?;
-        let traversed = if use_.is_reversed() {
-            ContourEdge::new(
-                edge.id().clone(),
-                edge.end_node().clone(),
-                edge.start_node().clone(),
-                edge.reversed_geometry(),
-            )
-        } else {
-            edge.clone()
-        };
+        let traversed = traversed_edge(topology, use_)?;
         let start = resolve_position(traversed.start_node())?;
         let end = resolve_position(traversed.end_node())?;
         let planar = traversed.tessellate(
@@ -251,6 +285,138 @@ fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool {
     inside
 }
 
+/// A loop of four contour edges whose two side edges are vertical -- both
+/// endpoints at the same XZ point, differing only in Y -- and at least one
+/// of whose two rails is a circular arc describes a *ruled strip*: a
+/// section of a cylinder, not a flat polygon. Its boundary ring genuinely
+/// lies on no single plane, so [`triangulate_contour_loops`]'s own
+/// projection has no plane to find and folds the ring onto itself, emitting
+/// triangles that visibly cut across the surface -- the same failure this
+/// crate's own top-level doc describes for the non-analytic path.
+///
+/// This builds the strip directly instead: the bottom rail's own
+/// tessellated polyline, those same XZ points lifted to the top rail's own
+/// heights, then [`ruled_strip`].
+///
+/// The condition is a statement about a region's own geometry, not about
+/// whatever produced it -- any region shaped this way takes this path.
+/// `None` whenever the shape does not match, which leaves the loop on the
+/// general path completely unchanged.
+fn ruled_strip_mesh(
+    topology: &ContourTopology,
+    loop_: &ContourLoop,
+    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<TriangulatedMesh> {
+    if loop_.len() != 4 {
+        return None;
+    }
+    let mut edges: Vec<(ContourEdge, [f32; 3], [f32; 3])> = Vec::with_capacity(4);
+    for use_ in loop_ {
+        let edge = traversed_edge(topology, use_)?;
+        let start = resolve_position(edge.start_node())?;
+        let end = resolve_position(edge.end_node())?;
+        edges.push((edge, start, end));
+    }
+
+    let is_vertical = |entry: &(ContourEdge, [f32; 3], [f32; 3])| {
+        let (edge, start, end) = entry;
+        matches!(edge.geometry(), ContourGeometry::Line)
+            && (start[0] - end[0]).abs() <= VERTICAL_SIDE_EPSILON
+            && (start[2] - end[2]).abs() <= VERTICAL_SIDE_EPSILON
+    };
+    if !is_vertical(&edges[1]) || !is_vertical(&edges[3]) {
+        return None;
+    }
+    let is_curved = |entry: &(ContourEdge, [f32; 3], [f32; 3])| {
+        matches!(entry.0.geometry(), ContourGeometry::CircularArc { .. })
+    };
+    if !is_curved(&edges[0]) && !is_curved(&edges[2]) {
+        return None;
+    }
+
+    let (bottom_edge, bottom_start, bottom_end) = &edges[0];
+    let (_, top_start, top_end) = &edges[2];
+    let planar = bottom_edge.tessellate(
+        [bottom_start[0], bottom_start[2]],
+        [bottom_end[0], bottom_end[2]],
+        ARC_TESSELLATION_TOLERANCE,
+    );
+    let count = planar.len();
+    if count < 2 {
+        return None;
+    }
+
+    // The top rail runs the opposite way round the loop, so the corner
+    // above the bottom rail's own *start* is the top rail's own *end*.
+    let mut bottom_rail = Vec::with_capacity(count);
+    let mut top_rail = Vec::with_capacity(count);
+    for (index, point) in planar.iter().enumerate() {
+        let t = index as f32 / (count - 1) as f32;
+        bottom_rail.push([
+            point[0],
+            bottom_start[1] + (bottom_end[1] - bottom_start[1]) * t,
+            point[1],
+        ]);
+        top_rail.push([
+            point[0],
+            top_end[1] + (top_start[1] - top_end[1]) * t,
+            point[1],
+        ]);
+    }
+    ruled_strip(&bottom_rail, &top_rail)
+}
+
+/// Triangulates two equal-length rails into a strip: consecutive rail pairs
+/// interleaved bottom-then-top, two triangles per facet between them, and
+/// each triangle carrying the real cross product of its own edges as its
+/// normal (not an idealized "radially outward" formula), so shading stays
+/// correct whichever way the strip bends. `None` for fewer than 2 pairs or
+/// rails of differing length.
+fn ruled_strip(bottom: &[[f32; 3]], top: &[[f32; 3]]) -> Option<TriangulatedMesh> {
+    let count = bottom.len();
+    if count < 2 || top.len() != count {
+        return None;
+    }
+
+    let mut positions = Vec::with_capacity(count * 2);
+    for index in 0..count {
+        positions.push(bottom[index]);
+        positions.push(top[index]);
+    }
+
+    let mut normals = vec![[0.0, 0.0, 1.0]; positions.len()];
+    let mut indices = Vec::with_capacity((count - 1) * 6);
+    for index in 0..count - 1 {
+        let bottom_a = index * 2;
+        let top_a = bottom_a + 1;
+        let bottom_b = bottom_a + 2;
+        let top_b = bottom_a + 3;
+
+        let facet_normal = unit_normal(cross(
+            sub(positions[bottom_b], positions[bottom_a]),
+            sub(positions[top_a], positions[bottom_a]),
+        ));
+        for vertex in [bottom_a, top_a, bottom_b, top_b] {
+            normals[vertex] = facet_normal;
+        }
+
+        indices.extend_from_slice(&[
+            bottom_a as u32,
+            bottom_b as u32,
+            top_a as u32,
+            top_a as u32,
+            bottom_b as u32,
+            top_b as u32,
+        ]);
+    }
+
+    Some(TriangulatedMesh {
+        positions,
+        normals,
+        indices,
+    })
+}
+
 /// Triangulates a curved quad (see [`crate`]'s own doc for the 4-corner
 /// shape) as a ruled strip: the bottom edge's own tessellated arc paired
 /// with the same arc mirrored at the top's own height, two triangles per
@@ -285,48 +451,7 @@ fn triangulate_curved_quad(
         *last = top_end;
     }
 
-    let count = bottom_arc.len();
-    if count < 2 {
-        return None;
-    }
-
-    let mut out_positions = Vec::with_capacity(count * 2);
-    for index in 0..count {
-        out_positions.push(bottom_arc[index]);
-        out_positions.push(top_arc[index]);
-    }
-
-    let mut normals = vec![[0.0, 0.0, 1.0]; out_positions.len()];
-    let mut indices = Vec::with_capacity((count - 1) * 6);
-    for index in 0..count - 1 {
-        let bottom_a = index * 2;
-        let top_a = bottom_a + 1;
-        let bottom_b = bottom_a + 2;
-        let top_b = bottom_a + 3;
-
-        let facet_normal = unit_normal(cross(
-            sub(out_positions[bottom_b], out_positions[bottom_a]),
-            sub(out_positions[top_a], out_positions[bottom_a]),
-        ));
-        for vertex in [bottom_a, top_a, bottom_b, top_b] {
-            normals[vertex] = facet_normal;
-        }
-
-        indices.extend_from_slice(&[
-            bottom_a as u32,
-            bottom_b as u32,
-            top_a as u32,
-            top_a as u32,
-            bottom_b as u32,
-            top_b as u32,
-        ]);
-    }
-
-    Some(TriangulatedMesh {
-        positions: out_positions,
-        normals,
-        indices,
-    })
+    ruled_strip(&bottom_arc, &top_arc)
 }
 
 fn unit_normal(vector: [f32; 3]) -> [f32; 3] {
@@ -768,6 +893,135 @@ mod tests {
             "the renderer may facet the arc"
         );
         assert!(!meshes[0].indices.is_empty());
+    }
+
+    /// A curved *wall panel* region -- a bottom arc, a vertical side, the
+    /// same arc back along the top, another vertical side -- is a section of
+    /// a cylinder whose ring lies on no plane. It must take the ruled-strip
+    /// path, not projection-and-earcut: every triangle real, and the facet
+    /// normals genuinely turning along the arc rather than one flat normal
+    /// shared by the whole panel.
+    #[test]
+    fn a_curved_wall_panel_region_meshes_as_a_ruled_strip() {
+        let graph = graph_with_positions(&[
+            ("bottom-start", [2.0, 0.0, 0.0]),
+            ("bottom-end", [-2.0, 0.0, 0.0]),
+            ("top-end", [-2.0, 3.0, 0.0]),
+            ("top-start", [2.0, 3.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let arc = |clockwise: bool| ContourGeometry::CircularArc {
+            center: [0.0, 0.0],
+            clockwise,
+        };
+        let spec: [(&str, &str, &str, ContourGeometry); 4] = [
+            ("base", "bottom-start", "bottom-end", arc(false)),
+            ("right", "bottom-end", "top-end", ContourGeometry::Line),
+            ("top", "top-end", "top-start", arc(true)),
+            ("left", "top-start", "bottom-start", ContourGeometry::Line),
+        ];
+        let loop_ = spec
+            .iter()
+            .map(|(id, start, end, geometry)| {
+                let edge_id = ContourEdgeId::new(*id).unwrap();
+                topology
+                    .add_edge(
+                        &graph,
+                        ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry),
+                    )
+                    .unwrap();
+                OrientedEdgeUse::forward(edge_id)
+            })
+            .collect();
+        let region_id = RegionId::new("panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+        let positions = graph
+            .snapshot()
+            .nodes()
+            .iter()
+            .map(|node| (node.id().as_str().to_owned(), *node.data()))
+            .collect::<HashMap<_, _>>();
+
+        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+            positions.get(id.as_str()).copied()
+        })
+        .unwrap()
+        .pop()
+        .unwrap();
+
+        // Interleaved bottom/top pairs, both rails on the true circle.
+        assert!(mesh.positions.len() >= 4 && mesh.positions.len() % 2 == 0);
+        for point in &mesh.positions {
+            let radius = (point[0].powi(2) + point[2].powi(2)).sqrt();
+            assert!(
+                (radius - 2.0).abs() < 1e-2,
+                "point left the true cylinder: {point:?}"
+            );
+            assert!(point[1] == 0.0 || point[1] == 3.0);
+        }
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [
+                triangle[0] as usize,
+                triangle[1] as usize,
+                triangle[2] as usize,
+            ];
+            let area = cross(
+                sub(mesh.positions[b], mesh.positions[a]),
+                sub(mesh.positions[c], mesh.positions[a]),
+            );
+            let length = (area[0] * area[0] + area[1] * area[1] + area[2] * area[2]).sqrt();
+            assert!(length > 1e-6, "degenerate triangle at indices {a},{b},{c}");
+        }
+        assert!(
+            mesh.normals.iter().any(|normal| {
+                let first = mesh.normals[0];
+                (normal[0] - first[0]).abs() > 1e-3 || (normal[2] - first[2]).abs() > 1e-3
+            }),
+            "a curved panel must not shade as one flat face"
+        );
+        for normal in &mesh.normals {
+            assert!(
+                normal[1].abs() < 1e-3,
+                "a vertical panel's own normals stay horizontal, got {normal:?}"
+            );
+        }
+    }
+
+    /// A *flat* vertical panel -- same shape, straight rails -- has a
+    /// perfectly good plane, so it must stay on the general path and keep
+    /// its own four-corner ring rather than being widened into a strip.
+    #[test]
+    fn a_flat_vertical_panel_region_stays_on_the_general_path() {
+        let graph = graph_with_positions(&[
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [4.0, 0.0, 0.0]),
+            ("c", [4.0, 3.0, 0.0]),
+            ("d", [0.0, 3.0, 0.0]),
+        ]);
+        let mut topology = ContourTopology::new();
+        let loop_ = line_loop(&mut topology, &graph, "flat", &["a", "b", "c", "d"]);
+        let region_id = RegionId::new("flat-panel").unwrap();
+        topology
+            .add_region(region_id.clone(), vec![loop_], Vec::new())
+            .unwrap();
+        let positions = graph
+            .snapshot()
+            .nodes()
+            .iter()
+            .map(|node| (node.id().as_str().to_owned(), *node.data()))
+            .collect::<HashMap<_, _>>();
+
+        let mesh = triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+            positions.get(id.as_str()).copied()
+        })
+        .unwrap()
+        .pop()
+        .unwrap();
+
+        assert_eq!(mesh.positions.len(), 4);
+        assert_eq!(mesh.indices.len(), 6);
     }
 
     #[test]
