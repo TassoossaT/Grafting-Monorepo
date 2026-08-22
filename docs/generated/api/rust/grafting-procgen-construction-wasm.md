@@ -1,5 +1,10 @@
 # grafting-procgen-construction-wasm
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`AddHole` -- opens one more inner loop on a face. See
+`region_editing::apply_add_hole`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_patch_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Registers a whole generated patch -- nodes, shared boundary edges,
@@ -99,6 +104,11 @@ Restores the state immediately after the latest matching undone path-brush opera
 
 One region's live boundary, in this crate's own deterministic order.
 See `region_editing::region_topology`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`RemoveHole` -- closes one back up. See
+`region_editing::apply_remove_hole`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 

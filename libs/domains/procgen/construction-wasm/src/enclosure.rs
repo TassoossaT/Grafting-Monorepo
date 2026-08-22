@@ -662,6 +662,7 @@ mod tests {
                             reversed: true,
                         },
                     ],
+                    holes: Vec::new(),
                     surface_type: "terrain".into(),
                     physical: true,
                 });
@@ -751,6 +752,7 @@ mod tests {
                 regions: vec![PatchRegionDto {
                     region_id: "patched".into(),
                     boundary,
+                    holes: Vec::new(),
                     surface_type: "terrain".into(),
                     physical: true,
                 }],
@@ -837,6 +839,7 @@ mod tests {
                             reversed: false,
                         })
                         .collect(),
+                    holes: Vec::new(),
                     surface_type: "terrain".into(),
                     physical: true,
                 }],
@@ -1149,6 +1152,7 @@ mod tests {
                                 reversed: false,
                             },
                         ],
+                        holes: Vec::new(),
                         surface_type: "terrain".into(),
                         physical: true,
                     },
@@ -1168,6 +1172,7 @@ mod tests {
                                 reversed: false,
                             },
                         ],
+                        holes: Vec::new(),
                         surface_type: "terrain".into(),
                         physical: true,
                     },

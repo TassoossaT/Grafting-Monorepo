@@ -3222,6 +3222,16 @@ One face of a generated patch, over edges the same request declares.
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.boundary: readonly ConstructionOrientedEdgeUse[]`
 
+### `property vtt.construction-session-port.ConstructionPatchRegion.holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]`
+
+Inner loops this face is opened by -- a door, a window, any opening.
+Absent means a solid face, which is what almost every patch declares.
+
+An opening leaves one use free on every edge of its own rim, so a
+second face can take that rim as its own boundary and stand in the
+opening. Declaring both in one patch is the point: half of it is a
+wall with an opening nobody is standing in.
+
 ### `property vtt.construction-session-port.ConstructionPatchRegion.physical: boolean`
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.regionId: string`
@@ -3276,6 +3286,12 @@ Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
 must validate at this boundary, not rely on recovering from one) behind
 app-owned types. Mirrors the whole session ABI, not only the slice the
 current runtime wiring calls.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
+
+Opens one more inner loop on an existing face -- what a door or a
+window is an opening for. The loop must already be registered, and it
+keeps one free use per edge so a face can stand in it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): ConstructionPatchOutcome`
 
@@ -3387,6 +3403,10 @@ Moves one boundary node to an absolute position.
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoPathBrush(operationId: string): void`
 
 Restores the confirmed state immediately after that undone path-brush operation.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
+
+Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): void`
 
