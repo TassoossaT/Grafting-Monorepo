@@ -10,7 +10,8 @@ import type {
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "./path-fitting.ts";
-import { wallPatch, type EdgeClaims, type WallColumn, type WallContour } from "./wall-patch.ts";
+import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
+import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
 export { xzDistance, pinnedToBaseline };
@@ -175,29 +176,6 @@ function resolveColumn(
 }
 
 /**
- * Every direction each boundary edge on the table is currently walked in.
- *
- * Read once per commit, so a run can tell which boundary it may join and
- * which it has to keep to itself -- see [`EdgeClaims`]. Without it a run
- * that tried to reference a column already bounded on both sides had its
- * whole panel refused, silently, which is what made joining two separate
- * walls work in one drawing direction and do nothing in the other.
- */
-function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
-  const uses = new Map<ConstructionEdgeId, boolean[]>();
-  for (const topology of ctx.runtime.getAllRegionTopologies()) {
-    for (const loop of [...topology.outerLoops, ...topology.holes]) {
-      for (const use of loop) {
-        const recorded = uses.get(use.edgeId);
-        if (recorded === undefined) uses.set(use.edgeId, [use.reversed]);
-        else recorded.push(use.reversed);
-      }
-    }
-  }
-  return uses;
-}
-
-/**
  * The columns a fitted run passes through and the geometry of each step
  * between them, with degenerate steps dropped and closure resolved.
  *
@@ -260,9 +238,15 @@ export function commitWallContour(
 
   const columns = points.map((point, index) => resolveColumn(ctx, point, params.height, idPrefix, index, causeId));
   const contour: WallContour = { columns, geometries, closed };
-  const claims: EdgeClaims = { existing: boundaryUsage(ctx), runPrefix: idPrefix };
+  // Any number of walls may stand on one column, so a run keeps its own
+  // edge wherever the shared one is full rather than losing the face.
+  const sharing: EdgeSharing = {
+    kind: "private-when-full",
+    runPrefix: idPrefix,
+    existingUses: boundaryUsage(ctx),
+  };
 
-  const outcome = ctx.runtime.addPatch(wallPatch(ctx.tableId, contour, params.wallType, claims), "local", causeId);
+  const outcome = ctx.runtime.addPatch(wallPatch(ctx.tableId, contour, params.wallType, sharing), "local", causeId);
   // A refused panel used to be the whole of this bug and left no trace at
   // all. Claiming edges against the live graph should make it unreachable
   // now, so say so out loud rather than letting it go quiet again.

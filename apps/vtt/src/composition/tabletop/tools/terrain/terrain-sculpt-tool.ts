@@ -4,7 +4,6 @@ import type {
   ConstructionCoveredRegion,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
-  ConstructionPatchEdge,
   ConstructionPatchRegion,
   ConstructionNodeId,
   ConstructionPosition,
@@ -15,6 +14,7 @@ import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-gr
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { restackTerrain } from "./terrain-restack.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { createBoundaryEdges } from "../core/boundary-edges.ts";
 
 /**
  * PENDING (not scheduled): this whole file -- lattice generation, heightmap
@@ -393,7 +393,11 @@ function toPatch(
   nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
   surfaces: readonly ConstructionSurfaceSpec[],
 ): ConstructionPatch {
-  const edges = new Map<string, ConstructionPatchEdge>();
+  // A boundary with a face on both sides is interior ground, and terrain is
+  // never created above anything -- so a face that finds its edge full is
+  // meant to be refused, not rescued with an edge of its own. The rim it
+  // leaves is what `fillUnfilledLoops` reads.
+  const edges = createBoundaryEdges(ctx.tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
 
   for (const surface of surfaces) {
@@ -402,15 +406,7 @@ function toPatch(
       const from = surface.cycle[index];
       const to = surface.cycle[(index + 1) % surface.cycle.length];
       if (from === undefined || to === undefined) continue;
-      // Lexicographic order picks the same representative from either side,
-      // which is the whole mechanism -- nothing else makes two independently
-      // generated faces agree on one name for the line between them.
-      const forward = from < to;
-      const start = forward ? from : to;
-      const end = forward ? to : from;
-      const edgeId = `${ctx.tableId}:seg:${start}~${end}`;
-      if (!edges.has(edgeId)) edges.set(edgeId, { edgeId, startNodeId: start, endNodeId: end });
-      boundary.push({ edgeId, reversed: !forward });
+      boundary.push(edges.use(from, to));
     }
     if (boundary.length !== surface.cycle.length) continue;
     regions.push({
@@ -421,7 +417,7 @@ function toPatch(
     });
   }
 
-  return { nodes, edges: [...edges.values()], regions };
+  return { nodes, edges: edges.all(), regions };
 }
 
 /**
