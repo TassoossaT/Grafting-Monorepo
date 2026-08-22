@@ -22,9 +22,10 @@
 
   <ItemGroup>
     <!-- Copies the freshly built Rust cdylib next to the test binaries so
-         P/Invoke's default same-directory DLL search finds it (same
-         pattern spike 2, spikes/rust-capi-dotnet, already validated). -->
-    <Content Include="../../target/release/grafting_isekai_capi.dll" Link="grafting_isekai_capi.dll" CopyToOutputDirectory="PreserveNewest" />
+         P/Invoke's default same-directory DLL search finds it (supports Windows, Linux, macOS). -->
+    <Content Include="../../target/release/grafting_isekai_capi.dll" Condition="Exists('../../target/release/grafting_isekai_capi.dll')" Link="grafting_isekai_capi.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../target/release/libgrafting_isekai_capi.so" Condition="Exists('../../target/release/libgrafting_isekai_capi.so')" Link="libgrafting_isekai_capi.so" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../target/release/libgrafting_isekai_capi.dylib" Condition="Exists('../../target/release/libgrafting_isekai_capi.dylib')" Link="libgrafting_isekai_capi.dylib" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -51,7 +51,11 @@
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/rust-toolchain.toml"
       ],
-      "outputs": ["{workspaceRoot}/target/release/grafting_isekai_capi.dll"]
+      "outputs": [
+        "{workspaceRoot}/target/release/grafting_isekai_capi.dll",
+        "{workspaceRoot}/target/release/libgrafting_isekai_capi.so",
+        "{workspaceRoot}/target/release/libgrafting_isekai_capi.dylib"
+      ]
     },
     "docs-generate": {
       "executor": "nx:run-commands",
