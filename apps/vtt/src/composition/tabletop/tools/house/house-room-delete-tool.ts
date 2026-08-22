@@ -1,8 +1,8 @@
 import type { ConstructionSurfaceKey } from "@/ports";
 
-import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { findEnclosingRoom, type DerivedRoom } from "./room-lookup.ts";
-import { findWallSurfaceAt } from "./wall-shared.ts";
+import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 
 /**
  * Every bounding wall panel's surface key for `room` (one per consecutive
@@ -53,7 +53,7 @@ export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   onClick(ctx: ToolContext, sample: PointerSample): void {
     const directHit = findWallSurfaceAt(ctx, sample.point);
     if (directHit !== undefined) {
-      ctx.runtime.removeSurface({ surfaceKey: directHit }, "local", `${ctx.tableId}:demolish-surface:${ctx.nextSequence()}`);
+      ctx.runtime.removeSurface({ surfaceKey: directHit }, "local", scopedToolId(ctx, "demolish-surface", ctx.nextSequence()));
       return;
     }
 
@@ -65,7 +65,7 @@ export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
       ctx.runtime.removeSurface(
         { surfaceKey },
         "local",
-        `${ctx.tableId}:room-delete:${sequence}:${index}`,
+        scopedToolId(ctx, "room-delete", `${sequence}:${index}`),
       );
     }
   },

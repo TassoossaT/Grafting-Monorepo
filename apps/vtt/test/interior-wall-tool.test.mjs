@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   cellsInPolygon,
   isRedundantPerimeterWall,
-} from "../src/composition/tabletop/tools/interior-partition.ts";
+} from "../src/composition/tabletop/tools/house/interior-partition.ts";
 
 const SQUARE = [
   { x: 0, z: 0 },

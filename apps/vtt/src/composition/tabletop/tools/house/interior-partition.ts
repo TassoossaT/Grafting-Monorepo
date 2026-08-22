@@ -1,45 +1,17 @@
 import type { CellCoordinate, ConstructionNodeId, ConstructionPosition } from "@/ports";
 
-import type { ToolContext } from "./tool-context.ts";
+import type { ToolContext } from "../core/tool-context.ts";
 
-export interface Vec2 {
-  readonly x: number;
-  readonly z: number;
-}
+import {
+  distanceToPolygonBoundaryXZ,
+  pointInPolygonXZ,
+  type PointXZ,
+} from "../shapes/geometry-2d.ts";
 
-function pointInPolygon(point: Vec2, polygon: readonly Vec2[]): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const pi = polygon[i];
-    const pj = polygon[j];
-    if (pi === undefined || pj === undefined) continue;
-    const crosses = pi.z > point.z !== pj.z > point.z;
-    if (!crosses) continue;
-    const xAtPointZ = ((pj.x - pi.x) * (point.z - pi.z)) / (pj.z - pi.z) + pi.x;
-    if (point.x < xAtPointZ) inside = !inside;
-  }
-  return inside;
-}
+export type Vec2 = PointXZ;
 
-function pointToSegmentDistance(point: Vec2, a: Vec2, b: Vec2): number {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const lengthSq = abx * abx + abz * abz;
-  if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lengthSq));
-  return Math.hypot(point.x - (a.x + t * abx), point.z - (a.z + t * abz));
-}
-
-function distanceToPolygonBoundary(point: Vec2, polygon: readonly Vec2[]): number {
-  let best = Infinity;
-  for (let i = 0; i < polygon.length; i += 1) {
-    const a = polygon[i];
-    const b = polygon[(i + 1) % polygon.length];
-    if (a === undefined || b === undefined) continue;
-    best = Math.min(best, pointToSegmentDistance(point, a, b));
-  }
-  return best;
-}
+const pointInPolygon = pointInPolygonXZ;
+const distanceToPolygonBoundary = distanceToPolygonBoundaryXZ;
 
 /** Every integer grid cell (in a local, `origin`-relative grid) whose own center falls inside `polygon`, plus the world-space `origin` that grid is anchored to. */
 export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { readonly cells: readonly CellCoordinate[]; readonly origin: Vec2 } {

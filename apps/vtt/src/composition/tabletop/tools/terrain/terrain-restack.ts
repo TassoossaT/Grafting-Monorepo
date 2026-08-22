@@ -1,7 +1,7 @@
 import { resolveCoverage, type AtomicEditOp, type ResolvedCoverage } from "@/features/edit-construction";
 import type { ConstructionCoveredRegion, ConstructionNodeId, ConstructionPosition } from "@/ports";
 
-import type { ToolContext } from "./tool-context.ts";
+import type { ToolContext } from "../core/tool-context.ts";
 
 /**
  * Painting terrain over terrain **raises** it -- by moving the vertices it

@@ -1,9 +1,9 @@
 import { createPathBrushEffect, DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { PathBrushEffect, PathBrushParams } from "@/features/edit-construction";
 
-import type { ToolContext } from "./tool-context.ts";
-import type { BrushRegion } from "./brush-tool.ts";
-import { createBrushTool } from "./brush-tool.ts";
+import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
+import type { BrushRegion } from "../core/brush-tool.ts";
+import { createBrushTool } from "../core/brush-tool.ts";
 
 const PATH_PREVIEW_COLOR = 0xc084fc;
 
@@ -37,7 +37,7 @@ export const pathBrushTool = createBrushTool<"path-brush">({
 
   applyRegion(region, ctx, params) {
     const sequence = ctx.nextSequence();
-    const effect = effectFor(ctx, region, params, `${ctx.tableId}:path-brush:${sequence}`);
+    const effect = effectFor(ctx, region, params, scopedToolId(ctx, "path-brush", sequence));
     try {
       const outcome = ctx.runtime.applyPathBrush(effect, "local");
       const changedSurfaceCount = outcome.surfaceIds.created.length + outcome.surfaceIds.replaced.length;

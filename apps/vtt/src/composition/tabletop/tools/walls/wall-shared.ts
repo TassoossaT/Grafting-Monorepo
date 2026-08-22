@@ -1,8 +1,11 @@
 import type { WallBrushParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
 
-import type { ToolContext } from "./tool-context.ts";
+import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
+import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { wallSpans } from "./wall-spans.ts";
+
+export { xzDistance, pinnedToBaseline };
 
 const WALL_SURFACE_TYPES = new Set(["wall-white", "wall-gray"]);
 /** Perpendicular distance (world units) within which a point counts as landing "on" an existing wall's centerline. */
@@ -26,23 +29,7 @@ export const WALL_COLOR: Record<WallBrushParams["wallType"], number> = { "wall-w
  * stroke can weld onto a precise straight run and vice versa.
  */
 export function idPrefixFor(ctx: ToolContext): string {
-  return `${ctx.tableId}:wall-brush`;
-}
-
-/**
- * Pins `point`'s Y to `baseline`'s -- a later drag/click sample landing on a
- * different surface (a step, a sloped terrain tile) must not desync a
- * path's baseline, or `extrude_path` rejects the whole thing as
- * `InconsistentBaseline`.
- */
-export function pinnedToBaseline(baseline: ConstructionPosition, point: ConstructionPosition): ConstructionPosition {
-  return { ...point, y: baseline.y };
-}
-
-export function xzDistance(a: ConstructionPosition, b: ConstructionPosition): number {
-  const dx = a.x - b.x;
-  const dz = a.z - b.z;
-  return Math.hypot(dx, dz);
+  return scopedToolId(ctx, "wall-brush");
 }
 
 /** Same position-derived id format as `structure_generation::ids::corner_id` -- must stay byte-identical so a manually-added split node welds onto whatever `extrude_path` mints at the same position under the same prefix. */
@@ -50,20 +37,7 @@ function cornerId(idPrefix: string, x: number, z: number, top: boolean): Constru
   return `${idPrefix}:corner:${x.toFixed(3)}:${z.toFixed(3)}:${top ? "top" : "bottom"}`;
 }
 
-/** `point` projected onto the infinite line through `a`/`b` (XZ only): how far along the segment (`t`, `0` at `a`, `1` at `b`) and how far off it (`perp`, world units). */
-function projectOntoSegment(point: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): { t: number; perp: number; x: number; z: number } {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const lengthSq = abx * abx + abz * abz;
-  if (lengthSq < 1e-9) return { t: 0, perp: xzDistance(point, a), x: a.x, z: a.z };
-
-  const apx = point.x - a.x;
-  const apz = point.z - a.z;
-  const t = (apx * abx + apz * abz) / lengthSq;
-  const x = a.x + t * abx;
-  const z = a.z + t * abz;
-  return { t, perp: Math.hypot(point.x - x, point.z - z), x, z };
-}
+const projectOntoSegment = projectOntoLineXZ;
 
 /**
  * If `point` lands within {@link CROSSING_TOLERANCE} of an existing wall

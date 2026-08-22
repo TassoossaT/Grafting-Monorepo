@@ -41,6 +41,43 @@ export function segmentBetween(
   };
 }
 
+/** Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost). */
+export function segmentsPreview(
+  positions: Float32Array | readonly number[],
+  color: number,
+  opacity = 0.7,
+): PreviewDescriptor {
+  return {
+    kind: "segments",
+    color,
+    opacity,
+    positions: positions instanceof Float32Array ? positions : Float32Array.from(positions),
+  };
+}
+
+/** Builds an open polyline preview connecting consecutive points. */
+export function polylineSegmentsPreview(
+  points: readonly ConstructionPosition[],
+  color: number,
+  opacity = 0.7,
+): PreviewDescriptor | undefined {
+  if (points.length < 2) return undefined;
+  const positions = new Float32Array((points.length - 1) * 6);
+  let offset = 0;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (a === undefined || b === undefined) continue;
+    positions[offset++] = a.x;
+    positions[offset++] = a.y;
+    positions[offset++] = a.z;
+    positions[offset++] = b.x;
+    positions[offset++] = b.y;
+    positions[offset++] = b.z;
+  }
+  return { kind: "segments", color, opacity, positions };
+}
+
 /** A filled ghost over an arbitrary rectangular footprint (not necessarily axis-aligned to `center`) -- a stamped footprint's proposed outline. */
 export function footprintQuad(
   corners: readonly [ConstructionPosition, ConstructionPosition, ConstructionPosition, ConstructionPosition],

@@ -4,7 +4,8 @@ import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
 
 import type { FittedEdge } from "./path-fitting.ts";
 import { fitPath } from "./path-fitting.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { segmentsPreview } from "../shapes/preview-shapes.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing, xzDistance } from "./wall-shared.ts";
 
 /**
@@ -55,8 +56,8 @@ function resolvedEdges(ctx: ToolContext, fitted: readonly FittedEdge[]): readonl
   const first = fitted[0];
   if (first === undefined) return [];
 
-  const corners: ConstructionPosition[] = [resolveWallCrossing(ctx, first.start, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`)];
-  for (const edge of fitted) corners.push(resolveWallCrossing(ctx, edge.end, `${ctx.tableId}:wall-crossing:${ctx.nextSequence()}`));
+  const corners: ConstructionPosition[] = [resolveWallCrossing(ctx, first.start, scopedToolId(ctx, "wall-crossing", ctx.nextSequence()))];
+  for (const edge of fitted) corners.push(resolveWallCrossing(ctx, edge.end, scopedToolId(ctx, "wall-crossing", ctx.nextSequence())));
 
   const edges: PathEdgeSpec[] = [];
   for (let index = 0; index < fitted.length; index += 1) {
@@ -82,7 +83,7 @@ function commitFitted(ctx: ToolContext, path: readonly ConstructionPosition[], p
       surfaceType: params.wallType,
     },
     "local",
-    `${ctx.tableId}:wall-brush:${sequence}`,
+    scopedToolId(ctx, "wall-brush", sequence),
   );
 }
 
@@ -146,7 +147,7 @@ export const wallBrushTool: ConstructionTool<"wall-brush"> = {
       ? []
       : [last.x, last.y, last.z, gesture.current.point.x, gesture.current.point.y, gesture.current.point.z];
 
-    return { kind: "segments", color: WALL_COLOR[params.wallType], opacity: 0.7, positions: Float32Array.from([...committed, ...ghost]) };
+    return segmentsPreview([...committed, ...ghost], WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample): void {

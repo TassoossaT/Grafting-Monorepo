@@ -12,9 +12,9 @@ import type {
 } from "@/ports";
 
 import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
-import { brushSweptOutlinePolygons, brushSweptRegionFill } from "./preview-shapes.ts";
+import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { restackTerrain } from "./terrain-restack.ts";
-import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
+import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
  * PENDING (not scheduled): this whole file -- lattice generation, heightmap

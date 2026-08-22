@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findEnclosingRoom } from "../src/composition/tabletop/tools/room-lookup.ts";
+import { findEnclosingRoom } from "../src/composition/tabletop/tools/house/room-lookup.ts";
 import { panelTopology } from "./wall-spans-fixture.mjs";
 
 

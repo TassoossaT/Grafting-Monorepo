@@ -31,18 +31,19 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
   - MUST NOT merge a pull request (human merges only, DEC-053, [ADR-0015](docs/adr/ADR-0015-agent-git-write-policy.md)).
   - MUST NOT commit directly on `master`/`main` for any change touching non-Markdown files.
 
-## 2. TASK LIFECYCLE & STACKED PRS (`tools/ia-graft`)
+## 2. TASK LIFECYCLE & ISSUE GOVERNANCE (`tools/ia-graft`)
 
 - **Autonomous Execution:** User requests pre-authorize all necessary `ia-graft` commands through `task done` without pausing for confirmation; merging PRs remains human-only.
+- **Issue & Backlog Governance:** Manage backlog, refinements, and tasks via `ia-graft issue <list|view|new|update>`. Do NOT invent unversioned markdown backlogs.
 - On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
 - **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**
-  1. Start task: `ia-graft task new --id <TASK-ID> [--base <branch>] [--parent <ID>]`
+  1. Start task: `ia-graft task new --id TASK-<ISSUE-ID>-<SLUG> [--base <branch>] [--parent <ID>]`
   2. **Stacked PRs:** When building upon an unmerged task, MUST use `--parent <PARENT-TASK-ID>`. `task done` automatically opens a stacked PR targeting the parent branch.
   3. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
   4. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--amend] [--agent <name>]`
   5. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
-  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "<body>"`
+  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "Closes #<ISSUE-ID>\n\n<details>"`
   7. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)

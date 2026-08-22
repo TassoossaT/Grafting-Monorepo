@@ -1,0 +1,62 @@
+export { toolFor } from "./core/tool-registry.ts";
+export {
+  scopedToolId,
+  type ConstructionTool,
+  type ConstructionToolFeedback,
+  type PointerSample,
+  type ToolContext,
+  type ToolGesture,
+} from "./core/tool-context.ts";
+export { createBrushTool, type BrushRegion, type BrushToolSpec, type BrushableToolId } from "./core/brush-tool.ts";
+export { navigateTool } from "./core/navigate-tool.ts";
+export { editRegionTool } from "./core/edit-region-tool.ts";
+
+export { terrainSculptTool } from "./terrain/terrain-sculpt-tool.ts";
+export { restackTerrain } from "./terrain/terrain-restack.ts";
+export { buildIrregularQuadGrid, type QuadMesh, type Vec2 as IrregularGridVec2 } from "./terrain/irregular-grid.ts";
+
+export { wallLineTool } from "./walls/wall-line-tool.ts";
+export { wallBrushTool } from "./walls/wall-brush-tool.ts";
+export {
+  WALL_COLOR,
+  WALL_HEIGHT,
+  findWallSurfaceAt,
+  idPrefixFor,
+  pinnedToBaseline,
+  resolveWallCrossing,
+  xzDistance,
+} from "./walls/wall-shared.ts";
+export { wallSpans, type WallSpan } from "./walls/wall-spans.ts";
+export { fitPath, type FittedEdge } from "./walls/path-fitting.ts";
+
+export { interiorWallTool } from "./house/interior-wall-tool.ts";
+export { houseRoomDeleteTool } from "./house/house-room-delete-tool.ts";
+export { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall, type Vec2 as HouseVec2 } from "./house/interior-partition.ts";
+export { findEnclosingRoom, type DerivedRoom } from "./house/room-lookup.ts";
+
+export { towerStampTool } from "./tower/tower-stamp-tool.ts";
+export { circleEdges, previewOutline } from "./tower/tower-geometry.ts";
+
+export { pathBrushTool } from "./paths/path-brush-tool.ts";
+
+export {
+  brushSweptOutlinePolygons,
+  brushSweptRegionFill,
+  footprintQuad,
+  polylineSegmentsPreview,
+  quadAround,
+  segmentBetween,
+  segmentsPreview,
+  type BrushOutlineShape,
+} from "./shapes/preview-shapes.ts";
+
+export {
+  angleFromToXZ,
+  distanceToPolygonBoundaryXZ,
+  distanceToSegmentXZ,
+  pointInPolygonXZ,
+  polygonAreaXZ,
+  projectOntoLineXZ,
+  xzDistanceSq,
+  type PointXZ,
+} from "./shapes/geometry-2d.ts";

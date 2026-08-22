@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fitPath } from "../src/composition/tabletop/tools/path-fitting.ts";
+import { fitPath } from "../src/composition/tabletop/tools/walls/path-fitting.ts";
 
 const EPSILON = 0.4;
 

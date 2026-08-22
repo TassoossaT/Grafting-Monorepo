@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { circleEdges, previewOutline } from "../src/composition/tabletop/tools/tower-geometry.ts";
+import { circleEdges, previewOutline } from "../src/composition/tabletop/tools/tower/tower-geometry.ts";
 
 const CENTER = { x: 10, y: 0, z: 5 };
 const RADIUS = 2.5;

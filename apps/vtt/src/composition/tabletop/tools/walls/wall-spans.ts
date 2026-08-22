@@ -6,7 +6,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
-import type { ToolContext } from "./tool-context.ts";
+import type { ToolContext } from "../core/tool-context.ts";
 
 /**
  * Every upright wall panel currently on the table, recovered from the

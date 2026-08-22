@@ -1,9 +1,10 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TowerStampParams } from "@/features/edit-construction";
 
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { segmentsPreview } from "../shapes/preview-shapes.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { circleEdges, previewOutline } from "./tower-geometry.ts";
-import { WALL_COLOR, WALL_HEIGHT, idPrefixFor } from "./wall-shared.ts";
+import { WALL_COLOR, WALL_HEIGHT, idPrefixFor } from "../walls/wall-shared.ts";
 
 /** How many straight chords the *preview* ghost's circle outline uses -- a rendering-only approximation, never fed to the engine (the committed geometry is 4 true circular arcs, not a facetted polygon). */
 const PREVIEW_SEGMENTS = 24;
@@ -27,12 +28,10 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
 
   previewFor(gesture: ToolGesture, params: TowerStampParams) {
-    return {
-      kind: "segments",
-      color: WALL_COLOR[params.wallType],
-      opacity: 0.7,
-      positions: previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
-    };
+    return segmentsPreview(
+      previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
+      WALL_COLOR[params.wallType],
+    );
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: TowerStampParams): void {
@@ -45,7 +44,7 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
         surfaceType: params.wallType,
       },
       "local",
-      `${ctx.tableId}:tower-stamp:${ctx.nextSequence()}`,
+      scopedToolId(ctx, "tower-stamp", ctx.nextSequence()),
     );
   },
 };

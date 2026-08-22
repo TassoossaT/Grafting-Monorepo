@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { brushSweptOutlinePolygons } from "../src/composition/tabletop/tools/preview-shapes.ts";
+import { brushSweptOutlinePolygons } from "../src/composition/tabletop/tools/shapes/preview-shapes.ts";
 
 const RADIUS = 3;
 

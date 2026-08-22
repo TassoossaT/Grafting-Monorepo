@@ -9,8 +9,8 @@ import type { SelectedNodeInfo } from "@/widgets";
 
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
-import { toolFor } from "./tools/tool-registry.ts";
-import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/tool-context.ts";
+import { toolFor } from "./tools/index.ts";
+import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;

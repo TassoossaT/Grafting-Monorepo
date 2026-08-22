@@ -2,7 +2,7 @@ import type { EditHistoryStack } from "@/features/edit-construction";
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
-import type { TabletopRuntime } from "../tabletop-runtime.ts";
+import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
@@ -57,4 +57,10 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`. */
   onClick?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
+}
+
+/** Builds a deterministic scoped operation/prefix ID for a given tool/domain on a table. */
+export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
+  const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
+  return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
 }

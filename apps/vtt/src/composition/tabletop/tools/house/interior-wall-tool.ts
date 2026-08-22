@@ -1,10 +1,10 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { InteriorGenerateParams } from "@/features/edit-construction";
 
-import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall } from "./interior-partition.ts";
 import { findEnclosingRoom } from "./room-lookup.ts";
-import { WALL_HEIGHT } from "./wall-shared.ts";
+import { WALL_HEIGHT } from "../walls/wall-shared.ts";
 
 const FLOOR_TYPE = "floor";
 const CEILING_TYPE = "ceiling";
@@ -38,13 +38,7 @@ const BOUNDARY_DUPLICATE_TOLERANCE_CELLS = 0.5;
  * engine's own floor/ceiling caps are NOT implemented as a front concept
  * yet, but are not suppressed here either (`generate_and_apply_region_partition`
  * has no opt-out for them -- see `apps/vtt/notes/0008-region-partition-needs-rework.md`,
- * which is the tracked follow-up, not a job for this tool to patch around).
- * Only wall panels that merely duplicate the room's own existing boundary
- * (the algorithm always redraws its own outer perimeter, a rectilinear
- * approximation of a possibly non-rectangular real boundary) get stripped
- * back out client-side -- see `isRedundantPerimeterWall`'s own doc
- * (`interior-partition.ts`). A click outside any enclosed space is a plain
- * no-op.
+ * item 2).
  */
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
   id: "interior-wall",
@@ -74,13 +68,13 @@ export const interiorWallTool: ConstructionTool<"interior-wall"> = {
         ceilingType: CEILING_TYPE,
       },
       "local",
-      `${ctx.tableId}:interior:${ctx.nextSequence()}`,
+      scopedToolId(ctx, "interior", ctx.nextSequence()),
     );
 
     const tolerance = params.cellSize * BOUNDARY_DUPLICATE_TOLERANCE_CELLS;
     for (const surfaceKey of outcome.addedSurfaceKeys) {
       if (!isRedundantPerimeterWall(ctx, surfaceKey, room.polygon, tolerance)) continue;
-      ctx.runtime.removeSurface({ surfaceKey }, "local", `${ctx.tableId}:interior-strip:${ctx.nextSequence()}`);
+      ctx.runtime.removeSurface({ surfaceKey }, "local", scopedToolId(ctx, "interior-strip", ctx.nextSequence()));
     }
   },
 };

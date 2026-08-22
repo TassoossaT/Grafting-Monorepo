@@ -1,7 +1,7 @@
 import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
 
-import type { ToolContext } from "./tool-context.ts";
-import { wallSpans, type WallSpan } from "./wall-spans.ts";
+import type { ToolContext } from "../core/tool-context.ts";
+import { wallSpans, type WallSpan } from "../walls/wall-spans.ts";
 
 /**
  * Finds the smallest closed wall loop containing a click point -- used by
@@ -10,16 +10,15 @@ import { wallSpans, type WallSpan } from "./wall-spans.ts";
  * surfaces), derive the room boundary there. See {@link findEnclosingRoom}'s
  * own doc for the algorithm.
  */
-interface Vec2 {
-  readonly x: number;
-  readonly z: number;
-}
+import {
+  angleFromToXZ,
+  pointInPolygonXZ,
+  polygonAreaXZ,
+  type PointXZ,
+} from "../shapes/geometry-2d.ts";
 
-
-
-function angleFromTo(a: Vec2, b: Vec2): number {
-  return Math.atan2(b.z - a.z, b.x - a.x);
-}
+type Vec2 = PointXZ;
+const angleFromTo = angleFromToXZ;
 
 /** Every vertex's neighbours, sorted by the angle of the edge leaving that vertex -- what face-tracing turns on at each step. */
 function buildAdjacency(
@@ -64,30 +63,8 @@ function traceFace(
   return undefined;
 }
 
-function pointInPolygon(point: Vec2, polygon: readonly Vec2[]): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const pi = polygon[i];
-    const pj = polygon[j];
-    if (pi === undefined || pj === undefined) continue;
-    const crosses = pi.z > point.z !== pj.z > point.z;
-    if (!crosses) continue;
-    const xAtPointZ = ((pj.x - pi.x) * (point.z - pi.z)) / (pj.z - pi.z) + pi.x;
-    if (point.x < xAtPointZ) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonArea(polygon: readonly Vec2[]): number {
-  let sum = 0;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const pi = polygon[i];
-    const pj = polygon[j];
-    if (pi === undefined || pj === undefined) continue;
-    sum += (pj.x + pi.x) * (pj.z - pi.z);
-  }
-  return Math.abs(sum) / 2;
-}
+const pointInPolygon = pointInPolygonXZ;
+const polygonArea = polygonAreaXZ;
 
 export interface DerivedRoom {
   readonly bottomCycle: readonly ConstructionNodeId[];
