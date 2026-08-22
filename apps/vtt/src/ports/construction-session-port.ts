@@ -98,11 +98,20 @@ export interface ConstructionPatchRegion {
   readonly physical: boolean;
 }
 
-/** One straight boundary segment of a generated patch, named by its caller. */
+/**
+ * One boundary segment of a generated patch, named by its caller.
+ *
+ * `geometry` is optional and defaults to a straight chord, which is what
+ * every flat-ground patch declares. It matters because a patch is the only
+ * way a generator names a **shared** edge: an arc two faces meet along has
+ * no other way to reach the graph curved, so a curved wall panel and its
+ * neighbour would otherwise be forced back onto an unshared edge each.
+ */
 export interface ConstructionPatchEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
+  readonly geometry?: ConstructionEdgeGeometry;
 }
 
 /**

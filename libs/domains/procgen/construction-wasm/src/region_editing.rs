@@ -833,6 +833,68 @@ mod tests {
         );
         assert_eq!(graph.node_count(), 0);
     }
+
+    /// A patch is the only way a generator names a **shared** edge, so an
+    /// arc that two faces meet along has to be declarable here -- otherwise
+    /// curvature is only reachable through a path that mints an unshared
+    /// edge per face. An edge with no declared geometry stays a straight
+    /// chord, which is what every flat-ground patch relies on.
+    #[test]
+    fn a_patch_edge_carries_its_own_declared_geometry() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+
+        apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: vec![
+                    PatchNodeDto {
+                        id: "east".into(),
+                        position: [2.0, 0.0, 0.0],
+                    },
+                    PatchNodeDto {
+                        id: "west".into(),
+                        position: [-2.0, 0.0, 0.0],
+                    },
+                ],
+                edges: vec![
+                    PatchEdgeDto {
+                        edge_id: "curved".into(),
+                        start_node_id: "east".into(),
+                        end_node_id: "west".into(),
+                        geometry: Some(ContourGeometryDto::Arc {
+                            center: [0.0, 0.0],
+                            clockwise: false,
+                        }),
+                    },
+                    PatchEdgeDto {
+                        edge_id: "straight".into(),
+                        start_node_id: "west".into(),
+                        end_node_id: "east".into(),
+                        geometry: None,
+                    },
+                ],
+                regions: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        let curved = topology.edge(&ContourEdgeId::new("curved").unwrap()).unwrap();
+        assert_eq!(
+            *curved.geometry(),
+            ContourGeometry::CircularArc {
+                center: [0.0, 0.0],
+                clockwise: false,
+            }
+        );
+        let straight = topology
+            .edge(&ContourEdgeId::new("straight").unwrap())
+            .unwrap();
+        assert_eq!(*straight.geometry(), ContourGeometry::Line);
+    }
 }
 
 // ---- Batched patch registration (shared edges) ----
@@ -850,6 +912,14 @@ pub struct PatchEdgeDto {
     pub edge_id: String,
     pub start_node_id: String,
     pub end_node_id: String,
+    /// This edge's own geometry between those two nodes. Absent means a
+    /// straight chord, which is what every flat-ground patch declares and
+    /// why this stays optional -- but a patch is the only way a generator
+    /// names a **shared** edge, so an arc that two faces meet along has no
+    /// other way to reach the graph curved. Hardcoding `Line` here is what
+    /// used to force curved geometry down a separate, unshared path.
+    #[serde(default)]
+    pub geometry: Option<ContourGeometryDto>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -929,11 +999,11 @@ pub fn apply_add_patch(
         }
         let start = parse_node_id(&edge.start_node_id)?;
         let end = parse_node_id(&edge.end_node_id)?;
+        let geometry = edge
+            .geometry
+            .map_or(ContourGeometry::Line, ContourGeometryDto::into_geometry);
         topology
-            .add_edge(
-                graph,
-                ContourEdge::new(id.clone(), start, end, ContourGeometry::Line),
-            )
+            .add_edge(graph, ContourEdge::new(id.clone(), start, end, geometry))
             .map_err(|error| error.to_string())?;
         minted.push(id);
     }

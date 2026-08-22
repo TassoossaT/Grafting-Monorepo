@@ -1,6 +1,16 @@
-import type { ConstructionPosition, PathEdgeSpec } from "@/ports";
+import type { ConstructionPosition } from "@/ports";
 
-/** How many arcs one tower stamp's own circle is built from -- see {@link circleEdges}'s own doc for why this can never be 2. */
+import type { FittedEdge } from "../walls/path-fitting.ts";
+
+/**
+ * How many arcs one tower's own circle is built from.
+ *
+ * Four rather than two: two semicircles closing the same circle share *both*
+ * their endpoints, so the two panels over them would be bounded by the same
+ * pair of columns and the same pair of edges -- one region, declared twice,
+ * of which only the first survives. Four quarter turns give every panel its
+ * own pair of columns, which is the plain reason, not a property of towers.
+ */
 const CIRCLE_SEGMENTS = 4;
 
 function pointOnCircle(center: ConstructionPosition, radius: number, angle: number): ConstructionPosition {
@@ -8,48 +18,30 @@ function pointOnCircle(center: ConstructionPosition, radius: number, angle: numb
 }
 
 /**
- * {@link CIRCLE_SEGMENTS} points evenly spaced around the circle, starting
- * due east and proceeding counterclockwise (increasing angle, matching
- * {@link previewOutline}'s own convention).
+ * A closed circular wall run: {@link CIRCLE_SEGMENTS} corners around the
+ * circle and one true circular arc between each pair, every arc sharing the
+ * one real center.
+ *
+ * This is the whole of the tower preset. It produces contour edges in the
+ * same vocabulary a free stroke is fitted into, so the preset commits
+ * through exactly the same wall builder with no geometry, no ids and no
+ * generation of its own -- a preset decides where the corners go and how
+ * each step curves, and stops there.
+ *
+ * Corners run counter-clockwise (increasing angle), and each arc sweeps the
+ * short way between consecutive corners, which is the quarter turn that
+ * actually lies on the requested circle.
  */
-function circlePoints(center: ConstructionPosition, radius: number): readonly ConstructionPosition[] {
-  const points: ConstructionPosition[] = [];
-  for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
-    points.push(pointOnCircle(center, radius, (step / CIRCLE_SEGMENTS) * Math.PI * 2));
-  }
-  return points;
-}
-
-/**
- * The {@link CIRCLE_SEGMENTS} committed edges one tower stamp sends to
- * `generatePathExtrusion` -- a full circle built from {@link CIRCLE_SEGMENTS}
- * true circular arcs, **never exactly 2** true semicircles: two semicircle
- * edges closing the same circle share both their own endpoints, and a
- * curved edge's own 4 corner nodes are purely position-derived
- * (`extrusion.rs`'s own `corner_id`), so both would mint the identical node
- * set and collide on one `grafting_graph_core::SurfaceKey` -- the engine
- * silently keeps only the first and drops the second, which read as "only
- * half the circle draws." {@link CIRCLE_SEGMENTS} arcs of `2*PI /
- * CIRCLE_SEGMENTS` each keep every edge's own corner pair unique. Each arc
- * is tagged `"arc-right"`, not `"arc-left"` -- for points generated in
- * increasing-angle (counterclockwise) order, `"arc-right"` is the tag whose
- * own true circle center actually lands back on `center` (verified in
- * `extrusion.rs`'s and `generation.rs`'s own matching tests); `"arc-left"`
- * would still produce 4 valid, non-colliding surfaces (this tag only
- * affects which side of the chord the arc bulges toward, not corner
- * identity), just not the circle actually requested.
- */
-export function circleEdges(center: ConstructionPosition, radius: number): readonly PathEdgeSpec[] {
-  const points = circlePoints(center, radius);
-  const includedAngle = (Math.PI * 2) / CIRCLE_SEGMENTS;
-  const edges: PathEdgeSpec[] = [];
-  for (let index = 0; index < points.length; index += 1) {
-    const start = points[index];
-    const end = points[(index + 1) % points.length];
-    if (start === undefined || end === undefined) continue;
-    edges.push({ start, end, curvature: "arc-right", includedAngle });
-  }
-  return edges;
+export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
+  const corners = Array.from({ length: CIRCLE_SEGMENTS }, (_unused, step) =>
+    pointOnCircle(center, radius, (step / CIRCLE_SEGMENTS) * Math.PI * 2),
+  );
+  const arcCenter = [center.x, center.z] as const;
+  return corners.map((start, index) => ({
+    start,
+    end: corners[(index + 1) % corners.length] ?? start,
+    geometry: { kind: "arc", center: arcCenter, clockwise: false } as const,
+  }));
 }
 
 /**

@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { circleEdges, previewOutline } from "../src/composition/tabletop/tools/tower/tower-geometry.ts";
+import { circleContour, previewOutline } from "../src/composition/tabletop/tools/tower/tower-geometry.ts";
 
 const CENTER = { x: 10, y: 0, z: 5 };
 const RADIUS = 2.5;
 
-test("circleEdges is exactly four arc-right quarter-arcs, each 90 degrees, chained continuously", () => {
-  const edges = circleEdges(CENTER, RADIUS);
-  assert.equal(edges.length, 4, "2 true semicircles would collide on one SurfaceKey (see circleEdges's own doc) -- 4 quarter-arcs each keep a unique corner pair");
+test("circleContour is four true quarter-arcs around one real center, chained continuously", () => {
+  const edges = circleContour(CENTER, RADIUS);
+  assert.equal(edges.length, 4, "two semicircles would share both endpoints, so both panels would be the same region declared twice");
   for (const edge of edges) {
-    assert.equal(edge.curvature, "arc-right");
-    assert.ok(Math.abs(edge.includedAngle - Math.PI / 2) < 1e-9, "each arc must sweep exactly a quarter turn");
+    assert.equal(edge.geometry.kind, "arc");
+    assert.deepEqual(edge.geometry.center, [CENTER.x, CENTER.z], "every arc shares the tower's own center -- there is no per-edge approximation");
+    assert.equal(edge.geometry.clockwise, false, "corners run counter-clockwise, so the short sweep between them is the counter-clockwise one");
   }
   for (let index = 0; index < edges.length; index += 1) {
     const next = edges[(index + 1) % edges.length];
@@ -19,16 +20,15 @@ test("circleEdges is exactly four arc-right quarter-arcs, each 90 degrees, chain
   }
 });
 
-test("circleEdges' own points sit exactly on the requested circle", () => {
-  const edges = circleEdges(CENTER, RADIUS);
-  for (const edge of edges) {
+test("circleContour's own points sit exactly on the requested circle", () => {
+  for (const edge of circleContour(CENTER, RADIUS)) {
     const distance = Math.hypot(edge.start.x - CENTER.x, edge.start.z - CENTER.z);
     assert.ok(Math.abs(distance - RADIUS) < 1e-6, "every edge's own start must sit exactly on the circle");
   }
 });
 
-test("circleEdges chains continuously regardless of center/radius", () => {
-  const edges = circleEdges({ x: -3, y: 1, z: -3 }, 1.5);
+test("circleContour chains continuously regardless of center/radius", () => {
+  const edges = circleContour({ x: -3, y: 1, z: -3 }, 1.5);
   for (let index = 0; index < edges.length; index += 1) {
     const next = edges[(index + 1) % edges.length];
     assert.deepEqual(edges[index].end, next.start);

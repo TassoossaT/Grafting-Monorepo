@@ -41,28 +41,69 @@ export interface WallSpan {
   readonly topEdgeIds: readonly ConstructionEdgeId[];
 }
 
+/** Two nodes belong to the same column when they sit on one XZ point and differ only in height. */
 function sameXz(a: ConstructionPosition, b: ConstructionPosition): boolean {
   return Math.abs(a.x - b.x) < 1e-3 && Math.abs(a.z - b.z) < 1e-3;
 }
 
+interface Column {
+  readonly bottom: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition };
+  readonly top: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition };
+}
+
+/**
+ * The panel's own columns: its nodes grouped by XZ, each group's lowest and
+ * highest node.
+ *
+ * A panel does not have to hold exactly four nodes. A T-junction inserts a
+ * vertex partway along an edge, which adds a column without dividing
+ * anything -- what divides a wall is an edge running side to side, never a
+ * vertex on the way. Reading columns rather than counting nodes is what lets
+ * a welded panel keep being recognised as the wall it still is.
+ */
+function columnsOf(nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[]): readonly Column[] {
+  const groups: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[][] = [];
+  for (const node of nodes) {
+    const group = groups.find((candidate) => candidate[0] !== undefined && sameXz(candidate[0].position, node.position));
+    if (group === undefined) groups.push([node]);
+    else group.push(node);
+  }
+  return groups.flatMap((group) => {
+    const sorted = [...group].sort((left, right) => left.position.y - right.position.y);
+    const bottom = sorted[0];
+    const top = sorted[sorted.length - 1];
+    if (bottom === undefined || top === undefined || bottom === top) return [];
+    return [{ bottom, top }];
+  });
+}
+
+/** The two columns furthest apart in XZ -- a panel's own extremities, which is what a wall's two ends always are. */
+function extremities(columns: readonly Column[]): readonly [Column, Column] | undefined {
+  let best: { readonly pair: readonly [Column, Column]; readonly distanceSq: number } | undefined;
+  for (let left = 0; left < columns.length; left += 1) {
+    for (let right = left + 1; right < columns.length; right += 1) {
+      const a = columns[left];
+      const b = columns[right];
+      if (a === undefined || b === undefined) continue;
+      const dx = a.bottom.position.x - b.bottom.position.x;
+      const dz = a.bottom.position.z - b.bottom.position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (best === undefined || distanceSq > best.distanceSq) best = { pair: [a, b], distanceSq };
+    }
+  }
+  return best?.pair;
+}
+
 function spanOf(topology: ConstructionRegionTopology): WallSpan | undefined {
   if (!WALL_SURFACE_TYPES.has(topology.surfaceType)) return undefined;
-  const nodes = topology.nodes;
-  if (nodes.length !== 4) return undefined;
+  const columns = columnsOf(topology.nodes);
+  const ends = extremities(columns);
+  if (ends === undefined) return undefined;
+  const [a, b] = ends;
 
-  const [first, ...rest] = nodes;
-  if (first === undefined) return undefined;
-  const groupA = [first, ...rest.filter((node) => sameXz(node.position, first.position))];
-  const groupB = rest.filter((node) => !sameXz(node.position, first.position));
-  if (groupA.length !== 2 || groupB.length !== 2) return undefined;
-
-  const [a0, a1] = [...groupA].sort((x, y) => x.position.y - y.position.y);
-  const [b0, b1] = [...groupB].sort((x, y) => x.position.y - y.position.y);
-  if (a0 === undefined || a1 === undefined || b0 === undefined || b1 === undefined) return undefined;
-
-  const baseline = a0.position.y;
+  const baseline = Math.min(a.bottom.position.y, b.bottom.position.y);
   const atBaseline = (id: ConstructionNodeId): boolean => {
-    const node = nodes.find((candidate) => candidate.id === id);
+    const node = topology.nodes.find((candidate) => candidate.id === id);
     return node !== undefined && Math.abs(node.position.y - baseline) < 1e-3;
   };
   const edges = topology.outerLoops.flat();
@@ -70,13 +111,13 @@ function spanOf(topology: ConstructionRegionTopology): WallSpan | undefined {
     surfaceKey: topology.surfaceKey,
     surfaceType: topology.surfaceType,
     physical: topology.physical,
-    bottomA: a0.id,
-    topA: a1.id,
-    bottomB: b0.id,
-    topB: b1.id,
-    a: a0.position,
-    b: b0.position,
-    topY: a1.position.y,
+    bottomA: a.bottom.id,
+    topA: a.top.id,
+    bottomB: b.bottom.id,
+    topB: b.top.id,
+    a: a.bottom.position,
+    b: b.bottom.position,
+    topY: a.top.position.y,
     bottomEdgeIds: edges
       .filter((edge) => atBaseline(edge.startNodeId) && atBaseline(edge.endNodeId))
       .map((edge) => edge.edgeId),

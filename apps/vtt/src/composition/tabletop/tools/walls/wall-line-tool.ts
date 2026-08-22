@@ -1,10 +1,10 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
-import type { WallBrushParams } from "@/features/edit-construction";
+import type { WallParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import { segmentBetween } from "../shapes/preview-shapes.ts";
-import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
-import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCrossing } from "./wall-shared.ts";
+import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { WALL_COLOR, commitWallContour, pinnedToBaseline } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -16,51 +16,35 @@ import { WALL_COLOR, WALL_HEIGHT, idPrefixFor, pinnedToBaseline, resolveWallCros
 let anchor: ConstructionPosition | undefined;
 
 /**
- * A straight wall drawn by press-drag-release, the same gesture as
- * `wall-brush-tool.ts`'s free-form stroke -- the pointer's own path is
- * followed live for the preview, exactly like the brush -- but wherever the
- * drag wanders, only `anchor` (the press point) and the release point ever
- * reach the graph: one exact straight segment between them, corrected
- * straight regardless of how the mouse wobbled in between. That correction
- * is this tool's entire reason to exist, distinct from the brush, which
- * commits every wobble as its own panel. Shares wall height/color/id-prefix
- * (`wall-shared.ts`) so a straight run welds onto a free-form stroke (or
- * another straight run) wherever their corners happen to coincide -- welding
- * is still automatic by position. Either endpoint landing on the side of an
- * existing wall (not near one of its own corners) splits it and snaps that
- * endpoint onto the split, forming a T-junction -- see `resolveWallCrossing`'s
- * own doc.
+ * A straight wall drawn by press-drag-release. Wherever the drag wanders,
+ * only the press point and the release point reach the graph: one exact
+ * straight contour edge between them. That correction is this tool's entire
+ * reason to exist, distinct from the free brush, whose own correction is a
+ * fit with a tolerance rather than a guarantee.
+ *
+ * Beyond that it is the same wall as every other: the same contour commit,
+ * the same column resolution, the same shared edges. A run drawn here welds
+ * onto a free stroke, or onto another straight run, by resolving its corner
+ * onto that run's own column -- by connection, not by landing on the same
+ * coordinate.
  */
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
-  previewFor(gesture: ToolGesture, params: WallBrushParams) {
+  previewFor(gesture: ToolGesture, params: WallParams) {
     if (anchor === undefined) return undefined;
     return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
   },
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
-    anchor = resolveWallCrossing(ctx, sample.point, scopedToolId(ctx, "wall-crossing", ctx.nextSequence()));
+  onPointerDown(_ctx: ToolContext, sample: PointerSample): void {
+    anchor = sample.point;
   },
 
-  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallBrushParams): void {
+  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallParams): void {
     if (anchor === undefined) return;
-
-    const pinned = pinnedToBaseline(anchor, gesture.current.point);
-    const end = resolveWallCrossing(ctx, pinned, scopedToolId(ctx, "wall-crossing", ctx.nextSequence()));
-    const sequence = ctx.nextSequence();
-    ctx.runtime.generatePathExtrusion(
-      {
-        edges: [{ start: anchor, end, curvature: "straight" }],
-        height: WALL_HEIGHT,
-        idPrefix: idPrefixFor(ctx),
-        surfaceType: params.wallType,
-      },
-      "local",
-      scopedToolId(ctx, "wall-line", sequence),
-    );
-
+    const end = pinnedToBaseline(anchor, gesture.current.point);
+    commitWallContour(ctx, [{ start: anchor, end, geometry: { kind: "line" } }], params, "wall-line");
     anchor = undefined;
   },
 };
