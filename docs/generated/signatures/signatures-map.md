@@ -3235,6 +3235,32 @@ export interface DerivedRoom {
 export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
   const spans = wallSpans(ctx);
 
+// src/composition/tabletop/tools/openings/opening-tool.ts
+export const openingTool: ConstructionTool<"opening"> = {
+  id: "opening",
+  defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
+
+  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+  const placed = resolvePlacement(ctx, gesture.current, params);
+
+// src/composition/tabletop/tools/openings/panel-rail.ts
+export interface PanelRail {
+  /** Rail length in world units -- the full run from one side of the panel to the other. */
+  readonly length: number;
+  readonly baseY: number;
+  readonly topY: number;
+  /** Where `point` sits along the rail, clamped to the panel. */
+  travelTo(point: ConstructionPosition): number;
+  /** The point `travel` along the rail, at height `y`. */
+export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | undefined {
+  const [outer] = topology.outerLoops;
+  if (outer === undefined || outer.length < 3) return undefined;
+
+  const positionOf = (nodeId: string): ConstructionPosition | undefined =>
+  topology.nodes.find((node) => node.id === nodeId)?.position;
+
+  const walked = outer.map((edge) => ({
+
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
@@ -3866,7 +3892,7 @@ export type {
   InteriorGenerateParams,
   PathBrushParams,
   NoToolParams,
-  PreviewDescriptor,
+  OpeningParams,
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
@@ -4133,6 +4159,14 @@ export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
 export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
   }
+export interface OpeningParams {
+  readonly openingType: "window" | "door";
+  /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
+  readonly width: number;
+  readonly height: number;
+  /** How far above the wall's own base the opening starts. Zero is a door. */
+  readonly sill: number;
+  }
 export type NoToolParams = Record<string, never>;
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
@@ -4151,7 +4185,6 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
-export type PreviewDescriptor =
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {

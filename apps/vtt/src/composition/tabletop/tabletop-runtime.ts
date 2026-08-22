@@ -119,6 +119,19 @@ export interface TabletopRuntime {
    * the faces over them -- in one transaction. See `ConstructionPatch`.
    */
   addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
+  /**
+   * Opens one more inner loop on a face that already exists -- what a door
+   * or a window stands in. The loop must already be registered, and it keeps
+   * one free use per edge so a face can take it.
+   */
+  addHole(
+    request: {
+      readonly surfaceKey: ConstructionSurfaceKey;
+      readonly hole: readonly ConstructionOrientedEdgeUse[];
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome;
   /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
@@ -714,6 +727,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
   addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome {
     this.#requireReady("registering a generated patch");
     const outcome = this.#construction.addPatch(patch);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  addHole(
+    request: {
+      readonly surfaceKey: ConstructionSurfaceKey;
+      readonly hole: readonly ConstructionOrientedEdgeUse[];
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome {
+    this.#requireReady("opening a face");
+    const outcome = this.#construction.addHole(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
     return outcome;
   }

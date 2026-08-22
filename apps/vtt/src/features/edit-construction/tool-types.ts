@@ -14,6 +14,7 @@ export type ConstructionToolId =
   | "wall-line"
   | "interior-wall"
   | "tower-stamp"
+  | "opening"
   | "house-room-delete"
   | "terrain-sculpt";
 
@@ -120,6 +121,26 @@ export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
 }
 
+/**
+ * One opening stamped onto a wall panel: a door or a window.
+ *
+ * An opening is a face like any other -- it is not a marker on the wall and
+ * not a hole cut through it. The wall gains an inner loop and this face
+ * takes that very loop as its own boundary, so the two share the rim and a
+ * wall with a window is still one wall.
+ *
+ * A door is the same shape with its sill on the floor, which is why there is
+ * one tool and not two.
+ */
+export interface OpeningParams {
+  readonly openingType: "window" | "door";
+  /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
+  readonly width: number;
+  readonly height: number;
+  /** How far above the wall's own base the opening starts. Zero is a door. */
+  readonly sill: number;
+}
+
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
@@ -130,6 +151,7 @@ export interface ToolParamsByTool {
   readonly "wall-line": WallParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
+  readonly opening: OpeningParams;
   readonly "house-room-delete": NoToolParams;
   readonly "terrain-sculpt": TerrainSculptParams;
 }
@@ -144,6 +166,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
+  opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
     trianglesPerSide: 10,

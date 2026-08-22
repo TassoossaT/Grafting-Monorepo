@@ -5,6 +5,7 @@ import type {
   BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
+  OpeningParams,
   PathBrushParams,
   TerrainSculptParams,
   ToolParamsByTool,
@@ -226,12 +227,41 @@ function TerrainSculptFields(props: {
   );
 }
 
+/** A door is the same opening with its sill on the floor, so the type sets the sill and the sliders take it from there. */
+function OpeningFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <div className="gm-material-grid">
+        <SelectableChip
+          label="Janela"
+          swatchColor="#7dd3fc"
+          selected={params.openingType === "window"}
+          onSelect={() => onChange({ ...params, openingType: "window", sill: params.sill > 0 ? params.sill : 1 })}
+        />
+        <SelectableChip
+          label="Porta"
+          swatchColor="#d97706"
+          selected={params.openingType === "door"}
+          onSelect={() => onChange({ ...params, openingType: "door", sill: 0, height: Math.max(params.height, 2) })}
+        />
+      </div>
+      {sliderRow("Largura", params.width, 0.4, 4, 0.1, (width) => onChange({ ...params, width }))}
+      {sliderRow("Altura", params.height, 0.4, 4, 0.1, (height) => onChange({ ...params, height }))}
+      {params.openingType === "door"
+        ? null
+        : sliderRow("Peitoril", params.sill, 0, 3, 0.1, (sill) => onChange({ ...params, sill }))}
+    </div>
+  );
+}
+
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "tower-stamp": "Parâmetros: Torre",
+  opening: "Parâmetros: Abertura",
   "terrain-sculpt": "Parâmetros: Escultura de Terreno",
 };
 
@@ -268,6 +298,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : activeTool === "interior-wall" ? (
         <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
+      ) : activeTool === "opening" ? (
+        <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : (

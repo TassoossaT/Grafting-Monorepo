@@ -384,6 +384,12 @@ request until the tool actually commits.
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[]): AppTabletopRuntime`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Opens one more inner loop on a face that already exists -- what a door
+or a window stands in. The loop must already be registered, and it keeps
+one free use per edge so a face can take it.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 Registers a whole generated patch -- nodes, shared boundary edges, and
@@ -500,6 +506,12 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `property vtt.tabletop-runtime.ConfirmedTokenDeltaEnvelope.origin: ChangeOrigin`
 
 ### `interface vtt.tabletop-runtime.TabletopRuntime`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Opens one more inner loop on a face that already exists -- what a door
+or a window stands in. The loop must already be registered, and it keeps
+one free use per edge so a face can take it.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
@@ -692,6 +704,12 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `reference vtt.tools.isRedundantPerimeterWall`
 
 ### `reference vtt.tools.navigateTool`
+
+### `reference vtt.tools.openingTool`
+
+### `reference vtt.tools.PanelRail`
+
+### `reference vtt.tools.panelRailOf`
 
 ### `reference vtt.tools.pathBrushTool`
 
@@ -1042,6 +1060,53 @@ room it already subdivided must still resolve to that structure's own
 land in after a prior generation -- otherwise regenerating (e.g. after
 changing the seed) only ever re-subdivides an already-subdivided sliver
 instead of the whole footprint again.
+
+### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
+
+One click stamps an opening onto the wall panel under the pointer.
+
+Two calls, because the wall already exists and only one of them creates
+anything: the patch registers the rim and the face standing in it, then
+the wall is opened along that very rim. The second walks the loop
+backwards -- reversing a ring is not just flipping each use, the order
+reverses too -- so the rim ends up bounding the wall on one side and the
+opening on the other, used twice, joined the way any two faces are.
+
+Where the opening lands is read off the panel itself, not off the ground:
+`panel-rail.ts` flattens the panel into travel-and-height, so a curved
+wall is travelled rather than spanned and a window sits on the curve
+instead of cutting across it.
+
+### `interface vtt.panel-rail.PanelRail`
+
+One upright face, flattened: a rail to travel along and a height to rise through.
+
+### `property vtt.panel-rail.PanelRail.baseY: number`
+
+### `property vtt.panel-rail.PanelRail.length: number`
+
+Rail length in world units -- the full run from one side of the panel to the other.
+
+### `property vtt.panel-rail.PanelRail.topY: number`
+
+### `method vtt.panel-rail.PanelRail.positionAt(travel: number, y: number): ConstructionPosition`
+
+The point `travel` along the rail, at height `y`.
+
+### `method vtt.panel-rail.PanelRail.travelTo(point: ConstructionPosition): number`
+
+Where `point` sits along the rail, clamped to the panel.
+
+### `function vtt.panel-rail.panelRailOf(topology: ConstructionRegionTopology): PanelRail | undefined`
+
+Reads a face as an upright panel: a run along the base, one side rising, a
+run back along the top, one side coming down.
+
+Found by locating exactly two upright sides rather than by counting edges,
+so a panel whose base has since been subdivided -- a T-junction welding
+another wall onto its side -- is still the same panel. `undefined` for
+anything that is not one, which is the whole of "you cannot put an opening
+here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
@@ -1998,6 +2063,8 @@ for it now.
 
 ### `reference vtt.edit-construction.NoToolParams`
 
+### `reference vtt.edit-construction.OpeningParams`
+
 ### `reference vtt.edit-construction.ORGANIC_ROLES`
 
 ### `reference vtt.edit-construction.PANEL_ROLES`
@@ -2674,6 +2741,30 @@ Drives the split layout's jitter -- the same enclosed footprint always reproduce
 
 ### `property vtt.tool-types.InteriorGenerateParams.wallType: "wall-white" | "wall-gray"`
 
+### `interface vtt.tool-types.OpeningParams`
+
+One opening stamped onto a wall panel: a door or a window.
+
+An opening is a face like any other -- it is not a marker on the wall and
+not a hole cut through it. The wall gains an inner loop and this face
+takes that very loop as its own boundary, so the two share the rim and a
+wall with a window is still one wall.
+
+A door is the same shape with its sill on the floor, which is why there is
+one tool and not two.
+
+### `property vtt.tool-types.OpeningParams.height: number`
+
+### `property vtt.tool-types.OpeningParams.openingType: "window" | "door"`
+
+### `property vtt.tool-types.OpeningParams.sill: number`
+
+How far above the wall's own base the opening starts. Zero is a door.
+
+### `property vtt.tool-types.OpeningParams.width: number`
+
+How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned.
+
 ### `interface vtt.tool-types.PathBrushParams`
 
 ### `property vtt.tool-types.PathBrushParams.depth: number`
@@ -2729,6 +2820,8 @@ Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPoi
 ### `property vtt.tool-types.ToolParamsByTool.interior-wall: InteriorGenerateParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
+
+### `property vtt.tool-types.ToolParamsByTool.opening: OpeningParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
@@ -2804,7 +2897,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -4807,7 +4900,8 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
    same region-partition algorithm the retired "Pintar Casa" brush used;
    Torre -- one click stamps a closed circular footprint at a known
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
-2. 🚪 Aberturas (Portas & Janelas)
+2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
+   and stands a face in the opening, see `opening-tool.ts`)
 3. 🪜 Escadas (Conexão de elevações)
 4. 🛤️ Caminhos (Trilhas & química de portais)
 5. ⛰️ Terreno & Água (Escultura de Terreno)
