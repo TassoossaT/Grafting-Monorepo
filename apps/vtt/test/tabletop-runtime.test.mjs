@@ -622,7 +622,7 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
       targetType: "path",
       brushShape: { kind: "circle", radius: 0.25 },
       brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }] },
-      parameters: { width: 0.5, depth: 0.1, falloff: 0.2, strength: 1 },
+      parameters: { kind: "street", profile: [{ lateralOffset: -0.25, elevation: 0 }, { lateralOffset: 0.25, elevation: 0 }], maxSegmentLength: 0.5, miterLimit: 4 },
     },
     "local",
   );
@@ -781,4 +781,3 @@ test("startup publishes one SurfaceRef pick proxy per semantic surface", async (
     surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY),
   ].sort());
 });
-

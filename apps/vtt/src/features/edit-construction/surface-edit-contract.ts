@@ -38,13 +38,8 @@ export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
 }
 
-/** Parameters for the initial shallow path formation. */
-export interface PathFormationParameters {
-  readonly width: number;
-  readonly depth: number;
-  readonly falloff: number;
-  readonly strength: number;
-}
+/** VTT-selected profile for a generic path-sweep formation. */
+export type PathFormationParameters = PathFormationRecipe;
 
 /** App-owned metadata for a mode, without renderer or Rust types. */
 export interface SurfaceEditModeDefinition {
@@ -91,6 +86,20 @@ function freezeShape(shape: BrushShape): BrushShape {
   return Object.freeze({ kind: shape.kind, radius: positive(shape.radius, "brushShape.radius"), rotationRadians: finite(shape.rotationRadians, "brushShape.rotationRadians") });
 }
 
+function freezeFormation(parameters: PathFormationParameters): PathFormationParameters {
+  if (!Number.isFinite(parameters.maxSegmentLength) || parameters.maxSegmentLength <= 0) throw new Error("parameters.maxSegmentLength must be positive");
+  if (!Number.isFinite(parameters.miterLimit) || parameters.miterLimit < 1) throw new Error("parameters.miterLimit must be at least one");
+  if (parameters.profile.length < 2) throw new Error("parameters.profile must have at least two points");
+  const profile = parameters.profile.map((point, index) => {
+    const lateralOffset = finite(point.lateralOffset, `parameters.profile[${index}].lateralOffset`);
+    const elevation = finite(point.elevation, `parameters.profile[${index}].elevation`);
+    if (elevation < 0) throw new Error("parameters.profile elevation must not be negative");
+    if (index > 0 && lateralOffset <= parameters.profile[index - 1]!.lateralOffset) throw new Error("parameters.profile must be strictly ordered");
+    return Object.freeze({ lateralOffset, elevation });
+  });
+  return Object.freeze({ kind: parameters.kind, profile: Object.freeze(profile), maxSegmentLength: parameters.maxSegmentLength, miterLimit: parameters.miterLimit });
+}
+
 /**
  * Creates one immutable effect for a future release-to-confirm boundary.
  * It deliberately does not resolve geometry or mutate graph topology.
@@ -110,7 +119,8 @@ export function createPathBrushEffect(
     operationId: required(context.operationId, "operationId"), tableId: required(context.tableId, "tableId"), initiatedBy: required(context.initiatedBy, "initiatedBy"),
     kind: "surface.path-brush@1", targetScope: "brush-region", targetType: "path", brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
-    parameters: Object.freeze({ width: positive(payload.parameters.width, "parameters.width"), depth: positive(payload.parameters.depth, "parameters.depth"), falloff: positive(payload.parameters.falloff, "parameters.falloff"), strength: positive(payload.parameters.strength, "parameters.strength") }),
+    parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
 }
+import type { PathFormationRecipe } from "./path-recipe.ts";

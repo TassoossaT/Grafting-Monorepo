@@ -1,4 +1,4 @@
-import { createPathBrushEffect, DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { createPathBrushEffect, DEFAULT_TOOL_PARAMS, pathFormationFor } from "@/features/edit-construction";
 import type { PathBrushEffect, PathBrushParams } from "@/features/edit-construction";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
@@ -12,7 +12,7 @@ function effectFor(ctx: ToolContext, region: BrushRegion, params: PathBrushParam
     {
       brushShape: region.shape,
       brushRegion: { samples: region.samples },
-      parameters: { width: params.radius * 2, depth: params.depth, falloff: 1, strength: 1 },
+      parameters: pathFormationFor(params),
     },
     { operationId, tableId: ctx.tableId, initiatedBy: "local" },
   );

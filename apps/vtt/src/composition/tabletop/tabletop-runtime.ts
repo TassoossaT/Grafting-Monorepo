@@ -885,7 +885,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       operationId: effect.operationId,
       samples: effect.brushRegion.samples,
       brushShape: effect.brushShape,
-      depth: effect.parameters.depth,
+      // The legacy brush contour still owns the temporary clipping envelope.
+      // The next bridge increment replaces this compatibility scalar with the
+      // resolved profile sweep; the path bed itself is already fixed at Y=0.
+      depth: 0.1,
       targetSurfaceType: effect.targetType,
       sourceSurfaceTypes: pathBrushSourceSurfaceTypes(effect.targetType),
     };
