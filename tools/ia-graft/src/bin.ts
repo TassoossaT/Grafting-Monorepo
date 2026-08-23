@@ -124,7 +124,9 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]`,
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]
+
+Any prose flag (--message, --title, --body, --prompt, --context, --topic, --comment) also accepts --<flag>-file <path>. Prefer it: ia-graft.cmd forwards argv with %*, and cmd.exe cuts an argument at its first newline, so a multi-line value passed inline is silently truncated. JSON on stdin, or --input <json>, works for every command.`,
     });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });

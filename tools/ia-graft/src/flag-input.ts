@@ -6,12 +6,51 @@
  * import.
  */
 
+import { readFileSync } from "node:fs";
+
 export function readValue(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(name);
   if (index === -1) return undefined;
   const value = argv[index + 1];
   if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
   return value;
+}
+
+/**
+ * A value carrying prose, which must not be trusted to the command line.
+ *
+ * `ia-graft.cmd` forwards its arguments with `%*`, and `cmd.exe` ends a
+ * command at a literal newline -- so `--message "line one\nline two"` reached
+ * the CLI as `"line one"`, silently, with no error. Every commit body, PR
+ * description, and delegate prompt written through the invocation `AGENTS.md`
+ * mandates lost everything after its first line, and nothing reported it.
+ *
+ * `%*` cannot be made newline-safe: the command is already over by the time
+ * the wrapper runs. So prose travels by file instead -- `--message-file
+ * <path>` beside `--message`, for every flag that can hold more than a
+ * phrase. The two forms are mutually exclusive rather than one silently
+ * winning, because a caller passing both has a wrong belief about which is
+ * being used.
+ *
+ * A BOM is stripped (PowerShell writes UTF-8 with one by default, and a BOM
+ * at the head of a commit subject is invisible until it is not), and trailing
+ * whitespace goes with it -- a file ends in a newline that no caller of this
+ * meant as content.
+ */
+export function readTextValue(argv: string[], name: string): string | undefined {
+  const filePath = readValue(argv, `${name}-file`);
+  const inline = readValue(argv, name);
+  if (filePath !== undefined && inline !== undefined) {
+    throw new Error(`${name} and ${name}-file cannot both be given`);
+  }
+  if (filePath === undefined) return inline;
+  let contents: string;
+  try {
+    contents = readFileSync(filePath, "utf8");
+  } catch (error) {
+    throw new Error(`${name}-file could not be read (${filePath}): ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return contents.replace(/^﻿/, "").trimEnd();
 }
 
 export function readValues(argv: string[], name: string): string[] {
@@ -52,7 +91,7 @@ export function flagInput(
   if (route === "task commit") {
     return {
       taskId,
-      message: readValue(argv, "--message"),
+      message: readTextValue(argv, "--message"),
       files: readValues(argv, "--file"),
       coAuthors: readValues(argv, "--co-author"),
       agent: readValue(argv, "--agent"),
@@ -79,8 +118,8 @@ export function flagInput(
   if (route === "task done") {
     return {
       taskId,
-      title: readValue(argv, "--title"),
-      body: readValue(argv, "--body"),
+      title: readTextValue(argv, "--title"),
+      body: readTextValue(argv, "--body"),
       base: readValue(argv, "--base"),
     };
   }
@@ -104,7 +143,7 @@ export function flagInput(
     const jsonSchemaRaw = readValue(argv, "--json-schema");
     const files = readValues(argv, "--file");
     return {
-      prompt: readValue(argv, "--prompt"),
+      prompt: readTextValue(argv, "--prompt"),
       effort: readValue(argv, "--effort"),
       files: files.length > 0 ? files : undefined,
       jsonSchema: jsonSchemaRaw === undefined ? undefined : JSON.parse(jsonSchemaRaw),
@@ -114,14 +153,14 @@ export function flagInput(
     const scope = readValues(argv, "--scope");
     return {
       taskId,
-      prompt: readValue(argv, "--prompt"),
+      prompt: readTextValue(argv, "--prompt"),
       effort: readValue(argv, "--effort"),
       scope: scope.length > 0 ? scope : undefined,
-      context: readValue(argv, "--context"),
+      context: readTextValue(argv, "--context"),
     };
   }
   if (route === "delegate research") {
-    return { taskId, topic: readValue(argv, "--topic"), outputFile: readValue(argv, "--output-file"), effort: readValue(argv, "--effort") };
+    return { taskId, topic: readTextValue(argv, "--topic"), outputFile: readValue(argv, "--output-file"), effort: readValue(argv, "--effort") };
   }
   if (route === "issue list") {
     const rawLimit = readValue(argv, "--limit");
@@ -138,14 +177,14 @@ export function flagInput(
   }
   if (route === "issue new") {
     return {
-      title: readValue(argv, "--title"),
+      title: readTextValue(argv, "--title"),
       type: readValue(argv, "--type") || "task",
       area: readValue(argv, "--area"),
       priority: readValue(argv, "--priority"),
       status: readValue(argv, "--status"),
       milestone: readValue(argv, "--milestone"),
       parent: readValue(argv, "--parent"),
-      body: readValue(argv, "--body"),
+      body: readTextValue(argv, "--body"),
     };
   }
   if (route === "issue update") {
@@ -153,7 +192,7 @@ export function flagInput(
       id: readValue(argv, "--id") ?? argv[2],
       status: readValue(argv, "--status"),
       priority: readValue(argv, "--priority"),
-      comment: readValue(argv, "--comment"),
+      comment: readTextValue(argv, "--comment"),
     };
   }
   return undefined;
