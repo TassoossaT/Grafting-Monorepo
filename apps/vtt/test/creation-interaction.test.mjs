@@ -52,8 +52,8 @@ test("a path carves whatever it crosses -- terrain as a road, a wall as an openi
   assert.equal(resolveCreationInteraction("path", "wall-white").kind, "cut");
 });
 
-test("a path over a path coexists -- there is nothing left to carve", () => {
-  assert.equal(resolveCreationInteraction("path", "path").kind, "ignore");
+test("a path over a path is cut and regenerated as one formation", () => {
+  assert.equal(resolveCreationInteraction("path", "path").kind, "cut");
 });
 
 test("a panel never consumes what it stands on, whatever that is", () => {
