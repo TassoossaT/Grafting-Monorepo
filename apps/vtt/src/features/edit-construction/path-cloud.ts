@@ -168,6 +168,11 @@ export function pathRunsIn(
   topologies: readonly ConstructionRegionTopology[],
 ): readonly PathRun[] {
   const edges = edgesOf(topologies);
+  /** Every node position on the table, so an adopted junction node can be placed. */
+  const nodePositions = new Map<string, ConstructionPosition>();
+  for (const topology of topologies) {
+    for (const node of topology.nodes) nodePositions.set(node.id, node.position);
+  }
   const byCorridor = new Map<string, Map<number, Map<number, PathRunNode>>>();
   const bandsByCorridor = new Map<string, ConstructionSurfaceKey[]>();
 
@@ -223,14 +228,32 @@ export function pathRunsIn(
       for (const node of perStation.values()) ownIds.add(node.nodeId);
     }
 
+    // A junction node belongs to the run that was crossed, so this run has no
+    // node of its own at that station -- but the node is still *on* this run's
+    // travel line, and leaving it out breaks the chain exactly where the two
+    // runs meet. Read as a gap it looks like no junction happened at all,
+    // which is the opposite of the truth. Adopted into the chain here, so both
+    // runs report the shared node and are visibly joined at it.
     const junctionStations: number[] = [];
+    for (const station of stations) {
+      const perStation = byStation.get(station)!;
+      if (perStation.has(0)) continue;
+      const across = [...perStation.values()].sort((left, right) => left.across - right.across);
+      const welded = weldedSpineAt(across, edges, ownIds);
+      const position = welded === undefined ? undefined : nodePositions.get(welded);
+      if (welded === undefined || position === undefined) continue;
+      junctionStations.push(station);
+      (perStation as Map<number, PathRunNode>).set(0, {
+        nodeId: welded,
+        station,
+        across: 0,
+        position,
+      });
+    }
+
     const ribs: PathRunRib[] = stations.map((station) => {
       const perStation = byStation.get(station)!;
       const nodes = [...perStation.values()].sort((left, right) => left.across - right.across);
-      if (!perStation.has(0)) {
-        const welded = weldedSpineAt(nodes, edges, ownIds);
-        if (welded !== undefined) junctionStations.push(station);
-      }
       const edgeIds: string[] = [];
       for (let index = 0; index + 1 < nodes.length; index += 1) {
         const edgeId = edgeBetween(edges, nodes[index]!.nodeId, nodes[index + 1]!.nodeId);

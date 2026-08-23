@@ -171,5 +171,19 @@ test("two runs are two clouds, and a welded station is reported as a junction", 
   assert.equal(clouds.length, 2, "one cloud per run");
   const joined = clouds.find((cloud) => cloud.corridorId === second);
   assert.deepEqual(joined.junctionStations, [0], "the welded station is a junction");
-  assert.equal(joined.spine, undefined, "its spine node belongs to the run it joined");
+
+  // The shared node belongs to the run that was crossed, but it is still on
+  // this run's travel line -- adopted into the chain, so both runs report it
+  // and the two are visibly joined at one point rather than reading as a gap.
+  assert.ok(joined.spine !== undefined, "the joined run still has a spine");
+  assert.equal(joined.spine.nodes.length, 1);
+  assert.equal(joined.spine.nodes[0].nodeId, stationNodeId(first, 1, 0));
+  assert.deepEqual(joined.spine.nodes[0].position, { x: 2, y: 0, z: 0 });
+
+  // And the run it joined reports the very same node as its own.
+  const crossed = clouds.find((cloud) => cloud.corridorId === first);
+  assert.ok(
+    crossed.spine.nodes.some((node) => node.nodeId === joined.spine.nodes[0].nodeId),
+    "one node, referenced by both runs",
+  );
 });
