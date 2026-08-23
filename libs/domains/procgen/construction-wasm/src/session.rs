@@ -1297,6 +1297,12 @@ mod tests {
         assert!(
             error
                 .as_string()
+                .unwrap()
+                .contains("unknown analytic region")
+        );
+    }
+
+    #[wasm_bindgen_test]
     fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
         let mut session = ConstructionSession::new();
         let patch_json = r#"{
@@ -1379,8 +1385,6 @@ mod tests {
             let positions: Vec<f32> = mesh["positions"]
                 .as_array()
                 .unwrap()
-                .contains("unknown analytic region")
-        );
                 .iter()
                 .map(|v| v.as_f64().unwrap() as f32)
                 .collect();
