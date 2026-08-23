@@ -40,19 +40,28 @@ export interface PathPatchFormation {
  */
 export function pathPatch(
   tableId: string,
-  operationId: string,
+  corridorId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
   profileLength: number,
   spineSlot: number,
+  /**
+   * Stations whose spine node already exists, by station index -- a junction.
+   * Reusing the very node is what joins two runs; nothing here compares
+   * coordinates, because coincident is not connected.
+   */
+  weldedSpines: ReadonlyMap<number, string> = new Map(),
 ): PathPatchFormation {
   // Station-major, exactly as the sweep lays its vertices out, so the address
   // an id carries is the one the generator actually built it at. `across` is
   // signed from the spine, which is what later makes "outward" arithmetic --
   // see `features/edit-construction/station-node-id.ts`.
-  const nodeIds = plan.vertices.map((_vertex, index) =>
-    stationNodeId(operationId, Math.floor(index / profileLength), (index % profileLength) - spineSlot),
-  );
+  const nodeIds = plan.vertices.map((_vertex, index) => {
+    const station = Math.floor(index / profileLength);
+    const across = (index % profileLength) - spineSlot;
+    const welded = across === 0 ? weldedSpines.get(station) : undefined;
+    return welded ?? stationNodeId(corridorId, station, across);
+  });
   const nodes = plan.vertices.map((position, index) => ({ id: nodeIds[index]!, position }));
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
 
@@ -61,7 +70,7 @@ export function pathPatch(
   };
 
   const regions = plan.quads.map((quad, index) => ({
-    regionId: `${operationId}:path-band:${index}`,
+    regionId: `${corridorId}:path-band:${index}`,
     boundary: quad.map((start, position) => useEdge(start, quad[(position + 1) % quad.length]!)),
     surfaceType,
     physical: true,

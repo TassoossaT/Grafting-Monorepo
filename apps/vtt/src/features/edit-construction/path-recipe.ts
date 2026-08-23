@@ -66,6 +66,30 @@ export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
 }
 
 /**
+ * Whether this subtype's stations take their height from the ground beneath
+ * them.
+ *
+ * A deck does not: it spans, so its height comes from its own ends and the
+ * middle stays level instead of sagging onto whatever it crosses. That, plus
+ * declaring that it consumes nothing, is the whole of what makes a subtype a
+ * bridge -- no separate type, no separate role table, no separate logic.
+ */
+export function pathRidesTerrain(kind: PathKind): boolean {
+  return kind !== "bridge";
+}
+
+/**
+ * Whether this subtype carves what it is drawn over.
+ *
+ * Declared rather than inferred, which is what dissolves the awkward part of
+ * an overpass: nothing has to work out from a flat XZ footprint whether a
+ * crossing is at the same level, because the run that spans says so itself.
+ */
+export function pathCarvesGround(kind: PathKind): boolean {
+  return kind !== "bridge";
+}
+
+/**
  * How far this recipe's own product reaches from the reference line -- the
  * outermost lateral offset of the profile it produces.
  *

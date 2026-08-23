@@ -42,8 +42,16 @@ export interface PathBrushParams extends BrushShapeParams {
   readonly miterLimit: number;
 }
 
-/** Visual/formation recipe for the one generic `path` surface type. */
-export type PathKind = "trail" | "street" | "road";
+/**
+ * Which preset a path run is built from.
+ *
+ * A subtype, not a type: every one of these collapses to the single `path`
+ * surface type, shares its role table, its cascade and its editing rules,
+ * and differs only in the cross-section it seeds and a couple of declared
+ * behaviours. Adding one is adding a preset -- never a second set of type
+ * logic to keep in step with the first.
+ */
+export type PathKind = "trail" | "street" | "road" | "bridge";
 
 /**
  * What every wall-producing tool needs and nothing else: which wall type,

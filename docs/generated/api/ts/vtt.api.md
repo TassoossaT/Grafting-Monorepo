@@ -1205,7 +1205,7 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, weldedSpines: ReadonlyMap<number, string>): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
@@ -2171,6 +2171,10 @@ for it now.
 
 ### `reference vtt.edit-construction.PathBrushParams`
 
+### `reference vtt.edit-construction.pathCarvesGround`
+
+### `reference vtt.edit-construction.pathCorridorId`
+
 ### `reference vtt.edit-construction.pathFormationFor`
 
 ### `reference vtt.edit-construction.PathFormationParameters`
@@ -2183,7 +2187,11 @@ for it now.
 
 ### `reference vtt.edit-construction.PathProfilePoint`
 
+### `reference vtt.edit-construction.pathRidesTerrain`
+
 ### `reference vtt.edit-construction.pathSpineSlot`
+
+### `reference vtt.edit-construction.pathSubtypeOf`
 
 ### `reference vtt.edit-construction.planEdit`
 
@@ -2406,6 +2414,12 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
+
+### `function vtt.path-corridor.pathSubtypeOf(corridorId: string): PathKind | undefined`
+
+The subtype `corridorId` was built from, or `undefined` if it carries none.
+
 ### `interface vtt.path-recipe.PathFormationRecipe`
 
 Product recipe forwarded unchanged to the construction-session boundary.
@@ -2435,6 +2449,14 @@ than being a number the generator forgot. Any further line a product wants
 to be first-class -- a lane, a rail -- is just another profile point, and
 needs no machinery of its own.
 
+### `function vtt.path-recipe.pathCarvesGround(kind: PathKind): boolean`
+
+Whether this subtype carves what it is drawn over.
+
+Declared rather than inferred, which is what dissolves the awkward part of
+an overpass: nothing has to work out from a flat XZ footprint whether a
+crossing is at the same level, because the run that spans says so itself.
+
 ### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
@@ -2453,6 +2475,16 @@ Read off the profile rather than recomputed from the parameters, so the
 width the brush is sized against and the width actually swept can never
 drift apart. A `street` has no shoulder and a `road` does; that difference
 lives in one place, and this follows it.
+
+### `function vtt.path-recipe.pathRidesTerrain(kind: PathKind): boolean`
+
+Whether this subtype's stations take their height from the ground beneath
+them.
+
+A deck does not: it spans, so its height comes from its own ends and the
+middle stays level instead of sagging onto whatever it crosses. That, plus
+declaring that it consumes nothing, is the whole of what makes a subtype a
+bridge -- no separate type, no separate role table, no separate logic.
 
 ### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
 
@@ -2525,7 +2557,7 @@ duplication, not per-type policy.
 
 The first refusal in a resolved coverage, if any.
 
-### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[]): readonly ResolvedCoverage[]`
+### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
 
 Pairs every region a footprint touches with its resolved interaction --
 the creation-side counterpart to `planEdit`. Pure: it decides, it does not
@@ -2535,7 +2567,7 @@ A `"forbid"` anywhere in the result is the caller's cue to abandon the
 whole stroke rather than apply the rest: painting terrain across a wall
 must not quietly terraform everything except the wall.
 
-### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string): CreationInteraction`
+### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 What painting `paintedType` over one already-present region means.
 
@@ -2646,9 +2678,9 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(coveredType: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -2657,6 +2689,11 @@ wall the same cut reads as an opening through it.
 Over another path the two formations become one connected path surface:
 the same cut-and-refill flow consumes the overlap instead of leaving
 coincident path geometry behind.
+
+Except a deck, which spans rather than carves. That is a declared property
+of the subtype, not something read back from geometry -- which is exactly
+why an overpass needs no height-aware coverage query to be told apart from
+a crossing at the same level. The run that passes over says so.
 
 ### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
 
@@ -2730,7 +2767,7 @@ anything.
 
 ### `function vtt.path-structure.pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): string`
 
-### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
 Builds one swept-product structure type on the shared spine model.
 
@@ -2795,12 +2832,18 @@ together on purpose:
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
-### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string) => CreationInteraction`
+### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `coveredType` -- the
 creation half of the same declaration. Directional on purpose: a wall
 goes on terrain, terrain does not go on a wall, and neither direction
 says anything about the other.
+
+`paintedSubtype` is the preset the run being painted was built from,
+when its type has subtypes at all. It is what lets one type vary a
+declared behaviour -- a bridge deck consuming nothing where a road
+carves -- without splitting into a second type with its own role table
+and its own logic to keep in step.
 
 ### `property vtt.structure-type.StructureTypeDefinition.label: string`
 
@@ -3171,9 +3214,15 @@ PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
 
-### `type vtt.tool-types.PathKind = "trail" | "street" | "road"`
+### `type vtt.tool-types.PathKind = "trail" | "street" | "road" | "bridge"`
 
-Visual/formation recipe for the one generic `path` surface type.
+Which preset a path run is built from.
+
+A subtype, not a type: every one of these collapses to the single `path`
+surface type, shares its role table, its cascade and its editing rules,
+and differs only in the cross-section it seeds and a couple of declared
+behaviours. Adding one is adding a preset -- never a second set of type
+logic to keep in step with the first.
 
 ### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 

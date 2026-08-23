@@ -89,6 +89,7 @@ export function resolvePolicy(topology: ConstructionRegionTopology, target: Edit
 export function resolveCreationInteraction(
   paintedType: string,
   coveredType: string,
+  paintedSubtype?: string,
 ): CreationInteraction {
   const definition = structureTypeFor(paintedType);
   if (definition === undefined) {
@@ -97,7 +98,7 @@ export function resolveCreationInteraction(
   if (structureTypeFor(coveredType) === undefined) {
     return forbid(`no structure type is defined for covered type "${coveredType}"`);
   }
-  return definition.interactionOver(coveredType);
+  return definition.interactionOver(coveredType, paintedSubtype);
 }
 
 /** One covered region, paired with what the painted type wants to do about it. */
@@ -118,10 +119,11 @@ export interface ResolvedCoverage {
 export function resolveCoverage(
   paintedType: string,
   covered: readonly ConstructionCoveredRegion[],
+  paintedSubtype?: string,
 ): readonly ResolvedCoverage[] {
   return covered.map((entry) => ({
     covered: entry,
-    interaction: resolveCreationInteraction(paintedType, entry.surfaceType),
+    interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
   }));
 }
 

@@ -3413,12 +3413,12 @@ export interface PathPatchFormation {
   }
 export function pathPatch(
   tableId: string,
-  operationId: string,
+  corridorId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
   profileLength: number,
   spineSlot: number,
-  ): PathPatchFormation {
+  /**
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
@@ -4061,6 +4061,13 @@ export type {
   ResolvedCoverage,
   RolePolicy,
 
+// src/features/edit-construction/path-corridor.ts
+export function pathCorridorId(operationId: string, kind: PathKind): string {
+  return `${operationId}${MARKER}${kind}`;
+  }
+export function pathSubtypeOf(corridorId: string): PathKind | undefined {
+  const at = corridorId.lastIndexOf(MARKER);
+
 // src/features/edit-construction/path-recipe.ts
 export const PATH_SPINE_OFFSET = 0;
 export interface PathProfilePoint {
@@ -4078,6 +4085,12 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
 export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
   return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
+export function pathRidesTerrain(kind: PathKind): boolean {
+  return kind !== "bridge";
+  }
+export function pathCarvesGround(kind: PathKind): boolean {
+  return kind !== "bridge";
+  }
 export function pathHalfWidth(params: PathBrushParams): number {
   return pathFormationFor(params).profile.reduce(
   (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
@@ -4127,6 +4140,7 @@ export function resolvePolicy(topology: ConstructionRegionTopology, target: Edit
 export function resolveCreationInteraction(
   paintedType: string,
   coveredType: string,
+  paintedSubtype?: string,
   ): CreationInteraction {
   const definition = structureTypeFor(paintedType);
 export interface ResolvedCoverage {
@@ -4136,11 +4150,11 @@ export interface ResolvedCoverage {
 export function resolveCoverage(
   paintedType: string,
   covered: readonly ConstructionCoveredRegion[],
+  paintedSubtype?: string,
   ): readonly ResolvedCoverage[] {
   return covered.map((entry) => ({
   covered: entry,
-  interaction: resolveCreationInteraction(paintedType, entry.surfaceType),
-  }));
+  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
 export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
   for (const entry of resolved) {
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
@@ -4179,14 +4193,17 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
 export function terrainInteractionOver(coveredType: string): CreationInteraction {
   if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
-export function pathInteractionOver(coveredType: string): CreationInteraction {
-  return CUT;
+export function pathInteractionOver(
+  _coveredType: string,
+  paintedSubtype?: string,
+  ): CreationInteraction {
+  return paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/panel-structure.ts
@@ -4242,7 +4259,7 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
@@ -4348,7 +4365,7 @@ export interface PathBrushParams extends BrushShapeParams {
   /** Width of each optional raised shoulder, in world units. */
   readonly shoulderWidth: number;
   /** Non-negative shoulder elevation above the path bed. */
-export type PathKind = "trail" | "street" | "road";
+export type PathKind = "trail" | "street" | "road" | "bridge";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** Length of a panel's own vertical edge, in world units. */

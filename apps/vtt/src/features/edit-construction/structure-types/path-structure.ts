@@ -103,7 +103,7 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,

@@ -65,7 +65,7 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
@@ -104,7 +104,15 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
  * Over another path the two formations become one connected path surface:
  * the same cut-and-refill flow consumes the overlap instead of leaving
  * coincident path geometry behind.
+ *
+ * Except a deck, which spans rather than carves. That is a declared property
+ * of the subtype, not something read back from geometry -- which is exactly
+ * why an overpass needs no height-aware coverage query to be told apart from
+ * a crossing at the same level. The run that passes over says so.
  */
-export function pathInteractionOver(coveredType: string): CreationInteraction {
-  return CUT;
+export function pathInteractionOver(
+  _coveredType: string,
+  paintedSubtype?: string,
+): CreationInteraction {
+  return paintedSubtype === "bridge" ? IGNORE : CUT;
 }
