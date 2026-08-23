@@ -48,3 +48,4 @@ pub fn tessellate_contour_loop(
     }
     (positions.len() >= 3).then_some(positions)
 }
+

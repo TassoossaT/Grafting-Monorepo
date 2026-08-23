@@ -788,5 +788,25 @@ fn a_four_panel_circular_tower_meshes_all_four_quarters_cleanly() {
                 "panel {step} normal points inward: pos {pos:?}, normal {normal:?}"
             );
         }
+
+        // Every triangle must be a local vertical facet along the cylinder,
+        // never a diagonal chord cutting across the 90° arc.
+        for triangle in mesh.indices.chunks_exact(3) {
+            let p0 = mesh.positions[triangle[0] as usize];
+            let p1 = mesh.positions[triangle[1] as usize];
+            let p2 = mesh.positions[triangle[2] as usize];
+            let a0 = p0[2].atan2(p0[0]);
+            let a1 = p1[2].atan2(p1[0]);
+            let a2 = p2[2].atan2(p2[0]);
+            let mut span = (a0 - a1).abs().max((a1 - a2).abs()).max((a2 - a0).abs());
+            if span > std::f32::consts::PI {
+                span = std::f32::consts::TAU - span;
+            }
+            assert!(
+                span < 0.4,
+                "triangle cut diagonally across cylinder: angular span = {span}"
+            );
+        }
     }
 }
+

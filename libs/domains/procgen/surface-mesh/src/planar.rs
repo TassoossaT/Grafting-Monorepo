@@ -55,3 +55,4 @@ pub fn triangulate_contour_loops<'a>(
         indices,
     })
 }
+
