@@ -1229,6 +1229,27 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
+### `function vtt.path-shared.joinedCoveredKeys(ctx: ToolContext, outline: readonly (readonly [number, number])[], covered: readonly ConstructionCoveredRegion[], joinedCorridors: ReadonlySet<string>): ReadonlySet<string>`
+
+Which covered faces this run *joins* rather than replaces.
+
+Joined faces are left out of the overlay's sources, so they are not
+consumed -- which is the whole point. A path replacing a path is what made
+one carriageway erase another instead of the two meeting.
+
+**Asked by identity first.** A run that welded a node onto another run's
+spine has joined that run, and every face of it, full stop; whether the
+new footprint happens to swallow one of its spine nodes is beside the
+point. Geometry was the only question available before junctions were
+built, and it stopped being safe the moment a junction started cutting the
+arriving road back at the rim: the footprint no longer reaches the other
+road's travel line, so the purely geometric answer became "cut" for the
+very runs this one had just joined -- and consuming those bands takes the
+crossed run's spine with them.
+
+The geometric rule stays for the case identity cannot see: a footprint
+laid over a run's travel line without any junction having been made.
+
 ### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.

@@ -257,6 +257,23 @@ pulling in opposite directions.
 flank is removed before the road that opens it is declared, and the wedges go
 in last, because they bound edges the road itself has only just minted.
 
+### Joining is asked by identity, and that had to be fixed twice
+
+Which faces a stroke *joins* rather than replaces used to be a purely
+geometric question: does the new footprint contain one of that face's spine
+nodes? That was the only question available before junctions existed, and
+closing a junction is exactly what broke it. Once the arriving road is cut
+back at the other road's rim, its footprint no longer reaches that road's
+travel line at all -- so the geometric answer flipped to "replace" for the
+very runs the stroke had just joined, and consuming those bands takes the
+crossed run's spine with them.
+
+A run that welded a node onto another run's spine has joined it, and every
+face of it, full stop. The geometric rule stays for the case identity cannot
+see -- a footprint laid over a travel line with no junction made -- but it is
+the second question now, not the first. `identity, not geometry` keeps being
+the same lesson in a new place.
+
 ### One name for an edge, wherever it is minted
 
 None of this works unless a split edge and a declared edge over the same pair

@@ -774,22 +774,30 @@ export function pathMouthsInto(
 /**
  * Which covered faces this run *joins* rather than replaces.
  *
- * The rule the owner set, and it reads off the thing a run is built around:
- * a face is joined when the new footprint reaches the travel line of the run
- * that face belongs to. Overlapping a road's shoulder is not meeting it;
- * reaching its spine is.
- *
  * Joined faces are left out of the overlay's sources, so they are not
  * consumed -- which is the whole point. A path replacing a path is what made
  * one carriageway erase another instead of the two meeting.
+ *
+ * **Asked by identity first.** A run that welded a node onto another run's
+ * spine has joined that run, and every face of it, full stop; whether the
+ * new footprint happens to swallow one of its spine nodes is beside the
+ * point. Geometry was the only question available before junctions were
+ * built, and it stopped being safe the moment a junction started cutting the
+ * arriving road back at the rim: the footprint no longer reaches the other
+ * road's travel line, so the purely geometric answer became "cut" for the
+ * very runs this one had just joined -- and consuming those bands takes the
+ * crossed run's spine with them.
+ *
+ * The geometric rule stays for the case identity cannot see: a footprint
+ * laid over a run's travel line without any junction having been made.
  */
-function joinedCoveredKeys(
+export function joinedCoveredKeys(
   ctx: ToolContext,
   outline: readonly (readonly [number, number])[],
   covered: readonly ConstructionCoveredRegion[],
+  joinedCorridors: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const joined = new Set<string>();
-  if (outline.length < 3) return joined;
   const polygon = outline.map(([x, z]) => ({ x, y: 0, z }));
 
   const positions = new Map<string, ConstructionPosition>();
@@ -799,12 +807,18 @@ function joinedCoveredKeys(
 
   for (const region of covered) {
     if (region.surfaceType !== "path") continue;
-    const touchesSpine = region.nodeIds.some((nodeId) => {
-      if (parseStationNodeId(nodeId)?.across !== 0) return false;
-      const position = positions.get(nodeId);
-      return position !== undefined && pointInPolygonXZ(position, polygon);
+    const belongsToJoined = region.nodeIds.some((nodeId) => {
+      const corridor = parseStationNodeId(nodeId)?.operationId;
+      return corridor !== undefined && joinedCorridors.has(corridor);
     });
-    if (touchesSpine) joined.add(region.surfaceKey.join(":"));
+    const touchesSpine =
+      polygon.length >= 3 &&
+      region.nodeIds.some((nodeId) => {
+        if (parseStationNodeId(nodeId)?.across !== 0) return false;
+        const position = positions.get(nodeId);
+        return position !== undefined && pointInPolygonXZ(position, polygon);
+      });
+    if (belongsToJoined || touchesSpine) joined.add(region.surfaceKey.join(":"));
   }
   return joined;
 }
@@ -998,11 +1012,20 @@ export function commitPathContour(
       ctx,
       formation.outline,
       resolved.map((entry) => entry.covered),
+      new Set(crossed.joined.map((run) => run.corridorId)),
     );
     const sourceSurfaceKeys = resolved
       .filter((entry) => entry.interaction.kind === "cut")
       .filter((entry) => !joined.has(entry.covered.surfaceKey.join(":")))
       .map((entry) => entry.covered.surfaceKey);
+
+    // A face cannot be both rebuilt and consumed. If one ever were, the
+    // overlay would go looking for a region the removal had already taken
+    // out and the whole stroke would be lost, so the rebuild yields.
+    const consumed = new Set(sourceSurfaceKeys.map((key) => key.join(":")));
+    const rebuilt = wedges.filter((wedge) =>
+      wedge.removed.every((key) => !consumed.has(key.join(":"))),
+    );
 
     // Split only once the commit is going through: both the spine node a
     // crossing needs and the rim nodes a fusion needs are made by cutting
@@ -1014,7 +1037,7 @@ export function commitPathContour(
       // The flank the mouth opens into goes before the road that opens it,
       // so the rim between the two corners is gone rather than left lying
       // across the junction like a kerb.
-      ...junctionRemovals(wedges),
+      ...junctionRemovals(rebuilt),
     ];
     if (splits.length > 0) {
       ctx.runtime.applyRegionEdit(splits, "local", operationId);
@@ -1034,7 +1057,7 @@ export function commitPathContour(
     // Last, because both wedges bound edges the road itself only just
     // declared: the rib between the junction node and each corner.
     const unclosed: string[] = [];
-    for (const wedge of wedges) {
+    for (const wedge of rebuilt) {
       const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
       unclosed.push(...laid.skippedRegionIds);
     }

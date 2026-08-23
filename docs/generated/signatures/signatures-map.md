@@ -3585,6 +3585,13 @@ export function pathMouthsInto(
   ): {
   readonly vertices: readonly ConstructionPosition[];
   readonly mouths: readonly PathMouth[];
+export function joinedCoveredKeys(
+  ctx: ToolContext,
+  outline: readonly (readonly [number, number])[],
+  covered: readonly ConstructionCoveredRegion[],
+  joinedCorridors: ReadonlySet<string>,
+  ): ReadonlySet<string> {
+  const joined = new Set<string>();
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
