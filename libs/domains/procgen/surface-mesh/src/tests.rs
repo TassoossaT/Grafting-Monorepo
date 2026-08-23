@@ -9,7 +9,7 @@ use grafting_graph_core::{
 
 use crate::math::{cross, sub};
 use crate::triangulate_region;
-use crate::types::TriangulatedMesh;
+use crate::types::{TriangulatedMesh, ARC_TESSELLATION_TOLERANCE};
 
 fn nid(name: &str) -> NodeId {
     NodeId::new(name).unwrap()
@@ -116,6 +116,18 @@ fn mesh_of(
     .unwrap()
     .pop()
     .unwrap()
+}
+
+/// The centroid of one triangle, in world coordinates.
+fn centroid_of(mesh: &TriangulatedMesh, triangle: &[u32]) -> [f32; 3] {
+    let mut sum = [0.0_f32; 3];
+    for index in triangle {
+        let point = mesh.positions[*index as usize];
+        for axis in 0..3 {
+            sum[axis] += point[axis];
+        }
+    }
+    [sum[0] / 3.0, sum[1] / 3.0, sum[2] / 3.0]
 }
 
 fn assert_every_triangle_has_area(mesh: &TriangulatedMesh) {
@@ -311,6 +323,7 @@ fn a_curved_upright_panel_carries_an_opening() {
 
     assert_every_triangle_has_area(&mesh);
     for triangle in mesh.indices.chunks_exact(3) {
+        let centroid = centroid_of(&mesh, triangle);
         let angle = centroid[2].atan2(centroid[0]);
         assert!(
             !(0.6..=1.1).contains(&angle) || !(1.0..=2.0).contains(&centroid[1]),
@@ -786,5 +799,80 @@ fn a_four_panel_circular_tower_meshes_all_four_quarters_cleanly() {
                 "triangle cut diagonally across cylinder: angular span = {span}"
             );
         }
+    }
+}
+
+#[test]
+fn an_opening_leaves_the_curved_panel_on_its_cylinder() {
+    let radius = 2.0_f32;
+    let mut nodes = vec![
+        ("bottom-start", [radius, 0.0, 0.0]),
+        ("bottom-end", [-radius, 0.0, 0.0]),
+        ("top-end", [-radius, 3.0, 0.0]),
+        ("top-start", [radius, 3.0, 0.0]),
+    ];
+    let rim: Vec<(String, [f32; 3])> = [(0.6_f32, 1.0_f32), (1.1, 1.0), (1.1, 2.0), (0.6, 2.0)]
+        .iter()
+        .enumerate()
+        .map(|(index, (angle, height))| {
+            (
+                format!("rim{index}"),
+                [radius * angle.cos(), *height, radius * angle.sin()],
+            )
+        })
+        .collect();
+    let owned: Vec<(&str, [f32; 3])> = rim
+        .iter()
+        .map(|(id, position)| (id.as_str(), *position))
+        .collect();
+    nodes.extend(owned);
+    let graph = graph_with_positions(&nodes);
+
+    let mut topology = ContourTopology::new();
+    let outer = upright_panel(&mut topology, &graph, "panel", Some([0.0, 0.0]));
+    let hole = line_loop(
+        &mut topology,
+        &graph,
+        "rim",
+        &["rim0", "rim1", "rim2", "rim3"],
+    );
+    let region_id = RegionId::new("panel").unwrap();
+    topology
+        .add_region(region_id.clone(), vec![outer], vec![hole])
+        .unwrap();
+
+    let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+    for point in &mesh.positions {
+        let r = (point[0].powi(2) + point[2].powi(2)).sqrt();
+        assert!((r - radius).abs() < 1e-2, "vertex left the cylinder: {point:?}");
+    }
+    for triangle in mesh.indices.chunks_exact(3) {
+        let angles: Vec<f32> = triangle
+            .iter()
+            .map(|index| {
+                let point = mesh.positions[*index as usize];
+                point[2].atan2(point[0])
+            })
+            .collect();
+        let mut span = (angles[0] - angles[1])
+            .abs()
+            .max((angles[1] - angles[2]).abs())
+            .max((angles[2] - angles[0]).abs());
+        // The panel ends on the -x axis, where `atan2` wraps.
+        if span > std::f32::consts::PI {
+            span = std::f32::consts::TAU - span;
+        }
+        assert!(span < 0.4, "triangle cut diagonally across cylinder: span = {span}");
+
+        // What a diagonal chord actually looks like on screen: the facet
+        // sinking inside the tower. It may not sink further than the
+        // tolerance the outline itself is drawn to.
+        let centroid = centroid_of(&mesh, triangle);
+        let sunk = radius - (centroid[0].powi(2) + centroid[2].powi(2)).sqrt();
+        assert!(
+            sunk < ARC_TESSELLATION_TOLERANCE,
+            "triangle sank into the tower by {sunk} m"
+        );
     }
 }

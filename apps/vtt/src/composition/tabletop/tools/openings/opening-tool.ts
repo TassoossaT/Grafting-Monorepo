@@ -12,7 +12,6 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 
-import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
 import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
@@ -103,9 +102,6 @@ export const openingTool: ConstructionTool<"opening"> = {
       runPrefix: idPrefix,
       existingUses: boundaryUsage(ctx),
     });
-    const boundary: ConstructionOrientedEdgeUse[] = nodes.map((node, index) =>
-      edges.use(node.id, nodes[(index + 1) % nodes.length]!.id),
-    );
     const bottomGeometry = placed.rail.geometry;
     const topGeometry = reverseGeometry(placed.rail.geometry);
     const boundary: ConstructionOrientedEdgeUse[] = [
@@ -191,6 +187,5 @@ function resolvePlacement(
   const rail = panelRailOf(topology);
   if (rail === undefined) return undefined;
   const corners = rimCorners(rail, rail.travelTo(sample.point), params);
-  return corners === undefined ? undefined : { surfaceKey, corners };
   return corners === undefined ? undefined : { surfaceKey, corners, rail };
 }

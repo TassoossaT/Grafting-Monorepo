@@ -25,12 +25,17 @@
 //! developable surface: a section of a cylinder flattens without distortion
 //! into "distance along the rail" and "height", and a straight panel is the
 //! same map with an infinite radius. Unrolled, it is an ordinary 2D polygon
-//! that `earcut` triangulates like any other -- openings included, which a
-//! strip built facet by facet could never punch.
+//! that triangulates like any other -- openings included, which a strip
+//! built facet by facet could never punch.
 //!
-//! The 3D positions never move: the unrolled coordinates are where `earcut`
-//! works, and `earcut` introduces no vertices of its own. The normals are
-//! derived from the frame, per vertex, so a curve shades as a curve.
+//! A flat panel keeps exactly the vertices its contour has: `earcut` invents
+//! none, and on a plane none are needed. A curved panel with an opening does
+//! need them -- the face left around the hole cannot be covered by joining
+//! contour vertices without spanning chords that cut through the inside of
+//! the cylinder -- so that one case is filled with `i_triangle`'s uniform
+//! Delaunay mesh at a bounded edge length and rolled back onto the surface.
+//! The normals are derived from the frame, per vertex, so a curve shades as
+//! a curve.
 //!
 //! Those unrolled coordinates also leave the crate, as [`TriangulatedMesh`]'s
 //! `uvs`. They are metres of the surface's own extent, not a normalised

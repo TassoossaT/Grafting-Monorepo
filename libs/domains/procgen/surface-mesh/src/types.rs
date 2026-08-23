@@ -15,9 +15,11 @@ pub const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
 pub const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
 
 /// A triangulated mesh derived from one surface's node cycle. Vertices stay
-/// in the caller-supplied cycle order (no Steiner points are introduced for
-/// the simple, hole-free polygons this domain produces), so `indices`
-/// reference the same order as the input `positions`.
+/// in the caller-supplied cycle order wherever the contour alone can carry
+/// the surface, so `indices` reference the same order as the input
+/// `positions`. The exception is a curved panel with an opening: that one is
+/// filled with a uniform mesh whose interior vertices exist only here, so
+/// `positions` is longer than the contour and in the mesher's own order.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TriangulatedMesh {
     pub positions: Vec<[f32; 3]>,
