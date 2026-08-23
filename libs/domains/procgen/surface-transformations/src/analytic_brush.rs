@@ -48,9 +48,9 @@ pub type BoundaryVertex = (NodeId, ContourGeometry);
 /// exterior boundaries (what a leftover remainder region must carry as its
 /// own hole), and the contour itself.
 ///
-/// Nothing here is specific to any one tool. A path-brush stroke, a future
-/// wall opening, or anything else that overlays one new closed shape onto
-/// the current graph and destroys whatever it covers can reuse this
+/// Nothing here is specific to any one tool. Any application operation that
+/// overlays one new closed shape onto the current graph and replaces what
+/// it covers can reuse this
 /// unchanged -- see [`plan_region_merge`]. Consuming an existing *region*
 /// (not just a plain surface) matters as soon as more than one such
 /// overlay can happen in the same place: without it, a second stroke can
@@ -402,11 +402,33 @@ pub fn plan_region_merge(
     contour: AnalyticBrushContour,
     is_eligible: impl Fn(&SurfaceType) -> bool,
 ) -> Result<RegionMergePlan, PathBrushFailure> {
+    plan_region_merge_regions(
+        graph,
+        surfaces,
+        topology,
+        contour,
+        |_region_id, surface_type| is_eligible(surface_type),
+    )
+}
+
+/// Plans a region overlay with eligibility resolved against exact region
+/// identities as well as semantic surface types.
+///
+/// This is the application-orchestrated form of [`plan_region_merge`]: a
+/// caller first queries coverage and resolves product policy, then supplies
+/// the precise region set selected by that decision. Geometry remains in
+/// Rust; product policy does not.
+pub fn plan_region_merge_regions(
+    graph: &Graph<[f32; 3], ()>,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    contour: AnalyticBrushContour,
+    is_eligible: impl Fn(&RegionId, &SurfaceType) -> bool,
+) -> Result<RegionMergePlan, PathBrushFailure> {
     let boundary_polygon = contour_polygon(&contour, CONTOUR_POLYGON_TOLERANCE);
 
-    // A later stroke has to be able to touch, cut, or remove what an
-    // earlier one created, so every existing region the contour overlaps is
-    // consumable -- most commonly a previous stroke's own remainder.
+    // Any later overlay must be able to touch, cut, or remove what an
+    // earlier overlay created. Eligibility is still entirely caller-owned.
     let consumed_region_ids = surfaces
         .region_surface_ids()
         .into_iter()
@@ -414,7 +436,7 @@ pub fn plan_region_merge(
             surfaces
                 .region_surface(region_id)
                 .is_some_and(|region_surface| {
-                    if !is_eligible(region_surface.surface_type()) {
+                    if !is_eligible(region_id, region_surface.surface_type()) {
                         return false;
                     }
                     let Some(region) = topology.region(region_id) else {

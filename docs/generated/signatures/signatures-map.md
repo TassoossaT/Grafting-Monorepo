@@ -56,11 +56,14 @@ pub fn surface_mesh(
 
 // src/path_brush.rs
 pub struct ApplyPathBrushRequest
+pub struct PathFormationOutlineRequest
+pub struct PathFormationOutlineResponse
 pub struct IdentityDeltaResponse
 pub struct SurfaceIdentityDeltaResponse
 pub struct InvalidationResponse
 pub struct ApplyPathBrushResponse
 pub fn apply_path_brush(
+pub fn path_formation_outline(
 
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
@@ -83,6 +86,10 @@ pub fn apply_move_region(
 pub struct RegionMergeOutcome
 pub fn apply_region_merge(
 
+// src/region_overlay.rs
+pub struct ApplyRegionOverlayRequest
+pub fn apply_region_overlay(
+
 // src/session.rs
 pub struct ConstructionSession
 pub fn new() -> ConstructionSession
@@ -99,6 +106,12 @@ pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
+
+// src/sweep_bridge.rs
+pub struct SweepProfilePointRequest
+pub struct PlanSweepRequest
+pub struct PlanSweepResponse
+pub fn plan_sweep(request: PlanSweepRequest) -> Result<PlanSweepResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -393,7 +406,9 @@ pub fn contour(&self) -> &AnalyticBrushContour
 pub fn vertices(&self) -> &[[f32; 2]]
 pub fn edge_geometries(&self) -> &[ContourGeometry]
 pub fn compact_analytic_brush_contour(
+pub fn polygonal_contour(
 pub fn plan_region_merge(
+pub fn plan_region_merge_regions(
 
 // src/lib.rs
 pub enum BrushShape
@@ -401,6 +416,18 @@ pub struct PathBrushRequest
 pub enum PathBrushFailure
 pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
 pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
+
+// src/sweep.rs
+pub struct TransverseProfilePoint
+pub struct SweepFormationRequest
+pub enum SweepFormationFailure
+pub struct SweepFormationPlan
+pub fn reference_line(&self) -> &[[f32; 2]]
+pub fn vertices(&self) -> &[[f32; 3]]
+pub fn quads(&self) -> &[[usize; 4]]
+pub fn boundary(&self) -> &[usize]
+pub fn profile_len(&self) -> usize
+pub fn plan_sweep_formation(
 ```
 
 ### `terrain-generation` (`libs/domains/procgen/terrain-generation`)
@@ -2855,6 +2882,36 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
+// .next/types/cache-life.d.ts
+export function cacheLife(profile: "default"): void
+export function cacheLife(profile: "seconds"): void
+export function cacheLife(profile: "minutes"): void
+export function cacheLife(profile: "hours"): void
+export function cacheLife(profile: "days"): void
+export function cacheLife(profile: "weeks"): void
+export function cacheLife(profile: "max"): void
+export function cacheLife(profile: {
+  /**
+  * This cache may be stale on clients for ... seconds before checking with the server.
+  */
+  stale?: number,
+  /**
+  * If the server receives a new request after ... seconds, start revalidating new values in the background.
+  */
+export const unstable_cacheTag: typeof cacheTag
+export const unstable_cacheLife: typeof cacheLife
+
+// .next/types/routes.d.ts
+export type ParamsOf<Route extends Routes> = ParamMap[Route]
+export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
+
+  declare global {
+  /**
+  * Props for Next.js App Router page components
+  * @example
+  * ```tsx
+  * export default function Page(props: PageProps<'/blog/[slug]'>) {
+
 // src/adapters/construction/construction-session-wasm-adapter.ts
 export function createConstructionSessionAdapter(): ConstructionSessionPort {
   return new ConstructionSessionWasmAdapter();
@@ -3269,6 +3326,21 @@ export const pathBrushTool = createBrushTool<"path-brush">({
 
   applyRegion(region, ctx, params) {
   const sequence = ctx.nextSequence();
+
+// src/composition/tabletop/tools/paths/path-patch.ts
+export interface PathPatchFormation {
+  readonly patch: ConstructionPatch;
+  readonly outline: readonly (readonly [number, number])[];
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  /** Clean navigation reference retained independently from render cells. */
+  readonly referenceLine: readonly (readonly [number, number])[];
+  }
+export function pathPatch(
+  operationId: string,
+  surfaceType: string,
+  plan: ConstructionSweepPlan,
+  ): PathPatchFormation {
+  const nodeIds = plan.vertices.map((_vertex, index) => `${operationId}:path-node:${index}`);
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -3890,9 +3962,9 @@ export type {
   BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
+  PathKind,
   PathBrushParams,
   NoToolParams,
-  OpeningParams,
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
@@ -3901,6 +3973,7 @@ export type {
   BrushShape,
   PathBrushEffect,
   PathFormationParameters,
+export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type {
@@ -3911,6 +3984,26 @@ export type {
   EditRole,
   ResolvedCoverage,
   RolePolicy,
+
+// src/features/edit-construction/path-recipe.ts
+export interface PathProfilePoint {
+  readonly lateralOffset: number;
+  readonly elevation: number;
+  }
+export interface PathFormationRecipe {
+  readonly kind: PathKind;
+  readonly profile: readonly PathProfilePoint[];
+  readonly maxSegmentLength: number;
+  readonly miterLimit: number;
+  }
+export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
+  const halfBed = params.bedWidth / 2;
+  const outer = halfBed + params.shoulderWidth;
+  const profile = params.pathKind === "street"
+  ? [{ lateralOffset: -halfBed, elevation: 0 }, { lateralOffset: halfBed, elevation: 0 }]
+  : [
+  { lateralOffset: -outer, elevation: params.shoulderHeight },
+  { lateralOffset: -halfBed, elevation: 0 },
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =
@@ -3989,7 +4082,6 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
   if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 export function pathInteractionOver(coveredType: string): CreationInteraction {
-  if (coveredType === "path") return IGNORE;
   return CUT;
   }
 
@@ -4073,12 +4165,7 @@ export type BrushShape =
 export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
   }
-export interface PathFormationParameters {
-  readonly width: number;
-  readonly depth: number;
-  readonly falloff: number;
-  readonly strength: number;
-  }
+export type PathFormationParameters = PathFormationRecipe;
 export interface SurfaceEditModeDefinition {
   readonly id: string;
   readonly sourceSurfaceType: string;
@@ -4106,11 +4193,6 @@ export function createPathBrushEffect(
 export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
 export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
   return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
-export const PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[] = Object.freeze(
-  SURFACE_EDIT_MODE_DEFINITIONS.filter((definition) =>
-  definition.effectKinds.includes(PATH_BRUSH_EFFECT_KIND),
-  ).map((definition) => definition.sourceSurfaceType),
-  );
 
 // src/features/edit-construction/tool-types.ts
 export type ConstructionToolId =
@@ -4124,8 +4206,14 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
-  readonly depth: number;
-  }
+  /** Product recipe; every variant still creates the single `path` surface type. */
+  readonly pathKind: PathKind;
+  /** Width of the flat traversable bed, in world units. */
+  readonly bedWidth: number;
+  /** Width of each optional raised shoulder, in world units. */
+  readonly shoulderWidth: number;
+  /** Non-negative shoulder elevation above the path bed. */
+export type PathKind = "trail" | "street" | "road";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** Length of a panel's own vertical edge, in world units. */
@@ -4177,14 +4265,6 @@ export interface ToolParamsByTool {
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
-export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
-  navigate: Object.freeze({}),
-  "edit-region": Object.freeze({}),
-  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
-  "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
-  "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
-  "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {
@@ -4343,12 +4423,12 @@ export type {
 export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
-  ApplyPathBrushOutcome,
-  ApplyPathBrushRequest,
+  ApplyRegionOverlayRequest,
   CellCoordinate,
   CloudOutcome,
   CloudRequest,
-  ConstructionBrushShape,
+  ConstructionCoverageKind,
+  ConstructionCoveredRegion,
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";

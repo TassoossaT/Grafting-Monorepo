@@ -397,8 +397,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Applies a resolved sequence of atomic edit ops as one transaction, then
@@ -409,6 +407,8 @@ Policy resolution deliberately happens *before* this call, in
 `features/edit-construction`: this method never asks what a wall allows,
 it only performs what was already decided -- see
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -479,6 +479,8 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
@@ -520,8 +522,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Applies a resolved sequence of atomic edit ops as one transaction --
@@ -529,6 +529,8 @@ what `planEdit` produced from the user's gesture and the grabbed role's
 own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -598,6 +600,8 @@ position it wants (an undo/redo stack replaying a drag), skipping the
 policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
@@ -1110,16 +1114,30 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-Path-brush's own effect: the brush hands it a region, it decides that
-means "form a path here" and calls the analytic Rust plan for the whole
-region -- once, on commit, never incrementally. Preview is the plain
-generic swept-region outline every brush tool gets (no custom
-`previewRegion`) -- a path is a structure like any other, not a special
-case that needs to inspect what's underneath before it can even be
-drawn. What surface type ends up under the brush is something `applyRegion`
-(and the Rust plan it calls) sorts out at commit time, the same way
-terrain generation already does, not something the preview needs to
-pre-validate.
+Path creation follows the same ownership split as walls: this tool chooses
+the product recipe and interactions, `pathPatch` declares its graph, and
+Rust only supplies reusable geometry and executes the resolved overlay.
+
+### `interface vtt.path-patch.PathPatchFormation`
+
+Application-owned graph declaration for one generic sweep result.
+
+### `property vtt.path-patch.PathPatchFormation.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+### `property vtt.path-patch.PathPatchFormation.outline: readonly (readonly [number, number])[]`
+
+### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
+
+### `property vtt.path-patch.PathPatchFormation.referenceLine: readonly (readonly [number, number])[]`
+
+Clean navigation reference retained independently from render cells.
+
+### `function vtt.path-patch.pathPatch(operationId: string, surfaceType: string, plan: ConstructionSweepPlan): PathPatchFormation`
+
+Converts graph-neutral Rust geometry into the exact nodes, shared edges,
+and faces the construction graph must register. This mirrors `wallPatch`:
+the application defines what the product is; Rust only validates and
+executes the resulting patch.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -2069,15 +2087,21 @@ for it now.
 
 ### `reference vtt.edit-construction.PANEL_ROLES`
 
-### `reference vtt.edit-construction.PATH_BRUSH_SOURCE_SURFACE_TYPES`
-
 ### `reference vtt.edit-construction.PathBrushEffect`
 
 ### `reference vtt.edit-construction.PathBrushHistoryEntry`
 
 ### `reference vtt.edit-construction.PathBrushParams`
 
+### `reference vtt.edit-construction.pathFormationFor`
+
 ### `reference vtt.edit-construction.PathFormationParameters`
+
+### `reference vtt.edit-construction.PathFormationRecipe`
+
+### `reference vtt.edit-construction.PathKind`
+
+### `reference vtt.edit-construction.PathProfilePoint`
 
 ### `reference vtt.edit-construction.planEdit`
 
@@ -2296,6 +2320,33 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `interface vtt.path-recipe.PathFormationRecipe`
+
+Product recipe forwarded unchanged to the construction-session boundary.
+
+### `property vtt.path-recipe.PathFormationRecipe.kind: PathKind`
+
+### `property vtt.path-recipe.PathFormationRecipe.maxSegmentLength: number`
+
+### `property vtt.path-recipe.PathFormationRecipe.miterLimit: number`
+
+### `property vtt.path-recipe.PathFormationRecipe.profile: readonly PathProfilePoint[]`
+
+### `interface vtt.path-recipe.PathProfilePoint`
+
+One VTT-owned sample of the cross-section the generic Rust sweep executes.
+
+### `property vtt.path-recipe.PathProfilePoint.elevation: number`
+
+### `property vtt.path-recipe.PathProfilePoint.lateralOffset: number`
+
+### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
+
+Resolves the VTT's named path recipe without constructing any mesh or graph.
+
+`street` is a flat bed, while `road` and `trail` carry a non-negative U
+profile. The Rust sweep owns all sampling, frames, vertices, and quads.
+
 ### `interface vtt.structure-types.ResolvedCoverage`
 
 One covered region, paired with what the painted type wants to do about it.
@@ -2442,8 +2493,9 @@ A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
 wall the same cut reads as an opening through it.
 
-Over another path there is nothing to carve -- the ground is already path
--- so the two simply coexist rather than one consuming the other.
+Over another path the two formations become one connected path surface:
+the same cut-and-refill flow consumes the overlap instead of leaving
+coincident path geometry behind.
 
 ### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
 
@@ -2622,25 +2674,13 @@ One semantic path-paint intent. It contains no graph mutations.
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.operationId: string`
 
-### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationParameters`
+### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationRecipe`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.tableId: string`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.targetScope: "brush-region"`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.targetType: "path"`
-
-### `interface vtt.surface-edit-contract.PathFormationParameters`
-
-Parameters for the initial shallow path formation.
-
-### `property vtt.surface-edit-contract.PathFormationParameters.depth: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.falloff: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.strength: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.width: number`
 
 ### `interface vtt.surface-edit-contract.RevisionPrecondition`
 
@@ -2678,6 +2718,10 @@ App-owned metadata for a mode, without renderer or Rust types.
 
 A renderer-neutral external brush footprint.
 
+### `type vtt.surface-edit-contract.PathFormationParameters = PathFormationRecipe`
+
+VTT-selected profile for a generic path-sweep formation.
+
 ### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
 
 A product-owned scope supported by a surface edit mode.
@@ -2686,10 +2730,6 @@ A product-owned scope supported by a surface edit mode.
 
 Creates one immutable effect for a future release-to-confirm boundary.
 It deliberately does not resolve geometry or mutate graph topology.
-
-### `variable vtt.surface-edit-mode-registry.PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[]`
-
-Source policy consumed by the path transformer; derived once from the mode registry.
 
 ### `variable vtt.surface-edit-mode-registry.SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[]`
 
@@ -2767,7 +2807,21 @@ How wide, measured along the wall rather than across the ground -- a curved wall
 
 ### `interface vtt.tool-types.PathBrushParams`
 
-### `property vtt.tool-types.PathBrushParams.depth: number`
+### `property vtt.tool-types.PathBrushParams.bedWidth: number`
+
+Width of the flat traversable bed, in world units.
+
+### `property vtt.tool-types.PathBrushParams.maxSegmentLength: number`
+
+Longest station spacing sent to the authoritative sweep generator.
+
+### `property vtt.tool-types.PathBrushParams.miterLimit: number`
+
+Maximum corner extension, in multiples of the local half width.
+
+### `property vtt.tool-types.PathBrushParams.pathKind: PathKind`
+
+Product recipe; every variant still creates the single `path` surface type.
 
 ### `property vtt.tool-types.PathBrushParams.radius: number`
 
@@ -2780,6 +2834,14 @@ Rotation around world Y; ignored by circles.
 ### `property vtt.tool-types.PathBrushParams.shape: BrushShapeKind`
 
 Convex footprint shared by terrain and path brushes.
+
+### `property vtt.tool-types.PathBrushParams.shoulderHeight: number`
+
+Non-negative shoulder elevation above the path bed.
+
+### `property vtt.tool-types.PathBrushParams.shoulderWidth: number`
+
+Width of each optional raised shoulder, in world units.
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -2907,6 +2969,10 @@ pointer/render logic -- that lives in `composition/tabletop/tools/`
 PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
+
+### `type vtt.tool-types.PathKind = "trail" | "street" | "road"`
+
+Visual/formation recipe for the one generic `path` surface type.
 
 ### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 
@@ -3050,9 +3116,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.AffectedSurfaces`
 
-### `reference vtt.ports.ApplyPathBrushOutcome`
-
-### `reference vtt.ports.ApplyPathBrushRequest`
+### `reference vtt.ports.ApplyRegionOverlayRequest`
 
 ### `reference vtt.ports.CameraControlHandle`
 
@@ -3075,8 +3139,6 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.ConfirmedSurfacePickRenderChange`
 
 ### `reference vtt.ports.ConfirmedTokenRenderChange`
-
-### `reference vtt.ports.ConstructionBrushShape`
 
 ### `reference vtt.ports.ConstructionCoverageKind`
 
@@ -3111,6 +3173,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.ConstructionSurfaceKey`
 
 ### `reference vtt.ports.ConstructionSurfaceSpec`
+
+### `reference vtt.ports.ConstructionSweepParameters`
+
+### `reference vtt.ports.ConstructionSweepPlan`
 
 ### `reference vtt.ports.ConstructionUnfilledLoop`
 
@@ -3160,33 +3226,19 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
-### `interface vtt.construction-session-port.ApplyPathBrushOutcome`
+### `interface vtt.construction-session-port.ApplyRegionOverlayRequest`
 
-Result of one atomic terrain-to-path transformation.
+One generic overlay whose geometry and affected regions were resolved by the application.
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.edgeIds: TransformationIdentityDelta<string>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.boundary: readonly ConstructionOrientedEdgeUse[]`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.invalidation: SurfaceTransformationInvalidation`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.operationId: string`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.nodeIds: TransformationIdentityDelta<string>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.outline: readonly (readonly [number, number])[]`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.surfaceIds: TransformationIdentityDelta<ConstructionSurfaceKey>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.patch: ConstructionPatch`
 
-### `interface vtt.construction-session-port.ApplyPathBrushRequest`
-
-One resolved continuous convex terrain-to-path brush request.
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.brushShape: ConstructionBrushShape`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.depth: number`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.operationId: string`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.samples: readonly ConstructionPosition[]`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.sourceSurfaceTypes: readonly string[]`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.targetSurfaceType: string`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
 ### `interface vtt.construction-session-port.CellCoordinate`
 
@@ -3394,9 +3446,9 @@ Nodes, edges, and regions already present are skipped, not rejected: a
 stroke overlapping an earlier one re-declares what they share, and that
 must not mint a second copy.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
+### `method vtt.construction-session-port.ConstructionSessionPort.applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome`
 
-Applies one resolved terrain-to-path brush atomically through the domain transformer.
+Atomically overlays an application-generated patch onto exact source regions.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
 
@@ -3493,9 +3545,11 @@ Moves every node on a region's boundary, holes included.
 
 Moves one boundary node to an absolute position.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.redoPathBrush(operationId: string): void`
+### `method vtt.construction-session-port.ConstructionSessionPort.planSweepFormation(request: { parameters: ConstructionSweepParameters; referenceLine: readonly ConstructionPosition[] }): ConstructionSweepPlan`
 
-Restores the confirmed state immediately after that undone path-brush operation.
+Executes only the generic sweep geometry algorithm; never mutates the graph.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
 
@@ -3521,9 +3575,7 @@ import("./scene-render-port.ts").SceneRenderPort's own
 `start`/`dispose` lifecycle so a composition root awaits both the same
 way.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.undoPathBrush(operationId: string): void`
-
-Restores the confirmed state immediately before that path-brush operation.
+### `method vtt.construction-session-port.ConstructionSessionPort.undoRegionOverlay(operationId: string): void`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceSpec`
 
@@ -3532,6 +3584,28 @@ Restores the confirmed state immediately before that path-brush operation.
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.physical: boolean`
 
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.surfaceType: string`
+
+### `interface vtt.construction-session-port.ConstructionSweepParameters`
+
+Declarative cross-section consumed by the generic Rust sweep.
+
+### `property vtt.construction-session-port.ConstructionSweepParameters.maxSegmentLength: number`
+
+### `property vtt.construction-session-port.ConstructionSweepParameters.miterLimit: number`
+
+### `property vtt.construction-session-port.ConstructionSweepParameters.profile: readonly { elevation: number; lateralOffset: number }[]`
+
+### `interface vtt.construction-session-port.ConstructionSweepPlan`
+
+Graph-neutral result of a reusable Rust profile sweep.
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.boundary: readonly number[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.quads: readonly (readonly [number, number, number, number])[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.referenceLine: readonly (readonly [number, number])[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.vertices: readonly ConstructionPosition[]`
 
 ### `interface vtt.construction-session-port.ConstructionUnfilledLoop`
 
@@ -3660,10 +3734,6 @@ Identity lifecycle emitted by an atomic surface transformation.
 ### `property vtt.construction-session-port.TransformationIdentityDelta.removed: readonly TIdentity[]`
 
 ### `property vtt.construction-session-port.TransformationIdentityDelta.replaced: readonly TIdentity[]`
-
-### `type vtt.construction-session-port.ConstructionBrushShape = { kind: "circle"; radius: number } | { kind: "square"; rotationRadians: number; size: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
-
-Renderer-neutral convex brush shape accepted by authoritative Rust brush queries.
 
 ### `type vtt.construction-session-port.ConstructionCoverageKind = "centroid" | "overlap"`
 

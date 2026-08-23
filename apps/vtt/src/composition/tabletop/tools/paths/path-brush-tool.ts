@@ -10,6 +10,7 @@ import type { PathBrushEffect, PathBrushParams } from "@/features/edit-construct
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { BrushRegion } from "../core/brush-tool.ts";
 import { createBrushTool } from "../core/brush-tool.ts";
+import { pathPatch } from "./path-patch.ts";
 
 const PATH_PREVIEW_COLOR = 0xc084fc;
 
@@ -25,16 +26,9 @@ function effectFor(ctx: ToolContext, region: BrushRegion, params: PathBrushParam
 }
 
 /**
- * Path-brush's own effect: the brush hands it a region, it decides that
- * means "form a path here" and calls the analytic Rust plan for the whole
- * region -- once, on commit, never incrementally. Preview is the plain
- * generic swept-region outline every brush tool gets (no custom
- * `previewRegion`) -- a path is a structure like any other, not a special
- * case that needs to inspect what's underneath before it can even be
- * drawn. What surface type ends up under the brush is something `applyRegion`
- * (and the Rust plan it calls) sorts out at commit time, the same way
- * terrain generation already does, not something the preview needs to
- * pre-validate.
+ * Path creation follows the same ownership split as walls: this tool chooses
+ * the product recipe and interactions, `pathPatch` declares its graph, and
+ * Rust only supplies reusable geometry and executes the resolved overlay.
  */
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
@@ -45,28 +39,36 @@ export const pathBrushTool = createBrushTool<"path-brush">({
     const sequence = ctx.nextSequence();
     const effect = effectFor(ctx, region, params, scopedToolId(ctx, "path-brush", sequence));
     try {
-      const outline = ctx.runtime.getPathFormationOutline(effect);
-      const resolved = resolveCoverage(effect.targetType, ctx.runtime.getFootprintCoverage(outline));
+      const formation = pathPatch(effect.operationId, effect.targetType, ctx.runtime.planPathFormation(effect));
+      const resolved = resolveCoverage(effect.targetType, ctx.runtime.getFootprintCoverage(formation.outline));
       const refusal = firstRefusal(resolved);
       if (refusal !== undefined) {
         ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
         return;
       }
-      const sourceSurfaceTypes = [...new Set(
-        resolved
-          .filter((entry) => entry.interaction.kind === "cut")
-          .map((entry) => entry.covered.surfaceType),
-      )];
-      const outcome = ctx.runtime.applyPathBrush(effect, sourceSurfaceTypes, "local");
-      const changedSurfaceCount = outcome.surfaceIds.created.length + outcome.surfaceIds.replaced.length;
-      if (changedSurfaceCount === 0 && outcome.surfaceIds.removed.length === 0) {
+      const sourceSurfaceKeys = resolved
+        .filter((entry) => entry.interaction.kind === "cut")
+        .map((entry) => entry.covered.surfaceKey);
+      const outcome = ctx.runtime.applyRegionOverlay(
+        {
+          operationId: effect.operationId,
+          sourceSurfaceKeys,
+          outline: formation.outline,
+          boundary: formation.boundary,
+          patch: formation.patch,
+        },
+        "local",
+        effect.operationId,
+      );
+      const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
+      if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
         ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
         return;
       }
       ctx.history.record({ kind: "path-brush", operationId: effect.operationId });
       ctx.reportFeedback({
         tone: "success",
-        message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas, ${outcome.nodeIds.created.length} nós novos e ${outcome.nodeIds.replaced.length} atualizados.`,
+        message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

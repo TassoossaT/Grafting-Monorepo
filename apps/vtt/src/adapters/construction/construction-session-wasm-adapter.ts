@@ -10,8 +10,7 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
-  ApplyPathBrushOutcome,
-  ApplyPathBrushRequest,
+  ApplyRegionOverlayRequest,
   CloudOutcome,
   CloudRequest,
   ConstructionCoverageKind,
@@ -26,6 +25,8 @@ import type {
   ConstructionRegionTopology,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
+  ConstructionSweepPlan,
+  ConstructionSweepParameters,
   ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateRegionPartitionRequest,
@@ -278,18 +279,25 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }));
   }
 
-  getPathFormationOutline(request: {
-    readonly samples: readonly ConstructionPosition[];
-    readonly formation: ApplyPathBrushRequest["formation"];
-  }): readonly (readonly [number, number])[] {
+  planSweepFormation(request: {
+    readonly referenceLine: readonly ConstructionPosition[];
+    readonly parameters: ConstructionSweepParameters;
+  }): ConstructionSweepPlan {
     const session = this.#require() as ConstructionSession & {
-      path_formation_outline_json(requestJson: string): string;
+      plan_sweep_json(requestJson: string): string;
     };
-    const response = JSON.parse(session.path_formation_outline_json(JSON.stringify({
-      samples: request.samples.map((sample) => [sample.x, sample.z]),
-      formation: request.formation,
-    }))) as { readonly outline: readonly (readonly [number, number])[] };
-    return response.outline;
+    const response = JSON.parse(session.plan_sweep_json(JSON.stringify({
+      referenceLine: request.referenceLine.map((sample) => [sample.x, sample.z]),
+      profile: request.parameters.profile,
+      maxSegmentLength: request.parameters.maxSegmentLength,
+      miterLimit: request.parameters.miterLimit,
+    }))) as {
+      readonly referenceLine: readonly (readonly [number, number])[];
+      readonly vertices: readonly WirePosition[];
+      readonly quads: readonly (readonly [number, number, number, number])[];
+      readonly boundary: readonly number[];
+    };
+    return { ...response, vertices: response.vertices.map(fromWirePosition) };
   }
 
   duplicateRegion(request: {
@@ -331,30 +339,33 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return fromWireOutcome(JSON.parse(responseJson) as RegionEditOutcomeWire);
   }
 
-  applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome {
-    const wire = {
-      operationId: request.operationId,
-      samples: request.samples.map((sample) => [sample.x, sample.z]),
-      brushShape: request.brushShape,
-      depth: request.depth,
-      formation: request.formation,
-      sourceSurfaceTypes: request.sourceSurfaceTypes,
-      targetSurfaceType: request.targetSurfaceType,
-    };
+  applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome {
     const session = this.#require() as ConstructionSession & {
-      apply_path_brush_json(requestJson: string): string;
+      apply_region_overlay_json(requestJson: string): string;
     };
-    return this.#pathBrushOutcome(session.apply_path_brush_json(JSON.stringify(wire)));
+    const patch = {
+      nodes: request.patch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
+      edges: request.patch.edges,
+      regions: request.patch.regions,
+    };
+    const wire = JSON.parse(session.apply_region_overlay_json(JSON.stringify({
+      operationId: request.operationId,
+      sourceSurfaceKeys: request.sourceSurfaceKeys,
+      outline: request.outline,
+      boundary: request.boundary,
+      patch,
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
   }
 
-  undoPathBrush(operationId: string): void {
-    const session = this.#require() as ConstructionSession & { undo_path_brush(operationId: string): void };
-    session.undo_path_brush(operationId);
+  undoRegionOverlay(operationId: string): void {
+    const session = this.#require() as ConstructionSession & { undo_region_overlay(id: string): void };
+    session.undo_region_overlay(operationId);
   }
 
-  redoPathBrush(operationId: string): void {
-    const session = this.#require() as ConstructionSession & { redo_path_brush(operationId: string): void };
-    session.redo_path_brush(operationId);
+  redoRegionOverlay(operationId: string): void {
+    const session = this.#require() as ConstructionSession & { redo_region_overlay(id: string): void };
+    session.redo_region_overlay(operationId);
   }
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome {
     const wire = {
@@ -384,10 +395,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return { surfaceKeys: response.surfaceKeys };
   }
 
-  #pathBrushOutcome(responseJson: string): ApplyPathBrushOutcome {
-    const response = JSON.parse(responseJson) as ApplyPathBrushOutcome;
-    return response;
-  }
 
   #diffOutcome(responseJson: string): DiffOutcome {
     const response = JSON.parse(responseJson) as {

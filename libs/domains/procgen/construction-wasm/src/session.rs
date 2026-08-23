@@ -19,8 +19,11 @@ use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
+#[cfg(test)]
 use crate::path_brush;
 use crate::region_editing;
+use crate::region_overlay;
+use crate::sweep_bridge;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -44,7 +47,7 @@ struct ConstructionState {
     known_regions: HashSet<RegionId>,
 }
 
-struct PathBrushHistoryEntry {
+struct RegionOverlayHistoryEntry {
     operation_id: String,
     before: ConstructionState,
     after: ConstructionState,
@@ -59,8 +62,8 @@ pub struct ConstructionSession {
     surfaces: SurfaceRegistry,
     topology: ContourTopology,
     known_regions: HashSet<RegionId>,
-    path_brush_undo: Vec<PathBrushHistoryEntry>,
-    path_brush_redo: Vec<PathBrushHistoryEntry>,
+    region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
+    region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
 }
 
 impl Default for ConstructionSession {
@@ -81,8 +84,8 @@ impl ConstructionSession {
             surfaces: SurfaceRegistry::new(),
             topology: ContourTopology::new(),
             known_regions: HashSet::new(),
-            path_brush_undo: Vec::new(),
-            path_brush_redo: Vec::new(),
+            region_overlay_undo: Vec::new(),
+            region_overlay_redo: Vec::new(),
         }
     }
 
@@ -297,9 +300,17 @@ impl ConstructionSession {
 
     /// Returns the exact XZ rim of a profile sweep without mutating session
     /// state, so the application can resolve creation interactions first.
+    #[cfg(test)]
     pub fn path_formation_outline_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: path_brush::PathFormationOutlineRequest = parse(request_json)?;
         let response = path_brush::path_formation_outline(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// Runs the graph-neutral sweep planner without mutating session state.
+    pub fn plan_sweep_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: sweep_bridge::PlanSweepRequest = parse(request_json)?;
+        let response = sweep_bridge::plan_sweep(request).map_err(to_js_error)?;
         serialize(&response)
     }
 
@@ -310,6 +321,7 @@ impl ConstructionSession {
     /// Applies one validated terrain-to-path brush operation. The session only
     /// forwards the resolved request to the domain transformer and publishes
     /// its already-atomic replacement plan.
+    #[cfg(test)]
     pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
@@ -333,55 +345,98 @@ impl ConstructionSession {
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
         };
-        self.path_brush_undo.push(PathBrushHistoryEntry {
+        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
             before,
             after,
         });
-        self.path_brush_redo.clear();
+        self.region_overlay_redo.clear();
         serialize(&response)
     }
 
-    /// Restores the state immediately before the latest matching path-brush operation.
-    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.path_brush_undo.pop() else {
-            return Err(JsValue::from_str(
-                "no path brush operation is available to undo",
-            ));
+    /// Applies an application-generated patch over an exact, already-resolved
+    /// set of source regions. Geometry and product policy are caller-owned;
+    /// this method only executes the generic overlay atomically.
+    pub fn apply_region_overlay_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request: region_overlay::ApplyRegionOverlayRequest = parse(request_json)?;
+        let operation_id = request.operation_id.clone();
+        let before = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        let response = region_overlay::apply_region_overlay(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            &mut self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
+        let after = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
+            operation_id,
+            before,
+            after,
+        });
+        self.region_overlay_redo.clear();
+        serialize(&response)
+    }
+
+    /// Restores the state immediately before one generic overlay.
+    pub fn undo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.region_overlay_undo.pop() else {
+            return Err(JsValue::from_str("no region overlay is available to undo"));
         };
         if entry.operation_id != operation_id {
-            self.path_brush_undo.push(entry);
+            self.region_overlay_undo.push(entry);
             return Err(JsValue::from_str(
-                "path brush undo order does not match session history",
+                "region overlay undo order does not match session history",
             ));
         }
         self.graph = entry.before.graph.clone();
         self.surfaces = entry.before.surfaces.clone();
         self.topology = entry.before.topology.clone();
         self.known_regions = entry.before.known_regions.clone();
-        self.path_brush_redo.push(entry);
+        self.region_overlay_redo.push(entry);
         Ok(())
     }
 
-    /// Restores the state immediately after the latest matching undone path-brush operation.
-    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.path_brush_redo.pop() else {
-            return Err(JsValue::from_str(
-                "no path brush operation is available to redo",
-            ));
+    /// Restores the state immediately after one undone generic overlay.
+    pub fn redo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.region_overlay_redo.pop() else {
+            return Err(JsValue::from_str("no region overlay is available to redo"));
         };
         if entry.operation_id != operation_id {
-            self.path_brush_redo.push(entry);
+            self.region_overlay_redo.push(entry);
             return Err(JsValue::from_str(
-                "path brush redo order does not match session history",
+                "region overlay redo order does not match session history",
             ));
         }
         self.graph = entry.after.graph.clone();
         self.surfaces = entry.after.surfaces.clone();
         self.topology = entry.after.topology.clone();
         self.known_regions = entry.after.known_regions.clone();
-        self.path_brush_undo.push(entry);
+        self.region_overlay_undo.push(entry);
         Ok(())
+    }
+
+    /// Test-only compatibility for the pre-refactor path-brush fixtures.
+    #[cfg(test)]
+    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        self.undo_region_overlay(operation_id)
+    }
+
+    /// Test-only compatibility for the pre-refactor path-brush fixtures.
+    #[cfg(test)]
+    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        self.redo_region_overlay(operation_id)
     }
     /// Regenerates a painted cell set's whole region partition (every
     /// region's own per-cell floor/ceiling, and a wall -- notched where a
@@ -603,6 +658,94 @@ mod tests {
         session
             .add_patch_json(&request.to_string())
             .expect("terrain patch registers");
+    }
+
+    #[test]
+    fn application_generated_patch_is_overlaid_without_a_provisional_target() {
+        let mut session = ConstructionSession::new();
+        terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+        let source = region_id_to_wire(session.known_regions.iter().next().unwrap());
+        let request = serde_json::json!({
+            "operationId": "generic-overlay",
+            "sourceSurfaceKeys": [source],
+            "outline": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]],
+            "boundary": [
+                {"edgeId": "overlay-e0", "reversed": false},
+                {"edgeId": "overlay-e1", "reversed": false},
+                {"edgeId": "overlay-e2", "reversed": false},
+                {"edgeId": "overlay-e3", "reversed": false}
+            ],
+            "patch": {
+                "nodes": [
+                    {"id": "overlay-a", "position": [0.5, 0.0, 0.5]},
+                    {"id": "overlay-b", "position": [1.5, 0.0, 0.5]},
+                    {"id": "overlay-c", "position": [1.5, 0.0, 1.5]},
+                    {"id": "overlay-d", "position": [0.5, 0.0, 1.5]}
+                ],
+                "edges": [
+                    {"edgeId": "overlay-e0", "startNodeId": "overlay-a", "endNodeId": "overlay-b"},
+                    {"edgeId": "overlay-e1", "startNodeId": "overlay-b", "endNodeId": "overlay-c"},
+                    {"edgeId": "overlay-e2", "startNodeId": "overlay-c", "endNodeId": "overlay-d"},
+                    {"edgeId": "overlay-e3", "startNodeId": "overlay-d", "endNodeId": "overlay-a"}
+                ],
+                "regions": [{
+                    "regionId": "application-path-face",
+                    "boundary": [
+                        {"edgeId": "overlay-e0", "reversed": false},
+                        {"edgeId": "overlay-e1", "reversed": false},
+                        {"edgeId": "overlay-e2", "reversed": false},
+                        {"edgeId": "overlay-e3", "reversed": false}
+                    ],
+                    "surfaceType": "path",
+                    "physical": true
+                }]
+            }
+        });
+        let response = session
+            .apply_region_overlay_json(&request.to_string())
+            .expect("generic overlay applies");
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            response["outcome"]["createdSurfaceKeys"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            response["outcome"]["removedSurfaceKeys"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            response["outcome"]["createdSurfaceKeys"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|key| { !key[1].as_str().unwrap().contains("new") })
+        );
+        let meshes: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+        assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+
+        session
+            .undo_region_overlay("generic-overlay")
+            .expect("generic overlay undoes");
+        let undone: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert_eq!(undone.len(), 1);
+        assert_eq!(undone[0]["surfaceType"], "terrain");
+
+        session
+            .redo_region_overlay("generic-overlay")
+            .expect("generic overlay redoes");
+        let redone: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert!(redone.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+        assert!(redone.iter().any(|mesh| mesh["surfaceType"] == "path"));
     }
 
     #[wasm_bindgen_test]

@@ -47,7 +47,7 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   organicStructureType(
     "path",
     "Caminho",
-    "applyPathBrush's swept convex footprint",
+    "the subtype's application-generated sweep patch",
     "deny",
     pathInteractionOver,
   ),

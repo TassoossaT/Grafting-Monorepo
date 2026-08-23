@@ -15,7 +15,7 @@ import {
   type MapProjection,
 } from "../../entities/map/index.ts";
 import type {
-  ApplyPathBrushOutcome,
+  ApplyRegionOverlayRequest,
   CameraControlHandle,
   CameraControlOptions,
   ChangeOrigin,
@@ -33,6 +33,7 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
+  ConstructionSweepPlan,
   ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateRegionPartitionRequest,
@@ -126,18 +127,18 @@ export interface TabletopRuntime {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
-  getPathFormationOutline(effect: PathBrushEffect): readonly (readonly [number, number])[];
+  planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan;
   /** Which of `points` already sit inside a region -- per-point, for a generator building only over open ground. */
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
-  applyPathBrush(
-    effect: PathBrushEffect,
-    sourceSurfaceTypes: readonly string[],
+  applyRegionOverlay(
+    request: ApplyRegionOverlayRequest,
     origin: ChangeOrigin,
-  ): ApplyPathBrushOutcome;
+    causeId: string,
+  ): ConstructionPatchOutcome;
   undoPathBrush(operationId: string, origin: ChangeOrigin): void;
   redoPathBrush(operationId: string, origin: ChangeOrigin): void;
   /**
@@ -192,15 +193,6 @@ export interface TabletopRuntime {
   dispose(): Promise<void>;
 }
 
-function emptyPathBrushOutcome(): ApplyPathBrushOutcome {
-  const ids = { created: [], preserved: [], replaced: [], removed: [] } as const;
-  return {
-    nodeIds: ids,
-    edgeIds: ids,
-    surfaceIds: ids,
-    invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
-  };
-}
 function snapshot(
   tableId: string,
   status: TabletopRuntimeStatus,
@@ -753,11 +745,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getFootprintCoverage(polygon);
   }
 
-  getPathFormationOutline(effect: PathBrushEffect): readonly (readonly [number, number])[] {
+  planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan {
     this.#requireReady("planning a path formation");
-    return this.#construction.getPathFormationOutline({
-      samples: effect.brushRegion.samples,
-      formation: effect.parameters,
+    return this.#construction.planSweepFormation({
+      referenceLine: effect.brushRegion.samples,
+      parameters: effect.parameters,
     });
   }
 
@@ -801,36 +793,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  /** Folds one Phase-C path-brush transformation without deriving topology in TypeScript. */
-  #foldPathBrushOutcome(outcome: ApplyPathBrushOutcome, origin: ChangeOrigin, causeId: string): void {
-    const changed = new Map<string, ConstructionSurfaceKey>();
-    for (const surfaceKey of [
-      ...outcome.surfaceIds.created,
-      ...outcome.surfaceIds.preserved,
-      ...outcome.surfaceIds.replaced,
-      ...outcome.invalidation.changedSurfaces,
-      ...outcome.invalidation.topologyRepairNeighbors,
-      ...outcome.invalidation.directDependencies,
-    ]) {
-      changed.set(surfaceRefFromNodeSet(surfaceKey), surfaceKey);
-    }
-
-    const removedRefs = outcome.surfaceIds.removed.map(surfaceRefFromNodeSet);
-    this.#applyConstructionMutation([...changed.values()], removedRefs, origin, causeId, (map) => {
-      let next = map;
-      for (const surfaceRef of removedRefs) {
-        const previous = next.byId.get(surfaceRef);
-        if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
-      }
-      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-      for (const nodeId of outcome.nodeIds.removed) {
-        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
-        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
-      }
-      return next;
-    });
-  }
   /** Rebuilds projections after a session-owned semantic checkpoint restore -- the only place a full `getAllSurfaceMeshes()` re-derivation is still correct, since an undo/redo restore can touch an arbitrary, unenumerated set of surfaces. See {@link AppTabletopRuntime.#fullResyncSurfaces}. */
   #refreshConstructionProjection(origin: ChangeOrigin, causeId: string): void {
     const meshes = this.#construction.getAllSurfaceMeshes();
@@ -875,46 +837,25 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  applyPathBrush(
-    effect: PathBrushEffect,
-    sourceSurfaceTypes: readonly string[],
+  applyRegionOverlay(
+    request: ApplyRegionOverlayRequest,
     origin: ChangeOrigin,
-  ): ApplyPathBrushOutcome {
-    this.#requireReady("applying a path brush");
-    if (effect.brushRegion.samples.length === 0) {
-      throw new Error("a confirmed path brush stroke requires at least one sample");
-    }
-    const request = {
-      operationId: effect.operationId,
-      samples: effect.brushRegion.samples,
-      brushShape: effect.brushShape,
-      // Kept on the wire for legacy single-point brush requests; profile
-      // sweeps derive their complete height field from `formation`.
-      depth: 0.1,
-      formation: effect.parameters,
-      targetSurfaceType: effect.targetType,
-      sourceSurfaceTypes,
-    };
-    let outcome: ApplyPathBrushOutcome;
-    try {
-      outcome = this.#construction.applyPathBrush(request);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("produced no semantic change")) throw error;
-      return emptyPathBrushOutcome();
-    }
-    this.#foldPathBrushOutcome(outcome, origin, effect.operationId);
+    causeId: string,
+  ): ConstructionPatchOutcome {
+    this.#requireReady("applying a region overlay");
+    const outcome = this.#construction.applyRegionOverlay(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
     return outcome;
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
     this.#requireReady("undoing a path brush");
-    this.#construction.undoPathBrush(operationId);
+    this.#construction.undoRegionOverlay(operationId);
     this.#refreshConstructionProjection(origin, `undo:${operationId}`);
   }
 
   redoPathBrush(operationId: string, origin: ChangeOrigin): void {
     this.#requireReady("redoing a path brush");
-    this.#construction.redoPathBrush(operationId);
+    this.#construction.redoRegionOverlay(operationId);
     this.#refreshConstructionProjection(origin, `redo:${operationId}`);
   }
   generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {

@@ -227,37 +227,28 @@ export interface SurfaceTransformationInvalidation {
   readonly directDependencies: readonly ConstructionSurfaceKey[];
 }
 
-/** Renderer-neutral convex brush shape accepted by authoritative Rust brush queries. */
-export type ConstructionBrushShape =
-  | { readonly kind: "circle"; readonly radius: number }
-  | { readonly kind: "square"; readonly size: number; readonly rotationRadians: number }
-  | { readonly kind: "hexagon"; readonly radius: number; readonly rotationRadians: number };
-
 /** Declarative cross-section consumed by the generic Rust sweep. */
-export interface ConstructionPathFormation {
+export interface ConstructionSweepParameters {
   readonly profile: readonly { readonly lateralOffset: number; readonly elevation: number }[];
   readonly maxSegmentLength: number;
   readonly miterLimit: number;
 }
 
-/** One resolved continuous convex terrain-to-path brush request. */
-export interface ApplyPathBrushRequest {
-  readonly operationId: string;
-  readonly samples: readonly ConstructionPosition[];
-  readonly brushShape: ConstructionBrushShape;
-  readonly depth: number;
-  /** VTT-selected profile; Rust derives the sweep and its terrain-cut rim. */
-  readonly formation: ConstructionPathFormation;
-  readonly sourceSurfaceTypes: readonly string[];
-  readonly targetSurfaceType: string;
+/** Graph-neutral result of a reusable Rust profile sweep. */
+export interface ConstructionSweepPlan {
+  readonly referenceLine: readonly (readonly [number, number])[];
+  readonly vertices: readonly ConstructionPosition[];
+  readonly quads: readonly (readonly [number, number, number, number])[];
+  readonly boundary: readonly number[];
 }
 
-/** Result of one atomic terrain-to-path transformation. */
-export interface ApplyPathBrushOutcome {
-  readonly nodeIds: TransformationIdentityDelta<ConstructionNodeId>;
-  readonly edgeIds: TransformationIdentityDelta<ConstructionEdgeId>;
-  readonly surfaceIds: TransformationIdentityDelta<ConstructionSurfaceKey>;
-  readonly invalidation: SurfaceTransformationInvalidation;
+/** One generic overlay whose geometry and affected regions were resolved by the application. */
+export interface ApplyRegionOverlayRequest {
+  readonly operationId: string;
+  readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly outline: readonly (readonly [number, number])[];
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  readonly patch: ConstructionPatch;
 }
 
 /**
@@ -411,11 +402,11 @@ export interface ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
-  /** Exact XZ rim of the generic profile sweep; pure and read-only. */
-  getPathFormationOutline(request: {
-    readonly samples: readonly ConstructionPosition[];
-    readonly formation: ConstructionPathFormation;
-  }): readonly (readonly [number, number])[];
+  /** Executes only the generic sweep geometry algorithm; never mutates the graph. */
+  planSweepFormation(request: {
+    readonly referenceLine: readonly ConstructionPosition[];
+    readonly parameters: ConstructionSweepParameters;
+  }): ConstructionSweepPlan;
   /**
    * Which of `points` already sit inside a region -- the per-point form of
    * {@link getFootprintCoverage}, for a generator deciding face by face
@@ -441,12 +432,10 @@ export interface ConstructionSessionPort {
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
-  /** Applies one resolved terrain-to-path brush atomically through the domain transformer. */
-  applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome;
-  /** Restores the confirmed state immediately before that path-brush operation. */
-  undoPathBrush(operationId: string): void;
-  /** Restores the confirmed state immediately after that undone path-brush operation. */
-  redoPathBrush(operationId: string): void;
+  /** Atomically overlays an application-generated patch onto exact source regions. */
+  applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
+  undoRegionOverlay(operationId: string): void;
+  redoRegionOverlay(operationId: string): void;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
   /** Unregisters a surface outright -- no hole-repair, no cascading. */
   removeSurface(request: RemoveSurfaceRequest): void;

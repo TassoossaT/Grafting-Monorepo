@@ -34,6 +34,13 @@ Existing analytic regions the new contour destroys.
 
 The new region's own contour, unchanged from what the caller built.
 
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::boundary(&self) -> &[usize]`
+
+Ordered outer cycle of the complete formation, expressed as vertex indices.
+
+This is the exact rim a terrain replacement uses as its hole boundary;
+it never includes an interior strip edge.
+
 ### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::profile_len(&self) -> usize`
 
 Number of profile vertices in every transverse station.
@@ -90,6 +97,16 @@ of the new remainder. A stroke that fully re-covers a multi-generation
 hole "heals" it instead of preserving it. Narrower than the total
 invisibility this replaces, but not a complete fix.
 
+### `pub fn grafting_procgen_surface_transformations::plan_region_merge_regions(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, topology: &grafting_graph_core::contour::ContourTopology, contour: grafting_procgen_surface_transformations::AnalyticBrushContour, is_eligible: impl core::ops::function::Fn(&grafting_graph_core::contour::RegionId, &grafting_graph_core::surface::SurfaceType) -> bool) -> core::result::Result<grafting_procgen_surface_transformations::RegionMergePlan, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Plans a region overlay with eligibility resolved against exact region
+identities as well as semantic surface types.
+
+This is the application-orchestrated form of [`plan_region_merge`]: a
+caller first queries coverage and resolves product policy, then supplies
+the precise region set selected by that decision. Geometry remains in
+Rust; product policy does not.
+
 ### `pub fn grafting_procgen_surface_transformations::plan_sweep_formation(request: &grafting_procgen_surface_transformations::SweepFormationRequest) -> core::result::Result<grafting_procgen_surface_transformations::SweepFormationPlan, grafting_procgen_surface_transformations::SweepFormationFailure>`
 
 Samples a transverse profile along a reference line into connected quads.
@@ -98,6 +115,13 @@ The reference line is resampled by `max_segment_length`; this makes curves
 denser without introducing a global terrain grid. Outer boundaries and
 interior strips share the exact same vertex indices, so a caller can turn
 the plan into a manifold graph patch without welding coincident geometry.
+
+### `pub fn grafting_procgen_surface_transformations::polygonal_contour(vertices: alloc::vec::Vec<[f32; 2]>) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Creates a straight-edged contour from an already-normalized exterior loop.
+
+A profile sweep uses this for its exact outer rim before the generic
+region-merge planner decides which existing surfaces must be replaced.
 
 ### `pub fn grafting_procgen_surface_transformations::swept_brush_contains(shape: &grafting_procgen_surface_transformations::BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool`
 
@@ -257,9 +281,9 @@ analytic regions a new region's contour destroys, their cancelled
 exterior boundaries (what a leftover remainder region must carry as its
 own hole), and the contour itself.
 
-Nothing here is specific to any one tool. A path-brush stroke, a future
-wall opening, or anything else that overlays one new closed shape onto
-the current graph and destroys whatever it covers can reuse this
+Nothing here is specific to any one tool. Any application operation that
+overlays one new closed shape onto the current graph and replaces what
+it covers can reuse this
 unchanged -- see [`plan_region_merge`]. Consuming an existing *region*
 (not just a plain surface) matters as soon as more than one such
 overlay can happen in the same place: without it, a second stroke can

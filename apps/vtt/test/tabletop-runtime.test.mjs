@@ -176,23 +176,21 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
-    getPathFormationOutline() {
+    planSweepFormation() {
       requireStarted();
-      return [[0, 0], [1, 0], [1, 1], [0, 1]];
+      return { referenceLine: [], vertices: [], quads: [], boundary: [] };
     },
-    applyPathBrush() {
+    applyRegionOverlay() {
       requireStarted();
       return {
-        nodeIds: { created: [], preserved: [], replaced: [], removed: [] },
-        edgeIds: { created: [], preserved: [], replaced: [], removed: [] },
-        surfaceIds: { created: [], preserved: [], replaced: [], removed: [] },
-        invalidation: { changedSurfaces: [], topologyRepairNeighbors: [], directDependencies: [] },
+        ...emptyRegionEdit(),
+        skippedRegionIds: [],
       };
     },
-    undoPathBrush() {
+    undoRegionOverlay() {
       requireStarted();
     },
-    redoPathBrush() {
+    redoRegionOverlay() {
       requireStarted();
     },
     getSurfaceMesh(surfaceKey) {
@@ -585,7 +583,7 @@ test("addPatch folds every created surface into the map, with its own type and p
   assert.equal(map.byId.get(surfaceRef).physical, false);
 });
 
-test("applyPathBrush folds atomic surface and node deltas into the map", async () => {
+test("applyRegionOverlay folds generic surface and node deltas into the map", async () => {
   const constructionPort = createFakeConstructionPort();
   const runtime = createTabletopRuntime({
     tableId: "table-path-brush",
@@ -596,11 +594,13 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
   await runtime.start();
 
   const pathKey = ["fake:path:a", "fake:path:b", "fake:path:c"];
-  constructionPort.applyPathBrush = () => ({
-    nodeIds: { created: ["fake:path:a", "fake:path:b", "fake:path:c"], preserved: [], replaced: [], removed: [] },
-    edgeIds: { created: ["fake:path:e0"], preserved: [], replaced: [], removed: [] },
-    surfaceIds: { created: [pathKey], preserved: [], replaced: [], removed: [FAKE_TERRAIN_SURFACE_KEY] },
-    invalidation: { changedSurfaces: [pathKey], topologyRepairNeighbors: [], directDependencies: [] },
+  constructionPort.applyRegionOverlay = () => ({
+    affectedSurfaceKeys: [],
+    createdSurfaceKeys: [pathKey],
+    removedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
+    createdNodeIds: ["fake:path:a", "fake:path:b", "fake:path:c"],
+    removedNodeIds: [],
+    skippedRegionIds: [],
   });
   constructionPort.getAllSurfaceMeshes = () => [
     {
@@ -620,19 +620,13 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
     { id: "fake:path:c", position: { x: 0, y: -0.1, z: 1 } },
   ];
 
-  const outcome = runtime.applyPathBrush(
-    {
-      operationId: "path-brush-1",
-      targetType: "path",
-      brushShape: { kind: "circle", radius: 0.25 },
-      brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }] },
-      parameters: { kind: "street", profile: [{ lateralOffset: -0.25, elevation: 0 }, { lateralOffset: 0.25, elevation: 0 }], maxSegmentLength: 0.5, miterLimit: 4 },
-    },
-    ["terrain"],
+  const outcome = runtime.applyRegionOverlay(
+    { operationId: "path-brush-1", sourceSurfaceKeys: [], outline: [], boundary: [], patch: EMPTY_PATCH },
     "local",
+    "path-brush-1",
   );
 
-  assert.deepEqual(outcome.surfaceIds.created, [pathKey]);
+  assert.deepEqual(outcome.createdSurfaceKeys, [pathKey]);
   const map = runtime.getSnapshot().map;
   assert.equal(map.byId.has(surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY)), false);
   assert.equal(map.byId.get(surfaceRefFromNodeSet(pathKey)).type, "path");
