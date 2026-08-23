@@ -132,6 +132,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
    */
   const refreshEdgeOverlay = useCallback((): void => {
     const { runtime } = optionsRef.current;
+    // Nothing to read, and nothing to draw on, until the table is live. The
+    // mount effect below runs before the runtime finishes loading, and asking
+    // it for topologies then is an error rather than an empty answer.
+    if (runtime.getSnapshot().status !== "ready") return;
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime.getAllRegionTopologies())) {
@@ -144,9 +148,18 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
-  // began is exactly as worth seeing as one just drawn.
+  // began is exactly as worth seeing as one just drawn. The runtime is still
+  // loading at mount, so this waits for it rather than asking too early.
   useEffect(() => {
+    const { runtime } = optionsRef.current;
     refreshEdgeOverlay();
+    let drawn = runtime.getSnapshot().status === "ready";
+    const unsubscribe = runtime.subscribe(() => {
+      if (drawn || runtime.getSnapshot().status !== "ready") return;
+      drawn = true;
+      refreshEdgeOverlay();
+    });
+    return unsubscribe;
   }, [options.runtime, refreshEdgeOverlay]);
 
   const sampleAt = useCallback(
