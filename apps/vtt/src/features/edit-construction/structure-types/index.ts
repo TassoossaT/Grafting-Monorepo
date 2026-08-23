@@ -16,6 +16,13 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * the role table that shape implies -- the whole TS-owned half of
  * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
  *
+ * A definition here is a **cloud's** behaviour, not a face's: the type
+ * string a surface carries only selects which of these tables governs the
+ * cloud it belongs to (`construction-cloud.ts`). Every type declares the
+ * same three things, including how far each of its roles reaches -- there
+ * is no per-type escape from the rule, and a type that wants a different
+ * reach says so in its own role table rather than in a tool.
+ *
  * Types sharing a shape share a definition rather than restating one: every
  * upright panel (wall, tower, door jamb) is one type built by one builder --
  * a tower is a wall someone stamped a circle of, not a kind of its own --
@@ -148,6 +155,7 @@ export type {
   CascadeContext,
   EditResolution,
   EditRole,
+  EditScope,
   RolePolicy,
   StructureTypeDefinition,
 } from "./structure-type.ts";

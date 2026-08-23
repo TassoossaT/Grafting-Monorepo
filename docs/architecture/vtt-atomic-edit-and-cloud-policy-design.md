@@ -2,19 +2,24 @@
 
 - Status: **implemented** — this file's settled design is now built. It
   stays as the rationale record; the code is the contract.
-- Date: 2026-08-19 (discussion), implemented 2026-08-19
+- Date: 2026-08-19 (discussion), implemented 2026-08-19; moved onto
+  cloud-scoped dispatch 2026-08-22 (see "Settled 2026-08-22" below)
 - Where it lives now:
   - Rust primitives: `libs/graph/core/src/region_edit.rs`, over the
     `ContourTopology` mutation surface added in `contour.rs`.
   - Wire shape and region-topology query:
     `libs/domains/procgen/construction-wasm/src/region_editing.rs`.
+  - The cloud query: `libs/domains/procgen/construction-wasm/src/geometry.rs`'s
+    `connected_component`, exposed as `cloud_json`.
   - App boundary: `ConstructionSessionPort`'s atomic-vocabulary section.
+  - Cloud resolution:
+    `apps/vtt/src/features/edit-construction/construction-cloud.ts`.
   - Role tables per structure type:
     `apps/vtt/src/features/edit-construction/structure-types/`.
   - Gesture orchestration:
     `apps/vtt/src/features/edit-construction/edit-orchestrator.ts`.
   - The tool that drives it:
-    `apps/vtt/src/composition/tabletop/tools/edit-region-tool.ts`.
+    `apps/vtt/src/composition/tabletop/tools/core/edit-region-tool.ts`.
 - Two decisions this file left open were settled during implementation:
   the TS file layout (above), and the wire contract (one shared
   `RegionEditOutcome` for every op, plus `regionTopology` as the
@@ -189,6 +194,56 @@ tower) are where the rich per-role table actually pays off.
   bottom and top runs. Splitting was only ever a way to get nodes at the
   crossing point, which `InsertVertex` does directly and cannot
   desynchronize the panel's two runs.
+
+## Settled 2026-08-22 — the cloud is what a gesture edits
+
+This file's first implementation dispatched on one `SurfaceRegion`: the tool
+resolved the face under the pointer, and `planEdit` planned against that
+face alone. That was a gap against `ADR-0022`, not a decision — the ADR is
+explicit that "editing dispatches by cloud, not by individual surface," and
+`cloudFor` had been plumbed end to end (`geometry.rs::connected_component`
+→ `cloud_json` → the Wasm adapter → `ConstructionSessionPort` →
+`TabletopRuntime`) with no caller at all.
+
+- **`planEdit` now takes a `CloudTopology`**
+  (`features/edit-construction/construction-cloud.ts`): the cloud, the face
+  the gesture landed on, and every member's live boundary. The face still
+  resolves the *role* — a corner is a corner of a panel, and no cloud-wide
+  question has an answer for one node — but the reach of the resulting op
+  does not come from it.
+- **Reach is the third thing a role declares**, next to its resolution and
+  its axes: `RolePolicy.scope` is `"surface"` or `"cloud"`, required rather
+  than defaulted, so a new structure type states it on purpose. This is the
+  rule for every type, not a wall affordance.
+- **What that changes today.** A panel's body drag was moving the one panel
+  under the pointer, dragging the columns it shares with its neighbours and
+  leaving the rest standing — shearing the run. `panel-body` and
+  `organic-body` are `"cloud"`, so the whole run (or the whole sculpted
+  patch) moves by the same delta. A lone panel is a component of size one
+  and takes the identical path. Corner, edge and post roles stay
+  `"surface"`: whatever else references the node moves because the graph
+  says so, which is a consequence rather than a scope.
+- **A cascade reads the cloud too.** `pairedTopCorners` searched the grabbed
+  face; it searches every member now, so which of two welded panels the
+  pointer landed on cannot change the answer.
+- **Membership is settled on press, positions are re-read every tick**
+  (`refreshCloudTopology`). A drag that welds onto a neighbour must not
+  silently enlarge what it is dragging.
+- **Undo captures the whole cloud.** The before-snapshot was the seed's
+  nodes; a cloud-scoped move addressed members it did not cover, so undo
+  could put one panel back and abandon the run.
+- **What deliberately stays outside cloud scope.** Welding and creation
+  (`wall-shared.ts`, `boundary-edges.ts`) are how clouds come to exist — a
+  new run must be able to reach a wall it is not yet connected to, so
+  scoping it to a cloud would make merging impossible. Room/enclosure
+  queries (`room-lookup.ts`, "Apagar Cômodo") ask a different question:
+  a room is bounded space, not a connected component of one type, and the
+  two answers legitimately differ.
+- **Presets are placeholders, enforced.** A tool preset — a tower, a
+  generated interior — picks parameters, a generator and an already-declared
+  type; it never becomes a type and never carries behaviour, because
+  behaviour belongs to the cloud its geometry lands in.
+  `test/tool-presets-are-placeholders.test.mjs` holds that line.
 
 ## Explicitly not decided by this file
 

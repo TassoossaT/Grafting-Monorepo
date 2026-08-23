@@ -2007,7 +2007,15 @@ for it now.
 
 ### `reference vtt.edit-construction.CascadeContext`
 
+### `reference vtt.edit-construction.cloudNodes`
+
+### `reference vtt.edit-construction.CloudSource`
+
+### `reference vtt.edit-construction.CloudTopology`
+
 ### `reference vtt.edit-construction.constrainToAxes`
+
+### `reference vtt.edit-construction.ConstructionCloud`
 
 ### `reference vtt.edit-construction.ConstructionHistoryEntry`
 
@@ -2042,6 +2050,8 @@ for it now.
 ### `reference vtt.edit-construction.EditResolution`
 
 ### `reference vtt.edit-construction.EditRole`
+
+### `reference vtt.edit-construction.EditScope`
 
 ### `reference vtt.edit-construction.EditTarget`
 
@@ -2083,9 +2093,15 @@ for it now.
 
 ### `reference vtt.edit-construction.PreviewDescriptor`
 
+### `reference vtt.edit-construction.refreshCloudTopology`
+
 ### `reference vtt.edit-construction.RegionEditHistoryEntry`
 
 ### `reference vtt.edit-construction.resolveBrushShape`
+
+### `reference vtt.edit-construction.resolveCloud`
+
+### `reference vtt.edit-construction.resolveCloudTopology`
 
 ### `reference vtt.edit-construction.resolveCoverage`
 
@@ -2186,6 +2202,104 @@ Which part of a region the user grabbed.
 
 Converts editable shape parameters into the immutable semantic brush contract.
 
+### `interface vtt.construction-cloud.CloudSource`
+
+The slice of the runtime a cloud resolution needs, named here so
+`features/` stays free of the composition root and a test can supply two
+functions instead of a runtime.
+
+### `method vtt.construction-cloud.CloudSource.cloudFor(request: { seed: ConstructionSurfaceKey; surfaceType: string }): { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+### `method vtt.construction-cloud.CloudSource.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `interface vtt.construction-cloud.CloudTopology`
+
+A cloud together with the live boundary of every member.
+
+### `property vtt.construction-cloud.CloudTopology.cloud: ConstructionCloud`
+
+### `property vtt.construction-cloud.CloudTopology.members: readonly ConstructionRegionTopology[]`
+
+Every member's boundary, the seed included.
+
+### `property vtt.construction-cloud.CloudTopology.seed: ConstructionRegionTopology`
+
+The member the gesture landed on. Role resolution reads this one and
+only this one: a corner is a corner of the face it belongs to, and
+asking the whole cloud what a single grabbed node means would have no
+answer.
+
+### `interface vtt.construction-cloud.ConstructionCloud`
+
+The cloud: the connected component of same-`type` surfaces reachable from
+one of them by shared graph nodes.
+
+`ADR-0022` puts this fourth in the layering (graph -> mesh -> surface ->
+**cloud** -> asset) and is explicit about what it is for: "this is the
+unit generation and editing operate on -- never an individual `Surface` in
+isolation," and "editing dispatches by cloud, not by individual surface."
+A cloud of one surface is not a special case; it is a component of size
+one, same code path as one of a thousand.
+
+Derived, never stored, exactly like a mesh. There is no cloud object in
+the graph to keep in sync: two separately drawn walls become one cloud the
+moment a stroke welds a node they both reference, because the *next*
+query walks across it. Nothing performs a merge, and nothing can forget
+to.
+
+The type is what the cloud carries, and the reason the whole layer exists:
+a surface holds the `type` string, but the cloud is the thing that string
+names as one construction. Which is why a type's editing behaviour is
+declared against the cloud (`structure-types/`), and why a tool preset --
+"a tower," "a house" -- can only choose parameters and a generator, never
+hold behaviour of its own.
+
+### `property vtt.construction-cloud.ConstructionCloud.members: readonly ConstructionSurfaceKey[]`
+
+Every member, the seed included, in the engine's own stable order.
+
+### `property vtt.construction-cloud.ConstructionCloud.seed: ConstructionSurfaceKey`
+
+The member the gesture actually landed on.
+
+### `property vtt.construction-cloud.ConstructionCloud.surfaceType: string`
+
+The one type every member shares; a cloud never spans two.
+
+### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology): readonly { id: string; position: { x: number; y: number; z: number } }[]`
+
+Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded.
+
+### `function vtt.construction-cloud.refreshCloudTopology(source: CloudSource, cloud: ConstructionCloud): CloudTopology | undefined`
+
+Re-reads every member's boundary against the live session, keeping the
+membership already resolved.
+
+A drag re-plans on every tick and must see current positions, but must not
+re-resolve membership mid-gesture: a move that welds onto a neighbour
+would silently enlarge the cloud under the pointer and start dragging
+geometry the gesture never grabbed. Membership is settled once, on press.
+
+### `function vtt.construction-cloud.resolveCloud(source: CloudSource, seed: ConstructionSurfaceKey): ConstructionCloud | undefined`
+
+The cloud the surface at `seed` belongs to.
+
+The engine answers which surfaces are connected and share the type; it is
+never asked what the type *means*. `undefined` only when the key is stale
+-- a live surface always belongs to at least its own cloud, so an empty
+membership is treated as the seed alone rather than as an error, which is
+what keeps a component of size one on the same path as any other.
+
+### `function vtt.construction-cloud.resolveCloudTopology(source: CloudSource, seed: ConstructionSurfaceKey): CloudTopology | undefined`
+
+resolveCloud plus every member's live boundary, which is what a
+gesture is actually planned against.
+
+A member whose topology has since gone stale is dropped rather than
+failing the whole resolution: the cloud query and the topology reads are
+separate calls, and a surface that disappeared between them is exactly the
+case where continuing with what is still there is right.
+
 ### `interface vtt.edit-history.EditHistoryStack`
 
 ### `method vtt.edit-history.EditHistoryStack.getState(): EditHistoryState`
@@ -2260,7 +2374,7 @@ The slice of `ConstructionSessionPort` an edit plan actually needs.
 
 ### `method vtt.edit-orchestrator.EditOpSink.retypeEdge(edgeId: string, geometry: { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }): RegionEditOutcome`
 
-### `type vtt.edit-orchestrator.EditPlan = { kind: "apply"; ops: readonly AtomicEditOp[]; role: EditRole } | { kind: "deny"; reason: string; role: EditRole } | { kind: "regenerate"; reason: string; role: EditRole }`
+### `type vtt.edit-orchestrator.EditPlan = { kind: "apply"; ops: readonly AtomicEditOp[]; role: EditRole; scope: EditScope; surfaceCount: number } | { kind: "deny"; reason: string; role: EditRole } | { kind: "regenerate"; reason: string; role: EditRole }`
 
 Turns one user gesture into the exact sequence of atomic ops to issue.
 
@@ -2270,8 +2384,14 @@ resolves which role was grabbed, constrains the op's own parameter, and
 assembles the primary op plus whatever cascade the role declares -- all
 before a single engine call is made.
 
-Pure on purpose. It reads a region's topology and returns a plan; nothing
-here touches the session. applyEditPlan performs it.
+It plans against a **cloud**, not a face (`ADR-0022`: "editing dispatches
+by cloud, not by individual surface"). The face the pointer landed on is
+still what says *what was grabbed* -- a corner is a corner of a panel --
+but how far the resulting op reaches is the role's own declaration, and a
+cloud-scoped role fans out over every member.
+
+Pure on purpose. It reads topology and returns a plan; nothing here
+touches the session. applyEditPlan performs it.
 
 ### `variable vtt.edit-orchestrator.EMPTY_OUTCOME: RegionEditOutcome`
 
@@ -2290,7 +2410,7 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
@@ -2309,6 +2429,13 @@ One covered region, paired with what the painted type wants to do about it.
 One file per structure type, each pairing creation-shape knowledge with
 the role table that shape implies -- the whole TS-owned half of
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+A definition here is a **cloud's** behaviour, not a face's: the type
+string a surface carries only selects which of these tables governs the
+cloud it belongs to (`construction-cloud.ts`). Every type declares the
+same three things, including how far each of its roles reaches -- there
+is no per-type escape from the rule, and a type that wants a different
+reach says so in its own role table rather than in a tool.
 
 Types sharing a shape share a definition rather than restating one: every
 upright panel (wall, tower, door jamb) is one type built by one builder --
@@ -2365,6 +2492,8 @@ The definition governing one surface type, or `undefined` if it has none.
 ### `reference vtt.structure-types.EditResolution`
 
 ### `reference vtt.structure-types.EditRole`
+
+### `reference vtt.structure-types.EditScope`
 
 ### `reference vtt.structure-types.forbid`
 
@@ -2493,6 +2622,13 @@ Builds one `extrude_path`-generated structure type on the shared panel model.
 
 What a cascade gets to look at when deriving its extra ops.
 
+The whole cloud, not only the grabbed face: a cascade exists precisely to
+reach parts the gesture never named, and a panel welded onto a neighbour
+shares its column with that neighbour. Reading one face would make the
+answer depend on which of two panels the pointer happened to land on.
+
+### `property vtt.structure-type.CascadeContext.cloud: CloudTopology`
+
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
 
 The delta already constrained by the role's own axes.
@@ -2501,10 +2637,13 @@ The delta already constrained by the role's own axes.
 
 ### `property vtt.structure-type.CascadeContext.topology: ConstructionRegionTopology`
 
+The face the gesture landed on -- `cloud.seed`, offered directly for the common case.
+
 ### `interface vtt.structure-type.RolePolicy`
 
-One role's complete editing policy: what it allows, what constrains the
-op's own parameter, and what else fires in the same transaction.
+One role's complete editing policy: what it allows, how far it reaches,
+what constrains the op's own parameter, and what else fires in the same
+transaction.
 
 ### `property vtt.structure-type.RolePolicy.axes: readonly EditAxis[]`
 
@@ -2521,17 +2660,35 @@ scaled or cross-axis variant.
 
 ### `property vtt.structure-type.RolePolicy.role: string`
 
+### `property vtt.structure-type.RolePolicy.scope: EditScope`
+
+Whether the op applies to the grabbed face alone or to every member of
+its cloud. Declared per role rather than defaulted, so a new structure
+type states its reach on purpose instead of inheriting whichever answer
+happened to be cheaper -- the same posture the axes list already takes.
+
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
-One structure type's definition, pairing both halves the design doc keeps
-together on purpose:
+One structure type's definition -- which is to say, **what a cloud of this
+type does**, since the cloud is what the type names (`ADR-0022`, and
+`construction-cloud.ts`). Nothing below is a property of a single face;
+a face only carries the string that selects this table.
+
+It pairs the halves the design doc keeps together on purpose:
 
 1. **How it is created** -- which generation call produced it, in what
    expected shape.
-2. **The role table derived from that shape.** Because this side *asked*
-   for a specific shape, it already knows by construction what index 0 of
-   the engine's deterministically-ordered response means. Nothing travels
-   back from Rust to say so.
+2. **The role table derived from that shape**, each role declaring its own
+   reach. Because this side *asked* for a specific shape, it already knows
+   by construction what index 0 of the engine's deterministically-ordered
+   response means. Nothing travels back from Rust to say so.
+3. **How it meets every other type** when painted over one.
+
+A tool preset -- "a tower," "a house" -- is not a type and never appears
+here. A preset chooses parameters and a generator; the geometry it
+produces lands in a cloud whose type is one of these, and that cloud is
+where its behaviour comes from. This is why a tower needs no editing code
+of its own.
 
 ### `property vtt.structure-type.StructureTypeDefinition.creation: string`
 
@@ -2570,9 +2727,22 @@ generated shape means" -- `"wall-bottom-corner"`, `"tower-rim-edge"`.
 Deliberately a plain string: the engine never sees one, never returns one,
 and never validates one. Each structure-type file mints its own.
 
-### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
+### `type vtt.structure-type.EditScope = "surface" | "cloud"`
 
-Convenience for the common "allowed, on these axes, no cascade" policy.
+How far a gesture on this role reaches.
+
+`ADR-0022` settles the default: the cloud is what editing operates on,
+never a face in isolation. A role is `"surface"` only where the grabbed
+part genuinely belongs to one face and to no other -- a panel's own
+corner is that panel's corner, and moving it moves whatever else happens
+to reference the node, which is a consequence of the graph rather than a
+scope decision. `"cloud"` is for the roles that name the *whole thing*:
+grabbing a wall's body means the wall, not the one panel under the
+pointer.
+
+### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], scope: EditScope, cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
+
+Convenience for the common "allowed, on these axes, at this reach, no cascade" policy.
 
 ### `function vtt.structure-type.denied(role: string, reason: string): RolePolicy`
 
@@ -2680,7 +2850,13 @@ A renderer-neutral external brush footprint.
 
 ### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
 
-A product-owned scope supported by a surface edit mode.
+A product-owned scope supported by a surface edit mode -- *what a mode
+accepts as a target*.
+
+Not to be confused with `structure-types`' own `EditScope`, which is *how
+far one role's op reaches* once a target has been grabbed. A mode can
+accept a `"node"` target whose role nevertheless reaches the whole cloud;
+the two answer different questions and share only the word.
 
 ### `function vtt.surface-edit-contract.createPathBrushEffect(payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">, context: ConstructionOperationContext, expected: readonly RevisionPrecondition[]): PathBrushEffect`
 
