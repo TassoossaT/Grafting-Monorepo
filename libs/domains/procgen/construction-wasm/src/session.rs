@@ -19,8 +19,9 @@ use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
-use crate::path_brush;
 use crate::region_editing;
+use crate::region_overlay;
+use crate::sweep_bridge;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -44,7 +45,7 @@ struct ConstructionState {
     known_regions: HashSet<RegionId>,
 }
 
-struct PathBrushHistoryEntry {
+struct RegionOverlayHistoryEntry {
     operation_id: String,
     before: ConstructionState,
     after: ConstructionState,
@@ -59,8 +60,8 @@ pub struct ConstructionSession {
     pub(crate) surfaces: SurfaceRegistry,
     pub(crate) topology: ContourTopology,
     pub(crate) known_regions: HashSet<RegionId>,
-    path_brush_undo: Vec<PathBrushHistoryEntry>,
-    path_brush_redo: Vec<PathBrushHistoryEntry>,
+    region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
+    region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
 }
 
 impl Default for ConstructionSession {
@@ -81,8 +82,8 @@ impl ConstructionSession {
             surfaces: SurfaceRegistry::new(),
             topology: ContourTopology::new(),
             known_regions: HashSet::new(),
-            path_brush_undo: Vec::new(),
-            path_brush_redo: Vec::new(),
+            region_overlay_undo: Vec::new(),
+            region_overlay_redo: Vec::new(),
         }
     }
 
@@ -295,15 +296,22 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
+    /// Runs the graph-neutral sweep planner without mutating session state.
+    pub fn plan_sweep_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: sweep_bridge::PlanSweepRequest = parse(request_json)?;
+        let response = sweep_bridge::plan_sweep(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     // ---- Terrain mesh lifecycle ----
 
     // ---- Generate-and-apply ----
 
-    /// Applies one validated terrain-to-path brush operation. The session only
-    /// forwards the resolved request to the domain transformer and publishes
-    /// its already-atomic replacement plan.
-    pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
+    /// Applies an application-generated patch over an exact, already-resolved
+    /// set of source regions. Geometry and product policy are caller-owned;
+    /// this method only executes the generic overlay atomically.
+    pub fn apply_region_overlay_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request: region_overlay::ApplyRegionOverlayRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
         let before = ConstructionState {
             graph: self.graph.clone(),
@@ -311,7 +319,7 @@ impl ConstructionSession {
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
         };
-        let response = path_brush::apply_path_brush(
+        let response = region_overlay::apply_region_overlay(
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
@@ -325,56 +333,53 @@ impl ConstructionSession {
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
         };
-        self.path_brush_undo.push(PathBrushHistoryEntry {
+        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
             before,
             after,
         });
-        self.path_brush_redo.clear();
+        self.region_overlay_redo.clear();
         serialize(&response)
     }
 
-    /// Restores the state immediately before the latest matching path-brush operation.
-    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.path_brush_undo.pop() else {
-            return Err(JsValue::from_str(
-                "no path brush operation is available to undo",
-            ));
+    /// Restores the state immediately before one generic overlay.
+    pub fn undo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.region_overlay_undo.pop() else {
+            return Err(JsValue::from_str("no region overlay is available to undo"));
         };
         if entry.operation_id != operation_id {
-            self.path_brush_undo.push(entry);
+            self.region_overlay_undo.push(entry);
             return Err(JsValue::from_str(
-                "path brush undo order does not match session history",
+                "region overlay undo order does not match session history",
             ));
         }
         self.graph = entry.before.graph.clone();
         self.surfaces = entry.before.surfaces.clone();
         self.topology = entry.before.topology.clone();
         self.known_regions = entry.before.known_regions.clone();
-        self.path_brush_redo.push(entry);
+        self.region_overlay_redo.push(entry);
         Ok(())
     }
 
-    /// Restores the state immediately after the latest matching undone path-brush operation.
-    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.path_brush_redo.pop() else {
-            return Err(JsValue::from_str(
-                "no path brush operation is available to redo",
-            ));
+    /// Restores the state immediately after one undone generic overlay.
+    pub fn redo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        let Some(entry) = self.region_overlay_redo.pop() else {
+            return Err(JsValue::from_str("no region overlay is available to redo"));
         };
         if entry.operation_id != operation_id {
-            self.path_brush_redo.push(entry);
+            self.region_overlay_redo.push(entry);
             return Err(JsValue::from_str(
-                "path brush redo order does not match session history",
+                "region overlay redo order does not match session history",
             ));
         }
         self.graph = entry.after.graph.clone();
         self.surfaces = entry.after.surfaces.clone();
         self.topology = entry.after.topology.clone();
         self.known_regions = entry.after.known_regions.clone();
-        self.path_brush_undo.push(entry);
+        self.region_overlay_undo.push(entry);
         Ok(())
     }
+
     /// Regenerates a painted cell set's whole region partition (every
     /// region's own per-cell floor/ceiling, and a wall -- notched where a
     /// run borders a different region -- along every boundary run) and

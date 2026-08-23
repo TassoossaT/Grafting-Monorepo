@@ -7,6 +7,7 @@ import {
   terrainInteractionOver,
 } from "./organic-structure.ts";
 import { panelStructureType } from "./panel-structure.ts";
+import { pathStructureType } from "./path-structure.ts";
 import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { denied } from "./structure-type.ts";
 import { forbid, type CreationInteraction } from "./creation-interaction.ts";
@@ -44,11 +45,10 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
     "regenerate",
     terrainInteractionOver,
   ),
-  organicStructureType(
+  pathStructureType(
     "path",
     "Caminho",
-    "applyPathBrush's swept convex footprint",
-    "deny",
+    "the subtype's application-generated sweep patch, spine-major",
     pathInteractionOver,
   ),
 ]);
@@ -142,6 +142,7 @@ export {
 export { CUT, IGNORE, RESTACK } from "./creation-interaction.ts";
 export type { CreationInteraction, CreationInteractionKind } from "./creation-interaction.ts";
 export { panelStructureType, PANEL_ROLES } from "./panel-structure.ts";
+export { pathStructureType, PATH_ROLES, pathRoleFor, pathPolicyFor } from "./path-structure.ts";
 export { allowed, denied } from "./structure-type.ts";
 export { forbid } from "./creation-interaction.ts";
 export type {

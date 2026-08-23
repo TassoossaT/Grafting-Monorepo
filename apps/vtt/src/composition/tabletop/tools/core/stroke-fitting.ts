@@ -229,6 +229,7 @@ function classifySegment(
   startIndex: number,
   endIndex: number,
   arcs: boolean,
+  tolerance: number,
 ): FittedEdge {
   const start = points[startIndex];
   const end = points[endIndex];
@@ -237,6 +238,18 @@ function classifySegment(
 
   const { straightResidual, arcResidual, arc } = computeResiduals(points, startIndex, endIndex, arcs);
   if (arc === undefined) return { start, end, geometry: LINE };
+
+  // This span survived {@link cornerIndices} without being split, which
+  // means *some* shape explained it within `tolerance`. If a straight chord
+  // is not that shape, the ratio heuristics below must not be allowed to
+  // pick one anyway: they exist to choose between two shapes that both fit,
+  // never to commit one that does not. Without this the span could be held
+  // together by its arc and then committed as a chord wandering arbitrarily
+  // far outside the brush the user actually drew -- the fit silently
+  // breaking the one promise the correction dial makes.
+  if (straightResidual > tolerance && arcResidual <= tolerance) {
+    return { start, end, geometry: { kind: "arc", center: arc.center, clockwise: arc.clockwise } };
+  }
 
   const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
   const allowance = Math.min(arc.radius, chordLength) * ARC_RESIDUAL_MAX_RATIO;
@@ -271,13 +284,14 @@ export function fitPath(
 ): readonly FittedEdge[] {
   if (points.length < 2) return [];
   const arcs = options.arcs ?? true;
-  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
+  const budget = Math.max(0, tolerance);
+  const indices = cornerIndices(points, budget, arcs);
   const edges: FittedEdge[] = [];
   for (let index = 0; index + 1 < indices.length; index += 1) {
     const startIndex = indices[index];
     const endIndex = indices[index + 1];
     if (startIndex === undefined || endIndex === undefined || startIndex === endIndex) continue;
-    edges.push(classifySegment(points, startIndex, endIndex, arcs));
+    edges.push(classifySegment(points, startIndex, endIndex, arcs, budget));
   }
   return edges;
 }

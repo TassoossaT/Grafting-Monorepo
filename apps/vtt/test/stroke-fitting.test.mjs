@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fitPath } from "../src/composition/tabletop/tools/walls/path-fitting.ts";
+import { fitPath } from "../src/composition/tabletop/tools/core/stroke-fitting.ts";
 
 const TOLERANCE = 0.4;
 

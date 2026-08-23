@@ -397,8 +397,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Applies a resolved sequence of atomic edit ops as one transaction, then
@@ -409,6 +407,8 @@ Policy resolution deliberately happens *before* this call, in
 `features/edit-construction`: this method never asks what a wall allows,
 it only performs what was already decided -- see
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -479,6 +479,8 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
@@ -520,8 +522,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome`
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Applies a resolved sequence of atomic edit ops as one transaction --
@@ -529,6 +529,8 @@ what `planEdit` produced from the user's gesture and the grabbed role's
 own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -598,6 +600,8 @@ position it wants (an undo/redo stack replaying a drag), skipping the
 policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
@@ -821,6 +825,16 @@ BrushToolSpec.applyRegion.
 
 ### `property vtt.brush-tool.BrushRegion.shape: BrushShape`
 
+The brush footprint, already widened to hold the product -- see
+expandedToHold. This is what the ghost is drawn from, which is
+what makes the ghost an honest envelope rather than a decoration.
+
+### `property vtt.brush-tool.BrushRegion.tolerance: number`
+
+How far the committed product may be moved off the drawn stroke to
+straighten it: whatever of the brush's own reach the product does not
+occupy. See BrushToolSpec.halfWidth.
+
 ### `interface vtt.brush-tool.BrushToolSpec`
 
 ### `property vtt.brush-tool.BrushToolSpec.id: Id`
@@ -834,6 +848,20 @@ never per-segment. Recomputing over the full region on every commit is
 fine; the brush never tracks what was already applied.
 
 ### `method vtt.brush-tool.BrushToolSpec.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.brush-tool.BrushToolSpec.halfWidth(params: ToolParamsFor<Id>): number`
+
+How far this brush's own product reaches from the stroke it is drawn
+along -- half a road's full width, shoulders included; zero for a
+product with no width of its own.
+
+This is the one number that gives the brush's reach a meaning, and it
+gives every brush the *same* meaning: the reach is the envelope the
+product must fit inside, and whatever the product leaves unused is the
+budget for straightening the hand. A wall is columns and shared edges,
+with no thickness in plan, so its whole reach is correction budget --
+the behaviour it already had, now falling out of the general rule
+instead of being a rule of its own.
 
 ### `method vtt.brush-tool.BrushToolSpec.previewColor(params: ToolParamsFor<Id>): number`
 
@@ -870,6 +898,48 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
+
+### `interface vtt.stroke-fitting.FitOptions`
+
+What a caller may vary about a fit. `arcs` defaults to on.
+
+### `property vtt.stroke-fitting.FitOptions.arcs?: boolean`
+
+When false, every span is fitted as a straight chord and no circle is ever considered.
+
+### `interface vtt.stroke-fitting.FittedEdge`
+
+One fitted edge of a stroke: an endpoint pair plus the contour geometry
+that actually explains the samples between them -- a straight chord, or a
+true circular arc through them. This is the graph's own edge vocabulary
+(`ConstructionEdgeGeometry`), not a private tag a generator has to
+translate, so a fitted edge is already the thing that gets declared.
+
+### `property vtt.stroke-fitting.FittedEdge.end: ConstructionPosition`
+
+### `property vtt.stroke-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.stroke-fitting.FittedEdge.start: ConstructionPosition`
+
+### `function vtt.stroke-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
+
+Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
+into a short list of fitted edges: corners are found first
+(Ramer-Douglas-Peucker, cornerIndices), then each run between
+corners is classified (classifySegment) as a straight chord or
+the true circle through it.
+
+`tolerance` (world units) is the whole correction dial -- how far the raw
+stroke must wander off *both* a straight line and its best-fit arc before
+that counts as a real corner rather than hand tremor or ordinary
+curvature. At `0` the contour is committed literally; the larger it gets,
+the more freely a shaky stroke is straightened into clean runs. Fewer
+than 2 points fits to nothing.
+
+With `arcs` off every span is a chord, however round the samples look.
+That is for a caller whose samples are no longer a hand -- points landing
+on exact grid intersections, say -- where the circle through any three of
+them is a real circle that nobody drew.
 
 ### `interface vtt.tool-context.ConstructionTool`
 
@@ -1083,6 +1153,12 @@ One upright face, flattened: a rail to travel along and a height to rise through
 
 ### `property vtt.panel-rail.PanelRail.baseY: number`
 
+### `property vtt.panel-rail.PanelRail.geometry: ConstructionEdgeGeometry`
+
+The rail's own curvature, as an edge geometry walked in the direction of
+increasing travel. A straight panel reads as a line; a curved one carries
+the arc, so anything stamped onto the panel bends with it.
+
 ### `property vtt.panel-rail.PanelRail.length: number`
 
 Rail length in world units -- the full run from one side of the panel to the other.
@@ -1110,16 +1186,70 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-Path-brush's own effect: the brush hands it a region, it decides that
-means "form a path here" and calls the analytic Rust plan for the whole
-region -- once, on commit, never incrementally. Preview is the plain
-generic swept-region outline every brush tool gets (no custom
-`previewRegion`) -- a path is a structure like any other, not a special
-case that needs to inspect what's underneath before it can even be
-drawn. What surface type ends up under the brush is something `applyRegion`
-(and the Rust plan it calls) sorts out at commit time, the same way
-terrain generation already does, not something the preview needs to
-pre-validate.
+A free path stroke, built on the same brush every other brush uses: press,
+drag, and on release the whole swept region is handed over once.
+
+Path creation follows the same ownership split as walls: this tool only
+chooses the interaction, `path-shared.ts` owns the single commit every
+path goes through, `path-patch.ts` declares the graph, and Rust supplies
+reusable geometry and executes the resolved overlay without ever being
+told any of it is a path.
+
+### `interface vtt.path-patch.PathPatchFormation`
+
+Application-owned graph declaration for one generic sweep result.
+
+### `property vtt.path-patch.PathPatchFormation.boundary: readonly ConstructionOrientedEdgeUse[]`
+
+### `property vtt.path-patch.PathPatchFormation.outline: readonly (readonly [number, number])[]`
+
+### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
+
+### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number): PathPatchFormation`
+
+Converts graph-neutral Rust geometry into the exact nodes, shared edges,
+and faces the construction graph must register. This mirrors `wallPatch`:
+the application defines what the product is; Rust only validates and
+executes the resulting patch.
+
+Edges are named after the table and the pair of nodes they run between,
+exactly as `wallPatch` names them, because that shared name is the whole
+mechanism by which two independently declared faces agree on one edge.
+Namespacing them per operation instead would guarantee that no path could
+ever share an edge with anything -- the interior edges of one sweep would
+still be shared, since they carry the same prefix, which is precisely what
+made the mistake invisible.
+
+`refuse-when-full` is the right rule here, and only becomes meaningful now
+that the name can actually collide: two faces to an edge is the true limit
+for ground, so an edge with no room left means something is already there,
+and the overlay refusing the patch is that fact arriving where it is
+precise. A wall shares `private-when-full` for the opposite reason -- any
+number of walls may legitimately stand on one column.
+
+### `variable vtt.path-shared.PATH_COLOR: 12616956`
+
+### `function vtt.path-shared.commitPathContour(ctx: ToolContext, stroke: readonly ConstructionPosition[], brushShape: BrushShape, tolerance: number, params: PathBrushParams, domain: string): void`
+
+Commits one path run, in one transaction.
+
+This is the only path a path is ever built by, the way
+`walls/wall-shared.ts`'s `commitWallContour` is the only path a wall is
+built by. A free stroke, and any straight drag or preset that comes
+later, differ in nothing but the reference line they hand over: they all
+resolve their formation the same way, claim their edges the same way, and
+declare the same faces. Nothing here knows which tool called it.
+
+The raw stroke is fitted before anything else, exactly as
+`commitWallStroke` fits one: `tolerance` is whatever of the brush's reach
+the road itself does not occupy, so the committed road always lands inside
+the ghost that was drawn. At zero slack -- a brush no wider than the road
+-- the stroke is committed literally.
+
+What reaches Rust is still a polyline, because the sweep planner cannot
+read an arc yet. But it is now a polyline of decisions rather than of hand
+samples, and this is the single place that changes when the planner learns
+contour geometry.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -1455,48 +1585,6 @@ a contour a preset happened to compute instead of a hand drawing it. That
 is the entire difference -- so a tower welds onto a drawn wall, gets
 edited by the same handles, and is subject to the same rules, for free.
 
-### `interface vtt.path-fitting.FitOptions`
-
-What a caller may vary about a fit. `arcs` defaults to on.
-
-### `property vtt.path-fitting.FitOptions.arcs?: boolean`
-
-When false, every span is fitted as a straight chord and no circle is ever considered.
-
-### `interface vtt.path-fitting.FittedEdge`
-
-One fitted edge of a stroke: an endpoint pair plus the contour geometry
-that actually explains the samples between them -- a straight chord, or a
-true circular arc through them. This is the graph's own edge vocabulary
-(`ConstructionEdgeGeometry`), not a private tag a generator has to
-translate, so a fitted edge is already the thing that gets declared.
-
-### `property vtt.path-fitting.FittedEdge.end: ConstructionPosition`
-
-### `property vtt.path-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
-
-### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
-
-### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
-
-Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
-into a short list of fitted edges: corners are found first
-(Ramer-Douglas-Peucker, cornerIndices), then each run between
-corners is classified (classifySegment) as a straight chord or
-the true circle through it.
-
-`tolerance` (world units) is the whole correction dial -- how far the raw
-stroke must wander off *both* a straight line and its best-fit arc before
-that counts as a real corner rather than hand tremor or ordinary
-curvature. At `0` the contour is committed literally; the larger it gets,
-the more freely a shaky stroke is straightened into clean runs. Fewer
-than 2 points fits to nothing.
-
-With `arcs` off every span is a chord, however round the samples look.
-That is for a caller whose samples are no longer a hand -- points landing
-on exact grid intersections, say -- where the circle through any three of
-them is a real circle that nobody drew.
-
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
 A free wall stroke, built on the same brush every other brush uses: press,
@@ -1595,7 +1683,7 @@ those edges -- it is never told that any of it is a wall.
 
 Default length of a panel's own vertical edge, for callers with no height parameter of their own.
 
-### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string): void`
+### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string, correction: number): void`
 
 Commits a fitted run of contour edges as walls, in one transaction.
 
@@ -2049,6 +2137,8 @@ for it now.
 
 ### `reference vtt.edit-construction.firstRefusal`
 
+### `reference vtt.edit-construction.followsOutward`
+
 ### `reference vtt.edit-construction.forbid`
 
 ### `reference vtt.edit-construction.HEIGHT_AXIS`
@@ -2058,6 +2148,8 @@ for it now.
 ### `reference vtt.edit-construction.IGNORE`
 
 ### `reference vtt.edit-construction.InteriorGenerateParams`
+
+### `reference vtt.edit-construction.isSpineNode`
 
 ### `reference vtt.edit-construction.mergeOutcomes`
 
@@ -2069,7 +2161,9 @@ for it now.
 
 ### `reference vtt.edit-construction.PANEL_ROLES`
 
-### `reference vtt.edit-construction.PATH_BRUSH_SOURCE_SURFACE_TYPES`
+### `reference vtt.edit-construction.parseStationNodeId`
+
+### `reference vtt.edit-construction.PATH_SPINE_OFFSET`
 
 ### `reference vtt.edit-construction.PathBrushEffect`
 
@@ -2077,7 +2171,19 @@ for it now.
 
 ### `reference vtt.edit-construction.PathBrushParams`
 
+### `reference vtt.edit-construction.pathFormationFor`
+
 ### `reference vtt.edit-construction.PathFormationParameters`
+
+### `reference vtt.edit-construction.PathFormationRecipe`
+
+### `reference vtt.edit-construction.pathHalfWidth`
+
+### `reference vtt.edit-construction.PathKind`
+
+### `reference vtt.edit-construction.PathProfilePoint`
+
+### `reference vtt.edit-construction.pathSpineSlot`
 
 ### `reference vtt.edit-construction.planEdit`
 
@@ -2102,6 +2208,10 @@ for it now.
 ### `reference vtt.edit-construction.RolePolicy`
 
 ### `reference vtt.edit-construction.scalePosition`
+
+### `reference vtt.edit-construction.StationNodeAddress`
+
+### `reference vtt.edit-construction.stationNodeId`
 
 ### `reference vtt.edit-construction.STRUCTURE_TYPE_DEFINITIONS`
 
@@ -2290,11 +2400,105 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture, related: readonly ConstructionRegionTopology[]): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
+
+### `interface vtt.path-recipe.PathFormationRecipe`
+
+Product recipe forwarded unchanged to the construction-session boundary.
+
+### `property vtt.path-recipe.PathFormationRecipe.kind: PathKind`
+
+### `property vtt.path-recipe.PathFormationRecipe.miterLimit: number`
+
+### `property vtt.path-recipe.PathFormationRecipe.profile: readonly PathProfilePoint[]`
+
+### `interface vtt.path-recipe.PathProfilePoint`
+
+One VTT-owned sample of the cross-section the generic Rust sweep executes.
+
+### `property vtt.path-recipe.PathProfilePoint.elevation: number`
+
+### `property vtt.path-recipe.PathProfilePoint.lateralOffset: number`
+
+### `variable vtt.path-recipe.PATH_SPINE_OFFSET: 0`
+
+The lateral offset the spine sits at.
+
+Every path profile carries a point here, which is what makes the travel
+line a real seam in the graph: the two bands either side of it meet along
+one shared edge chain, so the line is stored, shared and editable rather
+than being a number the generator forgot. Any further line a product wants
+to be first-class -- a lane, a rail -- is just another profile point, and
+needs no machinery of its own.
+
+### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
+
+Resolves the VTT's named path recipe without constructing any mesh or graph.
+
+`street` is a flat bed, while `road` and `trail` carry a non-negative U
+profile, measured from the reference line's own height rather than from
+the world floor. The Rust sweep owns frames, vertices and quads; where the
+stations go, and how high each one sits, stays on this side.
+
+### `function vtt.path-recipe.pathHalfWidth(params: PathBrushParams): number`
+
+How far this recipe's own product reaches from the reference line -- the
+outermost lateral offset of the profile it produces.
+
+Read off the profile rather than recomputed from the parameters, so the
+width the brush is sized against and the width actually swept can never
+drift apart. A `street` has no shoulder and a `road` does; that difference
+lives in one place, and this follows it.
+
+### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
+
+Which profile slot is the spine -- the index of the point at
+PATH_SPINE_OFFSET, or `-1` for a profile that declares none.
+
+Node identity is minted relative to this slot, so that "outward" is a fact
+an id carries rather than something a later edit has to infer from
+geometry that has since moved.
+
+### `interface vtt.station-node-id.StationNodeAddress`
+
+One node of a station-major sweep, as the parts its id is built from.
+
+### `property vtt.station-node-id.StationNodeAddress.across: number`
+
+Signed slot across the cross-section; `0` is the spine.
+
+### `property vtt.station-node-id.StationNodeAddress.operationId: string`
+
+The operation that minted it -- the corridor this node belongs to.
+
+### `property vtt.station-node-id.StationNodeAddress.station: number`
+
+Which cross-section along the line.
+
+### `function vtt.station-node-id.followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean`
+
+Whether `candidate` should follow `moved` when `moved` is dragged: same
+corridor, same station, and further from the spine on the same side.
+
+The spine carries its whole cross-section, a node partway out carries only
+what lies beyond it, and the outermost carries nothing -- one rule, no
+per-slot cases. Expressed as "further out" rather than as a walk from
+neighbour to neighbour because the two agree wherever a walk is even
+possible, and this keeps agreeing when the interior is not a grid.
+
+### `function vtt.station-node-id.isSpineNode(id: string): boolean`
+
+Whether `id` names the travel line itself rather than anything beside it.
+
+### `function vtt.station-node-id.parseStationNodeId(id: string): StationNodeAddress | undefined`
+
+The address inside `id`, or `undefined` for an id no sweep minted.
+
+### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
 
 ### `interface vtt.structure-types.ResolvedCoverage`
 
@@ -2378,7 +2582,15 @@ The definition governing one surface type, or `undefined` if it has none.
 
 ### `reference vtt.structure-types.panelStructureType`
 
+### `reference vtt.structure-types.PATH_ROLES`
+
 ### `reference vtt.structure-types.pathInteractionOver`
+
+### `reference vtt.structure-types.pathPolicyFor`
+
+### `reference vtt.structure-types.pathRoleFor`
+
+### `reference vtt.structure-types.pathStructureType`
 
 ### `reference vtt.structure-types.RESTACK`
 
@@ -2442,8 +2654,9 @@ A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
 wall the same cut reads as an opening through it.
 
-Over another path there is nothing to carve -- the ground is already path
--- so the two simply coexist rather than one consuming the other.
+Over another path the two formations become one connected path surface:
+the same cut-and-refill flow consumes the overlap instead of leaving
+coincident path geometry behind.
 
 ### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
 
@@ -2489,6 +2702,38 @@ That is the whole of the panel side of the interaction table.
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
 
+### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; edge: "path-edge"; spine: "path-spine"; unknown: "path-unknown" }`
+
+The role model for anything swept along a travel line: a spine, whatever
+lies between the spine and the rim, and the rim itself.
+
+**The whole rule is one sentence.** Dragging a node carries every node of
+its own station that lies further out on the same side. The spine's "further
+out" is the entire cross-section; a node partway out carries only what is
+beyond it; the rim carries nothing, because nothing is beyond it. That
+single rule replaces a per-slot table, and it is why there is no separate
+`contour` role here to keep in sync with a `rib` one.
+
+**Same-delta, deliberately.** Nothing is recomputed. A drag does not re-run
+the recipe or re-derive the mitre frame, so a corner made by dragging the
+spine narrows the way any hand-edited shape narrows. That is the model this
+repo already commits to for walls -- the graph is the truth and the recipe
+only seeds it -- and it is what lets the whole cascade be plain same-delta
+ops, which is all `RolePolicy` supports.
+
+**Widening has a direction now.** Because the cross-section is materialised
+as real nodes out to the rim, pushing the rim outward is an ordinary edit
+rather than a width parameter that would need the frame recomputed to mean
+anything.
+
+### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
+
+### `function vtt.path-structure.pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): string`
+
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+
+Builds one swept-product structure type on the shared spine model.
+
 ### `interface vtt.structure-type.CascadeContext`
 
 What a cascade gets to look at when deriving its extra ops.
@@ -2496,6 +2741,18 @@ What a cascade gets to look at when deriving its extra ops.
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
 
 The delta already constrained by the role's own axes.
+
+### `property vtt.structure-type.CascadeContext.related: readonly ConstructionRegionTopology[]`
+
+The other regions this one is connected to -- every region sharing at
+least one node with topology.
+
+A cascade that only ever saw its own region could not follow a
+relationship the generator spread across several. A wall does not need
+this, because a panel's paired corners are both its own; a swept product
+does, because one cross-section runs through every band it was built
+from and the rim belongs only to the outermost. Empty when the caller
+has no wider view to offer, so a role that ignores it is unaffected.
 
 ### `property vtt.structure-type.CascadeContext.target: EditTarget`
 
@@ -2622,25 +2879,13 @@ One semantic path-paint intent. It contains no graph mutations.
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.operationId: string`
 
-### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationParameters`
+### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationRecipe`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.tableId: string`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.targetScope: "brush-region"`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.targetType: "path"`
-
-### `interface vtt.surface-edit-contract.PathFormationParameters`
-
-Parameters for the initial shallow path formation.
-
-### `property vtt.surface-edit-contract.PathFormationParameters.depth: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.falloff: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.strength: number`
-
-### `property vtt.surface-edit-contract.PathFormationParameters.width: number`
 
 ### `interface vtt.surface-edit-contract.RevisionPrecondition`
 
@@ -2678,6 +2923,10 @@ App-owned metadata for a mode, without renderer or Rust types.
 
 A renderer-neutral external brush footprint.
 
+### `type vtt.surface-edit-contract.PathFormationParameters = PathFormationRecipe`
+
+VTT-selected profile for a generic path-sweep formation.
+
 ### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
 
 A product-owned scope supported by a surface edit mode.
@@ -2686,10 +2935,6 @@ A product-owned scope supported by a surface edit mode.
 
 Creates one immutable effect for a future release-to-confirm boundary.
 It deliberately does not resolve geometry or mutate graph topology.
-
-### `variable vtt.surface-edit-mode-registry.PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[]`
-
-Source policy consumed by the path transformer; derived once from the mode registry.
 
 ### `variable vtt.surface-edit-mode-registry.SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[]`
 
@@ -2767,7 +3012,17 @@ How wide, measured along the wall rather than across the ground -- a curved wall
 
 ### `interface vtt.tool-types.PathBrushParams`
 
-### `property vtt.tool-types.PathBrushParams.depth: number`
+### `property vtt.tool-types.PathBrushParams.bedWidth: number`
+
+Width of the flat traversable bed, in world units.
+
+### `property vtt.tool-types.PathBrushParams.miterLimit: number`
+
+Maximum corner extension, in multiples of the local half width.
+
+### `property vtt.tool-types.PathBrushParams.pathKind: PathKind`
+
+Product recipe; every variant still creates the single `path` surface type.
 
 ### `property vtt.tool-types.PathBrushParams.radius: number`
 
@@ -2780,6 +3035,14 @@ Rotation around world Y; ignored by circles.
 ### `property vtt.tool-types.PathBrushParams.shape: BrushShapeKind`
 
 Convex footprint shared by terrain and path brushes.
+
+### `property vtt.tool-types.PathBrushParams.shoulderHeight: number`
+
+Non-negative shoulder elevation above the path bed.
+
+### `property vtt.tool-types.PathBrushParams.shoulderWidth: number`
+
+Width of each optional raised shoulder, in world units.
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -2907,6 +3170,10 @@ pointer/render logic -- that lives in `composition/tabletop/tools/`
 PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
+
+### `type vtt.tool-types.PathKind = "trail" | "street" | "road"`
+
+Visual/formation recipe for the one generic `path` surface type.
 
 ### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 
@@ -3050,9 +3317,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `reference vtt.ports.AffectedSurfaces`
 
-### `reference vtt.ports.ApplyPathBrushOutcome`
-
-### `reference vtt.ports.ApplyPathBrushRequest`
+### `reference vtt.ports.ApplyRegionOverlayRequest`
 
 ### `reference vtt.ports.CameraControlHandle`
 
@@ -3075,8 +3340,6 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.ConfirmedSurfacePickRenderChange`
 
 ### `reference vtt.ports.ConfirmedTokenRenderChange`
-
-### `reference vtt.ports.ConstructionBrushShape`
 
 ### `reference vtt.ports.ConstructionCoverageKind`
 
@@ -3111,6 +3374,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `reference vtt.ports.ConstructionSurfaceKey`
 
 ### `reference vtt.ports.ConstructionSurfaceSpec`
+
+### `reference vtt.ports.ConstructionSweepParameters`
+
+### `reference vtt.ports.ConstructionSweepPlan`
 
 ### `reference vtt.ports.ConstructionUnfilledLoop`
 
@@ -3160,33 +3427,19 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
-### `interface vtt.construction-session-port.ApplyPathBrushOutcome`
+### `interface vtt.construction-session-port.ApplyRegionOverlayRequest`
 
-Result of one atomic terrain-to-path transformation.
+One generic overlay whose geometry and affected regions were resolved by the application.
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.edgeIds: TransformationIdentityDelta<string>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.boundary: readonly ConstructionOrientedEdgeUse[]`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.invalidation: SurfaceTransformationInvalidation`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.operationId: string`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.nodeIds: TransformationIdentityDelta<string>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.outline: readonly (readonly [number, number])[]`
 
-### `property vtt.construction-session-port.ApplyPathBrushOutcome.surfaceIds: TransformationIdentityDelta<ConstructionSurfaceKey>`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.patch: ConstructionPatch`
 
-### `interface vtt.construction-session-port.ApplyPathBrushRequest`
-
-One resolved continuous convex terrain-to-path brush request.
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.brushShape: ConstructionBrushShape`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.depth: number`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.operationId: string`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.samples: readonly ConstructionPosition[]`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.sourceSurfaceTypes: readonly string[]`
-
-### `property vtt.construction-session-port.ApplyPathBrushRequest.targetSurfaceType: string`
+### `property vtt.construction-session-port.ApplyRegionOverlayRequest.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
 ### `interface vtt.construction-session-port.CellCoordinate`
 
@@ -3394,9 +3647,9 @@ Nodes, edges, and regions already present are skipped, not rejected: a
 stroke overlapping an earlier one re-declares what they share, and that
 must not mint a second copy.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.applyPathBrush(request: ApplyPathBrushRequest): ApplyPathBrushOutcome`
+### `method vtt.construction-session-port.ConstructionSessionPort.applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome`
 
-Applies one resolved terrain-to-path brush atomically through the domain transformer.
+Atomically overlays an application-generated patch onto exact source regions.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
 
@@ -3493,9 +3746,11 @@ Moves every node on a region's boundary, holes included.
 
 Moves one boundary node to an absolute position.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.redoPathBrush(operationId: string): void`
+### `method vtt.construction-session-port.ConstructionSessionPort.planSweepFormation(request: { parameters: ConstructionSweepParameters; referenceLine: readonly ConstructionPosition[] }): ConstructionSweepPlan`
 
-Restores the confirmed state immediately after that undone path-brush operation.
+Executes only the generic sweep geometry algorithm; never mutates the graph.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
 
@@ -3521,9 +3776,7 @@ import("./scene-render-port.ts").SceneRenderPort's own
 `start`/`dispose` lifecycle so a composition root awaits both the same
 way.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.undoPathBrush(operationId: string): void`
-
-Restores the confirmed state immediately before that path-brush operation.
+### `method vtt.construction-session-port.ConstructionSessionPort.undoRegionOverlay(operationId: string): void`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceSpec`
 
@@ -3532,6 +3785,28 @@ Restores the confirmed state immediately before that path-brush operation.
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.physical: boolean`
 
 ### `property vtt.construction-session-port.ConstructionSurfaceSpec.surfaceType: string`
+
+### `interface vtt.construction-session-port.ConstructionSweepParameters`
+
+Declarative cross-section consumed by the generic Rust sweep.
+
+### `property vtt.construction-session-port.ConstructionSweepParameters.miterLimit: number`
+
+### `property vtt.construction-session-port.ConstructionSweepParameters.profile: readonly { elevation: number; lateralOffset: number }[]`
+
+### `interface vtt.construction-session-port.ConstructionSweepPlan`
+
+Graph-neutral result of a reusable Rust profile sweep.
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.boundary: readonly number[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.quads: readonly (readonly [number, number, number, number])[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.referenceLine: readonly ConstructionPosition[]`
+
+The stations the formation actually used, carrying the height each one rides at.
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.vertices: readonly ConstructionPosition[]`
 
 ### `interface vtt.construction-session-port.ConstructionUnfilledLoop`
 
@@ -3660,10 +3935,6 @@ Identity lifecycle emitted by an atomic surface transformation.
 ### `property vtt.construction-session-port.TransformationIdentityDelta.removed: readonly TIdentity[]`
 
 ### `property vtt.construction-session-port.TransformationIdentityDelta.replaced: readonly TIdentity[]`
-
-### `type vtt.construction-session-port.ConstructionBrushShape = { kind: "circle"; radius: number } | { kind: "square"; rotationRadians: number; size: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
-
-Renderer-neutral convex brush shape accepted by authoritative Rust brush queries.
 
 ### `type vtt.construction-session-port.ConstructionCoverageKind = "centroid" | "overlap"`
 

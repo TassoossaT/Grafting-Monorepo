@@ -71,6 +71,25 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample): GrabbedTarget |
     : { topology, target: { kind: "edge", edgeId: closest.edgeId } };
 }
 
+/**
+ * Every other region sharing at least one node with `topology` -- the wider
+ * view a cascade needs when a generator spread one relationship across
+ * several regions. Resolved here rather than inside the policy, so the rule
+ * stays a pure function of what it is handed.
+ */
+function relatedTopologies(
+  all: readonly ConstructionRegionTopology[],
+  topology: ConstructionRegionTopology,
+): readonly ConstructionRegionTopology[] {
+  const own = new Set(topology.nodes.map((node) => node.id));
+  const key = topology.surfaceKey.join(":");
+  return all.filter(
+    (candidate) =>
+      candidate.surfaceKey.join(":") !== key &&
+      candidate.nodes.some((node) => own.has(node.id)),
+  );
+}
+
 function delta(from: ConstructionPosition, to: ConstructionPosition): ConstructionPosition {
   return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
 }
@@ -144,11 +163,11 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     const topology = ctx.runtime.getRegionTopology(active.grabbed.topology.surfaceKey);
     if (topology === undefined) return;
 
-    const plan = planEdit(topology, {
-      surfaceKey: topology.surfaceKey,
-      target: active.grabbed.target,
-      delta: step,
-    });
+    const plan = planEdit(
+      topology,
+      { surfaceKey: topology.surfaceKey, target: active.grabbed.target, delta: step },
+      relatedTopologies(ctx.runtime.getAllRegionTopologies(), topology),
+    );
     if (plan.kind === "deny") {
       ctx.reportFeedback({ tone: "error", message: plan.reason });
       active = undefined;

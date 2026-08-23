@@ -285,11 +285,7 @@ pub fn classify_points(
         if rings.is_empty() {
             continue;
         }
-        polygons.push((
-            region_id,
-            surface.surface_type().as_str().to_owned(),
-            rings,
-        ));
+        polygons.push((region_id, surface.surface_type().as_str().to_owned(), rings));
     }
 
     for (index, point) in request.points.iter().enumerate() {
@@ -381,7 +377,10 @@ mod tests {
             .collect();
         assert_eq!(
             kinds,
-            vec![("face0", CoverageKind::Centroid), ("face1", CoverageKind::Overlap)]
+            vec![
+                ("face0", CoverageKind::Centroid),
+                ("face1", CoverageKind::Overlap)
+            ]
         );
     }
 

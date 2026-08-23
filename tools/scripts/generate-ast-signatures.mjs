@@ -13,7 +13,14 @@ const outputPath = resolve(root, "docs/generated/signatures/signatures-map.md");
 
 const readJson = async (relPath) => JSON.parse(await readFile(resolve(root, relPath), "utf8"));
 
-async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".worktrees", ".nx", ".git", "Generated", "generated", "pkg"]) {
+// `.next` is excluded for the same reason as `dist` and `target`, and it is
+// the one that actually bit: a developer who has run the VTT app locally has
+// `apps/vtt/.next/types/*.d.ts` on disk, so their signatures map picks up
+// Next's own generated route and cache typings. CI never builds the app
+// before generating, so the committed file and the regenerated one disagreed
+// on a machine-local artifact and the staleness check failed with a diff
+// nothing in the repository could explain.
+async function findFiles(directory, extensions, excludeDirs = ["node_modules", "dist", "target", ".next", ".worktrees", ".nx", ".git", "Generated", "generated", "pkg"]) {
   if (!existsSync(directory)) return [];
   const results = [];
   const entries = (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
