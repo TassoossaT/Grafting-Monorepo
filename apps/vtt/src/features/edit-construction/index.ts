@@ -31,6 +31,7 @@ export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
 export { pathRunFor, pathRunsIn, pathRunsOf } from "./path-cloud.ts";
 export type {
   PathRun,
+  PathRunBand,
   PathRunChain,
   PathRunNode,
   PathRunRib,

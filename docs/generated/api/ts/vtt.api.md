@@ -579,6 +579,17 @@ the scan.
 
 The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
 
+### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
+
+The name the edge between two nodes carries, wherever it is named.
+
+Exported because declaring a patch is not the only way an edge comes into
+being: splitting one at a node mints two more, and if those are named any
+other way then a face declared later over the same pair of nodes gets a
+second, coincident edge instead of the one already there. One rule, one
+name, everywhere -- which is what lets a junction share a spine seam with
+the run it split.
+
 ### `interface vtt.brush-tool.BrushRegion`
 
 The one geometric fact a brush produces: its shape plus every sample the
@@ -1076,6 +1087,31 @@ path goes through, `path-patch.ts` declares the graph, and Rust supplies
 reusable geometry and executes the resolved overlay without ever being
 told any of it is a path.
 
+### `interface vtt.path-junction.JunctionWedges`
+
+What closing one mouth costs and produces.
+
+### `property vtt.path-junction.JunctionWedges.patch: ConstructionPatch`
+
+Their replacement, either side of the arriving road.
+
+### `property vtt.path-junction.JunctionWedges.removed: readonly ConstructionSurfaceKey[]`
+
+Faces of the standing run that the mouth opens into, and so must go.
+
+### `function vtt.path-junction.junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[]`
+
+The edits that take the faces a mouth opens into out of the graph.
+
+### `function vtt.path-junction.junctionWedges(tableId: string, operationId: string, arrivingCorridorId: string, mouth: PathMouth, junction: { nodeId: string; station: number }): JunctionWedges | undefined`
+
+Rebuilds the standing run's flank around one mouth.
+
+`undefined` when the mouth spans nothing the standing run actually has --
+a graze at the very end of a run, or a corner that landed outside every
+band. Closing nothing is better than declaring a face over a hole that is
+not there.
+
 ### `interface vtt.path-patch.PathPatchFormation`
 
 Application-owned graph declaration for one generic sweep result.
@@ -1107,6 +1143,45 @@ for ground, so an edge with no room left means something is already there,
 and the overlay refusing the patch is that fact arriving where it is
 precise. A wall shares `private-when-full` for the opposite reason -- any
 number of walls may legitimately stand on one column.
+
+### `interface vtt.path-shared.PathMouth`
+
+### `property vtt.path-shared.PathMouth.run: PathRun`
+
+### `property vtt.path-shared.PathMouth.sides: readonly PathMouthSide[]`
+
+### `property vtt.path-shared.PathMouth.station: number`
+
+This run's end station, the one whose rib became the mouth.
+
+### `property vtt.path-shared.PathMouth.through: number`
+
+The slot of the standing rim the mouth opens through.
+
+### `interface vtt.path-shared.PathMouthSide`
+
+Where the run being committed opens into a run already standing.
+
+A T, seen from the arriving side. The arriving run stops at a spine node in
+the middle of the standing run, so its end rib cannot be mitred -- that rib
+has road on both sides of it and cannot be rotated onto anything. What can
+be said is where its two rims cross the standing rim, and those two points
+are the **mouth**: the opening the arriving road makes in the flank of the
+standing one.
+
+Reported rather than acted on, because closing a mouth is not an edit to
+this run at all -- it is a rebuild of the standing run's faces around the
+hole, which `junctionWedges` does.
+
+### `property vtt.path-shared.PathMouthSide.across: number`
+
+This run's own slot, so its corner node can be named.
+
+### `property vtt.path-shared.PathMouthSide.position: ConstructionPosition`
+
+### `property vtt.path-shared.PathMouthSide.standingStation: number`
+
+Where the corner falls on the standing run's own station scale.
 
 ### `interface vtt.path-shared.SpineJoin`
 
@@ -1154,35 +1229,6 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
-### `function vtt.path-shared.fuseContoursWithStandingRuns(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joined: readonly PathRun[]): { inserts: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
-
-Fuses this run's outer contours into the contours of the runs it joined.
-
-The spine join already made the two runs one graph -- they share a node on
-the travel line -- but their rims still passed straight through each other,
-each leaving a loose end sitting inside the other road bounding nothing.
-That is the mess: a contour crossing a contour without fusing.
-
-The rule, and it is the same rule in every case the owner set out:
-
-- **L.** Two runs meeting end to end. Each rim runs on in the direction its
-  own spine gave it until it reaches the other rim, and there they fuse.
-- **T.** A run arriving in the flank of another. The arrival necessarily
-  overlaps outside, and that overlap is where the rims fuse; the two ends
-  left loose inside the other road are cut. Only the crossings fuse, so the
-  mouth of the T stays open and the junction never closes into a triangle.
-- **X.** The same rule, at each place the rims actually cross.
-
-All three are one operation, because the loose end and the meeting point
-are the same event seen twice: the rim's last point moves onto the crossing
-and takes the standing rim's newly split node as its own. Cutting the stub
-and joining the rims is a single move, and nothing has to decide which
-shape a junction "is".
-
-Positions come back as a fresh vertex list rather than as an edit, because
-this run has not been committed yet -- the sweep proposed where its rim
-went, and the junction is what disposes.
-
 ### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.
@@ -1227,6 +1273,18 @@ Pairing the sides needs no case analysis either. One run's direction points
 out of the joint and the other's points into it, so two rims lie on the
 same hand of a traveller passing through precisely when `sideOf` gives them
 opposite signs.
+
+### `function vtt.path-shared.pathMouthsInto(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joined: readonly PathRun[]): { mouths: readonly PathMouth[]; vertices: readonly ConstructionPosition[] }`
+
+Cuts this run's end rib back onto the rim of the run it arrived at, and
+reports the mouth that leaves.
+
+The rim keeps the direction its own spine gave it until it reaches the
+standing rim, which is the same rule the mitre follows -- an arrival is
+still two L bends, one per side. What differs is only that a T bends into
+the *middle* of a rim rather than into its end, so the two corners are not
+nodes the standing run already has, and the faces behind them have to be
+rebuilt rather than nudged.
 
 ### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
 
@@ -2268,7 +2326,13 @@ movement is gone by this point, never clamped later or inside Rust.
 
 ### `interface vtt.path-cloud.PathRun`
 
-### `property vtt.path-cloud.PathRun.bands: readonly ConstructionSurfaceKey[]`
+### `property vtt.path-cloud.PathRun.bands: readonly PathRunBand[]`
+
+Every face of the run, each carrying the stretch it covers.
+
+The stretch is what a junction reads: closing a T means taking out the
+faces the arriving road opens into and declaring what replaces them, and
+"which faces" is a question about stations and sides, not about keys.
 
 ### `property vtt.path-cloud.PathRun.contours: readonly PathRunChain[]`
 
@@ -2286,6 +2350,20 @@ welded onto one already standing there. A junction, seen from this side.
 ### `property vtt.path-cloud.PathRun.spine: PathRunChain | undefined`
 
 ### `property vtt.path-cloud.PathRun.subtype: PathKind | undefined`
+
+### `interface vtt.path-cloud.PathRunBand`
+
+One face of a run, with the stretch of the run it covers.
+
+### `property vtt.path-cloud.PathRunBand.slots: readonly number[]`
+
+The slots it lies between, in order across.
+
+### `property vtt.path-cloud.PathRunBand.stations: readonly number[]`
+
+The stations it spans, in order.
+
+### `property vtt.path-cloud.PathRunBand.surfaceKey: ConstructionSurfaceKey`
 
 ### `interface vtt.path-cloud.PathRunChain`
 

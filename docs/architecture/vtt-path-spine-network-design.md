@@ -172,7 +172,7 @@ the welded node keeps its own position and both runs bound it.
 
 The surface that identity leaves behind is what the next section is about.
 
-## Contour fusion: two shapes, and only one of them is free
+## Contour fusion: two shapes, one construction
 
 Sharing a spine node makes two runs one graph. It does not make them one
 road: their outer contours still ran straight through each other, each
@@ -185,9 +185,11 @@ the owner settle what that should become.
 3. A T must not become a triangle: the fusion happens **only** where a real
    crossing occurred, never by linking regions that never met.
 
-The junctions split cleanly in two by **where on the standing run the arrival
-landed**, and the split is not cosmetic -- one shape costs nothing and the
-other needs a face.
+Both are the same construction: a rim keeps the direction its own spine gave
+it until it meets the rim it is joining, and there the two become one. What
+differs is only **where on the standing run the arrival landed** -- at one of
+its stations, or between two of them -- and that difference decides whether
+the standing run's faces can stay as they are.
 
 ### Met at a station: the mitre, and it is free
 
@@ -221,50 +223,57 @@ it, minting a second node centimetres from the one it meant to meet. Both are
 `resolveColumn`'s cases, and both are now answered the way walls answer them:
 clamp, then weld to the station that is already there.
 
-### Met mid-run: the T, and it needs a face
+### Met mid-run: the T is two bends and a hole
 
 An arrival that landed between two stations cannot be mitred: that rib has
-road on both sides of it and cannot be rotated onto anything. What happens
-instead is that the arriving rim is cut back to where it crossed the standing
-rim, taking a node minted by splitting that rim -- so the two rims do fuse at
-two points, and rule 3 falls out for free, since only crossings produce
-meeting points and the far side of the T is left alone.
+road on both sides of it and cannot be rotated onto anything. But the bends
+are the same bends. Each arriving rim runs on until it meets the standing
+rim, and there it turns and becomes that rim -- two L joins, one per side.
 
-**But that is half a fusion, and the half that is missing is visible.** The
-standing rim's span *between* those two meeting points is now interior to the
-union and should not be drawn at all, and nothing removes it -- so the
-junction reads as an **H**: the two arriving rims as the uprights, the
-standing rim straight through as the crossbar.
+What is different is the **hole** between them. The stretch of standing rim
+between the two corners is not rim any more: it is the mouth of the road that
+just arrived. Left in place it draws as a kerb laid straight across the
+junction, which is what a T looked like -- the two arriving rims as uprights
+and the standing rim as a crossbar.
 
-Removing the crossbar is not an edge operation. That span bounds the standing
-run's band, and taking it away leaves the band open. The construction that
-actually closes a T is known and is written out in the Open list below; what
-it needs that does not exist yet is the ability to consume one band and
-declare its replacement in the same transaction.
+That stretch cannot simply be deleted, because it bounds the standing run's
+band and taking it away leaves the band open. So the band goes with it, and
+two **wedges** replace it -- one either side of the arriving road. Each runs
+from the arriving road's corner along what is left of the old rim to where
+the band used to end, back down the spine to the junction node, and closes on
+the arriving road's own end rib.
+
+That last edge is the whole join. The rib between the junction node and a
+corner is named after the pair of nodes it runs between, exactly as the
+road's own patch names it, so the wedge and the road's last band walk **one**
+edge with a face on each side. The two roads are joined because they bound
+the same edges, not because they touch -- and the arriving spine reaches the
+junction node on a seam that bounds something, so it survives
+`prune_unused_edges` and travel connectivity and surface tidiness stop
+pulling in opposite directions.
+
+`pathMouthsInto` finds the mouth, `junctionWedges` rebuilds the flank, and
+`junctionRemovals` takes the old faces out. Order matters in the commit: the
+flank is removed before the road that opens it is declared, and the wedges go
+in last, because they bound edges the road itself has only just minted.
+
+### One name for an edge, wherever it is minted
+
+None of this works unless a split edge and a declared edge over the same pair
+of nodes are the *same* edge. Splitting one used to mint halves named after
+the edge that was split, so a face declared later over one of those pairs got
+a second, coincident edge lying on the first -- two lines, one drawn over the
+other, and no face sharing either. `sharedEdgeId` is now the single rule, and
+`insert-vertex` names its halves with it.
 
 ## Open
 
-- **The junction face, and the crossbar it removes.** For a T at fraction `s`
-  between the standing run's stations `k` and `k+1`, with the arriving spine
-  meeting the standing rim at `T` and the rims crossing at `M1` and `M2`, the
-  correct graph is the standing run's near band replaced by two faces:
-  `(spine_k, J, T, M1, rim_k)` and `(J, spine_k+1, rim_k+1, M2, T)`. The
-  arriving run then ends on the rib `M1 -- T -- M2`, and the crossbar is gone
-  because it was never declared: the rim is now the chain
-  `rim_k -> M1 -> T -> M2 -> rim_k+1`, and its middle two links are shared
-  edges between the arriving run's bands and the junction faces rather than
-  boundary. The arriving spine's last segment `T -- J` is what divides the
-  two junction faces, so it bounds something and survives
-  `prune_unused_edges` -- which is how travel connectivity and surface
-  tidiness stop pulling in opposite directions.
-
-  Every node and face there is declarable today. What blocks it is
-  `region_overlay.rs`: consuming the near band and declaring its replacement
-  in the same overlay makes the remainder -- built unconditionally from the
-  consumed boundary with the patch boundary punched out as a hole -- come out
-  with no area, and a zero-area region is not a thing the registry should
-  hold. The overlay needs to skip a remainder that the patch covers entirely.
-  An X is the same construction at four crossing points instead of two.
+- **The X.** A run passing clean *through* another still crosses it. There is
+  no arrival and no loose end: the rim goes in one side and out the other, so
+  there is no corner to bend and no mouth to close. The construction is the
+  same one at four corners instead of two, with the crossed run's flank
+  rebuilt on both sides, and the crossing area itself becoming faces divided
+  by both spines.
 - **Remainder collapse.** `region_overlay.rs` folds every consumed region into
   one remainder carrying the first one's surface type. A network that loses
   surface identity on every stroke cannot be administered.

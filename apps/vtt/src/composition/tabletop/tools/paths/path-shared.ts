@@ -30,6 +30,7 @@ import {
 } from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
+import { sharedEdgeId } from "../core/boundary-edges.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import {
   distanceToSegmentXZ,
@@ -44,6 +45,7 @@ import {
   sideOf,
 } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
+import { junctionRemovals, junctionWedges } from "./path-junction.ts";
 
 export const PATH_COLOR = 0xc084fc;
 
@@ -351,7 +353,14 @@ export function junctionsWithStandingSpines(
   // first has already split out of existence.
   const usedEdges = new Set<string>();
   /** Splits to issue against standing spines, in the order they were found. */
-  const inserts: { readonly nodeId: ConstructionNodeId; readonly position: ConstructionPosition; readonly edgeId: string }[] = [];
+  const inserts: {
+    readonly nodeId: ConstructionNodeId;
+    readonly position: ConstructionPosition;
+    readonly edgeId: string;
+    /** The nodes the split edge ran between, so the halves can be named. */
+    readonly startNodeId: ConstructionNodeId;
+    readonly endNodeId: ConstructionNodeId;
+  }[] = [];
 
   /**
    * Where an end of the stroke was moved onto a spine, by its own index in
@@ -390,11 +399,11 @@ export function junctionsWithStandingSpines(
     joinedCorridors.add(run.corridorId);
     if (arrivalIndex !== undefined) {
       arrivals.set(arrivalIndex, { position, nodeId });
-      inserts.push({ nodeId, position, edgeId });
+      inserts.push({ nodeId, position, edgeId, startNodeId: fromA.nodeId, endNodeId: toA.nodeId });
       return;
     }
     found.push({ at, position, nodeId, edgeId });
-    inserts.push({ nodeId, position, edgeId });
+    inserts.push({ nodeId, position, edgeId, startNodeId: fromA.nodeId, endNodeId: toA.nodeId });
   };
 
   // An end of the stroke that lands on a standing run joins it there. Done
@@ -530,13 +539,17 @@ export function junctionsWithStandingSpines(
     next += 1;
   }
 
+  // The halves are named after the pairs of nodes they run between, exactly
+  // as a declared edge is. A face built later over one of those pairs then
+  // finds the edge already standing instead of laying a second one beside it,
+  // which is the whole reason a junction can share a spine seam at all.
   const ops: AtomicEditOp[] = inserts.map((insert) => ({
     kind: "insert-vertex",
     edgeId: insert.edgeId,
     nodeId: insert.nodeId,
     position: insert.position,
-    firstEdgeId: `${insert.edgeId}|${insert.nodeId}|0`,
-    secondEdgeId: `${insert.edgeId}|${insert.nodeId}|1`,
+    firstEdgeId: sharedEdgeId(ctx.tableId, insert.startNodeId, insert.nodeId),
+    secondEdgeId: sharedEdgeId(ctx.tableId, insert.nodeId, insert.endNodeId),
   }));
   const touched = new Set(joinedCorridors);
   return {
@@ -650,48 +663,58 @@ export function mitreTerminalRibs(
 }
 
 /**
- * Fuses this run's outer contours into the contours of the runs it joined.
+ * Where the run being committed opens into a run already standing.
  *
- * The spine join already made the two runs one graph -- they share a node on
- * the travel line -- but their rims still passed straight through each other,
- * each leaving a loose end sitting inside the other road bounding nothing.
- * That is the mess: a contour crossing a contour without fusing.
+ * A T, seen from the arriving side. The arriving run stops at a spine node in
+ * the middle of the standing run, so its end rib cannot be mitred -- that rib
+ * has road on both sides of it and cannot be rotated onto anything. What can
+ * be said is where its two rims cross the standing rim, and those two points
+ * are the **mouth**: the opening the arriving road makes in the flank of the
+ * standing one.
  *
- * The rule, and it is the same rule in every case the owner set out:
- *
- * - **L.** Two runs meeting end to end. Each rim runs on in the direction its
- *   own spine gave it until it reaches the other rim, and there they fuse.
- * - **T.** A run arriving in the flank of another. The arrival necessarily
- *   overlaps outside, and that overlap is where the rims fuse; the two ends
- *   left loose inside the other road are cut. Only the crossings fuse, so the
- *   mouth of the T stays open and the junction never closes into a triangle.
- * - **X.** The same rule, at each place the rims actually cross.
- *
- * All three are one operation, because the loose end and the meeting point
- * are the same event seen twice: the rim's last point moves onto the crossing
- * and takes the standing rim's newly split node as its own. Cutting the stub
- * and joining the rims is a single move, and nothing has to decide which
- * shape a junction "is".
- *
- * Positions come back as a fresh vertex list rather than as an edit, because
- * this run has not been committed yet -- the sweep proposed where its rim
- * went, and the junction is what disposes.
+ * Reported rather than acted on, because closing a mouth is not an edit to
+ * this run at all -- it is a rebuild of the standing run's faces around the
+ * hole, which `junctionWedges` does.
  */
-export function fuseContoursWithStandingRuns(
+export interface PathMouthSide {
+  /** This run's own slot, so its corner node can be named. */
+  readonly across: number;
+  readonly position: ConstructionPosition;
+  /** Where the corner falls on the standing run's own station scale. */
+  readonly standingStation: number;
+}
+
+export interface PathMouth {
+  readonly run: PathRun;
+  /** The slot of the standing rim the mouth opens through. */
+  readonly through: number;
+  /** This run's end station, the one whose rib became the mouth. */
+  readonly station: number;
+  readonly sides: readonly PathMouthSide[];
+}
+
+/**
+ * Cuts this run's end rib back onto the rim of the run it arrived at, and
+ * reports the mouth that leaves.
+ *
+ * The rim keeps the direction its own spine gave it until it reaches the
+ * standing rim, which is the same rule the mitre follows -- an arrival is
+ * still two L bends, one per side. What differs is only that a T bends into
+ * the *middle* of a rim rather than into its end, so the two corners are not
+ * nodes the standing run already has, and the faces behind them have to be
+ * rebuilt rather than nudged.
+ */
+export function pathMouthsInto(
   plan: ConstructionSweepPlan,
   profileLength: number,
   spineSlot: number,
   joined: readonly PathRun[],
 ): {
   readonly vertices: readonly ConstructionPosition[];
-  /** Nodes this run must reuse, keyed `${station}:${across}`. */
-  readonly welds: ReadonlyMap<string, ConstructionNodeId>;
-  readonly inserts: readonly AtomicEditOp[];
+  readonly mouths: readonly PathMouth[];
 } {
   const vertices = [...plan.vertices];
-  const welds = new Map<string, ConstructionNodeId>();
-  const inserts: AtomicEditOp[] = [];
-  if (joined.length === 0 || profileLength < 3) return { vertices, welds, inserts };
+  if (joined.length === 0 || profileLength < 3) return { vertices, mouths: [] };
 
   const stationCount = Math.floor(vertices.length / profileLength);
   const at = (station: number, across: number): number =>
@@ -699,51 +722,53 @@ export function fuseContoursWithStandingRuns(
   const outerSlots = [...new Set([-spineSlot, profileLength - 1 - spineSlot])].filter(
     (across) => across !== 0,
   );
-  // One split per standing edge per commit, exactly as a spine crossing is
-  // capped: the second would name an edge the first has already replaced.
-  const splitEdges = new Set<string>();
+  const mouths: PathMouth[] = [];
 
-  for (const across of outerSlots) {
-    for (const run of joined) {
-      if (run.contours.length < 2) continue;
-      const footprint = footprintOf(
-        run.contours[0]!.nodes.map((node) => node.position),
-        run.contours[1]!.nodes.map((node) => node.position),
-      );
-      for (const chain of run.contours) {
+  for (const run of joined) {
+    if (run.contours.length < 2) continue;
+    const footprint = footprintOf(
+      run.contours[0]!.nodes.map((node) => node.position),
+      run.contours[1]!.nodes.map((node) => node.position),
+    );
+    for (const chain of run.contours) {
+      const standing = {
+        points: chain.nodes.map((node) => node.position),
+        edgeIds: chain.edgeIds,
+      };
+      const sides: PathMouthSide[] = [];
+      let station: number | undefined;
+      for (const across of outerSlots) {
         const own = {
-          points: Array.from({ length: stationCount }, (_unused, station) => vertices[at(station, across)]!),
+          points: Array.from(
+            { length: stationCount },
+            (_unused, index) => vertices[at(index, across)]!,
+          ),
           edgeIds: [],
         };
-        const standing = {
-          points: chain.nodes.map((node) => node.position),
-          edgeIds: chain.edgeIds,
-        };
-        for (const fusion of contourFusionsAgainst(own, standing, footprint)) {
-          const key = `${fusion.ownIndex}:${across}`;
-          if (splitEdges.has(fusion.edgeId) || welds.has(key)) continue;
-          const from = chain.nodes[fusion.standingIndex]!;
-          const to = chain.nodes[fusion.standingIndex + 1]!;
-          const station = Number(
-            (from.station + (to.station - from.station) * fusion.along).toFixed(3),
-          );
-          const nodeId = stationNodeId(run.corridorId, station, chain.across);
-          splitEdges.add(fusion.edgeId);
-          welds.set(key, nodeId);
-          vertices[at(fusion.ownIndex, across)] = fusion.position;
-          inserts.push({
-            kind: "insert-vertex",
-            edgeId: fusion.edgeId,
-            nodeId,
-            position: fusion.position,
-            firstEdgeId: `${fusion.edgeId}|${nodeId}|0`,
-            secondEdgeId: `${fusion.edgeId}|${nodeId}|1`,
-          });
-        }
+        const [fusion] = contourFusionsAgainst(own, standing, footprint);
+        if (fusion === undefined) continue;
+        const from = chain.nodes[fusion.standingIndex]!;
+        const to = chain.nodes[fusion.standingIndex + 1]!;
+        vertices[at(fusion.ownIndex, across)] = fusion.position;
+        station = fusion.ownIndex;
+        sides.push({
+          across,
+          position: fusion.position,
+          standingStation: from.station + (to.station - from.station) * fusion.along,
+        });
       }
+      // One side alone is a graze, not a mouth: an opening needs two corners,
+      // and rebuilding the flank around half of one would leave it open.
+      if (sides.length < 2 || station === undefined) continue;
+      mouths.push({
+        run,
+        through: chain.across,
+        station,
+        sides: [...sides].sort((left, right) => left.standingStation - right.standingStation),
+      });
     }
   }
-  return { vertices, welds, inserts };
+  return { vertices, mouths };
 }
 
 /**
@@ -921,7 +946,7 @@ export function commitPathContour(
     const mitredCorridors = new Set(
       crossed.terminals.filter((join) => join.terminal).map((join) => join.run.corridorId),
     );
-    const fused = fuseContoursWithStandingRuns(
+    const fused = pathMouthsInto(
       { ...plan, vertices: mitred.vertices },
       profile.length,
       spineSlot,
@@ -936,8 +961,24 @@ export function commitPathContour(
       { ...plan, vertices: fused.vertices },
       profile.length,
       spineSlot,
-      new Map([...spineWelds, ...mitred.welds, ...fused.welds]),
+      new Map([...spineWelds, ...mitred.welds]),
     );
+
+    // Closing a mouth is not an edit to this run: it is the standing run's
+    // flank rebuilt around the opening. Prepared here so a refusal below
+    // takes it down with everything else.
+    const corridorId = pathCorridorId(effect.operationId, params.pathKind);
+    const wedges = fused.mouths
+      .map((mouth) => {
+        const junctionNodeId = spineWelds.get(`${mouth.station}:0`);
+        const junctionStation = parseStationNodeId(junctionNodeId ?? "")?.station;
+        if (junctionNodeId === undefined || junctionStation === undefined) return undefined;
+        return junctionWedges(ctx.tableId, effect.operationId, corridorId, mouth, {
+          nodeId: junctionNodeId,
+          station: junctionStation,
+        });
+      })
+      .filter((wedge): wedge is NonNullable<typeof wedge> => wedge !== undefined);
 
     const resolved = resolveCoverage(
       effect.targetType,
@@ -967,7 +1008,14 @@ export function commitPathContour(
     // crossing needs and the rim nodes a fusion needs are made by cutting
     // edges of runs already standing, and a refusal above would otherwise
     // leave those cuts behind with nothing referencing them.
-    const splits = [...crossed.inserts, ...mitred.moves, ...fused.inserts];
+    const splits = [
+      ...crossed.inserts,
+      ...mitred.moves,
+      // The flank the mouth opens into goes before the road that opens it,
+      // so the rim between the two corners is gone rather than left lying
+      // across the junction like a kerb.
+      ...junctionRemovals(wedges),
+    ];
     if (splits.length > 0) {
       ctx.runtime.applyRegionEdit(splits, "local", operationId);
     }
@@ -983,6 +1031,22 @@ export function commitPathContour(
       "local",
       effect.operationId,
     );
+    // Last, because both wedges bound edges the road itself only just
+    // declared: the rib between the junction node and each corner.
+    const unclosed: string[] = [];
+    for (const wedge of wedges) {
+      const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
+      unclosed.push(...laid.skippedRegionIds);
+    }
+    if (unclosed.length > 0) {
+      // Worth saying out loud: the flank it replaced is already gone, so a
+      // refused wedge is a hole in the road rather than a cosmetic miss.
+      ctx.reportFeedback({
+        tone: "error",
+        message: `Junção incompleta: ${unclosed.length} face não pôde ser fechada.`,
+      });
+    }
+
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
     if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });

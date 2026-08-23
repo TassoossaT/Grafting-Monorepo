@@ -3231,6 +3231,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
+export function sharedEdgeId(
+  tableId: string,
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+  ): ConstructionEdgeId {
+  return from < to ? `${tableId}:seg:${from}~${to}` : `${tableId}:seg:${to}~${from}`;
+  }
 export type EdgeSharing =
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
   const uses = new Map<ConstructionEdgeId, boolean[]>();
@@ -3490,6 +3497,24 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   halfWidth: pathHalfWidth,
 
 
+// src/composition/tabletop/tools/paths/path-junction.ts
+export interface JunctionWedges {
+  /** Faces of the standing run that the mouth opens into, and so must go. */
+  readonly removed: readonly ConstructionSurfaceKey[];
+  /** Their replacement, either side of the arriving road. */
+  readonly patch: ConstructionPatch;
+  }
+export function junctionWedges(
+  tableId: string,
+  operationId: string,
+  arrivingCorridorId: string,
+  mouth: PathMouth,
+  /** The junction node on the standing spine, which both wedges pivot on. */
+  junction: { readonly nodeId: ConstructionNodeId; readonly station: number },
+  ): JunctionWedges | undefined {
+export function junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[] {
+  const seen = new Set<string>();
+
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -3537,14 +3562,29 @@ export function mitreTerminalRibs(
   ): {
   readonly vertices: readonly ConstructionPosition[];
   readonly welds: ReadonlyMap<string, ConstructionNodeId>;
-export function fuseContoursWithStandingRuns(
+export interface PathMouthSide {
+  /** This run's own slot, so its corner node can be named. */
+  readonly across: number;
+  readonly position: ConstructionPosition;
+  /** Where the corner falls on the standing run's own station scale. */
+  readonly standingStation: number;
+  }
+export interface PathMouth {
+  readonly run: PathRun;
+  /** The slot of the standing rim the mouth opens through. */
+  readonly through: number;
+  /** This run's end station, the one whose rib became the mouth. */
+  readonly station: number;
+  readonly sides: readonly PathMouthSide[];
+  }
+export function pathMouthsInto(
   plan: ConstructionSweepPlan,
   profileLength: number,
   spineSlot: number,
   joined: readonly PathRun[],
   ): {
   readonly vertices: readonly ConstructionPosition[];
-  /** Nodes this run must reuse, keyed `${station}:${across}`. */
+  readonly mouths: readonly PathMouth[];
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
@@ -4213,12 +4253,12 @@ export type {
   NoToolParams,
 export type {
   PathRun,
+  PathRunBand,
   PathRunChain,
   PathRunNode,
   PathRunRib,
   } from "./path-cloud.ts";
   export {
-  followsOutward,
 export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
@@ -4264,6 +4304,13 @@ export interface PathRunRib {
   /** The faces this rib bounds. */
   readonly bands: readonly ConstructionSurfaceKey[];
   }
+export interface PathRunBand {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  /** The stations it spans, in order. */
+  readonly stations: readonly number[];
+  /** The slots it lies between, in order across. */
+  readonly slots: readonly number[];
+  }
 export interface PathRun {
   readonly corridorId: string;
   readonly subtype: PathKind | undefined;
@@ -4271,7 +4318,7 @@ export interface PathRun {
   /** One per side, outermost slot first. */
   readonly contours: readonly PathRunChain[];
   readonly ribs: readonly PathRunRib[];
-  readonly bands: readonly ConstructionSurfaceKey[];
+  /**
 export function pathRunsIn(
   topologies: readonly ConstructionRegionTopology[],
   ): readonly PathRun[] {
