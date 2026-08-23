@@ -72,7 +72,6 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
       {params.pathKind !== "street" && sliderRow("Largura do ombro", params.shoulderWidth, 0.1, 4, 0.1, (shoulderWidth) => onChange({ ...params, shoulderWidth }))}
       {params.pathKind !== "street" && sliderRow("Altura do ombro", params.shoulderHeight, 0, 2, 0.05, (shoulderHeight) => onChange({ ...params, shoulderHeight }))}
-      {sliderRow("Densidade em curva", params.maxSegmentLength, 0.1, 2, 0.1, (maxSegmentLength) => onChange({ ...params, maxSegmentLength }))}
     </div>
   );
 }

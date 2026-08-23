@@ -4063,7 +4063,6 @@ export interface PathProfilePoint {
 export interface PathFormationRecipe {
   readonly kind: PathKind;
   readonly profile: readonly PathProfilePoint[];
-  readonly maxSegmentLength: number;
   readonly miterLimit: number;
   }
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {

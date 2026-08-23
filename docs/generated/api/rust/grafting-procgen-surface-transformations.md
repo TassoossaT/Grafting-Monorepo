@@ -51,7 +51,8 @@ Shared-vertex quad cells between neighbouring stations and profile samples.
 
 ### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::reference_line(&self) -> &[[f32; 3]]`
 
-Resampled reference line used by this exact formation.
+The stations this formation actually used -- the caller's own line,
+less any coincident repeat.
 
 ### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::vertices(&self) -> &[[f32; 3]]`
 
@@ -111,10 +112,15 @@ Rust; product policy does not.
 
 Samples a transverse profile along a reference line into connected quads.
 
-The reference line is resampled by `max_segment_length`; this makes curves
-denser without introducing a global terrain grid. Outer boundaries and
-interior strips share the exact same vertex indices, so a caller can turn
-the plan into a manifold graph patch without welding coincident geometry.
+Every station comes from the caller: this places none of its own, and
+invents no position or height that was not handed to it. Deciding where
+the stations go is inseparable from knowing what the formation runs over
+-- the ground it rides, how finely that ground varies -- and none of that
+is knowable here. A caller that wants denser stations spaces them itself.
+
+Outer boundaries and interior strips share the exact same vertex indices,
+so a caller can turn the plan into a manifold graph patch without welding
+coincident geometry.
 
 ### `pub fn grafting_procgen_surface_transformations::polygonal_contour(vertices: alloc::vec::Vec<[f32; 2]>) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -225,14 +231,6 @@ The profile is not finite, has fewer than two points, or is unordered.
 
 The reference line does not contain two distinct finite points.
 
-### `pub grafting_procgen_surface_transformations::SweepFormationFailure::InvalidSegmentLength`
-
-The requested longitudinal sampling spacing is invalid.
-
-### `pub grafting_procgen_surface_transformations::SweepFormationRequest::max_segment_length: f32`
-
-Longest allowed spacing between consecutive generated stations.
-
 ### `pub grafting_procgen_surface_transformations::SweepFormationRequest::miter_limit: f32`
 
 Largest allowed corner miter, expressed as a multiple of lateral offset.
@@ -246,9 +244,9 @@ Strictly left-to-right cross-section samples.
 Ordered reference-line samples as `[x, y, z]`.
 
 The line carries its own height, so a formation rides whatever it was
-drawn along rather than lying on the world floor. Station spacing is
-still measured horizontally: a climb makes a run steeper, never more
-densely sampled.
+drawn along rather than lying on the world floor. One station is
+emitted per point given: their spacing is the caller's decision, and
+nothing here adds to them or reads a height it was not handed.
 
 ### `pub grafting_procgen_surface_transformations::TransverseProfilePoint::elevation: f32`
 

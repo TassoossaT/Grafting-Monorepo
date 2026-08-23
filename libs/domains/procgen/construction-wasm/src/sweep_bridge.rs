@@ -23,7 +23,6 @@ pub struct SweepProfilePointRequest {
 pub struct PlanSweepRequest {
     reference_line: Vec<[f32; 3]>,
     profile: Vec<SweepProfilePointRequest>,
-    max_segment_length: f32,
     miter_limit: f32,
 }
 
@@ -49,7 +48,6 @@ pub fn plan_sweep(request: PlanSweepRequest) -> Result<PlanSweepResponse, String
                 elevation: point.elevation,
             })
             .collect(),
-        max_segment_length: request.max_segment_length,
         miter_limit: request.miter_limit,
     })
     .map_err(|error| error.to_string())?;

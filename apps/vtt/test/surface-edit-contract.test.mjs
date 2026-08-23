@@ -8,7 +8,7 @@ const context = { operationId: "path-1", tableId: "table-1", initiatedBy: "gm-1"
 const payload = {
   brushShape: { kind: "circle", radius: 2 },
   brushRegion: { samples: [{ x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }] },
-  parameters: { kind: "road", profile: [{ lateralOffset: -2, elevation: 0.2 }, { lateralOffset: -1, elevation: 0 }, { lateralOffset: 1, elevation: 0 }, { lateralOffset: 2, elevation: 0.2 }], maxSegmentLength: 0.5, miterLimit: 4 },
+  parameters: { kind: "road", profile: [{ lateralOffset: -2, elevation: 0.2 }, { lateralOffset: -1, elevation: 0 }, { lateralOffset: 1, elevation: 0 }, { lateralOffset: 2, elevation: 0.2 }], miterLimit: 4 },
 };
 
 test("path brush is one frozen semantic effect with a local scope", () => {
@@ -32,7 +32,7 @@ test("invalid gestures and formation values fail before a boundary call", () => 
 });
 
 test("VTT recipes choose the cross-section without constructing geometry", () => {
-  const common = { shape: "circle", radius: 1, rotationDegrees: 0, bedWidth: 4, shoulderWidth: 1, shoulderHeight: 0.2, maxSegmentLength: 0.5, miterLimit: 4 };
+  const common = { shape: "circle", radius: 1, rotationDegrees: 0, bedWidth: 4, shoulderWidth: 1, shoulderHeight: 0.2, miterLimit: 4 };
   assert.deepEqual(pathFormationFor({ ...common, pathKind: "street" }).profile, [{ lateralOffset: -2, elevation: 0 }, { lateralOffset: 2, elevation: 0 }]);
   assert.deepEqual(pathFormationFor({ ...common, pathKind: "road" }).profile, [{ lateralOffset: -3, elevation: 0.2 }, { lateralOffset: -2, elevation: 0 }, { lateralOffset: 2, elevation: 0 }, { lateralOffset: 3, elevation: 0.2 }]);
 });

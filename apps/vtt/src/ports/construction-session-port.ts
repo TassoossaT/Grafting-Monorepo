@@ -230,7 +230,6 @@ export interface SurfaceTransformationInvalidation {
 /** Declarative cross-section consumed by the generic Rust sweep. */
 export interface ConstructionSweepParameters {
   readonly profile: readonly { readonly lateralOffset: number; readonly elevation: number }[];
-  readonly maxSegmentLength: number;
   readonly miterLimit: number;
 }
 

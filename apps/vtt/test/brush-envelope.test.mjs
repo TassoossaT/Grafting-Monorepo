@@ -13,7 +13,6 @@ const ROAD = Object.freeze({
   bedWidth: 3,
   shoulderWidth: 0.6,
   shoulderHeight: 0.15,
-  maxSegmentLength: 8,
   miterLimit: 4,
 });
 

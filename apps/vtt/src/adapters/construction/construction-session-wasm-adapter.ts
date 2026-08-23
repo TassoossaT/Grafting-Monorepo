@@ -289,7 +289,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const response = JSON.parse(session.plan_sweep_json(JSON.stringify({
       referenceLine: request.referenceLine.map((sample) => [sample.x, sample.y, sample.z]),
       profile: request.parameters.profile,
-      maxSegmentLength: request.parameters.maxSegmentLength,
       miterLimit: request.parameters.miterLimit,
     }))) as {
       readonly referenceLine: readonly WirePosition[];

@@ -213,7 +213,6 @@ fn overlay_path_stroke(
             &json!({
                 "referenceLine": reference_line,
                 "profile": formation["profile"].clone(),
-                "maxSegmentLength": formation["maxSegmentLength"].clone(),
                 "miterLimit": formation["miterLimit"].clone(),
             })
             .to_string(),
@@ -321,14 +320,13 @@ fn a_profiled_path_is_a_shared_quad_patch_and_can_start_on_empty_ground() {
             {"lateralOffset": 0.5, "elevation": 0.0},
             {"lateralOffset": 1.0, "elevation": 0.4}
         ],
-        "maxSegmentLength": 1.0,
         "miterLimit": 2.0
     });
 
     let response = overlay_path_stroke(
         &mut session,
         "profiled-path-empty",
-        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
         &formation,
         &[],
     );
@@ -371,7 +369,6 @@ fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
             {"lateralOffset": 0.25, "elevation": 0.0},
             {"lateralOffset": 0.5, "elevation": 0.2}
         ],
-        "maxSegmentLength": 0.5,
         "miterLimit": 2.0
     });
 

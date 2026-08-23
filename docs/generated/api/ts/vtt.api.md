@@ -2398,8 +2398,6 @@ Product recipe forwarded unchanged to the construction-session boundary.
 
 ### `property vtt.path-recipe.PathFormationRecipe.kind: PathKind`
 
-### `property vtt.path-recipe.PathFormationRecipe.maxSegmentLength: number`
-
 ### `property vtt.path-recipe.PathFormationRecipe.miterLimit: number`
 
 ### `property vtt.path-recipe.PathFormationRecipe.profile: readonly PathProfilePoint[]`
@@ -2417,7 +2415,9 @@ One VTT-owned sample of the cross-section the generic Rust sweep executes.
 Resolves the VTT's named path recipe without constructing any mesh or graph.
 
 `street` is a flat bed, while `road` and `trail` carry a non-negative U
-profile. The Rust sweep owns all sampling, frames, vertices, and quads.
+profile, measured from the reference line's own height rather than from
+the world floor. The Rust sweep owns frames, vertices and quads; where the
+stations go, and how high each one sits, stays on this side.
 
 ### `function vtt.path-recipe.pathHalfWidth(params: PathBrushParams): number`
 
@@ -2892,17 +2892,6 @@ How wide, measured along the wall rather than across the ground -- a curved wall
 ### `property vtt.tool-types.PathBrushParams.bedWidth: number`
 
 Width of the flat traversable bed, in world units.
-
-### `property vtt.tool-types.PathBrushParams.maxSegmentLength: number`
-
-Longest station spacing sent to the authoritative sweep generator.
-
-A safety cap, not a sampling density. The reference line reaching the
-generator is already fitted -- straight runs are straight and curves are
-flattened to whatever smoothness they need -- so subdividing further
-adds collinear vertices and identical frames, which is face count with
-no fidelity behind it. Kept only so a single enormous segment still
-gets broken up.
 
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 
@@ -3677,8 +3666,6 @@ way.
 ### `interface vtt.construction-session-port.ConstructionSweepParameters`
 
 Declarative cross-section consumed by the generic Rust sweep.
-
-### `property vtt.construction-session-port.ConstructionSweepParameters.maxSegmentLength: number`
 
 ### `property vtt.construction-session-port.ConstructionSweepParameters.miterLimit: number`
 

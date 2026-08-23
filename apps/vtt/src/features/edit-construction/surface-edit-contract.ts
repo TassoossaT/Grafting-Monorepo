@@ -87,7 +87,6 @@ function freezeShape(shape: BrushShape): BrushShape {
 }
 
 function freezeFormation(parameters: PathFormationParameters): PathFormationParameters {
-  if (!Number.isFinite(parameters.maxSegmentLength) || parameters.maxSegmentLength <= 0) throw new Error("parameters.maxSegmentLength must be positive");
   if (!Number.isFinite(parameters.miterLimit) || parameters.miterLimit < 1) throw new Error("parameters.miterLimit must be at least one");
   if (parameters.profile.length < 2) throw new Error("parameters.profile must have at least two points");
   const profile = parameters.profile.map((point, index) => {
@@ -97,7 +96,7 @@ function freezeFormation(parameters: PathFormationParameters): PathFormationPara
     if (index > 0 && lateralOffset <= parameters.profile[index - 1]!.lateralOffset) throw new Error("parameters.profile must be strictly ordered");
     return Object.freeze({ lateralOffset, elevation });
   });
-  return Object.freeze({ kind: parameters.kind, profile: Object.freeze(profile), maxSegmentLength: parameters.maxSegmentLength, miterLimit: parameters.miterLimit });
+  return Object.freeze({ kind: parameters.kind, profile: Object.freeze(profile), miterLimit: parameters.miterLimit });
 }
 
 /**

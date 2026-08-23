@@ -10,7 +10,6 @@ export interface PathProfilePoint {
 export interface PathFormationRecipe {
   readonly kind: PathKind;
   readonly profile: readonly PathProfilePoint[];
-  readonly maxSegmentLength: number;
   readonly miterLimit: number;
 }
 
@@ -18,7 +17,9 @@ export interface PathFormationRecipe {
  * Resolves the VTT's named path recipe without constructing any mesh or graph.
  *
  * `street` is a flat bed, while `road` and `trail` carry a non-negative U
- * profile. The Rust sweep owns all sampling, frames, vertices, and quads.
+ * profile, measured from the reference line's own height rather than from
+ * the world floor. The Rust sweep owns frames, vertices and quads; where the
+ * stations go, and how high each one sits, stays on this side.
  */
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
@@ -34,7 +35,6 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   return Object.freeze({
     kind: params.pathKind,
     profile: Object.freeze(profile.map((point) => Object.freeze(point))),
-    maxSegmentLength: params.maxSegmentLength,
     miterLimit: params.miterLimit,
   });
 }
