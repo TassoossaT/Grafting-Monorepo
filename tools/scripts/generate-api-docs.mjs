@@ -168,6 +168,16 @@ function qualifiedName(reflection, project, rootName) {
   return [rootName, ...parts].join(".");
 }
 
+// Whether a reflection is one this document already covers -- i.e. the walk
+// from it reaches this project's root rather than running out. A re-export
+// target from outside the converted entry points does not.
+function belongsToProject(reflection, project) {
+  for (let current = reflection; current; current = current.parent) {
+    if (current === project) return true;
+  }
+  return false;
+}
+
 function renderParameters(parameters) {
   if (!parameters || parameters.length === 0) return "";
   return parameters
@@ -196,6 +206,29 @@ function collectEntries(reflection, project, rootName, entries) {
       if (child.kindOf?.(ReflectionKind.TypeParameter)) continue;
       collectEntries(child, project, rootName, entries);
     }
+    return;
+  }
+
+  // A pass-through re-export is not a declaration. It is one declaration
+  // named a second time by a barrel, and it carries no signature, no type
+  // and no comment of its own -- so it renders as a header with nothing
+  // under it, duplicating a name this same file documents properly
+  // somewhere else. That is not a rare accident here: cross-slice imports
+  // are *required* to go through an `index.ts` (apps/vtt's own
+  // architecture-boundaries test), so the denser the slicing the more of the
+  // file is empty headers.
+  //
+  // Two kinds of reference are NOT that, and both keep a pointer entry,
+  // because in each the reference is the only mention the name will ever
+  // get: one that renames on the way out (`type Vec2 as HouseVec2` --
+  // `HouseVec2` is the published name and exists nowhere else), and one
+  // whose target lies outside the converted entry points.
+  if (reflection.kindOf?.(ReflectionKind.Reference)) {
+    const target = reflection.tryGetTargetReflectionDeep?.();
+    const passThrough = target?.name === reflection.name && belongsToProject(target, project);
+    if (passThrough) return;
+    const pointer = target ? qualifiedName(target, project, rootName) : "(unresolved)";
+    entries.push({ signature: `reference ${name} -> ${pointer}`, doc });
     return;
   }
 

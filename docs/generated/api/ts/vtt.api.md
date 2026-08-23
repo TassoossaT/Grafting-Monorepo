@@ -1,64 +1,8 @@
 # vtt
 
-### `reference vtt.construction.createConstructionSessionAdapter`
-
-### `reference vtt.construction.createTerrainNoiseAdapter`
-
 ### `function vtt.construction-session-wasm-adapter.createConstructionSessionAdapter(): ConstructionSessionPort`
 
 ### `function vtt.terrain-noise-wasm-adapter.createTerrainNoiseAdapter(): TerrainNoisePort`
-
-### `reference vtt.rendering.chunkKeyFor`
-
-### `reference vtt.rendering.chunkKeyForSurface`
-
-### `reference vtt.rendering.chunkSurfaceMeshes`
-
-### `reference vtt.rendering.clipPlaneForCameraHeight`
-
-### `reference vtt.rendering.CONSTRUCTION_GRID_EXTENT`
-
-### `reference vtt.rendering.CoveringResolver`
-
-### `reference vtt.rendering.createRender3dSceneAdapter`
-
-### `reference vtt.rendering.GRID_SNAP_UNIT`
-
-### `reference vtt.rendering.MAP_LAYER_ID`
-
-### `reference vtt.rendering.MAP_SURFACE_PICK_LAYER_ID`
-
-### `reference vtt.rendering.MAP_SURFACE_PICK_VISUAL_KIND`
-
-### `reference vtt.rendering.MAP_SURFACE_VISUAL_KIND`
-
-### `reference vtt.rendering.mapChunkSceneItem`
-
-### `reference vtt.rendering.MapChunkVisualParams`
-
-### `reference vtt.rendering.MapSurfacePickData`
-
-### `reference vtt.rendering.mapSurfacePickSceneItem`
-
-### `reference vtt.rendering.mapSurfacePickSceneItemId`
-
-### `reference vtt.rendering.MapSurfacePickVisualParams`
-
-### `reference vtt.rendering.mergeChunkBucket`
-
-### `reference vtt.rendering.mergeSurfaceMeshes`
-
-### `reference vtt.rendering.NODE_HANDLE_LAYER_ID`
-
-### `reference vtt.rendering.NODE_HANDLE_VISUAL_KIND`
-
-### `reference vtt.rendering.NodeHandlePickData`
-
-### `reference vtt.rendering.nodeHandleSceneItem`
-
-### `reference vtt.rendering.nodeHandleSceneItemId`
-
-### `reference vtt.rendering.nodeHandleTransform`
 
 ### `variable vtt.construction-grid-scene-item.CONSTRUCTION_GRID_EXTENT: 25`
 
@@ -317,54 +261,6 @@ request until the tool actually commits.
 ### `function vtt.token-scene-item.tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>`
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
-
-### `reference vtt.tabletop.attachCameraNavigation`
-
-### `reference vtt.tabletop.CameraControlHandle`
-
-### `reference vtt.tabletop.CameraControlOptions`
-
-### `reference vtt.tabletop.ConfirmedTokenDeltaEnvelope`
-
-### `reference vtt.tabletop.ConstructionPointerHandlers`
-
-### `reference vtt.tabletop.ConstructionPosition`
-
-### `reference vtt.tabletop.ConstructionToolFeedback`
-
-### `reference vtt.tabletop.ConstructionToolId`
-
-### `reference vtt.tabletop.createEditHistoryStack`
-
-### `reference vtt.tabletop.createTabletopRuntime`
-
-### `reference vtt.tabletop.CreateTabletopRuntimeInput`
-
-### `reference vtt.tabletop.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.tabletop.EditHistoryStack`
-
-### `reference vtt.tabletop.EditHistoryState`
-
-### `reference vtt.tabletop.RegionEditHistoryEntry`
-
-### `reference vtt.tabletop.RenderViewId`
-
-### `reference vtt.tabletop.TabletopRuntime`
-
-### `reference vtt.tabletop.TabletopRuntimeListener`
-
-### `reference vtt.tabletop.TabletopRuntimeStatus`
-
-### `reference vtt.tabletop.TabletopSnapshot`
-
-### `reference vtt.tabletop.ToolParamsByTool`
-
-### `reference vtt.tabletop.ToolParamsFor`
-
-### `reference vtt.tabletop.useConstructionPointer`
-
-### `reference vtt.tabletop.UseConstructionPointerOptions`
 
 ### `interface vtt.create-tabletop-runtime.CreateTabletopRuntimeInput`
 
@@ -633,147 +529,9 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `type vtt.tabletop-runtime.TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed"`
 
-### `reference vtt.tools.angleFromToXZ`
+### `reference vtt.tools.HouseVec2 -> vtt.interior-partition.Vec2`
 
-### `reference vtt.tools.BoundaryEdges`
-
-### `reference vtt.tools.boundaryUsage`
-
-### `reference vtt.tools.BrushableToolId`
-
-### `reference vtt.tools.BrushOutlineShape`
-
-### `reference vtt.tools.brushReach`
-
-### `reference vtt.tools.BrushRegion`
-
-### `reference vtt.tools.brushSweptOutlinePolygons`
-
-### `reference vtt.tools.brushSweptRegionFill`
-
-### `reference vtt.tools.BrushToolSpec`
-
-### `reference vtt.tools.buildIrregularQuadGrid`
-
-### `reference vtt.tools.cellsInPolygon`
-
-### `reference vtt.tools.circleContour`
-
-### `reference vtt.tools.commitWallContour`
-
-### `reference vtt.tools.commitWallStroke`
-
-### `reference vtt.tools.ConstructionTool`
-
-### `reference vtt.tools.ConstructionToolFeedback`
-
-### `reference vtt.tools.createBoundaryEdges`
-
-### `reference vtt.tools.createBrushTool`
-
-### `reference vtt.tools.DerivedRoom`
-
-### `reference vtt.tools.distanceToPolygonBoundaryXZ`
-
-### `reference vtt.tools.distanceToSegmentXZ`
-
-### `reference vtt.tools.EdgeSharing`
-
-### `reference vtt.tools.editRegionTool`
-
-### `reference vtt.tools.findEnclosingRoom`
-
-### `reference vtt.tools.findWallSurfaceAt`
-
-### `reference vtt.tools.fitPath`
-
-### `reference vtt.tools.FittedEdge`
-
-### `reference vtt.tools.footprintQuad`
-
-### `reference vtt.tools.houseRoomDeleteTool`
-
-### `reference vtt.tools.HouseVec2`
-
-### `reference vtt.tools.idPrefixForRoom`
-
-### `reference vtt.tools.interiorWallTool`
-
-### `reference vtt.tools.IrregularGridVec2`
-
-### `reference vtt.tools.isRedundantPerimeterWall`
-
-### `reference vtt.tools.navigateTool`
-
-### `reference vtt.tools.openingTool`
-
-### `reference vtt.tools.PanelRail`
-
-### `reference vtt.tools.panelRailOf`
-
-### `reference vtt.tools.pathBrushTool`
-
-### `reference vtt.tools.pinnedToBaseline`
-
-### `reference vtt.tools.PointerSample`
-
-### `reference vtt.tools.pointInPolygonXZ`
-
-### `reference vtt.tools.PointXZ`
-
-### `reference vtt.tools.polygonAreaXZ`
-
-### `reference vtt.tools.polylineSegmentsPreview`
-
-### `reference vtt.tools.previewOutline`
-
-### `reference vtt.tools.projectOntoLineXZ`
-
-### `reference vtt.tools.quadAround`
-
-### `reference vtt.tools.QuadMesh`
-
-### `reference vtt.tools.restackTerrain`
-
-### `reference vtt.tools.reverseGeometry`
-
-### `reference vtt.tools.scopedToolId`
-
-### `reference vtt.tools.segmentBetween`
-
-### `reference vtt.tools.segmentsPreview`
-
-### `reference vtt.tools.terrainSculptTool`
-
-### `reference vtt.tools.ToolContext`
-
-### `reference vtt.tools.toolFor`
-
-### `reference vtt.tools.ToolGesture`
-
-### `reference vtt.tools.towerStampTool`
-
-### `reference vtt.tools.WALL_COLOR`
-
-### `reference vtt.tools.WALL_HEIGHT`
-
-### `reference vtt.tools.wallBrushTool`
-
-### `reference vtt.tools.WallColumn`
-
-### `reference vtt.tools.WallContour`
-
-### `reference vtt.tools.wallLineTool`
-
-### `reference vtt.tools.wallPatch`
-
-### `reference vtt.tools.WallSpan`
-
-### `reference vtt.tools.wallSpans`
-
-### `reference vtt.tools.xzDistance`
-
-### `reference vtt.tools.xzDistanceSq`
+### `reference vtt.tools.IrregularGridVec2 -> vtt.irregular-grid.Vec2`
 
 ### `interface vtt.boundary-edges.BoundaryEdges`
 
@@ -1587,8 +1345,6 @@ Everything about what a wall *is* lives here, in TypeScript. The engine is
 told which nodes exist, which edges connect them, and which faces sit over
 those edges -- it is never told that any of it is a wall.
 
-### `reference vtt.wall-patch.reverseGeometry`
-
 ### `variable vtt.wall-shared.WALL_COLOR: Record<WallParams["wallType"], number>`
 
 ### `variable vtt.wall-shared.WALL_HEIGHT: 3`
@@ -1626,10 +1382,6 @@ within WALL_PICK_TOLERANCE), or `undefined` if none qualify --
 `house-room-delete-tool.ts`'s single-surface delete: a click that lands
 directly on a wall removes just that one panel, distinct from a click on
 open floor inside a room, which removes every wall bounding it instead.
-
-### `reference vtt.wall-shared.pinnedToBaseline`
-
-### `reference vtt.wall-shared.xzDistance`
 
 ### `interface vtt.wall-spans.WallSpan`
 
@@ -1707,48 +1459,6 @@ branches on *which* tool is active -- it only resolves what the pointer
 hit, looks the active tool up in `tools/tool-registry.ts`, and calls
 whichever lifecycle hook that tool defines. Per-tool behavior (what a
 stroke or a click actually generates) lives entirely in `tools/*.ts`.
-
-### `reference vtt.map.applyMapProjectionDelta`
-
-### `reference vtt.map.colorForSurfaceType`
-
-### `reference vtt.map.CoveringKind`
-
-### `reference vtt.map.createMapProjection`
-
-### `reference vtt.map.createSurfaceProjection`
-
-### `reference vtt.map.MapId`
-
-### `reference vtt.map.MapProjection`
-
-### `reference vtt.map.MapProjectionDelta`
-
-### `reference vtt.map.NodePosition`
-
-### `reference vtt.map.NodePositionEntry`
-
-### `reference vtt.map.NodeRef`
-
-### `reference vtt.map.NONE_COVERING`
-
-### `reference vtt.map.NONE_COVERING_KIND`
-
-### `reference vtt.map.PAINTED_COVERING_KIND`
-
-### `reference vtt.map.paintedCovering`
-
-### `reference vtt.map.resolveSurfaceCovering`
-
-### `reference vtt.map.SurfaceCovering`
-
-### `reference vtt.map.SurfaceFill`
-
-### `reference vtt.map.SurfaceProjection`
-
-### `reference vtt.map.SurfaceRef`
-
-### `reference vtt.map.surfaceRefFromNodeSet`
 
 ### `interface vtt.map-projection.MapProjection`
 
@@ -1911,28 +1621,6 @@ which produces a single outer loop and no holes, so no opening exists to
 leave unfilled. The policy lands with hole authoring; the mechanism is ready
 for it now.
 
-### `reference vtt.token.applyTokenProjectionDelta`
-
-### `reference vtt.token.createTokenCollection`
-
-### `reference vtt.token.createTokenProjection`
-
-### `reference vtt.token.SceneId`
-
-### `reference vtt.token.SubjectRef`
-
-### `reference vtt.token.TokenAppearance`
-
-### `reference vtt.token.TokenCollectionProjection`
-
-### `reference vtt.token.TokenId`
-
-### `reference vtt.token.TokenPosition`
-
-### `reference vtt.token.TokenProjection`
-
-### `reference vtt.token.TokenProjectionDelta`
-
 ### `interface vtt.token-projection.TokenAppearance`
 
 ### `property vtt.token-projection.TokenAppearance.color: number`
@@ -1982,172 +1670,6 @@ for it now.
 ### `function vtt.token-projection.createTokenCollection(tokens: readonly TokenProjection[]): TokenCollectionProjection`
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
-
-### `reference vtt.edit-construction.addPosition`
-
-### `reference vtt.edit-construction.ALL_AXES`
-
-### `reference vtt.edit-construction.applyEditOp`
-
-### `reference vtt.edit-construction.applyEditPlan`
-
-### `reference vtt.edit-construction.AtomicEditOp`
-
-### `reference vtt.edit-construction.AtomicEditOpKind`
-
-### `reference vtt.edit-construction.BrushGestureRegion`
-
-### `reference vtt.edit-construction.BrushGestureSample`
-
-### `reference vtt.edit-construction.BrushShape`
-
-### `reference vtt.edit-construction.BrushShapeKind`
-
-### `reference vtt.edit-construction.BrushShapeParams`
-
-### `reference vtt.edit-construction.CascadeContext`
-
-### `reference vtt.edit-construction.cloudNodes`
-
-### `reference vtt.edit-construction.CloudSource`
-
-### `reference vtt.edit-construction.CloudTopology`
-
-### `reference vtt.edit-construction.constrainToAxes`
-
-### `reference vtt.edit-construction.ConstructionCloud`
-
-### `reference vtt.edit-construction.ConstructionHistoryEntry`
-
-### `reference vtt.edit-construction.ConstructionOperationContext`
-
-### `reference vtt.edit-construction.ConstructionToolId`
-
-### `reference vtt.edit-construction.createEditHistoryStack`
-
-### `reference vtt.edit-construction.createPathBrushEffect`
-
-### `reference vtt.edit-construction.CreationInteraction`
-
-### `reference vtt.edit-construction.CreationInteractionKind`
-
-### `reference vtt.edit-construction.CUT`
-
-### `reference vtt.edit-construction.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.edit-construction.EditAxis`
-
-### `reference vtt.edit-construction.EditGesture`
-
-### `reference vtt.edit-construction.EditHistoryStack`
-
-### `reference vtt.edit-construction.EditHistoryState`
-
-### `reference vtt.edit-construction.EditOpSink`
-
-### `reference vtt.edit-construction.EditPlan`
-
-### `reference vtt.edit-construction.EditResolution`
-
-### `reference vtt.edit-construction.EditRole`
-
-### `reference vtt.edit-construction.EditScope`
-
-### `reference vtt.edit-construction.EditTarget`
-
-### `reference vtt.edit-construction.EMPTY_OUTCOME`
-
-### `reference vtt.edit-construction.firstRefusal`
-
-### `reference vtt.edit-construction.forbid`
-
-### `reference vtt.edit-construction.HEIGHT_AXIS`
-
-### `reference vtt.edit-construction.HORIZONTAL_AXES`
-
-### `reference vtt.edit-construction.IGNORE`
-
-### `reference vtt.edit-construction.InteriorGenerateParams`
-
-### `reference vtt.edit-construction.mergeOutcomes`
-
-### `reference vtt.edit-construction.NoToolParams`
-
-### `reference vtt.edit-construction.OpeningParams`
-
-### `reference vtt.edit-construction.ORGANIC_ROLES`
-
-### `reference vtt.edit-construction.PANEL_ROLES`
-
-### `reference vtt.edit-construction.PATH_BRUSH_SOURCE_SURFACE_TYPES`
-
-### `reference vtt.edit-construction.PathBrushEffect`
-
-### `reference vtt.edit-construction.PathBrushHistoryEntry`
-
-### `reference vtt.edit-construction.PathBrushParams`
-
-### `reference vtt.edit-construction.PathFormationParameters`
-
-### `reference vtt.edit-construction.planEdit`
-
-### `reference vtt.edit-construction.PreviewDescriptor`
-
-### `reference vtt.edit-construction.refreshCloudTopology`
-
-### `reference vtt.edit-construction.RegionEditHistoryEntry`
-
-### `reference vtt.edit-construction.resolveBrushShape`
-
-### `reference vtt.edit-construction.resolveCloud`
-
-### `reference vtt.edit-construction.resolveCloudTopology`
-
-### `reference vtt.edit-construction.resolveCoverage`
-
-### `reference vtt.edit-construction.resolveCreationInteraction`
-
-### `reference vtt.edit-construction.ResolvedCoverage`
-
-### `reference vtt.edit-construction.resolvePolicy`
-
-### `reference vtt.edit-construction.RESTACK`
-
-### `reference vtt.edit-construction.RevisionPrecondition`
-
-### `reference vtt.edit-construction.RolePolicy`
-
-### `reference vtt.edit-construction.scalePosition`
-
-### `reference vtt.edit-construction.STRUCTURE_TYPE_DEFINITIONS`
-
-### `reference vtt.edit-construction.StructureTypeDefinition`
-
-### `reference vtt.edit-construction.structureTypeFor`
-
-### `reference vtt.edit-construction.SURFACE_EDIT_MODE_DEFINITIONS`
-
-### `reference vtt.edit-construction.SurfaceEditModeDefinition`
-
-### `reference vtt.edit-construction.surfaceEditModeFor`
-
-### `reference vtt.edit-construction.SurfaceEditTargetScope`
-
-### `reference vtt.edit-construction.TerrainSculptParams`
-
-### `reference vtt.edit-construction.ToolParamsByTool`
-
-### `reference vtt.edit-construction.ToolParamsFor`
-
-### `reference vtt.edit-construction.TOWER_RADIUS_PRESETS`
-
-### `reference vtt.edit-construction.TowerStampParams`
-
-### `reference vtt.edit-construction.WallBrushParams`
-
-### `reference vtt.edit-construction.WallParams`
-
-### `reference vtt.edit-construction.ZERO_DELTA`
 
 ### `interface vtt.atomic-edit.EditGesture`
 
@@ -2477,46 +1999,6 @@ guessing would corrupt geometry.
 
 The definition governing one surface type, or `undefined` if it has none.
 
-### `reference vtt.structure-types.allowed`
-
-### `reference vtt.structure-types.CascadeContext`
-
-### `reference vtt.structure-types.CreationInteraction`
-
-### `reference vtt.structure-types.CreationInteractionKind`
-
-### `reference vtt.structure-types.CUT`
-
-### `reference vtt.structure-types.denied`
-
-### `reference vtt.structure-types.EditResolution`
-
-### `reference vtt.structure-types.EditRole`
-
-### `reference vtt.structure-types.EditScope`
-
-### `reference vtt.structure-types.forbid`
-
-### `reference vtt.structure-types.IGNORE`
-
-### `reference vtt.structure-types.ORGANIC_ROLES`
-
-### `reference vtt.structure-types.organicStructureType`
-
-### `reference vtt.structure-types.PANEL_ROLES`
-
-### `reference vtt.structure-types.panelStructureType`
-
-### `reference vtt.structure-types.pathInteractionOver`
-
-### `reference vtt.structure-types.RESTACK`
-
-### `reference vtt.structure-types.RolePolicy`
-
-### `reference vtt.structure-types.StructureTypeDefinition`
-
-### `reference vtt.structure-types.terrainInteractionOver`
-
 ### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
 
 What happens when one structure type is painted over another.
@@ -2747,8 +2229,6 @@ Convenience for the common "allowed, on these axes, at this reach, no cascade" p
 ### `function vtt.structure-type.denied(role: string, reason: string): RolePolicy`
 
 The policy every unknown role falls back to: refuse rather than guess.
-
-### `reference vtt.structure-type.EditGesture`
 
 ### `interface vtt.surface-edit-contract.BrushGestureRegion`
 
@@ -3109,10 +2589,6 @@ closed catalog, not a free numeric field -- so every tower on a table is
 one of a few known sizes a later room-generation pass (Note 0008) can
 reason about, not an arbitrary one a careless drag produced.
 
-### `reference vtt.navigate-camera.attachCameraNavigation`
-
-### `reference vtt.navigate-camera.CameraControllable`
-
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 
 The minimum a target needs for this feature to drive its camera. A
@@ -3127,28 +2603,6 @@ concrete runtime type and instead accepts anything shaped like it.
 Wires camera navigation for one attached view. Returns a detach function --
 callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 `TabletopRuntime.attachView`'s own callers already follow.
-
-### `reference vtt.place-token.BindTokenSubjectIntent`
-
-### `reference vtt.place-token.BindTokenSubjectOperation`
-
-### `reference vtt.place-token.createBindTokenSubjectOperation`
-
-### `reference vtt.place-token.createPlaceTokenOperation`
-
-### `reference vtt.place-token.OperationId`
-
-### `reference vtt.place-token.ParticipantId`
-
-### `reference vtt.place-token.PlaceTokenIntent`
-
-### `reference vtt.place-token.PlaceTokenOperation`
-
-### `reference vtt.place-token.RevisionPrecondition`
-
-### `reference vtt.place-token.TokenOperation`
-
-### `reference vtt.place-token.TokenOperationContext`
 
 ### `interface vtt.token-operations.BindTokenSubjectIntent`
 
@@ -3223,114 +2677,6 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `function vtt.token-operations.createBindTokenSubjectOperation(intent: BindTokenSubjectIntent, context: TokenOperationContext): BindTokenSubjectOperation`
 
 ### `function vtt.token-operations.createPlaceTokenOperation(intent: PlaceTokenIntent, context: TokenOperationContext): PlaceTokenOperation`
-
-### `reference vtt.ports.AffectedSurfaces`
-
-### `reference vtt.ports.ApplyPathBrushOutcome`
-
-### `reference vtt.ports.ApplyPathBrushRequest`
-
-### `reference vtt.ports.CameraControlHandle`
-
-### `reference vtt.ports.CameraControlOptions`
-
-### `reference vtt.ports.CellCoordinate`
-
-### `reference vtt.ports.ChangeOrigin`
-
-### `reference vtt.ports.CloudOutcome`
-
-### `reference vtt.ports.CloudRequest`
-
-### `reference vtt.ports.ConfirmedMapChunkRenderChange`
-
-### `reference vtt.ports.ConfirmedNodeHandleRenderChange`
-
-### `reference vtt.ports.ConfirmedRenderChange`
-
-### `reference vtt.ports.ConfirmedSurfacePickRenderChange`
-
-### `reference vtt.ports.ConfirmedTokenRenderChange`
-
-### `reference vtt.ports.ConstructionBrushShape`
-
-### `reference vtt.ports.ConstructionCoverageKind`
-
-### `reference vtt.ports.ConstructionCoveredRegion`
-
-### `reference vtt.ports.ConstructionEdgeGeometry`
-
-### `reference vtt.ports.ConstructionEdgeId`
-
-### `reference vtt.ports.ConstructionNodeId`
-
-### `reference vtt.ports.ConstructionNodeSnapshot`
-
-### `reference vtt.ports.ConstructionOrientedEdgeUse`
-
-### `reference vtt.ports.ConstructionPatch`
-
-### `reference vtt.ports.ConstructionPatchEdge`
-
-### `reference vtt.ports.ConstructionPatchOutcome`
-
-### `reference vtt.ports.ConstructionPatchRegion`
-
-### `reference vtt.ports.ConstructionPosition`
-
-### `reference vtt.ports.ConstructionRegionEdge`
-
-### `reference vtt.ports.ConstructionRegionTopology`
-
-### `reference vtt.ports.ConstructionSessionPort`
-
-### `reference vtt.ports.ConstructionSurfaceKey`
-
-### `reference vtt.ports.ConstructionSurfaceSpec`
-
-### `reference vtt.ports.ConstructionUnfilledLoop`
-
-### `reference vtt.ports.DiffOutcome`
-
-### `reference vtt.ports.GenerateRegionPartitionRequest`
-
-### `reference vtt.ports.RegionEditOutcome`
-
-### `reference vtt.ports.RemoveSurfaceRequest`
-
-### `reference vtt.ports.RenderCovering`
-
-### `reference vtt.ports.RenderDependencyRevision`
-
-### `reference vtt.ports.RenderLayerKey`
-
-### `reference vtt.ports.RenderMapChunk`
-
-### `reference vtt.ports.RenderMeshData`
-
-### `reference vtt.ports.RenderNodeHandle`
-
-### `reference vtt.ports.RenderPreviewDescriptor`
-
-### `reference vtt.ports.RenderSurfacePickTarget`
-
-### `reference vtt.ports.RenderToken`
-
-### `reference vtt.ports.RenderViewId`
-
-### `reference vtt.ports.ScenePickResult`
-
-### `reference vtt.ports.SceneRenderMetrics`
-
-### `reference vtt.ports.SceneRenderPort`
-
-### `reference vtt.ports.SurfaceMeshResult`
-
-### `reference vtt.ports.SurfaceTransformationInvalidation`
-
-### `reference vtt.ports.TerrainNoisePort`
-
-### `reference vtt.ports.TransformationIdentityDelta`
 
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
@@ -4974,10 +4320,6 @@ its edge as the drag/toggle control.
 
 Semantic status marker with Grafting-owned status names.
 
-### `reference vtt.seeded-random.lerp`
-
-### `reference vtt.seeded-random.mulberry32`
-
 ### `interface vtt.widgets.ConstructionDockProps`
 
 ### `property vtt.widgets.ConstructionDockProps.activeTool: ConstructionToolId`
@@ -5128,18 +4470,6 @@ open/close trigger), edit-mode only. Grid snap sits here (not in the
 construction hotbar) because it is not itself a tool -- it modifies every
 construction tool's resolved point the same way, via
 `use-construction-pointer.ts`.
-
-### `reference vtt.widgets.ConstructionToolId`
-
-### `reference vtt.widgets.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.widgets.KeyboardShortcutsOptions`
-
-### `reference vtt.widgets.ToolParamsByTool`
-
-### `reference vtt.widgets.ToolParamsFor`
-
-### `reference vtt.widgets.useKeyboardShortcuts`
 
 ### `interface vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions`
 
