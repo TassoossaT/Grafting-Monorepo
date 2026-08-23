@@ -1297,8 +1297,128 @@ mod tests {
         assert!(
             error
                 .as_string()
+    fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
+        let mut session = ConstructionSession::new();
+        let patch_json = r#"{
+            "nodes": [
+                {"id": "b0", "position": [2.0, 0.0, 0.0]},
+                {"id": "t0", "position": [2.0, 3.0, 0.0]},
+                {"id": "b1", "position": [0.0, 0.0, 2.0]},
+                {"id": "t1", "position": [0.0, 3.0, 2.0]},
+                {"id": "b2", "position": [-2.0, 0.0, 0.0]},
+                {"id": "t2", "position": [-2.0, 3.0, 0.0]},
+                {"id": "b3", "position": [0.0, 0.0, -2.0]},
+                {"id": "t3", "position": [0.0, 3.0, -2.0]}
+            ],
+            "edges": [
+                {"edgeId": "e_b0_b1", "startNodeId": "b0", "endNodeId": "b1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b1_t1", "startNodeId": "b1", "endNodeId": "t1"},
+                {"edgeId": "e_t0_t1", "startNodeId": "t0", "endNodeId": "t1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_t0_b0", "startNodeId": "t0", "endNodeId": "b0"},
+                {"edgeId": "e_b1_b2", "startNodeId": "b1", "endNodeId": "b2", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b2_t2", "startNodeId": "b2", "endNodeId": "t2"},
+                {"edgeId": "e_t1_t2", "startNodeId": "t1", "endNodeId": "t2", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b2_b3", "startNodeId": "b2", "endNodeId": "b3", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b3_t3", "startNodeId": "b3", "endNodeId": "t3"},
+                {"edgeId": "e_t2_t3", "startNodeId": "t2", "endNodeId": "t3", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b3_b0", "startNodeId": "b3", "endNodeId": "b0", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_t3_t0", "startNodeId": "t3", "endNodeId": "t0", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}}
+            ],
+            "regions": [
+                {
+                    "regionId": "r0",
+                    "boundary": [
+                        {"edge": "e_b0_b1", "reversed": false},
+                        {"edge": "e_b1_t1", "reversed": false},
+                        {"edge": "e_t0_t1", "reversed": true},
+                        {"edge": "e_t0_b0", "reversed": false}
+                    ],
+                    "surfaceType": "wall-white",
+                    "physical": true
+                },
+                {
+                    "regionId": "r1",
+                    "boundary": [
+                        {"edge": "e_b1_b2", "reversed": false},
+                        {"edge": "e_b2_t2", "reversed": false},
+                        {"edge": "e_t1_t2", "reversed": true},
+                        {"edge": "e_b1_t1", "reversed": true}
+                    ],
+                    "surfaceType": "wall-white",
+                    "physical": true
+                },
+                {
+                    "regionId": "r2",
+                    "boundary": [
+                        {"edge": "e_b2_b3", "reversed": false},
+                        {"edge": "e_b3_t3", "reversed": false},
+                        {"edge": "e_t2_t3", "reversed": true},
+                        {"edge": "e_b2_t2", "reversed": true}
+                    ],
+                    "surfaceType": "wall-white",
+                    "physical": true
+                },
+                {
+                    "regionId": "r3",
+                    "boundary": [
+                        {"edge": "e_b3_b0", "reversed": false},
+                        {"edge": "e_t0_b0", "reversed": true},
+                        {"edge": "e_t3_t0", "reversed": true},
+                        {"edge": "e_b3_t3", "reversed": true}
+                    ],
+                    "surfaceType": "wall-white",
+                    "physical": true
+                }
+            ]
+        }"#;
+        session.add_patch_json(patch_json).unwrap();
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 4);
+        for mesh in meshes {
+            let positions: Vec<f32> = mesh["positions"]
+                .as_array()
                 .unwrap()
                 .contains("unknown analytic region")
         );
+                .iter()
+                .map(|v| v.as_f64().unwrap() as f32)
+                .collect();
+            let indices: Vec<u32> = mesh["indices"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap() as u32)
+                .collect();
+            assert!(!indices.is_empty());
+            for triangle in indices.chunks_exact(3) {
+                let p0 = [
+                    positions[triangle[0] as usize * 3],
+                    positions[triangle[0] as usize * 3 + 1],
+                    positions[triangle[0] as usize * 3 + 2],
+                ];
+                let p1 = [
+                    positions[triangle[1] as usize * 3],
+                    positions[triangle[1] as usize * 3 + 1],
+                    positions[triangle[1] as usize * 3 + 2],
+                ];
+                let p2 = [
+                    positions[triangle[2] as usize * 3],
+                    positions[triangle[2] as usize * 3 + 1],
+                    positions[triangle[2] as usize * 3 + 2],
+                ];
+                let a0 = p0[2].atan2(p0[0]);
+                let a1 = p1[2].atan2(p1[0]);
+                let a2 = p2[2].atan2(p2[0]);
+                let mut span = (a0 - a1).abs().max((a1 - a2).abs()).max((a2 - a0).abs());
+                if span > std::f32::consts::PI {
+                    span = std::f32::consts::TAU - span;
+                }
+                assert!(
+                    span < 0.4,
+                    "triangle cut diagonally across tower: angular span = {span}"
+                );
+            }
+        }
     }
 }
