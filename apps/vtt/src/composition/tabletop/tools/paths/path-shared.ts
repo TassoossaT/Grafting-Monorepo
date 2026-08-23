@@ -1,4 +1,4 @@
-import type { AtomicEditOp, BrushShape, PathBrushParams } from "@/features/edit-construction";
+import type { AtomicEditOp, BrushShape, PathBrushParams, PathRun } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionNodeId,
@@ -23,7 +23,7 @@ import {
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
-import { pointInPolygonXZ } from "../shapes/geometry-2d.ts";
+import { pointInPolygonXZ, projectOntoLineXZ } from "../shapes/geometry-2d.ts";
 import { pathPatch } from "./path-patch.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -256,17 +256,46 @@ function segmentCrossing(
 }
 
 /**
- * Every crossing between the run being drawn and a spine already standing.
+ * How far this run reaches from its own spine, measured on the run itself.
  *
- * This is the half of the wall's junction model that was missing: a crossing
- * almost never lands on an existing station, so there is nothing to weld
- * onto until one is *made*. `insertedColumnAt` splits the crossed panel and
- * mints the column; this splits the crossed spine's own edge and mints the
- * node, and the run being drawn gains a station at the very same place.
+ * A road ending *on* another road is a junction, and "on" means inside that
+ * road's surface. Measured rather than assumed, because every run carries its
+ * own width and the run being drawn need not share it.
+ */
+function reachOf(run: PathRun): number {
+  let widest = 0;
+  for (const rib of run.ribs) {
+    const spine = rib.nodes.find((node) => node.across === 0);
+    if (spine === undefined) continue;
+    for (const node of rib.nodes) {
+      widest = Math.max(
+        widest,
+        Math.hypot(node.position.x - spine.position.x, node.position.z - spine.position.z),
+      );
+    }
+  }
+  return widest;
+}
+
+/**
+ * Every place the run being drawn meets a spine already standing.
  *
- * The inserted node is numbered on the crossed run's own station scale --
- * fractionally, because it sits between two of its stations -- so it stays
- * part of that spine's chain and in the right order.
+ * Two ways to meet, and only the first existed before: a stroke drawn
+ * **across** another run crosses its spine, and a stroke that **ends on**
+ * another run touches it without ever crossing anything. The second is the
+ * ordinary T -- one road arriving at another -- and is far more common than
+ * the first. Segment intersection cannot see it at all, because there is no
+ * intersection: the drawn line simply stops.
+ *
+ * So an endpoint is handled by projection instead. If either end of the
+ * stroke lands within the standing run's own reach of its spine -- which is
+ * to say, on that road -- it is moved onto the spine and joined there.
+ *
+ * Either way the join is *made*, not found: a meeting point almost never
+ * lands on an existing station, so the crossed spine's edge is split and the
+ * node minted, which is `insertedColumnAt` for paths. The node is numbered on
+ * the crossed run's own station scale, fractionally, so it stays part of that
+ * spine's chain and in the right order.
  */
 export function junctionsWithStandingSpines(
   ctx: ToolContext,
@@ -286,6 +315,71 @@ export function junctionsWithStandingSpines(
   // One insert per crossed edge per commit: the second would name an edge the
   // first has already split out of existence.
   const usedEdges = new Set<string>();
+  /** Splits to issue against standing spines, in the order they were found. */
+  const inserts: { readonly nodeId: ConstructionNodeId; readonly position: ConstructionPosition; readonly edgeId: string }[] = [];
+
+  /**
+   * Where an end of the stroke was moved onto a spine, by its own index in
+   * the line. Kept apart from the splices below because an arrival *replaces*
+   * that station rather than standing beside it -- the end has to land on the
+   * spine, and leaving the drawn one in place would put a station up to a
+   * road-width away and join nothing.
+   */
+  const arrivals = new Map<number, { readonly position: ConstructionPosition; readonly nodeId: ConstructionNodeId }>();
+
+  /** Records one meeting point, minting the node the crossed spine gains. */
+  const record = (
+    run: PathRun,
+    step: number,
+    edgeId: string,
+    along: number,
+    at: number,
+    arrivalIndex?: number,
+  ): void => {
+    const spine = run.spine!;
+    const fromA = spine.nodes[step]!;
+    const toA = spine.nodes[step + 1]!;
+    const position: ConstructionPosition = {
+      x: fromA.position.x + (toA.position.x - fromA.position.x) * along,
+      y: fromA.position.y + (toA.position.y - fromA.position.y) * along,
+      z: fromA.position.z + (toA.position.z - fromA.position.z) * along,
+    };
+    const station = Number((fromA.station + (toA.station - fromA.station) * along).toFixed(3));
+    const nodeId = stationNodeId(run.corridorId, station, 0);
+    usedEdges.add(edgeId);
+    if (arrivalIndex !== undefined) {
+      arrivals.set(arrivalIndex, { position, nodeId });
+      inserts.push({ nodeId, position, edgeId });
+      return;
+    }
+    found.push({ at, position, nodeId, edgeId });
+    inserts.push({ nodeId, position, edgeId });
+  };
+
+  // An end of the stroke that lands on a standing run joins it there. Done
+  // first, so an endpoint that also happens to cross claims its edge as the
+  // arrival it is rather than as a pass-through.
+  const endpoints = line.length < 2 ? [] : [0, line.length - 1];
+  for (const index of endpoints) {
+    const end = line[index]!;
+    let best:
+      | { readonly run: PathRun; readonly step: number; readonly edgeId: string; readonly along: number; readonly perp: number }
+      | undefined;
+    for (const run of standing) {
+      const spine = run.spine;
+      if (spine === undefined) continue;
+      const reach = reachOf(run);
+      if (reach <= 0) continue;
+      for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
+        const edgeId = spine.edgeIds[step];
+        if (edgeId === undefined || usedEdges.has(edgeId)) continue;
+        const { t, perp } = projectOntoLineXZ(end, spine.nodes[step]!.position, spine.nodes[step + 1]!.position);
+        if (perp > reach || t < 0 || t > 1) continue;
+        if (best === undefined || perp < best.perp) best = { run, step, edgeId, along: t, perp };
+      }
+    }
+    if (best !== undefined) record(best.run, best.step, best.edgeId, best.along, index, index);
+  }
 
   for (const run of standing) {
     const spine = run.spine;
@@ -298,20 +392,14 @@ export function junctionsWithStandingSpines(
       for (let index = 0; index + 1 < line.length; index += 1) {
         const crossing = segmentCrossing(fromA.position, toA.position, line[index]!, line[index + 1]!);
         if (crossing === undefined) continue;
-        const position: ConstructionPosition = {
-          x: fromA.position.x + (toA.position.x - fromA.position.x) * crossing.along,
-          y: fromA.position.y + (toA.position.y - fromA.position.y) * crossing.along,
-          z: fromA.position.z + (toA.position.z - fromA.position.z) * crossing.along,
-        };
-        const station = Number((fromA.station + (toA.station - fromA.station) * crossing.along).toFixed(3));
-        const nodeId = stationNodeId(run.corridorId, station, 0);
-        usedEdges.add(edgeId);
-        found.push({ at: index + crossing.across, position, nodeId, edgeId });
+        record(run, step, edgeId, crossing.along, index + crossing.across);
         break;
       }
     }
   }
-  if (found.length === 0) return { line, welds: new Map(), inserts: [] };
+  if (found.length === 0 && arrivals.size === 0) {
+    return { line, welds: new Map(), inserts: [] };
+  }
 
   const ordered = [...found].sort((left, right) => left.at - right.at);
   const spliced: ConstructionPosition[] = [];
@@ -352,22 +440,26 @@ export function junctionsWithStandingSpines(
       pushCrossing(ordered[next]!);
       next += 1;
     }
-    pushStation(line[index]!);
+    // An arrival replaces the drawn end: the road has to reach the spine it
+    // joins, so the station moves onto it rather than one being added beside.
+    const arrival = arrivals.get(index);
+    if (arrival !== undefined) pushCrossing(arrival);
+    else pushStation(line[index]!);
   }
   while (next < ordered.length) {
     pushCrossing(ordered[next]!);
     next += 1;
   }
 
-  const inserts: AtomicEditOp[] = ordered.map((crossing) => ({
+  const ops: AtomicEditOp[] = inserts.map((insert) => ({
     kind: "insert-vertex",
-    edgeId: crossing.edgeId,
-    nodeId: crossing.nodeId,
-    position: crossing.position,
-    firstEdgeId: `${crossing.edgeId}|${crossing.nodeId}|0`,
-    secondEdgeId: `${crossing.edgeId}|${crossing.nodeId}|1`,
+    edgeId: insert.edgeId,
+    nodeId: insert.nodeId,
+    position: insert.position,
+    firstEdgeId: `${insert.edgeId}|${insert.nodeId}|0`,
+    secondEdgeId: `${insert.edgeId}|${insert.nodeId}|1`,
   }));
-  return { line: spliced, welds, inserts };
+  return { line: spliced, welds, inserts: ops };
 }
 
 /**

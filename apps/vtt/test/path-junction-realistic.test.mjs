@@ -90,3 +90,68 @@ test("a stroke drawn across that run finds the crossing and splits its spine", (
   assert.equal(result.inserts[0].position.z, 0, "and it sits on the travel line");
   assert.equal(result.welds.size, 1, "the new run welds a station to it");
 });
+
+test("a stroke that ends on a standing run joins it, without ever crossing it", () => {
+  const formation = pathPatch("table-1", CORRIDOR, "path", planAlongX(4), 3, 1);
+  const ctx = { runtime: { getAllRegionTopologies: () => topologiesFrom(formation) } };
+
+  // Arrives from the side and stops on the road, a metre short of its spine.
+  // No segment intersection exists here at all: the stroke simply ends.
+  const result = junctionsWithStandingSpines(ctx, [
+    { x: 3, y: 0, z: -5 },
+    { x: 3, y: 0, z: -1 },
+  ]);
+
+  assert.equal(result.inserts.length, 1, "the arrival is found and the spine split");
+  assert.equal(result.inserts[0].position.z, 0, "the node lands on the travel line");
+  assert.equal(result.inserts[0].position.x, 3);
+
+  // The drawn end moved onto the spine rather than a station being added
+  // beside it: still two stations, and the last one is the junction.
+  assert.equal(result.line.length, 2);
+  assert.deepEqual(result.line[1], { x: 3, y: 0, z: 0 });
+  assert.equal(result.welds.get(1), result.inserts[0].nodeId);
+});
+
+test("a stroke that stops well clear of every run joins nothing", () => {
+  const formation = pathPatch("table-1", CORRIDOR, "path", planAlongX(4), 3, 1);
+  const ctx = { runtime: { getAllRegionTopologies: () => topologiesFrom(formation) } };
+
+  const result = junctionsWithStandingSpines(ctx, [
+    { x: 3, y: 0, z: -9 },
+    { x: 3, y: 0, z: -5 },
+  ]);
+
+  assert.equal(result.inserts.length, 0, "arriving near is not arriving on");
+  assert.equal(result.welds.size, 0);
+  assert.equal(result.line.length, 2);
+});
+
+test("a stroke starting on one run and ending on another joins both", () => {
+  const first = pathPatch("table-1", CORRIDOR, "path", planAlongX(4), 3, 1);
+  const other = pathCorridorId("table:path-brush:2", "road");
+  const shifted = planAlongX(4);
+  const second = pathPatch(
+    "table-1",
+    other,
+    "path",
+    { ...shifted, vertices: shifted.vertices.map((v) => ({ ...v, z: v.z + 12 })) },
+    3,
+    1,
+  );
+  const ctx = {
+    runtime: {
+      getAllRegionTopologies: () => [...topologiesFrom(first), ...topologiesFrom(second)],
+    },
+  };
+
+  const result = junctionsWithStandingSpines(ctx, [
+    { x: 3, y: 0, z: 0 },
+    { x: 3, y: 0, z: 12 },
+  ]);
+
+  assert.equal(result.inserts.length, 2, "one split per run joined");
+  assert.equal(result.welds.size, 2);
+  assert.deepEqual(result.line[0], { x: 3, y: 0, z: 0 });
+  assert.deepEqual(result.line[result.line.length - 1], { x: 3, y: 0, z: 12 });
+});

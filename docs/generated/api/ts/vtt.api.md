@@ -1052,17 +1052,24 @@ contour geometry.
 
 ### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[]): { inserts: readonly AtomicEditOp[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
 
-Every crossing between the run being drawn and a spine already standing.
+Every place the run being drawn meets a spine already standing.
 
-This is the half of the wall's junction model that was missing: a crossing
-almost never lands on an existing station, so there is nothing to weld
-onto until one is *made*. `insertedColumnAt` splits the crossed panel and
-mints the column; this splits the crossed spine's own edge and mints the
-node, and the run being drawn gains a station at the very same place.
+Two ways to meet, and only the first existed before: a stroke drawn
+**across** another run crosses its spine, and a stroke that **ends on**
+another run touches it without ever crossing anything. The second is the
+ordinary T -- one road arriving at another -- and is far more common than
+the first. Segment intersection cannot see it at all, because there is no
+intersection: the drawn line simply stops.
 
-The inserted node is numbered on the crossed run's own station scale --
-fractionally, because it sits between two of its stations -- so it stays
-part of that spine's chain and in the right order.
+So an endpoint is handled by projection instead. If either end of the
+stroke lands within the standing run's own reach of its spine -- which is
+to say, on that road -- it is moved onto the spine and joined there.
+
+Either way the join is *made*, not found: a meeting point almost never
+lands on an existing station, so the crossed spine's edge is split and the
+node minted, which is `insertedColumnAt` for paths. The node is numbered on
+the crossed run's own station scale, fractionally, so it stays part of that
+spine's chain and in the right order.
 
 ### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
 
