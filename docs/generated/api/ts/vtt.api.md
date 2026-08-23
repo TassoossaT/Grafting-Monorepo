@@ -1251,6 +1251,18 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
+### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
+
+The reference line to sweep along: where the fit decided the road goes,
+at the height the ground was actually picked at.
+
+Arc flattening here is temporary and deliberately kept in one place so it
+is obvious what to delete -- `plan_sweep_formation` only samples a
+polyline, so a true arc has no way to reach it intact. Until it accepts
+contour geometry, a curve is handed over as chords close enough that the
+difference is invisible, which is still a world apart from handing over
+the raw hand.
+
 ### `interface vtt.geometry-2d.PointXZ`
 
 Shared 2D geometry algorithms in the tabletop's ground plane (XZ).
@@ -2173,6 +2185,18 @@ for it now.
 
 ### `reference vtt.edit-construction.pathCarvesGround`
 
+### `reference vtt.edit-construction.PathCloud`
+
+### `reference vtt.edit-construction.PathCloudChain`
+
+### `reference vtt.edit-construction.pathCloudFor`
+
+### `reference vtt.edit-construction.PathCloudNode`
+
+### `reference vtt.edit-construction.PathCloudRib`
+
+### `reference vtt.edit-construction.pathClouds`
+
 ### `reference vtt.edit-construction.pathCorridorId`
 
 ### `reference vtt.edit-construction.pathFormationFor`
@@ -2414,6 +2438,79 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `interface vtt.path-cloud.PathCloud`
+
+### `property vtt.path-cloud.PathCloud.bands: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.path-cloud.PathCloud.contours: readonly PathCloudChain[]`
+
+One per side, outermost slot first.
+
+### `property vtt.path-cloud.PathCloud.corridorId: string`
+
+### `property vtt.path-cloud.PathCloud.junctionStations: readonly number[]`
+
+Stations whose spine node belongs to a **different** corridor -- this run
+welded onto one already standing there. A junction, seen from this side.
+
+### `property vtt.path-cloud.PathCloud.ribs: readonly PathCloudRib[]`
+
+### `property vtt.path-cloud.PathCloud.spine: PathCloudChain | undefined`
+
+### `property vtt.path-cloud.PathCloud.subtype: PathKind | undefined`
+
+### `interface vtt.path-cloud.PathCloudChain`
+
+A chain running **along** the run: the spine, or one side of the contour.
+
+### `property vtt.path-cloud.PathCloudChain.across: number`
+
+### `property vtt.path-cloud.PathCloudChain.edgeIds: readonly string[]`
+
+The edge between consecutive nodes; one shorter than `nodes`.
+
+### `property vtt.path-cloud.PathCloudChain.nodes: readonly PathCloudNode[]`
+
+Ordered by station.
+
+### `interface vtt.path-cloud.PathCloudNode`
+
+One node of a run, with the address its id carries.
+
+### `property vtt.path-cloud.PathCloudNode.across: number`
+
+Signed slot across the cross-section; `0` is the spine.
+
+### `property vtt.path-cloud.PathCloudNode.nodeId: string`
+
+### `property vtt.path-cloud.PathCloudNode.position: ConstructionPosition`
+
+### `property vtt.path-cloud.PathCloudNode.station: number`
+
+### `interface vtt.path-cloud.PathCloudRib`
+
+A chain running **across** the run: one station, contour to contour.
+
+### `property vtt.path-cloud.PathCloudRib.bands: readonly ConstructionSurfaceKey[]`
+
+The faces this rib bounds.
+
+### `property vtt.path-cloud.PathCloudRib.edgeIds: readonly string[]`
+
+### `property vtt.path-cloud.PathCloudRib.nodes: readonly PathCloudNode[]`
+
+Ordered by `across`, so from one contour through the spine to the other.
+
+### `property vtt.path-cloud.PathCloudRib.station: number`
+
+### `function vtt.path-cloud.pathCloudFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathCloud | undefined`
+
+One run by its corridor id, or `undefined` if nothing standing is from it.
+
+### `function vtt.path-cloud.pathClouds(topologies: readonly ConstructionRegionTopology[]): readonly PathCloud[]`
+
+Every path run standing in `topologies`, one cloud each.
+
 ### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
 
 ### `function vtt.path-corridor.pathSubtypeOf(corridorId: string): PathKind | undefined`
@@ -2461,10 +2558,20 @@ crossing is at the same level, because the run that spans says so itself.
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
 
-`street` is a flat bed, while `road` and `trail` carry a non-negative U
-profile, measured from the reference line's own height rather than from
-the world floor. The Rust sweep owns frames, vertices and quads; where the
-stations go, and how high each one sits, stays on this side.
+**Flat, and three slots wide, on purpose.** A run is exactly its outer
+contour, its spine, and the rib linking them -- the same three parts the
+junction work is about to be written against. A raised U edge is a detail
+that goes back on top once those connections work, and while the central
+logic is being settled it only gets in the way: a lifted rim drags the
+terrain's own hole up with it, because the hole reuses the rim's very
+nodes, which reads as a berm running the whole length of the road.
+
+`shoulderWidth` still widens the run; `shoulderHeight` is deliberately
+unread until the U returns.
+
+Elevations are measured from the reference line's own height rather than
+from the world floor. The Rust sweep owns frames, vertices and quads;
+where the stations go, and how high each one sits, stays on this side.
 
 ### `function vtt.path-recipe.pathHalfWidth(params: PathBrushParams): number`
 

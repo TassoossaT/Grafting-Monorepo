@@ -1,3 +1,9 @@
+import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
+import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
+
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time. A type-only
+// `@/` import is fine -- those are erased.
 import {
   createPathBrushEffect,
   firstRefusal,
@@ -7,9 +13,7 @@ import {
   pathRidesTerrain,
   pathSpineSlot,
   resolveCoverage,
-} from "@/features/edit-construction";
-import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
+} from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
@@ -62,12 +66,24 @@ function groundHeightNear(
   return closest?.y ?? 0;
 }
 
+/**
+ * One point of the flattened track, and whether the run genuinely turns
+ * there. A corner has to become a station whatever the walk decides, or the
+ * road cuts straight across it; an arc sample is only sampling, and the walk
+ * is free to place stations wherever it likes along it.
+ */
+interface TrackPoint {
+  readonly x: number;
+  readonly z: number;
+  readonly corner: boolean;
+}
+
 /** The fitted contour as ground positions, arcs sampled by angle. */
-function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number, number])[] {
+function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
 
-  const track: (readonly [number, number])[] = [[first.start.x, first.start.z]];
+  const track: TrackPoint[] = [{ x: first.start.x, z: first.start.z, corner: true }];
   for (const edge of fitted) {
     if (edge.geometry.kind === "arc") {
       const [centerX, centerZ] = edge.geometry.center;
@@ -89,10 +105,14 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number,
         const angle = edge.geometry.clockwise
           ? startAngle - (swept * step) / steps
           : startAngle + (swept * step) / steps;
-        track.push([centerX + radius * Math.cos(angle), centerZ + radius * Math.sin(angle)]);
+        track.push({
+          x: centerX + radius * Math.cos(angle),
+          z: centerZ + radius * Math.sin(angle),
+          corner: false,
+        });
       }
     }
-    track.push([edge.end.x, edge.end.z]);
+    track.push({ x: edge.end.x, z: edge.end.z, corner: true });
   }
   return track;
 }
@@ -108,7 +128,7 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number,
  * difference is invisible, which is still a world apart from handing over
  * the raw hand.
  */
-function referenceLineFrom(
+export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
@@ -121,11 +141,11 @@ function referenceLineFrom(
   // A deck spans: its height comes from its own two ends, so the middle stays
   // level instead of sagging onto whatever it crosses. Everything else reads
   // the ground the stroke was drawn over, station by station.
-  const startY = groundHeightNear(stroke, first[0], first[1]);
-  const endY = groundHeightNear(stroke, last[0], last[1]);
+  const startY = groundHeightNear(stroke, first.x, first.z);
+  const endY = groundHeightNear(stroke, last.x, last.z);
   let total = 0;
   for (let index = 0; index + 1 < track.length; index += 1) {
-    total += Math.hypot(track[index + 1]![0] - track[index]![0], track[index + 1]![1] - track[index]![1]);
+    total += Math.hypot(track[index + 1]!.x - track[index]!.x, track[index + 1]!.z - track[index]!.z);
   }
   let travelled = 0;
   const heightAt = (x: number, z: number): number => {
@@ -133,41 +153,65 @@ function referenceLineFrom(
     return total < 1e-6 ? startY : startY + (endY - startY) * (travelled / total);
   };
 
+  // Walked as one continuous arc length rather than segment by segment.
+  // Subdividing each fitted segment on its own recomputed the step from
+  // scratch every time, so a 2.0 m segment got one station and a 2.1 m
+  // segment got two -- neighbouring ribs differing by a factor of two, and
+  // far worse beside the short segments a corner produces. The step is now
+  // uniform along the whole run, and only a genuine corner interrupts it.
   const line: ConstructionPosition[] = [
-    { x: first[0], y: heightAt(first[0], first[1]), z: first[1] },
+    { x: first.x, y: heightAt(first.x, first.z), z: first.z },
   ];
+  const push = (x: number, z: number): void => {
+    const previous = line[line.length - 1]!;
+    // Two stations at one spot would be dropped by the sweep, sliding every
+    // later station's index and breaking the weld bookkeeping below.
+    if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) return;
+    line.push({ x, y: heightAt(x, z), z });
+  };
+
+  let sinceStation = 0;
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
-    const span = Math.hypot(to[0] - from[0], to[1] - from[1]);
-    const steps = Math.max(1, Math.ceil(span / TERRAIN_FOLLOW_STEP));
-    for (let step = 1; step <= steps; step += 1) {
-      const ratio = step / steps;
-      const x = from[0] + (to[0] - from[0]) * ratio;
-      const z = from[1] + (to[1] - from[1]) * ratio;
-      travelled += span / steps;
-      const previous = line[line.length - 1]!;
-      // Two stations at one spot would be dropped by the sweep, sliding every
-      // later station's index and breaking the weld bookkeeping below.
-      if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) continue;
-      line.push({ x, y: heightAt(x, z), z });
+    const span = Math.hypot(to.x - from.x, to.z - from.z);
+    if (span < 1e-9) continue;
+    let cursor = 0;
+    while (sinceStation + (span - cursor) >= TERRAIN_FOLLOW_STEP) {
+      cursor += TERRAIN_FOLLOW_STEP - sinceStation;
+      const ratio = cursor / span;
+      travelled += TERRAIN_FOLLOW_STEP - sinceStation;
+      sinceStation = 0;
+      push(from.x + (to.x - from.x) * ratio, from.z + (to.z - from.z) * ratio);
+    }
+    travelled += span - cursor;
+    sinceStation += span - cursor;
+    if (to.corner) {
+      push(to.x, to.z);
+      sinceStation = 0;
     }
   }
+  // The run has to end where it was drawn, corner or not.
+  push(last.x, last.z);
   return line;
 }
 
 /**
  * How close (world units, XZ) a new station may sit to a standing spine node
- * and still be treated as that same node -- a floor, raised by whatever
- * correction budget the stroke carries, exactly as the wall's own weld
- * tolerance is.
+ * and still be treated as that same node.
  *
- * This is the whole of a junction's identity. Two runs meet because they
- * reference one spine node, never because they crossed at the same
- * coordinate: coincident is not connected, which is also what leaves an
- * overpass an overpass -- it crosses without ever sharing one.
+ * Deliberately near-exact for now. Two runs meet because they reference one
+ * spine node, never because they crossed at the same coordinate -- but the
+ * half of the wall's model that makes that *happen* at a crossing is
+ * `insertedColumnAt`, which splits the crossed run and mints the node the
+ * junction needs. Without it, a generous tolerance only drags a station
+ * sideways onto whichever node happened to be near, kinking the run for no
+ * gain: stations sit two metres apart, so a crossing lands within a wide
+ * tolerance of one perhaps two times in five, and does nothing visible even
+ * then. Kept as an exact-coincidence rule until the insert lands with the
+ * junction geometry it belongs to.
  */
-const SPINE_WELD_TOLERANCE = 0.25;
+const SPINE_WELD_TOLERANCE = 1e-3;
 
 /** Every spine node standing on the table, with the position it stands at. */
 function standingSpineNodes(
@@ -264,11 +308,7 @@ export function commitPathContour(
       ? stroke
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
   if (drawn.length === 0) return;
-  const { line: referenceLine, welds } = weldedToStandingSpines(
-    ctx,
-    drawn,
-    Math.max(SPINE_WELD_TOLERANCE, tolerance),
-  );
+  const { line: referenceLine, welds } = weldedToStandingSpines(ctx, drawn, SPINE_WELD_TOLERANCE);
 
   try {
     const effect = createPathBrushEffect(

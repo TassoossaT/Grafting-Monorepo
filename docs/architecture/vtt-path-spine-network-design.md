@@ -15,12 +15,38 @@
     supplied by `composition/tabletop/tools/core/edit-region-tool.ts`.
   - Graph declaration: `composition/tabletop/tools/paths/path-patch.ts`.
   - Subtype identity: `apps/vtt/src/features/edit-construction/path-corridor.ts`.
+  - The run read back as spine/contour/rib:
+    `apps/vtt/src/features/edit-construction/path-cloud.ts`.
   - Declared subtype behaviour: `pathRidesTerrain` / `pathCarvesGround` in
     `path-recipe.ts`, read by `pathInteractionOver`.
   - Welding: `weldedToStandingSpines` in
     `composition/tabletop/tools/paths/path-shared.ts`.
 - Related: `vtt-atomic-edit-and-cloud-policy-design.md` (the role/policy
   machinery this reuses unchanged), `vtt-product-model.md`.
+
+## The three parts
+
+A run is exactly three things, and this is the vocabulary the junction work
+is written against:
+
+- **Spine** — the chain at slot 0, running along the run. The travel line.
+- **Contour** — a chain at an extreme slot, running *parallel* to the spine.
+  One per side.
+- **Rib** — the transverse run of one station, linking contour to spine to
+  contour, and bounding the faces either side of it.
+
+`path-cloud.ts` reads all three back off the graph. It is a **derived view,
+never stored**: every fact is already there — the spine is slot 0, a contour
+is an extreme slot, a rib is one station — and a second copy alongside would
+only give the two something to disagree about. Naming a contour is what
+junction work needs and what scanning for the largest `|across|` on demand
+does not give.
+
+**This version is flat and three slots wide.** The raised U edge of a road is
+a detail that returns once connections work. While it was on, the terrain's
+own hole reused the road's rim nodes, so the hole sat at the shoulder's
+height and the terrain ramped up to meet it — a berm running the whole length
+of the run. `shoulderWidth` still widens; `shoulderHeight` is unread.
 
 ## The decision
 
@@ -160,9 +186,16 @@ tool for computing that area.
 
 ## Open
 
-- **Junction geometry.** The crossing area must become a face bounded by both
-  runs, so the crossed spine survives on a boundary instead of inside a region
-  about to be replaced. See the measured behaviour above.
+- **Junction geometry.** Settled in shape, not written. Insert a node into
+  *both* spines at the crossing; intersect the two contours; cut the four ends
+  and relink them into one closed contour around the crossing, so no contour
+  runs over another; the enclosed area becomes its own face with both spines
+  crossing inside it, which also puts the crossed spine back on a boundary
+  instead of inside a region about to be replaced. `i_overlay` is already a
+  dependency of `surface-transformations` and is the tool for step two.
+  **Undecided:** whether that contour is the *intersection* of the two runs (a
+  simple quadrilateral) or their *union* trimmed at the four ends (the
+  chamfered corners a real crossing has).
 - **Regeneration.** The corridor id now carries the subtype, so the recipe is
   recoverable; nothing re-runs it yet. Still undecided: whether a hand-moved
   lateral vertex survives a regeneration that touches its station.
@@ -172,3 +205,8 @@ tool for computing that area.
 - **Closed loops** (`outer_boundary` assumes an open line) and
   **self-intersection** (criterion known: spine radius must exceed the
   half-width; the response to a violation is not decided).
+- **Terrain around a run.** With the rim flat this no longer shows, but the
+  hole still reuses the run's own rim nodes, so any future raised edge drags
+  the terrain up with it. Whether that is cut-and-fill worth keeping or an
+  artifact to correct is not decided; both references solve the same problem
+  by deforming terrain deliberately.

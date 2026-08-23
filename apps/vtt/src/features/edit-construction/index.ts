@@ -28,6 +28,13 @@ export {
   pathSpineSlot,
 } from "./path-recipe.ts";
 export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
+export { pathCloudFor, pathClouds } from "./path-cloud.ts";
+export type {
+  PathCloud,
+  PathCloudChain,
+  PathCloudNode,
+  PathCloudRib,
+} from "./path-cloud.ts";
 export {
   followsOutward,
   isSpineNode,

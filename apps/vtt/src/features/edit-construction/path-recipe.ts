@@ -28,24 +28,29 @@ export interface PathFormationRecipe {
 /**
  * Resolves the VTT's named path recipe without constructing any mesh or graph.
  *
- * `street` is a flat bed, while `road` and `trail` carry a non-negative U
- * profile, measured from the reference line's own height rather than from
- * the world floor. The Rust sweep owns frames, vertices and quads; where the
- * stations go, and how high each one sits, stays on this side.
+ * **Flat, and three slots wide, on purpose.** A run is exactly its outer
+ * contour, its spine, and the rib linking them -- the same three parts the
+ * junction work is about to be written against. A raised U edge is a detail
+ * that goes back on top once those connections work, and while the central
+ * logic is being settled it only gets in the way: a lifted rim drags the
+ * terrain's own hole up with it, because the hole reuses the rim's very
+ * nodes, which reads as a berm running the whole length of the road.
+ *
+ * `shoulderWidth` still widens the run; `shoulderHeight` is deliberately
+ * unread until the U returns.
+ *
+ * Elevations are measured from the reference line's own height rather than
+ * from the world floor. The Rust sweep owns frames, vertices and quads;
+ * where the stations go, and how high each one sits, stays on this side.
  */
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
-  const outer = halfBed + params.shoulderWidth;
-  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
-  const profile = params.pathKind === "street"
-    ? [{ lateralOffset: -halfBed, elevation: 0 }, spine, { lateralOffset: halfBed, elevation: 0 }]
-    : [
-        { lateralOffset: -outer, elevation: params.shoulderHeight },
-        { lateralOffset: -halfBed, elevation: 0 },
-        spine,
-        { lateralOffset: halfBed, elevation: 0 },
-        { lateralOffset: outer, elevation: params.shoulderHeight },
-      ];
+  const halfWidth = params.pathKind === "street" ? halfBed : halfBed + params.shoulderWidth;
+  const profile = [
+    { lateralOffset: -halfWidth, elevation: 0 },
+    { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 },
+    { lateralOffset: halfWidth, elevation: 0 },
+  ];
   return Object.freeze({
     kind: params.pathKind,
     profile: Object.freeze(profile.map((point) => Object.freeze(point))),

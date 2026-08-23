@@ -3422,6 +3422,12 @@ export function pathPatch(
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
+export function referenceLineFrom(
+  fitted: readonly FittedEdge[],
+  stroke: readonly ConstructionPosition[],
+  ridesTerrain: boolean,
+  ): readonly ConstructionPosition[] {
+  const track = groundTrack(fitted);
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
@@ -4040,6 +4046,14 @@ export type {
   PathKind,
   PathBrushParams,
   NoToolParams,
+export type {
+  PathCloud,
+  PathCloudChain,
+  PathCloudNode,
+  PathCloudRib,
+  } from "./path-cloud.ts";
+  export {
+  followsOutward,
 export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
@@ -4061,6 +4075,47 @@ export type {
   ResolvedCoverage,
   RolePolicy,
 
+// src/features/edit-construction/path-cloud.ts
+export interface PathCloudNode {
+  readonly nodeId: string;
+  readonly station: number;
+  /** Signed slot across the cross-section; `0` is the spine. */
+  readonly across: number;
+  readonly position: ConstructionPosition;
+  }
+export interface PathCloudChain {
+  readonly across: number;
+  /** Ordered by station. */
+  readonly nodes: readonly PathCloudNode[];
+  /** The edge between consecutive nodes; one shorter than `nodes`. */
+  readonly edgeIds: readonly string[];
+  }
+export interface PathCloudRib {
+  readonly station: number;
+  /** Ordered by `across`, so from one contour through the spine to the other. */
+  readonly nodes: readonly PathCloudNode[];
+  readonly edgeIds: readonly string[];
+  /** The faces this rib bounds. */
+  readonly bands: readonly ConstructionSurfaceKey[];
+  }
+export interface PathCloud {
+  readonly corridorId: string;
+  readonly subtype: PathKind | undefined;
+  readonly spine: PathCloudChain | undefined;
+  /** One per side, outermost slot first. */
+  readonly contours: readonly PathCloudChain[];
+  readonly ribs: readonly PathCloudRib[];
+  readonly bands: readonly ConstructionSurfaceKey[];
+export function pathClouds(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly PathCloud[] {
+  const edges = edgesOf(topologies);
+export function pathCloudFor(
+  topologies: readonly ConstructionRegionTopology[],
+  corridorId: string,
+  ): PathCloud | undefined {
+  return pathClouds(topologies).find((cloud) => cloud.corridorId === corridorId);
+
 // src/features/edit-construction/path-corridor.ts
 export function pathCorridorId(operationId: string, kind: PathKind): string {
   return `${operationId}${MARKER}${kind}`;
@@ -4081,8 +4136,12 @@ export interface PathFormationRecipe {
   }
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
-  const outer = halfBed + params.shoulderWidth;
-  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
+  const halfWidth = params.pathKind === "street" ? halfBed : halfBed + params.shoulderWidth;
+  const profile = [
+  { lateralOffset: -halfWidth, elevation: 0 },
+  { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 },
+  { lateralOffset: halfWidth, elevation: 0 },
+  ];
 export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
   return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
 export function pathRidesTerrain(kind: PathKind): boolean {
