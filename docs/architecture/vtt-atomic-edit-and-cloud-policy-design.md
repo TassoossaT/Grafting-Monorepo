@@ -25,6 +25,10 @@
   already-built `SurfaceRegion`, and how per-structure-type editing policy
   (what a wall vs. a terrain patch vs. a path lets you do) is defined and
   owned.
+- Extended 2026-08-23: `CascadeContext` gained `related`, the regions
+  sharing a node with the grabbed one, so a cascade can follow a
+  relationship a generator spread across several regions. Walls do not use
+  it. See `docs/architecture/vtt-path-spine-network-design.md`.
 - Related: `docs/architecture/vtt-node-and-wall-handle-design-notes.md`
   (2026-08-17, prior discussion of wall node roles and directional handle
   families at the interaction-design level — still relevant context, not

@@ -46,6 +46,18 @@ export interface RolePolicy {
 /** What a cascade gets to look at when deriving its extra ops. */
 export interface CascadeContext {
   readonly topology: ConstructionRegionTopology;
+  /**
+   * The other regions this one is connected to -- every region sharing at
+   * least one node with {@link topology}.
+   *
+   * A cascade that only ever saw its own region could not follow a
+   * relationship the generator spread across several. A wall does not need
+   * this, because a panel's paired corners are both its own; a swept product
+   * does, because one cross-section runs through every band it was built
+   * from and the rim belongs only to the outermost. Empty when the caller
+   * has no wider view to offer, so a role that ignores it is unaffected.
+   */
+  readonly related: readonly ConstructionRegionTopology[];
   readonly target: EditTarget;
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };

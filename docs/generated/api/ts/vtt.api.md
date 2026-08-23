@@ -1205,7 +1205,7 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
@@ -2137,6 +2137,8 @@ for it now.
 
 ### `reference vtt.edit-construction.firstRefusal`
 
+### `reference vtt.edit-construction.followsOutward`
+
 ### `reference vtt.edit-construction.forbid`
 
 ### `reference vtt.edit-construction.HEIGHT_AXIS`
@@ -2147,6 +2149,8 @@ for it now.
 
 ### `reference vtt.edit-construction.InteriorGenerateParams`
 
+### `reference vtt.edit-construction.isSpineNode`
+
 ### `reference vtt.edit-construction.mergeOutcomes`
 
 ### `reference vtt.edit-construction.NoToolParams`
@@ -2156,6 +2160,10 @@ for it now.
 ### `reference vtt.edit-construction.ORGANIC_ROLES`
 
 ### `reference vtt.edit-construction.PANEL_ROLES`
+
+### `reference vtt.edit-construction.parseStationNodeId`
+
+### `reference vtt.edit-construction.PATH_SPINE_OFFSET`
 
 ### `reference vtt.edit-construction.PathBrushEffect`
 
@@ -2174,6 +2182,8 @@ for it now.
 ### `reference vtt.edit-construction.PathKind`
 
 ### `reference vtt.edit-construction.PathProfilePoint`
+
+### `reference vtt.edit-construction.pathSpineSlot`
 
 ### `reference vtt.edit-construction.planEdit`
 
@@ -2198,6 +2208,10 @@ for it now.
 ### `reference vtt.edit-construction.RolePolicy`
 
 ### `reference vtt.edit-construction.scalePosition`
+
+### `reference vtt.edit-construction.StationNodeAddress`
+
+### `reference vtt.edit-construction.stationNodeId`
 
 ### `reference vtt.edit-construction.STRUCTURE_TYPE_DEFINITIONS`
 
@@ -2386,7 +2400,7 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture, related: readonly ConstructionRegionTopology[]): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
@@ -2410,6 +2424,17 @@ One VTT-owned sample of the cross-section the generic Rust sweep executes.
 
 ### `property vtt.path-recipe.PathProfilePoint.lateralOffset: number`
 
+### `variable vtt.path-recipe.PATH_SPINE_OFFSET: 0`
+
+The lateral offset the spine sits at.
+
+Every path profile carries a point here, which is what makes the travel
+line a real seam in the graph: the two bands either side of it meet along
+one shared edge chain, so the line is stored, shared and editable rather
+than being a number the generator forgot. Any further line a product wants
+to be first-class -- a lane, a rail -- is just another profile point, and
+needs no machinery of its own.
+
 ### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
@@ -2428,6 +2453,52 @@ Read off the profile rather than recomputed from the parameters, so the
 width the brush is sized against and the width actually swept can never
 drift apart. A `street` has no shoulder and a `road` does; that difference
 lives in one place, and this follows it.
+
+### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
+
+Which profile slot is the spine -- the index of the point at
+PATH_SPINE_OFFSET, or `-1` for a profile that declares none.
+
+Node identity is minted relative to this slot, so that "outward" is a fact
+an id carries rather than something a later edit has to infer from
+geometry that has since moved.
+
+### `interface vtt.station-node-id.StationNodeAddress`
+
+One node of a station-major sweep, as the parts its id is built from.
+
+### `property vtt.station-node-id.StationNodeAddress.across: number`
+
+Signed slot across the cross-section; `0` is the spine.
+
+### `property vtt.station-node-id.StationNodeAddress.operationId: string`
+
+The operation that minted it -- the corridor this node belongs to.
+
+### `property vtt.station-node-id.StationNodeAddress.station: number`
+
+Which cross-section along the line.
+
+### `function vtt.station-node-id.followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean`
+
+Whether `candidate` should follow `moved` when `moved` is dragged: same
+corridor, same station, and further from the spine on the same side.
+
+The spine carries its whole cross-section, a node partway out carries only
+what lies beyond it, and the outermost carries nothing -- one rule, no
+per-slot cases. Expressed as "further out" rather than as a walk from
+neighbour to neighbour because the two agree wherever a walk is even
+possible, and this keeps agreeing when the interior is not a grid.
+
+### `function vtt.station-node-id.isSpineNode(id: string): boolean`
+
+Whether `id` names the travel line itself rather than anything beside it.
+
+### `function vtt.station-node-id.parseStationNodeId(id: string): StationNodeAddress | undefined`
+
+The address inside `id`, or `undefined` for an id no sweep minted.
+
+### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
 
 ### `interface vtt.structure-types.ResolvedCoverage`
 
@@ -2511,7 +2582,15 @@ The definition governing one surface type, or `undefined` if it has none.
 
 ### `reference vtt.structure-types.panelStructureType`
 
+### `reference vtt.structure-types.PATH_ROLES`
+
 ### `reference vtt.structure-types.pathInteractionOver`
+
+### `reference vtt.structure-types.pathPolicyFor`
+
+### `reference vtt.structure-types.pathRoleFor`
+
+### `reference vtt.structure-types.pathStructureType`
 
 ### `reference vtt.structure-types.RESTACK`
 
@@ -2623,6 +2702,38 @@ That is the whole of the panel side of the interaction table.
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
 
+### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; edge: "path-edge"; spine: "path-spine"; unknown: "path-unknown" }`
+
+The role model for anything swept along a travel line: a spine, whatever
+lies between the spine and the rim, and the rim itself.
+
+**The whole rule is one sentence.** Dragging a node carries every node of
+its own station that lies further out on the same side. The spine's "further
+out" is the entire cross-section; a node partway out carries only what is
+beyond it; the rim carries nothing, because nothing is beyond it. That
+single rule replaces a per-slot table, and it is why there is no separate
+`contour` role here to keep in sync with a `rib` one.
+
+**Same-delta, deliberately.** Nothing is recomputed. A drag does not re-run
+the recipe or re-derive the mitre frame, so a corner made by dragging the
+spine narrows the way any hand-edited shape narrows. That is the model this
+repo already commits to for walls -- the graph is the truth and the recipe
+only seeds it -- and it is what lets the whole cascade be plain same-delta
+ops, which is all `RolePolicy` supports.
+
+**Widening has a direction now.** Because the cross-section is materialised
+as real nodes out to the rim, pushing the rim outward is an ordinary edit
+rather than a width parameter that would need the frame recomputed to mean
+anything.
+
+### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
+
+### `function vtt.path-structure.pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): string`
+
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+
+Builds one swept-product structure type on the shared spine model.
+
 ### `interface vtt.structure-type.CascadeContext`
 
 What a cascade gets to look at when deriving its extra ops.
@@ -2630,6 +2741,18 @@ What a cascade gets to look at when deriving its extra ops.
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
 
 The delta already constrained by the role's own axes.
+
+### `property vtt.structure-type.CascadeContext.related: readonly ConstructionRegionTopology[]`
+
+The other regions this one is connected to -- every region sharing at
+least one node with topology.
+
+A cascade that only ever saw its own region could not follow a
+relationship the generator spread across several. A wall does not need
+this, because a panel's paired corners are both its own; a swept product
+does, because one cross-section runs through every band it was built
+from and the rim belongs only to the outermost. Empty when the caller
+has no wider view to offer, so a role that ignores it is unaffected.
 
 ### `property vtt.structure-type.CascadeContext.target: EditTarget`
 

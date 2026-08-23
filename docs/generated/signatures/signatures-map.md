@@ -3416,8 +3416,9 @@ export function pathPatch(
   operationId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
   ): PathPatchFormation {
-  const nodeIds = plan.vertices.map((_vertex, index) => `${operationId}:path-node:${index}`);
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
@@ -3989,7 +3990,11 @@ export function createEditHistoryStack(): EditHistoryStack {
 
 // src/features/edit-construction/edit-orchestrator.ts
 export type EditPlan =
-export function planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan {
+export function planEdit(
+  topology: ConstructionRegionTopology,
+  gesture: EditGesture,
+  related: readonly ConstructionRegionTopology[] = [],
+  ): EditPlan {
   const policy = resolvePolicy(topology, gesture.target);
 export interface EditOpSink {
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
@@ -4035,6 +4040,7 @@ export type {
   PathKind,
   PathBrushParams,
   NoToolParams,
+export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
@@ -4056,6 +4062,7 @@ export type {
   RolePolicy,
 
 // src/features/edit-construction/path-recipe.ts
+export const PATH_SPINE_OFFSET = 0;
 export interface PathProfilePoint {
   readonly lateralOffset: number;
   readonly elevation: number;
@@ -4068,16 +4075,39 @@ export interface PathFormationRecipe {
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
   const outer = halfBed + params.shoulderWidth;
-  const profile = params.pathKind === "street"
-  ? [{ lateralOffset: -halfBed, elevation: 0 }, { lateralOffset: halfBed, elevation: 0 }]
-  : [
-  { lateralOffset: -outer, elevation: params.shoulderHeight },
-  { lateralOffset: -halfBed, elevation: 0 },
+  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
+export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
+  return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
 export function pathHalfWidth(params: PathBrushParams): number {
   return pathFormationFor(params).profile.reduce(
   (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
   0,
   );
+
+// src/features/edit-construction/station-node-id.ts
+export interface StationNodeAddress {
+  /** The operation that minted it -- the corridor this node belongs to. */
+  readonly operationId: string;
+  /** Which cross-section along the line. */
+  readonly station: number;
+  /** Signed slot across the cross-section; `0` is the spine. */
+  readonly across: number;
+  }
+export function stationNodeId(operationId: string, station: number, across: number): string {
+  return `${operationId}:s${station}:a${across}`;
+  }
+export function parseStationNodeId(id: string): StationNodeAddress | undefined {
+  const match = PATTERN.exec(id);
+export function isSpineNode(id: string): boolean {
+  return parseStationNodeId(id)?.across === 0;
+  }
+export function followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean {
+  if (candidate.operationId !== moved.operationId) return false;
+  if (candidate.station !== moved.station) return false;
+  if (candidate.across === moved.across) return false;
+  if (moved.across === 0) return true;
+  return Math.sign(candidate.across) === Math.sign(moved.across)
+  && Math.abs(candidate.across) > Math.abs(moved.across);
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =
@@ -4189,6 +4219,34 @@ export function panelStructureType(
   surfaceType,
   label,
 
+// src/features/edit-construction/structure-types/path-structure.ts
+export const PATH_ROLES = {
+  spine: "path-spine",
+  across: "path-across",
+  body: "path-body",
+  edge: "path-edge",
+  unknown: "path-unknown",
+  } as const;
+
+export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  if (target.kind === "region") return PATH_ROLES.body;
+  if (target.kind === "edge") return PATH_ROLES.edge;
+  const address = parseStationNodeId(target.nodeId);
+export function pathPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  // Height included on purpose: lifting a spine station off the ground is
+  // how a run stops riding the terrain, which is the whole of a bridge deck.
+  case PATH_ROLES.spine:
+  return allowed(role, ALL_AXES, outwardOfGrabbed);
+export function pathStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  interactionOver: (coveredType: string) => CreationInteraction,
+  ): StructureTypeDefinition {
+  return Object.freeze({
+  surfaceType,
+
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
 export type EditResolution =
@@ -4202,9 +4260,12 @@ export interface RolePolicy {
   * moving a wall's bottom corner moves its paired top corner by the *same*
 export interface CascadeContext {
   readonly topology: ConstructionRegionTopology;
-  readonly target: EditTarget;
-  /** The delta already constrained by the role's own axes. */
-  readonly delta: { readonly x: number; readonly y: number; readonly z: number };
+  /**
+  * The other regions this one is connected to -- every region sharing at
+  * least one node with {@link topology}.
+  *
+  * A cascade that only ever saw its own region could not follow a
+  * relationship the generator spread across several. A wall does not need
 export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;

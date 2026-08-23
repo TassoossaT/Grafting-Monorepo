@@ -33,6 +33,8 @@ test("invalid gestures and formation values fail before a boundary call", () => 
 
 test("VTT recipes choose the cross-section without constructing geometry", () => {
   const common = { shape: "circle", radius: 1, rotationDegrees: 0, bedWidth: 4, shoulderWidth: 1, shoulderHeight: 0.2, miterLimit: 4 };
-  assert.deepEqual(pathFormationFor({ ...common, pathKind: "street" }).profile, [{ lateralOffset: -2, elevation: 0 }, { lateralOffset: 2, elevation: 0 }]);
-  assert.deepEqual(pathFormationFor({ ...common, pathKind: "road" }).profile, [{ lateralOffset: -3, elevation: 0.2 }, { lateralOffset: -2, elevation: 0 }, { lateralOffset: 2, elevation: 0 }, { lateralOffset: 3, elevation: 0.2 }]);
+  // Every profile carries a spine at offset 0: the travel line is a real
+  // seam between the two bands either side of it, not a forgotten number.
+  assert.deepEqual(pathFormationFor({ ...common, pathKind: "street" }).profile, [{ lateralOffset: -2, elevation: 0 }, { lateralOffset: 0, elevation: 0 }, { lateralOffset: 2, elevation: 0 }]);
+  assert.deepEqual(pathFormationFor({ ...common, pathKind: "road" }).profile, [{ lateralOffset: -3, elevation: 0.2 }, { lateralOffset: -2, elevation: 0 }, { lateralOffset: 0, elevation: 0 }, { lateralOffset: 2, elevation: 0 }, { lateralOffset: 3, elevation: 0.2 }]);
 });

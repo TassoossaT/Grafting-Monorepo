@@ -2,6 +2,7 @@ import {
   createPathBrushEffect,
   firstRefusal,
   pathFormationFor,
+  pathSpineSlot,
   resolveCoverage,
 } from "@/features/edit-construction";
 import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
@@ -178,11 +179,14 @@ export function commitPathContour(
       },
       { operationId, tableId: ctx.tableId, initiatedBy: "local" },
     );
+    const profile = effect.parameters.profile;
     const formation = pathPatch(
       ctx.tableId,
       effect.operationId,
       effect.targetType,
       ctx.runtime.planPathFormation(effect),
+      profile.length,
+      pathSpineSlot(profile),
     );
 
     const resolved = resolveCoverage(effect.targetType, ctx.runtime.getFootprintCoverage(formation.outline));

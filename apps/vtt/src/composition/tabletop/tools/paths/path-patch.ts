@@ -6,6 +6,10 @@ import type {
 
 import { createBoundaryEdges } from "../core/boundary-edges.ts";
 
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time.
+import { stationNodeId } from "../../../../features/edit-construction/index.ts";
+
 /** Application-owned graph declaration for one generic sweep result. */
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -39,8 +43,16 @@ export function pathPatch(
   operationId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
 ): PathPatchFormation {
-  const nodeIds = plan.vertices.map((_vertex, index) => `${operationId}:path-node:${index}`);
+  // Station-major, exactly as the sweep lays its vertices out, so the address
+  // an id carries is the one the generator actually built it at. `across` is
+  // signed from the spine, which is what later makes "outward" arithmetic --
+  // see `features/edit-construction/station-node-id.ts`.
+  const nodeIds = plan.vertices.map((_vertex, index) =>
+    stationNodeId(operationId, Math.floor(index / profileLength), (index % profileLength) - spineSlot),
+  );
   const nodes = plan.vertices.map((position, index) => ({ id: nodeIds[index]!, position }));
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
 
@@ -49,7 +61,7 @@ export function pathPatch(
   };
 
   const regions = plan.quads.map((quad, index) => ({
-    regionId: `${operationId}:path-quad:${index}`,
+    regionId: `${operationId}:path-band:${index}`,
     boundary: quad.map((start, position) => useEdge(start, quad[(position + 1) % quad.length]!)),
     surfaceType,
     physical: true,

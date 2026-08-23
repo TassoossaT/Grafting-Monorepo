@@ -1,5 +1,17 @@
 import type { PathBrushParams, PathKind } from "./tool-types.ts";
 
+/**
+ * The lateral offset the spine sits at.
+ *
+ * Every path profile carries a point here, which is what makes the travel
+ * line a real seam in the graph: the two bands either side of it meet along
+ * one shared edge chain, so the line is stored, shared and editable rather
+ * than being a number the generator forgot. Any further line a product wants
+ * to be first-class -- a lane, a rail -- is just another profile point, and
+ * needs no machinery of its own.
+ */
+export const PATH_SPINE_OFFSET = 0;
+
 /** One VTT-owned sample of the cross-section the generic Rust sweep executes. */
 export interface PathProfilePoint {
   readonly lateralOffset: number;
@@ -24,11 +36,13 @@ export interface PathFormationRecipe {
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
   const outer = halfBed + params.shoulderWidth;
+  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
   const profile = params.pathKind === "street"
-    ? [{ lateralOffset: -halfBed, elevation: 0 }, { lateralOffset: halfBed, elevation: 0 }]
+    ? [{ lateralOffset: -halfBed, elevation: 0 }, spine, { lateralOffset: halfBed, elevation: 0 }]
     : [
         { lateralOffset: -outer, elevation: params.shoulderHeight },
         { lateralOffset: -halfBed, elevation: 0 },
+        spine,
         { lateralOffset: halfBed, elevation: 0 },
         { lateralOffset: outer, elevation: params.shoulderHeight },
       ];
@@ -37,6 +51,18 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
     profile: Object.freeze(profile.map((point) => Object.freeze(point))),
     miterLimit: params.miterLimit,
   });
+}
+
+/**
+ * Which profile slot is the spine -- the index of the point at
+ * {@link PATH_SPINE_OFFSET}, or `-1` for a profile that declares none.
+ *
+ * Node identity is minted relative to this slot, so that "outward" is a fact
+ * an id carries rather than something a later edit has to infer from
+ * geometry that has since moved.
+ */
+export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
+  return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
 }
 
 /**

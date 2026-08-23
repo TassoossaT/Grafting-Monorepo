@@ -19,7 +19,14 @@ export type {
   WallParams,
 } from "./tool-types.ts";
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
-export { pathFormationFor, pathHalfWidth } from "./path-recipe.ts";
+export { PATH_SPINE_OFFSET, pathFormationFor, pathHalfWidth, pathSpineSlot } from "./path-recipe.ts";
+export {
+  followsOutward,
+  isSpineNode,
+  parseStationNodeId,
+  stationNodeId,
+} from "./station-node-id.ts";
+export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
