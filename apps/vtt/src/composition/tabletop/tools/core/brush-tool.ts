@@ -1,5 +1,9 @@
-import { resolveBrushShape } from "@/features/edit-construction";
 import type { BrushShape, PreviewDescriptor, ToolParamsFor } from "@/features/edit-construction";
+
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time. A
+// type-only `@/` import is fine -- those are erased.
+import { resolveBrushShape } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
@@ -14,7 +18,18 @@ import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
  */
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
+  /**
+   * The brush footprint, already widened to hold the product -- see
+   * {@link expandedToHold}. This is what the ghost is drawn from, which is
+   * what makes the ghost an honest envelope rather than a decoration.
+   */
   readonly shape: BrushShape;
+  /**
+   * How far the committed product may be moved off the drawn stroke to
+   * straighten it: whatever of the brush's own reach the product does not
+   * occupy. See {@link BrushToolSpec.halfWidth}.
+   */
+  readonly tolerance: number;
 }
 
 function outlineShapeFor(shape: BrushShape): BrushOutlineShape {
@@ -37,10 +52,40 @@ export function brushReach(shape: BrushShape): number {
   return shape.radius;
 }
 
+/**
+ * The same shape, grown just enough that its reach holds a product of
+ * `halfWidth`.
+ *
+ * The brush is an envelope: whatever it paints has to fit inside the ghost
+ * the user was shown. So a product wider than the brush does not spill past
+ * it -- it pushes the brush open. Asking for a wider road is therefore also
+ * asking for a wider brush, and the ghost keeps telling the truth without
+ * the tool having to clamp, refuse, or silently narrow what was asked for.
+ */
+function expandedToHold(shape: BrushShape, halfWidth: number): BrushShape {
+  if (brushReach(shape) >= halfWidth) return shape;
+  if (shape.kind === "square") return { ...shape, size: halfWidth * 2 };
+  return { ...shape, radius: halfWidth };
+}
+
 export interface BrushToolSpec<Id extends BrushableToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
   previewColor(params: ToolParamsFor<Id>): number;
+  /**
+   * How far this brush's own product reaches from the stroke it is drawn
+   * along -- half a road's full width, shoulders included; zero for a
+   * product with no width of its own.
+   *
+   * This is the one number that gives the brush's reach a meaning, and it
+   * gives every brush the *same* meaning: the reach is the envelope the
+   * product must fit inside, and whatever the product leaves unused is the
+   * budget for straightening the hand. A wall is columns and shared edges,
+   * with no thickness in plan, so its whole reach is correction budget --
+   * the behaviour it already had, now falling out of the general rule
+   * instead of being a rule of its own.
+   */
+  halfWidth(params: ToolParamsFor<Id>): number;
   /**
    * The only place domain semantics live: what the swept region means, and
    * which backend call applies it. Called exactly once, on pointer release,
@@ -64,10 +109,15 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
  * -- is the same for all of them.
  */
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
-  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => ({
-    samples: gesture.samples.map((sample) => sample.point),
-    shape: resolveBrushShape(params),
-  });
+  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
+    const halfWidth = spec.halfWidth(params);
+    const shape = expandedToHold(resolveBrushShape(params), halfWidth);
+    return {
+      samples: gesture.samples.map((sample) => sample.point),
+      shape,
+      tolerance: Math.max(0, brushReach(shape) - halfWidth),
+    };
+  };
 
   return {
     id: spec.id,

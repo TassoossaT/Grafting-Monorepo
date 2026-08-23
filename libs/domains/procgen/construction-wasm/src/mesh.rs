@@ -192,9 +192,9 @@ mod tests {
     }
 
     /// Two spatially disjoint quads folded into ONE analytic region -- a
-    /// source region merged by a path-brush stroke crossing two separate
-    /// terrain surfaces legitimately has one outer loop per original piece
-    /// (`plan_analytic_path_brush`'s `source_boundaries`). A single-piece
+    /// remainder left by an overlay crossing two separate terrain surfaces
+    /// legitimately has one outer loop per original piece
+    /// (`plan_region_merge_regions`'s consumed boundaries). A single-piece
     /// lookup here would silently drop the second quad's geometry: exactly
     /// the real bug behind surfaces "disappearing" after applying a path
     /// brush -- `#applyConstructionMutation`'s per-key refetch only ever

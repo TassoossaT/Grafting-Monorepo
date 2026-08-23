@@ -35,7 +35,7 @@ export {
 } from "./walls/wall-shared.ts";
 export { wallPatch, type WallColumn, type WallContour } from "./walls/wall-patch.ts";
 export { wallSpans, type WallSpan } from "./walls/wall-spans.ts";
-export { fitPath, type FittedEdge } from "./walls/path-fitting.ts";
+export { fitPath, type FittedEdge } from "./core/stroke-fitting.ts";
 
 export { interiorWallTool } from "./house/interior-wall-tool.ts";
 export { houseRoomDeleteTool } from "./house/house-room-delete-tool.ts";

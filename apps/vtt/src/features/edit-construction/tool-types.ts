@@ -30,8 +30,20 @@ export interface BrushShapeParams {
 }
 
 export interface PathBrushParams extends BrushShapeParams {
-  readonly depth: number;
+  /** Product recipe; every variant still creates the single `path` surface type. */
+  readonly pathKind: PathKind;
+  /** Width of the flat traversable bed, in world units. */
+  readonly bedWidth: number;
+  /** Width of each optional raised shoulder, in world units. */
+  readonly shoulderWidth: number;
+  /** Non-negative shoulder elevation above the path bed. */
+  readonly shoulderHeight: number;
+  /** Maximum corner extension, in multiples of the local half width. */
+  readonly miterLimit: number;
 }
+
+/** Visual/formation recipe for the one generic `path` surface type. */
+export type PathKind = "trail" | "street" | "road";
 
 /**
  * What every wall-producing tool needs and nothing else: which wall type,
@@ -161,7 +173,13 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({}),
-  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
+  "path-brush": Object.freeze({
+    // The brush has to hold the road: bed 3 plus two 0.6 shoulders reaches
+    // 2.1 from the centerline, so a radius of 2.5 leaves 0.4 of correction.
+    shape: "circle", radius: 2.5, rotationDegrees: 0,
+    pathKind: "road", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
+    miterLimit: 4,
+  }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),

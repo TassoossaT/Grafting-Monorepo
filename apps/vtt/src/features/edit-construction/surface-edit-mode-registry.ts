@@ -30,10 +30,3 @@ const MODE_BY_SOURCE_TYPE = new Map(
 export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
   return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
 }
-
-/** Source policy consumed by the path transformer; derived once from the mode registry. */
-export const PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[] = Object.freeze(
-  SURFACE_EDIT_MODE_DEFINITIONS.filter((definition) =>
-    definition.effectKinds.includes(PATH_BRUSH_EFFECT_KIND),
-  ).map((definition) => definition.sourceSurfaceType),
-);

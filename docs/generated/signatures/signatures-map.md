@@ -54,14 +54,6 @@ pub struct SurfaceMeshRequest
 pub fn all_surface_meshes(
 pub fn surface_mesh(
 
-// src/path_brush.rs
-pub struct ApplyPathBrushRequest
-pub struct IdentityDeltaResponse
-pub struct SurfaceIdentityDeltaResponse
-pub struct InvalidationResponse
-pub struct ApplyPathBrushResponse
-pub fn apply_path_brush(
-
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
 pub enum ContourGeometryDto
@@ -79,9 +71,9 @@ pub fn apply_move_edge(
 pub struct MoveRegionRequest
 pub fn apply_move_region(
 
-// src/region_merge.rs
-pub struct RegionMergeOutcome
-pub fn apply_region_merge(
+// src/region_overlay.rs
+pub struct ApplyRegionOverlayRequest
+pub fn apply_region_overlay(
 
 // src/session.rs
 pub struct ConstructionSession
@@ -99,6 +91,12 @@ pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
+
+// src/sweep_bridge.rs
+pub struct SweepProfilePointRequest
+pub struct PlanSweepRequest
+pub struct PlanSweepResponse
+pub fn plan_sweep(request: PlanSweepRequest) -> Result<PlanSweepResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -375,9 +373,49 @@ pub fn boundary_runs(cells: &[CellCoord], regions: &[Region]) -> Vec<BoundaryRun
 ### `surface-mesh` (`libs/domains/procgen/surface-mesh`)
 
 ```rust
+// src/frame.rs
+pub enum UnrollFrame
+pub fn of(geometry: &ContourGeometry, start: [f32; 3], end: [f32; 3]) -> Option<Self>
+pub fn unroll(&self, point: [f32; 3]) -> [f32; 2]
+pub fn roll(&self, unrolled: [f32; 2]) -> [f32; 3]
+pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
+
 // src/lib.rs
-pub struct TriangulatedMesh
+pub mod frame;
+pub mod math;
+pub mod planar;
+pub mod tessellation;
+pub mod types;
+pub mod upright;
 pub fn triangulate_region(
+
+// src/math.rs
+pub fn dot(a: [f32; 3], b: [f32; 3]) -> f32
+pub fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3]
+pub fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3]
+pub fn face_normal(positions: &[[f32; 3]]) -> Option<[f32; 3]>
+pub fn winding_normal(positions: &[[f32; 3]], indices: &[u32]) -> Option<[f32; 3]>
+pub fn distance_xz(a: [f32; 2], b: [f32; 2]) -> f32
+pub fn angle_xz(center: [f32; 2], point: [f32; 2]) -> f32
+pub fn sweep(from: f32, to: f32, clockwise: bool) -> f32
+pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
+
+// src/planar.rs
+pub fn triangulate_contour_loops<'a>(
+
+// src/tessellation.rs
+pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
+pub fn tessellate_contour_loop(
+
+// src/types.rs
+pub const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
+pub const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
+pub struct TriangulatedMesh
+
+// src/upright.rs
+pub struct UprightStructure
+pub fn upright_structure(
+pub fn upright_face_mesh(
 ```
 
 ### `surface-transformations` (`libs/domains/procgen/surface-transformations`)
@@ -393,7 +431,9 @@ pub fn contour(&self) -> &AnalyticBrushContour
 pub fn vertices(&self) -> &[[f32; 2]]
 pub fn edge_geometries(&self) -> &[ContourGeometry]
 pub fn compact_analytic_brush_contour(
+pub fn polygonal_contour(
 pub fn plan_region_merge(
+pub fn plan_region_merge_regions(
 
 // src/lib.rs
 pub enum BrushShape
@@ -401,6 +441,18 @@ pub struct PathBrushRequest
 pub enum PathBrushFailure
 pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
 pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
+
+// src/sweep.rs
+pub struct TransverseProfilePoint
+pub struct SweepFormationRequest
+pub enum SweepFormationFailure
+pub struct SweepFormationPlan
+pub fn reference_line(&self) -> &[[f32; 3]]
+pub fn vertices(&self) -> &[[f32; 3]]
+pub fn quads(&self) -> &[[usize; 4]]
+pub fn boundary(&self) -> &[usize]
+pub fn profile_len(&self) -> usize
+pub fn plan_sweep_formation(
 ```
 
 ### `terrain-generation` (`libs/domains/procgen/terrain-generation`)
@@ -1911,6 +1963,26 @@ export interface DocCheckResult {
   checks: Array<{ file: string; lineCount: number; maxLines: number; passed: boolean; reason?: string }>;
   }
 
+// src/flag-input.ts
+export function readValue(argv: string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+export function readTextValue(argv: string[], name: string): string | undefined {
+  const filePath = readValue(argv, `${name}-file`);
+export function readValues(argv: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+  if (argv[index] !== name) continue;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+export function flagInput(
+  group: string | undefined,
+  subcommand: string | undefined,
+  argv: string[],
+  ): unknown | undefined {
+  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
+  const route = subcommand === undefined ? group : `${group} ${subcommand}`;
+  const taskId = readValue(argv, "--id");
+
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
   return path.join(repoPath, '.worktrees', taskId);
@@ -3176,8 +3248,12 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
 // src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
+  /**
+  * The brush footprint, already widened to hold the product -- see
+  * {@link expandedToHold}. This is what the ghost is drawn from, which is
+  * what makes the ghost an honest envelope rather than a decoration.
+  */
   readonly shape: BrushShape;
-  }
 export type BrushableToolId = "path-brush" | "wall-brush";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
@@ -3188,14 +3264,12 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
   defaultParams(): ToolParamsFor<Id>;
   previewColor(params: ToolParamsFor<Id>): number;
   /**
-  * The only place domain semantics live: what the swept region means, and
-  * which backend call applies it. Called exactly once, on pointer release,
-  * with the whole gesture's region -- never incrementally, never per-cell,
+  * How far this brush's own product reaches from the stroke it is drawn
+  * along -- half a road's full width, shoulders included; zero for a
+  * product with no width of its own.
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
-  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => ({
-  samples: gesture.samples.map((sample) => sample.point),
-  shape: resolveBrushShape(params),
-  });
+  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
+  const halfWidth = spec.halfWidth(params);
 
 // src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
@@ -3211,6 +3285,25 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
   defaultParams: () => ({}),
   };
+
+// src/composition/tabletop/tools/core/stroke-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export interface FitOptions {
+  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
+  readonly arcs?: boolean;
+  }
+export function fitPath(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  options: FitOptions = {},
+  ): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const arcs = options.arcs ?? true;
+  const budget = Math.max(0, tolerance);
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
@@ -3326,10 +3419,37 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_PREVIEW_COLOR,
+  previewColor: () => PATH_COLOR,
+  // Bed plus shoulders: the road occupies this much of the brush, and only
+  // what is left over may be spent straightening the stroke.
+  halfWidth: pathHalfWidth,
 
-  applyRegion(region, ctx, params) {
-  const sequence = ctx.nextSequence();
+
+// src/composition/tabletop/tools/paths/path-patch.ts
+export interface PathPatchFormation {
+  readonly patch: ConstructionPatch;
+  readonly outline: readonly (readonly [number, number])[];
+  readonly boundary: readonly ConstructionOrientedEdgeUse[];
+  }
+export function pathPatch(
+  tableId: string,
+  operationId: string,
+  surfaceType: string,
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  ): PathPatchFormation {
+
+// src/composition/tabletop/tools/paths/path-shared.ts
+export const PATH_COLOR = 0xc084fc;
+export function commitPathContour(
+  ctx: ToolContext,
+  stroke: readonly ConstructionPosition[],
+  brushShape: BrushShape,
+  tolerance: number,
+  params: PathBrushParams,
+  domain: string,
+  ): void {
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -3576,33 +3696,15 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
   WALL_COLOR[params.wallType],
 
-// src/composition/tabletop/tools/walls/path-fitting.ts
-export interface FittedEdge {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly geometry: ConstructionEdgeGeometry;
-  }
-export interface FitOptions {
-  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
-  readonly arcs?: boolean;
-  }
-export function fitPath(
-  points: readonly ConstructionPosition[],
-  tolerance: number,
-  options: FitOptions = {},
-  ): readonly FittedEdge[] {
-  if (points.length < 2) return [];
-  const arcs = options.arcs ?? true;
-  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
-
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
   previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
+  // A wall is columns and shared edges, with no thickness in plan, so it
+  // occupies none of the brush and the whole reach is correction budget.
+  halfWidth: () => 0,
 
-  applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
-  commitWallStroke(ctx, region.samples, brushReach(region.shape), params, "wall-brush");
 
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
@@ -3647,9 +3749,9 @@ export function commitWallContour(
   fitted: readonly FittedEdge[],
   params: WallParams,
   domain: string,
+  correction = 0,
   ): void {
   if (fitted.length === 0) return;
-  const sequence = ctx.nextSequence();
 export function commitWallStroke(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -3874,6 +3976,50 @@ export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
   if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
 
+// src/features/edit-construction/construction-cloud.ts
+export interface ConstructionCloud {
+  /** The one type every member shares; a cloud never spans two. */
+  readonly surfaceType: string;
+  /** The member the gesture actually landed on. */
+  readonly seed: ConstructionSurfaceKey;
+  /** Every member, the seed included, in the engine's own stable order. */
+  readonly members: readonly ConstructionSurfaceKey[];
+  }
+export interface CloudSource {
+  cloudFor(request: {
+  readonly seed: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  }): { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+export interface CloudTopology {
+  readonly cloud: ConstructionCloud;
+  /**
+  * The member the gesture landed on. Role resolution reads this one and
+  * only this one: a corner is a corner of the face it belongs to, and
+  * asking the whole cloud what a single grabbed node means would have no
+  * answer.
+  */
+export function resolveCloud(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): ConstructionCloud | undefined {
+  const topology = source.getRegionTopology(seed);
+export function resolveCloudTopology(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): CloudTopology | undefined {
+  const cloud = resolveCloud(source, seed);
+export function refreshCloudTopology(
+  source: CloudSource,
+  cloud: ConstructionCloud,
+  ): CloudTopology | undefined {
+  const members = cloud.members
+  .map((key) => source.getRegionTopology(key))
+  .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+export function cloudNodes(
+  topology: CloudTopology,
+  ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
+  const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
+
 // src/features/edit-construction/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
@@ -3908,8 +4054,8 @@ export function createEditHistoryStack(): EditHistoryStack {
 
 // src/features/edit-construction/edit-orchestrator.ts
 export type EditPlan =
-export function planEdit(topology: ConstructionRegionTopology, gesture: EditGesture): EditPlan {
-  const policy = resolvePolicy(topology, gesture.target);
+export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
+  const policy = resolvePolicy(cloud.seed, gesture.target);
 export interface EditOpSink {
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
   moveEdge(edgeId: string, delta: { x: number; y: number; z: number }): RegionEditOutcome;
@@ -3951,9 +4097,10 @@ export type {
   BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
+  PathKind,
   PathBrushParams,
   NoToolParams,
-  OpeningParams,
+export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
@@ -3962,16 +4109,66 @@ export type {
   BrushShape,
   PathBrushEffect,
   PathFormationParameters,
+export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type {
   CascadeContext,
   CreationInteraction,
   CreationInteractionKind,
   EditResolution,
   EditRole,
+  EditScope,
   ResolvedCoverage,
-  RolePolicy,
+
+// src/features/edit-construction/path-recipe.ts
+export const PATH_SPINE_OFFSET = 0;
+export interface PathProfilePoint {
+  readonly lateralOffset: number;
+  readonly elevation: number;
+  }
+export interface PathFormationRecipe {
+  readonly kind: PathKind;
+  readonly profile: readonly PathProfilePoint[];
+  readonly miterLimit: number;
+  }
+export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
+  const halfBed = params.bedWidth / 2;
+  const outer = halfBed + params.shoulderWidth;
+  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
+export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
+  return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
+export function pathHalfWidth(params: PathBrushParams): number {
+  return pathFormationFor(params).profile.reduce(
+  (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
+  0,
+  );
+
+// src/features/edit-construction/station-node-id.ts
+export interface StationNodeAddress {
+  /** The operation that minted it -- the corridor this node belongs to. */
+  readonly operationId: string;
+  /** Which cross-section along the line. */
+  readonly station: number;
+  /** Signed slot across the cross-section; `0` is the spine. */
+  readonly across: number;
+  }
+export function stationNodeId(operationId: string, station: number, across: number): string {
+  return `${operationId}:s${station}:a${across}`;
+  }
+export function parseStationNodeId(id: string): StationNodeAddress | undefined {
+  const match = PATTERN.exec(id);
+export function isSpineNode(id: string): boolean {
+  return parseStationNodeId(id)?.across === 0;
+  }
+export function followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean {
+  if (candidate.operationId !== moved.operationId) return false;
+  if (candidate.station !== moved.station) return false;
+  if (candidate.across === moved.across) return false;
+  if (moved.across === 0) return true;
+  return Math.sign(candidate.across) === Math.sign(moved.across)
+  && Math.abs(candidate.across) > Math.abs(moved.across);
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =
@@ -4014,10 +4211,10 @@ export type {
   CascadeContext,
   EditResolution,
   EditRole,
+  EditScope,
   RolePolicy,
   StructureTypeDefinition,
   } from "./structure-type.ts";
-
 
 // src/features/edit-construction/structure-types/organic-structure.ts
 export const ORGANIC_ROLES = {
@@ -4036,8 +4233,7 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
   switch (role) {
   case ORGANIC_ROLES.boundaryVertex:
   case ORGANIC_ROLES.boundaryEdge:
-  case ORGANIC_ROLES.body:
-  return allowed(role, HORIZONTAL_AXES);
+  return allowed(role, HORIZONTAL_AXES, "surface");
 export function organicStructureType(
   surfaceType: string,
   label: string,
@@ -4050,7 +4246,6 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
   if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 export function pathInteractionOver(coveredType: string): CreationInteraction {
-  if (coveredType === "path") return IGNORE;
   return CUT;
   }
 
@@ -4071,7 +4266,10 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case PANEL_ROLES.bottomCorner:
-  return allowed(role, HORIZONTAL_AXES, pairedTopCorners);
+  // One corner of one panel. Whatever else references the node moves
+  // with it because the graph says so, not because the gesture reached
+  // for it.
+  return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
 export function panelInteractionOver(_coveredType: string): CreationInteraction {
   return IGNORE;
   }
@@ -4084,18 +4282,51 @@ export function panelStructureType(
   surfaceType,
   label,
 
+// src/features/edit-construction/structure-types/path-structure.ts
+export const PATH_ROLES = {
+  spine: "path-spine",
+  across: "path-across",
+  body: "path-body",
+  edge: "path-edge",
+  unknown: "path-unknown",
+  } as const;
+
+export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  if (target.kind === "region") return PATH_ROLES.body;
+  if (target.kind === "edge") return PATH_ROLES.edge;
+  const address = parseStationNodeId(target.nodeId);
+export function pathPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  // Height included on purpose: lifting a spine station off the ground is
+  // how a run stops riding the terrain, which is the whole of a bridge deck.
+  //
+  // Scope is `"surface"` for every part-level role here, and it is not a
+  // hedge: the primary op names one node or one edge, and the reach past
+  // it is the cascade's, declared above. Widening scope as well would move
+export function pathStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  interactionOver: (coveredType: string) => CreationInteraction,
+  ): StructureTypeDefinition {
+  return Object.freeze({
+  surfaceType,
+
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
 export type EditResolution =
+export type EditScope = "surface" | "cloud";
 export interface RolePolicy {
   readonly role: EditRole;
   readonly resolve: EditResolution;
   /** Axes the gesture's delta survives on. Ignored when `resolve` is not `"allow"`. */
   readonly axes: readonly EditAxis[];
   /**
-  * Extra ops fired alongside the primary one, as one transaction -- e.g.
-  * moving a wall's bottom corner moves its paired top corner by the *same*
+  * Whether the op applies to the grabbed face alone or to every member of
+  * its cloud. Declared per role rather than defaulted, so a new structure
 export interface CascadeContext {
+  readonly cloud: CloudTopology;
+  /** The face the gesture landed on -- `cloud.seed`, offered directly for the common case. */
   readonly topology: ConstructionRegionTopology;
   readonly target: EditTarget;
   /** The delta already constrained by the role's own axes. */
@@ -4109,9 +4340,14 @@ export interface StructureTypeDefinition {
   * the doc's whole point is that these two halves must not drift apart.
   */
 export function denied(role: EditRole, reason: string): RolePolicy {
-  return { role, resolve: { kind: "deny", reason }, axes: [] };
-export function allowed(role: EditRole, axes: readonly EditAxis[], cascade?: RolePolicy["cascade"]): RolePolicy {
-  return { role, resolve: { kind: "allow" }, axes, cascade };
+  return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
+export function allowed(
+  role: EditRole,
+  axes: readonly EditAxis[],
+  scope: EditScope,
+  cascade?: RolePolicy["cascade"],
+  ): RolePolicy {
+  return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 export type { EditGesture };
 
 // src/features/edit-construction/surface-edit-contract.ts
@@ -4134,12 +4370,7 @@ export type BrushShape =
 export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
   }
-export interface PathFormationParameters {
-  readonly width: number;
-  readonly depth: number;
-  readonly falloff: number;
-  readonly strength: number;
-  }
+export type PathFormationParameters = PathFormationRecipe;
 export interface SurfaceEditModeDefinition {
   readonly id: string;
   readonly sourceSurfaceType: string;
@@ -4167,11 +4398,6 @@ export function createPathBrushEffect(
 export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
 export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
   return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
-export const PATH_BRUSH_SOURCE_SURFACE_TYPES: readonly string[] = Object.freeze(
-  SURFACE_EDIT_MODE_DEFINITIONS.filter((definition) =>
-  definition.effectKinds.includes(PATH_BRUSH_EFFECT_KIND),
-  ).map((definition) => definition.sourceSurfaceType),
-  );
 
 // src/features/edit-construction/tool-types.ts
 export type ConstructionToolId =
@@ -4185,8 +4411,14 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
-  readonly depth: number;
-  }
+  /** Product recipe; every variant still creates the single `path` surface type. */
+  readonly pathKind: PathKind;
+  /** Width of the flat traversable bed, in world units. */
+  readonly bedWidth: number;
+  /** Width of each optional raised shoulder, in world units. */
+  readonly shoulderWidth: number;
+  /** Non-negative shoulder elevation above the path bed. */
+export type PathKind = "trail" | "street" | "road";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** Length of a panel's own vertical edge, in world units. */
@@ -4238,14 +4470,6 @@ export interface ToolParamsByTool {
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
-export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
-  navigate: Object.freeze({}),
-  "edit-region": Object.freeze({}),
-  "path-brush": Object.freeze({ shape: "circle", radius: 0.75, rotationDegrees: 0, depth: 0.2 }),
-  "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
-  "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
-  "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
-  "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {
@@ -4404,12 +4628,12 @@ export type {
 export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
-  ApplyPathBrushOutcome,
-  ApplyPathBrushRequest,
+  ApplyRegionOverlayRequest,
   CellCoordinate,
   CloudOutcome,
   CloudRequest,
-  ConstructionBrushShape,
+  ConstructionCoverageKind,
+  ConstructionCoveredRegion,
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";

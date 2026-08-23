@@ -7,6 +7,7 @@ import {
   terrainInteractionOver,
 } from "./organic-structure.ts";
 import { panelStructureType } from "./panel-structure.ts";
+import { pathStructureType } from "./path-structure.ts";
 import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { denied } from "./structure-type.ts";
 import { forbid, type CreationInteraction } from "./creation-interaction.ts";
@@ -26,9 +27,14 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * Types sharing a shape share a definition rather than restating one: every
  * upright panel (wall, tower, door jamb) is one type built by one builder --
  * a tower is a wall someone stamped a circle of, not a kind of its own --
- * and every procedurally swept product (terrain, path) is the same
- * non-enumerable boundary. Splitting them per product name would be
- * duplication, not per-type policy.
+ * and both terrain flavours are the same non-enumerable boundary. Splitting
+ * those per product name would be duplication, not per-type policy.
+ *
+ * A path is its own definition despite also being generated, because its
+ * shape genuinely differs: a swept run has addressable stations, so it has
+ * real roles to name, where terrain has none and can only regenerate. Shape
+ * is what decides whether two products share a table -- not whether they
+ * happen to share a generator.
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
@@ -51,11 +57,10 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
     "regenerate",
     terrainInteractionOver,
   ),
-  organicStructureType(
+  pathStructureType(
     "path",
     "Caminho",
-    "applyPathBrush's swept convex footprint",
-    "deny",
+    "the subtype's application-generated sweep patch, spine-major",
     pathInteractionOver,
   ),
 ]);
@@ -149,6 +154,7 @@ export {
 export { CUT, IGNORE, RESTACK } from "./creation-interaction.ts";
 export type { CreationInteraction, CreationInteractionKind } from "./creation-interaction.ts";
 export { panelStructureType, PANEL_ROLES } from "./panel-structure.ts";
+export { pathStructureType, PATH_ROLES, pathRoleFor, pathPolicyFor } from "./path-structure.ts";
 export { allowed, denied } from "./structure-type.ts";
 export { forbid } from "./creation-interaction.ts";
 export type {

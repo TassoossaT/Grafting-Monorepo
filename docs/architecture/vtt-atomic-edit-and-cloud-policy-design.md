@@ -30,6 +30,10 @@
   already-built `SurfaceRegion`, and how per-structure-type editing policy
   (what a wall vs. a terrain patch vs. a path lets you do) is defined and
   owned.
+- Extended 2026-08-23: `CascadeContext` gained `related`, the regions
+  sharing a node with the grabbed one, so a cascade can follow a
+  relationship a generator spread across several regions. Walls do not use
+  it. See `docs/architecture/vtt-path-spine-network-design.md`.
 - Related: `docs/architecture/vtt-node-and-wall-handle-design-notes.md`
   (2026-08-17, prior discussion of wall node roles and directional handle
   families at the interaction-design level — still relevant context, not
@@ -244,6 +248,50 @@ explicit that "editing dispatches by cloud, not by individual surface," and
   type; it never becomes a type and never carries behaviour, because
   behaviour belongs to the cloud its geometry lands in.
   `test/tool-presets-are-placeholders.test.mjs` holds that line.
+
+## Settled 2026-08-23 — a cloud-scoped body move addresses nodes, not regions
+
+The obvious spelling of "move the whole cloud" is one `moveRegion` per
+member. It is wrong, and the reason is the definition of a cloud itself.
+
+`moveRegion` translates **every node on a region's boundary**, and members
+of a cloud are welded precisely by *sharing* nodes. So a column that two
+panels both reference receives the delta once for each of them and ends up
+twice as far as everything around it. The run shears open at exactly the
+joints that made it one run — the failure is worst where the structure is
+most connected, which is the opposite of what the cloud is for.
+
+A cloud-scoped body move therefore expands to one `moveVertex` per
+*distinct* node of the cloud. Deduplication is not a repair applied
+afterwards; it is what addressing nodes instead of regions means. The op
+list also states plainly what the gesture did, which a list of overlapping
+region moves does not.
+
+`moveRegion` stays in the vocabulary for `scope: "surface"`, where a
+region's nodes are its own and the shorter op is the honest one. That two
+scopes of the same gesture produce different op kinds is deliberate and is
+the point: the scope is a claim about *which nodes* the gesture reaches,
+and the ops say so.
+
+This was found by the sync with #204 rather than by the original design,
+and the test that encoded the wrong behaviour has been replaced by one that
+asserts the shared column moves once
+(`test/edit-orchestrator.test.mjs`).
+
+### The same rule applied to swept paths
+
+#204 landed a path structure type whose cascade needed "every region
+sharing a node with this one", and resolved it with a `relatedTopologies`
+helper in the tool plus a `related` field on `CascadeContext`. That is the
+cloud, computed a second time and less well: it stopped at direct
+neighbours instead of walking the component, and it offered up regions of
+other types that the cascade then had to filter out.
+
+`CascadeContext` carries the cloud and nothing else. A swept path's
+cascade reads `cloud.members`, which follows a station through the whole
+run. This is the rule stated at the top of this section holding for a type
+that was written after it: a type declares reach in its own role table, and
+never grows a private substitute for the cloud.
 
 ## Explicitly not decided by this file
 

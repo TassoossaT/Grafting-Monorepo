@@ -73,6 +73,13 @@ export interface RolePolicy {
  * reach parts the gesture never named, and a panel welded onto a neighbour
  * shares its column with that neighbour. Reading one face would make the
  * answer depend on which of two panels the pointer happened to land on.
+ *
+ * A swept product needs the same reach for its own reason -- one station
+ * runs through every band it was built from, and the rim belongs only to
+ * the outermost -- which is why there is no second "related regions" list
+ * beside this one. The cloud already *is* that list, resolved by the layer
+ * whose job it is (`construction-cloud.ts`) instead of recomputed by
+ * whichever tool happens to be calling.
  */
 export interface CascadeContext {
   readonly cloud: CloudTopology;

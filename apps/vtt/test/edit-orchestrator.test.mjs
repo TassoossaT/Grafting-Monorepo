@@ -138,10 +138,35 @@ test("grabbing a wall's body moves the whole run, not the one panel under the po
   assert.equal(plan.kind, "apply");
   assert.equal(plan.scope, "cloud");
   assert.equal(plan.surfaceCount, 2);
+  // Every distinct node of the run, each carried exactly once. Note the
+  // y: 9 in the gesture is gone -- a wall body is horizontal-only.
   assert.deepEqual(plan.ops, [
-    { kind: "move-region", surfaceKey: ["@region", "wall-1"], delta: { x: 2, y: 0, z: 0 } },
-    { kind: "move-region", surfaceKey: ["@region", "wall-2"], delta: { x: 2, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-bottom", position: { x: 2, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-bottom", position: { x: 6, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-top", position: { x: 6, y: 3, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-top", position: { x: 2, y: 3, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-2:b-bottom", position: { x: 10, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-2:b-top", position: { x: 10, y: 3, z: 0 } },
   ]);
+});
+
+/**
+ * The reason a cloud-scoped body drag addresses nodes rather than issuing
+ * one `moveRegion` per member: `moveRegion` translates every node on a
+ * region's boundary, and members of a cloud are welded by *sharing* nodes.
+ * One call per member would hand the shared column the delta twice and tear
+ * the run open at the very joint that makes it one run.
+ */
+test("a welded column takes the body delta once, not once per panel referencing it", () => {
+  const plan = planEdit(WELDED_RUN, gesture({ kind: "region" }, { x: 2, y: 0, z: 0 }));
+  assert.equal(plan.kind, "apply");
+
+  const moves = plan.ops.filter((op) => op.nodeId === "wall-1:b-bottom");
+  assert.equal(moves.length, 1, "the shared column is addressed exactly once");
+  assert.deepEqual(moves[0].position, { x: 6, y: 0, z: 0 }, "one delta, not two");
+
+  const ids = plan.ops.map((op) => op.nodeId);
+  assert.equal(new Set(ids).size, ids.length, "no node appears twice in the plan");
 });
 
 test("a lone panel is a cloud of one -- the same body drag, not a second behaviour", () => {
@@ -150,7 +175,10 @@ test("a lone panel is a cloud of one -- the same body drag, not a second behavio
   assert.equal(plan.scope, "cloud");
   assert.equal(plan.surfaceCount, 1);
   assert.deepEqual(plan.ops, [
-    { kind: "move-region", surfaceKey: WALL.surfaceKey, delta: { x: 2, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-bottom", position: { x: 2, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-bottom", position: { x: 6, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-top", position: { x: 6, y: 3, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-top", position: { x: 2, y: 3, z: 0 } },
   ]);
 });
 
@@ -182,10 +210,21 @@ test("a terrain patch slides as one patch -- every face the stroke left welded, 
   });
   assert.equal(plan.kind, "apply");
   assert.equal(plan.scope, "cloud");
-  assert.deepEqual(plan.ops, [
-    { kind: "move-region", surfaceKey: TERRAIN.surfaceKey, delta: { x: 2, y: 0, z: 0 } },
-    { kind: "move-region", surfaceKey: second.surfaceKey, delta: { x: 2, y: 0, z: 0 } },
-  ]);
+  // Both patches, node by node: eight distinct corners across the two.
+  assert.equal(plan.surfaceCount, 2);
+  assert.ok(plan.ops.every((op) => op.kind === "move-vertex"));
+  assert.deepEqual(
+    plan.ops.map((op) => op.nodeId),
+    [
+      "terrain-1:a-bottom", "terrain-1:b-bottom", "terrain-1:b-top", "terrain-1:a-top",
+      "terrain-2:a-bottom", "terrain-2:b-bottom", "terrain-2:b-top", "terrain-2:a-top",
+    ],
+  );
+  // Horizontal-only: the gesture's y: 8 is gone, so every corner keeps the
+  // height it already had rather than being lifted with the drag.
+  const heights = new Map(plan.ops.map((op) => [op.nodeId, op.position.y]));
+  assert.equal(heights.get("terrain-1:a-bottom"), 0);
+  assert.equal(heights.get("terrain-1:b-top"), 3);
 });
 
 test("a terrain boundary vertex still slides on its own -- reach is per role, not per type", () => {

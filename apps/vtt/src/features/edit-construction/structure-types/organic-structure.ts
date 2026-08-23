@@ -111,10 +111,10 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
  * the path's own shape cut out of it. Over terrain that is a road; over a
  * wall the same cut reads as an opening through it.
  *
- * Over another path there is nothing to carve -- the ground is already path
- * -- so the two simply coexist rather than one consuming the other.
+ * Over another path the two formations become one connected path surface:
+ * the same cut-and-refill flow consumes the overlap instead of leaving
+ * coincident path geometry behind.
  */
 export function pathInteractionOver(coveredType: string): CreationInteraction {
-  if (coveredType === "path") return IGNORE;
   return CUT;
 }

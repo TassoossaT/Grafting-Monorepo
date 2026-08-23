@@ -9,13 +9,27 @@ import type {
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
-import { fitPath, type FittedEdge } from "./path-fitting.ts";
+import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
 export { xzDistance, pinnedToBaseline };
 
+/**
+ * The three tolerances below -- crossing, corner weld, and loop closure --
+ * are **floors**, not fixed rules. A run carrying a correction budget of its
+ * own (a brush stroke, whose budget is the brush reach the product leaves
+ * unused) raises each of them to that budget.
+ *
+ * Without that, a wide brush produced a contradiction: the stroke was
+ * straightened generously, yet still refused to weld onto a corner well
+ * inside the very radius that licensed the straightening. What the budget
+ * says is "everything within this distance is the same intention" -- and
+ * joining is as much a consequence of that as straightening is. A run with
+ * no budget at all, like a drawn line or a stamped preset, keeps the floor,
+ * because a deliberate placement still has to snap to what it touches.
+ */
 /** Perpendicular distance (world units) within which a point counts as landing "on" an existing wall's centerline. */
 const CROSSING_TOLERANCE = 0.15;
 /** How close (as a fraction of the wall's own length) a point may get to either of that wall's own corners and still count as a genuine mid-span crossing -- any closer and it is really landing on the corner, which welds onto that corner's own nodes instead of splitting anything. */
@@ -63,12 +77,16 @@ function columnsOf(span: WallSpan): readonly WallColumn[] {
  * the engine is never asked to notice a coincidence, because there is none
  * to notice.
  */
-function existingColumnAt(ctx: ToolContext, point: ConstructionPosition): WallColumn | undefined {
+function existingColumnAt(
+  ctx: ToolContext,
+  point: ConstructionPosition,
+  weldTolerance: number,
+): WallColumn | undefined {
   let best: { readonly column: WallColumn; readonly distance: number } | undefined;
   for (const span of wallSpans(ctx)) {
     for (const column of columnsOf(span)) {
       const distance = xzDistance(point, column.bottom);
-      if (distance > CORNER_WELD_TOLERANCE) continue;
+      if (distance > weldTolerance) continue;
       if (best === undefined || distance < best.distance) best = { column, distance };
     }
   }
@@ -90,13 +108,14 @@ function insertedColumnAt(
   point: ConstructionPosition,
   mint: () => { readonly bottomNodeId: ConstructionNodeId; readonly topNodeId: ConstructionNodeId },
   causeId: string,
+  crossingTolerance: number,
 ): WallColumn | undefined {
   for (const span of wallSpans(ctx)) {
     const spanLength = xzDistance(span.a, span.b);
     if (spanLength < 1e-6) continue;
 
     const { t, perp, x, z } = projectOntoSegment(point, span.a, span.b);
-    if (perp > CROSSING_TOLERANCE) continue;
+    if (perp > crossingTolerance) continue;
     const marginT = CROSSING_END_MARGIN / spanLength;
     if (t <= marginT || t >= 1 - marginT) continue;
 
@@ -157,14 +176,15 @@ function resolveColumn(
   idPrefix: string,
   index: number,
   causeId: string,
+  correction: number,
 ): WallColumn {
   const mint = () => ({
     bottomNodeId: `${idPrefix}:c${index}:bottom`,
     topNodeId: `${idPrefix}:c${index}:top`,
   });
-  const existing = existingColumnAt(ctx, point);
+  const existing = existingColumnAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction));
   if (existing !== undefined) return existing;
-  const inserted = insertedColumnAt(ctx, point, mint, causeId);
+  const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
   return {
@@ -184,7 +204,7 @@ function resolveColumn(
  * onto one intersection both produce. Kept, it would declare a panel of no
  * width between two columns standing at one spot.
  */
-function contourOf(fitted: readonly FittedEdge[]): {
+function contourOf(fitted: readonly FittedEdge[], closeTolerance: number): {
   readonly points: readonly ConstructionPosition[];
   readonly geometries: readonly ConstructionEdgeGeometry[];
   readonly closed: boolean;
@@ -209,7 +229,7 @@ function contourOf(fitted: readonly FittedEdge[]): {
     points.length > 3 &&
     last !== undefined &&
     start !== undefined &&
-    xzDistance(last, start) <= CONTOUR_CLOSE_TOLERANCE;
+    xzDistance(last, start) <= closeTolerance;
   return { points: closed ? points.slice(0, -1) : points, geometries, closed };
 }
 
@@ -227,16 +247,19 @@ export function commitWallContour(
   fitted: readonly FittedEdge[],
   params: WallParams,
   domain: string,
+  correction = 0,
 ): void {
   if (fitted.length === 0) return;
   const sequence = ctx.nextSequence();
   const causeId = scopedToolId(ctx, domain, sequence);
   const idPrefix = scopedToolId(ctx, `wall-${sequence}`);
 
-  const { points, geometries, closed } = contourOf(fitted);
+  const { points, geometries, closed } = contourOf(fitted, Math.max(CONTOUR_CLOSE_TOLERANCE, correction));
   if (points.length < 2) return;
 
-  const columns = points.map((point, index) => resolveColumn(ctx, point, params.height, idPrefix, index, causeId));
+  const columns = points.map((point, index) =>
+    resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction),
+  );
   const contour: WallContour = { columns, geometries, closed };
   // Any number of walls may stand on one column, so a run keeps its own
   // edge wherever the shared one is full rather than losing the face.
@@ -281,5 +304,5 @@ export function commitWallStroke(
   const first = samples[0];
   if (first === undefined) return;
   const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  commitWallContour(ctx, fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid }), params, domain);
+  commitWallContour(ctx, fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid }), params, domain, tolerance);
 }

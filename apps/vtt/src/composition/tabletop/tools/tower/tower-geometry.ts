@@ -1,6 +1,6 @@
 import type { ConstructionPosition } from "@/ports";
 
-import type { FittedEdge } from "../walls/path-fitting.ts";
+import type { FittedEdge } from "../core/stroke-fitting.ts";
 
 /**
  * How many arcs one tower's own circle is built from.

@@ -8,6 +8,10 @@ Renderer-neutral convex brush footprint shared by surface and terrain tools.
 
 Failure while building a path-brush replacement plan.
 
+### `pub enum grafting_procgen_surface_transformations::SweepFormationFailure`
+
+Reusable failures while creating a profile sweep.
+
 ### `pub fn grafting_procgen_surface_transformations::AnalyticBrushContour::edge_geometries(&self) -> &[grafting_graph_core::contour::ContourGeometry]`
 
 Geometry for each directed boundary edge.
@@ -29,6 +33,30 @@ Existing analytic regions the new contour destroys.
 ### `pub fn grafting_procgen_surface_transformations::RegionMergePlan::contour(&self) -> &grafting_procgen_surface_transformations::AnalyticBrushContour`
 
 The new region's own contour, unchanged from what the caller built.
+
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::boundary(&self) -> &[usize]`
+
+Ordered outer cycle of the complete formation, expressed as vertex indices.
+
+This is the exact rim a terrain replacement uses as its hole boundary;
+it never includes an interior strip edge.
+
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::profile_len(&self) -> usize`
+
+Number of profile vertices in every transverse station.
+
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::quads(&self) -> &[[usize; 4]]`
+
+Shared-vertex quad cells between neighbouring stations and profile samples.
+
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::reference_line(&self) -> &[[f32; 3]]`
+
+The stations this formation actually used -- the caller's own line,
+less any coincident repeat.
+
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::vertices(&self) -> &[[f32; 3]]`
+
+Generated world-space vertices, arranged one transverse station at a time.
 
 ### `pub fn grafting_procgen_surface_transformations::compact_analytic_brush_contour(request: &grafting_procgen_surface_transformations::PathBrushRequest) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
 
@@ -69,6 +97,37 @@ participate in cancellation -- a hole already inside a consumed region
 of the new remainder. A stroke that fully re-covers a multi-generation
 hole "heals" it instead of preserving it. Narrower than the total
 invisibility this replaces, but not a complete fix.
+
+### `pub fn grafting_procgen_surface_transformations::plan_region_merge_regions(graph: &grafting_graph_core::model::Graph<[f32; 3], ()>, surfaces: &grafting_graph_core::surface::SurfaceRegistry, topology: &grafting_graph_core::contour::ContourTopology, contour: grafting_procgen_surface_transformations::AnalyticBrushContour, is_eligible: impl core::ops::function::Fn(&grafting_graph_core::contour::RegionId, &grafting_graph_core::surface::SurfaceType) -> bool) -> core::result::Result<grafting_procgen_surface_transformations::RegionMergePlan, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Plans a region overlay with eligibility resolved against exact region
+identities as well as semantic surface types.
+
+This is the application-orchestrated form of [`plan_region_merge`]: a
+caller first queries coverage and resolves product policy, then supplies
+the precise region set selected by that decision. Geometry remains in
+Rust; product policy does not.
+
+### `pub fn grafting_procgen_surface_transformations::plan_sweep_formation(request: &grafting_procgen_surface_transformations::SweepFormationRequest) -> core::result::Result<grafting_procgen_surface_transformations::SweepFormationPlan, grafting_procgen_surface_transformations::SweepFormationFailure>`
+
+Samples a transverse profile along a reference line into connected quads.
+
+Every station comes from the caller: this places none of its own, and
+invents no position or height that was not handed to it. Deciding where
+the stations go is inseparable from knowing what the formation runs over
+-- the ground it rides, how finely that ground varies -- and none of that
+is knowable here. A caller that wants denser stations spaces them itself.
+
+Outer boundaries and interior strips share the exact same vertex indices,
+so a caller can turn the plan into a manifold graph patch without welding
+coincident geometry.
+
+### `pub fn grafting_procgen_surface_transformations::polygonal_contour(vertices: alloc::vec::Vec<[f32; 2]>) -> core::result::Result<grafting_procgen_surface_transformations::AnalyticBrushContour, grafting_procgen_surface_transformations::PathBrushFailure>`
+
+Creates a straight-edged contour from an already-normalized exterior loop.
+
+A profile sweep uses this for its exact outer rim before the generic
+region-merge planner decides which existing surfaces must be replaced.
 
 ### `pub fn grafting_procgen_surface_transformations::swept_brush_contains(shape: &grafting_procgen_surface_transformations::BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool`
 
@@ -160,6 +219,43 @@ Source types eligible for local replacement in the same atomic stroke.
 
 Type assigned to the painted local region.
 
+### `pub grafting_procgen_surface_transformations::SweepFormationFailure::InvalidMiterLimit`
+
+The requested corner miter limit is invalid.
+
+### `pub grafting_procgen_surface_transformations::SweepFormationFailure::InvalidProfile`
+
+The profile is not finite, has fewer than two points, or is unordered.
+
+### `pub grafting_procgen_surface_transformations::SweepFormationFailure::InvalidReferenceLine`
+
+The reference line does not contain two distinct finite points.
+
+### `pub grafting_procgen_surface_transformations::SweepFormationRequest::miter_limit: f32`
+
+Largest allowed corner miter, expressed as a multiple of lateral offset.
+
+### `pub grafting_procgen_surface_transformations::SweepFormationRequest::profile: alloc::vec::Vec<grafting_procgen_surface_transformations::TransverseProfilePoint>`
+
+Strictly left-to-right cross-section samples.
+
+### `pub grafting_procgen_surface_transformations::SweepFormationRequest::reference_line: alloc::vec::Vec<[f32; 3]>`
+
+Ordered reference-line samples as `[x, y, z]`.
+
+The line carries its own height, so a formation rides whatever it was
+drawn along rather than lying on the world floor. One station is
+emitted per point given: their spacing is the caller's decision, and
+nothing here adds to them or reads a height it was not handed.
+
+### `pub grafting_procgen_surface_transformations::TransverseProfilePoint::elevation: f32`
+
+World-space Y coordinate at this lateral offset.
+
+### `pub grafting_procgen_surface_transformations::TransverseProfilePoint::lateral_offset: f32`
+
+Signed world-space distance from the reference line.
+
 ### `pub mod grafting_procgen_surface_transformations`
 
 Deterministic planning for local construction-surface transformations.
@@ -188,14 +284,36 @@ analytic regions a new region's contour destroys, their cancelled
 exterior boundaries (what a leftover remainder region must carry as its
 own hole), and the contour itself.
 
-Nothing here is specific to any one tool. A path-brush stroke, a future
-wall opening, or anything else that overlays one new closed shape onto
-the current graph and destroys whatever it covers can reuse this
+Nothing here is specific to any one tool. Any application operation that
+overlays one new closed shape onto the current graph and replaces what
+it covers can reuse this
 unchanged -- see [`plan_region_merge`]. Consuming an existing *region*
 (not just a plain surface) matters as soon as more than one such
 overlay can happen in the same place: without it, a second stroke can
 never touch, cut, or remove what an earlier one already created, and it
 just sits there orphaned forever.
+
+### `pub struct grafting_procgen_surface_transformations::SweepFormationPlan`
+
+Graph-neutral result of sweeping a profile along a reference line.
+
+Vertices are arranged station-major: every consecutive `profile_len`
+entries form one transverse station. Each quad references those shared
+vertices, so neighbouring strips are topologically connected by design.
+
+### `pub struct grafting_procgen_surface_transformations::SweepFormationRequest`
+
+Input for one deterministic profile sweep.
+
+### `pub struct grafting_procgen_surface_transformations::TransverseProfilePoint`
+
+One sample of a formation's transverse profile.
+
+`lateral_offset` is measured left/right from the reference line in world
+units. `elevation` is measured **from the reference line's own height at
+that station**, not from the world floor, so one profile describes the
+same cross-section wherever the line happens to run. Callers own the
+policy that decides which elevations are valid for their product.
 
 ### `pub type grafting_procgen_surface_transformations::BoundaryVertex = (grafting_graph_core::model::NodeId, grafting_graph_core::contour::ContourGeometry)`
 

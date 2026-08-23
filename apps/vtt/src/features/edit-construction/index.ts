@@ -6,6 +6,7 @@ export type {
   BrushShapeParams,
   ConstructionToolId,
   InteriorGenerateParams,
+  PathKind,
   PathBrushParams,
   NoToolParams,
   OpeningParams,
@@ -18,6 +19,14 @@ export type {
   WallParams,
 } from "./tool-types.ts";
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
+export { PATH_SPINE_OFFSET, pathFormationFor, pathHalfWidth, pathSpineSlot } from "./path-recipe.ts";
+export {
+  followsOutward,
+  isSpineNode,
+  parseStationNodeId,
+  stationNodeId,
+} from "./station-node-id.ts";
+export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,
@@ -29,6 +38,7 @@ export type {
   SurfaceEditModeDefinition,
   SurfaceEditTargetScope,
 } from "./surface-edit-contract.ts";
+export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 
 export {
   ALL_AXES,
@@ -83,7 +93,6 @@ export type {
 
 export { resolveBrushShape } from "./brush-shape-params.ts";
 export {
-  PATH_BRUSH_SOURCE_SURFACE_TYPES,
   SURFACE_EDIT_MODE_DEFINITIONS,
   surfaceEditModeFor,
 } from "./surface-edit-mode-registry.ts";

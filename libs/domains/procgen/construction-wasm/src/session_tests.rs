@@ -1,8 +1,9 @@
+use std::collections::HashSet;
+
 use serde_json::json;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 use crate::mesh;
-use crate::path_brush;
 use crate::session::ConstructionSession;
 
 fn terrain_cell(
@@ -50,6 +51,94 @@ fn terrain_cell(
         .expect("terrain patch registers");
 }
 
+#[test]
+fn application_generated_patch_is_overlaid_without_a_provisional_target() {
+    let mut session = ConstructionSession::new();
+    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+    let source = mesh::region_id_to_wire(session.known_regions.iter().next().unwrap());
+    let request = serde_json::json!({
+        "operationId": "generic-overlay",
+        "sourceSurfaceKeys": [source],
+        "outline": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]],
+        "boundary": [
+            {"edgeId": "overlay-e0", "reversed": false},
+            {"edgeId": "overlay-e1", "reversed": false},
+            {"edgeId": "overlay-e2", "reversed": false},
+            {"edgeId": "overlay-e3", "reversed": false}
+        ],
+        "patch": {
+            "nodes": [
+                {"id": "overlay-a", "position": [0.5, 0.0, 0.5]},
+                {"id": "overlay-b", "position": [1.5, 0.0, 0.5]},
+                {"id": "overlay-c", "position": [1.5, 0.0, 1.5]},
+                {"id": "overlay-d", "position": [0.5, 0.0, 1.5]}
+            ],
+            "edges": [
+                {"edgeId": "overlay-e0", "startNodeId": "overlay-a", "endNodeId": "overlay-b"},
+                {"edgeId": "overlay-e1", "startNodeId": "overlay-b", "endNodeId": "overlay-c"},
+                {"edgeId": "overlay-e2", "startNodeId": "overlay-c", "endNodeId": "overlay-d"},
+                {"edgeId": "overlay-e3", "startNodeId": "overlay-d", "endNodeId": "overlay-a"}
+            ],
+            "regions": [{
+                "regionId": "application-path-face",
+                "boundary": [
+                    {"edgeId": "overlay-e0", "reversed": false},
+                    {"edgeId": "overlay-e1", "reversed": false},
+                    {"edgeId": "overlay-e2", "reversed": false},
+                    {"edgeId": "overlay-e3", "reversed": false}
+                ],
+                "surfaceType": "path",
+                "physical": true
+            }]
+        }
+    });
+    let response = session
+        .apply_region_overlay_json(&request.to_string())
+        .expect("generic overlay applies");
+    let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(
+        response["outcome"]["createdSurfaceKeys"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        response["outcome"]["removedSurfaceKeys"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        response["outcome"]["createdSurfaceKeys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|key| { !key[1].as_str().unwrap().contains("new") })
+    );
+    let meshes: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
+
+    session
+        .undo_region_overlay("generic-overlay")
+        .expect("generic overlay undoes");
+    let undone: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    assert_eq!(undone.len(), 1);
+    assert_eq!(undone[0]["surfaceType"], "terrain");
+
+    session
+        .redo_region_overlay("generic-overlay")
+        .expect("generic overlay redoes");
+    let redone: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    assert!(redone.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+    assert!(redone.iter().any(|mesh| mesh["surfaceType"] == "path"));
+}
+
 #[wasm_bindgen_test]
 fn a_full_session_sequence_generates_moves_and_merges() {
     let mut session = ConstructionSession::new();
@@ -70,557 +159,251 @@ fn a_full_session_sequence_generates_moves_and_merges() {
     assert!(snapshot.contains("\"surfaces\""));
 }
 
-#[test]
-fn applying_path_brush_replaces_terrain_through_the_wasm_boundary() {
-    let mut session = ConstructionSession::new();
-    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+/// The table identity this fixture namespaces its shared edges under -- the
+/// application's own `ctx.tableId`. Naming an edge after the table and the
+/// pair of nodes it runs between is what lets two independently declared
+/// faces agree on one name for the edge they meet along.
+const FIXTURE_TABLE_ID: &str = "table-path";
 
-    let request = r#"{"operationId":"path-1","samples":[[0.5,0.5]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
-    let before = session.snapshot_json().expect("snapshot before the stroke");
-    let response = session
-        .apply_path_brush_json(request)
-        .expect("path brush applies");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert!(!parsed["surfaceIds"]["created"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(session.snapshot_json().unwrap().contains("\"path\""));
-
-    let meshes: Vec<serde_json::Value> =
-        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
-    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
-    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
-
-    session
-        .undo_path_brush("path-1")
-        .expect("whole stroke undoes");
-    assert_eq!(session.snapshot_json().unwrap(), before);
-    session
-        .redo_path_brush("path-1")
-        .expect("whole stroke redoes");
-    assert!(session.snapshot_json().unwrap().contains("\"path\""));
-}
-
-#[test]
-fn a_multi_segment_stroke_over_terrain_leaves_a_derivable_remainder_mesh() {
-    let mut session = ConstructionSession::new();
-    for cell in 0..16 {
-        let x = cell % 4;
-        let z = cell / 4;
-        terrain_cell(
-            &mut session,
-            cell,
-            4,
-            0.0,
-            [
-                &format!("n{x}-{z}-0"),
-                &format!("n{x}-{z}-1"),
-                &format!("n{x}-{z}-2"),
-                &format!("n{x}-{z}-3"),
-            ],
-        );
-    }
-
-    let request = serde_json::json!({
-        "operationId": "path-multi-1",
-        "samples": [[1.0, 1.0], [3.0, 1.0], [3.0, 3.0], [5.0, 3.0]],
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-
-    let response = session
-        .apply_path_brush_json(&request)
-        .expect("multi-segment path brush applies");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert_eq!(
-        parsed["surfaceIds"]["created"].as_array().unwrap().len(),
-        2,
-        "both the remainder terrain and the new path region must be created"
-    );
-
-    let meshes_json = session
-        .all_surface_meshes_json()
-        .expect("every created region, including the remainder, must have a derivable mesh");
-    let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
-    assert!(
-        meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"),
-        "the remainder terrain must still be present and meshable: {meshes_json}"
-    );
-}
-
-#[test]
-fn a_loop_stroke_fully_covering_its_only_terrain_cell_still_meshes() {
-    let mut session = ConstructionSession::new();
-    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
-
-    let loop_samples: Vec<[f32; 2]> = (0..=32)
-        .map(|index| {
-            let angle = std::f32::consts::TAU * index as f32 / 32.0;
-            [1.0 + 3.0 * angle.cos(), 1.0 + 3.0 * angle.sin()]
-        })
-        .collect();
-    let request = serde_json::json!({
-        "operationId": "path-loop-cover",
-        "samples": loop_samples,
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-
-    let response = session
-        .apply_path_brush_json(&request)
-        .expect("a loop stroke fully covering its only terrain cell must still apply");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert!(!parsed["surfaceIds"]["created"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-
-    let meshes_json = session
-        .all_surface_meshes_json()
-        .expect("every created region must have a derivable mesh, remainder included");
-    let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-    assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
-}
-
-#[test]
-fn a_second_overlapping_path_brush_stroke_consumes_the_first_ones_region() {
-    let mut session = ConstructionSession::new();
-    for cell in 0..16 {
-        let x = cell % 4;
-        let z = cell / 4;
-        terrain_cell(
-            &mut session,
-            cell,
-            4,
-            0.0,
-            [
-                &format!("n{x}-{z}-0"),
-                &format!("n{x}-{z}-1"),
-                &format!("n{x}-{z}-2"),
-                &format!("n{x}-{z}-3"),
-            ],
-        );
-    }
-
-    let first = serde_json::json!({
-        "operationId": "path-overlap-1",
-        "samples": [[1.0, 1.0], [3.0, 1.0]],
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-    let first_response = session
-        .apply_path_brush_json(&first)
-        .expect("first path brush applies");
-    let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
-    let first_remainder_region = first_parsed["surfaceIds"]["created"]
-        .as_array()
-        .unwrap()
-        .first()
-        .unwrap()
-        .clone();
-
-    let second = serde_json::json!({
-        "operationId": "path-overlap-2",
-        "samples": [[1.5, 0.5], [1.5, 2.5]],
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-    let response = session
-        .apply_path_brush_json(&second)
-        .expect("second, overlapping path brush stroke must still apply");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert!(!parsed["surfaceIds"]["created"]
-        .as_array()
-        .unwrap()
-        .is_empty());
-    assert!(
-        parsed["surfaceIds"]["removed"]
-            .as_array()
-            .unwrap()
-            .contains(&first_remainder_region),
-        "the second stroke must report the first stroke's own remainder region as removed: {response}"
-    );
-
-    let meshes_json = session
-        .all_surface_meshes_json()
-        .expect("every surface, including anything from the first stroke, must still mesh");
-    let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-    assert!(
-        !meshes
-            .iter()
-            .any(|mesh| mesh["surfaceKey"] == first_remainder_region),
-        "the first stroke's own remainder region must no longer be rendered after being consumed"
-    );
-    assert!(!meshes.is_empty());
-}
-
-#[test]
-fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
-    let mut session = ConstructionSession::new();
-    for cell in 0..16 {
-        let x = cell % 4;
-        let z = cell / 4;
-        terrain_cell(
-            &mut session,
-            cell,
-            4,
-            0.0,
-            [
-                &format!("n{x}-{z}-0"),
-                &format!("n{x}-{z}-1"),
-                &format!("n{x}-{z}-2"),
-                &format!("n{x}-{z}-3"),
-            ],
-        );
-    }
-
-    let first = serde_json::json!({
-        "operationId": "path-type-1",
-        "samples": [[1.0, 1.0], [3.0, 1.0]],
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-    let first_response = session
-        .apply_path_brush_json(&first)
-        .expect("first path brush applies");
-    let first_parsed: serde_json::Value = serde_json::from_str(&first_response).unwrap();
-    let first_path_region = first_parsed["surfaceIds"]["created"]
-        .as_array()
-        .unwrap()
-        .last()
-        .unwrap()
-        .clone();
-
-    let second = serde_json::json!({
-        "operationId": "path-type-2",
-        "samples": [[2.0, 1.0]],
-        "brushShape": {"kind": "circle", "radius": 0.6},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-    let response = session
-        .apply_path_brush_json(&second)
-        .expect("second stroke over the first stroke's own path region must still apply");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert!(
-        parsed["surfaceIds"]["removed"]
-            .as_array()
-            .unwrap()
-            .contains(&first_path_region),
-        "a path region from an earlier stroke must be cut like anything else under the brush: {response}"
-    );
-}
-
-#[test]
-fn consuming_shared_quads_deletes_the_now_orphaned_center_node() {
-    let mut session = ConstructionSession::new();
-    let mut corners: Vec<serde_json::Value> = Vec::new();
-    let mut corner = |id: &str, x: f32, z: f32| {
-        corners.push(serde_json::json!({"id": id, "position": [x, 0.0, z]}));
+/// Declares (or reuses) the shared edge between two sweep vertices, and
+/// returns the use that walks it in that direction -- `core/boundary-edges.ts`'s
+/// `use`, in the `refuse-when-full` mode a path commits under.
+fn fixture_edge_use(
+    operation_id: &str,
+    from: usize,
+    to: usize,
+    edges: &mut Vec<serde_json::Value>,
+    declared: &mut HashSet<String>,
+) -> serde_json::Value {
+    let from_node = format!("{operation_id}:path-node:{from}");
+    let to_node = format!("{operation_id}:path-node:{to}");
+    let forward = from_node < to_node;
+    let (start, end) = if forward {
+        (&from_node, &to_node)
+    } else {
+        (&to_node, &from_node)
     };
-    corner("q-a", 0.0, 0.0);
-    corner("q-b", 1.0, 0.0);
-    corner("q-c", 2.0, 0.0);
-    corner("q-d", 0.0, 1.0);
-    corner("q-e", 1.0, 1.0);
-    corner("q-f", 2.0, 1.0);
-    corner("q-g", 0.0, 2.0);
-    corner("q-h", 1.0, 2.0);
-    corner("q-i", 2.0, 2.0);
+    let edge_id = format!("{FIXTURE_TABLE_ID}:seg:{start}~{end}");
+    if declared.insert(edge_id.clone()) {
+        edges.push(json!({"edgeId": edge_id, "startNodeId": start, "endNodeId": end}));
+    }
+    json!({"edgeId": edge_id, "reversed": !forward})
+}
 
-    let mut quad = |cycle: [&str; 4]| {
-        let segment = |from: &str, to: &str| {
-            let forward = from < to;
-            let (start, end) = if forward { (from, to) } else { (to, from) };
-            (
-                format!("seg:{start}~{end}"),
-                start.to_string(),
-                end.to_string(),
-                forward,
-            )
-        };
-        let steps: Vec<_> = (0..4)
-            .map(|index| segment(cycle[index], cycle[(index + 1) % 4]))
-            .collect();
-        let edges: Vec<_> = steps
-            .iter()
-            .map(|(id, start, end, _)| {
-                serde_json::json!({"edgeId": id, "startNodeId": start, "endNodeId": end})
+/// The exact orchestration `tools/paths/path-brush-tool.ts` performs, as a
+/// test fixture: plan the graph-neutral sweep, declare the patch the way
+/// `tools/paths/path-patch.ts` declares it, and hand both to the generic
+/// overlay.
+///
+/// It lives in the tests rather than in the crate on purpose. What a path
+/// *is* -- which nodes, which shared edges, which faces stand over them --
+/// is the application's to decide, and this crate is not allowed to know.
+/// The fixture only lets a Rust test issue the very transaction the
+/// application issues, so the overlay can be exercised over real sweep
+/// geometry without the crate growing a second opinion about paths.
+fn overlay_path_stroke(
+    session: &mut ConstructionSession,
+    operation_id: &str,
+    reference_line: &[[f32; 3]],
+    formation: &serde_json::Value,
+    source_surface_keys: &[serde_json::Value],
+) -> serde_json::Value {
+    let planned = session
+        .plan_sweep_json(
+            &json!({
+                "referenceLine": reference_line,
+                "profile": formation["profile"].clone(),
+                "miterLimit": formation["miterLimit"].clone(),
             })
-            .collect();
-        let boundary: Vec<_> = steps
-            .iter()
-            .map(|(id, _, _, forward)| serde_json::json!({"edgeId": id, "reversed": !forward}))
-            .collect();
-        session
-            .add_patch_json(
-                &serde_json::json!({
-                    "nodes": corners,
-                    "edges": edges,
-                    "regions": [{
-                        "regionId": cycle.join("|"),
-                        "boundary": boundary,
-                        "surfaceType": "terrain",
-                        "physical": true,
-                    }],
-                })
-                .to_string(),
-            )
-            .expect("quad patch adds");
-    };
-    quad(["q-a", "q-b", "q-e", "q-d"]);
-    quad(["q-b", "q-c", "q-f", "q-e"]);
-    quad(["q-d", "q-e", "q-h", "q-g"]);
-    quad(["q-e", "q-f", "q-i", "q-h"]);
+            .to_string(),
+        )
+        .expect("sweep planning is a pure query");
+    let plan: serde_json::Value = serde_json::from_str(&planned).unwrap();
 
-    let request = serde_json::json!({
-        "operationId": "path-orphan-cleanup",
-        "samples": [[1.0, 1.0]],
-        "brushShape": {"kind": "circle", "radius": 1.6},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-    let response = session
-        .apply_path_brush_json(&request)
-        .expect("a brush covering the whole grid applies");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-
-    let removed_node_ids: Vec<&str> = parsed["nodeIds"]["removed"]
+    let vertices = plan["vertices"].as_array().unwrap();
+    let quads = plan["quads"].as_array().unwrap();
+    let rim: Vec<usize> = plan["boundary"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|value| value.as_str().unwrap())
+        .map(|index| index.as_u64().unwrap() as usize)
         .collect();
-    assert_eq!(
-        removed_node_ids,
-        vec!["q-e"],
-        "only the shared center node has every one of its own edges cancel out: {response}"
-    );
-    assert!(
-        session
-            .graph
-            .node(&grafting_graph_core::NodeId::new("q-e").unwrap())
-            .is_none(),
-        "the reported orphan must actually be gone from the graph"
-    );
-    for surviving in ["q-a", "q-b", "q-c", "q-d", "q-f", "q-g", "q-h", "q-i"] {
-        assert!(
-            session
-                .graph
-                .node(&grafting_graph_core::NodeId::new(surviving).unwrap())
-                .is_some(),
-            "{surviving} still anchors a surviving remainder edge and must not be deleted"
-        );
-    }
-}
 
-#[test]
-fn a_single_point_circle_brush_dot_applies_as_a_pure_arc_region() {
-    let mut session = ConstructionSession::new();
-    let request = r#"{"operationId":"path-dot","samples":[[0.0,0.0]],"brushShape":{"kind":"circle","radius":0.5},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
-
-    let response = session
-        .apply_path_brush_json(request)
-        .expect("a pure-arc contour must apply");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
-    assert!(session.snapshot_json().unwrap().contains("\"path\""));
-
-    let meshes_json = session.all_surface_meshes_json().unwrap();
-    let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-    assert_eq!(
-        meshes.len(),
-        1,
-        "the pure-arc region must produce exactly one mesh: {meshes_json}"
-    );
-    assert!(
-        !meshes[0]["indices"].as_array().unwrap().is_empty(),
-        "the pure-arc region's mesh must have real triangles, not be empty: {meshes_json}"
-    );
-}
-
-#[test]
-fn a_self_overlapping_loop_stroke_applies_and_renders_as_one_region() {
-    let mut session = ConstructionSession::new();
-    let loop_samples: Vec<[f32; 2]> = (0..=32)
-        .map(|index| {
-            let angle = std::f32::consts::TAU * index as f32 / 32.0;
-            [2.0 * angle.cos(), 2.0 * angle.sin()]
-        })
-        .collect();
-    let request = serde_json::json!({
-        "operationId": "path-loop",
-        "samples": loop_samples,
-        "brushShape": {"kind": "circle", "radius": 0.5},
-        "depth": 0.1,
-        "sourceSurfaceTypes": ["terrain"],
-        "targetSurfaceType": "path",
-    })
-    .to_string();
-
-    let response = session
-        .apply_path_brush_json(&request)
-        .expect("a self-overlapping loop stroke must apply, not require union normalization");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert_eq!(parsed["surfaceIds"]["created"].as_array().unwrap().len(), 1);
-
-    let meshes_json = session.all_surface_meshes_json().unwrap();
-    let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
-    assert_eq!(
-        meshes.len(),
-        1,
-        "the looped stroke must produce exactly one mesh: {meshes_json}"
-    );
-    assert!(
-        !meshes[0]["indices"].as_array().unwrap().is_empty(),
-        "the looped stroke's mesh must have real triangles, not be empty: {meshes_json}"
-    );
-}
-
-#[test]
-fn applying_path_brush_with_no_terrain_at_all_still_creates_the_path() {
-    let mut session = ConstructionSession::new();
-    let request = r#"{"operationId":"path-empty","samples":[[0.0,0.0],[1.0,0.0]],"brushShape":{"kind":"circle","radius":0.25},"depth":0.1,"sourceSurfaceTypes":["terrain"],"targetSurfaceType":"path"}"#;
-
-    let response = session
-        .apply_path_brush_json(request)
-        .expect("path brush applies with no terrain underneath");
-    let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-    assert_eq!(
-        parsed["surfaceIds"]["created"].as_array().unwrap().len(),
-        1,
-        "only the target region is created, there is no source region to make"
-    );
-    assert!(
-        parsed["surfaceIds"]["removed"]
+    let mut edges: Vec<serde_json::Value> = Vec::new();
+    let mut declared: HashSet<String> = HashSet::new();
+    let mut regions: Vec<serde_json::Value> = Vec::new();
+    for (index, quad) in quads.iter().enumerate() {
+        let corners: Vec<usize> = quad
             .as_array()
             .unwrap()
-            .is_empty(),
-        "nothing existed to remove"
-    );
-    assert!(session.snapshot_json().unwrap().contains("\"path\""));
+            .iter()
+            .map(|corner| corner.as_u64().unwrap() as usize)
+            .collect();
+        let boundary: Vec<serde_json::Value> = (0..corners.len())
+            .map(|step| {
+                fixture_edge_use(
+                    operation_id,
+                    corners[step],
+                    corners[(step + 1) % corners.len()],
+                    &mut edges,
+                    &mut declared,
+                )
+            })
+            .collect();
+        regions.push(json!({
+            "regionId": format!("{operation_id}:path-quad:{index}"),
+            "boundary": boundary,
+            "surfaceType": "path",
+            "physical": true,
+        }));
+    }
+
+    let boundary: Vec<serde_json::Value> = (0..rim.len())
+        .map(|step| {
+            fixture_edge_use(
+                operation_id,
+                rim[step],
+                rim[(step + 1) % rim.len()],
+                &mut edges,
+                &mut declared,
+            )
+        })
+        .collect();
+    let outline: Vec<[f64; 2]> = rim
+        .iter()
+        .map(|index| {
+            let vertex = vertices[*index].as_array().unwrap();
+            [vertex[0].as_f64().unwrap(), vertex[2].as_f64().unwrap()]
+        })
+        .collect();
+    let nodes: Vec<serde_json::Value> = vertices
+        .iter()
+        .enumerate()
+        .map(|(index, vertex)| {
+            json!({"id": format!("{operation_id}:path-node:{index}"), "position": vertex})
+        })
+        .collect();
+
+    let response = session
+        .apply_region_overlay_json(
+            &json!({
+                "operationId": operation_id,
+                "sourceSurfaceKeys": source_surface_keys,
+                "outline": outline,
+                "boundary": boundary,
+                "patch": {"nodes": nodes, "edges": edges, "regions": regions},
+            })
+            .to_string(),
+        )
+        .expect("the application-declared path patch overlays");
+    serde_json::from_str(&response).unwrap()
 }
 
-struct Xorshift(u32);
-impl Xorshift {
-    fn next(&mut self) -> u32 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 17;
-        self.0 ^= self.0 << 5;
-        self.0
-    }
-    fn range(&mut self, lo: f32, hi: f32) -> f32 {
-        lo + (self.next() as f32 / u32::MAX as f32) * (hi - lo)
-    }
+/// Every region the session currently holds, as wire surface keys -- what
+/// the application resolves through `getFootprintCoverage` and its own
+/// per-type interaction table before it decides which ones to replace.
+fn all_surface_keys(session: &ConstructionSession) -> Vec<serde_json::Value> {
+    session
+        .known_regions
+        .iter()
+        .map(|region| serde_json::to_value(mesh::region_id_to_wire(region)).unwrap())
+        .collect()
 }
 
 #[test]
-fn many_random_overlapping_strokes_never_leave_an_unmeshable_surface() {
+fn a_profiled_path_is_a_shared_quad_patch_and_can_start_on_empty_ground() {
     let mut session = ConstructionSession::new();
-    for cell in 0..36 {
-        let x = cell % 6;
-        let z = cell / 6;
-        terrain_cell(
-            &mut session,
-            cell,
-            4,
-            0.0,
-            [
-                &format!("n{x}-{z}-0"),
-                &format!("n{x}-{z}-1"),
-                &format!("n{x}-{z}-2"),
-                &format!("n{x}-{z}-3"),
-            ],
-        );
-    }
+    let formation = json!({
+        "profile": [
+            {"lateralOffset": -1.0, "elevation": 0.4},
+            {"lateralOffset": -0.5, "elevation": 0.0},
+            {"lateralOffset": 0.5, "elevation": 0.0},
+            {"lateralOffset": 1.0, "elevation": 0.4}
+        ],
+        "miterLimit": 2.0
+    });
 
-    let mut rng = Xorshift(0x9e3779b1);
-    for stroke in 0..80 {
-        let shape = match rng.next() % 3 {
-            0 => serde_json::json!({"kind": "circle", "radius": rng.range(0.3, 1.5)}),
-            1 => {
-                serde_json::json!({"kind": "square", "size": rng.range(0.6, 3.0), "rotationRadians": rng.range(0.0, 6.28)})
-            }
-            _ => {
-                serde_json::json!({"kind": "hexagon", "radius": rng.range(0.3, 1.5), "rotationRadians": rng.range(0.0, 6.28)})
-            }
-        };
-        let sample_count = 1 + (rng.next() % 3) as usize;
-        let samples: Vec<[f32; 2]> = (0..sample_count)
-            .map(|_| [rng.range(-1.0, 7.0), rng.range(-1.0, 7.0)])
-            .collect();
-        let request_json = serde_json::json!({
-            "operationId": format!("path-stress-{stroke}"),
-            "samples": samples,
-            "brushShape": shape,
-            "depth": 0.1,
-            "sourceSurfaceTypes": ["terrain"],
-            "targetSurfaceType": "path",
-        })
-        .to_string();
-        let request: path_brush::ApplyPathBrushRequest = serde_json::from_str(&request_json)
-            .unwrap_or_else(|error| panic!("bad request json {request_json}: {error}"));
+    let response = overlay_path_stroke(
+        &mut session,
+        "profiled-path-empty",
+        &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        &formation,
+        &[],
+    );
+    assert_eq!(
+        response["outcome"]["createdSurfaceKeys"]
+            .as_array()
+            .unwrap()
+            .len(),
+        6,
+        "two longitudinal segments times three transverse bands"
+    );
 
-        let response = match path_brush::apply_path_brush(
-            &mut session.graph,
-            &mut session.surfaces,
-            &mut session.topology,
-            &mut session.known_regions,
-            request,
-        ) {
-            Ok(response) => response,
-            Err(message) => {
-                if message.contains("produced no semantic change") {
-                    continue;
-                }
-                panic!("stroke {stroke} ({request_json}) failed to apply: {message}");
-            }
-        };
-        let response_json = serde_json::to_string(&response).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&response_json).unwrap();
-
-        for key in parsed["surfaceIds"]["created"].as_array().unwrap() {
-            let surface_key: Vec<String> = key
+    let meshes: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    assert_eq!(meshes.len(), 6);
+    let heights = meshes
+        .iter()
+        .flat_map(|mesh| {
+            mesh["positions"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|part| part.as_str().unwrap().to_string())
-                .collect();
-            if let Err(message) = mesh::surface_mesh(
-                &session.graph,
-                &session.surfaces,
-                &session.topology,
-                mesh::SurfaceMeshRequest {
-                    surface_key: surface_key.clone(),
-                },
-            ) {
-                panic!(
-                    "stroke {stroke} created {surface_key:?} but it doesn't mesh: {message}\nstroke request: {request_json}\nstroke response: {response_json}"
-                );
-            }
-        }
-    }
+                .skip(1)
+                .step_by(3)
+        })
+        .map(|height| height.as_f64().unwrap())
+        .collect::<Vec<_>>();
+    assert!(heights.iter().all(|height| *height >= 0.0));
+    assert!(heights.contains(&0.0));
+    assert!(heights.iter().any(|height| *height > 0.0));
+}
+
+#[test]
+fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
+    let mut session = ConstructionSession::new();
+    let formation = json!({
+        "profile": [
+            {"lateralOffset": -0.5, "elevation": 0.2},
+            {"lateralOffset": -0.25, "elevation": 0.0},
+            {"lateralOffset": 0.25, "elevation": 0.0},
+            {"lateralOffset": 0.5, "elevation": 0.2}
+        ],
+        "miterLimit": 2.0
+    });
+
+    overlay_path_stroke(
+        &mut session,
+        "profile-cross-a",
+        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        &formation,
+        &[],
+    );
+
+    // The application resolved every standing path face as a source to cut,
+    // which is what `resolveCoverage` reports for path painted over path.
+    let sources = all_surface_keys(&session);
+    let response = overlay_path_stroke(
+        &mut session,
+        "profile-cross-b",
+        &[[1.0, 0.0, -1.0], [1.0, 0.0, 1.0]],
+        &formation,
+        &sources,
+    );
+    assert!(
+        response["outcome"]["createdSurfaceKeys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|key| {
+                let id = key[1].as_str().unwrap();
+                id.contains("remainder") || id.contains("quad")
+            })
+    );
+    let meshes: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    assert!(!meshes.is_empty());
+    assert!(meshes.iter().all(|mesh| mesh["surfaceType"] == "path"));
 }
 
 #[wasm_bindgen_test]

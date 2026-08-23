@@ -64,8 +64,14 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <BrushShapeFields params={params} radiusMin={0.15} radiusMax={3} onChange={onChange} />
-      {sliderRow("Profundidade", params.depth, 0.05, 1.5, 0.05, (depth) => onChange({ ...params, depth }))}
+      <div className="gm-material-grid">
+        <SelectableChip label="Trilha" selected={params.pathKind === "trail"} onSelect={() => onChange({ ...params, pathKind: "trail" })} />
+        <SelectableChip label="Rua" selected={params.pathKind === "street"} onSelect={() => onChange({ ...params, pathKind: "street" })} />
+        <SelectableChip label="Estrada" selected={params.pathKind === "road"} onSelect={() => onChange({ ...params, pathKind: "road" })} />
+      </div>
+      {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
+      {params.pathKind !== "street" && sliderRow("Largura do ombro", params.shoulderWidth, 0.1, 4, 0.1, (shoulderWidth) => onChange({ ...params, shoulderWidth }))}
+      {params.pathKind !== "street" && sliderRow("Altura do ombro", params.shoulderHeight, 0, 2, 0.05, (shoulderHeight) => onChange({ ...params, shoulderHeight }))}
     </div>
   );
 }
