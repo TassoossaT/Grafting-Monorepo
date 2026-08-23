@@ -38,8 +38,8 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 - On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
 - **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**
-  1. Start task: `ia-graft task new --id TASK-<ISSUE-ID>-<SLUG> [--base <branch>] [--parent <ID>]`
-  2. **Stacked PRs:** When building upon an unmerged task, MUST use `--parent <PARENT-TASK-ID>`. `task done` automatically opens a stacked PR targeting the parent branch.
+  1. Start task: `ia-graft task new --id TASK-<ISSUE-ID>-<SLUG> [--base <branch>]`
+  2. **MUST NOT stack PRs.** Work continuing from earlier unmerged work goes on the SAME branch as further commits, in one PR; re-running `task done` updates it. `--parent` exists but MUST NOT be used: a PR targeting `task/**` matches no CI trigger and receives no checks, and squash-merging the parent replaces its commits so every child then conflicts (#202).
   3. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
   4. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--amend] [--agent <name>]`
   5. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
