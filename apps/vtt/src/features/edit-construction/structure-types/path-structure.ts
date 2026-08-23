@@ -51,19 +51,25 @@ export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditT
  * Every node outward of the grabbed one, in its own station, moved by the
  * same delta.
  *
- * Scans `related` as well as the grabbed region because a station is spread
+ * Scans the whole cloud, not the grabbed band, because a station is spread
  * across several of them: the spine is shared by the two bands either side of
  * it, while the rim belongs only to the outermost band. A cascade that could
  * see one region alone would reach the rib and stop short of the rim.
+ *
+ * The cloud is the right list rather than merely a convenient one. It is
+ * every same-type band reachable through shared nodes -- which is exactly
+ * what one swept run is -- so it follows a station through a whole path
+ * instead of only to the grabbed band's immediate neighbours, and it never
+ * offers up a terrain patch that happens to touch the rim.
  */
 function outwardOfGrabbed(context: CascadeContext): readonly AtomicEditOp[] {
-  const { topology, related, target, delta } = context;
+  const { cloud, target, delta } = context;
   if (target.kind !== "vertex") return [];
   const moved = parseStationNodeId(target.nodeId);
   if (moved === undefined) return [];
 
   const ops = new Map<string, AtomicEditOp>();
-  for (const region of [topology, ...related]) {
+  for (const region of cloud.members) {
     for (const node of region.nodes) {
       if (node.id === target.nodeId || ops.has(node.id)) continue;
       const address = parseStationNodeId(node.id);
@@ -82,17 +88,25 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
     // Height included on purpose: lifting a spine station off the ground is
     // how a run stops riding the terrain, which is the whole of a bridge deck.
+    //
+    // Scope is `"surface"` for every part-level role here, and it is not a
+    // hedge: the primary op names one node or one edge, and the reach past
+    // it is the cascade's, declared above. Widening scope as well would move
+    // each band a second time.
     case PATH_ROLES.spine:
-      return allowed(role, ALL_AXES, outwardOfGrabbed);
+      return allowed(role, ALL_AXES, "surface", outwardOfGrabbed);
     case PATH_ROLES.across:
-      return allowed(role, ALL_AXES, outwardOfGrabbed);
+      return allowed(role, ALL_AXES, "surface", outwardOfGrabbed);
     case PATH_ROLES.edge:
       // `moveEdge` already carries both endpoints; each of those carries its
       // own station outward through the vertex rule, so a spine edge drags
       // the two cross-sections it spans without a rule of its own.
-      return allowed(role, ALL_AXES);
+      return allowed(role, ALL_AXES, "surface");
+    // The body is the run, not the band under the pointer -- the same answer
+    // a wall's body gives, for the same reason: a swept path is one thing
+    // that happens to be stored as many.
     case PATH_ROLES.body:
-      return allowed(role, ALL_AXES);
+      return allowed(role, ALL_AXES, "cloud");
     default:
       return denied(role, "this part of the path has no editing role");
   }

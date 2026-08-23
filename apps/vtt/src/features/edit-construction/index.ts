@@ -59,6 +59,13 @@ export {
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export {
+  cloudNodes,
+  refreshCloudTopology,
+  resolveCloud,
+  resolveCloudTopology,
+} from "./construction-cloud.ts";
+export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
+export {
   CUT,
   IGNORE,
   ORGANIC_ROLES,
@@ -78,6 +85,7 @@ export type {
   CreationInteractionKind,
   EditResolution,
   EditRole,
+  EditScope,
   ResolvedCoverage,
   RolePolicy,
   StructureTypeDefinition,

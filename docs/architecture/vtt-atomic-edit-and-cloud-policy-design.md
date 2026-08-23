@@ -2,19 +2,24 @@
 
 - Status: **implemented** — this file's settled design is now built. It
   stays as the rationale record; the code is the contract.
-- Date: 2026-08-19 (discussion), implemented 2026-08-19
+- Date: 2026-08-19 (discussion), implemented 2026-08-19; moved onto
+  cloud-scoped dispatch 2026-08-22 (see "Settled 2026-08-22" below)
 - Where it lives now:
   - Rust primitives: `libs/graph/core/src/region_edit.rs`, over the
     `ContourTopology` mutation surface added in `contour.rs`.
   - Wire shape and region-topology query:
     `libs/domains/procgen/construction-wasm/src/region_editing.rs`.
+  - The cloud query: `libs/domains/procgen/construction-wasm/src/geometry.rs`'s
+    `connected_component`, exposed as `cloud_json`.
   - App boundary: `ConstructionSessionPort`'s atomic-vocabulary section.
+  - Cloud resolution:
+    `apps/vtt/src/features/edit-construction/construction-cloud.ts`.
   - Role tables per structure type:
     `apps/vtt/src/features/edit-construction/structure-types/`.
   - Gesture orchestration:
     `apps/vtt/src/features/edit-construction/edit-orchestrator.ts`.
   - The tool that drives it:
-    `apps/vtt/src/composition/tabletop/tools/edit-region-tool.ts`.
+    `apps/vtt/src/composition/tabletop/tools/core/edit-region-tool.ts`.
 - Two decisions this file left open were settled during implementation:
   the TS file layout (above), and the wire contract (one shared
   `RegionEditOutcome` for every op, plus `regionTopology` as the
@@ -193,6 +198,100 @@ tower) are where the rich per-role table actually pays off.
   bottom and top runs. Splitting was only ever a way to get nodes at the
   crossing point, which `InsertVertex` does directly and cannot
   desynchronize the panel's two runs.
+
+## Settled 2026-08-22 — the cloud is what a gesture edits
+
+This file's first implementation dispatched on one `SurfaceRegion`: the tool
+resolved the face under the pointer, and `planEdit` planned against that
+face alone. That was a gap against `ADR-0022`, not a decision — the ADR is
+explicit that "editing dispatches by cloud, not by individual surface," and
+`cloudFor` had been plumbed end to end (`geometry.rs::connected_component`
+→ `cloud_json` → the Wasm adapter → `ConstructionSessionPort` →
+`TabletopRuntime`) with no caller at all.
+
+- **`planEdit` now takes a `CloudTopology`**
+  (`features/edit-construction/construction-cloud.ts`): the cloud, the face
+  the gesture landed on, and every member's live boundary. The face still
+  resolves the *role* — a corner is a corner of a panel, and no cloud-wide
+  question has an answer for one node — but the reach of the resulting op
+  does not come from it.
+- **Reach is the third thing a role declares**, next to its resolution and
+  its axes: `RolePolicy.scope` is `"surface"` or `"cloud"`, required rather
+  than defaulted, so a new structure type states it on purpose. This is the
+  rule for every type, not a wall affordance.
+- **What that changes today.** A panel's body drag was moving the one panel
+  under the pointer, dragging the columns it shares with its neighbours and
+  leaving the rest standing — shearing the run. `panel-body` and
+  `organic-body` are `"cloud"`, so the whole run (or the whole sculpted
+  patch) moves by the same delta. A lone panel is a component of size one
+  and takes the identical path. Corner, edge and post roles stay
+  `"surface"`: whatever else references the node moves because the graph
+  says so, which is a consequence rather than a scope.
+- **A cascade reads the cloud too.** `pairedTopCorners` searched the grabbed
+  face; it searches every member now, so which of two welded panels the
+  pointer landed on cannot change the answer.
+- **Membership is settled on press, positions are re-read every tick**
+  (`refreshCloudTopology`). A drag that welds onto a neighbour must not
+  silently enlarge what it is dragging.
+- **Undo captures the whole cloud.** The before-snapshot was the seed's
+  nodes; a cloud-scoped move addressed members it did not cover, so undo
+  could put one panel back and abandon the run.
+- **What deliberately stays outside cloud scope.** Welding and creation
+  (`wall-shared.ts`, `boundary-edges.ts`) are how clouds come to exist — a
+  new run must be able to reach a wall it is not yet connected to, so
+  scoping it to a cloud would make merging impossible. Room/enclosure
+  queries (`room-lookup.ts`, "Apagar Cômodo") ask a different question:
+  a room is bounded space, not a connected component of one type, and the
+  two answers legitimately differ.
+- **Presets are placeholders, enforced.** A tool preset — a tower, a
+  generated interior — picks parameters, a generator and an already-declared
+  type; it never becomes a type and never carries behaviour, because
+  behaviour belongs to the cloud its geometry lands in.
+  `test/tool-presets-are-placeholders.test.mjs` holds that line.
+
+## Settled 2026-08-23 — a cloud-scoped body move addresses nodes, not regions
+
+The obvious spelling of "move the whole cloud" is one `moveRegion` per
+member. It is wrong, and the reason is the definition of a cloud itself.
+
+`moveRegion` translates **every node on a region's boundary**, and members
+of a cloud are welded precisely by *sharing* nodes. So a column that two
+panels both reference receives the delta once for each of them and ends up
+twice as far as everything around it. The run shears open at exactly the
+joints that made it one run — the failure is worst where the structure is
+most connected, which is the opposite of what the cloud is for.
+
+A cloud-scoped body move therefore expands to one `moveVertex` per
+*distinct* node of the cloud. Deduplication is not a repair applied
+afterwards; it is what addressing nodes instead of regions means. The op
+list also states plainly what the gesture did, which a list of overlapping
+region moves does not.
+
+`moveRegion` stays in the vocabulary for `scope: "surface"`, where a
+region's nodes are its own and the shorter op is the honest one. That two
+scopes of the same gesture produce different op kinds is deliberate and is
+the point: the scope is a claim about *which nodes* the gesture reaches,
+and the ops say so.
+
+This was found by the sync with #204 rather than by the original design,
+and the test that encoded the wrong behaviour has been replaced by one that
+asserts the shared column moves once
+(`test/edit-orchestrator.test.mjs`).
+
+### The same rule applied to swept paths
+
+#204 landed a path structure type whose cascade needed "every region
+sharing a node with this one", and resolved it with a `relatedTopologies`
+helper in the tool plus a `related` field on `CascadeContext`. That is the
+cloud, computed a second time and less well: it stopped at direct
+neighbours instead of walking the component, and it offered up regions of
+other types that the cascade then had to filter out.
+
+`CascadeContext` carries the cloud and nothing else. A swept path's
+cascade reads `cloud.members`, which follows a station through the whole
+run. This is the rule stated at the top of this section holding for a type
+that was written after it: a type declares reach in its own role table, and
+never grows a private substitute for the cloud.
 
 ## Explicitly not decided by this file
 

@@ -2,6 +2,7 @@ import type { ConstructionRegionTopology } from "@/ports";
 
 import type { AtomicEditOp, EditTarget } from "../atomic-edit.ts";
 import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../atomic-edit.ts";
+import { cloudNodes } from "../construction-cloud.ts";
 import type { CascadeContext, EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { allowed, denied } from "./structure-type.ts";
 import { IGNORE, type CreationInteraction } from "./creation-interaction.ts";
@@ -70,13 +71,21 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
  * **same** delta, so the panel stays upright instead of shearing. The pair
  * is the boundary node directly above it (same XZ, greater Y) -- the very
  * relationship `extrude_path` created it with.
+ *
+ * Searched across the whole cloud, not the grabbed face. Two panels welded
+ * at a column reference one pair of nodes, so reading either face alone
+ * happens to give the same answer today -- but a column standing taller on
+ * one side than the other is the same corner with two pairs, and which of
+ * them a drag found would otherwise depend on which panel the pointer
+ * landed on. The cloud is the run; the run is what a corner belongs to.
  */
 function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
-  const { topology, target, delta } = context;
+  const { cloud, target, delta } = context;
   if (target.kind !== "vertex") return [];
-  const moved = topology.nodes.find((node) => node.id === target.nodeId);
+  const nodes = cloudNodes(cloud);
+  const moved = nodes.find((node) => node.id === target.nodeId);
   if (moved === undefined) return [];
-  return topology.nodes
+  return nodes
     .filter(
       (node) =>
         node.id !== moved.id &&
@@ -98,22 +107,31 @@ function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
     case PANEL_ROLES.bottomCorner:
-      return allowed(role, HORIZONTAL_AXES, pairedTopCorners);
+      // One corner of one panel. Whatever else references the node moves
+      // with it because the graph says so, not because the gesture reached
+      // for it.
+      return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
     case PANEL_ROLES.topCorner:
-      return allowed(role, HEIGHT_AXIS);
+      return allowed(role, HEIGHT_AXIS, "surface");
     case PANEL_ROLES.bottomEdge:
       // A whole bottom run drags horizontally; its own two corners each
       // carry their paired top corner through the same cascade the corner
       // role uses, so this needs no separate rule.
-      return allowed(role, HORIZONTAL_AXES);
+      return allowed(role, HORIZONTAL_AXES, "surface");
     case PANEL_ROLES.topEdge:
-      return allowed(role, HEIGHT_AXIS);
+      return allowed(role, HEIGHT_AXIS, "surface");
     case PANEL_ROLES.post:
       // A vertical post moves as one rigid unit -- `moveEdge` already
       // carries both of its endpoints.
-      return allowed(role, HORIZONTAL_AXES);
+      return allowed(role, HORIZONTAL_AXES, "surface");
     case PANEL_ROLES.body:
-      return allowed(role, HORIZONTAL_AXES);
+      // Grabbing the body means the wall, not the panel under the pointer.
+      // Moving one panel of a welded run drags the columns it shares with
+      // its neighbours and leaves the rest standing, which shears the run
+      // -- the shape a wall can never legitimately take. Every member moves
+      // by the same delta instead, and a lone panel is a cloud of one, so
+      // this is not two behaviours.
+      return allowed(role, HORIZONTAL_AXES, "cloud");
     default:
       return denied(role, "this part of the panel has no editing role");
   }

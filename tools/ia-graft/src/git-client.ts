@@ -1,5 +1,6 @@
 import { exec, execFile } from 'child_process';
 import { createHash, randomBytes } from 'crypto';
+import { realpathSync } from 'fs';
 import * as fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
@@ -172,8 +173,16 @@ async function findNodeModulesDirs(dir: string, relBase = ''): Promise<string[]>
  * workspace packages to task-local sources. No main installation is a valid
  * `linked: false` result; installation remains a main-checkout responsibility.
  */
+/**
+ * Canonical on both sides, for the same reason {@link samePath} is: the
+ * child here is typically a `realpath` of a link and therefore already in
+ * long form, while the parent is whatever name the caller reached the
+ * repository by. Comparing those two lexically read every workspace link as
+ * external, so a task worktree silently rebound its own packages back to the
+ * main checkout.
+ */
 function relativeInside(parent: string, child: string): string | undefined {
-    const relative = path.relative(path.resolve(parent), path.resolve(child));
+    const relative = path.relative(canonicalPath(parent), canonicalPath(child));
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
     return relative;
 }
@@ -343,8 +352,49 @@ async function removeWithRetry(target: string, attempts = 5, delayMs = 300): Pro
     }
 }
 
+/**
+ * One path's canonical on-disk identity, for comparison.
+ *
+ * `path.resolve` alone is not enough. It normalises separators and case but
+ * expands no Windows 8.3 short name, follows no junction and no symlink --
+ * so two names for one directory compare as different:
+ *
+ * ```
+ * os.tmpdir()               C:\Users\TASSO~1.PIM\AppData\Local\Temp
+ * fs.realpathSync.native()  C:\Users\tasso.pimenta\AppData\Local\Temp
+ * ```
+ *
+ * `git worktree list` always answers with the long form, so a caller that
+ * reached the repository by the short one was told its own registered
+ * worktree was "an orphan directory" whose branch was "checked out in an
+ * unexpected worktree" -- naming the very path it had just asked about.
+ *
+ * A path is routinely compared before it exists (a worktree about to be
+ * created), and an absent path has no real form, so the deepest ancestor
+ * that does exist is canonicalised and the remaining segments re-appended.
+ * That is what lets a to-be-created child of a short-named parent still
+ * match.
+ */
+function canonicalPath(target: string): string {
+    const resolved = path.resolve(target);
+    let current = resolved;
+    const trailing: string[] = [];
+    for (;;) {
+        try {
+            return path.join(realpathSync.native(current), ...trailing);
+        } catch {
+            const parent = path.dirname(current);
+            // A root that cannot be realpath'd leaves nothing further to
+            // try; the lexical form is then the best identity available.
+            if (parent === current) return resolved;
+            trailing.unshift(path.basename(current));
+            current = parent;
+        }
+    }
+}
+
 function samePath(left: string, right: string): boolean {
-    return path.relative(path.resolve(left), path.resolve(right)) === '';
+    return path.relative(canonicalPath(left), canonicalPath(right)) === '';
 }
 
 function assertSafeTaskPath(repoPath: string, target: string): void {
