@@ -292,6 +292,7 @@ enum UnrollFrame {
         center: [f32; 2],
         radius: f32,
         start_angle: f32,
+        total_sweep: f32,
         clockwise: bool,
     },
 }
@@ -310,10 +311,14 @@ impl UnrollFrame {
             }
             ContourGeometry::CircularArc { center, clockwise } => {
                 let radius = distance_xz(*center, [start[0], start[2]]);
+                let start_angle = angle_xz(*center, [start[0], start[2]]);
+                let end_angle = angle_xz(*center, [end[0], end[2]]);
+                let total_sweep = sweep(start_angle, end_angle, *clockwise);
                 (radius > f32::EPSILON).then_some(Self::Cylinder {
                     center: *center,
                     radius,
-                    start_angle: angle_xz(*center, [start[0], start[2]]),
+                    start_angle,
+                    total_sweep,
                     clockwise: *clockwise,
                 })
             }
@@ -332,13 +337,24 @@ impl UnrollFrame {
                 center,
                 radius,
                 start_angle,
+                total_sweep,
                 clockwise,
             } => {
-                let swept = sweep(
+                let raw_swept = sweep(
                     *start_angle,
                     angle_xz(*center, [point[0], point[2]]),
                     *clockwise,
                 );
+                let swept = if raw_swept > std::f32::consts::TAU - 1e-3 {
+                    0.0
+                } else if *total_sweep > 0.0
+                    && raw_swept > *total_sweep
+                    && (raw_swept - *total_sweep) < 1e-3
+                {
+                    *total_sweep
+                } else {
+                    raw_swept
+                };
                 [radius * swept, point[1]]
             }
         }
@@ -442,7 +458,8 @@ fn upright_rail(
         _ => return None,
     };
 
-    let (edge, start, end) = base.first()?;
+    let (edge, start, _) = base.first()?;
+    let (_, _, end) = base.last()?;
     Some(UprightRail {
         frame: UnrollFrame::of(edge.geometry(), *start, *end)?,
     })
@@ -497,10 +514,10 @@ fn upright_face_mesh(
         return None;
     }
 
-    // Which way the face actually faces is settled by the winding its own
-    // triangles came out with, so the frame supplies the direction and the
-    // geometry supplies the sign -- once, for the whole face.
-    let mut normals: Vec<[f32; 3]> = positions
+    // Which way the face actually faces is settled by the frame's outward
+    // direction. If the unrolled triangle winding ended up facing inward,
+    // swap the triangle winding so the mesh is front-facing from the outside.
+    let normals: Vec<[f32; 3]> = positions
         .iter()
         .map(|point| rail.frame.normal_at(*point))
         .collect();
@@ -508,8 +525,8 @@ fn upright_face_mesh(
         let anchor = indices[0] as usize;
         let radial = normals[anchor];
         if dot(reference, radial) < 0.0 {
-            for normal in &mut normals {
-                *normal = [-normal[0], -normal[1], -normal[2]];
+            for triangle in indices.chunks_exact_mut(3) {
+                triangle.swap(1, 2);
             }
         }
     }
@@ -1311,6 +1328,108 @@ mod tests {
                 (uv[0] - point[0]).abs() < 1e-4 && (uv[1] - point[2]).abs() < 1e-4,
                 "expected world xz for {point:?}, got {uv:?}"
             );
+        }
+    }
+
+    #[test]
+    fn a_four_panel_circular_tower_meshes_all_four_quarters_cleanly() {
+        let radius = 2.0_f32;
+        let height = 3.0_f32;
+        let corners = [
+            ("c0", [radius, 0.0, 0.0], [radius, height, 0.0]),
+            ("c1", [0.0, 0.0, radius], [0.0, height, radius]),
+            ("c2", [-radius, 0.0, 0.0], [-radius, height, 0.0]),
+            ("c3", [0.0, 0.0, -radius], [0.0, height, -radius]),
+        ];
+
+        let mut node_positions = Vec::new();
+        for (id, bot, top) in &corners {
+            node_positions.push((format!("{id}-bot"), *bot));
+            node_positions.push((format!("{id}-top"), *top));
+        }
+        let pos_refs: Vec<(&str, [f32; 3])> = node_positions
+            .iter()
+            .map(|(id, pos)| (id.as_str(), *pos))
+            .collect();
+        let graph = graph_with_positions(&pos_refs);
+        let mut topology = ContourTopology::new();
+
+        let arc = |clockwise: bool| ContourGeometry::CircularArc {
+            center: [0.0, 0.0],
+            clockwise,
+        };
+
+        for step in 0..4 {
+            let next = (step + 1) % 4;
+            let (from_id, _, _) = corners[step];
+            let (to_id, _, _) = corners[next];
+
+            let spec = [
+                (
+                    format!("base-{step}"),
+                    format!("{from_id}-bot"),
+                    format!("{to_id}-bot"),
+                    arc(false),
+                ),
+                (
+                    format!("right-{step}"),
+                    format!("{to_id}-bot"),
+                    format!("{to_id}-top"),
+                    ContourGeometry::Line,
+                ),
+                (
+                    format!("top-{step}"),
+                    format!("{to_id}-top"),
+                    format!("{from_id}-top"),
+                    arc(true),
+                ),
+                (
+                    format!("left-{step}"),
+                    format!("{from_id}-top"),
+                    format!("{from_id}-bot"),
+                    ContourGeometry::Line,
+                ),
+            ];
+
+            let loop_: ContourLoop = spec
+                .iter()
+                .map(|(name, start, end, geometry)| {
+                    let edge_id = ContourEdgeId::new(name.clone()).unwrap();
+                    topology
+                        .add_edge(
+                            &graph,
+                            ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry),
+                        )
+                        .unwrap();
+                    OrientedEdgeUse::forward(edge_id)
+                })
+                .collect();
+
+            let region_id = RegionId::new(format!("panel-{step}")).unwrap();
+            topology
+                .add_region(region_id.clone(), vec![loop_], Vec::new())
+                .unwrap();
+
+            let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+            assert_every_triangle_has_area(&mesh);
+            assert_one_uv_per_vertex(&mesh);
+
+            for point in &mesh.positions {
+                let r = (point[0].powi(2) + point[2].powi(2)).sqrt();
+                assert!(
+                    (r - radius).abs() < 1e-2,
+                    "point on panel {step} left cylinder: {point:?}"
+                );
+            }
+
+            // Normals must point outward (XZ distance from origin grows)
+            for (pos, normal) in mesh.positions.iter().zip(mesh.normals.iter()) {
+                let dot_radial = pos[0] * normal[0] + pos[2] * normal[2];
+                assert!(
+                    dot_radial > 0.0,
+                    "panel {step} normal points inward: pos {pos:?}, normal {normal:?}"
+                );
+            }
         }
     }
 }
