@@ -2983,36 +2983,6 @@ export interface UiMountHandle<Props> {
 ### `vtt` (`apps/vtt`)
 
 ```ts
-// .next/types/cache-life.d.ts
-export function cacheLife(profile: "default"): void
-export function cacheLife(profile: "seconds"): void
-export function cacheLife(profile: "minutes"): void
-export function cacheLife(profile: "hours"): void
-export function cacheLife(profile: "days"): void
-export function cacheLife(profile: "weeks"): void
-export function cacheLife(profile: "max"): void
-export function cacheLife(profile: {
-  /**
-  * This cache may be stale on clients for ... seconds before checking with the server.
-  */
-  stale?: number,
-  /**
-  * If the server receives a new request after ... seconds, start revalidating new values in the background.
-  */
-export const unstable_cacheTag: typeof cacheTag
-export const unstable_cacheLife: typeof cacheLife
-
-// .next/types/routes.d.ts
-export type ParamsOf<Route extends Routes> = ParamMap[Route]
-export type { AppRoutes, PageRoutes, LayoutRoutes, RedirectRoutes, RewriteRoutes, ParamMap }
-
-  declare global {
-  /**
-  * Props for Next.js App Router page components
-  * @example
-  * ```tsx
-  * export default function Page(props: PageProps<'/blog/[slug]'>) {
-
 // src/adapters/construction/construction-session-wasm-adapter.ts
 export function createConstructionSessionAdapter(): ConstructionSessionPort {
   return new ConstructionSessionWasmAdapter();
