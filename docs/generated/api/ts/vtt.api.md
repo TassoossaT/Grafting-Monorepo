@@ -1087,6 +1087,12 @@ One upright face, flattened: a rail to travel along and a height to rise through
 
 ### `property vtt.panel-rail.PanelRail.baseY: number`
 
+### `property vtt.panel-rail.PanelRail.geometry: ConstructionEdgeGeometry`
+
+The rail's own curvature, as an edge geometry walked in the direction of
+increasing travel. A straight panel reads as a line; a curved one carries
+the arc, so anything stamped onto the panel bends with it.
+
 ### `property vtt.panel-rail.PanelRail.length: number`
 
 Rail length in world units -- the full run from one side of the panel to the other.

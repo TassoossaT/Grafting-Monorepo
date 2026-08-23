@@ -388,9 +388,49 @@ pub fn boundary_runs(cells: &[CellCoord], regions: &[Region]) -> Vec<BoundaryRun
 ### `surface-mesh` (`libs/domains/procgen/surface-mesh`)
 
 ```rust
+// src/frame.rs
+pub enum UnrollFrame
+pub fn of(geometry: &ContourGeometry, start: [f32; 3], end: [f32; 3]) -> Option<Self>
+pub fn unroll(&self, point: [f32; 3]) -> [f32; 2]
+pub fn roll(&self, unrolled: [f32; 2]) -> [f32; 3]
+pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
+
 // src/lib.rs
-pub struct TriangulatedMesh
+pub mod frame;
+pub mod math;
+pub mod planar;
+pub mod tessellation;
+pub mod types;
+pub mod upright;
 pub fn triangulate_region(
+
+// src/math.rs
+pub fn dot(a: [f32; 3], b: [f32; 3]) -> f32
+pub fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3]
+pub fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3]
+pub fn face_normal(positions: &[[f32; 3]]) -> Option<[f32; 3]>
+pub fn winding_normal(positions: &[[f32; 3]], indices: &[u32]) -> Option<[f32; 3]>
+pub fn distance_xz(a: [f32; 2], b: [f32; 2]) -> f32
+pub fn angle_xz(center: [f32; 2], point: [f32; 2]) -> f32
+pub fn sweep(from: f32, to: f32, clockwise: bool) -> f32
+pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
+
+// src/planar.rs
+pub fn triangulate_contour_loops<'a>(
+
+// src/tessellation.rs
+pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
+pub fn tessellate_contour_loop(
+
+// src/types.rs
+pub const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
+pub const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
+pub struct TriangulatedMesh
+
+// src/upright.rs
+pub struct UprightStructure
+pub fn upright_structure(
+pub fn upright_face_mesh(
 ```
 
 ### `surface-transformations` (`libs/domains/procgen/surface-transformations`)
