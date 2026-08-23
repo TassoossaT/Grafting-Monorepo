@@ -157,6 +157,16 @@ pub fn compact_analytic_brush_contour(
     }
 }
 
+/// Creates a straight-edged contour from an already-normalized exterior loop.
+///
+/// A profile sweep uses this for its exact outer rim before the generic
+/// region-merge planner decides which existing surfaces must be replaced.
+pub fn polygonal_contour(
+    vertices: Vec<[f32; 2]>,
+) -> Result<AnalyticBrushContour, PathBrushFailure> {
+    polygon(vertices)
+}
+
 /// Precision for [`tessellate_primitive`]'s own arc subdivision -- coarser
 /// than rendering quality is fine, since [`union_stroke_footprint`]'s output
 /// is already a faceted (straight-edge) polygon, not a true-arc contour.

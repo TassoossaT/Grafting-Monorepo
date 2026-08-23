@@ -78,6 +78,7 @@ pub struct SweepFormationPlan {
     reference_line: Vec<[f32; 2]>,
     vertices: Vec<[f32; 3]>,
     quads: Vec<[usize; 4]>,
+    boundary: Vec<usize>,
     profile_len: usize,
 }
 
@@ -95,6 +96,14 @@ impl SweepFormationPlan {
     /// Shared-vertex quad cells between neighbouring stations and profile samples.
     pub fn quads(&self) -> &[[usize; 4]] {
         &self.quads
+    }
+
+    /// Ordered outer cycle of the complete formation, expressed as vertex indices.
+    ///
+    /// This is the exact rim a terrain replacement uses as its hole boundary;
+    /// it never includes an interior strip edge.
+    pub fn boundary(&self) -> &[usize] {
+        &self.boundary
     }
 
     /// Number of profile vertices in every transverse station.
@@ -145,13 +154,28 @@ pub fn plan_sweep_formation(
             ]);
         }
     }
+    let boundary = outer_boundary(reference_line.len(), profile_len);
 
     Ok(SweepFormationPlan {
         reference_line,
         vertices,
         quads,
+        boundary,
         profile_len,
     })
+}
+
+fn outer_boundary(station_len: usize, profile_len: usize) -> Vec<usize> {
+    let last_station = station_len - 1;
+    let mut boundary: Vec<usize> = (0..profile_len).collect();
+    boundary.extend((1..station_len).map(|station| station * profile_len + profile_len - 1));
+    boundary.extend(
+        (0..profile_len - 1)
+            .rev()
+            .map(|profile| last_station * profile_len + profile),
+    );
+    boundary.extend((1..last_station).rev().map(|station| station * profile_len));
+    boundary
 }
 
 fn validate_request(request: &SweepFormationRequest) -> Result<(), SweepFormationFailure> {
@@ -301,6 +325,7 @@ mod tests {
         assert_eq!(plan.reference_line().len(), 4);
         assert_eq!(plan.vertices().len(), 8);
         assert_eq!(plan.quads(), &[[0, 2, 3, 1], [2, 4, 5, 3], [4, 6, 7, 5]]);
+        assert_eq!(plan.boundary(), &[0, 1, 3, 5, 7, 6, 4, 2]);
         assert!(plan.vertices().iter().all(|vertex| vertex[1] == 0.0));
     }
 

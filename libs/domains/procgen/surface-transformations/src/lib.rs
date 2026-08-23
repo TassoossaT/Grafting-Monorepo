@@ -19,7 +19,7 @@ use stroke::{StrokePrimitive, distance_to_stroke, fit_stroke};
 
 pub use analytic_brush::{
     AnalyticBrushContour, BoundaryVertex, RegionMergePlan, compact_analytic_brush_contour,
-    plan_region_merge,
+    plan_region_merge, polygonal_contour,
 };
 pub use sweep::{
     SweepFormationFailure, SweepFormationPlan, SweepFormationRequest, TransverseProfilePoint,

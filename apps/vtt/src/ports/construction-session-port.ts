@@ -239,6 +239,12 @@ export interface ApplyPathBrushRequest {
   readonly samples: readonly ConstructionPosition[];
   readonly brushShape: ConstructionBrushShape;
   readonly depth: number;
+  /** VTT-selected profile; Rust derives the sweep and its terrain-cut rim. */
+  readonly formation: {
+    readonly profile: readonly { readonly lateralOffset: number; readonly elevation: number }[];
+    readonly maxSegmentLength: number;
+    readonly miterLimit: number;
+  };
   readonly sourceSurfaceTypes: readonly string[];
   readonly targetSurfaceType: string;
 }

@@ -13,7 +13,8 @@ use std::collections::HashSet;
 
 use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_surface_transformations::{
-    BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
+    BrushShape, PathBrushRequest, SweepFormationRequest, TransverseProfilePoint,
+    compact_analytic_brush_contour, plan_region_merge, plan_sweep_formation, polygonal_contour,
     validate_request,
 };
 
@@ -78,6 +79,23 @@ pub struct ApplyPathBrushRequest {
     depth: f32,
     source_surface_types: Vec<String>,
     target_surface_type: String,
+    #[serde(default)]
+    formation: Option<PathFormationRequest>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PathFormationRequest {
+    profile: Vec<PathProfilePointRequest>,
+    max_segment_length: f32,
+    miter_limit: f32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PathProfilePointRequest {
+    lateral_offset: f32,
+    elevation: f32,
 }
 
 /// Wire-ready identity lifecycle delta.
@@ -128,7 +146,13 @@ pub fn apply_path_brush(
     request: ApplyPathBrushRequest,
 ) -> Result<ApplyPathBrushResponse, String> {
     let domain_request = domain_request(&request);
-    let plan = plan_path_brush_region_merge(graph, surfaces, topology, &domain_request)?;
+    let plan = plan_path_brush_region_merge(
+        graph,
+        surfaces,
+        topology,
+        &domain_request,
+        request.formation.as_ref(),
+    )?;
     let outcome = apply_region_merge(
         graph,
         surfaces,
@@ -155,9 +179,40 @@ fn plan_path_brush_region_merge(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: &PathBrushRequest,
+    formation: Option<&PathFormationRequest>,
 ) -> Result<grafting_procgen_surface_transformations::RegionMergePlan, String> {
     validate_request(request).map_err(|error| error.to_string())?;
-    let contour = compact_analytic_brush_contour(request).map_err(|error| error.to_string())?;
+    let contour = formation.map_or_else(
+        || compact_analytic_brush_contour(request).map_err(|error| error.to_string()),
+        |formation| {
+            if request.samples.len() < 2 {
+                return compact_analytic_brush_contour(request).map_err(|error| error.to_string());
+            }
+            let formation = plan_sweep_formation(&SweepFormationRequest {
+                reference_line: request.samples.clone(),
+                profile: formation
+                    .profile
+                    .iter()
+                    .map(|point| TransverseProfilePoint {
+                        lateral_offset: point.lateral_offset,
+                        elevation: point.elevation,
+                    })
+                    .collect(),
+                max_segment_length: formation.max_segment_length,
+                miter_limit: formation.miter_limit,
+            })
+            .map_err(|error| error.to_string())?;
+            let boundary = formation
+                .boundary()
+                .iter()
+                .map(|&index| {
+                    let vertex = formation.vertices()[index];
+                    [vertex[0], vertex[2]]
+                })
+                .collect();
+            polygonal_contour(boundary).map_err(|error| error.to_string())
+        },
+    )?;
     // A path stroke cuts whatever it geometrically covers -- terrain,
     // another path, or anything else -- so eligibility here is not a type
     // filter at all, unlike a tool that genuinely needs one.

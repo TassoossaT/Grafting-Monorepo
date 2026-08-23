@@ -323,6 +323,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       samples: request.samples.map((sample) => [sample.x, sample.z]),
       brushShape: request.brushShape,
       depth: request.depth,
+      formation: request.formation,
       sourceSurfaceTypes: request.sourceSurfaceTypes,
       targetSurfaceType: request.targetSurfaceType,
     };
