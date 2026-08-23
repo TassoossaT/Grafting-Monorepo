@@ -42,6 +42,12 @@ export interface PanelRail {
   travelTo(point: ConstructionPosition): number;
   /** The point `travel` along the rail, at height `y`. */
   positionAt(travel: number, y: number): ConstructionPosition;
+  /**
+   * The rail's own curvature, as an edge geometry walked in the direction of
+   * increasing travel. A straight panel reads as a line; a curved one carries
+   * the arc, so anything stamped onto the panel bends with it.
+   */
+  readonly geometry: ConstructionEdgeGeometry;
 }
 
 function angleAround(center: readonly [number, number], x: number, z: number): number {
@@ -161,6 +167,10 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
     length,
     baseY,
     topY,
+    geometry:
+      resolved.kind === "cylinder"
+        ? { kind: "arc", center: resolved.center, clockwise: resolved.clockwise }
+        : { kind: "line" },
     travelTo(point) {
       if (resolved.kind === "chord") {
         return clamp(

@@ -88,6 +88,42 @@ impl UnrollFrame {
         }
     }
 
+    /// The inverse of [`unroll`](Self::unroll): a point on the flattened face
+    /// put back onto the surface it came from.
+    ///
+    /// What makes it worth having is that the flat place is where a
+    /// triangulator is allowed to invent vertices. One it invents has no
+    /// counterpart in the contour, so the only way back onto the wall is to
+    /// roll it there.
+    pub fn roll(&self, unrolled: [f32; 2]) -> [f32; 3] {
+        match self {
+            Self::Chord { origin, direction } => [
+                origin[0] + direction[0] * unrolled[0],
+                unrolled[1],
+                origin[1] + direction[1] * unrolled[0],
+            ],
+            Self::Cylinder {
+                center,
+                radius,
+                start_angle,
+                clockwise,
+                ..
+            } => {
+                let swept = unrolled[0] / radius;
+                let angle = if *clockwise {
+                    start_angle - swept
+                } else {
+                    start_angle + swept
+                };
+                [
+                    center[0] + radius * angle.cos(),
+                    unrolled[1],
+                    center[1] + radius * angle.sin(),
+                ]
+            }
+        }
+    }
+
     /// The outward horizontal direction at `point` -- radial for a cylinder,
     /// constant for a chord.
     pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3] {

@@ -12,7 +12,7 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 
-import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
+import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
@@ -102,9 +102,14 @@ export const openingTool: ConstructionTool<"opening"> = {
       runPrefix: idPrefix,
       existingUses: boundaryUsage(ctx),
     });
-    const boundary: ConstructionOrientedEdgeUse[] = nodes.map((node, index) =>
-      edges.use(node.id, nodes[(index + 1) % nodes.length]!.id),
-    );
+    const bottomGeometry = placed.rail.geometry;
+    const topGeometry = reverseGeometry(placed.rail.geometry);
+    const boundary: ConstructionOrientedEdgeUse[] = [
+      edges.use(nodes[0]!.id, nodes[1]!.id, bottomGeometry),
+      edges.use(nodes[1]!.id, nodes[2]!.id),
+      edges.use(nodes[2]!.id, nodes[3]!.id, topGeometry),
+      edges.use(nodes[3]!.id, nodes[0]!.id),
+    ];
 
     const outcome = ctx.runtime.addPatch(
       {
@@ -145,6 +150,7 @@ export const openingTool: ConstructionTool<"opening"> = {
 interface Placement {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly corners: readonly ConstructionPosition[];
+  readonly rail: PanelRail;
 }
 
 /**
@@ -181,5 +187,5 @@ function resolvePlacement(
   const rail = panelRailOf(topology);
   if (rail === undefined) return undefined;
   const corners = rimCorners(rail, rail.travelTo(sample.point), params);
-  return corners === undefined ? undefined : { surfaceKey, corners };
+  return corners === undefined ? undefined : { surfaceKey, corners, rail };
 }
