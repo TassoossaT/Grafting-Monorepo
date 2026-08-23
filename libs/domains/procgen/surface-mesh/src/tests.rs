@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use grafting_graph_core::{
-    ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, Graph, Node,
-    NodeId, OrientedEdgeUse, RegionId,
+    ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, Graph, Node, NodeId,
+    OrientedEdgeUse, RegionId,
 };
 
 use crate::math::{cross, sub};
@@ -43,12 +43,7 @@ fn line_loop(
             topology
                 .add_edge(
                     graph,
-                    ContourEdge::new(
-                        edge_id.clone(),
-                        nid(start),
-                        nid(end),
-                        ContourGeometry::Line,
-                    ),
+                    ContourEdge::new(edge_id.clone(), nid(start), nid(end), ContourGeometry::Line),
                 )
                 .unwrap();
             OrientedEdgeUse::forward(edge_id)
@@ -426,10 +421,7 @@ fn a_vertical_face_keeps_the_hole_punched_in_it() {
             ]
         });
         assert!(
-            centroid[0] <= 1.0
-                || centroid[0] >= 3.0
-                || centroid[1] <= 1.0
-                || centroid[1] >= 2.0,
+            centroid[0] <= 1.0 || centroid[0] >= 3.0 || centroid[1] <= 1.0 || centroid[1] >= 2.0,
             "a triangle covered the opening: {centroid:?}"
         );
     }
@@ -478,10 +470,7 @@ fn analytic_region_hole_receives_no_mesh_triangles() {
             ]
         });
         assert!(
-            centroid[0] <= -0.5
-                || centroid[0] >= 0.5
-                || centroid[2] <= -0.5
-                || centroid[2] >= 0.5,
+            centroid[0] <= -0.5 || centroid[0] >= 0.5 || centroid[2] <= -0.5 || centroid[2] >= 0.5,
             "triangle centroid entered the analytic hole: {centroid:?}"
         );
     }
@@ -649,9 +638,7 @@ fn an_opening_is_measured_in_the_walls_own_coordinates() {
         .positions
         .iter()
         .zip(mesh.uvs.iter())
-        .filter(|(point, _)| {
-            (0.9..=3.1).contains(&point[0]) && (0.9..=2.1).contains(&point[1])
-        })
+        .filter(|(point, _)| (0.9..=3.1).contains(&point[0]) && (0.9..=2.1).contains(&point[1]))
         .map(|(_, uv)| *uv)
         .collect();
     assert_eq!(rim.len(), 4, "the four rim corners");
@@ -786,6 +773,25 @@ fn a_four_panel_circular_tower_meshes_all_four_quarters_cleanly() {
             assert!(
                 dot_radial > 0.0,
                 "panel {step} normal points inward: pos {pos:?}, normal {normal:?}"
+            );
+        }
+
+        // Every triangle must be a local vertical facet along the cylinder,
+        // never a diagonal chord cutting across the 90° arc.
+        for triangle in mesh.indices.chunks_exact(3) {
+            let p0 = mesh.positions[triangle[0] as usize];
+            let p1 = mesh.positions[triangle[1] as usize];
+            let p2 = mesh.positions[triangle[2] as usize];
+            let a0 = p0[2].atan2(p0[0]);
+            let a1 = p1[2].atan2(p1[0]);
+            let a2 = p2[2].atan2(p2[0]);
+            let mut span = (a0 - a1).abs().max((a1 - a2).abs()).max((a2 - a0).abs());
+            if span > std::f32::consts::PI {
+                span = std::f32::consts::TAU - span;
+            }
+            assert!(
+                span < 0.4,
+                "triangle cut diagonally across cylinder: angular span = {span}"
             );
         }
     }
