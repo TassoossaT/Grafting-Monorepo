@@ -4,15 +4,14 @@
 //! (`compact_analytic_brush_contour`, `plan_region_merge`) and this crate's
 //! own `region_merge` (`apply_region_merge`), neither of which knows
 //! anything about "path." This module only parses wire data, supplies the
-//! path-specific parameters (which source types are eligible, what type the
-//! new region gets, how deep it carves), and translates the result back to
-//! JSON.
+//! path-specific parameters (which source types are eligible and what type
+//! the new region gets), and translates the result back to JSON.
 
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashSet;
 
-use grafting_graph_core::{ContourTopology, NodeId, RegionId, SurfaceRegistry, SurfaceType};
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry, SurfaceType};
 use grafting_procgen_surface_transformations::{
     BrushShape, PathBrushRequest, compact_analytic_brush_contour, plan_region_merge,
     validate_request,
@@ -130,8 +129,6 @@ pub fn apply_path_brush(
 ) -> Result<ApplyPathBrushResponse, String> {
     let domain_request = domain_request(&request);
     let plan = plan_path_brush_region_merge(graph, surfaces, topology, &domain_request)?;
-    let consumed = consumed_nodes(topology, &plan);
-    let depth = domain_request.depth;
     let outcome = apply_region_merge(
         graph,
         surfaces,
@@ -139,7 +136,10 @@ pub fn apply_path_brush(
         known_regions,
         &domain_request.operation_id,
         domain_request.target_type.clone(),
-        move |graph, point| nearest_source_height(graph, &consumed, point) - depth,
+        // A path is a flat world-space formation. Terrain is cut around its
+        // shared rim; the path's own bed never inherits a negative offset
+        // from whichever source surface happened to be nearest.
+        move |_graph, _point| 0.0,
         plan,
     )?;
     Ok(response_from_outcome(outcome))
@@ -233,36 +233,6 @@ fn response_from_outcome(outcome: RegionMergeOutcome) -> ApplyPathBrushResponse 
             direct_dependencies: Vec::new(),
         },
     }
-}
-
-/// Path-brush's own height rule: each new node sits `depth` below whatever
-/// consumed region's own node happens to be nearest it -- a generic region
-/// merge has no opinion of its own about height, this is exactly the kind
-/// of thing `apply_region_merge`'s `height_for` parameter exists for.
-/// Every node on the boundary of a region this stroke is about to destroy,
-/// collected *before* the merge removes them -- the ground the new surface
-/// has to sit under.
-fn consumed_nodes(
-    topology: &ContourTopology,
-    plan: &grafting_procgen_surface_transformations::RegionMergePlan,
-) -> Vec<NodeId> {
-    plan.consumed_region_ids()
-        .iter()
-        .filter_map(|id| topology.region_nodes(id).ok())
-        .flatten()
-        .collect()
-}
-
-fn nearest_source_height(graph: &SessionGraph, nodes: &[NodeId], point: [f32; 2]) -> f32 {
-    nodes
-        .iter()
-        .filter_map(|id| graph.node(id).map(|node| *node.data()))
-        .min_by(|left, right| {
-            let left_distance = (left[0] - point[0]).powi(2) + (left[2] - point[1]).powi(2);
-            let right_distance = (right[0] - point[0]).powi(2) + (right[2] - point[1]).powi(2);
-            left_distance.total_cmp(&right_distance)
-        })
-        .map_or(0.0, |position| position[1])
 }
 
 #[cfg(test)]

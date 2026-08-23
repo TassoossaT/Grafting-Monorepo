@@ -640,6 +640,20 @@ mod tests {
             serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
         assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "path"));
         assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
+        let path = meshes
+            .iter()
+            .find(|mesh| mesh["surfaceType"] == "path")
+            .expect("path mesh exists");
+        assert!(
+            path["positions"]
+                .as_array()
+                .expect("flat position buffer")
+                .iter()
+                .skip(1)
+                .step_by(3)
+                .all(|height| height.as_f64() == Some(0.0)),
+            "a path bed is always at world-space height zero"
+        );
 
         session
             .undo_path_brush("path-1")
