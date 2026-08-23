@@ -1,5 +1,9 @@
 import type { AtomicEditOp, BrushShape, PathBrushParams } from "@/features/edit-construction";
-import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
+import type {
+  ConstructionCoveredRegion,
+  ConstructionNodeId,
+  ConstructionPosition,
+} from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
@@ -19,6 +23,7 @@ import {
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
+import { pointInPolygonXZ } from "../shapes/geometry-2d.ts";
 import { pathPatch } from "./path-patch.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -217,6 +222,16 @@ export function referenceLineFrom(
 const SPINE_WELD_TOLERANCE = 1e-3;
 
 /**
+ * How close (world units, XZ) a crossing may fall to a station already on the
+ * run before the two are treated as one.
+ *
+ * A quarter of the station step. Closer than this and keeping both would
+ * declare a band of almost no length -- the sliver faces that ran along the
+ * contour when crossings were first spliced in blindly.
+ */
+const STATION_MERGE_DISTANCE = TERRAIN_FOLLOW_STEP / 4;
+
+/**
  * Where two XZ segments cross, as the parameter along each -- `undefined`
  * for parallel segments, or for a crossing that falls outside either one.
  */
@@ -301,18 +316,46 @@ export function junctionsWithStandingSpines(
   const ordered = [...found].sort((left, right) => left.at - right.at);
   const spliced: ConstructionPosition[] = [];
   const welds = new Map<number, ConstructionNodeId>();
+
+  const near = (left: ConstructionPosition, right: ConstructionPosition): boolean =>
+    Math.hypot(left.x - right.x, left.z - right.z) < STATION_MERGE_DISTANCE;
+
+  /**
+   * A crossing becomes a station -- but moves the neighbouring one onto
+   * itself when that one is close enough, rather than standing beside it.
+   *
+   * Two stations a few centimetres apart make a band of almost no length,
+   * which is a sliver face running along the contour. The crossing is the
+   * station that matters, so it wins the position and the neighbour gives way.
+   */
+  const pushCrossing = (crossing: { readonly position: ConstructionPosition; readonly nodeId: ConstructionNodeId }): void => {
+    const previous = spliced[spliced.length - 1];
+    if (previous !== undefined && near(previous, crossing.position)) {
+      spliced[spliced.length - 1] = crossing.position;
+      welds.set(spliced.length - 1, crossing.nodeId);
+      return;
+    }
+    welds.set(spliced.length, crossing.nodeId);
+    spliced.push(crossing.position);
+  };
+
+  /** A drawn station, unless a crossing has already claimed that spot. */
+  const pushStation = (station: ConstructionPosition): void => {
+    const previous = spliced[spliced.length - 1];
+    if (previous !== undefined && welds.has(spliced.length - 1) && near(previous, station)) return;
+    spliced.push(station);
+  };
+
   let next = 0;
   for (let index = 0; index < line.length; index += 1) {
     while (next < ordered.length && ordered[next]!.at < index) {
-      welds.set(spliced.length, ordered[next]!.nodeId);
-      spliced.push(ordered[next]!.position);
+      pushCrossing(ordered[next]!);
       next += 1;
     }
-    spliced.push(line[index]!);
+    pushStation(line[index]!);
   }
   while (next < ordered.length) {
-    welds.set(spliced.length, ordered[next]!.nodeId);
-    spliced.push(ordered[next]!.position);
+    pushCrossing(ordered[next]!);
     next += 1;
   }
 
@@ -325,6 +368,44 @@ export function junctionsWithStandingSpines(
     secondEdgeId: `${crossing.edgeId}|${crossing.nodeId}|1`,
   }));
   return { line: spliced, welds, inserts };
+}
+
+/**
+ * Which covered faces this run *joins* rather than replaces.
+ *
+ * The rule the owner set, and it reads off the thing a run is built around:
+ * a face is joined when the new footprint reaches the travel line of the run
+ * that face belongs to. Overlapping a road's shoulder is not meeting it;
+ * reaching its spine is.
+ *
+ * Joined faces are left out of the overlay's sources, so they are not
+ * consumed -- which is the whole point. A path replacing a path is what made
+ * one carriageway erase another instead of the two meeting.
+ */
+function joinedCoveredKeys(
+  ctx: ToolContext,
+  outline: readonly (readonly [number, number])[],
+  covered: readonly ConstructionCoveredRegion[],
+): ReadonlySet<string> {
+  const joined = new Set<string>();
+  if (outline.length < 3) return joined;
+  const polygon = outline.map(([x, z]) => ({ x, y: 0, z }));
+
+  const positions = new Map<string, ConstructionPosition>();
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    for (const node of topology.nodes) positions.set(node.id, node.position);
+  }
+
+  for (const region of covered) {
+    if (region.surfaceType !== "path") continue;
+    const touchesSpine = region.nodeIds.some((nodeId) => {
+      if (parseStationNodeId(nodeId)?.across !== 0) return false;
+      const position = positions.get(nodeId);
+      return position !== undefined && pointInPolygonXZ(position, polygon);
+    });
+    if (touchesSpine) joined.add(region.surfaceKey.join(":"));
+  }
+  return joined;
 }
 
 /** Every spine node standing on the table, with the position it stands at. */
@@ -422,26 +503,18 @@ export function commitPathContour(
       ? stroke
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
   if (drawn.length === 0) return;
-  // Crossing detection is written and tested (`junctionsWithStandingSpines`)
-  // but deliberately not wired in yet.
-  //
-  // Two reasons, and the second is the one that matters. It splices a station
-  // into the run at the crossing without checking how close the neighbouring
-  // stations are, so a crossing landing a centimetre from one produces a band
-  // of almost no length -- a sliver face along the contour. And splitting the
-  // crossed spine buys nothing while the overlay still consumes that run's
-  // bands at the crossing: the node survives, its chain does not, and the
-  // only visible result is malformed geometry.
-  //
-  // It belongs on the cloud layer that now owns edit dispatch, which is where
-  // it will be rebuilt rather than patched here.
-  const { line: referenceLine, welds } = weldedToStandingSpines(
-    ctx,
-    drawn,
-    SPINE_WELD_TOLERANCE,
-  );
+  // A crossing is made, not found: the crossed spine is split so a node
+  // exists for both runs to reference. Whatever still lands exactly on a
+  // standing node is welded to it directly.
+  const crossed = junctionsWithStandingSpines(ctx, drawn);
+  const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
+  const referenceLine = exact.line;
+  const welds = new Map([...crossed.welds, ...exact.welds]);
 
   try {
+    if (crossed.inserts.length > 0) {
+      ctx.runtime.applyRegionEdit(crossed.inserts, "local", operationId);
+    }
     const effect = createPathBrushEffect(
       {
         brushShape,
@@ -476,8 +549,18 @@ export function commitPathContour(
       ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
       return;
     }
+    // A run that reaches another run's spine *meets* it. Leaving those faces
+    // out of the sources is what stops one carriageway from erasing the
+    // other: they are not consumed, so the crossed run keeps its own bands
+    // and, with them, its own travel line.
+    const joined = joinedCoveredKeys(
+      ctx,
+      formation.outline,
+      resolved.map((entry) => entry.covered),
+    );
     const sourceSurfaceKeys = resolved
       .filter((entry) => entry.interaction.kind === "cut")
+      .filter((entry) => !joined.has(entry.covered.surfaceKey.join(":")))
       .map((entry) => entry.covered.surfaceKey);
 
     const outcome = ctx.runtime.applyRegionOverlay(
