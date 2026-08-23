@@ -30,7 +30,14 @@ export interface StationNodeAddress {
   readonly across: number;
 }
 
-const PATTERN = /^(.*):s(\d+):a(-?\d+)$/;
+/**
+ * A station may be fractional. A junction lands wherever two runs happen to
+ * cross, which is between stations far more often than on one, and the node
+ * inserted there belongs to the crossed run's own spine. Numbering it `3.5`
+ * keeps it in the chain and in the right order, where a fresh integer would
+ * collide and a separate id scheme would drop it out of the chain entirely.
+ */
+const PATTERN = /^(.*):s(\d+(?:\.\d+)?):a(-?\d+)$/;
 
 export function stationNodeId(operationId: string, station: number, across: number): string {
   return `${operationId}:s${station}:a${across}`;

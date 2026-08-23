@@ -36,5 +36,7 @@ test("VTT recipes choose the cross-section without constructing geometry", () =>
   // Every profile carries a spine at offset 0: the travel line is a real
   // seam between the two bands either side of it, not a forgotten number.
   assert.deepEqual(pathFormationFor({ ...common, pathKind: "street" }).profile, [{ lateralOffset: -2, elevation: 0 }, { lateralOffset: 0, elevation: 0 }, { lateralOffset: 2, elevation: 0 }]);
-  assert.deepEqual(pathFormationFor({ ...common, pathKind: "road" }).profile, [{ lateralOffset: -3, elevation: 0.2 }, { lateralOffset: -2, elevation: 0 }, { lateralOffset: 0, elevation: 0 }, { lateralOffset: 2, elevation: 0 }, { lateralOffset: 3, elevation: 0.2 }]);
+  // A road is wider by its shoulder, and flat in this version: the raised U
+  // edge returns once junction geometry is settled.
+  assert.deepEqual(pathFormationFor({ ...common, pathKind: "road" }).profile, [{ lateralOffset: -3, elevation: 0 }, { lateralOffset: 0, elevation: 0 }, { lateralOffset: 3, elevation: 0 }]);
 });

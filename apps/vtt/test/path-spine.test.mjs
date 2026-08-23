@@ -23,10 +23,11 @@ const ROAD = Object.freeze({
 });
 
 test("every path profile carries a spine, and it is the middle slot", () => {
+  // This version is contour, spine, contour -- three slots, flat.
   const road = pathFormationFor(ROAD).profile;
-  assert.equal(road.length, 5);
-  assert.equal(pathSpineSlot(road), 2);
-  assert.equal(road[2].lateralOffset, 0);
+  assert.equal(road.length, 3);
+  assert.equal(pathSpineSlot(road), 1);
+  assert.equal(road[1].lateralOffset, 0);
 
   const street = pathFormationFor({ ...ROAD, pathKind: "street" }).profile;
   assert.equal(street.length, 3);

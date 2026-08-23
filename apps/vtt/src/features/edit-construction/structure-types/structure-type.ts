@@ -130,8 +130,17 @@ export interface StructureTypeDefinition {
    * creation half of the same declaration. Directional on purpose: a wall
    * goes on terrain, terrain does not go on a wall, and neither direction
    * says anything about the other.
+   *
+   * `paintedSubtype` is the preset the run being painted was built from,
+   * when its type has subtypes at all. It is what lets one type vary a
+   * declared behaviour -- a bridge deck consuming nothing where a road
+   * carves -- without splitting into a second type with its own role table
+   * and its own logic to keep in step.
    */
-  readonly interactionOver: (coveredType: string) => CreationInteraction;
+  readonly interactionOver: (
+    coveredType: string,
+    paintedSubtype?: string,
+  ) => CreationInteraction;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

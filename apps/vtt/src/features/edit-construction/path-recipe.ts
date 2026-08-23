@@ -28,24 +28,29 @@ export interface PathFormationRecipe {
 /**
  * Resolves the VTT's named path recipe without constructing any mesh or graph.
  *
- * `street` is a flat bed, while `road` and `trail` carry a non-negative U
- * profile, measured from the reference line's own height rather than from
- * the world floor. The Rust sweep owns frames, vertices and quads; where the
- * stations go, and how high each one sits, stays on this side.
+ * **Flat, and three slots wide, on purpose.** A run is exactly its outer
+ * contour, its spine, and the rib linking them -- the same three parts the
+ * junction work is about to be written against. A raised U edge is a detail
+ * that goes back on top once those connections work, and while the central
+ * logic is being settled it only gets in the way: a lifted rim drags the
+ * terrain's own hole up with it, because the hole reuses the rim's very
+ * nodes, which reads as a berm running the whole length of the road.
+ *
+ * `shoulderWidth` still widens the run; `shoulderHeight` is deliberately
+ * unread until the U returns.
+ *
+ * Elevations are measured from the reference line's own height rather than
+ * from the world floor. The Rust sweep owns frames, vertices and quads;
+ * where the stations go, and how high each one sits, stays on this side.
  */
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
-  const outer = halfBed + params.shoulderWidth;
-  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
-  const profile = params.pathKind === "street"
-    ? [{ lateralOffset: -halfBed, elevation: 0 }, spine, { lateralOffset: halfBed, elevation: 0 }]
-    : [
-        { lateralOffset: -outer, elevation: params.shoulderHeight },
-        { lateralOffset: -halfBed, elevation: 0 },
-        spine,
-        { lateralOffset: halfBed, elevation: 0 },
-        { lateralOffset: outer, elevation: params.shoulderHeight },
-      ];
+  const halfWidth = params.pathKind === "street" ? halfBed : halfBed + params.shoulderWidth;
+  const profile = [
+    { lateralOffset: -halfWidth, elevation: 0 },
+    { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 },
+    { lateralOffset: halfWidth, elevation: 0 },
+  ];
   return Object.freeze({
     kind: params.pathKind,
     profile: Object.freeze(profile.map((point) => Object.freeze(point))),
@@ -63,6 +68,30 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
  */
 export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
   return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
+}
+
+/**
+ * Whether this subtype's stations take their height from the ground beneath
+ * them.
+ *
+ * A deck does not: it spans, so its height comes from its own ends and the
+ * middle stays level instead of sagging onto whatever it crosses. That, plus
+ * declaring that it consumes nothing, is the whole of what makes a subtype a
+ * bridge -- no separate type, no separate role table, no separate logic.
+ */
+export function pathRidesTerrain(kind: PathKind): boolean {
+  return kind !== "bridge";
+}
+
+/**
+ * Whether this subtype carves what it is drawn over.
+ *
+ * Declared rather than inferred, which is what dissolves the awkward part of
+ * an overpass: nothing has to work out from a flat XZ footprint whether a
+ * crossing is at the same level, because the run that spans says so itself.
+ */
+export function pathCarvesGround(kind: PathKind): boolean {
+  return kind !== "bridge";
 }
 
 /**

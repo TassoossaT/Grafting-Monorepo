@@ -1,18 +1,33 @@
+import type { AtomicEditOp, BrushShape, PathBrushParams, PathRun } from "@/features/edit-construction";
+import type {
+  ConstructionCoveredRegion,
+  ConstructionNodeId,
+  ConstructionPosition,
+} from "@/ports";
+
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time. A type-only
+// `@/` import is fine -- those are erased.
 import {
   createPathBrushEffect,
   firstRefusal,
+  parseStationNodeId,
+  pathCorridorId,
   pathFormationFor,
+  pathRidesTerrain,
+  pathRunsIn,
   pathSpineSlot,
   resolveCoverage,
-} from "@/features/edit-construction";
-import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
-import type { ConstructionPosition } from "@/ports";
+  stationNodeId,
+} from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
+import { pointInPolygonXZ, projectOntoLineXZ } from "../shapes/geometry-2d.ts";
 import { pathPatch } from "./path-patch.ts";
 
 export const PATH_COLOR = 0xc084fc;
+
 
 /**
  * How far a flattened arc may sit from the true circle, in world units.
@@ -59,12 +74,24 @@ function groundHeightNear(
   return closest?.y ?? 0;
 }
 
+/**
+ * One point of the flattened track, and whether the run genuinely turns
+ * there. A corner has to become a station whatever the walk decides, or the
+ * road cuts straight across it; an arc sample is only sampling, and the walk
+ * is free to place stations wherever it likes along it.
+ */
+interface TrackPoint {
+  readonly x: number;
+  readonly z: number;
+  readonly corner: boolean;
+}
+
 /** The fitted contour as ground positions, arcs sampled by angle. */
-function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number, number])[] {
+function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
 
-  const track: (readonly [number, number])[] = [[first.start.x, first.start.z]];
+  const track: TrackPoint[] = [{ x: first.start.x, z: first.start.z, corner: true }];
   for (const edge of fitted) {
     if (edge.geometry.kind === "arc") {
       const [centerX, centerZ] = edge.geometry.center;
@@ -86,10 +113,14 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number,
         const angle = edge.geometry.clockwise
           ? startAngle - (swept * step) / steps
           : startAngle + (swept * step) / steps;
-        track.push([centerX + radius * Math.cos(angle), centerZ + radius * Math.sin(angle)]);
+        track.push({
+          x: centerX + radius * Math.cos(angle),
+          z: centerZ + radius * Math.sin(angle),
+          corner: false,
+        });
       }
     }
-    track.push([edge.end.x, edge.end.z]);
+    track.push({ x: edge.end.x, z: edge.end.z, corner: true });
   }
   return track;
 }
@@ -105,32 +136,424 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number,
  * difference is invisible, which is still a world apart from handing over
  * the raw hand.
  */
-function referenceLineFrom(
+export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
+  ridesTerrain: boolean,
 ): readonly ConstructionPosition[] {
   const track = groundTrack(fitted);
   const first = track[0];
-  if (first === undefined) return [];
+  const last = track[track.length - 1];
+  if (first === undefined || last === undefined) return [];
 
-  const atGround = (x: number, z: number): ConstructionPosition => ({
-    x,
-    y: groundHeightNear(stroke, x, z),
-    z,
-  });
+  // A deck spans: its height comes from its own two ends, so the middle stays
+  // level instead of sagging onto whatever it crosses. Everything else reads
+  // the ground the stroke was drawn over, station by station.
+  const startY = groundHeightNear(stroke, first.x, first.z);
+  const endY = groundHeightNear(stroke, last.x, last.z);
+  let total = 0;
+  for (let index = 0; index + 1 < track.length; index += 1) {
+    total += Math.hypot(track[index + 1]!.x - track[index]!.x, track[index + 1]!.z - track[index]!.z);
+  }
+  let travelled = 0;
+  const heightAt = (x: number, z: number): number => {
+    if (ridesTerrain) return groundHeightNear(stroke, x, z);
+    return total < 1e-6 ? startY : startY + (endY - startY) * (travelled / total);
+  };
 
-  const line: ConstructionPosition[] = [atGround(first[0], first[1])];
+  // Walked as one continuous arc length rather than segment by segment.
+  // Subdividing each fitted segment on its own recomputed the step from
+  // scratch every time, so a 2.0 m segment got one station and a 2.1 m
+  // segment got two -- neighbouring ribs differing by a factor of two, and
+  // far worse beside the short segments a corner produces. The step is now
+  // uniform along the whole run, and only a genuine corner interrupts it.
+  const line: ConstructionPosition[] = [
+    { x: first.x, y: heightAt(first.x, first.z), z: first.z },
+  ];
+  const push = (x: number, z: number): void => {
+    const previous = line[line.length - 1]!;
+    // Two stations at one spot would be dropped by the sweep, sliding every
+    // later station's index and breaking the weld bookkeeping below.
+    if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) return;
+    line.push({ x, y: heightAt(x, z), z });
+  };
+
+  let sinceStation = 0;
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
-    const span = Math.hypot(to[0] - from[0], to[1] - from[1]);
-    const steps = Math.max(1, Math.ceil(span / TERRAIN_FOLLOW_STEP));
-    for (let step = 1; step <= steps; step += 1) {
-      const ratio = step / steps;
-      line.push(atGround(from[0] + (to[0] - from[0]) * ratio, from[1] + (to[1] - from[1]) * ratio));
+    const span = Math.hypot(to.x - from.x, to.z - from.z);
+    if (span < 1e-9) continue;
+    let cursor = 0;
+    while (sinceStation + (span - cursor) >= TERRAIN_FOLLOW_STEP) {
+      cursor += TERRAIN_FOLLOW_STEP - sinceStation;
+      const ratio = cursor / span;
+      travelled += TERRAIN_FOLLOW_STEP - sinceStation;
+      sinceStation = 0;
+      push(from.x + (to.x - from.x) * ratio, from.z + (to.z - from.z) * ratio);
+    }
+    travelled += span - cursor;
+    sinceStation += span - cursor;
+    if (to.corner) {
+      push(to.x, to.z);
+      sinceStation = 0;
     }
   }
+  // The run has to end where it was drawn, corner or not.
+  push(last.x, last.z);
   return line;
+}
+
+/**
+ * How close (world units, XZ) a new station may sit to a standing spine node
+ * and still be treated as that same node.
+ *
+ * Deliberately near-exact for now. Two runs meet because they reference one
+ * spine node, never because they crossed at the same coordinate -- but the
+ * half of the wall's model that makes that *happen* at a crossing is
+ * `insertedColumnAt`, which splits the crossed run and mints the node the
+ * junction needs. Without it, a generous tolerance only drags a station
+ * sideways onto whichever node happened to be near, kinking the run for no
+ * gain: stations sit two metres apart, so a crossing lands within a wide
+ * tolerance of one perhaps two times in five, and does nothing visible even
+ * then. Kept as an exact-coincidence rule until the insert lands with the
+ * junction geometry it belongs to.
+ */
+const SPINE_WELD_TOLERANCE = 1e-3;
+
+/**
+ * How close (world units, XZ) a crossing may fall to a station already on the
+ * run before the two are treated as one.
+ *
+ * A quarter of the station step. Closer than this and keeping both would
+ * declare a band of almost no length -- the sliver faces that ran along the
+ * contour when crossings were first spliced in blindly.
+ */
+const STATION_MERGE_DISTANCE = TERRAIN_FOLLOW_STEP / 4;
+
+/**
+ * Where two XZ segments cross, as the parameter along each -- `undefined`
+ * for parallel segments, or for a crossing that falls outside either one.
+ */
+function segmentCrossing(
+  fromA: ConstructionPosition,
+  toA: ConstructionPosition,
+  fromB: ConstructionPosition,
+  toB: ConstructionPosition,
+): { readonly along: number; readonly across: number } | undefined {
+  const ax = toA.x - fromA.x;
+  const az = toA.z - fromA.z;
+  const bx = toB.x - fromB.x;
+  const bz = toB.z - fromB.z;
+  const denominator = ax * bz - az * bx;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const dx = fromB.x - fromA.x;
+  const dz = fromB.z - fromA.z;
+  const along = (dx * bz - dz * bx) / denominator;
+  const across = (dx * az - dz * ax) / denominator;
+  if (along < 0 || along > 1 || across < 0 || across > 1) return undefined;
+  return { along, across };
+}
+
+/**
+ * How far this run reaches from its own spine, measured on the run itself.
+ *
+ * A road ending *on* another road is a junction, and "on" means inside that
+ * road's surface. Measured rather than assumed, because every run carries its
+ * own width and the run being drawn need not share it.
+ */
+function reachOf(run: PathRun): number {
+  let widest = 0;
+  for (const rib of run.ribs) {
+    const spine = rib.nodes.find((node) => node.across === 0);
+    if (spine === undefined) continue;
+    for (const node of rib.nodes) {
+      widest = Math.max(
+        widest,
+        Math.hypot(node.position.x - spine.position.x, node.position.z - spine.position.z),
+      );
+    }
+  }
+  return widest;
+}
+
+/**
+ * Every place the run being drawn meets a spine already standing.
+ *
+ * Two ways to meet, and only the first existed before: a stroke drawn
+ * **across** another run crosses its spine, and a stroke that **ends on**
+ * another run touches it without ever crossing anything. The second is the
+ * ordinary T -- one road arriving at another -- and is far more common than
+ * the first. Segment intersection cannot see it at all, because there is no
+ * intersection: the drawn line simply stops.
+ *
+ * So an endpoint is handled by projection instead. If either end of the
+ * stroke lands within the standing run's own reach of its spine -- which is
+ * to say, on that road -- it is moved onto the spine and joined there.
+ *
+ * Either way the join is *made*, not found: a meeting point almost never
+ * lands on an existing station, so the crossed spine's edge is split and the
+ * node minted, which is `insertedColumnAt` for paths. The node is numbered on
+ * the crossed run's own station scale, fractionally, so it stays part of that
+ * spine's chain and in the right order.
+ */
+export function junctionsWithStandingSpines(
+  ctx: ToolContext,
+  line: readonly ConstructionPosition[],
+): {
+  readonly line: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
+  readonly inserts: readonly AtomicEditOp[];
+} {
+  const standing = pathRunsIn(ctx.runtime.getAllRegionTopologies());
+  const found: {
+    readonly at: number;
+    readonly position: ConstructionPosition;
+    readonly nodeId: ConstructionNodeId;
+    readonly edgeId: string;
+  }[] = [];
+  // One insert per crossed edge per commit: the second would name an edge the
+  // first has already split out of existence.
+  const usedEdges = new Set<string>();
+  /** Splits to issue against standing spines, in the order they were found. */
+  const inserts: { readonly nodeId: ConstructionNodeId; readonly position: ConstructionPosition; readonly edgeId: string }[] = [];
+
+  /**
+   * Where an end of the stroke was moved onto a spine, by its own index in
+   * the line. Kept apart from the splices below because an arrival *replaces*
+   * that station rather than standing beside it -- the end has to land on the
+   * spine, and leaving the drawn one in place would put a station up to a
+   * road-width away and join nothing.
+   */
+  const arrivals = new Map<number, { readonly position: ConstructionPosition; readonly nodeId: ConstructionNodeId }>();
+
+  /** Records one meeting point, minting the node the crossed spine gains. */
+  const record = (
+    run: PathRun,
+    step: number,
+    edgeId: string,
+    along: number,
+    at: number,
+    arrivalIndex?: number,
+  ): void => {
+    const spine = run.spine!;
+    const fromA = spine.nodes[step]!;
+    const toA = spine.nodes[step + 1]!;
+    const position: ConstructionPosition = {
+      x: fromA.position.x + (toA.position.x - fromA.position.x) * along,
+      y: fromA.position.y + (toA.position.y - fromA.position.y) * along,
+      z: fromA.position.z + (toA.position.z - fromA.position.z) * along,
+    };
+    const station = Number((fromA.station + (toA.station - fromA.station) * along).toFixed(3));
+    const nodeId = stationNodeId(run.corridorId, station, 0);
+    usedEdges.add(edgeId);
+    if (arrivalIndex !== undefined) {
+      arrivals.set(arrivalIndex, { position, nodeId });
+      inserts.push({ nodeId, position, edgeId });
+      return;
+    }
+    found.push({ at, position, nodeId, edgeId });
+    inserts.push({ nodeId, position, edgeId });
+  };
+
+  // An end of the stroke that lands on a standing run joins it there. Done
+  // first, so an endpoint that also happens to cross claims its edge as the
+  // arrival it is rather than as a pass-through.
+  const endpoints = line.length < 2 ? [] : [0, line.length - 1];
+  for (const index of endpoints) {
+    const end = line[index]!;
+    let best:
+      | { readonly run: PathRun; readonly step: number; readonly edgeId: string; readonly along: number; readonly perp: number }
+      | undefined;
+    for (const run of standing) {
+      const spine = run.spine;
+      if (spine === undefined) continue;
+      const reach = reachOf(run);
+      if (reach <= 0) continue;
+      for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
+        const edgeId = spine.edgeIds[step];
+        if (edgeId === undefined || usedEdges.has(edgeId)) continue;
+        const { t, perp } = projectOntoLineXZ(end, spine.nodes[step]!.position, spine.nodes[step + 1]!.position);
+        if (perp > reach || t < 0 || t > 1) continue;
+        if (best === undefined || perp < best.perp) best = { run, step, edgeId, along: t, perp };
+      }
+    }
+    if (best !== undefined) record(best.run, best.step, best.edgeId, best.along, index, index);
+  }
+
+  for (const run of standing) {
+    const spine = run.spine;
+    if (spine === undefined) continue;
+    for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
+      const edgeId = spine.edgeIds[step];
+      if (edgeId === undefined || usedEdges.has(edgeId)) continue;
+      const fromA = spine.nodes[step]!;
+      const toA = spine.nodes[step + 1]!;
+      for (let index = 0; index + 1 < line.length; index += 1) {
+        const crossing = segmentCrossing(fromA.position, toA.position, line[index]!, line[index + 1]!);
+        if (crossing === undefined) continue;
+        record(run, step, edgeId, crossing.along, index + crossing.across);
+        break;
+      }
+    }
+  }
+  if (found.length === 0 && arrivals.size === 0) {
+    return { line, welds: new Map(), inserts: [] };
+  }
+
+  const ordered = [...found].sort((left, right) => left.at - right.at);
+  const spliced: ConstructionPosition[] = [];
+  const welds = new Map<number, ConstructionNodeId>();
+
+  const near = (left: ConstructionPosition, right: ConstructionPosition): boolean =>
+    Math.hypot(left.x - right.x, left.z - right.z) < STATION_MERGE_DISTANCE;
+
+  /**
+   * A crossing becomes a station -- but moves the neighbouring one onto
+   * itself when that one is close enough, rather than standing beside it.
+   *
+   * Two stations a few centimetres apart make a band of almost no length,
+   * which is a sliver face running along the contour. The crossing is the
+   * station that matters, so it wins the position and the neighbour gives way.
+   */
+  const pushCrossing = (crossing: { readonly position: ConstructionPosition; readonly nodeId: ConstructionNodeId }): void => {
+    const previous = spliced[spliced.length - 1];
+    if (previous !== undefined && near(previous, crossing.position)) {
+      spliced[spliced.length - 1] = crossing.position;
+      welds.set(spliced.length - 1, crossing.nodeId);
+      return;
+    }
+    welds.set(spliced.length, crossing.nodeId);
+    spliced.push(crossing.position);
+  };
+
+  /** A drawn station, unless a crossing has already claimed that spot. */
+  const pushStation = (station: ConstructionPosition): void => {
+    const previous = spliced[spliced.length - 1];
+    if (previous !== undefined && welds.has(spliced.length - 1) && near(previous, station)) return;
+    spliced.push(station);
+  };
+
+  let next = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    while (next < ordered.length && ordered[next]!.at < index) {
+      pushCrossing(ordered[next]!);
+      next += 1;
+    }
+    // An arrival replaces the drawn end: the road has to reach the spine it
+    // joins, so the station moves onto it rather than one being added beside.
+    const arrival = arrivals.get(index);
+    if (arrival !== undefined) pushCrossing(arrival);
+    else pushStation(line[index]!);
+  }
+  while (next < ordered.length) {
+    pushCrossing(ordered[next]!);
+    next += 1;
+  }
+
+  const ops: AtomicEditOp[] = inserts.map((insert) => ({
+    kind: "insert-vertex",
+    edgeId: insert.edgeId,
+    nodeId: insert.nodeId,
+    position: insert.position,
+    firstEdgeId: `${insert.edgeId}|${insert.nodeId}|0`,
+    secondEdgeId: `${insert.edgeId}|${insert.nodeId}|1`,
+  }));
+  return { line: spliced, welds, inserts: ops };
+}
+
+/**
+ * Which covered faces this run *joins* rather than replaces.
+ *
+ * The rule the owner set, and it reads off the thing a run is built around:
+ * a face is joined when the new footprint reaches the travel line of the run
+ * that face belongs to. Overlapping a road's shoulder is not meeting it;
+ * reaching its spine is.
+ *
+ * Joined faces are left out of the overlay's sources, so they are not
+ * consumed -- which is the whole point. A path replacing a path is what made
+ * one carriageway erase another instead of the two meeting.
+ */
+function joinedCoveredKeys(
+  ctx: ToolContext,
+  outline: readonly (readonly [number, number])[],
+  covered: readonly ConstructionCoveredRegion[],
+): ReadonlySet<string> {
+  const joined = new Set<string>();
+  if (outline.length < 3) return joined;
+  const polygon = outline.map(([x, z]) => ({ x, y: 0, z }));
+
+  const positions = new Map<string, ConstructionPosition>();
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    for (const node of topology.nodes) positions.set(node.id, node.position);
+  }
+
+  for (const region of covered) {
+    if (region.surfaceType !== "path") continue;
+    const touchesSpine = region.nodeIds.some((nodeId) => {
+      if (parseStationNodeId(nodeId)?.across !== 0) return false;
+      const position = positions.get(nodeId);
+      return position !== undefined && pointInPolygonXZ(position, polygon);
+    });
+    if (touchesSpine) joined.add(region.surfaceKey.join(":"));
+  }
+  return joined;
+}
+
+/** Every spine node standing on the table, with the position it stands at. */
+function standingSpineNodes(
+  ctx: ToolContext,
+): readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] {
+  const seen = new Map<ConstructionNodeId, ConstructionPosition>();
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    for (const node of topology.nodes) {
+      if (seen.has(node.id) || parseStationNodeId(node.id)?.across !== 0) continue;
+      seen.set(node.id, node.position);
+    }
+  }
+  return [...seen].map(([id, position]) => ({ id, position }));
+}
+
+/**
+ * The reference line with every station landing on a standing spine snapped
+ * exactly onto it, plus the node ids those stations must reuse.
+ *
+ * Resolved *before* the sweep, never after -- the same order
+ * `commitWallContour` resolves its columns in, and for the same reason: a
+ * station that will share a node has to be built at that node's position
+ * rather than dragged onto it afterwards.
+ */
+function weldedToStandingSpines(
+  ctx: ToolContext,
+  line: readonly ConstructionPosition[],
+  tolerance: number,
+): {
+  readonly line: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
+} {
+  const standing = standingSpineNodes(ctx);
+  if (standing.length === 0) return { line, welds: new Map() };
+
+  const welds = new Map<number, ConstructionNodeId>();
+  const taken = new Set<ConstructionNodeId>();
+  const snapped = line.map((station, index) => {
+    let best:
+      | { readonly id: ConstructionNodeId; readonly position: ConstructionPosition; readonly distance: number }
+      | undefined;
+    for (const candidate of standing) {
+      if (taken.has(candidate.id)) continue;
+      const distance = Math.hypot(candidate.position.x - station.x, candidate.position.z - station.z);
+      if (distance > tolerance) continue;
+      if (best === undefined || distance < best.distance) {
+        best = { id: candidate.id, position: candidate.position, distance };
+      }
+    }
+    if (best === undefined) return station;
+    taken.add(best.id);
+    welds.set(index, best.id);
+    return best.position;
+  });
+  return { line: snapped, welds };
 }
 
 /**
@@ -167,10 +590,23 @@ export function commitPathContour(
   const operationId = scopedToolId(ctx, domain, sequence);
 
   const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
-  const referenceLine = fitted.length === 0 ? stroke : referenceLineFrom(fitted, stroke);
-  if (referenceLine.length === 0) return;
+  const drawn =
+    fitted.length === 0
+      ? stroke
+      : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
+  if (drawn.length === 0) return;
+  // A crossing is made, not found: the crossed spine is split so a node
+  // exists for both runs to reference. Whatever still lands exactly on a
+  // standing node is welded to it directly.
+  const crossed = junctionsWithStandingSpines(ctx, drawn);
+  const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
+  const referenceLine = exact.line;
+  const welds = new Map([...crossed.welds, ...exact.welds]);
 
   try {
+    if (crossed.inserts.length > 0) {
+      ctx.runtime.applyRegionEdit(crossed.inserts, "local", operationId);
+    }
     const effect = createPathBrushEffect(
       {
         brushShape,
@@ -180,23 +616,43 @@ export function commitPathContour(
       { operationId, tableId: ctx.tableId, initiatedBy: "local" },
     );
     const profile = effect.parameters.profile;
+    const plan = ctx.runtime.planPathFormation(effect);
     const formation = pathPatch(
       ctx.tableId,
-      effect.operationId,
+      pathCorridorId(effect.operationId, params.pathKind),
       effect.targetType,
-      ctx.runtime.planPathFormation(effect),
+      plan,
       profile.length,
       pathSpineSlot(profile),
+      // The sweep drops a station only where two coincide, which the
+      // reference line already rules out. Were one dropped anyway the indices
+      // would no longer line up, so the run commits unwelded rather than
+      // welded to the wrong place.
+      plan.referenceLine.length === referenceLine.length ? welds : new Map(),
     );
 
-    const resolved = resolveCoverage(effect.targetType, ctx.runtime.getFootprintCoverage(formation.outline));
+    const resolved = resolveCoverage(
+      effect.targetType,
+      ctx.runtime.getFootprintCoverage(formation.outline),
+      params.pathKind,
+    );
     const refusal = firstRefusal(resolved);
     if (refusal !== undefined) {
       ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
       return;
     }
+    // A run that reaches another run's spine *meets* it. Leaving those faces
+    // out of the sources is what stops one carriageway from erasing the
+    // other: they are not consumed, so the crossed run keeps its own bands
+    // and, with them, its own travel line.
+    const joined = joinedCoveredKeys(
+      ctx,
+      formation.outline,
+      resolved.map((entry) => entry.covered),
+    );
     const sourceSurfaceKeys = resolved
       .filter((entry) => entry.interaction.kind === "cut")
+      .filter((entry) => !joined.has(entry.covered.surfaceKey.join(":")))
       .map((entry) => entry.covered.surfaceKey);
 
     const outcome = ctx.runtime.applyRegionOverlay(

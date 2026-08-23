@@ -4,12 +4,18 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import type { ConstructionToolId, EditHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
+import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
+import {
+  edgeOverlayChannel,
+  edgeOverlayDescriptor,
+  edgeOverlayOf,
+} from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
@@ -80,6 +86,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const lastPreviewAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
+  const shownEdgeChannels = useRef(new Set<string>());
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -87,8 +95,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     gestureRef.current = null;
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
-    options.runtime.clearPreview();
+    options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
   }, [options.activeTool, options.runtime]);
+
 
 
   const ctx = useMemo<ToolContext>(
@@ -111,6 +120,47 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     }),
     [nextSequence],
   );
+
+  /**
+   * Redraws the construction-edge overlay from whatever is now standing.
+   *
+   * Here rather than inside any one tool: an edge belongs to the table, not
+   * to whichever tool happened to draw it, so a wall's posts show while the
+   * path brush is selected and vice versa. Refreshed after a commit and on
+   * tool change -- nothing about the graph moves in between -- and each role
+   * gets its own channel, which leaves the tool's own ghost untouched.
+   */
+  const refreshEdgeOverlay = useCallback((): void => {
+    const { runtime } = optionsRef.current;
+    // Nothing to read, and nothing to draw on, until the table is live. The
+    // mount effect below runs before the runtime finishes loading, and asking
+    // it for topologies then is an error rather than an empty answer.
+    if (runtime.getSnapshot().status !== "ready") return;
+    for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
+    shownEdgeChannels.current.clear();
+    for (const group of edgeOverlayOf(runtime.getAllRegionTopologies())) {
+      if (group.positions.length === 0) continue;
+      const channel = edgeOverlayChannel(group.role);
+      runtime.showPreview(edgeOverlayDescriptor(group), channel);
+      shownEdgeChannels.current.add(channel);
+    }
+  }, []);
+
+  // Draw what is already standing as soon as the table is live, not only
+  // after the first commit -- an edge that was there before this session
+  // began is exactly as worth seeing as one just drawn. The runtime is still
+  // loading at mount, so this waits for it rather than asking too early.
+  useEffect(() => {
+    const { runtime } = optionsRef.current;
+    refreshEdgeOverlay();
+    let drawn = runtime.getSnapshot().status === "ready";
+    const unsubscribe = runtime.subscribe(() => {
+      if (drawn || runtime.getSnapshot().status !== "ready") return;
+      drawn = true;
+      refreshEdgeOverlay();
+    });
+    return unsubscribe;
+  }, [options.runtime, refreshEdgeOverlay]);
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {
@@ -139,7 +189,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const { runtime, activeTool, toolParams } = optionsRef.current;
     const tool = toolFor(activeTool);
     if (sample === undefined || tool.previewFor === undefined) {
-      runtime.clearPreview();
+      runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
       return;
     }
     const now = performance.now();
@@ -147,8 +197,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastPreviewAtRef.current = now;
     const params = toolParams[activeTool];
     const descriptor = tool.previewFor({ start: sample, current: sample, samples: [sample] }, params as never, ctx);
-    if (descriptor === undefined) runtime.clearPreview();
-    else runtime.showPreview(descriptor);
+    if (descriptor === undefined) runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    else runtime.showPreview(descriptor, TOOL_GHOST_PREVIEW_CHANNEL);
   }, []);
 
   const onPointerDown = useCallback(
@@ -186,7 +236,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // No button down -- idle hovering never shows a preview, only an
       // actual drag does (see `showStartPreview`'s own doc for why).
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        optionsRef.current.runtime.clearPreview();
+        optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
         return;
       }
 
@@ -203,8 +253,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (now - lastPreviewAtRef.current >= PREVIEW_THROTTLE_MS) {
         lastPreviewAtRef.current = now;
         const descriptor = tool.previewFor?.(activeGesture, params, ctx);
-        if (descriptor === undefined) optionsRef.current.runtime.clearPreview();
-        else optionsRef.current.runtime.showPreview(descriptor);
+        if (descriptor === undefined) optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+        else optionsRef.current.runtime.showPreview(descriptor, TOOL_GHOST_PREVIEW_CHANNEL);
       }
       if (now - lastCommitAtRef.current < MOVE_COMMIT_THROTTLE_MS) return;
       lastCommitAtRef.current = now;
@@ -226,9 +276,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-      optionsRef.current.runtime.clearPreview();
+      optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      refreshEdgeOverlay();
     },
-    [ctx],
+    [ctx, refreshEdgeOverlay],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -238,7 +289,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    optionsRef.current.runtime.clearPreview();
+    optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
   }, []);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -248,8 +299,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const sample = sampleAt(event);
       if (sample === undefined) return;
       tool.onClick(ctx, sample, toolParams[activeTool] as never);
+      refreshEdgeOverlay();
     },
-    [ctx, sampleAt],
+    [ctx, refreshEdgeOverlay, sampleAt],
   );
 
   return {

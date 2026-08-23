@@ -3025,7 +3025,10 @@ export function constructionGridSceneItems(): readonly [SceneItem<GridParams>, S
 // src/adapters/rendering/construction-preview-scene-item.ts
 export const CONSTRUCTION_PREVIEW_LAYER_ID = "construction-preview";
 export const CONSTRUCTION_PREVIEW_VISUAL_KIND = "vtt-construction-preview";
-export const CONSTRUCTION_PREVIEW_ITEM_ID = "construction-preview:active";
+export const DEFAULT_PREVIEW_CHANNEL = TOOL_GHOST_PREVIEW_CHANNEL;
+export function constructionPreviewSceneItemId(channel: string): string {
+  return `construction-preview:${channel}`;
+  }
 export interface ConstructionPreviewVisualParams {
   readonly positions: Float32Array;
   readonly indices?: Uint16Array | Uint32Array;
@@ -3035,12 +3038,12 @@ export interface ConstructionPreviewVisualParams {
   }
 export function constructionPreviewSceneItem(
   descriptor: RenderPreviewDescriptor,
+  channel: string = DEFAULT_PREVIEW_CHANNEL,
   ): SceneItem<ConstructionPreviewVisualParams> {
   return {
-  id: CONSTRUCTION_PREVIEW_ITEM_ID,
+  id: constructionPreviewSceneItemId(channel),
   layer: CONSTRUCTION_PREVIEW_LAYER_ID,
   visual: {
-  kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
 
 // src/adapters/rendering/map-chunk-batching.ts
 export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
@@ -3271,6 +3274,31 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
 
+// src/composition/tabletop/tools/core/edge-overlay.ts
+export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
+  "path-spine-edge": 0xfacc15,
+  "path-contour-edge": 0x22d3ee,
+  "path-rib-edge": 0xf472b6,
+  "panel-bottom-edge": 0x34d399,
+  "panel-top-edge": 0x818cf8,
+  "panel-post": 0xfb923c,
+  "organic-boundary-edge": 0x94a3b8,
+export const EDGE_FALLBACK_COLOR = 0x64748b;
+export function edgeOverlayChannel(role: string): string {
+  return `edges:${role}`;
+  }
+export interface EdgeOverlayGroup {
+  readonly role: string;
+  readonly color: number;
+  readonly positions: Float32Array;
+  }
+export function edgeOverlayOf(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly EdgeOverlayGroup[] {
+  const byRole = new Map<string, number[]>();
+export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
+  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
+
 // src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
@@ -3433,15 +3461,29 @@ export interface PathPatchFormation {
   }
 export function pathPatch(
   tableId: string,
-  operationId: string,
+  corridorId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
   profileLength: number,
   spineSlot: number,
-  ): PathPatchFormation {
+  /**
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
+export function referenceLineFrom(
+  fitted: readonly FittedEdge[],
+  stroke: readonly ConstructionPosition[],
+  ridesTerrain: boolean,
+  ): readonly ConstructionPosition[] {
+  const track = groundTrack(fitted);
+export function junctionsWithStandingSpines(
+  ctx: ToolContext,
+  line: readonly ConstructionPosition[],
+  ): {
+  readonly line: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
+  readonly inserts: readonly AtomicEditOp[];
+  } {
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
@@ -4100,6 +4142,14 @@ export type {
   PathKind,
   PathBrushParams,
   NoToolParams,
+export type {
+  PathRun,
+  PathRunChain,
+  PathRunNode,
+  PathRunRib,
+  } from "./path-cloud.ts";
+  export {
+  followsOutward,
 export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
@@ -4122,6 +4172,56 @@ export type {
   EditScope,
   ResolvedCoverage,
 
+// src/features/edit-construction/path-cloud.ts
+export interface PathRunNode {
+  readonly nodeId: string;
+  readonly station: number;
+  /** Signed slot across the cross-section; `0` is the spine. */
+  readonly across: number;
+  readonly position: ConstructionPosition;
+  }
+export interface PathRunChain {
+  readonly across: number;
+  /** Ordered by station. */
+  readonly nodes: readonly PathRunNode[];
+  /** The edge between consecutive nodes; one shorter than `nodes`. */
+  readonly edgeIds: readonly string[];
+  }
+export interface PathRunRib {
+  readonly station: number;
+  /** Ordered by `across`, so from one contour through the spine to the other. */
+  readonly nodes: readonly PathRunNode[];
+  readonly edgeIds: readonly string[];
+  /** The faces this rib bounds. */
+  readonly bands: readonly ConstructionSurfaceKey[];
+  }
+export interface PathRun {
+  readonly corridorId: string;
+  readonly subtype: PathKind | undefined;
+  readonly spine: PathRunChain | undefined;
+  /** One per side, outermost slot first. */
+  readonly contours: readonly PathRunChain[];
+  readonly ribs: readonly PathRunRib[];
+  readonly bands: readonly ConstructionSurfaceKey[];
+export function pathRunsIn(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly PathRun[] {
+  const edges = edgesOf(topologies);
+export function pathRunsOf(cloud: CloudTopology): readonly PathRun[] {
+  return pathRunsIn(cloud.members);
+export function pathRunFor(
+  topologies: readonly ConstructionRegionTopology[],
+  corridorId: string,
+  ): PathRun | undefined {
+  return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
+
+// src/features/edit-construction/path-corridor.ts
+export function pathCorridorId(operationId: string, kind: PathKind): string {
+  return `${operationId}${MARKER}${kind}`;
+  }
+export function pathSubtypeOf(corridorId: string): PathKind | undefined {
+  const at = corridorId.lastIndexOf(MARKER);
+
 // src/features/edit-construction/path-recipe.ts
 export const PATH_SPINE_OFFSET = 0;
 export interface PathProfilePoint {
@@ -4135,10 +4235,20 @@ export interface PathFormationRecipe {
   }
 export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   const halfBed = params.bedWidth / 2;
-  const outer = halfBed + params.shoulderWidth;
-  const spine = { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 };
+  const halfWidth = params.pathKind === "street" ? halfBed : halfBed + params.shoulderWidth;
+  const profile = [
+  { lateralOffset: -halfWidth, elevation: 0 },
+  { lateralOffset: PATH_SPINE_OFFSET, elevation: 0 },
+  { lateralOffset: halfWidth, elevation: 0 },
+  ];
 export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
   return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
+export function pathRidesTerrain(kind: PathKind): boolean {
+  return kind !== "bridge";
+  }
+export function pathCarvesGround(kind: PathKind): boolean {
+  return kind !== "bridge";
+  }
 export function pathHalfWidth(params: PathBrushParams): number {
   return pathFormationFor(params).profile.reduce(
   (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
@@ -4188,6 +4298,7 @@ export function resolvePolicy(topology: ConstructionRegionTopology, target: Edit
 export function resolveCreationInteraction(
   paintedType: string,
   coveredType: string,
+  paintedSubtype?: string,
   ): CreationInteraction {
   const definition = structureTypeFor(paintedType);
 export interface ResolvedCoverage {
@@ -4197,11 +4308,11 @@ export interface ResolvedCoverage {
 export function resolveCoverage(
   paintedType: string,
   covered: readonly ConstructionCoveredRegion[],
+  paintedSubtype?: string,
   ): readonly ResolvedCoverage[] {
   return covered.map((entry) => ({
   covered: entry,
-  interaction: resolveCreationInteraction(paintedType, entry.surfaceType),
-  }));
+  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
 export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
   for (const entry of resolved) {
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
@@ -4239,14 +4350,17 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
 export function terrainInteractionOver(coveredType: string): CreationInteraction {
   if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
-export function pathInteractionOver(coveredType: string): CreationInteraction {
-  return CUT;
+export function pathInteractionOver(
+  _coveredType: string,
+  paintedSubtype?: string,
+  ): CreationInteraction {
+  return paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/panel-structure.ts
@@ -4287,14 +4401,13 @@ export const PATH_ROLES = {
   spine: "path-spine",
   across: "path-across",
   body: "path-body",
-  edge: "path-edge",
-  unknown: "path-unknown",
-  } as const;
-
-export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  /** Along the travel line: the seam the two central bands meet on. */
+  spineEdge: "path-spine-edge",
+  /** Along the run at an extreme slot -- one side of the outer contour. */
+  contourEdge: "path-contour-edge",
+export function pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PATH_ROLES.body;
-  if (target.kind === "edge") return PATH_ROLES.edge;
-  const address = parseStationNodeId(target.nodeId);
+  if (target.kind === "edge") return pathEdgeRole(topology, target.edgeId);
 export function pathPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   // Height included on purpose: lifting a spine station off the ground is
@@ -4307,7 +4420,7 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
@@ -4418,7 +4531,7 @@ export interface PathBrushParams extends BrushShapeParams {
   /** Width of each optional raised shoulder, in world units. */
   readonly shoulderWidth: number;
   /** Non-negative shoulder elevation above the path bed. */
-export type PathKind = "trail" | "street" | "road";
+export type PathKind = "trail" | "street" | "road" | "bridge";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
   /** Length of a panel's own vertical edge, in world units. */

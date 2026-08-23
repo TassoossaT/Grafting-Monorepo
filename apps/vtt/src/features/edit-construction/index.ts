@@ -19,7 +19,22 @@ export type {
   WallParams,
 } from "./tool-types.ts";
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
-export { PATH_SPINE_OFFSET, pathFormationFor, pathHalfWidth, pathSpineSlot } from "./path-recipe.ts";
+export {
+  PATH_SPINE_OFFSET,
+  pathCarvesGround,
+  pathFormationFor,
+  pathHalfWidth,
+  pathRidesTerrain,
+  pathSpineSlot,
+} from "./path-recipe.ts";
+export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
+export { pathRunFor, pathRunsIn, pathRunsOf } from "./path-cloud.ts";
+export type {
+  PathRun,
+  PathRunChain,
+  PathRunNode,
+  PathRunRib,
+} from "./path-cloud.ts";
 export {
   followsOutward,
   isSpineNode,

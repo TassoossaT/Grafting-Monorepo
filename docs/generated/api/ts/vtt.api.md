@@ -49,19 +49,23 @@ already exists.
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.positions: Float32Array`
 
-### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_ITEM_ID: "construction-preview:active"`
-
-Fixed id -- there is only ever one active tool preview at a time, so `put` on this id always replaces it.
-
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_LAYER_ID: "construction-preview"`
 
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_VISUAL_KIND: "vtt-construction-preview"`
 
-### `function vtt.construction-preview-scene-item.constructionPreviewSceneItem(descriptor: RenderPreviewDescriptor): SceneItem<ConstructionPreviewVisualParams>`
+### `variable vtt.construction-preview-scene-item.DEFAULT_PREVIEW_CHANNEL: "active"`
+
+The channel a caller that names none is drawn on -- the single tool ghost.
+
+### `function vtt.construction-preview-scene-item.constructionPreviewSceneItem(descriptor: RenderPreviewDescriptor, channel: string): SceneItem<ConstructionPreviewVisualParams>`
 
 Turns a tool's plain RenderPreviewDescriptor into a scene item on
 the dedicated preview layer -- never pickable, drawn above everything
 (tokens included) so a ghost is never occluded by real geometry.
+
+### `function vtt.construction-preview-scene-item.constructionPreviewSceneItemId(channel: string): string`
+
+One id per channel, so `put` replaces within a channel and never across.
 
 ### `interface vtt.map-chunk-batching.ResolvedCovering`
 
@@ -219,9 +223,9 @@ currently is.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.attachView(target: HTMLElement): string`
 
-### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.clearPreview(): void`
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.clearPreview(channel?: string): void`
 
-Hides the active preview, if any. A no-op when nothing is shown.
+Hides one channel, or every channel when none is named.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.detachView(viewId: string): void`
 
@@ -239,12 +243,15 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
-### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor, channel: string): void`
 
-Shows (or replaces) the single active construction-tool preview. Never
-touches the construction session -- purely visual, so a tool can call
-this on every pointer move without paying for a real generate/mutate
-request until the tool actually commits.
+Shows (or replaces) one preview overlay.
+
+`channel` names which overlay: two callers with different names coexist,
+and the same name always replaces. A tool's own ghost is one channel; a
+diagnostic overlay drawn alongside it is another, and neither has to know
+the other exists. Omitted means the default channel, which is the
+single-ghost behaviour every tool already relies on.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.start(runtimeGeneration: number): Promise<void>`
 
@@ -322,7 +329,7 @@ minted nodes by position, which is all the junction ever needed.
 
 Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(channel?: string): void`
 
 Hides the active tool preview, if any.
 
@@ -385,7 +392,7 @@ Unregisters a surface outright -- no hole-repair, no cascading. A caller composi
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
@@ -444,7 +451,7 @@ minted nodes by position, which is all the junction ever needed.
 
 Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(channel?: string): void`
 
 Hides the active tool preview, if any.
 
@@ -507,7 +514,7 @@ Unregisters a surface outright -- no hole-repair, no cascading. A caller composi
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
@@ -646,6 +653,40 @@ underneath it, but that's `applyRegion`'s job to sort out at commit time
 region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
+
+### `interface vtt.edge-overlay.EdgeOverlayGroup`
+
+One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
+
+### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
+
+Drawn for an edge whose role no palette entry names.
+
+### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
+
+A palette keyed by role, with a fallback for a role nothing has named yet.
+
+### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
+
+The preview channel one role's edges are drawn on.
+
+### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor`
+
+One group as the descriptor that draws it.
+
+### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[]): readonly EdgeOverlayGroup[]`
+
+Groups every edge of every region in `topologies` by role.
+
+An edge shared by two faces is drawn once: it is one edge, and drawing it
+twice would only make a shared boundary look heavier than a free one, which
+is the opposite of the truth worth seeing.
 
 ### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
 
@@ -963,7 +1004,7 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, weldedSpines: ReadonlyMap<number, string>): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
@@ -1008,6 +1049,39 @@ What reaches Rust is still a polyline, because the sweep planner cannot
 read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
+
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[]): { inserts: readonly AtomicEditOp[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
+
+Every place the run being drawn meets a spine already standing.
+
+Two ways to meet, and only the first existed before: a stroke drawn
+**across** another run crosses its spine, and a stroke that **ends on**
+another run touches it without ever crossing anything. The second is the
+ordinary T -- one road arriving at another -- and is far more common than
+the first. Segment intersection cannot see it at all, because there is no
+intersection: the drawn line simply stops.
+
+So an endpoint is handled by projection instead. If either end of the
+stroke lands within the standing run's own reach of its spine -- which is
+to say, on that road -- it is moved onto the spine and joined there.
+
+Either way the join is *made*, not found: a meeting point almost never
+lands on an existing station, so the crossed spine's edge is split and the
+node minted, which is `insertedColumnAt` for paths. The node is numbered on
+the crossed run's own station scale, fractionally, so it stays part of that
+spine's chain and in the right order.
+
+### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
+
+The reference line to sweep along: where the fit decided the road goes,
+at the height the ground was actually picked at.
+
+Arc flattening here is temporary and deliberately kept in one place so it
+is obvious what to delete -- `plan_sweep_formation` only samples a
+polyline, so a true arc has no way to reach it intact. Until it accepts
+contour geometry, a curve is handed over as chords close enough that the
+difference is invisible, which is still a world apart from handing over
+the raw hand.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -2026,6 +2100,99 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `interface vtt.path-cloud.PathRun`
+
+### `property vtt.path-cloud.PathRun.bands: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.path-cloud.PathRun.contours: readonly PathRunChain[]`
+
+One per side, outermost slot first.
+
+### `property vtt.path-cloud.PathRun.corridorId: string`
+
+### `property vtt.path-cloud.PathRun.junctionStations: readonly number[]`
+
+Stations whose spine node belongs to a **different** corridor -- this run
+welded onto one already standing there. A junction, seen from this side.
+
+### `property vtt.path-cloud.PathRun.ribs: readonly PathRunRib[]`
+
+### `property vtt.path-cloud.PathRun.spine: PathRunChain | undefined`
+
+### `property vtt.path-cloud.PathRun.subtype: PathKind | undefined`
+
+### `interface vtt.path-cloud.PathRunChain`
+
+A chain running **along** the run: the spine, or one side of the contour.
+
+### `property vtt.path-cloud.PathRunChain.across: number`
+
+### `property vtt.path-cloud.PathRunChain.edgeIds: readonly string[]`
+
+The edge between consecutive nodes; one shorter than `nodes`.
+
+### `property vtt.path-cloud.PathRunChain.nodes: readonly PathRunNode[]`
+
+Ordered by station.
+
+### `interface vtt.path-cloud.PathRunNode`
+
+One node of a run, with the address its id carries.
+
+### `property vtt.path-cloud.PathRunNode.across: number`
+
+Signed slot across the cross-section; `0` is the spine.
+
+### `property vtt.path-cloud.PathRunNode.nodeId: string`
+
+### `property vtt.path-cloud.PathRunNode.position: ConstructionPosition`
+
+### `property vtt.path-cloud.PathRunNode.station: number`
+
+### `interface vtt.path-cloud.PathRunRib`
+
+A chain running **across** the run: one station, contour to contour.
+
+### `property vtt.path-cloud.PathRunRib.bands: readonly ConstructionSurfaceKey[]`
+
+The faces this rib bounds.
+
+### `property vtt.path-cloud.PathRunRib.edgeIds: readonly string[]`
+
+### `property vtt.path-cloud.PathRunRib.nodes: readonly PathRunNode[]`
+
+Ordered by `across`, so from one contour through the spine to the other.
+
+### `property vtt.path-cloud.PathRunRib.station: number`
+
+### `function vtt.path-cloud.pathRunFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathRun | undefined`
+
+One run by its corridor id, or `undefined` if nothing present is from it.
+
+### `function vtt.path-cloud.pathRunsIn(topologies: readonly ConstructionRegionTopology[]): readonly PathRun[]`
+
+Every path run present in `topologies`, one per corridor.
+
+Takes a plain set of boundaries rather than a cloud, because the caller
+that needs *every* standing run -- crossing detection, which is looking
+for runs it is not yet connected to -- is by definition looking outside
+any one cloud.
+
+### `function vtt.path-cloud.pathRunsOf(cloud: CloudTopology): readonly PathRun[]`
+
+The runs inside one cloud -- the cloud-owned view, and the one a tool
+should reach for.
+
+Editing dispatches by cloud, so anything asking "what is this road made
+of" is asking about the cloud under the pointer, not about a face and not
+about the whole table.
+
+### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
+
+### `function vtt.path-corridor.pathSubtypeOf(corridorId: string): PathKind | undefined`
+
+The subtype `corridorId` was built from, or `undefined` if it carries none.
+
 ### `interface vtt.path-recipe.PathFormationRecipe`
 
 Product recipe forwarded unchanged to the construction-session boundary.
@@ -2055,14 +2222,32 @@ than being a number the generator forgot. Any further line a product wants
 to be first-class -- a lane, a rail -- is just another profile point, and
 needs no machinery of its own.
 
+### `function vtt.path-recipe.pathCarvesGround(kind: PathKind): boolean`
+
+Whether this subtype carves what it is drawn over.
+
+Declared rather than inferred, which is what dissolves the awkward part of
+an overpass: nothing has to work out from a flat XZ footprint whether a
+crossing is at the same level, because the run that spans says so itself.
+
 ### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
 
-`street` is a flat bed, while `road` and `trail` carry a non-negative U
-profile, measured from the reference line's own height rather than from
-the world floor. The Rust sweep owns frames, vertices and quads; where the
-stations go, and how high each one sits, stays on this side.
+**Flat, and three slots wide, on purpose.** A run is exactly its outer
+contour, its spine, and the rib linking them -- the same three parts the
+junction work is about to be written against. A raised U edge is a detail
+that goes back on top once those connections work, and while the central
+logic is being settled it only gets in the way: a lifted rim drags the
+terrain's own hole up with it, because the hole reuses the rim's very
+nodes, which reads as a berm running the whole length of the road.
+
+`shoulderWidth` still widens the run; `shoulderHeight` is deliberately
+unread until the U returns.
+
+Elevations are measured from the reference line's own height rather than
+from the world floor. The Rust sweep owns frames, vertices and quads;
+where the stations go, and how high each one sits, stays on this side.
 
 ### `function vtt.path-recipe.pathHalfWidth(params: PathBrushParams): number`
 
@@ -2073,6 +2258,16 @@ Read off the profile rather than recomputed from the parameters, so the
 width the brush is sized against and the width actually swept can never
 drift apart. A `street` has no shoulder and a `road` does; that difference
 lives in one place, and this follows it.
+
+### `function vtt.path-recipe.pathRidesTerrain(kind: PathKind): boolean`
+
+Whether this subtype's stations take their height from the ground beneath
+them.
+
+A deck does not: it spans, so its height comes from its own ends and the
+middle stays level instead of sagging onto whatever it crosses. That, plus
+declaring that it consumes nothing, is the whole of what makes a subtype a
+bridge -- no separate type, no separate role table, no separate logic.
 
 ### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
 
@@ -2157,7 +2352,7 @@ happen to share a generator.
 
 The first refusal in a resolved coverage, if any.
 
-### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[]): readonly ResolvedCoverage[]`
+### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
 
 Pairs every region a footprint touches with its resolved interaction --
 the creation-side counterpart to `planEdit`. Pure: it decides, it does not
@@ -2167,7 +2362,7 @@ A `"forbid"` anywhere in the result is the caller's cue to abandon the
 whole stroke rather than apply the rest: painting terrain across a wall
 must not quietly terraform everything except the wall.
 
-### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string): CreationInteraction`
+### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 What painting `paintedType` over one already-present region means.
 
@@ -2232,9 +2427,9 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(coveredType: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -2243,6 +2438,11 @@ wall the same cut reads as an opening through it.
 Over another path the two formations become one connected path surface:
 the same cut-and-refill flow consumes the overlap instead of leaving
 coincident path geometry behind.
+
+Except a deck, which spans rather than carves. That is a declared property
+of the subtype, not something read back from geometry -- which is exactly
+why an overpass needs no height-aware coverage query to be told apart from
+a crossing at the same level. The run that passes over says so.
 
 ### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
 
@@ -2288,7 +2488,7 @@ That is the whole of the panel side of the interaction table.
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
 
-### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; edge: "path-edge"; spine: "path-spine"; unknown: "path-unknown" }`
+### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; contourEdge: "path-contour-edge"; edge: "path-edge"; ribEdge: "path-rib-edge"; spine: "path-spine"; spineEdge: "path-spine-edge"; unknown: "path-unknown" }`
 
 The role model for anything swept along a travel line: a spine, whatever
 lies between the spine and the rim, and the rim itself.
@@ -2314,9 +2514,9 @@ anything.
 
 ### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
 
-### `function vtt.path-structure.pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): string`
+### `function vtt.path-structure.pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
 
-### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
 Builds one swept-product structure type on the shared spine model.
 
@@ -2404,12 +2604,18 @@ of its own.
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
-### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string) => CreationInteraction`
+### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `coveredType` -- the
 creation half of the same declaration. Directional on purpose: a wall
 goes on terrain, terrain does not go on a wall, and neither direction
 says anything about the other.
+
+`paintedSubtype` is the preset the run being painted was built from,
+when its type has subtypes at all. It is what lets one type vary a
+declared behaviour -- a bridge deck consuming nothing where a road
+carves -- without splitting into a second type with its own role table
+and its own logic to keep in step.
 
 ### `property vtt.structure-type.StructureTypeDefinition.label: string`
 
@@ -2797,9 +3003,15 @@ PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
 
-### `type vtt.tool-types.PathKind = "trail" | "street" | "road"`
+### `type vtt.tool-types.PathKind = "trail" | "street" | "road" | "bridge"`
 
-Visual/formation recipe for the one generic `path` surface type.
+Which preset a path run is built from.
+
+A subtype, not a type: every one of these collapses to the single `path`
+surface type, shares its role table, its cascade and its editing rules,
+and differs only in the cross-section it seeds and a couple of declared
+behaviours. Adding one is adding a preset -- never a second set of type
+logic to keep in step with the first.
 
 ### `type vtt.tool-types.PreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 
@@ -3602,9 +3814,9 @@ currently is.
 
 ### `method vtt.scene-render-port.SceneRenderPort.attachView(target: HTMLElement): string`
 
-### `method vtt.scene-render-port.SceneRenderPort.clearPreview(): void`
+### `method vtt.scene-render-port.SceneRenderPort.clearPreview(channel?: string): void`
 
-Hides the active preview, if any. A no-op when nothing is shown.
+Hides one channel, or every channel when none is named.
 
 ### `method vtt.scene-render-port.SceneRenderPort.detachView(viewId: string): void`
 
@@ -3622,12 +3834,15 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
-### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
-Shows (or replaces) the single active construction-tool preview. Never
-touches the construction session -- purely visual, so a tool can call
-this on every pointer move without paying for a real generate/mutate
-request until the tool actually commits.
+Shows (or replaces) one preview overlay.
+
+`channel` names which overlay: two callers with different names coexist,
+and the same name always replaces. A tool's own ghost is one channel; a
+diagnostic overlay drawn alongside it is another, and neither has to know
+the other exists. Omitted means the default channel, which is the
+single-ghost behaviour every tool already relies on.
 
 ### `method vtt.scene-render-port.SceneRenderPort.start(runtimeGeneration: number): Promise<void>`
 
@@ -3647,14 +3862,15 @@ request until the tool actually commits.
 
 ### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 
-A construction tool's not-yet-committed ghost, as plain geometry -- mirrors
-`features/edit-construction`'s own `PreviewDescriptor` one-for-one, but
-this port cannot import that layer (`ports` sits below `features` in
-`VTT-ARCH-002`'s allowed-import graph), so the shape is repeated here
-rather than shared. `"segments"` draws an open polyline; `"quad"` draws a
-filled footprint as two triangles over 4 corner points.
-
 ### `type vtt.scene-render-port.RenderViewId = string`
+
+### `variable vtt.scene-render-port.TOOL_GHOST_PREVIEW_CHANNEL: "active"`
+
+The channel a tool's own ghost is drawn on.
+
+Named in the port rather than in the adapter because the dispatcher has to
+clear *its* overlay without touching anyone else's: an unnamed clear empties
+every channel, which is right for teardown and wrong on every pointer move.
 
 ### `interface vtt.terrain-noise-port.TerrainNoisePort`
 

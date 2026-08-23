@@ -688,3 +688,62 @@ fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
         }
     }
 }
+
+/// A crossing consumes the crossed run's **spine**, and keeps only its rim.
+///
+/// `apply_region_overlay` rebuilds what it consumed from the outer boundary
+/// of the consumed set, so every node on that rim survives and every node
+/// interior to it does not. A spine is interior by construction -- it is the
+/// seam down the middle -- so the travel line is severed exactly where two
+/// runs meet, which is the one place a network most needs it intact.
+///
+/// Pinned here as the measured starting point for junction geometry: a real
+/// junction has to put the crossed spine back on a face boundary rather than
+/// leave it inside a region that is about to be replaced. Sharing a node at
+/// the crossing (the application's weld) keeps that single node alive, but
+/// not the chain either side of it.
+#[test]
+fn a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim() {
+    let mut session = ConstructionSession::new();
+    let formation = json!({
+        "profile": [
+            {"lateralOffset": -2.1, "elevation": 0.0},
+            {"lateralOffset": 0.0, "elevation": 0.0},
+            {"lateralOffset": 2.1, "elevation": 0.0}
+        ],
+        "miterLimit": 2.0
+    });
+    overlay_path_stroke(
+        &mut session,
+        "road-a",
+        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [4.0, 0.0, 0.0], [6.0, 0.0, 0.0]],
+        &formation,
+        &[],
+    );
+    let before = session.snapshot_json().unwrap();
+
+    let sources = all_surface_keys(&session);
+    overlay_path_stroke(
+        &mut session,
+        "road-b",
+        &[[3.0, 0.0, -4.0], [3.0, 0.0, 0.0], [3.0, 0.0, 4.0]],
+        &formation,
+        &sources,
+    );
+    let after = session.snapshot_json().unwrap();
+
+    // Station-major over a three-slot profile, so slot 1 of every station is
+    // the spine: indices 1, 4, 7, 10.
+    let gone: Vec<usize> = (0..12)
+        .filter(|index| {
+            let id = format!("road-a:path-node:{index}");
+            before.contains(&id) && !after.contains(&id)
+        })
+        .collect();
+    assert_eq!(
+        gone,
+        vec![4, 7],
+        "only the crossed spine stations inside the crossing are consumed"
+    );
+    assert!(gone.iter().all(|index| index % 3 == 1), "every loss is a spine node");
+}

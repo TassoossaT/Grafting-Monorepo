@@ -1,8 +1,8 @@
 # VTT path spine: the travel line as a stored seam
 
-- Status: **partly implemented** — the spine, its identity scheme, and its
-  edit cascade are built. Junction faces, per-corridor recipe persistence,
-  and the bridge type are **not**; see "Open" below.
+- Status: **partly implemented** — the spine, its identity scheme, its edit
+  cascade, subtypes, the bridge deck and junction *identity* (welding) are
+  built. Junction **geometry** is not; see "Open" below.
 - Date: 2026-08-23
 - Where it lives:
   - Spine in the recipe: `apps/vtt/src/features/edit-construction/path-recipe.ts`
@@ -14,8 +14,39 @@
     `apps/vtt/src/features/edit-construction/structure-types/structure-type.ts`,
     supplied by `composition/tabletop/tools/core/edit-region-tool.ts`.
   - Graph declaration: `composition/tabletop/tools/paths/path-patch.ts`.
+  - Subtype identity: `apps/vtt/src/features/edit-construction/path-corridor.ts`.
+  - The run read back as spine/contour/rib:
+    `apps/vtt/src/features/edit-construction/path-cloud.ts`.
+  - Declared subtype behaviour: `pathRidesTerrain` / `pathCarvesGround` in
+    `path-recipe.ts`, read by `pathInteractionOver`.
+  - Welding: `weldedToStandingSpines` in
+    `composition/tabletop/tools/paths/path-shared.ts`.
 - Related: `vtt-atomic-edit-and-cloud-policy-design.md` (the role/policy
   machinery this reuses unchanged), `vtt-product-model.md`.
+
+## The three parts
+
+A run is exactly three things, and this is the vocabulary the junction work
+is written against:
+
+- **Spine** — the chain at slot 0, running along the run. The travel line.
+- **Contour** — a chain at an extreme slot, running *parallel* to the spine.
+  One per side.
+- **Rib** — the transverse run of one station, linking contour to spine to
+  contour, and bounding the faces either side of it.
+
+`path-cloud.ts` reads all three back off the graph. It is a **derived view,
+never stored**: every fact is already there — the spine is slot 0, a contour
+is an extreme slot, a rib is one station — and a second copy alongside would
+only give the two something to disagree about. Naming a contour is what
+junction work needs and what scanning for the largest `|across|` on demand
+does not give.
+
+**This version is flat and three slots wide.** The raised U edge of a road is
+a detail that returns once connections work. While it was on, the terrain's
+own hole reused the road's rim nodes, so the hole sat at the shoulder's
+height and the terrain ramped up to meet it — a berm running the whole length
+of the run. `shoulderWidth` still widens; `shoulderHeight` is unread.
 
 ## The decision
 
@@ -99,22 +130,87 @@ from 1 band to 2, `road` from 3 to 4. A product declaring travel lanes as well
 would roughly double again. Deliberate, and the reason the spine is not added
 speculatively to profiles that do not want one (`pathSpineSlot` returns `-1`).
 
+## Subtypes, and why they are not types
+
+Every preset — trail, street, road, bridge — collapses to the one `path`
+surface type, shares its role table, its cascade and its editing rules. A
+subtype varies the cross-section it seeds plus two declared behaviours, and
+nothing else. Adding one is adding a preset, never a second set of type logic
+to keep in step with the first.
+
+The subtype rides in the corridor id (`{operationId}#{kind}`) because the
+surface itself deliberately cannot say which preset built it, and a later
+regeneration or junction needs to know. The marker is appended so
+`parseStationNodeId` keeps treating a corridor id as an opaque prefix.
+
+`interactionOver` gained the painted run's subtype for the same reason a role
+table exists at all: so a declared behaviour can vary without a second type.
+
+## The bridge, and the query it makes unnecessary
+
+A deck is a subtype that declares two things: its stations do not read ground
+height (`pathRidesTerrain` false, so the middle stays level between its own
+two ends instead of sagging onto what it crosses), and it consumes nothing
+(`pathCarvesGround` false, so `pathInteractionOver` answers `IGNORE`).
+
+That dissolves a blocker this design kept running into. `getFootprintCoverage`
+is a flat XZ query and cannot tell an overpass from a crossing at the same
+level — but it never has to, because the run that spans **says so**. Intent is
+declared, not inferred from geometry that cannot carry it.
+
+Raising the deck afterwards is the ordinary spine edit: `ALL_AXES` on the
+spine role, and the cascade lifts the whole cross-section with it.
+
+## Junction identity is built; junction geometry is not
+
+Two runs meet because they reference one spine node. `weldedToStandingSpines`
+snaps a station onto a standing spine node **before** the sweep — the same
+order `commitWallContour` resolves its columns in, and for the same reason: a
+station that will share a node has to be built at that node's position, not
+dragged onto it after. `apply_add_patch` skips a node that already exists, so
+the welded node keeps its own position and both runs bound it.
+
+What is **not** solved is the surface. Measured, and pinned by
+`a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim` in
+`construction-wasm`'s session tests: `apply_region_overlay` rebuilds what it
+consumed from the **outer boundary** of the consumed set, so rim nodes survive
+and interior nodes do not. A spine is interior by construction. Crossing a
+road therefore severs the crossed road's travel line exactly at the junction —
+the welded node itself survives, the chain either side of it does not.
+
+A real junction has to put the crossed spine back onto a face boundary, which
+means the crossing area becoming its own face bounded by **both** runs' cross
+sections rather than simply being replaced by the newer run's bands.
+`i_overlay` is already a dependency of `surface-transformations` and is the
+tool for computing that area.
+
 ## Open
 
-- **Junction faces.** A crossing is two spines sharing a node, and an overpass
-  is two spines crossing with no shared node — the model expresses the
-  difference, but the overlap does not yet become one junction face. Today
-  `apply_region_overlay` consumes the earlier path and rebuilds a remainder
-  with a hole, which is union, not junction.
-- **Per-corridor recipe.** The spine records *where*, not *what*. Changing a
-  run's type is a regeneration, and needs the recipe persisted per corridor —
-  which is also the argument for each road type becoming its own surface type,
-  as `wall-white` and `wall-gray` already are.
-- **Bridge.** Two of three pieces are in reach: a spine station may already be
-  lifted (`ALL_AXES` on the spine role), and `interactionOver` can return
-  `IGNORE` so a deck does not cut what it spans. The blocker is that
-  `getFootprintCoverage` is a 2D XZ query and cannot tell an overpass from a
-  same-level crossing.
+- **Junction geometry.** Identity is done; the *surface* is not, and the two
+  runs still do not read as joined. The overlay consumes the crossed run's
+  bands at the crossing, and with them its spine -- so the node the insert
+  minted survives (the new run references it) while the chain either side of
+  it does not. Settled in shape, not written. Insert a node into
+  *both* spines at the crossing; intersect the two contours; cut the four ends
+  and relink them into one closed contour around the crossing, so no contour
+  runs over another; the enclosed area becomes its own face with both spines
+  crossing inside it, which also puts the crossed spine back on a boundary
+  instead of inside a region about to be replaced. `i_overlay` is already a
+  dependency of `surface-transformations` and is the tool for step two.
+  **Undecided:** whether that contour is the *intersection* of the two runs (a
+  simple quadrilateral) or their *union* trimmed at the four ends (the
+  chamfered corners a real crossing has).
+- **Regeneration.** The corridor id now carries the subtype, so the recipe is
+  recoverable; nothing re-runs it yet. Still undecided: whether a hand-moved
+  lateral vertex survives a regeneration that touches its station.
 - **Remainder collapse.** `region_overlay.rs` folds every consumed region into
   one remainder carrying the first one's surface type. A network that loses
   surface identity on every stroke cannot be administered.
+- **Closed loops** (`outer_boundary` assumes an open line) and
+  **self-intersection** (criterion known: spine radius must exceed the
+  half-width; the response to a violation is not decided).
+- **Terrain around a run.** With the rim flat this no longer shows, but the
+  hole still reuses the run's own rim nodes, so any future raised edge drags
+  the terrain up with it. Whether that is cut-and-fill worth keeping or an
+  artifact to correct is not decided; both references solve the same problem
+  by deforming terrain deliberately.

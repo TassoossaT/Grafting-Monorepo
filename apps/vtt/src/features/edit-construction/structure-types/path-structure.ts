@@ -35,13 +35,49 @@ export const PATH_ROLES = {
   spine: "path-spine",
   across: "path-across",
   body: "path-body",
+  /** Along the travel line: the seam the two central bands meet on. */
+  spineEdge: "path-spine-edge",
+  /** Along the run at an extreme slot -- one side of the outer contour. */
+  contourEdge: "path-contour-edge",
+  /** Across the run, within one station: what links the spine to a contour. */
+  ribEdge: "path-rib-edge",
   edge: "path-edge",
   unknown: "path-unknown",
 } as const;
 
-export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+/**
+ * Which of the three parts an edge belongs to, read off its two endpoints.
+ *
+ * An edge running between two nodes of the same slot runs *along* the run; at
+ * slot 0 that is the spine, at an extreme slot it is a contour. An edge
+ * between two slots of one station runs *across* it, which is a rib. The
+ * classification is the same fact the ids already carry, and having it in the
+ * role table rather than only in a viewer is what lets an edit rule -- or a
+ * colour -- ask the type instead of re-deriving it.
+ */
+function pathEdgeRole(
+  topology: ConstructionRegionTopology,
+  edgeId: string,
+): EditRole {
+  for (const loop of [...topology.outerLoops, ...topology.holes]) {
+    for (const use of loop) {
+      if (use.edgeId !== edgeId) continue;
+      const start = parseStationNodeId(use.startNodeId);
+      const end = parseStationNodeId(use.endNodeId);
+      if (start === undefined || end === undefined) return PATH_ROLES.edge;
+      if (start.across === end.across) {
+        return start.across === 0 ? PATH_ROLES.spineEdge : PATH_ROLES.contourEdge;
+      }
+      if (start.station === end.station) return PATH_ROLES.ribEdge;
+      return PATH_ROLES.edge;
+    }
+  }
+  return PATH_ROLES.edge;
+}
+
+export function pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PATH_ROLES.body;
-  if (target.kind === "edge") return PATH_ROLES.edge;
+  if (target.kind === "edge") return pathEdgeRole(topology, target.edgeId);
   const address = parseStationNodeId(target.nodeId);
   if (address === undefined) return PATH_ROLES.unknown;
   return address.across === 0 ? PATH_ROLES.spine : PATH_ROLES.across;
@@ -97,6 +133,9 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
       return allowed(role, ALL_AXES, "surface", outwardOfGrabbed);
     case PATH_ROLES.across:
       return allowed(role, ALL_AXES, "surface", outwardOfGrabbed);
+    case PATH_ROLES.spineEdge:
+    case PATH_ROLES.contourEdge:
+    case PATH_ROLES.ribEdge:
     case PATH_ROLES.edge:
       // `moveEdge` already carries both endpoints; each of those carries its
       // own station outward through the vertex rule, so a spine edge drags
@@ -117,7 +156,7 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string) => CreationInteraction,
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
