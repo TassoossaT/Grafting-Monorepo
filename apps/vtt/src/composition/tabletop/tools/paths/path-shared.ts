@@ -421,18 +421,26 @@ export function commitPathContour(
       ? stroke
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
   if (drawn.length === 0) return;
-  // A crossing is made, not found: the crossed spine is split so a node
-  // exists to share. Whatever still lands exactly on a standing node is
-  // welded to it directly.
-  const crossed = junctionsWithStandingSpines(ctx, drawn);
-  const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
-  const referenceLine = exact.line;
-  const welds = new Map([...crossed.welds, ...exact.welds]);
+  // Crossing detection is written and tested (`junctionsWithStandingSpines`)
+  // but deliberately not wired in yet.
+  //
+  // Two reasons, and the second is the one that matters. It splices a station
+  // into the run at the crossing without checking how close the neighbouring
+  // stations are, so a crossing landing a centimetre from one produces a band
+  // of almost no length -- a sliver face along the contour. And splitting the
+  // crossed spine buys nothing while the overlay still consumes that run's
+  // bands at the crossing: the node survives, its chain does not, and the
+  // only visible result is malformed geometry.
+  //
+  // It belongs on the cloud layer that now owns edit dispatch, which is where
+  // it will be rebuilt rather than patched here.
+  const { line: referenceLine, welds } = weldedToStandingSpines(
+    ctx,
+    drawn,
+    SPINE_WELD_TOLERANCE,
+  );
 
   try {
-    if (crossed.inserts.length > 0) {
-      ctx.runtime.applyRegionEdit(crossed.inserts, "local", operationId);
-    }
     const effect = createPathBrushEffect(
       {
         brushShape,
