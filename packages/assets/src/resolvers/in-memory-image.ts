@@ -1,6 +1,7 @@
 import type { AssetDefinition } from "../contracts/definition.js";
 import type { ImageResource } from "../contracts/resource.js";
 import type { ResourceResolver } from "../contracts/resolver.js";
+import { disposeImageResource, imageResourceBytes } from "./image-ownership.js";
 
 /** The kind {@link inMemoryImageResolver} claims. */
 export const IN_MEMORY_IMAGE_KIND = "in-memory-image";
@@ -15,11 +16,6 @@ export interface InMemoryImageSource {
   readonly height: number;
   /** Defaults to `"srgb"`, which is what colour textures are authored in. */
   readonly colorSpace?: "srgb" | "linear";
-}
-
-/** Whether a value looks like an `ImageBitmap`, without naming the DOM type at runtime. */
-function isClosable(value: unknown): value is { close: () => void } {
-  return typeof (value as { close?: unknown } | null)?.close === "function";
 }
 
 /**
@@ -55,17 +51,9 @@ export const inMemoryImageResolver: ResourceResolver<typeof IN_MEMORY_IMAGE_KIND
     return image as never;
   },
   dispose(resource): void {
-    const image = resource as unknown as ImageResource;
-    if (image.form !== "decoded") return;
-    if (isClosable(image.source)) image.source.close();
+    disposeImageResource(resource as unknown as ImageResource);
   },
   sizeOf(resource): number {
-    const image = resource as unknown as ImageResource;
-    // Four bytes per pixel: what an RGBA texture actually occupies once
-    // decoded, which is the number that matters and has nothing to do with the
-    // size of whatever file it came from.
-    return image.form === "decoded"
-      ? image.width * image.height * 4
-      : image.levels.reduce((total, level) => total + level.data.byteLength, 0);
+    return imageResourceBytes(resource as unknown as ImageResource);
   },
 };

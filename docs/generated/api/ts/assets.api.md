@@ -163,6 +163,47 @@ Identifies this source in diagnostics.
 
 Everything this source declares.
 
+### `interface assets.DecodedImage`
+
+A decoded image, in the shape ImageResource's decoded form needs.
+
+### `property assets.DecodedImage.height: number`
+
+Height in pixels. Reported by the decoder, as width is.
+
+### `property assets.DecodedImage.source: ImageBitmap | HTMLImageElement | HTMLCanvasElement`
+
+DOM image types only. No renderer texture type is exposed.
+
+### `property assets.DecodedImage.width: number`
+
+Width in pixels.
+
+Reported by the decoder rather than read back off source, so a
+decoder whose output does not expose its own dimensions still works.
+
+### `interface assets.EncodedImageResolverOptions`
+
+How the resolver reaches the platform. Both default to the global.
+
+### `property assets.EncodedImageResolverOptions.decode?: (bytes: Uint8Array, mediaType: string | undefined) => Promise<DecodedImage>`
+
+Turns encoded bytes into a decoded image. Defaults to `createImageBitmap`.
+
+The one step that genuinely varies by environment: a worker, an SSR
+context, and a format the platform cannot decode natively each need their
+own, and a package that hardcoded the browser's would be unusable in all
+three. It is also what lets this resolver be tested with no network and no
+real bitmap, which `AGENTS.md` requires -- no test may depend on an asset
+that is not produced in-process.
+
+### `property assets.EncodedImageResolverOptions.fetch?: (url: string, init: { signal: AbortSignal }) => Promise<Response>`
+
+Fetches a URL. Defaults to the global `fetch`.
+
+Supplied from outside so a consumer can add auth headers, a cache policy,
+or a retry -- none of which this package should have opinions about.
+
 ### `interface assets.InMemoryImageSource`
 
 What an in-memory image definition puts in its `source`.
@@ -355,6 +396,19 @@ Upward axis.
 
 Depth axis.
 
+### `type assets.EncodedImageBytes = { bytes: Uint8Array } | { url: string }`
+
+Where an encoded image's bytes come from.
+
+The same two cases as the glTF resolver, for the same reason: bytes that were
+generated, uploaded by a user, or read from storage this package knows
+nothing about must work exactly as well as a fetch. Which one a definition
+uses is invisible to everything upstream of the resolver.
+
+### `type assets.EncodedImageSource = EncodedImageBytes & { colorSpace?: ImageColorSpace; mediaType?: string }`
+
+What an encoded image definition puts in its `source`.
+
 ### `type assets.GltfMeshSource = { bytes: Uint8Array } | { url: string }`
 
 What a glTF mesh definition puts in its `source`.
@@ -363,6 +417,21 @@ Two forms rather than one, because the two real situations differ: content
 fetched from wherever a catalogue points, and content already in hand —
 generated, uploaded by a user, or read from storage the store knows nothing
 about.
+
+### `type assets.ImageColorSpace = "srgb" | "linear"`
+
+How a colour channel's values are to be read.
+
+Declared per image, never assumed, because a PBR material is not one texture.
+Base colour is authored in sRGB; normal, roughness, ambient occlusion and
+height are linear data that merely happen to be stored in an image. Decoding
+a normal map as sRGB does not fail -- it produces lighting that is subtly and
+consistently wrong, which is the kind of defect that survives review and is
+obvious only on screen.
+
+There is no safe default across a material's maps, so the declaration carries
+it and this resolver never guesses. `"srgb"` is the fallback only because a
+lone texture with nothing said about it is far more often colour.
 
 ### `type assets.ImageResource = { colorSpace: "srgb" | "linear"; form: "decoded"; height: number; source: ImageBitmap | HTMLImageElement | HTMLCanvasElement; width: number } | { form: "compressed"; format: string; levels: readonly { data: Uint8Array; height: number; width: number }[] }`
 
@@ -415,6 +484,10 @@ What happens to a resource's bytes when its last holder releases.
 ### `type assets.StoreEvent = { ref: ResourceRef; type: "declared" } | { ref: ResourceRef; type: "load-started" } | { ref: ResourceRef; type: "load-succeeded" } | { error: string; ref: ResourceRef; type: "load-failed" } | { ref: ResourceRef; type: "disposed" }`
 
 Something the store did, for diagnostics and tests.
+
+### `variable assets.ENCODED_IMAGE_KIND: "encoded-image"`
+
+The kind createEncodedImageResolver claims.
 
 ### `variable assets.GLTF_MESH_KIND: "gltf-mesh"`
 
@@ -490,6 +563,20 @@ Creates an asset store.
 Ships no resolvers and no catalog sources: a store that knew how to load
 anything would know where things live, and this package deliberately does
 not. Register what the environment provides.
+
+### `function assets.createEncodedImageResolver(options: EncodedImageResolverOptions): ResourceResolver<"encoded-image">`
+
+Loads an authored image the store did not create.
+
+The counterpart to `inMemoryImageResolver`, which adopts an image a caller
+already decoded. That one is right for a generated texture and is
+deliberately zero-dependency; this one is what lets a consumer *declare* a
+texture and acquire it, with the fetch, the decode, the abort handling and
+the disposal all owned here instead of repeated at every call site.
+
+Nothing about where images live is decided here. A definition names bytes or
+a URL, and both arrive from a `CatalogSource` the consumer supplies -- which
+is what makes this work for asset binaries that are never committed.
 
 ### `function assets.resourceRef(value: string): ResourceRef<TKind>`
 
