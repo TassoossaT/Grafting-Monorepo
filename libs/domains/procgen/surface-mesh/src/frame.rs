@@ -88,6 +88,32 @@ impl UnrollFrame {
         }
     }
 
+    /// Converts an unrolled (u, y) coordinate back into a 3D position on the developable surface.
+    pub fn roll(&self, u: f32, y: f32) -> [f32; 3] {
+        match self {
+            Self::Chord { origin, direction } => [
+                origin[0] + direction[0] * u,
+                y,
+                origin[1] + direction[1] * u,
+            ],
+            Self::Cylinder {
+                center,
+                radius,
+                start_angle,
+                clockwise,
+                ..
+            } => {
+                let swept = u / radius;
+                let angle = *start_angle + if *clockwise { -swept } else { swept };
+                [
+                    center[0] + radius * angle.cos(),
+                    y,
+                    center[1] + radius * angle.sin(),
+                ]
+            }
+        }
+    }
+
     /// The outward horizontal direction at `point` -- radial for a cylinder,
     /// constant for a chord.
     pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3] {

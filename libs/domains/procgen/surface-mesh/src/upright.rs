@@ -168,6 +168,173 @@ fn ruled_upright_mesh(
     })
 }
 
+/// Meshes an upright face with openings by decomposing it into vertical quad slices.
+///
+/// In unrolled (u, y) coordinates, each vertical slice between consecutive u-coordinates
+/// (from arc tessellation and hole vertices) contains vertical quads:
+/// - solid quads below and above holes (sills and lintels)
+/// - full-height quads on solid sections of the wall
+///
+/// Every vertex is mapped back to 3D via `frame.roll(u, y)`, which ensures the entire wall
+/// follows the exact true cylinder curvature without flat diagonal chords.
+fn vertical_sliced_upright_mesh(
+    frame: &UnrollFrame,
+    outer_3d: Vec<[f32; 3]>,
+    holes_3d: Vec<Vec<[f32; 3]>>,
+) -> Option<TriangulatedMesh> {
+    let outer_2d: Vec<[f32; 2]> = outer_3d.iter().map(|p| frame.unroll(*p)).collect();
+    let holes_2d: Vec<Vec<[f32; 2]>> = holes_3d
+        .iter()
+        .map(|hole| hole.iter().map(|p| frame.unroll(*p)).collect())
+        .collect();
+
+    let mut segments: Vec<([f32; 2], [f32; 2])> = Vec::new();
+    let mut add_segments = |loop_2d: &[[f32; 2]]| {
+        let n = loop_2d.len();
+        if n >= 2 {
+            for i in 0..n {
+                let p1 = loop_2d[i];
+                let p2 = loop_2d[(i + 1) % n];
+                segments.push((p1, p2));
+            }
+        }
+    };
+    add_segments(&outer_2d);
+    for hole in &holes_2d {
+        add_segments(hole);
+    }
+
+    let mut u_coords: Vec<f32> = Vec::new();
+    for p in &outer_2d {
+        u_coords.push(p[0]);
+    }
+    for hole in &holes_2d {
+        for p in hole {
+            u_coords.push(p[0]);
+        }
+    }
+    u_coords.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    u_coords.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+
+    if u_coords.len() < 2 {
+        return None;
+    }
+
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut uvs = Vec::new();
+    let mut indices = Vec::new();
+
+    for k in 0..u_coords.len() - 1 {
+        let u_a = u_coords[k];
+        let u_b = u_coords[k + 1];
+        if (u_b - u_a).abs() < 1e-4 {
+            continue;
+        }
+        let u_mid = (u_a + u_b) * 0.5;
+
+        let mut hits: Vec<(f32, [f32; 2], [f32; 2])> = Vec::new();
+        for &(p1, p2) in &segments {
+            let u_min = p1[0].min(p2[0]);
+            let u_max = p1[0].max(p2[0]);
+            if (u_max - u_min) > 1e-5 && u_min <= u_mid && u_mid <= u_max {
+                let t = (u_mid - p1[0]) / (p2[0] - p1[0]);
+                let y_mid = p1[1] + t * (p2[1] - p1[1]);
+                hits.push((y_mid, p1, p2));
+            }
+        }
+
+        hits.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        hits.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-4);
+
+        for chunk in hits.chunks_exact(2) {
+            let (_, p_bot1, p_bot2) = chunk[0];
+            let (_, p_top1, p_top2) = chunk[1];
+
+            let eval_y = |p1: [f32; 2], p2: [f32; 2], u: f32| -> f32 {
+                let du = p2[0] - p1[0];
+                if du.abs() < 1e-5 {
+                    (p1[1] + p2[1]) * 0.5
+                } else {
+                    let t = (u - p1[0]) / du;
+                    p1[1] + t * (p2[1] - p1[1])
+                }
+            };
+
+            let y_bot_a = eval_y(p_bot1, p_bot2, u_a);
+            let y_bot_b = eval_y(p_bot1, p_bot2, u_b);
+            let y_top_a = eval_y(p_top1, p_top2, u_a);
+            let y_top_b = eval_y(p_top1, p_top2, u_b);
+
+            if (y_top_a - y_bot_a) < 1e-4 && (y_top_b - y_bot_b) < 1e-4 {
+                continue;
+            }
+
+            let pt_ba = frame.roll(u_a, y_bot_a);
+            let pt_bb = frame.roll(u_b, y_bot_b);
+            let pt_tb = frame.roll(u_b, y_top_b);
+            let pt_ta = frame.roll(u_a, y_top_a);
+
+            let n_ba = frame.normal_at(pt_ba);
+            let n_bb = frame.normal_at(pt_bb);
+            let n_tb = frame.normal_at(pt_tb);
+            let n_ta = frame.normal_at(pt_ta);
+
+            let base_idx = positions.len() as u32;
+
+            positions.push(pt_ba);
+            normals.push(n_ba);
+            uvs.push([u_a, y_bot_a]);
+
+            positions.push(pt_bb);
+            normals.push(n_bb);
+            uvs.push([u_b, y_bot_b]);
+
+            positions.push(pt_tb);
+            normals.push(n_tb);
+            uvs.push([u_b, y_top_b]);
+
+            positions.push(pt_ta);
+            normals.push(n_ta);
+            uvs.push([u_a, y_top_a]);
+
+            let v1 = sub(pt_bb, pt_ba);
+            let v2 = sub(pt_ta, pt_ba);
+            let face_n = cross(v1, v2);
+            if dot(face_n, n_ba) > 0.0 {
+                indices.extend_from_slice(&[
+                    base_idx,
+                    base_idx + 1,
+                    base_idx + 3,
+                    base_idx + 3,
+                    base_idx + 1,
+                    base_idx + 2,
+                ]);
+            } else {
+                indices.extend_from_slice(&[
+                    base_idx,
+                    base_idx + 3,
+                    base_idx + 1,
+                    base_idx + 3,
+                    base_idx + 2,
+                    base_idx + 1,
+                ]);
+            }
+        }
+    }
+
+    if indices.is_empty() {
+        return None;
+    }
+
+    Some(TriangulatedMesh {
+        positions,
+        normals,
+        uvs,
+        indices,
+    })
+}
+
 /// Meshes an upright face -- a wall panel, straight or curved, opened or
 /// solid -- by unrolling it flat and triangulating there.
 ///
@@ -206,6 +373,14 @@ pub fn upright_face_mesh(
         .map(|loop_| tessellate_contour_loop(topology, loop_, resolve_position))
         .collect::<Option<Vec<_>>>()?;
 
+    // For upright panels with holes (e.g. windows, doors), vertical sliced
+    // quad meshing decomposes the wall into clean vertical strips, preserving
+    // the cylindrical curvature everywhere around the opening.
+    if let Some(mesh) = vertical_sliced_upright_mesh(&structure.frame, outer.clone(), holes.clone()) {
+        return Some(mesh);
+    }
+
+    // General fallback path:
     let mut positions = outer;
     let mut hole_indices = Vec::new();
     for hole in &holes {

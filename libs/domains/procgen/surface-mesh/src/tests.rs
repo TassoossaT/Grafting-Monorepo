@@ -310,6 +310,13 @@ fn a_curved_upright_panel_carries_an_opening() {
     let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
 
     assert_every_triangle_has_area(&mesh);
+    for point in &mesh.positions {
+        let r = (point[0].powi(2) + point[2].powi(2)).sqrt();
+        assert!(
+            (r - 2.0).abs() < 1e-2,
+            "point on curved wall with opening left cylinder: {point:?}"
+        );
+    }
     for triangle in mesh.indices.chunks_exact(3) {
         let centroid = triangle.iter().fold([0.0; 3], |sum, index| {
             let point = mesh.positions[*index as usize];
@@ -319,6 +326,26 @@ fn a_curved_upright_panel_carries_an_opening() {
                 sum[2] + point[2] / 3.0,
             ]
         });
+        let p0 = mesh.positions[triangle[0] as usize];
+        let p1 = mesh.positions[triangle[1] as usize];
+        let p2 = mesh.positions[triangle[2] as usize];
+        let a0 = p0[2].atan2(p0[0]);
+        let a1 = p1[2].atan2(p1[0]);
+        let a2 = p2[2].atan2(p2[0]);
+        let mut span = (a0 - a1).abs().max((a1 - a2).abs()).max((a2 - a0).abs());
+        if span > std::f32::consts::PI {
+            span = std::f32::consts::TAU - span;
+        }
+        assert!(
+            span < 0.4,
+            "triangle on curved wall with opening cut diagonally across cylinder: angular span = {span}"
+        );
+
+        let centroid = [
+            (p0[0] + p1[0] + p2[0]) / 3.0,
+            (p0[1] + p1[1] + p2[1]) / 3.0,
+            (p0[2] + p1[2] + p2[2]) / 3.0,
+        ];
         let angle = centroid[2].atan2(centroid[0]);
         assert!(
             !(0.6..=1.1).contains(&angle) || !(1.0..=2.0).contains(&centroid[1]),

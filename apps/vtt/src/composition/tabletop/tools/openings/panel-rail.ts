@@ -38,6 +38,8 @@ export interface PanelRail {
   readonly length: number;
   readonly baseY: number;
   readonly topY: number;
+  /** The horizontal geometry along the rail (arc for curved wall, line for straight). */
+  readonly geometry: ConstructionEdgeGeometry;
   /** Where `point` sits along the rail, clamped to the panel. */
   travelTo(point: ConstructionPosition): number;
   /** The point `travel` along the rail, at height `y`. */
@@ -157,10 +159,16 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
 
   const clamp = (travel: number): number => Math.min(Math.max(travel, 0), length);
 
+  const railGeometry: ConstructionEdgeGeometry =
+    frame?.kind === "cylinder"
+      ? { kind: "arc", center: frame.center, clockwise: frame.clockwise }
+      : { kind: "line" };
+
   return {
     length,
     baseY,
     topY,
+    geometry: railGeometry,
     travelTo(point) {
       if (resolved.kind === "chord") {
         return clamp(

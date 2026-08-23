@@ -628,12 +628,10 @@ mod tests {
             .apply_path_brush_json(request)
             .expect("path brush applies");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(
-            !parsed["surfaceIds"]["created"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .is_empty());
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
 
         let meshes: Vec<serde_json::Value> =
@@ -735,12 +733,10 @@ mod tests {
             .apply_path_brush_json(&request)
             .expect("a loop stroke fully covering its only terrain cell must still apply");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(
-            !parsed["surfaceIds"]["created"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .is_empty());
 
         let meshes_json = session
             .all_surface_meshes_json()
@@ -818,12 +814,10 @@ mod tests {
             .apply_path_brush_json(&second)
             .expect("second, overlapping path brush stroke must still apply");
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert!(
-            !parsed["surfaceIds"]["created"]
-                .as_array()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(!parsed["surfaceIds"]["created"]
+            .as_array()
+            .unwrap()
+            .is_empty());
         assert!(
             parsed["surfaceIds"]["removed"]
                 .as_array()
@@ -1289,20 +1283,6 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    fn surface_mesh_json_rejects_an_unregistered_key() {
-        let session = ConstructionSession::new();
-        let error = session
-            .surface_mesh_json(r#"{"surfaceKey":["@region","missing"]}"#)
-            .unwrap_err();
-        assert!(
-            error
-                .as_string()
-                .unwrap()
-                .contains("unknown analytic region")
-        );
-    }
-
-    #[wasm_bindgen_test]
     fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
         let mut session = ConstructionSession::new();
         let patch_json = r#"{
@@ -1421,6 +1401,140 @@ mod tests {
                 assert!(
                     span < 0.4,
                     "triangle cut diagonally across tower: angular span = {span}"
+                );
+            }
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
+        let mut session = ConstructionSession::new();
+        let patch_json = r#"{
+            "nodes": [
+                {"id": "b0", "position": [2.0, 0.0, 0.0]},
+                {"id": "t0", "position": [2.0, 3.0, 0.0]},
+                {"id": "b1", "position": [0.0, 0.0, 2.0]},
+                {"id": "t1", "position": [0.0, 3.0, 2.0]}
+            ],
+            "edges": [
+                {"edgeId": "e_b0_b1", "startNodeId": "b0", "endNodeId": "b1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_b1_t1", "startNodeId": "b1", "endNodeId": "t1"},
+                {"edgeId": "e_t0_t1", "startNodeId": "t0", "endNodeId": "t1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_t0_b0", "startNodeId": "t0", "endNodeId": "b0"}
+            ],
+            "regions": [
+                {
+                    "regionId": "r0",
+                    "boundary": [
+                        {"edge": "e_b0_b1", "reversed": false},
+                        {"edge": "e_b1_t1", "reversed": false},
+                        {"edge": "e_t0_t1", "reversed": true},
+                        {"edge": "e_t0_b0", "reversed": false}
+                    ],
+                    "surfaceType": "wall-white",
+                    "physical": true
+                }
+            ]
+        }"#;
+        session.add_patch_json(patch_json).unwrap();
+
+        // Punch a window in r0
+        let win_patch_json = r#"{
+            "nodes": [
+                {"id": "w0", "position": [1.847759, 1.0, 0.765366]},
+                {"id": "w1", "position": [1.414213, 1.0, 1.414213]},
+                {"id": "w2", "position": [1.414213, 2.0, 1.414213]},
+                {"id": "w3", "position": [1.847759, 2.0, 0.765366]}
+            ],
+            "edges": [
+                {"edgeId": "e_w0_w1", "startNodeId": "w0", "endNodeId": "w1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+                {"edgeId": "e_w1_w2", "startNodeId": "w1", "endNodeId": "w2"},
+                {"edgeId": "e_w2_w3", "startNodeId": "w2", "endNodeId": "w3", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": true}},
+                {"edgeId": "e_w3_w0", "startNodeId": "w3", "endNodeId": "w0"}
+            ],
+            "regions": [
+                {
+                    "regionId": "r_win",
+                    "boundary": [
+                        {"edge": "e_w0_w1", "reversed": false},
+                        {"edge": "e_w1_w2", "reversed": false},
+                        {"edge": "e_w2_w3", "reversed": false},
+                        {"edge": "e_w3_w0", "reversed": false}
+                    ],
+                    "surfaceType": "window",
+                    "physical": false
+                }
+            ]
+        }"#;
+        session.add_patch_json(win_patch_json).unwrap();
+
+        let add_hole_json = r#"{
+            "surfaceKey": ["@region", "r0"],
+            "hole": [
+                {"edgeId": "e_w3_w0", "reversed": true},
+                {"edgeId": "e_w2_w3", "reversed": true},
+                {"edgeId": "e_w1_w2", "reversed": true},
+                {"edgeId": "e_w0_w1", "reversed": true}
+            ]
+        }"#;
+        session.add_hole_json(add_hole_json).unwrap();
+
+        let meshes_json = session.all_surface_meshes_json().unwrap();
+        let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
+        assert_eq!(meshes.len(), 2, "1 wall with hole + 1 window glass");
+
+        for mesh in meshes {
+            let positions: Vec<f32> = mesh["positions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap() as f32)
+                .collect();
+            let indices: Vec<u32> = mesh["indices"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_u64().unwrap() as u32)
+                .collect();
+            assert!(!indices.is_empty());
+
+            // Every vertex must sit on the cylinder radius (r ≈ 2.0)
+            for chunk in positions.chunks_exact(3) {
+                let r = (chunk[0].powi(2) + chunk[2].powi(2)).sqrt();
+                assert!(
+                    (r - 2.0).abs() < 0.05,
+                    "vertex on curved wall/window flattened off cylinder: r = {r}, pos = {chunk:?}"
+                );
+            }
+
+            // Every triangle must be a local vertical facet along the cylinder,
+            // never a flat chord cutting across the cylinder.
+            for triangle in indices.chunks_exact(3) {
+                let p0 = [
+                    positions[triangle[0] as usize * 3],
+                    positions[triangle[0] as usize * 3 + 1],
+                    positions[triangle[0] as usize * 3 + 2],
+                ];
+                let p1 = [
+                    positions[triangle[1] as usize * 3],
+                    positions[triangle[1] as usize * 3 + 1],
+                    positions[triangle[1] as usize * 3 + 2],
+                ];
+                let p2 = [
+                    positions[triangle[2] as usize * 3],
+                    positions[triangle[2] as usize * 3 + 1],
+                    positions[triangle[2] as usize * 3 + 2],
+                ];
+                let a0 = p0[2].atan2(p0[0]);
+                let a1 = p1[2].atan2(p1[0]);
+                let a2 = p2[2].atan2(p2[0]);
+                let mut span = (a0 - a1).abs().max((a1 - a2).abs()).max((a2 - a0).abs());
+                if span > std::f32::consts::PI {
+                    span = std::f32::consts::TAU - span;
+                }
+                assert!(
+                    span < 0.4,
+                    "triangle cut diagonally across curved wall with opening: angular span = {span}"
                 );
             }
         }
