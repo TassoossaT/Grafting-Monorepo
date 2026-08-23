@@ -46,11 +46,16 @@ export function pathPatch(
   profileLength: number,
   spineSlot: number,
   /**
-   * Stations whose spine node already exists, by station index -- a junction.
+   * Nodes that already exist, keyed `${station}:${across}` -- a junction.
    * Reusing the very node is what joins two runs; nothing here compares
    * coordinates, because coincident is not connected.
+   *
+   * Addressed by the full station address rather than by station alone
+   * because a junction is not only a spine matter: fusing two contours welds
+   * a node at an outer slot in exactly the same way, and giving the spine its
+   * own private channel would make that a second mechanism doing one job.
    */
-  weldedSpines: ReadonlyMap<number, string> = new Map(),
+  welded: ReadonlyMap<string, string> = new Map(),
 ): PathPatchFormation {
   // Station-major, exactly as the sweep lays its vertices out, so the address
   // an id carries is the one the generator actually built it at. `across` is
@@ -59,8 +64,7 @@ export function pathPatch(
   const nodeIds = plan.vertices.map((_vertex, index) => {
     const station = Math.floor(index / profileLength);
     const across = (index % profileLength) - spineSlot;
-    const welded = across === 0 ? weldedSpines.get(station) : undefined;
-    return welded ?? stationNodeId(corridorId, station, across);
+    return welded.get(`${station}:${across}`) ?? stationNodeId(corridorId, station, across);
   });
   const nodes = plan.vertices.map((position, index) => ({ id: nodeIds[index]!, position }));
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });

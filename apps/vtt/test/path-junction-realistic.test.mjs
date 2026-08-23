@@ -155,3 +155,24 @@ test("a stroke starting on one run and ending on another joins both", () => {
   assert.deepEqual(result.line[0], { x: 3, y: 0, z: 0 });
   assert.deepEqual(result.line[result.line.length - 1], { x: 3, y: 0, z: 12 });
 });
+
+test("two roads join when their surfaces touch, not when one reaches the other's spine", () => {
+  const formation = pathPatch("table-1", CORRIDOR, "path", planAlongX(4), 3, 1);
+  const ctx = { runtime: { getAllRegionTopologies: () => topologiesFrom(formation) } };
+
+  // The standing run reaches 2.1 from its spine. A stroke stopping at z = -4
+  // is well outside it -- nobody draws up to another road's centre line.
+  const stopsShort = [
+    { x: 3, y: 0, z: -9 },
+    { x: 3, y: 0, z: -4 },
+  ];
+
+  // Reaching only the spine: no join, which is the snap that felt too weak.
+  assert.equal(junctionsWithStandingSpines(ctx, stopsShort).inserts.length, 0);
+
+  // Counting the drawn road's own half width, the two surfaces overlap there,
+  // and they join.
+  const joined = junctionsWithStandingSpines(ctx, stopsShort, 2.1);
+  assert.equal(joined.inserts.length, 1);
+  assert.deepEqual(joined.line[joined.line.length - 1], { x: 3, y: 0, z: 0 });
+});

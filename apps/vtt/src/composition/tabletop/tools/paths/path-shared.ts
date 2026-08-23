@@ -3,6 +3,7 @@ import type {
   ConstructionCoveredRegion,
   ConstructionNodeId,
   ConstructionPosition,
+  ConstructionSweepPlan,
 } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -14,6 +15,7 @@ import {
   parseStationNodeId,
   pathCorridorId,
   pathFormationFor,
+  pathHalfWidth,
   pathRidesTerrain,
   pathRunsIn,
   pathSpineSlot,
@@ -23,7 +25,8 @@ import {
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
-import { pointInPolygonXZ, projectOntoLineXZ } from "../shapes/geometry-2d.ts";
+import { pointInPolygonXZ, projectOntoLineXZ, segmentCrossingXZ } from "../shapes/geometry-2d.ts";
+import { contourFusionsAgainst, footprintOf } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -232,30 +235,6 @@ const SPINE_WELD_TOLERANCE = 1e-3;
 const STATION_MERGE_DISTANCE = TERRAIN_FOLLOW_STEP / 4;
 
 /**
- * Where two XZ segments cross, as the parameter along each -- `undefined`
- * for parallel segments, or for a crossing that falls outside either one.
- */
-function segmentCrossing(
-  fromA: ConstructionPosition,
-  toA: ConstructionPosition,
-  fromB: ConstructionPosition,
-  toB: ConstructionPosition,
-): { readonly along: number; readonly across: number } | undefined {
-  const ax = toA.x - fromA.x;
-  const az = toA.z - fromA.z;
-  const bx = toB.x - fromB.x;
-  const bz = toB.z - fromB.z;
-  const denominator = ax * bz - az * bx;
-  if (Math.abs(denominator) < 1e-12) return undefined;
-  const dx = fromB.x - fromA.x;
-  const dz = fromB.z - fromA.z;
-  const along = (dx * bz - dz * bx) / denominator;
-  const across = (dx * az - dz * ax) / denominator;
-  if (along < 0 || along > 1 || across < 0 || across > 1) return undefined;
-  return { along, across };
-}
-
-/**
  * How far this run reaches from its own spine, measured on the run itself.
  *
  * A road ending *on* another road is a junction, and "on" means inside that
@@ -300,10 +279,28 @@ function reachOf(run: PathRun): number {
 export function junctionsWithStandingSpines(
   ctx: ToolContext,
   line: readonly ConstructionPosition[],
+  /**
+   * How far the run being drawn reaches from its own spine. Added to the
+   * standing run's reach, so two roads join when their **surfaces** touch
+   * rather than when one centre line reaches the other. Nobody draws up to
+   * another road's centre line -- they stop when the two look like they meet,
+   * which is exactly where the two surfaces first overlap.
+   */
+  ownReach = 0,
 ): {
   readonly line: readonly ConstructionPosition[];
   readonly welds: ReadonlyMap<number, ConstructionNodeId>;
   readonly inserts: readonly AtomicEditOp[];
+  /**
+   * The standing runs this one is now joined to, by spine.
+   *
+   * Reported rather than looked up again because it is the answer to the
+   * question contour fusion asks next -- rule two of the junction spec is
+   * that two runs sharing a spine node must share their contours as well, so
+   * the runs listed here are exactly the ones whose rims are in play. A run
+   * that merely overlaps is not one of them.
+   */
+  readonly joined: readonly PathRun[];
 } {
   const standing = pathRunsIn(ctx.runtime.getAllRegionTopologies());
   const found: {
@@ -328,6 +325,9 @@ export function junctionsWithStandingSpines(
   const arrivals = new Map<number, { readonly position: ConstructionPosition; readonly nodeId: ConstructionNodeId }>();
 
   /** Records one meeting point, minting the node the crossed spine gains. */
+  /** Corridors this run welded a spine node onto. */
+  const joinedCorridors = new Set<string>();
+
   const record = (
     run: PathRun,
     step: number,
@@ -347,6 +347,7 @@ export function junctionsWithStandingSpines(
     const station = Number((fromA.station + (toA.station - fromA.station) * along).toFixed(3));
     const nodeId = stationNodeId(run.corridorId, station, 0);
     usedEdges.add(edgeId);
+    joinedCorridors.add(run.corridorId);
     if (arrivalIndex !== undefined) {
       arrivals.set(arrivalIndex, { position, nodeId });
       inserts.push({ nodeId, position, edgeId });
@@ -368,7 +369,7 @@ export function junctionsWithStandingSpines(
     for (const run of standing) {
       const spine = run.spine;
       if (spine === undefined) continue;
-      const reach = reachOf(run);
+      const reach = reachOf(run) + ownReach;
       if (reach <= 0) continue;
       for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
         const edgeId = spine.edgeIds[step];
@@ -390,7 +391,7 @@ export function junctionsWithStandingSpines(
       const fromA = spine.nodes[step]!;
       const toA = spine.nodes[step + 1]!;
       for (let index = 0; index + 1 < line.length; index += 1) {
-        const crossing = segmentCrossing(fromA.position, toA.position, line[index]!, line[index + 1]!);
+        const crossing = segmentCrossingXZ(fromA.position, toA.position, line[index]!, line[index + 1]!);
         if (crossing === undefined) continue;
         record(run, step, edgeId, crossing.along, index + crossing.across);
         break;
@@ -398,7 +399,7 @@ export function junctionsWithStandingSpines(
     }
   }
   if (found.length === 0 && arrivals.size === 0) {
-    return { line, welds: new Map(), inserts: [] };
+    return { line, welds: new Map(), inserts: [], joined: [] };
   }
 
   const ordered = [...found].sort((left, right) => left.at - right.at);
@@ -459,7 +460,110 @@ export function junctionsWithStandingSpines(
     firstEdgeId: `${insert.edgeId}|${insert.nodeId}|0`,
     secondEdgeId: `${insert.edgeId}|${insert.nodeId}|1`,
   }));
-  return { line: spliced, welds, inserts: ops };
+  const touched = new Set(joinedCorridors);
+  return {
+    line: spliced,
+    welds,
+    inserts: ops,
+    joined: standing.filter((run) => touched.has(run.corridorId)),
+  };
+}
+
+/**
+ * Fuses this run's outer contours into the contours of the runs it joined.
+ *
+ * The spine join already made the two runs one graph -- they share a node on
+ * the travel line -- but their rims still passed straight through each other,
+ * each leaving a loose end sitting inside the other road bounding nothing.
+ * That is the mess: a contour crossing a contour without fusing.
+ *
+ * The rule, and it is the same rule in every case the owner set out:
+ *
+ * - **L.** Two runs meeting end to end. Each rim runs on in the direction its
+ *   own spine gave it until it reaches the other rim, and there they fuse.
+ * - **T.** A run arriving in the flank of another. The arrival necessarily
+ *   overlaps outside, and that overlap is where the rims fuse; the two ends
+ *   left loose inside the other road are cut. Only the crossings fuse, so the
+ *   mouth of the T stays open and the junction never closes into a triangle.
+ * - **X.** The same rule, at each place the rims actually cross.
+ *
+ * All three are one operation, because the loose end and the meeting point
+ * are the same event seen twice: the rim's last point moves onto the crossing
+ * and takes the standing rim's newly split node as its own. Cutting the stub
+ * and joining the rims is a single move, and nothing has to decide which
+ * shape a junction "is".
+ *
+ * Positions come back as a fresh vertex list rather than as an edit, because
+ * this run has not been committed yet -- the sweep proposed where its rim
+ * went, and the junction is what disposes.
+ */
+export function fuseContoursWithStandingRuns(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joined: readonly PathRun[],
+): {
+  readonly vertices: readonly ConstructionPosition[];
+  /** Nodes this run must reuse, keyed `${station}:${across}`. */
+  readonly welds: ReadonlyMap<string, ConstructionNodeId>;
+  readonly inserts: readonly AtomicEditOp[];
+} {
+  const vertices = [...plan.vertices];
+  const welds = new Map<string, ConstructionNodeId>();
+  const inserts: AtomicEditOp[] = [];
+  if (joined.length === 0 || profileLength < 3) return { vertices, welds, inserts };
+
+  const stationCount = Math.floor(vertices.length / profileLength);
+  const at = (station: number, across: number): number =>
+    station * profileLength + across + spineSlot;
+  const outerSlots = [...new Set([-spineSlot, profileLength - 1 - spineSlot])].filter(
+    (across) => across !== 0,
+  );
+  // One split per standing edge per commit, exactly as a spine crossing is
+  // capped: the second would name an edge the first has already replaced.
+  const splitEdges = new Set<string>();
+
+  for (const across of outerSlots) {
+    for (const run of joined) {
+      if (run.contours.length < 2) continue;
+      const footprint = footprintOf(
+        run.contours[0]!.nodes.map((node) => node.position),
+        run.contours[1]!.nodes.map((node) => node.position),
+      );
+      for (const chain of run.contours) {
+        const own = {
+          points: Array.from({ length: stationCount }, (_unused, station) => vertices[at(station, across)]!),
+          edgeIds: [],
+        };
+        const standing = {
+          points: chain.nodes.map((node) => node.position),
+          edgeIds: chain.edgeIds,
+        };
+        for (const fusion of contourFusionsAgainst(own, standing, footprint)) {
+          const key = `${fusion.ownIndex}:${across}`;
+          if (splitEdges.has(fusion.edgeId) || welds.has(key)) continue;
+          const from = chain.nodes[fusion.standingIndex]!;
+          const to = chain.nodes[fusion.standingIndex + 1]!;
+          const station = Number(
+            (from.station + (to.station - from.station) * fusion.along).toFixed(3),
+          );
+          const nodeId = stationNodeId(run.corridorId, station, chain.across);
+          splitEdges.add(fusion.edgeId);
+          welds.set(key, nodeId);
+          vertices[at(fusion.ownIndex, across)] = fusion.position;
+          inserts.push({
+            kind: "insert-vertex",
+            edgeId: fusion.edgeId,
+            nodeId,
+            position: fusion.position,
+            firstEdgeId: `${fusion.edgeId}|${nodeId}|0`,
+            secondEdgeId: `${fusion.edgeId}|${nodeId}|1`,
+          });
+        }
+      }
+    }
+  }
+  return { vertices, welds, inserts };
 }
 
 /**
@@ -598,15 +702,12 @@ export function commitPathContour(
   // A crossing is made, not found: the crossed spine is split so a node
   // exists for both runs to reference. Whatever still lands exactly on a
   // standing node is welded to it directly.
-  const crossed = junctionsWithStandingSpines(ctx, drawn);
+  const crossed = junctionsWithStandingSpines(ctx, drawn, pathHalfWidth(params));
   const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
   const referenceLine = exact.line;
   const welds = new Map([...crossed.welds, ...exact.welds]);
 
   try {
-    if (crossed.inserts.length > 0) {
-      ctx.runtime.applyRegionEdit(crossed.inserts, "local", operationId);
-    }
     const effect = createPathBrushEffect(
       {
         brushShape,
@@ -616,19 +717,27 @@ export function commitPathContour(
       { operationId, tableId: ctx.tableId, initiatedBy: "local" },
     );
     const profile = effect.parameters.profile;
+    const spineSlot = pathSpineSlot(profile);
     const plan = ctx.runtime.planPathFormation(effect);
+    // The sweep drops a station only where two coincide, which the reference
+    // line already rules out. Were one dropped anyway the indices would no
+    // longer line up, so the run commits unwelded rather than welded to the
+    // wrong place.
+    const aligned = plan.referenceLine.length === referenceLine.length;
+    // Now that the rim exists, fuse it into the rims of the runs this one
+    // joined: a shared spine node without shared contour nodes is two roads
+    // drawn over each other, not a junction.
+    const fused = fuseContoursWithStandingRuns(plan, profile.length, spineSlot, aligned ? crossed.joined : []);
+    const spineWelds = new Map<string, ConstructionNodeId>();
+    if (aligned) for (const [station, nodeId] of welds) spineWelds.set(`${station}:0`, nodeId);
     const formation = pathPatch(
       ctx.tableId,
       pathCorridorId(effect.operationId, params.pathKind),
       effect.targetType,
-      plan,
+      { ...plan, vertices: fused.vertices },
       profile.length,
-      pathSpineSlot(profile),
-      // The sweep drops a station only where two coincide, which the
-      // reference line already rules out. Were one dropped anyway the indices
-      // would no longer line up, so the run commits unwelded rather than
-      // welded to the wrong place.
-      plan.referenceLine.length === referenceLine.length ? welds : new Map(),
+      spineSlot,
+      new Map([...spineWelds, ...fused.welds]),
     );
 
     const resolved = resolveCoverage(
@@ -654,6 +763,15 @@ export function commitPathContour(
       .filter((entry) => entry.interaction.kind === "cut")
       .filter((entry) => !joined.has(entry.covered.surfaceKey.join(":")))
       .map((entry) => entry.covered.surfaceKey);
+
+    // Split only once the commit is going through: both the spine node a
+    // crossing needs and the rim nodes a fusion needs are made by cutting
+    // edges of runs already standing, and a refusal above would otherwise
+    // leave those cuts behind with nothing referencing them.
+    const splits = [...crossed.inserts, ...fused.inserts];
+    if (splits.length > 0) {
+      ctx.runtime.applyRegionEdit(splits, "local", operationId);
+    }
 
     const outcome = ctx.runtime.applyRegionOverlay(
       {

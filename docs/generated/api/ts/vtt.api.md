@@ -654,6 +654,65 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.contour-fusion.ContourFusion`
+
+One place a rim being committed must fuse into a standing one.
+
+### `property vtt.contour-fusion.ContourFusion.along: number`
+
+Where along that edge the meeting point falls, from 0 to 1.
+
+### `property vtt.contour-fusion.ContourFusion.edgeId: string`
+
+The standing edge that gains the meeting point.
+
+### `property vtt.contour-fusion.ContourFusion.ownIndex: number`
+
+The point of the committed rim that moves onto the meeting point.
+
+### `property vtt.contour-fusion.ContourFusion.position: ConstructionPosition`
+
+Where the two rims meet, at the height the committed rim carries there.
+
+### `property vtt.contour-fusion.ContourFusion.standingIndex: number`
+
+Which segment of the standing rim that was.
+
+### `interface vtt.contour-fusion.FusionPolyline`
+
+One polyline of a rim, with the edge standing between each pair of points.
+
+### `property vtt.contour-fusion.FusionPolyline.edgeIds: readonly (string | undefined)[]`
+
+The edge between consecutive points; one shorter than `points`.
+
+### `property vtt.contour-fusion.FusionPolyline.points: readonly ConstructionPosition[]`
+
+### `function vtt.contour-fusion.contourFusionsAgainst(own: FusionPolyline, standing: FusionPolyline, standingFootprint: readonly PointXZ[]): readonly ContourFusion[]`
+
+Every meeting point between a rim being committed and one already standing.
+
+A crossing counts when it cuts off an **end** of the committed rim: the
+first or last point, sitting inside `standingFootprint` with nothing of the
+rim beyond it. That is the loose end -- the stub poking into the other face
+-- and it is the one that moves onto the meeting point, which both cuts the
+stub and fuses the rims in a single stroke.
+
+An interior point inside the footprint is a rim passing clean **through**
+rather than arriving, and is left alone. Pulling it back would fold the rim
+over on itself; cutting it properly means splitting the committed rim in
+two and filling the gap with a face, and nothing here is allowed to invent
+that face. So a true through-crossing still leaves two rims crossing, and
+closing it is the junction face this does not build.
+
+At most one fusion per committed point and one per standing edge: a point
+can only be in one place, and an edge split twice would name a second time
+the edge the first split has already replaced.
+
+### `function vtt.contour-fusion.footprintOf(left: readonly ConstructionPosition[], right: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
+
+The closed footprint a pair of rims bounds, walked as one ring.
+
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
 One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
@@ -1004,7 +1063,7 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, weldedSpines: ReadonlyMap<number, string>): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, welded: ReadonlyMap<string, string>): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
@@ -1050,7 +1109,36 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
-### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[]): { inserts: readonly AtomicEditOp[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
+### `function vtt.path-shared.fuseContoursWithStandingRuns(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joined: readonly PathRun[]): { inserts: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
+
+Fuses this run's outer contours into the contours of the runs it joined.
+
+The spine join already made the two runs one graph -- they share a node on
+the travel line -- but their rims still passed straight through each other,
+each leaving a loose end sitting inside the other road bounding nothing.
+That is the mess: a contour crossing a contour without fusing.
+
+The rule, and it is the same rule in every case the owner set out:
+
+- **L.** Two runs meeting end to end. Each rim runs on in the direction its
+  own spine gave it until it reaches the other rim, and there they fuse.
+- **T.** A run arriving in the flank of another. The arrival necessarily
+  overlaps outside, and that overlap is where the rims fuse; the two ends
+  left loose inside the other road are cut. Only the crossings fuse, so the
+  mouth of the T stays open and the junction never closes into a triangle.
+- **X.** The same rule, at each place the rims actually cross.
+
+All three are one operation, because the loose end and the meeting point
+are the same event seen twice: the rim's last point moves onto the crossing
+and takes the standing rim's newly split node as its own. Cutting the stub
+and joining the rims is a single move, and nothing has to decide which
+shape a junction "is".
+
+Positions come back as a fresh vertex list rather than as an edit, because
+this run has not been committed yet -- the sweep proposed where its rim
+went, and the junction is what disposes.
+
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.
 
@@ -1122,6 +1210,15 @@ Projects `point` onto the infinite line through `a` and `b` on the XZ plane.
 - `t`: normalized position along the segment (0 at `a`, 1 at `b`, can be <0 or >1 outside the segment).
 - `perp`: perpendicular distance from `point` to the infinite line.
 - `x`, `z`: coordinates of the projected point on the line.
+
+### `function vtt.geometry-2d.segmentCrossingXZ(fromA: PointXZ, toA: PointXZ, fromB: PointXZ, toB: PointXZ): { across: number; along: number } | undefined`
+
+Where two XZ segments cross, as the parameter along each -- `undefined` for
+parallel segments, or for a crossing that falls outside either one.
+
+Both parameters come back because a caller almost always needs the one it
+did not ask about: splitting the segment that was crossed needs `across`,
+while ordering the crossing among a polyline's own points needs `along`.
 
 ### `function vtt.geometry-2d.xzDistance(a: PointXZ, b: PointXZ): number`
 

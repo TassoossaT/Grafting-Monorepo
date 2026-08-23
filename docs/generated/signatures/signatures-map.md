@@ -3274,6 +3274,33 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
 
+// src/composition/tabletop/tools/core/contour-fusion.ts
+export interface FusionPolyline {
+  readonly points: readonly ConstructionPosition[];
+  /** The edge between consecutive points; one shorter than `points`. */
+  readonly edgeIds: readonly (string | undefined)[];
+  }
+export interface ContourFusion {
+  /** The point of the committed rim that moves onto the meeting point. */
+  readonly ownIndex: number;
+  /** Where the two rims meet, at the height the committed rim carries there. */
+  readonly position: ConstructionPosition;
+  /** The standing edge that gains the meeting point. */
+  readonly edgeId: string;
+  /** Where along that edge the meeting point falls, from 0 to 1. */
+export function contourFusionsAgainst(
+  own: FusionPolyline,
+  standing: FusionPolyline,
+  standingFootprint: readonly PointXZ[],
+  ): readonly ContourFusion[] {
+  const best = new Map<number, ContourFusion & { readonly distance: number }>();
+export function footprintOf(
+  left: readonly ConstructionPosition[],
+  right: readonly ConstructionPosition[],
+  ): readonly ConstructionPosition[] {
+  return [...left, ...[...right].reverse()];
+  }
+
 // src/composition/tabletop/tools/core/edge-overlay.ts
 export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
   "path-spine-edge": 0xfacc15,
@@ -3479,11 +3506,19 @@ export function referenceLineFrom(
 export function junctionsWithStandingSpines(
   ctx: ToolContext,
   line: readonly ConstructionPosition[],
+  /**
+  * How far the run being drawn reaches from its own spine. Added to the
+  * standing run's reach, so two roads join when their **surfaces** touch
+  * rather than when one centre line reaches the other. Nobody draws up to
+  * another road's centre line -- they stop when the two look like they meet,
+export function fuseContoursWithStandingRuns(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joined: readonly PathRun[],
   ): {
-  readonly line: readonly ConstructionPosition[];
-  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
-  readonly inserts: readonly AtomicEditOp[];
-  } {
+  readonly vertices: readonly ConstructionPosition[];
+  /** Nodes this run must reuse, keyed `${station}:${across}`. */
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
@@ -3520,6 +3555,14 @@ export function distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): num
   const abz = b.z - a.z;
   const lengthSq = abx * abx + abz * abz;
   if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
+export function segmentCrossingXZ(
+  fromA: PointXZ,
+  toA: PointXZ,
+  fromB: PointXZ,
+  toB: PointXZ,
+  ): { readonly along: number; readonly across: number } | undefined {
+  const ax = toA.x - fromA.x;
+  const az = toA.z - fromA.z;
 export function pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {

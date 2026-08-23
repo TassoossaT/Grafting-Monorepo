@@ -66,7 +66,7 @@ test("a welded station reuses the standing spine node instead of minting one", (
     twoStationPlan(),
     3,
     1,
-    new Map([[0, standing]]),
+    new Map([["0:0", standing]]),
   );
 
   const ids = formation.patch.nodes.map((node) => node.id);
@@ -98,7 +98,7 @@ test("a welded node still bounds the bands it belongs to, so the junction is one
     twoStationPlan(),
     3,
     1,
-    new Map([[0, standing]]),
+    new Map([["0:0", standing]]),
   );
 
   const touching = formation.patch.edges.filter(

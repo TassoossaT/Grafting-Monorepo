@@ -161,7 +161,7 @@ declared, not inferred from geometry that cannot carry it.
 Raising the deck afterwards is the ordinary spine edit: `ALL_AXES` on the
 spine role, and the cascade lifts the whole cross-section with it.
 
-## Junction identity is built; junction geometry is not
+## Junction identity is built first
 
 Two runs meet because they reference one spine node. `weldedToStandingSpines`
 snaps a station onto a standing spine node **before** the sweep — the same
@@ -170,36 +170,64 @@ station that will share a node has to be built at that node's position, not
 dragged onto it after. `apply_add_patch` skips a node that already exists, so
 the welded node keeps its own position and both runs bound it.
 
-What is **not** solved is the surface. Measured, and pinned by
-`a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim` in
-`construction-wasm`'s session tests: `apply_region_overlay` rebuilds what it
-consumed from the **outer boundary** of the consumed set, so rim nodes survive
-and interior nodes do not. A spine is interior by construction. Crossing a
-road therefore severs the crossed road's travel line exactly at the junction —
-the welded node itself survives, the chain either side of it does not.
+The surface that identity leaves behind is what the next section is about.
 
-A real junction has to put the crossed spine back onto a face boundary, which
-means the crossing area becoming its own face bounded by **both** runs' cross
-sections rather than simply being replaced by the newer run's bands.
-`i_overlay` is already a dependency of `surface-transformations` and is the
-tool for computing that area.
+## Contour fusion: the loose end and the meeting point are one event
+
+Sharing a spine node makes two runs one graph. It does not make them one
+road: their rims still ran straight through each other, each leaving an end
+inside the other's surface bounding nothing. Three rules from the owner
+settle what that should become.
+
+1. No outer contour may cross another without fusing into it.
+2. Two runs joined at one spine node must have their contours joined too --
+   the L bend.
+3. A T must not become a triangle: the fusion happens **only** where a real
+   crossing occurred, never by linking regions that never met.
+
+The construction is one move, and it is the same move in all three cases. The
+rim being committed keeps the direction its own spine gave it and runs on
+until it reaches the standing rim; where it reaches it, the standing edge is
+split and the rim's loose end takes the node that split minted. Cutting the
+stub and fusing the rims are not two steps -- the end that was loose *is* the
+end that lands on the meeting point.
+
+That is why rule three needs no special case. Only crossings produce meeting
+points, so the far side of a T, which nothing crossed, is not touched, and the
+mouth stays open by construction rather than by a check.
+
+`core/contour-fusion.ts` holds the geometry and knows nothing about roads: it
+takes two polylines and the footprint the standing one bounds, and reports
+where they meet. `fuseContoursWithStandingRuns` in `path-shared.ts` is the
+path-shaped caller, and it runs **after** the sweep -- the sweep proposes
+where the rim goes, and the junction disposes, which is why it returns a fresh
+vertex list rather than an edit.
+
+The welds ride the same channel the spine junction rides: `pathPatch` takes
+one map keyed by the full station address, so a rim node welded at an outer
+slot and a station welded at slot `0` are one mechanism, not two.
+
+**What this does not do.** A rim passing clean *through* another still crosses
+it. The point inside is interior, not an end, and cutting it means splitting
+the committed rim in two and filling the gap with a face -- the junction face
+below. So rule one holds for arrivals, which is the L and the T, and does not
+yet hold for an X.
 
 ## Open
 
-- **Junction geometry.** Identity is done; the *surface* is not, and the two
-  runs still do not read as joined. The overlay consumes the crossed run's
-  bands at the crossing, and with them its spine -- so the node the insert
-  minted survives (the new run references it) while the chain either side of
-  it does not. Settled in shape, not written. Insert a node into
-  *both* spines at the crossing; intersect the two contours; cut the four ends
-  and relink them into one closed contour around the crossing, so no contour
-  runs over another; the enclosed area becomes its own face with both spines
-  crossing inside it, which also puts the crossed spine back on a boundary
-  instead of inside a region about to be replaced. `i_overlay` is already a
-  dependency of `surface-transformations` and is the tool for step two.
-  **Undecided:** whether that contour is the *intersection* of the two runs (a
-  simple quadrilateral) or their *union* trimmed at the four ends (the
-  chamfered corners a real crossing has).
+- **The junction face.** A through-crossing has no loose end to cut, so its
+  rims still overlap. Closing it means the crossing area becoming its own
+  face, bounded by both runs' cross sections and divided by both spines, so
+  that each travel line reaches the centre *and* nothing overlaps. That also
+  puts the crossed spine back on a face boundary: measured and pinned by
+  `a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim`,
+  `apply_region_overlay` rebuilds what it consumed from the **outer boundary**
+  of the consumed set, so rim nodes survive and interior ones do not, and a
+  spine is interior by construction. The expensive part is trimming the run
+  that was already standing: its bands crossing the junction have to be split
+  at the junction boundary, which the overlay cannot express today.
+  `i_overlay` is already a dependency of `surface-transformations` and is the
+  tool for computing that area.
 - **Regeneration.** The corridor id now carries the subtype, so the recipe is
   recoverable; nothing re-runs it yet. Still undecided: whether a hand-moved
   lateral vertex survives a regeneration that touches its station.
