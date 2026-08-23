@@ -180,6 +180,15 @@ export interface ScenePickResult {
  * rather than shared. `"segments"` draws an open polyline; `"quad"` draws a
  * filled footprint as two triangles over 4 corner points.
  */
+/**
+ * The channel a tool's own ghost is drawn on.
+ *
+ * Named in the port rather than in the adapter because the dispatcher has to
+ * clear *its* overlay without touching anyone else's: an unnamed clear empties
+ * every channel, which is right for teardown and wrong on every pointer move.
+ */
+export const TOOL_GHOST_PREVIEW_CHANNEL = "active";
+
 export type RenderPreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
   | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
@@ -238,9 +247,19 @@ export interface SceneRenderPort {
    * this on every pointer move without paying for a real generate/mutate
    * request until the tool actually commits.
    */
-  showPreview(descriptor: RenderPreviewDescriptor): void;
+  /**
+   * Shows (or replaces) one preview overlay.
+   *
+   * `channel` names which overlay: two callers with different names coexist,
+   * and the same name always replaces. A tool's own ghost is one channel; a
+   * diagnostic overlay drawn alongside it is another, and neither has to know
+   * the other exists. Omitted means the default channel, which is the
+   * single-ghost behaviour every tool already relies on.
+   */
+  showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
   /** Hides the active preview, if any. A no-op when nothing is shown. */
-  clearPreview(): void;
+  /** Hides one channel, or every channel when none is named. */
+  clearPreview(channel?: string): void;
   /**
    * Makes `element`'s drag/scroll gestures drive `viewId`'s camera, starting
    * from the framing that view was created with. Call once per view and hold

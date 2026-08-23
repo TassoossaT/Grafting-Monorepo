@@ -25,7 +25,8 @@ import type {
 } from "@/ports";
 
 import {
-  CONSTRUCTION_PREVIEW_ITEM_ID,
+  DEFAULT_PREVIEW_CHANNEL,
+  constructionPreviewSceneItemId,
   CONSTRUCTION_PREVIEW_LAYER_ID,
   CONSTRUCTION_PREVIEW_VISUAL_KIND,
   constructionPreviewSceneItem,
@@ -116,6 +117,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
   readonly #tokens = new Map<string, RenderToken>();
   readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
+  /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
+  readonly #previewChannels = new Set<string>();
   // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
   // and a token id can never collide, even though both are caller-chosen
   // strings that share no coordination.
@@ -425,18 +428,24 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     return { point: result.point, nodeId, surfaceRef };
   }
 
-  showPreview(descriptor: RenderPreviewDescriptor): void {
+  showPreview(descriptor: RenderPreviewDescriptor, channel = DEFAULT_PREVIEW_CHANNEL): void {
     const engine = this.#requireEngine();
-    // `put` on the fixed preview id always replaces whatever was there --
-    // there is only ever one active tool preview, never a growing set.
-    engine.scene.put(constructionPreviewSceneItem(descriptor), "engine");
+    // `put` on a channel's own id always replaces whatever that channel had.
+    // Channels never collide, so a diagnostic overlay and a tool ghost coexist
+    // without either knowing about the other.
+    engine.scene.put(constructionPreviewSceneItem(descriptor, channel), "engine");
+    this.#previewChannels.add(channel);
   }
 
-  clearPreview(): void {
+  clearPreview(channel?: string): void {
     const engine = this.#requireEngine();
     // Safe no-op when nothing is currently shown (`scene.remove` on an
     // unknown id just returns `false`).
-    engine.scene.remove(CONSTRUCTION_PREVIEW_ITEM_ID, "engine");
+    const channels = channel === undefined ? [...this.#previewChannels] : [channel];
+    for (const name of channels) {
+      engine.scene.remove(constructionPreviewSceneItemId(name), "engine");
+      this.#previewChannels.delete(name);
+    }
   }
 
   attachCameraControls(

@@ -3025,7 +3025,10 @@ export function constructionGridSceneItems(): readonly [SceneItem<GridParams>, S
 // src/adapters/rendering/construction-preview-scene-item.ts
 export const CONSTRUCTION_PREVIEW_LAYER_ID = "construction-preview";
 export const CONSTRUCTION_PREVIEW_VISUAL_KIND = "vtt-construction-preview";
-export const CONSTRUCTION_PREVIEW_ITEM_ID = "construction-preview:active";
+export const DEFAULT_PREVIEW_CHANNEL = TOOL_GHOST_PREVIEW_CHANNEL;
+export function constructionPreviewSceneItemId(channel: string): string {
+  return `construction-preview:${channel}`;
+  }
 export interface ConstructionPreviewVisualParams {
   readonly positions: Float32Array;
   readonly indices?: Uint16Array | Uint32Array;
@@ -3035,12 +3038,12 @@ export interface ConstructionPreviewVisualParams {
   }
 export function constructionPreviewSceneItem(
   descriptor: RenderPreviewDescriptor,
+  channel: string = DEFAULT_PREVIEW_CHANNEL,
   ): SceneItem<ConstructionPreviewVisualParams> {
   return {
-  id: CONSTRUCTION_PREVIEW_ITEM_ID,
+  id: constructionPreviewSceneItemId(channel),
   layer: CONSTRUCTION_PREVIEW_LAYER_ID,
   visual: {
-  kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
 
 // src/adapters/rendering/map-chunk-batching.ts
 export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
@@ -3425,6 +3428,39 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   halfWidth: pathHalfWidth,
 
 
+// src/composition/tabletop/tools/paths/path-edge-overlay.ts
+export interface PathEdgeOverlay {
+  readonly spine: Float32Array;
+  readonly contour: Float32Array;
+  readonly rib: Float32Array;
+  }
+export const PATH_EDGE_COLORS = {
+  spine: 0xfacc15,
+  contour: 0x22d3ee,
+  rib: 0xf472b6,
+  } as const;
+
+  /** The preview channel each part is drawn on; separate, so one clear never takes the others. */
+export const PATH_EDGE_CHANNELS = {
+  spine: "path-edges:spine",
+  contour: "path-edges:contour",
+  rib: "path-edges:rib",
+  } as const;
+
+  function pushSegment(into: number[], from: ConstructionPosition, to: ConstructionPosition): void {
+  into.push(from.x, from.y, from.z, to.x, to.y, to.z);
+export function pathEdgeOverlayOf(runs: readonly PathRun[]): PathEdgeOverlay {
+  const spine: number[] = [];
+  const contour: number[] = [];
+  const rib: number[] = [];
+
+  for (const run of runs) {
+  if (run.spine !== undefined) chainSegments(spine, run.spine.nodes);
+export function pathEdgeOverlayIn(
+  topologies: readonly ConstructionRegionTopology[],
+  ): PathEdgeOverlay {
+  return pathEdgeOverlayOf(pathRunsIn(topologies));
+
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -3442,6 +3478,8 @@ export function pathPatch(
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
+export function refreshPathEdgeOverlay(ctx: ToolContext): void {
+  const overlay = pathEdgeOverlayIn(ctx.runtime.getAllRegionTopologies());
 export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],

@@ -176,9 +176,9 @@ export interface TabletopRuntime {
   generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
-  showPreview(descriptor: RenderPreviewDescriptor): void;
+  showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
   /** Hides the active tool preview, if any. */
-  clearPreview(): void;
+  clearPreview(channel?: string): void;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;
   resizeView(viewId: RenderViewId, width: number, height: number): void;
@@ -923,12 +923,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#render.pick(viewId, x, y);
   }
 
-  showPreview(descriptor: RenderPreviewDescriptor): void {
-    this.#render.showPreview(descriptor);
+  showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void {
+    this.#render.showPreview(descriptor, channel);
   }
 
-  clearPreview(): void {
-    this.#render.clearPreview();
+  clearPreview(channel?: string): void {
+    this.#render.clearPreview(channel);
   }
 
   generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array {

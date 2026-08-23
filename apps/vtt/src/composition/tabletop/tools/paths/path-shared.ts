@@ -20,8 +20,41 @@ import {
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { pathPatch } from "./path-patch.ts";
+import {
+  PATH_EDGE_CHANNELS,
+  PATH_EDGE_COLORS,
+  pathEdgeOverlayIn,
+} from "./path-edge-overlay.ts";
 
 export const PATH_COLOR = 0xc084fc;
+
+/**
+ * Redraws the spine/contour/rib overlay from whatever is now standing.
+ *
+ * Node handles are drawn and edges are not, so how a run is *joined* has
+ * been invisible -- and joining is the whole of what a junction is. Refreshed
+ * after a commit rather than per frame: nothing about the graph changes
+ * between commits, and each part goes on its own channel so the tool's own
+ * ghost keeps working untouched.
+ */
+export function refreshPathEdgeOverlay(ctx: ToolContext): void {
+  const overlay = pathEdgeOverlayIn(ctx.runtime.getAllRegionTopologies());
+  const parts = [
+    { positions: overlay.contour, color: PATH_EDGE_COLORS.contour, channel: PATH_EDGE_CHANNELS.contour },
+    { positions: overlay.rib, color: PATH_EDGE_COLORS.rib, channel: PATH_EDGE_CHANNELS.rib },
+    { positions: overlay.spine, color: PATH_EDGE_COLORS.spine, channel: PATH_EDGE_CHANNELS.spine },
+  ];
+  for (const part of parts) {
+    if (part.positions.length === 0) {
+      ctx.runtime.clearPreview(part.channel);
+      continue;
+    }
+    ctx.runtime.showPreview(
+      { kind: "segments", positions: part.positions, color: part.color, opacity: 1 },
+      part.channel,
+    );
+  }
+}
 
 /**
  * How far a flattened arc may sit from the true circle, in world units.
@@ -496,6 +529,7 @@ export function commitPathContour(
       return;
     }
     ctx.history.record({ kind: "path-brush", operationId: effect.operationId });
+    refreshPathEdgeOverlay(ctx);
     ctx.reportFeedback({
       tone: "success",
       message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,

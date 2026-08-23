@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
 import type { ConstructionToolId, EditHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
+import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
@@ -87,7 +88,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     gestureRef.current = null;
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
-    options.runtime.clearPreview();
+    options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
   }, [options.activeTool, options.runtime]);
 
 
@@ -139,7 +140,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const { runtime, activeTool, toolParams } = optionsRef.current;
     const tool = toolFor(activeTool);
     if (sample === undefined || tool.previewFor === undefined) {
-      runtime.clearPreview();
+      runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
       return;
     }
     const now = performance.now();
@@ -147,8 +148,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastPreviewAtRef.current = now;
     const params = toolParams[activeTool];
     const descriptor = tool.previewFor({ start: sample, current: sample, samples: [sample] }, params as never, ctx);
-    if (descriptor === undefined) runtime.clearPreview();
-    else runtime.showPreview(descriptor);
+    if (descriptor === undefined) runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    else runtime.showPreview(descriptor, TOOL_GHOST_PREVIEW_CHANNEL);
   }, []);
 
   const onPointerDown = useCallback(
@@ -186,7 +187,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // No button down -- idle hovering never shows a preview, only an
       // actual drag does (see `showStartPreview`'s own doc for why).
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        optionsRef.current.runtime.clearPreview();
+        optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
         return;
       }
 
@@ -203,8 +204,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (now - lastPreviewAtRef.current >= PREVIEW_THROTTLE_MS) {
         lastPreviewAtRef.current = now;
         const descriptor = tool.previewFor?.(activeGesture, params, ctx);
-        if (descriptor === undefined) optionsRef.current.runtime.clearPreview();
-        else optionsRef.current.runtime.showPreview(descriptor);
+        if (descriptor === undefined) optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+        else optionsRef.current.runtime.showPreview(descriptor, TOOL_GHOST_PREVIEW_CHANNEL);
       }
       if (now - lastCommitAtRef.current < MOVE_COMMIT_THROTTLE_MS) return;
       lastCommitAtRef.current = now;
@@ -226,7 +227,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-      optionsRef.current.runtime.clearPreview();
+      optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
     },
     [ctx],
   );
@@ -238,7 +239,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    optionsRef.current.runtime.clearPreview();
+    optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
   }, []);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {

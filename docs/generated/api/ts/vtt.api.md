@@ -49,19 +49,23 @@ already exists.
 
 ### `property vtt.construction-preview-scene-item.ConstructionPreviewVisualParams.positions: Float32Array`
 
-### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_ITEM_ID: "construction-preview:active"`
-
-Fixed id -- there is only ever one active tool preview at a time, so `put` on this id always replaces it.
-
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_LAYER_ID: "construction-preview"`
 
 ### `variable vtt.construction-preview-scene-item.CONSTRUCTION_PREVIEW_VISUAL_KIND: "vtt-construction-preview"`
 
-### `function vtt.construction-preview-scene-item.constructionPreviewSceneItem(descriptor: RenderPreviewDescriptor): SceneItem<ConstructionPreviewVisualParams>`
+### `variable vtt.construction-preview-scene-item.DEFAULT_PREVIEW_CHANNEL: "active"`
+
+The channel a caller that names none is drawn on -- the single tool ghost.
+
+### `function vtt.construction-preview-scene-item.constructionPreviewSceneItem(descriptor: RenderPreviewDescriptor, channel: string): SceneItem<ConstructionPreviewVisualParams>`
 
 Turns a tool's plain RenderPreviewDescriptor into a scene item on
 the dedicated preview layer -- never pickable, drawn above everything
 (tokens included) so a ghost is never occluded by real geometry.
+
+### `function vtt.construction-preview-scene-item.constructionPreviewSceneItemId(channel: string): string`
+
+One id per channel, so `put` replaces within a channel and never across.
 
 ### `interface vtt.map-chunk-batching.ResolvedCovering`
 
@@ -219,9 +223,9 @@ currently is.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.attachView(target: HTMLElement): string`
 
-### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.clearPreview(): void`
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.clearPreview(channel?: string): void`
 
-Hides the active preview, if any. A no-op when nothing is shown.
+Hides one channel, or every channel when none is named.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.detachView(viewId: string): void`
 
@@ -239,12 +243,15 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
-### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor, channel: string): void`
 
-Shows (or replaces) the single active construction-tool preview. Never
-touches the construction session -- purely visual, so a tool can call
-this on every pointer move without paying for a real generate/mutate
-request until the tool actually commits.
+Shows (or replaces) one preview overlay.
+
+`channel` names which overlay: two callers with different names coexist,
+and the same name always replaces. A tool's own ghost is one channel; a
+diagnostic overlay drawn alongside it is another, and neither has to know
+the other exists. Omitted means the default channel, which is the
+single-ghost behaviour every tool already relies on.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.start(runtimeGeneration: number): Promise<void>`
 
@@ -322,7 +329,7 @@ minted nodes by position, which is all the junction ever needed.
 
 Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.clearPreview(channel?: string): void`
 
 Hides the active tool preview, if any.
 
@@ -385,7 +392,7 @@ Unregisters a surface outright -- no hole-repair, no cascading. A caller composi
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
@@ -444,7 +451,7 @@ minted nodes by position, which is all the junction ever needed.
 
 Which of `points` already sit inside a region -- per-point, for a generator building only over open ground.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.clearPreview(channel?: string): void`
 
 Hides the active tool preview, if any.
 
@@ -507,7 +514,7 @@ Unregisters a surface outright -- no hole-repair, no cascading. A caller composi
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
 
@@ -953,6 +960,37 @@ path goes through, `path-patch.ts` declares the graph, and Rust supplies
 reusable geometry and executes the resolved overlay without ever being
 told any of it is a path.
 
+### `interface vtt.path-edge-overlay.PathEdgeOverlay`
+
+The three parts, each as a flat `[x, y, z, x, y, z, ...]` segment list.
+
+### `property vtt.path-edge-overlay.PathEdgeOverlay.contour: Float32Array`
+
+### `property vtt.path-edge-overlay.PathEdgeOverlay.rib: Float32Array`
+
+### `property vtt.path-edge-overlay.PathEdgeOverlay.spine: Float32Array`
+
+### `variable vtt.path-edge-overlay.PATH_EDGE_CHANNELS: { contour: "path-edges:contour"; rib: "path-edges:rib"; spine: "path-edges:spine" }`
+
+The preview channel each part is drawn on; separate, so one clear never takes the others.
+
+### `variable vtt.path-edge-overlay.PATH_EDGE_COLORS: { contour: 2282478; rib: 16020150; spine: 16436245 }`
+
+Colours chosen to read against the path's own surface, and against each other.
+
+### `function vtt.path-edge-overlay.pathEdgeOverlayIn(topologies: readonly ConstructionRegionTopology[]): PathEdgeOverlay`
+
+The same, straight from a set of region boundaries.
+
+### `function vtt.path-edge-overlay.pathEdgeOverlayOf(runs: readonly PathRun[]): PathEdgeOverlay`
+
+Groups the edges of `runs` by role.
+
+Drawn from the chains rather than from the edge ids, on purpose: a chain
+is what the structure *claims*, so a missing edge shows up as a visible
+gap instead of quietly not being drawn. A spine broken at a crossing --
+which is exactly what happens today -- therefore looks broken.
+
 ### `interface vtt.path-patch.PathPatchFormation`
 
 Application-owned graph declaration for one generic sweep result.
@@ -1034,6 +1072,16 @@ polyline, so a true arc has no way to reach it intact. Until it accepts
 contour geometry, a curve is handed over as chords close enough that the
 difference is invisible, which is still a world apart from handing over
 the raw hand.
+
+### `function vtt.path-shared.refreshPathEdgeOverlay(ctx: ToolContext): void`
+
+Redraws the spine/contour/rib overlay from whatever is now standing.
+
+Node handles are drawn and edges are not, so how a run is *joined* has
+been invisible -- and joining is the whole of what a junction is. Refreshed
+after a commit rather than per frame: nothing about the graph changes
+between commits, and each part goes on its own channel so the tool's own
+ghost keeps working untouched.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -3766,9 +3814,9 @@ currently is.
 
 ### `method vtt.scene-render-port.SceneRenderPort.attachView(target: HTMLElement): string`
 
-### `method vtt.scene-render-port.SceneRenderPort.clearPreview(): void`
+### `method vtt.scene-render-port.SceneRenderPort.clearPreview(channel?: string): void`
 
-Hides the active preview, if any. A no-op when nothing is shown.
+Hides one channel, or every channel when none is named.
 
 ### `method vtt.scene-render-port.SceneRenderPort.detachView(viewId: string): void`
 
@@ -3786,12 +3834,15 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
-### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor): void`
+### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
-Shows (or replaces) the single active construction-tool preview. Never
-touches the construction session -- purely visual, so a tool can call
-this on every pointer move without paying for a real generate/mutate
-request until the tool actually commits.
+Shows (or replaces) one preview overlay.
+
+`channel` names which overlay: two callers with different names coexist,
+and the same name always replaces. A tool's own ghost is one channel; a
+diagnostic overlay drawn alongside it is another, and neither has to know
+the other exists. Omitted means the default channel, which is the
+single-ghost behaviour every tool already relies on.
 
 ### `method vtt.scene-render-port.SceneRenderPort.start(runtimeGeneration: number): Promise<void>`
 
@@ -3811,14 +3862,15 @@ request until the tool actually commits.
 
 ### `type vtt.scene-render-port.RenderPreviewDescriptor = { color: number; kind: "segments"; opacity?: number; positions: Float32Array } | { color: number; kind: "quad"; opacity?: number; positions: Float32Array } | { color: number; indices: Uint16Array | Uint32Array; kind: "mesh"; opacity?: number; positions: Float32Array }`
 
-A construction tool's not-yet-committed ghost, as plain geometry -- mirrors
-`features/edit-construction`'s own `PreviewDescriptor` one-for-one, but
-this port cannot import that layer (`ports` sits below `features` in
-`VTT-ARCH-002`'s allowed-import graph), so the shape is repeated here
-rather than shared. `"segments"` draws an open polyline; `"quad"` draws a
-filled footprint as two triangles over 4 corner points.
-
 ### `type vtt.scene-render-port.RenderViewId = string`
+
+### `variable vtt.scene-render-port.TOOL_GHOST_PREVIEW_CHANNEL: "active"`
+
+The channel a tool's own ghost is drawn on.
+
+Named in the port rather than in the adapter because the dispatcher has to
+clear *its* overlay without touching anyone else's: an unnamed clear empties
+every channel, which is right for teardown and wrong on every pointer move.
 
 ### `interface vtt.terrain-noise-port.TerrainNoisePort`
 
