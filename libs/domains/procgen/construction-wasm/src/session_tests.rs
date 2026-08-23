@@ -923,10 +923,10 @@ fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
             {
                 "regionId": "r0",
                 "boundary": [
-                    {"edge": "e_b0_b1", "reversed": false},
-                    {"edge": "e_b1_t1", "reversed": false},
-                    {"edge": "e_t0_t1", "reversed": true},
-                    {"edge": "e_t0_b0", "reversed": false}
+                    {"edgeId": "e_b0_b1", "reversed": false},
+                    {"edgeId": "e_b1_t1", "reversed": false},
+                    {"edgeId": "e_t0_t1", "reversed": true},
+                    {"edgeId": "e_t0_b0", "reversed": false}
                 ],
                 "surfaceType": "wall-white",
                 "physical": true
@@ -934,10 +934,10 @@ fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
             {
                 "regionId": "r1",
                 "boundary": [
-                    {"edge": "e_b1_b2", "reversed": false},
-                    {"edge": "e_b2_t2", "reversed": false},
-                    {"edge": "e_t1_t2", "reversed": true},
-                    {"edge": "e_b1_t1", "reversed": true}
+                    {"edgeId": "e_b1_b2", "reversed": false},
+                    {"edgeId": "e_b2_t2", "reversed": false},
+                    {"edgeId": "e_t1_t2", "reversed": true},
+                    {"edgeId": "e_b1_t1", "reversed": true}
                 ],
                 "surfaceType": "wall-white",
                 "physical": true
@@ -945,10 +945,10 @@ fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
             {
                 "regionId": "r2",
                 "boundary": [
-                    {"edge": "e_b2_b3", "reversed": false},
-                    {"edge": "e_b3_t3", "reversed": false},
-                    {"edge": "e_t2_t3", "reversed": true},
-                    {"edge": "e_b2_t2", "reversed": true}
+                    {"edgeId": "e_b2_b3", "reversed": false},
+                    {"edgeId": "e_b3_t3", "reversed": false},
+                    {"edgeId": "e_t2_t3", "reversed": true},
+                    {"edgeId": "e_b2_t2", "reversed": true}
                 ],
                 "surfaceType": "wall-white",
                 "physical": true
@@ -956,10 +956,10 @@ fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
             {
                 "regionId": "r3",
                 "boundary": [
-                    {"edge": "e_b3_b0", "reversed": false},
-                    {"edge": "e_t0_b0", "reversed": true},
-                    {"edge": "e_t3_t0", "reversed": true},
-                    {"edge": "e_b3_t3", "reversed": true}
+                    {"edgeId": "e_b3_b0", "reversed": false},
+                    {"edgeId": "e_t0_b0", "reversed": true},
+                    {"edgeId": "e_t3_t0", "reversed": true},
+                    {"edgeId": "e_b3_t3", "reversed": true}
                 ],
                 "surfaceType": "wall-white",
                 "physical": true
@@ -1035,10 +1035,10 @@ fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
             {
                 "regionId": "r0",
                 "boundary": [
-                    {"edge": "e_b0_b1", "reversed": false},
-                    {"edge": "e_b1_t1", "reversed": false},
-                    {"edge": "e_t0_t1", "reversed": true},
-                    {"edge": "e_t0_b0", "reversed": false}
+                    {"edgeId": "e_b0_b1", "reversed": false},
+                    {"edgeId": "e_b1_t1", "reversed": false},
+                    {"edgeId": "e_t0_t1", "reversed": true},
+                    {"edgeId": "e_t0_b0", "reversed": false}
                 ],
                 "surfaceType": "wall-white",
                 "physical": true
@@ -1064,10 +1064,10 @@ fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
             {
                 "regionId": "r_win",
                 "boundary": [
-                    {"edge": "e_w0_w1", "reversed": false},
-                    {"edge": "e_w1_w2", "reversed": false},
-                    {"edge": "e_w2_w3", "reversed": false},
-                    {"edge": "e_w3_w0", "reversed": false}
+                    {"edgeId": "e_w0_w1", "reversed": false},
+                    {"edgeId": "e_w1_w2", "reversed": false},
+                    {"edgeId": "e_w2_w3", "reversed": false},
+                    {"edgeId": "e_w3_w0", "reversed": false}
                 ],
                 "surfaceType": "window",
                 "physical": false
