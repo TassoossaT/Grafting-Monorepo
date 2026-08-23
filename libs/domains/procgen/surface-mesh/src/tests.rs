@@ -318,14 +318,6 @@ fn a_curved_upright_panel_carries_an_opening() {
         );
     }
     for triangle in mesh.indices.chunks_exact(3) {
-        let centroid = triangle.iter().fold([0.0; 3], |sum, index| {
-            let point = mesh.positions[*index as usize];
-            [
-                sum[0] + point[0] / 3.0,
-                sum[1] + point[1] / 3.0,
-                sum[2] + point[2] / 3.0,
-            ]
-        });
         let p0 = mesh.positions[triangle[0] as usize];
         let p1 = mesh.positions[triangle[1] as usize];
         let p2 = mesh.positions[triangle[2] as usize];
