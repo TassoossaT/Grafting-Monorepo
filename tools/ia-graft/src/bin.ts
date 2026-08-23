@@ -6,6 +6,7 @@ import { delegateRun } from "./delegate-commands.ts";
 import { delegateEdit } from "./delegate-edit-commands.ts";
 import { delegateResearch } from "./delegate-research-commands.ts";
 import { runDocCheck } from "./doc-check.ts";
+import { flagInput } from "./flag-input.ts";
 import { runGuardCheck } from "./guard-command.ts";
 import { issueList, issueNew, issueUpdate, issueView } from "./issue-commands.ts";
 import { runMcpServer } from "./mcp-server.ts";
@@ -53,142 +54,6 @@ function readInputFlag(argv: string[]): unknown | undefined {
   return JSON.parse(raw);
 }
 
-function readValue(argv: string[], name: string): string | undefined {
-  const index = argv.indexOf(name);
-  if (index === -1) return undefined;
-  const value = argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-  return value;
-}
-
-function readValues(argv: string[], name: string): string[] {
-  const values: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] !== name) continue;
-    const value = argv[index + 1];
-    if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-    values.push(value);
-  }
-  return values;
-}
-
-function flagInput(subcommand: string | undefined, argv: string[]): unknown | undefined {
-  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
-  const taskId = readValue(argv, "--id");
-  if (subcommand === "new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
-  if (subcommand === "resume") {
-    const pr = readValue(argv, "--pr");
-    return { taskId, pr: pr === undefined ? undefined : Number(pr) };
-  }
-  if (subcommand === "commit") {
-    return {
-      taskId,
-      message: readValue(argv, "--message"),
-      files: readValues(argv, "--file"),
-      coAuthors: readValues(argv, "--co-author"),
-      agent: readValue(argv, "--agent"),
-      amend: argv.includes("--amend"),
-      dryRun: argv.includes("--dry-run") || argv.includes("--check"),
-    };
-  }
-  if (subcommand === "test") {
-    const commands = readValues(argv, "--command");
-    return commands.length <= 1
-      ? { taskId, command: commands[0], keepGoing: argv.includes("--keep-going") }
-      : { taskId, commands, keepGoing: argv.includes("--keep-going") };
-  }
-  if (subcommand === "deps") {
-    return {
-      taskId,
-      install: argv.includes("--install"),
-      updateLockfile: argv.includes("--update-lockfile") || argv.includes("--update"),
-      add: readValue(argv, "--add") ?? readValue(argv, "--pkg"),
-      workspace: readValue(argv, "--workspace") ?? readValue(argv, "--filter"),
-      dev: argv.includes("--dev") || argv.includes("-D"),
-    };
-  }
-  if (subcommand === "done") {
-    return {
-      taskId,
-      title: readValue(argv, "--title"),
-      body: readValue(argv, "--body"),
-      base: readValue(argv, "--base"),
-    };
-  }
-  if (subcommand === "cleanup") return { taskId, force: argv.includes("--force") };
-  if (subcommand === "sync") return { taskId, fetch: argv.includes("--fetch"), abort: argv.includes("--abort") };
-  if (subcommand === "status") return { taskId };
-  if (subcommand === "doctor") return { taskId };
-  if (subcommand === "checkout") return { taskId, restore: argv.includes("--restore"), force: argv.includes("--force") };
-  if (subcommand === "context") {
-    const rawPaths = readValue(argv, "--paths");
-    return {
-      query: readValue(argv, "--query"),
-      scope: readValue(argv, "--scope"),
-      map: argv.includes("--map"),
-      pack: argv.includes("--pack"),
-      taskId: readValue(argv, "--id") ?? readValue(argv, "--task"),
-      paths: rawPaths ? rawPaths.split(",").map((p) => p.trim()).filter(Boolean) : undefined,
-    };
-  }
-  if (subcommand === "run") {
-    const jsonSchemaRaw = readValue(argv, "--json-schema");
-    const files = readValues(argv, "--file");
-    return {
-      prompt: readValue(argv, "--prompt"),
-      effort: readValue(argv, "--effort"),
-      files: files.length > 0 ? files : undefined,
-      jsonSchema: jsonSchemaRaw === undefined ? undefined : JSON.parse(jsonSchemaRaw),
-    };
-  }
-  if (subcommand === "edit") {
-    const scope = readValues(argv, "--scope");
-    return {
-      taskId,
-      prompt: readValue(argv, "--prompt"),
-      effort: readValue(argv, "--effort"),
-      scope: scope.length > 0 ? scope : undefined,
-      context: readValue(argv, "--context"),
-    };
-  }
-  if (subcommand === "research") {
-    return { taskId, topic: readValue(argv, "--topic"), outputFile: readValue(argv, "--output-file"), effort: readValue(argv, "--effort") };
-  }
-  if (subcommand === "list") {
-    const rawLimit = readValue(argv, "--limit");
-    return {
-      type: readValue(argv, "--type"),
-      area: readValue(argv, "--area"),
-      status: readValue(argv, "--status"),
-      priority: readValue(argv, "--priority"),
-      limit: rawLimit ? Number(rawLimit) : undefined,
-    };
-  }
-  if (subcommand === "view") {
-    return { id: readValue(argv, "--id") ?? argv[2] };
-  }
-  if (subcommand === "new") {
-    return {
-      title: readValue(argv, "--title"),
-      type: readValue(argv, "--type") || "task",
-      area: readValue(argv, "--area"),
-      priority: readValue(argv, "--priority"),
-      status: readValue(argv, "--status"),
-      milestone: readValue(argv, "--milestone"),
-      parent: readValue(argv, "--parent"),
-      body: readValue(argv, "--body"),
-    };
-  }
-  if (subcommand === "update") {
-    return {
-      id: readValue(argv, "--id") ?? argv[2],
-      status: readValue(argv, "--status"),
-      priority: readValue(argv, "--priority"),
-      comment: readValue(argv, "--comment"),
-    };
-  }
-  return undefined;
-}
 function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(result.ok && result.passed !== false ? 0 : 1);
@@ -220,12 +85,12 @@ async function main(argv: string[]): Promise<void> {
     }
 
     if (group === "context") {
-      const input = readInputFlag(argv) ?? flagInput("context", argv) ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput("context", undefined, argv) ?? (await readStdin());
       printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
     }
 
     if (group === "issue") {
-      const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
       if (subcommand === "list") printAndExit(await issueList(root, input as Parameters<typeof issueList>[1]));
       if (subcommand === "view") printAndExit(await issueView(root, input as Parameters<typeof issueView>[1]));
       if (subcommand === "new") printAndExit(await issueNew(root, input as Parameters<typeof issueNew>[1]));
@@ -233,14 +98,14 @@ async function main(argv: string[]): Promise<void> {
     }
 
     if (group === "delegate") {
-      const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
       if (subcommand === "run") printAndExit(await delegateRun(root, input as Parameters<typeof delegateRun>[1]));
       if (subcommand === "edit") printAndExit(await delegateEdit(root, input as Parameters<typeof delegateEdit>[1]));
       if (subcommand === "research") printAndExit(await delegateResearch(root, input as Parameters<typeof delegateResearch>[1]));
     }
 
     if (group === "task") {
-      const input = readInputFlag(argv) ?? flagInput(subcommand, argv) ?? (await readStdin());
+      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
       if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
       if (subcommand === "resume") printAndExit(await taskResume(root, input as Parameters<typeof taskResume>[1]));
       if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
