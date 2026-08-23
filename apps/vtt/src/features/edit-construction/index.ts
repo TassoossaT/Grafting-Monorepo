@@ -19,7 +19,7 @@ export type {
   WallParams,
 } from "./tool-types.ts";
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
-export { pathFormationFor } from "./path-recipe.ts";
+export { pathFormationFor, pathHalfWidth } from "./path-recipe.ts";
 export type {
   BrushGestureRegion,
   ConstructionOperationContext,

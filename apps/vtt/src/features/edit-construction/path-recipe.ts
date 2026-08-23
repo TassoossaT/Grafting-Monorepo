@@ -38,3 +38,19 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
     miterLimit: params.miterLimit,
   });
 }
+
+/**
+ * How far this recipe's own product reaches from the reference line -- the
+ * outermost lateral offset of the profile it produces.
+ *
+ * Read off the profile rather than recomputed from the parameters, so the
+ * width the brush is sized against and the width actually swept can never
+ * drift apart. A `street` has no shoulder and a `road` does; that difference
+ * lives in one place, and this follows it.
+ */
+export function pathHalfWidth(params: PathBrushParams): number {
+  return pathFormationFor(params).profile.reduce(
+    (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
+    0,
+  );
+}

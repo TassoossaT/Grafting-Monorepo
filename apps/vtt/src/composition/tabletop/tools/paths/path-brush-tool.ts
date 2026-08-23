@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, pathHalfWidth } from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import type { ToolContext } from "../core/tool-context.ts";
@@ -19,8 +19,11 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewColor: () => PATH_COLOR,
+  // Bed plus shoulders: the road occupies this much of the brush, and only
+  // what is left over may be spent straightening the stroke.
+  halfWidth: pathHalfWidth,
 
   applyRegion(region: BrushRegion, ctx: ToolContext, params: PathBrushParams): void {
-    commitPathContour(ctx, region.samples, region.shape, params, "path-brush");
+    commitPathContour(ctx, region.samples, region.shape, region.tolerance, params, "path-brush");
   },
 });

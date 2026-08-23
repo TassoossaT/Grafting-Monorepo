@@ -3228,8 +3228,12 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
 // src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
+  /**
+  * The brush footprint, already widened to hold the product -- see
+  * {@link expandedToHold}. This is what the ghost is drawn from, which is
+  * what makes the ghost an honest envelope rather than a decoration.
+  */
   readonly shape: BrushShape;
-  }
 export type BrushableToolId = "path-brush" | "wall-brush";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
@@ -3240,14 +3244,12 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
   defaultParams(): ToolParamsFor<Id>;
   previewColor(params: ToolParamsFor<Id>): number;
   /**
-  * The only place domain semantics live: what the swept region means, and
-  * which backend call applies it. Called exactly once, on pointer release,
-  * with the whole gesture's region -- never incrementally, never per-cell,
+  * How far this brush's own product reaches from the stroke it is drawn
+  * along -- half a road's full width, shoulders included; zero for a
+  * product with no width of its own.
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
-  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => ({
-  samples: gesture.samples.map((sample) => sample.point),
-  shape: resolveBrushShape(params),
-  });
+  const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
+  const halfWidth = spec.halfWidth(params);
 
 // src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
@@ -3281,7 +3283,7 @@ export function fitPath(
   ): readonly FittedEdge[] {
   if (points.length < 2) return [];
   const arcs = options.arcs ?? true;
-  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
+  const budget = Math.max(0, tolerance);
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
@@ -3398,9 +3400,10 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewColor: () => PATH_COLOR,
+  // Bed plus shoulders: the road occupies this much of the brush, and only
+  // what is left over may be spent straightening the stroke.
+  halfWidth: pathHalfWidth,
 
-  applyRegion(region: BrushRegion, ctx: ToolContext, params: PathBrushParams): void {
-  commitPathContour(ctx, region.samples, region.shape, params, "path-brush");
 
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
@@ -3420,12 +3423,12 @@ export function pathPatch(
 export const PATH_COLOR = 0xc084fc;
 export function commitPathContour(
   ctx: ToolContext,
-  referenceLine: readonly ConstructionPosition[],
+  stroke: readonly ConstructionPosition[],
   brushShape: BrushShape,
+  tolerance: number,
   params: PathBrushParams,
   domain: string,
   ): void {
-  if (referenceLine.length === 0) return;
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -3677,9 +3680,10 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
   previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
+  // A wall is columns and shared edges, with no thickness in plan, so it
+  // occupies none of the brush and the whole reach is correction budget.
+  halfWidth: () => 0,
 
-  applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
-  commitWallStroke(ctx, region.samples, brushReach(region.shape), params, "wall-brush");
 
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
@@ -3724,9 +3728,9 @@ export function commitWallContour(
   fitted: readonly FittedEdge[],
   params: WallParams,
   domain: string,
+  correction = 0,
   ): void {
   if (fitted.length === 0) return;
-  const sequence = ctx.nextSequence();
 export function commitWallStroke(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -4070,6 +4074,11 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   : [
   { lateralOffset: -outer, elevation: params.shoulderHeight },
   { lateralOffset: -halfBed, elevation: 0 },
+export function pathHalfWidth(params: PathBrushParams): number {
+  return pathFormationFor(params).profile.reduce(
+  (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
+  0,
+  );
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =

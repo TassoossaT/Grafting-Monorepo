@@ -38,7 +38,16 @@ export interface PathBrushParams extends BrushShapeParams {
   readonly shoulderWidth: number;
   /** Non-negative shoulder elevation above the path bed. */
   readonly shoulderHeight: number;
-  /** Longest station spacing sent to the authoritative sweep generator. */
+  /**
+   * Longest station spacing sent to the authoritative sweep generator.
+   *
+   * A safety cap, not a sampling density. The reference line reaching the
+   * generator is already fitted -- straight runs are straight and curves are
+   * flattened to whatever smoothness they need -- so subdividing further
+   * adds collinear vertices and identical frames, which is face count with
+   * no fidelity behind it. Kept only so a single enormous segment still
+   * gets broken up.
+   */
   readonly maxSegmentLength: number;
   /** Maximum corner extension, in multiples of the local half width. */
   readonly miterLimit: number;
@@ -176,9 +185,11 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({
-    shape: "circle", radius: 0.75, rotationDegrees: 0,
+    // The brush has to hold the road: bed 3 plus two 0.6 shoulders reaches
+    // 2.1 from the centerline, so a radius of 2.5 leaves 0.4 of correction.
+    shape: "circle", radius: 2.5, rotationDegrees: 0,
     pathKind: "road", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
-    maxSegmentLength: 0.5, miterLimit: 4,
+    maxSegmentLength: 8, miterLimit: 4,
   }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),

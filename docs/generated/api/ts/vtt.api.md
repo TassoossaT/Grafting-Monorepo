@@ -825,6 +825,16 @@ BrushToolSpec.applyRegion.
 
 ### `property vtt.brush-tool.BrushRegion.shape: BrushShape`
 
+The brush footprint, already widened to hold the product -- see
+expandedToHold. This is what the ghost is drawn from, which is
+what makes the ghost an honest envelope rather than a decoration.
+
+### `property vtt.brush-tool.BrushRegion.tolerance: number`
+
+How far the committed product may be moved off the drawn stroke to
+straighten it: whatever of the brush's own reach the product does not
+occupy. See BrushToolSpec.halfWidth.
+
 ### `interface vtt.brush-tool.BrushToolSpec`
 
 ### `property vtt.brush-tool.BrushToolSpec.id: Id`
@@ -838,6 +848,20 @@ never per-segment. Recomputing over the full region on every commit is
 fine; the brush never tracks what was already applied.
 
 ### `method vtt.brush-tool.BrushToolSpec.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.brush-tool.BrushToolSpec.halfWidth(params: ToolParamsFor<Id>): number`
+
+How far this brush's own product reaches from the stroke it is drawn
+along -- half a road's full width, shoulders included; zero for a
+product with no width of its own.
+
+This is the one number that gives the brush's reach a meaning, and it
+gives every brush the *same* meaning: the reach is the envelope the
+product must fit inside, and whatever the product leaves unused is the
+budget for straightening the hand. A wall is columns and shared edges,
+with no thickness in plan, so its whole reach is correction budget --
+the behaviour it already had, now falling out of the general rule
+instead of being a rule of its own.
 
 ### `method vtt.brush-tool.BrushToolSpec.previewColor(params: ToolParamsFor<Id>): number`
 
@@ -1205,7 +1229,7 @@ number of walls may legitimately stand on one column.
 
 ### `variable vtt.path-shared.PATH_COLOR: 12616956`
 
-### `function vtt.path-shared.commitPathContour(ctx: ToolContext, referenceLine: readonly ConstructionPosition[], brushShape: BrushShape, params: PathBrushParams, domain: string): void`
+### `function vtt.path-shared.commitPathContour(ctx: ToolContext, stroke: readonly ConstructionPosition[], brushShape: BrushShape, tolerance: number, params: PathBrushParams, domain: string): void`
 
 Commits one path run, in one transaction.
 
@@ -1216,10 +1240,16 @@ later, differ in nothing but the reference line they hand over: they all
 resolve their formation the same way, claim their edges the same way, and
 declare the same faces. Nothing here knows which tool called it.
 
-The reference line is still a plain polyline rather than the contour-edge
-vocabulary a wall speaks, because the sweep planner only samples a
-polyline. That is the one thing this funnel does not yet fix -- but it is
-now the single place that would have to change.
+The raw stroke is fitted before anything else, exactly as
+`commitWallStroke` fits one: `tolerance` is whatever of the brush's reach
+the road itself does not occupy, so the committed road always lands inside
+the ghost that was drawn. At zero slack -- a brush no wider than the road
+-- the stroke is committed literally.
+
+What reaches Rust is still a polyline, because the sweep planner cannot
+read an arc yet. But it is now a polyline of decisions rather than of hand
+samples, and this is the single place that changes when the planner learns
+contour geometry.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -1653,7 +1683,7 @@ those edges -- it is never told that any of it is a wall.
 
 Default length of a panel's own vertical edge, for callers with no height parameter of their own.
 
-### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string): void`
+### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string, correction: number): void`
 
 Commits a fitted run of contour edges as walls, in one transaction.
 
@@ -2139,6 +2169,8 @@ for it now.
 
 ### `reference vtt.edit-construction.PathFormationRecipe`
 
+### `reference vtt.edit-construction.pathHalfWidth`
+
 ### `reference vtt.edit-construction.PathKind`
 
 ### `reference vtt.edit-construction.PathProfilePoint`
@@ -2386,6 +2418,16 @@ Resolves the VTT's named path recipe without constructing any mesh or graph.
 
 `street` is a flat bed, while `road` and `trail` carry a non-negative U
 profile. The Rust sweep owns all sampling, frames, vertices, and quads.
+
+### `function vtt.path-recipe.pathHalfWidth(params: PathBrushParams): number`
+
+How far this recipe's own product reaches from the reference line -- the
+outermost lateral offset of the profile it produces.
+
+Read off the profile rather than recomputed from the parameters, so the
+width the brush is sized against and the width actually swept can never
+drift apart. A `street` has no shoulder and a `road` does; that difference
+lives in one place, and this follows it.
 
 ### `interface vtt.structure-types.ResolvedCoverage`
 
@@ -2854,6 +2896,13 @@ Width of the flat traversable bed, in world units.
 ### `property vtt.tool-types.PathBrushParams.maxSegmentLength: number`
 
 Longest station spacing sent to the authoritative sweep generator.
+
+A safety cap, not a sampling density. The reference line reaching the
+generator is already fitted -- straight runs are straight and curves are
+flattened to whatever smoothness they need -- so subdividing further
+adds collinear vertices and identical frames, which is face count with
+no fidelity behind it. Kept only so a single enormous segment still
+gets broken up.
 
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 

@@ -1,7 +1,7 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallBrushParams } from "@/features/edit-construction";
 
-import { brushReach, createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
+import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { WALL_COLOR, commitWallStroke } from "./wall-shared.ts";
 
@@ -27,8 +27,11 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
   previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
+  // A wall is columns and shared edges, with no thickness in plan, so it
+  // occupies none of the brush and the whole reach is correction budget.
+  halfWidth: () => 0,
 
   applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
-    commitWallStroke(ctx, region.samples, brushReach(region.shape), params, "wall-brush");
+    commitWallStroke(ctx, region.samples, region.tolerance, params, "wall-brush");
   },
 });
