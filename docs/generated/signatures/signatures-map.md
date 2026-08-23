@@ -1686,6 +1686,8 @@ export interface InventoryEntry {
   /** What the store currently knows about it. */
   readonly status: ResourceStatus;
   }
+export type RejectionReason =
+export type DeclarationOutcome =
 export type StoreEvent =
 export type RetentionPolicy =
 export interface AssetStoreOptions {
@@ -1693,13 +1695,13 @@ export interface AssetStoreOptions {
   readonly retention?: RetentionPolicy;
   }
 export interface AssetStore {
-  /** Declares a resource, replacing any prior declaration of the same ref. */
-  define(definition: AssetDefinition): void;
-  /** Declares everything a {@link CatalogSource} lists. */
-  load(source: CatalogSource, signal?: AbortSignal): Promise<number>;
-  /** Registers the resolver for one kind. Throws if that kind is already claimed. */
-  registerResolver<TKind extends ResourceKind>(resolver: ResourceResolver<TKind>): void;
-
+  /**
+  * Declares a resource.
+  *
+  * A ref already declared is **kept**, not replaced, unless this definition
+  * carries a higher {@link AssetDefinition.revision} -- which is the one case
+  * that means "the same thing, changed" rather than "a different thing with
+  * the same name". Anything else is refused and reported.
 
 // src/index.ts
 export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
@@ -1716,11 +1718,11 @@ export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
 export type {
   AssetStore,
   AssetStoreOptions,
+  DeclarationOutcome,
   InventoryEntry,
+  RejectionReason,
   ResourceHandle,
   ResourceStatus,
-  RetentionPolicy,
-  StoreEvent,
 export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
 export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
 export type {
@@ -1814,6 +1816,15 @@ export const primitiveMeshResolver: ResourceResolver<typeof PRIMITIVE_MESH_KIND>
 export function createAssetStore(options: AssetStoreOptions = {}): AssetStore {
   const retention = options.retention ?? IMMEDIATE;
   const definitions = new Map<string, AssetDefinition>();
+
+// src/store/validate-definition.ts
+export function invalidReason(candidate: AssetDefinition): string | undefined {
+  const entry = candidate as Partial<AssetDefinition> | null | undefined;
+  if (entry === null || typeof entry !== "object") return "definition is not an object";
+
+  if (typeof entry.ref !== "string" || entry.ref.length === 0) {
+  return "ref must be a non-empty string";
+  }
 ```
 
 ### `ia-graft` (`tools/ia-graft`)

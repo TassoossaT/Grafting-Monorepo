@@ -98,9 +98,19 @@ Claims a resource, starting its load if nothing else already has.
 Concurrent acquisitions of the same `(ref, revision)` join one load; there
 is never a second request in flight for the same thing.
 
-### `method assets.AssetStore.define(definition: AssetDefinition): void`
+### `method assets.AssetStore.define(definition: AssetDefinition): DeclarationOutcome`
 
-Declares a resource, replacing any prior declaration of the same ref.
+Declares a resource.
+
+A ref already declared is **kept**, not replaced, unless this definition
+carries a higher AssetDefinition.revision -- which is the one case
+that means "the same thing, changed" rather than "a different thing with
+the same name". Anything else is refused and reported.
+
+That asymmetry is the whole point. Content from several catalogues has to
+coexist: a default pack and an imported one both declaring `grass/meadow`
+must not end with one of them silently gone, and the caller must be able to
+find out it happened.
 
 ### `method assets.AssetStore.dispose(): void`
 
@@ -115,7 +125,14 @@ textures" from a bisect into a table.
 
 ### `method assets.AssetStore.load(source: CatalogSource, signal?: AbortSignal): Promise<number>`
 
-Declares everything a CatalogSource lists.
+Declares everything a CatalogSource lists, and reports how many
+declarations that actually produced.
+
+The return value counts what was declared or updated, **not** what the
+source listed. A source offering twenty entries of which five collide
+returns fifteen, and emits five `rejected` events naming it. Reporting the
+listed count instead would say a pack loaded cleanly while a quarter of it
+did nothing.
 
 ### `method assets.AssetStore.observe(listener: (event: StoreEvent) => void): () => void`
 
@@ -396,6 +413,10 @@ Upward axis.
 
 Depth axis.
 
+### `type assets.DeclarationOutcome = "declared" | "updated" | "rejected"`
+
+What declaring one definition did.
+
 ### `type assets.EncodedImageBytes = { bytes: Uint8Array } | { url: string }`
 
 Where an encoded image's bytes come from.
@@ -447,6 +468,14 @@ every consumer touches -- and compression is not a micro-optimisation here: a
 
 What a primitive mesh definition puts in its `source`.
 
+### `type assets.RejectionReason = "already-declared" | "invalid"`
+
+Why a declaration was refused.
+
+Refusal is reported rather than thrown because catalogues are routinely
+untrusted: one malformed entry in an imported pack must not take down the
+application that loaded it. The rest of the pack still declares.
+
 ### `type assets.ResourceKind = string`
 
 Which sort of resource a definition describes.
@@ -481,7 +510,7 @@ What the store currently knows about one reference.
 
 What happens to a resource's bytes when its last holder releases.
 
-### `type assets.StoreEvent = { ref: ResourceRef; type: "declared" } | { ref: ResourceRef; type: "load-started" } | { ref: ResourceRef; type: "load-succeeded" } | { error: string; ref: ResourceRef; type: "load-failed" } | { ref: ResourceRef; type: "disposed" }`
+### `type assets.StoreEvent = { ref: ResourceRef; type: "declared" } | { detail: string; reason: RejectionReason; ref: ResourceRef | undefined; sourceId?: string; type: "rejected" } | { ref: ResourceRef; type: "load-started" } | { ref: ResourceRef; type: "load-succeeded" } | { error: string; ref: ResourceRef; type: "load-failed" } | { ref: ResourceRef; type: "disposed" }`
 
 Something the store did, for diagnostics and tests.
 

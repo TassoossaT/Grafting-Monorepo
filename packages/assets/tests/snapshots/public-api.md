@@ -408,10 +408,47 @@ export interface InventoryEntry {
     /** What the store currently knows about it. */
     readonly status: ResourceStatus;
 }
+/**
+ * Why a declaration was refused.
+ *
+ * Refusal is reported rather than thrown because catalogues are routinely
+ * untrusted: one malformed entry in an imported pack must not take down the
+ * application that loaded it. The rest of the pack still declares.
+ */
+export type RejectionReason = 
+/**
+ * Something else already declares this ref at this revision.
+ *
+ * The existing declaration is kept and this one discarded, never the other
+ * way round. Two catalogues that disagree about what a name means is a
+ * conflict to surface, not a race for whoever loaded last -- silently
+ * replacing is how a default pack disappears when an imported one happens to
+ * reuse a name.
+ */
+"already-declared"
+/** A required field is missing or malformed. {@link StoreEvent} carries which. */
+ | "invalid";
+/** What declaring one definition did. */
+export type DeclarationOutcome = 
+/** Newly declared. */
+"declared"
+/** Replaced an earlier declaration of the same ref at a lower revision. */
+ | "updated"
+/** Refused; the store is unchanged. A `rejected` event says why. */
+ | "rejected";
 /** Something the store did, for diagnostics and tests. */
 export type StoreEvent = {
     readonly type: "declared";
     readonly ref: ResourceRef;
+} | {
+    readonly type: "rejected";
+    /** The offending ref, or `undefined` when the entry had no usable one. */
+    readonly ref: ResourceRef | undefined;
+    /** Which catalogue supplied it, when it came from one. */
+    readonly sourceId?: string;
+    readonly reason: RejectionReason;
+    /** What was wrong, in a form worth showing a person. */
+    readonly detail: string;
 } | {
     readonly type: "load-started";
     readonly ref: ResourceRef;
@@ -461,9 +498,30 @@ export interface AssetStoreOptions {
  * scenes, cannot be used by a consumer with a different scene model.
  */
 export interface AssetStore {
-    /** Declares a resource, replacing any prior declaration of the same ref. */
-    define(definition: AssetDefinition): void;
-    /** Declares everything a {@link CatalogSource} lists. */
+    /**
+     * Declares a resource.
+     *
+     * A ref already declared is **kept**, not replaced, unless this definition
+     * carries a higher {@link AssetDefinition.revision} -- which is the one case
+     * that means "the same thing, changed" rather than "a different thing with
+     * the same name". Anything else is refused and reported.
+     *
+     * That asymmetry is the whole point. Content from several catalogues has to
+     * coexist: a default pack and an imported one both declaring `grass/meadow`
+     * must not end with one of them silently gone, and the caller must be able to
+     * find out it happened.
+     */
+    define(definition: AssetDefinition): DeclarationOutcome;
+    /**
+     * Declares everything a {@link CatalogSource} lists, and reports how many
+     * declarations that actually produced.
+     *
+     * The return value counts what was declared or updated, **not** what the
+     * source listed. A source offering twenty entries of which five collide
+     * returns fifteen, and emits five `rejected` events naming it. Reporting the
+     * listed count instead would say a pack loaded cleanly while a quarter of it
+     * did nothing.
+     */
     load(source: CatalogSource, signal?: AbortSignal): Promise<number>;
     /** Registers the resolver for one kind. Throws if that kind is already claimed. */
     registerResolver<TKind extends ResourceKind>(resolver: ResourceResolver<TKind>): void;

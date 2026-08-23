@@ -30,7 +30,9 @@ export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
 export type {
   AssetStore,
   AssetStoreOptions,
+  DeclarationOutcome,
   InventoryEntry,
+  RejectionReason,
   ResourceHandle,
   ResourceStatus,
   RetentionPolicy,
