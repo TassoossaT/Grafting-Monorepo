@@ -13,10 +13,10 @@ All task execution MUST use `tools/ia-graft`.
 
 ## 2. IA-GRAFT COMMAND FAMILY SUMMARY
 
-- `task new --id <ID> [--base <branch>] [--parent <PARENT-ID>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). Use `--parent` for Stacked PRs chained on an open task.
+- `task new --id <ID> [--base <branch>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). `--parent` exists but MUST NOT be used; stacked PRs get no CI and conflict once the parent is squash-merged (`AGENTS.md` §2, #202). Continuing work goes on the same branch.
 - `task commit --id <ID> --message "<m>" [--amend] [--dry-run] [--agent <a>]` — Stages and commits inside task worktree with AI co-authorship.
 - `task test --id <ID> --command "<c>"` — Runs verification commands inside worktree with capped summary output.
-- `task done --id <ID> --title "<t>" --body "<b>"` — Pushes task branch and opens/updates PR (or stacked PR) via `gh`.
+- `task done --id <ID> --title "<t>" --body "<b>"` — Pushes task branch and opens/updates the PR via `gh`. Re-run it after further commits to update the same PR.
 - `task sync --id <ID> [--fetch]` — Integrates forward-only base updates without rebase.
 - `task deps --id <ID> [--install] [--update-lockfile] [--add <pkg>]` — Managed dependency overlay and lockfile updates.
 - `task cleanup --id <ID> [--force]` — Removes merged worktree and deletes task branch after PR merge.

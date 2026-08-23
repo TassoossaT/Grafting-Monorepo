@@ -1713,6 +1713,8 @@ export interface InventoryEntry {
   /** What the store currently knows about it. */
   readonly status: ResourceStatus;
   }
+export type RejectionReason =
+export type DeclarationOutcome =
 export type StoreEvent =
 export type RetentionPolicy =
 export interface AssetStoreOptions {
@@ -1720,13 +1722,13 @@ export interface AssetStoreOptions {
   readonly retention?: RetentionPolicy;
   }
 export interface AssetStore {
-  /** Declares a resource, replacing any prior declaration of the same ref. */
-  define(definition: AssetDefinition): void;
-  /** Declares everything a {@link CatalogSource} lists. */
-  load(source: CatalogSource, signal?: AbortSignal): Promise<number>;
-  /** Registers the resolver for one kind. Throws if that kind is already claimed. */
-  registerResolver<TKind extends ResourceKind>(resolver: ResourceResolver<TKind>): void;
-
+  /**
+  * Declares a resource.
+  *
+  * A ref already declared is **kept**, not replaced, unless this definition
+  * carries a higher {@link AssetDefinition.revision} -- which is the one case
+  * that means "the same thing, changed" rather than "a different thing with
+  * the same name". Anything else is refused and reported.
 
 // src/index.ts
 export type { ResourceKind, ResourceKinds, ResourceOf, ResourceRef } from "./contracts/ref.js";
@@ -1743,14 +1745,55 @@ export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
 export type {
   AssetStore,
   AssetStoreOptions,
+  DeclarationOutcome,
   InventoryEntry,
+  RejectionReason,
   ResourceHandle,
   ResourceStatus,
-  RetentionPolicy,
-  StoreEvent,
 export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
 export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
+export type {
+  DecodedImage,
+  EncodedImageBytes,
+  EncodedImageResolverOptions,
+  EncodedImageSource,
+  ImageColorSpace,
+  } from "./resolvers/encoded-image.js";
+
 export type { GltfMeshSource } from "./resolvers/gltf-mesh.js";
+
+// src/resolvers/encoded-image.ts
+export const ENCODED_IMAGE_KIND = "encoded-image";
+export type EncodedImageBytes =
+export type ImageColorSpace = "srgb" | "linear";
+export type EncodedImageSource = EncodedImageBytes & {
+  /**
+  * How this image's values are read. Defaults to `"srgb"`.
+  *
+  * Set `"linear"` for every map that carries data rather than colour.
+  */
+  readonly colorSpace?: ImageColorSpace;
+  /**
+export interface DecodedImage {
+  /** DOM image types only. No renderer texture type is exposed. */
+  readonly source: ImageBitmap | HTMLImageElement | HTMLCanvasElement;
+  /**
+  * Width in pixels.
+  *
+  * Reported by the decoder rather than read back off {@link source}, so a
+  * decoder whose output does not expose its own dimensions still works.
+export interface EncodedImageResolverOptions {
+  /**
+  * Fetches a URL. Defaults to the global `fetch`.
+  *
+  * Supplied from outside so a consumer can add auth headers, a cache policy,
+  * or a retry -- none of which this package should have opinions about.
+  */
+  readonly fetch?: (url: string, init: { signal: AbortSignal }) => Promise<Response>;
+export function createEncodedImageResolver(
+  options: EncodedImageResolverOptions = {},
+  ): ResourceResolver<typeof ENCODED_IMAGE_KIND> {
+  const fetchImpl = options.fetch ?? ((url, init) => fetch(url, init));
 
 // src/resolvers/gltf-mesh.ts
 export const GLTF_MESH_KIND = "gltf-mesh";
@@ -1760,6 +1803,15 @@ export const gltfMeshResolver: ResourceResolver<typeof GLTF_MESH_KIND> = {
   async load(definition: AssetDefinition<typeof GLTF_MESH_KIND>): Promise<never> {
   const source = definition.source as GltfMeshSource | undefined;
   if (source === undefined) throw new Error(`"${definition.ref}" declares no glTF source`);
+
+// src/resolvers/image-ownership.ts
+export function disposeImageResource(resource: ImageResource): void {
+  if (resource.form !== "decoded") return;
+  if (isClosable(resource.source)) resource.source.close();
+export function imageResourceBytes(resource: ImageResource): number {
+  return resource.form === "decoded"
+  ? resource.width * resource.height * 4
+  : resource.levels.reduce((total, level) => total + level.data.byteLength, 0);
 
 // src/resolvers/in-memory-image.ts
 export const IN_MEMORY_IMAGE_KIND = "in-memory-image";
@@ -1791,6 +1843,15 @@ export const primitiveMeshResolver: ResourceResolver<typeof PRIMITIVE_MESH_KIND>
 export function createAssetStore(options: AssetStoreOptions = {}): AssetStore {
   const retention = options.retention ?? IMMEDIATE;
   const definitions = new Map<string, AssetDefinition>();
+
+// src/store/validate-definition.ts
+export function invalidReason(candidate: AssetDefinition): string | undefined {
+  const entry = candidate as Partial<AssetDefinition> | null | undefined;
+  if (entry === null || typeof entry !== "object") return "definition is not an object";
+
+  if (typeof entry.ref !== "string" || entry.ref.length === 0) {
+  return "ref must be a non-empty string";
+  }
 ```
 
 ### `ia-graft` (`tools/ia-graft`)

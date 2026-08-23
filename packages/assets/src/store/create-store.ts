@@ -4,12 +4,14 @@ import type { CatalogSource, ResourceResolver } from "../contracts/resolver.js";
 import type {
   AssetStore,
   AssetStoreOptions,
+  DeclarationOutcome,
   InventoryEntry,
   ResourceHandle,
   ResourceStatus,
   RetentionPolicy,
   StoreEvent,
 } from "../contracts/store.js";
+import { invalidReason } from "./validate-definition.js";
 
 /**
  * One `(ref, revision)` pair's live state.
@@ -170,16 +172,65 @@ export function createAssetStore(options: AssetStoreOptions = {}): AssetStore {
     };
   };
 
-  return {
-    define(definition: AssetDefinition): void {
+  /**
+   * The one path a declaration takes, whether it arrived directly or from a
+   * catalogue.
+   *
+   * Keeping the existing declaration rather than overwriting it is what makes
+   * several catalogues able to coexist. A higher revision is the single
+   * exception, because that is the one case meaning "this same thing changed"
+   * rather than "a different thing wants this name".
+   */
+  const declare = (definition: AssetDefinition, sourceId?: string): DeclarationOutcome => {
+    const reject = (reason: "already-declared" | "invalid", detail: string): "rejected" => {
+      emit({
+        type: "rejected",
+        ref: typeof definition?.ref === "string" ? definition.ref : undefined,
+        ...(sourceId === undefined ? {} : { sourceId }),
+        reason,
+        detail,
+      });
+      return "rejected";
+    };
+
+    const invalid = invalidReason(definition);
+    if (invalid !== undefined) return reject("invalid", invalid);
+
+    const existing = definitions.get(definition.ref);
+    if (existing !== undefined) {
+      if (definition.revision <= existing.revision) {
+        return reject(
+          "already-declared",
+          `"${definition.ref}" is already declared at revision ${existing.revision}`,
+        );
+      }
       definitions.set(definition.ref, definition);
       emit({ type: "declared", ref: definition.ref });
+      return "updated";
+    }
+
+    definitions.set(definition.ref, definition);
+    emit({ type: "declared", ref: definition.ref });
+    return "declared";
+  };
+
+  return {
+    define(definition: AssetDefinition): DeclarationOutcome {
+      return declare(definition);
     },
 
     async load(source: CatalogSource, signal?: AbortSignal): Promise<number> {
       const listed = await source.list(signal ?? new AbortController().signal);
-      for (const definition of listed) this.define(definition);
-      return listed.length;
+      let accepted = 0;
+      for (const definition of listed) {
+        // `source.id` is attached here rather than inside `declare`, because
+        // this is the only place that knows which catalogue an entry came
+        // from -- and with several catalogues in play, "which pack did this"
+        // is the first question anybody asks about a rejection.
+        if (declare(definition, source.id) === "rejected") continue;
+        accepted += 1;
+      }
+      return accepted;
     },
 
     registerResolver<TKind extends ResourceKind>(resolver: ResourceResolver<TKind>): void {

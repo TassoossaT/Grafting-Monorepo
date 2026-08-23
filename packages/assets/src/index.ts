@@ -30,7 +30,9 @@ export type { CatalogSource, ResourceResolver } from "./contracts/resolver.js";
 export type {
   AssetStore,
   AssetStoreOptions,
+  DeclarationOutcome,
   InventoryEntry,
+  RejectionReason,
   ResourceHandle,
   ResourceStatus,
   RetentionPolicy,
@@ -44,6 +46,15 @@ export type { PrimitiveMeshSource } from "./resolvers/primitive-mesh.js";
 
 export { IN_MEMORY_IMAGE_KIND, inMemoryImageResolver } from "./resolvers/in-memory-image.js";
 export type { InMemoryImageSource } from "./resolvers/in-memory-image.js";
+
+export { ENCODED_IMAGE_KIND, createEncodedImageResolver } from "./resolvers/encoded-image.js";
+export type {
+  DecodedImage,
+  EncodedImageBytes,
+  EncodedImageResolverOptions,
+  EncodedImageSource,
+  ImageColorSpace,
+} from "./resolvers/encoded-image.js";
 
 export { GLTF_MESH_KIND, gltfMeshResolver } from "./resolvers/gltf-mesh.js";
 export type { GltfMeshSource } from "./resolvers/gltf-mesh.js";
