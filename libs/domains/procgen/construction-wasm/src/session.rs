@@ -19,8 +19,6 @@ use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
-#[cfg(test)]
-use crate::path_brush;
 use crate::region_editing;
 use crate::region_overlay;
 use crate::sweep_bridge;
@@ -298,15 +296,6 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
-    /// Returns the exact XZ rim of a profile sweep without mutating session
-    /// state, so the application can resolve creation interactions first.
-    #[cfg(test)]
-    pub fn path_formation_outline_json(&self, request_json: &str) -> Result<String, JsValue> {
-        let request: path_brush::PathFormationOutlineRequest = parse(request_json)?;
-        let response = path_brush::path_formation_outline(request).map_err(to_js_error)?;
-        serialize(&response)
-    }
-
     /// Runs the graph-neutral sweep planner without mutating session state.
     pub fn plan_sweep_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: sweep_bridge::PlanSweepRequest = parse(request_json)?;
@@ -317,42 +306,6 @@ impl ConstructionSession {
     // ---- Terrain mesh lifecycle ----
 
     // ---- Generate-and-apply ----
-
-    /// Applies one validated terrain-to-path brush operation. The session only
-    /// forwards the resolved request to the domain transformer and publishes
-    /// its already-atomic replacement plan.
-    #[cfg(test)]
-    pub fn apply_path_brush_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request: path_brush::ApplyPathBrushRequest = parse(request_json)?;
-        let operation_id = request.operation_id.clone();
-        let before = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-        };
-        let response = path_brush::apply_path_brush(
-            &mut self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            &mut self.known_regions,
-            request,
-        )
-        .map_err(to_js_error)?;
-        let after = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-        };
-        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
-            operation_id,
-            before,
-            after,
-        });
-        self.region_overlay_redo.clear();
-        serialize(&response)
-    }
 
     /// Applies an application-generated patch over an exact, already-resolved
     /// set of source regions. Geometry and product policy are caller-owned;
@@ -427,17 +380,6 @@ impl ConstructionSession {
         Ok(())
     }
 
-    /// Test-only compatibility for the pre-refactor path-brush fixtures.
-    #[cfg(test)]
-    pub fn undo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        self.undo_region_overlay(operation_id)
-    }
-
-    /// Test-only compatibility for the pre-refactor path-brush fixtures.
-    #[cfg(test)]
-    pub fn redo_path_brush(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        self.redo_region_overlay(operation_id)
-    }
     /// Regenerates a painted cell set's whole region partition (every
     /// region's own per-cell floor/ceiling, and a wall -- notched where a
     /// run borders a different region -- along every boundary run) and

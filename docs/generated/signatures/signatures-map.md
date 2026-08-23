@@ -54,17 +54,6 @@ pub struct SurfaceMeshRequest
 pub fn all_surface_meshes(
 pub fn surface_mesh(
 
-// src/path_brush.rs
-pub struct ApplyPathBrushRequest
-pub struct PathFormationOutlineRequest
-pub struct PathFormationOutlineResponse
-pub struct IdentityDeltaResponse
-pub struct SurfaceIdentityDeltaResponse
-pub struct InvalidationResponse
-pub struct ApplyPathBrushResponse
-pub fn apply_path_brush(
-pub fn path_formation_outline(
-
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
 pub enum ContourGeometryDto
@@ -81,10 +70,6 @@ pub struct MoveEdgeRequest
 pub fn apply_move_edge(
 pub struct MoveRegionRequest
 pub fn apply_move_region(
-
-// src/region_merge.rs
-pub struct RegionMergeOutcome
-pub fn apply_region_merge(
 
 // src/region_overlay.rs
 pub struct ApplyRegionOverlayRequest
@@ -3279,6 +3264,25 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   defaultParams: () => ({}),
   };
 
+// src/composition/tabletop/tools/core/stroke-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export interface FitOptions {
+  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
+  readonly arcs?: boolean;
+  }
+export function fitPath(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  options: FitOptions = {},
+  ): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const arcs = options.arcs ?? true;
+  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
+
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
   readonly point: ConstructionPosition;
@@ -3393,25 +3397,35 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_PREVIEW_COLOR,
+  previewColor: () => PATH_COLOR,
 
-  applyRegion(region, ctx, params) {
-  const sequence = ctx.nextSequence();
+  applyRegion(region: BrushRegion, ctx: ToolContext, params: PathBrushParams): void {
+  commitPathContour(ctx, region.samples, region.shape, params, "path-brush");
 
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
   readonly outline: readonly (readonly [number, number])[];
   readonly boundary: readonly ConstructionOrientedEdgeUse[];
-  /** Clean navigation reference retained independently from render cells. */
-  readonly referenceLine: readonly (readonly [number, number])[];
   }
 export function pathPatch(
+  tableId: string,
   operationId: string,
   surfaceType: string,
   plan: ConstructionSweepPlan,
   ): PathPatchFormation {
   const nodeIds = plan.vertices.map((_vertex, index) => `${operationId}:path-node:${index}`);
+
+// src/composition/tabletop/tools/paths/path-shared.ts
+export const PATH_COLOR = 0xc084fc;
+export function commitPathContour(
+  ctx: ToolContext,
+  referenceLine: readonly ConstructionPosition[],
+  brushShape: BrushShape,
+  params: PathBrushParams,
+  domain: string,
+  ): void {
+  if (referenceLine.length === 0) return;
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -3657,25 +3671,6 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   return segmentsPreview(
   previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
   WALL_COLOR[params.wallType],
-
-// src/composition/tabletop/tools/walls/path-fitting.ts
-export interface FittedEdge {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly geometry: ConstructionEdgeGeometry;
-  }
-export interface FitOptions {
-  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
-  readonly arcs?: boolean;
-  }
-export function fitPath(
-  points: readonly ConstructionPosition[],
-  tolerance: number,
-  options: FitOptions = {},
-  ): readonly FittedEdge[] {
-  if (points.length < 2) return [];
-  const arcs = options.arcs ?? true;
-  const indices = cornerIndices(points, Math.max(0, tolerance), arcs);
 
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool = createBrushTool<"wall-brush">({

@@ -875,6 +875,48 @@ not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
 
+### `interface vtt.stroke-fitting.FitOptions`
+
+What a caller may vary about a fit. `arcs` defaults to on.
+
+### `property vtt.stroke-fitting.FitOptions.arcs?: boolean`
+
+When false, every span is fitted as a straight chord and no circle is ever considered.
+
+### `interface vtt.stroke-fitting.FittedEdge`
+
+One fitted edge of a stroke: an endpoint pair plus the contour geometry
+that actually explains the samples between them -- a straight chord, or a
+true circular arc through them. This is the graph's own edge vocabulary
+(`ConstructionEdgeGeometry`), not a private tag a generator has to
+translate, so a fitted edge is already the thing that gets declared.
+
+### `property vtt.stroke-fitting.FittedEdge.end: ConstructionPosition`
+
+### `property vtt.stroke-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.stroke-fitting.FittedEdge.start: ConstructionPosition`
+
+### `function vtt.stroke-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
+
+Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
+into a short list of fitted edges: corners are found first
+(Ramer-Douglas-Peucker, cornerIndices), then each run between
+corners is classified (classifySegment) as a straight chord or
+the true circle through it.
+
+`tolerance` (world units) is the whole correction dial -- how far the raw
+stroke must wander off *both* a straight line and its best-fit arc before
+that counts as a real corner rather than hand tremor or ordinary
+curvature. At `0` the contour is committed literally; the larger it gets,
+the more freely a shaky stroke is straightened into clean runs. Fewer
+than 2 points fits to nothing.
+
+With `arcs` off every span is a chord, however round the samples look.
+That is for a caller whose samples are no longer a hand -- points landing
+on exact grid intersections, say -- where the circle through any three of
+them is a real circle that nobody drew.
+
 ### `interface vtt.tool-context.ConstructionTool`
 
 One construction tool's behavior, generic over its own parameter shape.
@@ -1120,9 +1162,14 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-Path creation follows the same ownership split as walls: this tool chooses
-the product recipe and interactions, `pathPatch` declares its graph, and
-Rust only supplies reusable geometry and executes the resolved overlay.
+A free path stroke, built on the same brush every other brush uses: press,
+drag, and on release the whole swept region is handed over once.
+
+Path creation follows the same ownership split as walls: this tool only
+chooses the interaction, `path-shared.ts` owns the single commit every
+path goes through, `path-patch.ts` declares the graph, and Rust supplies
+reusable geometry and executes the resolved overlay without ever being
+told any of it is a path.
 
 ### `interface vtt.path-patch.PathPatchFormation`
 
@@ -1134,16 +1181,45 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `property vtt.path-patch.PathPatchFormation.referenceLine: readonly (readonly [number, number])[]`
-
-Clean navigation reference retained independently from render cells.
-
-### `function vtt.path-patch.pathPatch(operationId: string, surfaceType: string, plan: ConstructionSweepPlan): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, operationId: string, surfaceType: string, plan: ConstructionSweepPlan): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
 the application defines what the product is; Rust only validates and
 executes the resulting patch.
+
+Edges are named after the table and the pair of nodes they run between,
+exactly as `wallPatch` names them, because that shared name is the whole
+mechanism by which two independently declared faces agree on one edge.
+Namespacing them per operation instead would guarantee that no path could
+ever share an edge with anything -- the interior edges of one sweep would
+still be shared, since they carry the same prefix, which is precisely what
+made the mistake invisible.
+
+`refuse-when-full` is the right rule here, and only becomes meaningful now
+that the name can actually collide: two faces to an edge is the true limit
+for ground, so an edge with no room left means something is already there,
+and the overlay refusing the patch is that fact arriving where it is
+precise. A wall shares `private-when-full` for the opposite reason -- any
+number of walls may legitimately stand on one column.
+
+### `variable vtt.path-shared.PATH_COLOR: 12616956`
+
+### `function vtt.path-shared.commitPathContour(ctx: ToolContext, referenceLine: readonly ConstructionPosition[], brushShape: BrushShape, params: PathBrushParams, domain: string): void`
+
+Commits one path run, in one transaction.
+
+This is the only path a path is ever built by, the way
+`walls/wall-shared.ts`'s `commitWallContour` is the only path a wall is
+built by. A free stroke, and any straight drag or preset that comes
+later, differ in nothing but the reference line they hand over: they all
+resolve their formation the same way, claim their edges the same way, and
+declare the same faces. Nothing here knows which tool called it.
+
+The reference line is still a plain polyline rather than the contour-edge
+vocabulary a wall speaks, because the sweep planner only samples a
+polyline. That is the one thing this funnel does not yet fix -- but it is
+now the single place that would have to change.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -1478,48 +1554,6 @@ the ordinary wall type, committed through the ordinary wall builder, from
 a contour a preset happened to compute instead of a hand drawing it. That
 is the entire difference -- so a tower welds onto a drawn wall, gets
 edited by the same handles, and is subject to the same rules, for free.
-
-### `interface vtt.path-fitting.FitOptions`
-
-What a caller may vary about a fit. `arcs` defaults to on.
-
-### `property vtt.path-fitting.FitOptions.arcs?: boolean`
-
-When false, every span is fitted as a straight chord and no circle is ever considered.
-
-### `interface vtt.path-fitting.FittedEdge`
-
-One fitted edge of a stroke: an endpoint pair plus the contour geometry
-that actually explains the samples between them -- a straight chord, or a
-true circular arc through them. This is the graph's own edge vocabulary
-(`ConstructionEdgeGeometry`), not a private tag a generator has to
-translate, so a fitted edge is already the thing that gets declared.
-
-### `property vtt.path-fitting.FittedEdge.end: ConstructionPosition`
-
-### `property vtt.path-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
-
-### `property vtt.path-fitting.FittedEdge.start: ConstructionPosition`
-
-### `function vtt.path-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
-
-Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
-into a short list of fitted edges: corners are found first
-(Ramer-Douglas-Peucker, cornerIndices), then each run between
-corners is classified (classifySegment) as a straight chord or
-the true circle through it.
-
-`tolerance` (world units) is the whole correction dial -- how far the raw
-stroke must wander off *both* a straight line and its best-fit arc before
-that counts as a real corner rather than hand tremor or ordinary
-curvature. At `0` the contour is committed literally; the larger it gets,
-the more freely a shaky stroke is straightened into clean runs. Fewer
-than 2 points fits to nothing.
-
-With `arcs` off every span is a chord, however round the samples look.
-That is for a caller whose samples are no longer a hand -- points landing
-on exact grid intersections, say -- where the circle through any three of
-them is a real circle that nobody drew.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 

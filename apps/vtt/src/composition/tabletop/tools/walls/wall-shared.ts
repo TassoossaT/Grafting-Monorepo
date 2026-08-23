@@ -9,7 +9,7 @@ import type {
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
-import { fitPath, type FittedEdge } from "./path-fitting.ts";
+import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";

@@ -11,11 +11,7 @@ mod footprint;
 mod generation;
 mod geometry;
 mod mesh;
-#[cfg(test)]
-mod path_brush;
 mod region_editing;
-#[cfg(test)]
-mod region_merge;
 mod region_overlay;
 mod session;
 #[cfg(test)]

@@ -10,7 +10,7 @@ test("path subtype declares its own shared quad patch from a graph-neutral sweep
       vertices.push({ x, y, z });
     }
   }
-  const formation = pathPatch("path-1", "path", {
+  const formation = pathPatch("table-1", "path-1", "path", {
     referenceLine: [[0, 0], [1, 0], [2, 0]],
     vertices,
     quads: [
@@ -25,7 +25,6 @@ test("path subtype declares its own shared quad patch from a graph-neutral sweep
   assert.equal(formation.patch.regions.length, 6);
   assert.equal(formation.boundary.length, 10);
   assert.deepEqual(formation.outline[0], [0, -1]);
-  assert.deepEqual(formation.referenceLine, [[0, 0], [1, 0], [2, 0]]);
 
   const uses = new Map();
   for (const region of formation.patch.regions) {
