@@ -8,10 +8,10 @@ import {
   createPathBrushEffect,
   firstRefusal,
   parseStationNodeId,
-  pathClouds,
   pathCorridorId,
   pathFormationFor,
   pathRidesTerrain,
+  pathRunsIn,
   pathSpineSlot,
   resolveCoverage,
   stationNodeId,
@@ -260,7 +260,7 @@ export function junctionsWithStandingSpines(
   readonly welds: ReadonlyMap<number, ConstructionNodeId>;
   readonly inserts: readonly AtomicEditOp[];
 } {
-  const clouds = pathClouds(ctx.runtime.getAllRegionTopologies());
+  const standing = pathRunsIn(ctx.runtime.getAllRegionTopologies());
   const found: {
     readonly at: number;
     readonly position: ConstructionPosition;
@@ -271,8 +271,8 @@ export function junctionsWithStandingSpines(
   // first has already split out of existence.
   const usedEdges = new Set<string>();
 
-  for (const cloud of clouds) {
-    const spine = cloud.spine;
+  for (const run of standing) {
+    const spine = run.spine;
     if (spine === undefined) continue;
     for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
       const edgeId = spine.edgeIds[step];
@@ -288,7 +288,7 @@ export function junctionsWithStandingSpines(
           z: fromA.position.z + (toA.position.z - fromA.position.z) * crossing.along,
         };
         const station = Number((fromA.station + (toA.station - fromA.station) * crossing.along).toFixed(3));
-        const nodeId = stationNodeId(cloud.corridorId, station, 0);
+        const nodeId = stationNodeId(run.corridorId, station, 0);
         usedEdges.add(edgeId);
         found.push({ at: index + crossing.across, position, nodeId, edgeId });
         break;

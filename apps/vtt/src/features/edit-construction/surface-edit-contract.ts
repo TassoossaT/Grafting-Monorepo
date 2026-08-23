@@ -17,7 +17,15 @@ export interface ConstructionOperationContext {
   readonly initiatedBy: string;
 }
 
-/** A product-owned scope supported by a surface edit mode. */
+/**
+ * A product-owned scope supported by a surface edit mode -- *what a mode
+ * accepts as a target*.
+ *
+ * Not to be confused with `structure-types`' own `EditScope`, which is *how
+ * far one role's op reaches* once a target has been grabbed. A mode can
+ * accept a `"node"` target whose role nevertheless reaches the whole cloud;
+ * the two answer different questions and share only the word.
+ */
 export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
 
 /** A world-space pointer sample collected for one brush gesture. */

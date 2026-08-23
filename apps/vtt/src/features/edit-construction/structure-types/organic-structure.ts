@@ -43,8 +43,14 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
     switch (role) {
       case ORGANIC_ROLES.boundaryVertex:
       case ORGANIC_ROLES.boundaryEdge:
+        return allowed(role, HORIZONTAL_AXES, "surface");
       case ORGANIC_ROLES.body:
-        return allowed(role, HORIZONTAL_AXES);
+        // Sliding "the ground" means the patch, and a patch is however many
+        // faces a stroke left welded together -- a terrain sweep is one
+        // lattice of many faces, not one face. Moving the clicked face
+        // alone would tear it out of its own lattice, which is the one
+        // thing an organic boundary cannot survive.
+        return allowed(role, HORIZONTAL_AXES, "cloud");
       default:
         return structural === "regenerate"
           ? {
@@ -54,6 +60,10 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
                 reason: "an organic region has no fixed roles; editing it means generating it again",
               },
               axes: [],
+              // What gets regenerated is the cloud: a re-roll of one face
+              // out of a lattice would leave its neighbours describing a
+              // boundary that no longer exists.
+              scope: "cloud" as const,
             }
           : denied(role, "this region has no editing role for that part");
     }

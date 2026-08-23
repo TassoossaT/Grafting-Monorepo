@@ -1963,6 +1963,26 @@ export interface DocCheckResult {
   checks: Array<{ file: string; lineCount: number; maxLines: number; passed: boolean; reason?: string }>;
   }
 
+// src/flag-input.ts
+export function readValue(argv: string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+export function readTextValue(argv: string[], name: string): string | undefined {
+  const filePath = readValue(argv, `${name}-file`);
+export function readValues(argv: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+  if (argv[index] !== name) continue;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+export function flagInput(
+  group: string | undefined,
+  subcommand: string | undefined,
+  argv: string[],
+  ): unknown | undefined {
+  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
+  const route = subcommand === undefined ? group : `${group} ${subcommand}`;
+  const taskId = readValue(argv, "--id");
+
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
   return path.join(repoPath, '.worktrees', taskId);
@@ -3970,6 +3990,50 @@ export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
   if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
 
+// src/features/edit-construction/construction-cloud.ts
+export interface ConstructionCloud {
+  /** The one type every member shares; a cloud never spans two. */
+  readonly surfaceType: string;
+  /** The member the gesture actually landed on. */
+  readonly seed: ConstructionSurfaceKey;
+  /** Every member, the seed included, in the engine's own stable order. */
+  readonly members: readonly ConstructionSurfaceKey[];
+  }
+export interface CloudSource {
+  cloudFor(request: {
+  readonly seed: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  }): { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+export interface CloudTopology {
+  readonly cloud: ConstructionCloud;
+  /**
+  * The member the gesture landed on. Role resolution reads this one and
+  * only this one: a corner is a corner of the face it belongs to, and
+  * asking the whole cloud what a single grabbed node means would have no
+  * answer.
+  */
+export function resolveCloud(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): ConstructionCloud | undefined {
+  const topology = source.getRegionTopology(seed);
+export function resolveCloudTopology(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): CloudTopology | undefined {
+  const cloud = resolveCloud(source, seed);
+export function refreshCloudTopology(
+  source: CloudSource,
+  cloud: ConstructionCloud,
+  ): CloudTopology | undefined {
+  const members = cloud.members
+  .map((key) => source.getRegionTopology(key))
+  .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+export function cloudNodes(
+  topology: CloudTopology,
+  ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
+  const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
+
 // src/features/edit-construction/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
@@ -4004,12 +4068,8 @@ export function createEditHistoryStack(): EditHistoryStack {
 
 // src/features/edit-construction/edit-orchestrator.ts
 export type EditPlan =
-export function planEdit(
-  topology: ConstructionRegionTopology,
-  gesture: EditGesture,
-  related: readonly ConstructionRegionTopology[] = [],
-  ): EditPlan {
-  const policy = resolvePolicy(topology, gesture.target);
+export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
+  const policy = resolvePolicy(cloud.seed, gesture.target);
 export interface EditOpSink {
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
   moveEdge(edgeId: string, delta: { x: number; y: number; z: number }): RegionEditOutcome;
@@ -4055,10 +4115,10 @@ export type {
   PathBrushParams,
   NoToolParams,
 export type {
-  PathCloud,
-  PathCloudChain,
-  PathCloudNode,
-  PathCloudRib,
+  PathRun,
+  PathRunChain,
+  PathRunNode,
+  PathRunRib,
   } from "./path-cloud.ts";
   export {
   followsOutward,
@@ -4074,55 +4134,58 @@ export type {
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type {
   CascadeContext,
   CreationInteraction,
   CreationInteractionKind,
   EditResolution,
   EditRole,
+  EditScope,
   ResolvedCoverage,
-  RolePolicy,
 
 // src/features/edit-construction/path-cloud.ts
-export interface PathCloudNode {
+export interface PathRunNode {
   readonly nodeId: string;
   readonly station: number;
   /** Signed slot across the cross-section; `0` is the spine. */
   readonly across: number;
   readonly position: ConstructionPosition;
   }
-export interface PathCloudChain {
+export interface PathRunChain {
   readonly across: number;
   /** Ordered by station. */
-  readonly nodes: readonly PathCloudNode[];
+  readonly nodes: readonly PathRunNode[];
   /** The edge between consecutive nodes; one shorter than `nodes`. */
   readonly edgeIds: readonly string[];
   }
-export interface PathCloudRib {
+export interface PathRunRib {
   readonly station: number;
   /** Ordered by `across`, so from one contour through the spine to the other. */
-  readonly nodes: readonly PathCloudNode[];
+  readonly nodes: readonly PathRunNode[];
   readonly edgeIds: readonly string[];
   /** The faces this rib bounds. */
   readonly bands: readonly ConstructionSurfaceKey[];
   }
-export interface PathCloud {
+export interface PathRun {
   readonly corridorId: string;
   readonly subtype: PathKind | undefined;
-  readonly spine: PathCloudChain | undefined;
+  readonly spine: PathRunChain | undefined;
   /** One per side, outermost slot first. */
-  readonly contours: readonly PathCloudChain[];
-  readonly ribs: readonly PathCloudRib[];
+  readonly contours: readonly PathRunChain[];
+  readonly ribs: readonly PathRunRib[];
   readonly bands: readonly ConstructionSurfaceKey[];
-export function pathClouds(
+export function pathRunsIn(
   topologies: readonly ConstructionRegionTopology[],
-  ): readonly PathCloud[] {
+  ): readonly PathRun[] {
   const edges = edgesOf(topologies);
-export function pathCloudFor(
+export function pathRunsOf(cloud: CloudTopology): readonly PathRun[] {
+  return pathRunsIn(cloud.members);
+export function pathRunFor(
   topologies: readonly ConstructionRegionTopology[],
   corridorId: string,
-  ): PathCloud | undefined {
-  return pathClouds(topologies).find((cloud) => cloud.corridorId === corridorId);
+  ): PathRun | undefined {
+  return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
 
 // src/features/edit-construction/path-corridor.ts
 export function pathCorridorId(operationId: string, kind: PathKind): string {
@@ -4231,10 +4294,10 @@ export type {
   CascadeContext,
   EditResolution,
   EditRole,
+  EditScope,
   RolePolicy,
   StructureTypeDefinition,
   } from "./structure-type.ts";
-
 
 // src/features/edit-construction/structure-types/organic-structure.ts
 export const ORGANIC_ROLES = {
@@ -4253,8 +4316,7 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
   switch (role) {
   case ORGANIC_ROLES.boundaryVertex:
   case ORGANIC_ROLES.boundaryEdge:
-  case ORGANIC_ROLES.body:
-  return allowed(role, HORIZONTAL_AXES);
+  return allowed(role, HORIZONTAL_AXES, "surface");
 export function organicStructureType(
   surfaceType: string,
   label: string,
@@ -4290,7 +4352,10 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case PANEL_ROLES.bottomCorner:
-  return allowed(role, HORIZONTAL_AXES, pairedTopCorners);
+  // One corner of one panel. Whatever else references the node moves
+  // with it because the graph says so, not because the gesture reached
+  // for it.
+  return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
 export function panelInteractionOver(_coveredType: string): CreationInteraction {
   return IGNORE;
   }
@@ -4320,8 +4385,10 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   // Height included on purpose: lifting a spine station off the ground is
   // how a run stops riding the terrain, which is the whole of a bridge deck.
-  case PATH_ROLES.spine:
-  return allowed(role, ALL_AXES, outwardOfGrabbed);
+  //
+  // Scope is `"surface"` for every part-level role here, and it is not a
+  // hedge: the primary op names one node or one edge, and the reach past
+  // it is the cascade's, declared above. Widening scope as well would move
 export function pathStructureType(
   surfaceType: string,
   label: string,
@@ -4334,22 +4401,22 @@ export function pathStructureType(
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
 export type EditResolution =
+export type EditScope = "surface" | "cloud";
 export interface RolePolicy {
   readonly role: EditRole;
   readonly resolve: EditResolution;
   /** Axes the gesture's delta survives on. Ignored when `resolve` is not `"allow"`. */
   readonly axes: readonly EditAxis[];
   /**
-  * Extra ops fired alongside the primary one, as one transaction -- e.g.
-  * moving a wall's bottom corner moves its paired top corner by the *same*
+  * Whether the op applies to the grabbed face alone or to every member of
+  * its cloud. Declared per role rather than defaulted, so a new structure
 export interface CascadeContext {
+  readonly cloud: CloudTopology;
+  /** The face the gesture landed on -- `cloud.seed`, offered directly for the common case. */
   readonly topology: ConstructionRegionTopology;
-  /**
-  * The other regions this one is connected to -- every region sharing at
-  * least one node with {@link topology}.
-  *
-  * A cascade that only ever saw its own region could not follow a
-  * relationship the generator spread across several. A wall does not need
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: { readonly x: number; readonly y: number; readonly z: number };
 export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
@@ -4359,9 +4426,14 @@ export interface StructureTypeDefinition {
   * the doc's whole point is that these two halves must not drift apart.
   */
 export function denied(role: EditRole, reason: string): RolePolicy {
-  return { role, resolve: { kind: "deny", reason }, axes: [] };
-export function allowed(role: EditRole, axes: readonly EditAxis[], cascade?: RolePolicy["cascade"]): RolePolicy {
-  return { role, resolve: { kind: "allow" }, axes, cascade };
+  return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
+export function allowed(
+  role: EditRole,
+  axes: readonly EditAxis[],
+  scope: EditScope,
+  cascade?: RolePolicy["cascade"],
+  ): RolePolicy {
+  return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 export type { EditGesture };
 
 // src/features/edit-construction/surface-edit-contract.ts

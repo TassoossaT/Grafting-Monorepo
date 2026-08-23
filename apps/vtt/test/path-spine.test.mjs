@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { planEdit } from "../src/features/edit-construction/edit-orchestrator.ts";
+import { cloudOf } from "./cloud-fixture.mjs";
 import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/path-recipe.ts";
 import {
   followsOutward,
@@ -96,15 +97,11 @@ test("dragging the spine carries its whole cross-section, across every band it s
   const innerRight = band("inner-right", [0, 1]);
   const right = band("right", [1, 2]);
 
-  const plan = planEdit(
-    innerLeft,
-    {
-      surfaceKey: innerLeft.surfaceKey,
-      target: { kind: "vertex", nodeId: stationNodeId("op", 0, 0) },
-      delta: { x: 0, y: 0, z: 1 },
-    },
-    [left, innerRight, right],
-  );
+  const plan = planEdit(cloudOf(innerLeft, left, innerRight, right), {
+    surfaceKey: innerLeft.surfaceKey,
+    target: { kind: "vertex", nodeId: stationNodeId("op", 0, 0) },
+    delta: { x: 0, y: 0, z: 1 },
+  });
 
   assert.equal(plan.kind, "apply");
   assert.equal(plan.role, PATH_ROLES.spine);
@@ -128,15 +125,11 @@ test("dragging a rib carries the rim beyond it and leaves the spine alone", () =
   const innerLeft = band("inner-left", [-1, 0]);
   const innerRight = band("inner-right", [0, 1]);
 
-  const plan = planEdit(
-    left,
-    {
-      surfaceKey: left.surfaceKey,
-      target: { kind: "vertex", nodeId: stationNodeId("op", 0, -1) },
-      delta: { x: 0, y: 0, z: -1 },
-    },
-    [innerLeft, innerRight],
-  );
+  const plan = planEdit(cloudOf(left, innerLeft, innerRight), {
+    surfaceKey: left.surfaceKey,
+    target: { kind: "vertex", nodeId: stationNodeId("op", 0, -1) },
+    delta: { x: 0, y: 0, z: -1 },
+  });
 
   assert.equal(plan.kind, "apply");
   assert.equal(plan.role, PATH_ROLES.across);
@@ -146,15 +139,11 @@ test("dragging a rib carries the rim beyond it and leaves the spine alone", () =
 
 test("dragging the rim moves nothing but itself", () => {
   const left = band("left", [-2, -1]);
-  const plan = planEdit(
-    left,
-    {
-      surfaceKey: left.surfaceKey,
-      target: { kind: "vertex", nodeId: stationNodeId("op", 0, -2) },
-      delta: { x: 0, y: 0, z: -0.5 },
-    },
-    [],
-  );
+  const plan = planEdit(cloudOf(left), {
+    surfaceKey: left.surfaceKey,
+    target: { kind: "vertex", nodeId: stationNodeId("op", 0, -2) },
+    delta: { x: 0, y: 0, z: -0.5 },
+  });
 
   assert.equal(plan.kind, "apply");
   assert.equal(plan.ops.length, 1);
@@ -164,15 +153,11 @@ test("dragging the rim moves nothing but itself", () => {
 test("a spine station may be lifted, which is what a bridge deck is", () => {
   const innerLeft = band("inner-left", [-1, 0]);
   const innerRight = band("inner-right", [0, 1]);
-  const plan = planEdit(
-    innerLeft,
-    {
-      surfaceKey: innerLeft.surfaceKey,
-      target: { kind: "vertex", nodeId: stationNodeId("op", 0, 0) },
-      delta: { x: 0, y: 3, z: 0 },
-    },
-    [innerRight],
-  );
+  const plan = planEdit(cloudOf(innerLeft, innerRight), {
+    surfaceKey: innerLeft.surfaceKey,
+    target: { kind: "vertex", nodeId: stationNodeId("op", 0, 0) },
+    delta: { x: 0, y: 3, z: 0 },
+  });
 
   assert.equal(plan.kind, "apply");
   assert.ok(plan.ops.every((op) => op.position.y === 3), "the whole cross-section rises together");

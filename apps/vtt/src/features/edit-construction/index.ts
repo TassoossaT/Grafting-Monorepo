@@ -28,12 +28,12 @@ export {
   pathSpineSlot,
 } from "./path-recipe.ts";
 export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
-export { pathCloudFor, pathClouds } from "./path-cloud.ts";
+export { pathRunFor, pathRunsIn, pathRunsOf } from "./path-cloud.ts";
 export type {
-  PathCloud,
-  PathCloudChain,
-  PathCloudNode,
-  PathCloudRib,
+  PathRun,
+  PathRunChain,
+  PathRunNode,
+  PathRunRib,
 } from "./path-cloud.ts";
 export {
   followsOutward,
@@ -74,6 +74,13 @@ export {
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export {
+  cloudNodes,
+  refreshCloudTopology,
+  resolveCloud,
+  resolveCloudTopology,
+} from "./construction-cloud.ts";
+export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
+export {
   CUT,
   IGNORE,
   ORGANIC_ROLES,
@@ -93,6 +100,7 @@ export type {
   CreationInteractionKind,
   EditResolution,
   EditRole,
+  EditScope,
   ResolvedCoverage,
   RolePolicy,
   StructureTypeDefinition,

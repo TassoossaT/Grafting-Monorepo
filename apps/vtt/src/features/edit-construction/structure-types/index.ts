@@ -17,12 +17,24 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * the role table that shape implies -- the whole TS-owned half of
  * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
  *
+ * A definition here is a **cloud's** behaviour, not a face's: the type
+ * string a surface carries only selects which of these tables governs the
+ * cloud it belongs to (`construction-cloud.ts`). Every type declares the
+ * same three things, including how far each of its roles reaches -- there
+ * is no per-type escape from the rule, and a type that wants a different
+ * reach says so in its own role table rather than in a tool.
+ *
  * Types sharing a shape share a definition rather than restating one: every
  * upright panel (wall, tower, door jamb) is one type built by one builder --
  * a tower is a wall someone stamped a circle of, not a kind of its own --
- * and every procedurally swept product (terrain, path) is the same
- * non-enumerable boundary. Splitting them per product name would be
- * duplication, not per-type policy.
+ * and both terrain flavours are the same non-enumerable boundary. Splitting
+ * those per product name would be duplication, not per-type policy.
+ *
+ * A path is its own definition despite also being generated, because its
+ * shape genuinely differs: a swept run has addressable stations, so it has
+ * real roles to name, where terrain has none and can only regenerate. Shape
+ * is what decides whether two products share a table -- not whether they
+ * happen to share a generator.
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
@@ -151,6 +163,7 @@ export type {
   CascadeContext,
   EditResolution,
   EditRole,
+  EditScope,
   RolePolicy,
   StructureTypeDefinition,
 } from "./structure-type.ts";

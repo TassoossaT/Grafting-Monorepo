@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pathClouds, pathCloudFor } from "../src/features/edit-construction/path-cloud.ts";
+import { pathRunsIn, pathRunFor } from "../src/features/edit-construction/path-cloud.ts";
 import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
 import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/path-recipe.ts";
 import { stationNodeId } from "../src/features/edit-construction/station-node-id.ts";
@@ -106,7 +106,7 @@ test("a cloud reads back the spine, both contours and every rib", () => {
     band(corridor, [0, 1], stations),
   ];
 
-  const cloud = pathCloudFor(topologies, corridor);
+  const cloud = pathRunFor(topologies, corridor);
   assert.ok(cloud !== undefined);
   assert.equal(cloud.subtype, "road");
 
@@ -167,7 +167,7 @@ test("two runs are two clouds, and a welded station is reported as a junction", 
     },
   ];
 
-  const clouds = pathClouds(topologies);
+  const clouds = pathRunsIn(topologies);
   assert.equal(clouds.length, 2, "one cloud per run");
   const joined = clouds.find((cloud) => cloud.corridorId === second);
   assert.deepEqual(joined.junctionStations, [0], "the welded station is a junction");

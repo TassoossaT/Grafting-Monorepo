@@ -1,64 +1,8 @@
 # vtt
 
-### `reference vtt.construction.createConstructionSessionAdapter`
-
-### `reference vtt.construction.createTerrainNoiseAdapter`
-
 ### `function vtt.construction-session-wasm-adapter.createConstructionSessionAdapter(): ConstructionSessionPort`
 
 ### `function vtt.terrain-noise-wasm-adapter.createTerrainNoiseAdapter(): TerrainNoisePort`
-
-### `reference vtt.rendering.chunkKeyFor`
-
-### `reference vtt.rendering.chunkKeyForSurface`
-
-### `reference vtt.rendering.chunkSurfaceMeshes`
-
-### `reference vtt.rendering.clipPlaneForCameraHeight`
-
-### `reference vtt.rendering.CONSTRUCTION_GRID_EXTENT`
-
-### `reference vtt.rendering.CoveringResolver`
-
-### `reference vtt.rendering.createRender3dSceneAdapter`
-
-### `reference vtt.rendering.GRID_SNAP_UNIT`
-
-### `reference vtt.rendering.MAP_LAYER_ID`
-
-### `reference vtt.rendering.MAP_SURFACE_PICK_LAYER_ID`
-
-### `reference vtt.rendering.MAP_SURFACE_PICK_VISUAL_KIND`
-
-### `reference vtt.rendering.MAP_SURFACE_VISUAL_KIND`
-
-### `reference vtt.rendering.mapChunkSceneItem`
-
-### `reference vtt.rendering.MapChunkVisualParams`
-
-### `reference vtt.rendering.MapSurfacePickData`
-
-### `reference vtt.rendering.mapSurfacePickSceneItem`
-
-### `reference vtt.rendering.mapSurfacePickSceneItemId`
-
-### `reference vtt.rendering.MapSurfacePickVisualParams`
-
-### `reference vtt.rendering.mergeChunkBucket`
-
-### `reference vtt.rendering.mergeSurfaceMeshes`
-
-### `reference vtt.rendering.NODE_HANDLE_LAYER_ID`
-
-### `reference vtt.rendering.NODE_HANDLE_VISUAL_KIND`
-
-### `reference vtt.rendering.NodeHandlePickData`
-
-### `reference vtt.rendering.nodeHandleSceneItem`
-
-### `reference vtt.rendering.nodeHandleSceneItemId`
-
-### `reference vtt.rendering.nodeHandleTransform`
 
 ### `variable vtt.construction-grid-scene-item.CONSTRUCTION_GRID_EXTENT: 25`
 
@@ -317,54 +261,6 @@ request until the tool actually commits.
 ### `function vtt.token-scene-item.tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>`
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
-
-### `reference vtt.tabletop.attachCameraNavigation`
-
-### `reference vtt.tabletop.CameraControlHandle`
-
-### `reference vtt.tabletop.CameraControlOptions`
-
-### `reference vtt.tabletop.ConfirmedTokenDeltaEnvelope`
-
-### `reference vtt.tabletop.ConstructionPointerHandlers`
-
-### `reference vtt.tabletop.ConstructionPosition`
-
-### `reference vtt.tabletop.ConstructionToolFeedback`
-
-### `reference vtt.tabletop.ConstructionToolId`
-
-### `reference vtt.tabletop.createEditHistoryStack`
-
-### `reference vtt.tabletop.createTabletopRuntime`
-
-### `reference vtt.tabletop.CreateTabletopRuntimeInput`
-
-### `reference vtt.tabletop.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.tabletop.EditHistoryStack`
-
-### `reference vtt.tabletop.EditHistoryState`
-
-### `reference vtt.tabletop.RegionEditHistoryEntry`
-
-### `reference vtt.tabletop.RenderViewId`
-
-### `reference vtt.tabletop.TabletopRuntime`
-
-### `reference vtt.tabletop.TabletopRuntimeListener`
-
-### `reference vtt.tabletop.TabletopRuntimeStatus`
-
-### `reference vtt.tabletop.TabletopSnapshot`
-
-### `reference vtt.tabletop.ToolParamsByTool`
-
-### `reference vtt.tabletop.ToolParamsFor`
-
-### `reference vtt.tabletop.useConstructionPointer`
-
-### `reference vtt.tabletop.UseConstructionPointerOptions`
 
 ### `interface vtt.create-tabletop-runtime.CreateTabletopRuntimeInput`
 
@@ -637,147 +533,9 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `type vtt.tabletop-runtime.TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed"`
 
-### `reference vtt.tools.angleFromToXZ`
+### `reference vtt.tools.HouseVec2 -> vtt.interior-partition.Vec2`
 
-### `reference vtt.tools.BoundaryEdges`
-
-### `reference vtt.tools.boundaryUsage`
-
-### `reference vtt.tools.BrushableToolId`
-
-### `reference vtt.tools.BrushOutlineShape`
-
-### `reference vtt.tools.brushReach`
-
-### `reference vtt.tools.BrushRegion`
-
-### `reference vtt.tools.brushSweptOutlinePolygons`
-
-### `reference vtt.tools.brushSweptRegionFill`
-
-### `reference vtt.tools.BrushToolSpec`
-
-### `reference vtt.tools.buildIrregularQuadGrid`
-
-### `reference vtt.tools.cellsInPolygon`
-
-### `reference vtt.tools.circleContour`
-
-### `reference vtt.tools.commitWallContour`
-
-### `reference vtt.tools.commitWallStroke`
-
-### `reference vtt.tools.ConstructionTool`
-
-### `reference vtt.tools.ConstructionToolFeedback`
-
-### `reference vtt.tools.createBoundaryEdges`
-
-### `reference vtt.tools.createBrushTool`
-
-### `reference vtt.tools.DerivedRoom`
-
-### `reference vtt.tools.distanceToPolygonBoundaryXZ`
-
-### `reference vtt.tools.distanceToSegmentXZ`
-
-### `reference vtt.tools.EdgeSharing`
-
-### `reference vtt.tools.editRegionTool`
-
-### `reference vtt.tools.findEnclosingRoom`
-
-### `reference vtt.tools.findWallSurfaceAt`
-
-### `reference vtt.tools.fitPath`
-
-### `reference vtt.tools.FittedEdge`
-
-### `reference vtt.tools.footprintQuad`
-
-### `reference vtt.tools.houseRoomDeleteTool`
-
-### `reference vtt.tools.HouseVec2`
-
-### `reference vtt.tools.idPrefixForRoom`
-
-### `reference vtt.tools.interiorWallTool`
-
-### `reference vtt.tools.IrregularGridVec2`
-
-### `reference vtt.tools.isRedundantPerimeterWall`
-
-### `reference vtt.tools.navigateTool`
-
-### `reference vtt.tools.openingTool`
-
-### `reference vtt.tools.PanelRail`
-
-### `reference vtt.tools.panelRailOf`
-
-### `reference vtt.tools.pathBrushTool`
-
-### `reference vtt.tools.pinnedToBaseline`
-
-### `reference vtt.tools.PointerSample`
-
-### `reference vtt.tools.pointInPolygonXZ`
-
-### `reference vtt.tools.PointXZ`
-
-### `reference vtt.tools.polygonAreaXZ`
-
-### `reference vtt.tools.polylineSegmentsPreview`
-
-### `reference vtt.tools.previewOutline`
-
-### `reference vtt.tools.projectOntoLineXZ`
-
-### `reference vtt.tools.quadAround`
-
-### `reference vtt.tools.QuadMesh`
-
-### `reference vtt.tools.restackTerrain`
-
-### `reference vtt.tools.reverseGeometry`
-
-### `reference vtt.tools.scopedToolId`
-
-### `reference vtt.tools.segmentBetween`
-
-### `reference vtt.tools.segmentsPreview`
-
-### `reference vtt.tools.terrainSculptTool`
-
-### `reference vtt.tools.ToolContext`
-
-### `reference vtt.tools.toolFor`
-
-### `reference vtt.tools.ToolGesture`
-
-### `reference vtt.tools.towerStampTool`
-
-### `reference vtt.tools.WALL_COLOR`
-
-### `reference vtt.tools.WALL_HEIGHT`
-
-### `reference vtt.tools.wallBrushTool`
-
-### `reference vtt.tools.WallColumn`
-
-### `reference vtt.tools.WallContour`
-
-### `reference vtt.tools.wallLineTool`
-
-### `reference vtt.tools.wallPatch`
-
-### `reference vtt.tools.WallSpan`
-
-### `reference vtt.tools.wallSpans`
-
-### `reference vtt.tools.xzDistance`
-
-### `reference vtt.tools.xzDistanceSq`
+### `reference vtt.tools.IrregularGridVec2 -> vtt.irregular-grid.Vec2`
 
 ### `interface vtt.boundary-edges.BoundaryEdges`
 
@@ -1701,8 +1459,6 @@ Everything about what a wall *is* lives here, in TypeScript. The engine is
 told which nodes exist, which edges connect them, and which faces sit over
 those edges -- it is never told that any of it is a wall.
 
-### `reference vtt.wall-patch.reverseGeometry`
-
 ### `variable vtt.wall-shared.WALL_COLOR: Record<WallParams["wallType"], number>`
 
 ### `variable vtt.wall-shared.WALL_HEIGHT: 3`
@@ -1740,10 +1496,6 @@ within WALL_PICK_TOLERANCE), or `undefined` if none qualify --
 `house-room-delete-tool.ts`'s single-surface delete: a click that lands
 directly on a wall removes just that one panel, distinct from a click on
 open floor inside a room, which removes every wall bounding it instead.
-
-### `reference vtt.wall-shared.pinnedToBaseline`
-
-### `reference vtt.wall-shared.xzDistance`
 
 ### `interface vtt.wall-spans.WallSpan`
 
@@ -1821,48 +1573,6 @@ branches on *which* tool is active -- it only resolves what the pointer
 hit, looks the active tool up in `tools/tool-registry.ts`, and calls
 whichever lifecycle hook that tool defines. Per-tool behavior (what a
 stroke or a click actually generates) lives entirely in `tools/*.ts`.
-
-### `reference vtt.map.applyMapProjectionDelta`
-
-### `reference vtt.map.colorForSurfaceType`
-
-### `reference vtt.map.CoveringKind`
-
-### `reference vtt.map.createMapProjection`
-
-### `reference vtt.map.createSurfaceProjection`
-
-### `reference vtt.map.MapId`
-
-### `reference vtt.map.MapProjection`
-
-### `reference vtt.map.MapProjectionDelta`
-
-### `reference vtt.map.NodePosition`
-
-### `reference vtt.map.NodePositionEntry`
-
-### `reference vtt.map.NodeRef`
-
-### `reference vtt.map.NONE_COVERING`
-
-### `reference vtt.map.NONE_COVERING_KIND`
-
-### `reference vtt.map.PAINTED_COVERING_KIND`
-
-### `reference vtt.map.paintedCovering`
-
-### `reference vtt.map.resolveSurfaceCovering`
-
-### `reference vtt.map.SurfaceCovering`
-
-### `reference vtt.map.SurfaceFill`
-
-### `reference vtt.map.SurfaceProjection`
-
-### `reference vtt.map.SurfaceRef`
-
-### `reference vtt.map.surfaceRefFromNodeSet`
 
 ### `interface vtt.map-projection.MapProjection`
 
@@ -2025,28 +1735,6 @@ which produces a single outer loop and no holes, so no opening exists to
 leave unfilled. The policy lands with hole authoring; the mechanism is ready
 for it now.
 
-### `reference vtt.token.applyTokenProjectionDelta`
-
-### `reference vtt.token.createTokenCollection`
-
-### `reference vtt.token.createTokenProjection`
-
-### `reference vtt.token.SceneId`
-
-### `reference vtt.token.SubjectRef`
-
-### `reference vtt.token.TokenAppearance`
-
-### `reference vtt.token.TokenCollectionProjection`
-
-### `reference vtt.token.TokenId`
-
-### `reference vtt.token.TokenPosition`
-
-### `reference vtt.token.TokenProjection`
-
-### `reference vtt.token.TokenProjectionDelta`
-
 ### `interface vtt.token-projection.TokenAppearance`
 
 ### `property vtt.token-projection.TokenAppearance.color: number`
@@ -2096,198 +1784,6 @@ for it now.
 ### `function vtt.token-projection.createTokenCollection(tokens: readonly TokenProjection[]): TokenCollectionProjection`
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
-
-### `reference vtt.edit-construction.addPosition`
-
-### `reference vtt.edit-construction.ALL_AXES`
-
-### `reference vtt.edit-construction.applyEditOp`
-
-### `reference vtt.edit-construction.applyEditPlan`
-
-### `reference vtt.edit-construction.AtomicEditOp`
-
-### `reference vtt.edit-construction.AtomicEditOpKind`
-
-### `reference vtt.edit-construction.BrushGestureRegion`
-
-### `reference vtt.edit-construction.BrushGestureSample`
-
-### `reference vtt.edit-construction.BrushShape`
-
-### `reference vtt.edit-construction.BrushShapeKind`
-
-### `reference vtt.edit-construction.BrushShapeParams`
-
-### `reference vtt.edit-construction.CascadeContext`
-
-### `reference vtt.edit-construction.constrainToAxes`
-
-### `reference vtt.edit-construction.ConstructionHistoryEntry`
-
-### `reference vtt.edit-construction.ConstructionOperationContext`
-
-### `reference vtt.edit-construction.ConstructionToolId`
-
-### `reference vtt.edit-construction.createEditHistoryStack`
-
-### `reference vtt.edit-construction.createPathBrushEffect`
-
-### `reference vtt.edit-construction.CreationInteraction`
-
-### `reference vtt.edit-construction.CreationInteractionKind`
-
-### `reference vtt.edit-construction.CUT`
-
-### `reference vtt.edit-construction.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.edit-construction.EditAxis`
-
-### `reference vtt.edit-construction.EditGesture`
-
-### `reference vtt.edit-construction.EditHistoryStack`
-
-### `reference vtt.edit-construction.EditHistoryState`
-
-### `reference vtt.edit-construction.EditOpSink`
-
-### `reference vtt.edit-construction.EditPlan`
-
-### `reference vtt.edit-construction.EditResolution`
-
-### `reference vtt.edit-construction.EditRole`
-
-### `reference vtt.edit-construction.EditTarget`
-
-### `reference vtt.edit-construction.EMPTY_OUTCOME`
-
-### `reference vtt.edit-construction.firstRefusal`
-
-### `reference vtt.edit-construction.followsOutward`
-
-### `reference vtt.edit-construction.forbid`
-
-### `reference vtt.edit-construction.HEIGHT_AXIS`
-
-### `reference vtt.edit-construction.HORIZONTAL_AXES`
-
-### `reference vtt.edit-construction.IGNORE`
-
-### `reference vtt.edit-construction.InteriorGenerateParams`
-
-### `reference vtt.edit-construction.isSpineNode`
-
-### `reference vtt.edit-construction.mergeOutcomes`
-
-### `reference vtt.edit-construction.NoToolParams`
-
-### `reference vtt.edit-construction.OpeningParams`
-
-### `reference vtt.edit-construction.ORGANIC_ROLES`
-
-### `reference vtt.edit-construction.PANEL_ROLES`
-
-### `reference vtt.edit-construction.parseStationNodeId`
-
-### `reference vtt.edit-construction.PATH_SPINE_OFFSET`
-
-### `reference vtt.edit-construction.PathBrushEffect`
-
-### `reference vtt.edit-construction.PathBrushHistoryEntry`
-
-### `reference vtt.edit-construction.PathBrushParams`
-
-### `reference vtt.edit-construction.pathCarvesGround`
-
-### `reference vtt.edit-construction.PathCloud`
-
-### `reference vtt.edit-construction.PathCloudChain`
-
-### `reference vtt.edit-construction.pathCloudFor`
-
-### `reference vtt.edit-construction.PathCloudNode`
-
-### `reference vtt.edit-construction.PathCloudRib`
-
-### `reference vtt.edit-construction.pathClouds`
-
-### `reference vtt.edit-construction.pathCorridorId`
-
-### `reference vtt.edit-construction.pathFormationFor`
-
-### `reference vtt.edit-construction.PathFormationParameters`
-
-### `reference vtt.edit-construction.PathFormationRecipe`
-
-### `reference vtt.edit-construction.pathHalfWidth`
-
-### `reference vtt.edit-construction.PathKind`
-
-### `reference vtt.edit-construction.PathProfilePoint`
-
-### `reference vtt.edit-construction.pathRidesTerrain`
-
-### `reference vtt.edit-construction.pathSpineSlot`
-
-### `reference vtt.edit-construction.pathSubtypeOf`
-
-### `reference vtt.edit-construction.planEdit`
-
-### `reference vtt.edit-construction.PreviewDescriptor`
-
-### `reference vtt.edit-construction.RegionEditHistoryEntry`
-
-### `reference vtt.edit-construction.resolveBrushShape`
-
-### `reference vtt.edit-construction.resolveCoverage`
-
-### `reference vtt.edit-construction.resolveCreationInteraction`
-
-### `reference vtt.edit-construction.ResolvedCoverage`
-
-### `reference vtt.edit-construction.resolvePolicy`
-
-### `reference vtt.edit-construction.RESTACK`
-
-### `reference vtt.edit-construction.RevisionPrecondition`
-
-### `reference vtt.edit-construction.RolePolicy`
-
-### `reference vtt.edit-construction.scalePosition`
-
-### `reference vtt.edit-construction.StationNodeAddress`
-
-### `reference vtt.edit-construction.stationNodeId`
-
-### `reference vtt.edit-construction.STRUCTURE_TYPE_DEFINITIONS`
-
-### `reference vtt.edit-construction.StructureTypeDefinition`
-
-### `reference vtt.edit-construction.structureTypeFor`
-
-### `reference vtt.edit-construction.SURFACE_EDIT_MODE_DEFINITIONS`
-
-### `reference vtt.edit-construction.SurfaceEditModeDefinition`
-
-### `reference vtt.edit-construction.surfaceEditModeFor`
-
-### `reference vtt.edit-construction.SurfaceEditTargetScope`
-
-### `reference vtt.edit-construction.TerrainSculptParams`
-
-### `reference vtt.edit-construction.ToolParamsByTool`
-
-### `reference vtt.edit-construction.ToolParamsFor`
-
-### `reference vtt.edit-construction.TOWER_RADIUS_PRESETS`
-
-### `reference vtt.edit-construction.TowerStampParams`
-
-### `reference vtt.edit-construction.WallBrushParams`
-
-### `reference vtt.edit-construction.WallParams`
-
-### `reference vtt.edit-construction.ZERO_DELTA`
 
 ### `interface vtt.atomic-edit.EditGesture`
 
@@ -2341,6 +1837,104 @@ Which part of a region the user grabbed.
 ### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
 Converts editable shape parameters into the immutable semantic brush contract.
+
+### `interface vtt.construction-cloud.CloudSource`
+
+The slice of the runtime a cloud resolution needs, named here so
+`features/` stays free of the composition root and a test can supply two
+functions instead of a runtime.
+
+### `method vtt.construction-cloud.CloudSource.cloudFor(request: { seed: ConstructionSurfaceKey; surfaceType: string }): { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+### `method vtt.construction-cloud.CloudSource.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `interface vtt.construction-cloud.CloudTopology`
+
+A cloud together with the live boundary of every member.
+
+### `property vtt.construction-cloud.CloudTopology.cloud: ConstructionCloud`
+
+### `property vtt.construction-cloud.CloudTopology.members: readonly ConstructionRegionTopology[]`
+
+Every member's boundary, the seed included.
+
+### `property vtt.construction-cloud.CloudTopology.seed: ConstructionRegionTopology`
+
+The member the gesture landed on. Role resolution reads this one and
+only this one: a corner is a corner of the face it belongs to, and
+asking the whole cloud what a single grabbed node means would have no
+answer.
+
+### `interface vtt.construction-cloud.ConstructionCloud`
+
+The cloud: the connected component of same-`type` surfaces reachable from
+one of them by shared graph nodes.
+
+`ADR-0022` puts this fourth in the layering (graph -> mesh -> surface ->
+**cloud** -> asset) and is explicit about what it is for: "this is the
+unit generation and editing operate on -- never an individual `Surface` in
+isolation," and "editing dispatches by cloud, not by individual surface."
+A cloud of one surface is not a special case; it is a component of size
+one, same code path as one of a thousand.
+
+Derived, never stored, exactly like a mesh. There is no cloud object in
+the graph to keep in sync: two separately drawn walls become one cloud the
+moment a stroke welds a node they both reference, because the *next*
+query walks across it. Nothing performs a merge, and nothing can forget
+to.
+
+The type is what the cloud carries, and the reason the whole layer exists:
+a surface holds the `type` string, but the cloud is the thing that string
+names as one construction. Which is why a type's editing behaviour is
+declared against the cloud (`structure-types/`), and why a tool preset --
+"a tower," "a house" -- can only choose parameters and a generator, never
+hold behaviour of its own.
+
+### `property vtt.construction-cloud.ConstructionCloud.members: readonly ConstructionSurfaceKey[]`
+
+Every member, the seed included, in the engine's own stable order.
+
+### `property vtt.construction-cloud.ConstructionCloud.seed: ConstructionSurfaceKey`
+
+The member the gesture actually landed on.
+
+### `property vtt.construction-cloud.ConstructionCloud.surfaceType: string`
+
+The one type every member shares; a cloud never spans two.
+
+### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology): readonly { id: string; position: { x: number; y: number; z: number } }[]`
+
+Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded.
+
+### `function vtt.construction-cloud.refreshCloudTopology(source: CloudSource, cloud: ConstructionCloud): CloudTopology | undefined`
+
+Re-reads every member's boundary against the live session, keeping the
+membership already resolved.
+
+A drag re-plans on every tick and must see current positions, but must not
+re-resolve membership mid-gesture: a move that welds onto a neighbour
+would silently enlarge the cloud under the pointer and start dragging
+geometry the gesture never grabbed. Membership is settled once, on press.
+
+### `function vtt.construction-cloud.resolveCloud(source: CloudSource, seed: ConstructionSurfaceKey): ConstructionCloud | undefined`
+
+The cloud the surface at `seed` belongs to.
+
+The engine answers which surfaces are connected and share the type; it is
+never asked what the type *means*. `undefined` only when the key is stale
+-- a live surface always belongs to at least its own cloud, so an empty
+membership is treated as the seed alone rather than as an error, which is
+what keeps a component of size one on the same path as any other.
+
+### `function vtt.construction-cloud.resolveCloudTopology(source: CloudSource, seed: ConstructionSurfaceKey): CloudTopology | undefined`
+
+resolveCloud plus every member's live boundary, which is what a
+gesture is actually planned against.
+
+A member whose topology has since gone stale is dropped rather than
+failing the whole resolution: the cloud query and the topology reads are
+separate calls, and a surface that disappeared between them is exactly the
+case where continuing with what is still there is right.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -2416,7 +2010,7 @@ The slice of `ConstructionSessionPort` an edit plan actually needs.
 
 ### `method vtt.edit-orchestrator.EditOpSink.retypeEdge(edgeId: string, geometry: { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }): RegionEditOutcome`
 
-### `type vtt.edit-orchestrator.EditPlan = { kind: "apply"; ops: readonly AtomicEditOp[]; role: EditRole } | { kind: "deny"; reason: string; role: EditRole } | { kind: "regenerate"; reason: string; role: EditRole }`
+### `type vtt.edit-orchestrator.EditPlan = { kind: "apply"; ops: readonly AtomicEditOp[]; role: EditRole; scope: EditScope; surfaceCount: number } | { kind: "deny"; reason: string; role: EditRole } | { kind: "regenerate"; reason: string; role: EditRole }`
 
 Turns one user gesture into the exact sequence of atomic ops to issue.
 
@@ -2426,8 +2020,14 @@ resolves which role was grabbed, constrains the op's own parameter, and
 assembles the primary op plus whatever cascade the role declares -- all
 before a single engine call is made.
 
-Pure on purpose. It reads a region's topology and returns a plan; nothing
-here touches the session. applyEditPlan performs it.
+It plans against a **cloud**, not a face (`ADR-0022`: "editing dispatches
+by cloud, not by individual surface"). The face the pointer landed on is
+still what says *what was grabbed* -- a corner is a corner of a panel --
+but how far the resulting op reaches is the role's own declaration, and a
+cloud-scoped role fans out over every member.
+
+Pure on purpose. It reads topology and returns a plan; nothing here
+touches the session. applyEditPlan performs it.
 
 ### `variable vtt.edit-orchestrator.EMPTY_OUTCOME: RegionEditOutcome`
 
@@ -2446,84 +2046,98 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(topology: ConstructionRegionTopology, gesture: EditGesture, related: readonly ConstructionRegionTopology[]): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
-### `interface vtt.path-cloud.PathCloud`
+### `interface vtt.path-cloud.PathRun`
 
-### `property vtt.path-cloud.PathCloud.bands: readonly ConstructionSurfaceKey[]`
+### `property vtt.path-cloud.PathRun.bands: readonly ConstructionSurfaceKey[]`
 
-### `property vtt.path-cloud.PathCloud.contours: readonly PathCloudChain[]`
+### `property vtt.path-cloud.PathRun.contours: readonly PathRunChain[]`
 
 One per side, outermost slot first.
 
-### `property vtt.path-cloud.PathCloud.corridorId: string`
+### `property vtt.path-cloud.PathRun.corridorId: string`
 
-### `property vtt.path-cloud.PathCloud.junctionStations: readonly number[]`
+### `property vtt.path-cloud.PathRun.junctionStations: readonly number[]`
 
 Stations whose spine node belongs to a **different** corridor -- this run
 welded onto one already standing there. A junction, seen from this side.
 
-### `property vtt.path-cloud.PathCloud.ribs: readonly PathCloudRib[]`
+### `property vtt.path-cloud.PathRun.ribs: readonly PathRunRib[]`
 
-### `property vtt.path-cloud.PathCloud.spine: PathCloudChain | undefined`
+### `property vtt.path-cloud.PathRun.spine: PathRunChain | undefined`
 
-### `property vtt.path-cloud.PathCloud.subtype: PathKind | undefined`
+### `property vtt.path-cloud.PathRun.subtype: PathKind | undefined`
 
-### `interface vtt.path-cloud.PathCloudChain`
+### `interface vtt.path-cloud.PathRunChain`
 
 A chain running **along** the run: the spine, or one side of the contour.
 
-### `property vtt.path-cloud.PathCloudChain.across: number`
+### `property vtt.path-cloud.PathRunChain.across: number`
 
-### `property vtt.path-cloud.PathCloudChain.edgeIds: readonly string[]`
+### `property vtt.path-cloud.PathRunChain.edgeIds: readonly string[]`
 
 The edge between consecutive nodes; one shorter than `nodes`.
 
-### `property vtt.path-cloud.PathCloudChain.nodes: readonly PathCloudNode[]`
+### `property vtt.path-cloud.PathRunChain.nodes: readonly PathRunNode[]`
 
 Ordered by station.
 
-### `interface vtt.path-cloud.PathCloudNode`
+### `interface vtt.path-cloud.PathRunNode`
 
 One node of a run, with the address its id carries.
 
-### `property vtt.path-cloud.PathCloudNode.across: number`
+### `property vtt.path-cloud.PathRunNode.across: number`
 
 Signed slot across the cross-section; `0` is the spine.
 
-### `property vtt.path-cloud.PathCloudNode.nodeId: string`
+### `property vtt.path-cloud.PathRunNode.nodeId: string`
 
-### `property vtt.path-cloud.PathCloudNode.position: ConstructionPosition`
+### `property vtt.path-cloud.PathRunNode.position: ConstructionPosition`
 
-### `property vtt.path-cloud.PathCloudNode.station: number`
+### `property vtt.path-cloud.PathRunNode.station: number`
 
-### `interface vtt.path-cloud.PathCloudRib`
+### `interface vtt.path-cloud.PathRunRib`
 
 A chain running **across** the run: one station, contour to contour.
 
-### `property vtt.path-cloud.PathCloudRib.bands: readonly ConstructionSurfaceKey[]`
+### `property vtt.path-cloud.PathRunRib.bands: readonly ConstructionSurfaceKey[]`
 
 The faces this rib bounds.
 
-### `property vtt.path-cloud.PathCloudRib.edgeIds: readonly string[]`
+### `property vtt.path-cloud.PathRunRib.edgeIds: readonly string[]`
 
-### `property vtt.path-cloud.PathCloudRib.nodes: readonly PathCloudNode[]`
+### `property vtt.path-cloud.PathRunRib.nodes: readonly PathRunNode[]`
 
 Ordered by `across`, so from one contour through the spine to the other.
 
-### `property vtt.path-cloud.PathCloudRib.station: number`
+### `property vtt.path-cloud.PathRunRib.station: number`
 
-### `function vtt.path-cloud.pathCloudFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathCloud | undefined`
+### `function vtt.path-cloud.pathRunFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathRun | undefined`
 
-One run by its corridor id, or `undefined` if nothing standing is from it.
+One run by its corridor id, or `undefined` if nothing present is from it.
 
-### `function vtt.path-cloud.pathClouds(topologies: readonly ConstructionRegionTopology[]): readonly PathCloud[]`
+### `function vtt.path-cloud.pathRunsIn(topologies: readonly ConstructionRegionTopology[]): readonly PathRun[]`
 
-Every path run standing in `topologies`, one cloud each.
+Every path run present in `topologies`, one per corridor.
+
+Takes a plain set of boundaries rather than a cloud, because the caller
+that needs *every* standing run -- crossing detection, which is looking
+for runs it is not yet connected to -- is by definition looking outside
+any one cloud.
+
+### `function vtt.path-cloud.pathRunsOf(cloud: CloudTopology): readonly PathRun[]`
+
+The runs inside one cloud -- the cloud-owned view, and the one a tool
+should reach for.
+
+Editing dispatches by cloud, so anything asking "what is this road made
+of" is asking about the cloud under the pointer, not about a face and not
+about the whole table.
 
 ### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
 
@@ -2667,12 +2281,24 @@ One file per structure type, each pairing creation-shape knowledge with
 the role table that shape implies -- the whole TS-owned half of
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
+A definition here is a **cloud's** behaviour, not a face's: the type
+string a surface carries only selects which of these tables governs the
+cloud it belongs to (`construction-cloud.ts`). Every type declares the
+same three things, including how far each of its roles reaches -- there
+is no per-type escape from the rule, and a type that wants a different
+reach says so in its own role table rather than in a tool.
+
 Types sharing a shape share a definition rather than restating one: every
 upright panel (wall, tower, door jamb) is one type built by one builder --
 a tower is a wall someone stamped a circle of, not a kind of its own --
-and every procedurally swept product (terrain, path) is the same
-non-enumerable boundary. Splitting them per product name would be
-duplication, not per-type policy.
+and both terrain flavours are the same non-enumerable boundary. Splitting
+those per product name would be duplication, not per-type policy.
+
+A path is its own definition despite also being generated, because its
+shape genuinely differs: a swept run has addressable stations, so it has
+real roles to name, where terrain has none and can only regenerate. Shape
+is what decides whether two products share a table -- not whether they
+happen to share a generator.
 
 ### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
 
@@ -2706,52 +2332,6 @@ guessing would corrupt geometry.
 ### `function vtt.structure-types.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
 
 The definition governing one surface type, or `undefined` if it has none.
-
-### `reference vtt.structure-types.allowed`
-
-### `reference vtt.structure-types.CascadeContext`
-
-### `reference vtt.structure-types.CreationInteraction`
-
-### `reference vtt.structure-types.CreationInteractionKind`
-
-### `reference vtt.structure-types.CUT`
-
-### `reference vtt.structure-types.denied`
-
-### `reference vtt.structure-types.EditResolution`
-
-### `reference vtt.structure-types.EditRole`
-
-### `reference vtt.structure-types.forbid`
-
-### `reference vtt.structure-types.IGNORE`
-
-### `reference vtt.structure-types.ORGANIC_ROLES`
-
-### `reference vtt.structure-types.organicStructureType`
-
-### `reference vtt.structure-types.PANEL_ROLES`
-
-### `reference vtt.structure-types.panelStructureType`
-
-### `reference vtt.structure-types.PATH_ROLES`
-
-### `reference vtt.structure-types.pathInteractionOver`
-
-### `reference vtt.structure-types.pathPolicyFor`
-
-### `reference vtt.structure-types.pathRoleFor`
-
-### `reference vtt.structure-types.pathStructureType`
-
-### `reference vtt.structure-types.RESTACK`
-
-### `reference vtt.structure-types.RolePolicy`
-
-### `reference vtt.structure-types.StructureTypeDefinition`
-
-### `reference vtt.structure-types.terrainInteractionOver`
 
 ### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
 
@@ -2896,30 +2476,35 @@ Builds one swept-product structure type on the shared spine model.
 
 What a cascade gets to look at when deriving its extra ops.
 
+The whole cloud, not only the grabbed face: a cascade exists precisely to
+reach parts the gesture never named, and a panel welded onto a neighbour
+shares its column with that neighbour. Reading one face would make the
+answer depend on which of two panels the pointer happened to land on.
+
+A swept product needs the same reach for its own reason -- one station
+runs through every band it was built from, and the rim belongs only to
+the outermost -- which is why there is no second "related regions" list
+beside this one. The cloud already *is* that list, resolved by the layer
+whose job it is (`construction-cloud.ts`) instead of recomputed by
+whichever tool happens to be calling.
+
+### `property vtt.structure-type.CascadeContext.cloud: CloudTopology`
+
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
 
 The delta already constrained by the role's own axes.
-
-### `property vtt.structure-type.CascadeContext.related: readonly ConstructionRegionTopology[]`
-
-The other regions this one is connected to -- every region sharing at
-least one node with topology.
-
-A cascade that only ever saw its own region could not follow a
-relationship the generator spread across several. A wall does not need
-this, because a panel's paired corners are both its own; a swept product
-does, because one cross-section runs through every band it was built
-from and the rim belongs only to the outermost. Empty when the caller
-has no wider view to offer, so a role that ignores it is unaffected.
 
 ### `property vtt.structure-type.CascadeContext.target: EditTarget`
 
 ### `property vtt.structure-type.CascadeContext.topology: ConstructionRegionTopology`
 
+The face the gesture landed on -- `cloud.seed`, offered directly for the common case.
+
 ### `interface vtt.structure-type.RolePolicy`
 
-One role's complete editing policy: what it allows, what constrains the
-op's own parameter, and what else fires in the same transaction.
+One role's complete editing policy: what it allows, how far it reaches,
+what constrains the op's own parameter, and what else fires in the same
+transaction.
 
 ### `property vtt.structure-type.RolePolicy.axes: readonly EditAxis[]`
 
@@ -2936,17 +2521,35 @@ scaled or cross-axis variant.
 
 ### `property vtt.structure-type.RolePolicy.role: string`
 
+### `property vtt.structure-type.RolePolicy.scope: EditScope`
+
+Whether the op applies to the grabbed face alone or to every member of
+its cloud. Declared per role rather than defaulted, so a new structure
+type states its reach on purpose instead of inheriting whichever answer
+happened to be cheaper -- the same posture the axes list already takes.
+
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
-One structure type's definition, pairing both halves the design doc keeps
-together on purpose:
+One structure type's definition -- which is to say, **what a cloud of this
+type does**, since the cloud is what the type names (`ADR-0022`, and
+`construction-cloud.ts`). Nothing below is a property of a single face;
+a face only carries the string that selects this table.
+
+It pairs the halves the design doc keeps together on purpose:
 
 1. **How it is created** -- which generation call produced it, in what
    expected shape.
-2. **The role table derived from that shape.** Because this side *asked*
-   for a specific shape, it already knows by construction what index 0 of
-   the engine's deterministically-ordered response means. Nothing travels
-   back from Rust to say so.
+2. **The role table derived from that shape**, each role declaring its own
+   reach. Because this side *asked* for a specific shape, it already knows
+   by construction what index 0 of the engine's deterministically-ordered
+   response means. Nothing travels back from Rust to say so.
+3. **How it meets every other type** when painted over one.
+
+A tool preset -- "a tower," "a house" -- is not a type and never appears
+here. A preset chooses parameters and a generator; the geometry it
+produces lands in a cloud whose type is one of these, and that cloud is
+where its behaviour comes from. This is why a tower needs no editing code
+of its own.
 
 ### `property vtt.structure-type.StructureTypeDefinition.creation: string`
 
@@ -2991,15 +2594,26 @@ generated shape means" -- `"wall-bottom-corner"`, `"tower-rim-edge"`.
 Deliberately a plain string: the engine never sees one, never returns one,
 and never validates one. Each structure-type file mints its own.
 
-### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
+### `type vtt.structure-type.EditScope = "surface" | "cloud"`
 
-Convenience for the common "allowed, on these axes, no cascade" policy.
+How far a gesture on this role reaches.
+
+`ADR-0022` settles the default: the cloud is what editing operates on,
+never a face in isolation. A role is `"surface"` only where the grabbed
+part genuinely belongs to one face and to no other -- a panel's own
+corner is that panel's corner, and moving it moves whatever else happens
+to reference the node, which is a consequence of the graph rather than a
+scope decision. `"cloud"` is for the roles that name the *whole thing*:
+grabbing a wall's body means the wall, not the one panel under the
+pointer.
+
+### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], scope: EditScope, cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
+
+Convenience for the common "allowed, on these axes, at this reach, no cascade" policy.
 
 ### `function vtt.structure-type.denied(role: string, reason: string): RolePolicy`
 
 The policy every unknown role falls back to: refuse rather than guess.
-
-### `reference vtt.structure-type.EditGesture`
 
 ### `interface vtt.surface-edit-contract.BrushGestureRegion`
 
@@ -3093,7 +2707,13 @@ VTT-selected profile for a generic path-sweep formation.
 
 ### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
 
-A product-owned scope supported by a surface edit mode.
+A product-owned scope supported by a surface edit mode -- *what a mode
+accepts as a target*.
+
+Not to be confused with `structure-types`' own `EditScope`, which is *how
+far one role's op reaches* once a target has been grabbed. A mode can
+accept a `"node"` target whose role nevertheless reaches the whole cloud;
+the two answer different questions and share only the word.
 
 ### `function vtt.surface-edit-contract.createPathBrushEffect(payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">, context: ConstructionOperationContext, expected: readonly RevisionPrecondition[]): PathBrushEffect`
 
@@ -3370,10 +2990,6 @@ closed catalog, not a free numeric field -- so every tower on a table is
 one of a few known sizes a later room-generation pass (Note 0008) can
 reason about, not an arbitrary one a careless drag produced.
 
-### `reference vtt.navigate-camera.attachCameraNavigation`
-
-### `reference vtt.navigate-camera.CameraControllable`
-
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 
 The minimum a target needs for this feature to drive its camera. A
@@ -3388,28 +3004,6 @@ concrete runtime type and instead accepts anything shaped like it.
 Wires camera navigation for one attached view. Returns a detach function --
 callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 `TabletopRuntime.attachView`'s own callers already follow.
-
-### `reference vtt.place-token.BindTokenSubjectIntent`
-
-### `reference vtt.place-token.BindTokenSubjectOperation`
-
-### `reference vtt.place-token.createBindTokenSubjectOperation`
-
-### `reference vtt.place-token.createPlaceTokenOperation`
-
-### `reference vtt.place-token.OperationId`
-
-### `reference vtt.place-token.ParticipantId`
-
-### `reference vtt.place-token.PlaceTokenIntent`
-
-### `reference vtt.place-token.PlaceTokenOperation`
-
-### `reference vtt.place-token.RevisionPrecondition`
-
-### `reference vtt.place-token.TokenOperation`
-
-### `reference vtt.place-token.TokenOperationContext`
 
 ### `interface vtt.token-operations.BindTokenSubjectIntent`
 
@@ -3484,114 +3078,6 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `function vtt.token-operations.createBindTokenSubjectOperation(intent: BindTokenSubjectIntent, context: TokenOperationContext): BindTokenSubjectOperation`
 
 ### `function vtt.token-operations.createPlaceTokenOperation(intent: PlaceTokenIntent, context: TokenOperationContext): PlaceTokenOperation`
-
-### `reference vtt.ports.AffectedSurfaces`
-
-### `reference vtt.ports.ApplyRegionOverlayRequest`
-
-### `reference vtt.ports.CameraControlHandle`
-
-### `reference vtt.ports.CameraControlOptions`
-
-### `reference vtt.ports.CellCoordinate`
-
-### `reference vtt.ports.ChangeOrigin`
-
-### `reference vtt.ports.CloudOutcome`
-
-### `reference vtt.ports.CloudRequest`
-
-### `reference vtt.ports.ConfirmedMapChunkRenderChange`
-
-### `reference vtt.ports.ConfirmedNodeHandleRenderChange`
-
-### `reference vtt.ports.ConfirmedRenderChange`
-
-### `reference vtt.ports.ConfirmedSurfacePickRenderChange`
-
-### `reference vtt.ports.ConfirmedTokenRenderChange`
-
-### `reference vtt.ports.ConstructionCoverageKind`
-
-### `reference vtt.ports.ConstructionCoveredRegion`
-
-### `reference vtt.ports.ConstructionEdgeGeometry`
-
-### `reference vtt.ports.ConstructionEdgeId`
-
-### `reference vtt.ports.ConstructionNodeId`
-
-### `reference vtt.ports.ConstructionNodeSnapshot`
-
-### `reference vtt.ports.ConstructionOrientedEdgeUse`
-
-### `reference vtt.ports.ConstructionPatch`
-
-### `reference vtt.ports.ConstructionPatchEdge`
-
-### `reference vtt.ports.ConstructionPatchOutcome`
-
-### `reference vtt.ports.ConstructionPatchRegion`
-
-### `reference vtt.ports.ConstructionPosition`
-
-### `reference vtt.ports.ConstructionRegionEdge`
-
-### `reference vtt.ports.ConstructionRegionTopology`
-
-### `reference vtt.ports.ConstructionSessionPort`
-
-### `reference vtt.ports.ConstructionSurfaceKey`
-
-### `reference vtt.ports.ConstructionSurfaceSpec`
-
-### `reference vtt.ports.ConstructionSweepParameters`
-
-### `reference vtt.ports.ConstructionSweepPlan`
-
-### `reference vtt.ports.ConstructionUnfilledLoop`
-
-### `reference vtt.ports.DiffOutcome`
-
-### `reference vtt.ports.GenerateRegionPartitionRequest`
-
-### `reference vtt.ports.RegionEditOutcome`
-
-### `reference vtt.ports.RemoveSurfaceRequest`
-
-### `reference vtt.ports.RenderCovering`
-
-### `reference vtt.ports.RenderDependencyRevision`
-
-### `reference vtt.ports.RenderLayerKey`
-
-### `reference vtt.ports.RenderMapChunk`
-
-### `reference vtt.ports.RenderMeshData`
-
-### `reference vtt.ports.RenderNodeHandle`
-
-### `reference vtt.ports.RenderPreviewDescriptor`
-
-### `reference vtt.ports.RenderSurfacePickTarget`
-
-### `reference vtt.ports.RenderToken`
-
-### `reference vtt.ports.RenderViewId`
-
-### `reference vtt.ports.ScenePickResult`
-
-### `reference vtt.ports.SceneRenderMetrics`
-
-### `reference vtt.ports.SceneRenderPort`
-
-### `reference vtt.ports.SurfaceMeshResult`
-
-### `reference vtt.ports.SurfaceTransformationInvalidation`
-
-### `reference vtt.ports.TerrainNoisePort`
-
-### `reference vtt.ports.TransformationIdentityDelta`
 
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
@@ -5239,10 +4725,6 @@ its edge as the drag/toggle control.
 
 Semantic status marker with Grafting-owned status names.
 
-### `reference vtt.seeded-random.lerp`
-
-### `reference vtt.seeded-random.mulberry32`
-
 ### `interface vtt.widgets.ConstructionDockProps`
 
 ### `property vtt.widgets.ConstructionDockProps.activeTool: ConstructionToolId`
@@ -5393,18 +4875,6 @@ open/close trigger), edit-mode only. Grid snap sits here (not in the
 construction hotbar) because it is not itself a tool -- it modifies every
 construction tool's resolved point the same way, via
 `use-construction-pointer.ts`.
-
-### `reference vtt.widgets.ConstructionToolId`
-
-### `reference vtt.widgets.DEFAULT_TOOL_PARAMS`
-
-### `reference vtt.widgets.KeyboardShortcutsOptions`
-
-### `reference vtt.widgets.ToolParamsByTool`
-
-### `reference vtt.widgets.ToolParamsFor`
-
-### `reference vtt.widgets.useKeyboardShortcuts`
 
 ### `interface vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions`
 

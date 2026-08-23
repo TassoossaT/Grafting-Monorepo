@@ -4,6 +4,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
+import type { CloudTopology } from "./construction-cloud.ts";
 import { pathSubtypeOf } from "./path-corridor.ts";
 import { parseStationNodeId } from "./station-node-id.ts";
 import type { PathKind } from "./tool-types.ts";
@@ -12,6 +13,12 @@ import type { PathKind } from "./tool-types.ts";
  * One committed run of path, read back as the three parts it is built from:
  * the spine, the outer contour running parallel to it, and the rib linking
  * them.
+ *
+ * **A run is not a cloud.** `ADR-0022`'s cloud is the connected component of
+ * one surface type, so two roads that meet are one cloud with two runs in it
+ * -- which is exactly what a junction is. The cloud stays the unit editing
+ * dispatches on; a run is what that unit is *made of*, and the pair is read
+ * through `pathRunsOf`.
  *
  * **Derived, never stored.** Every fact here is already in the graph -- the
  * spine is the chain at slot 0, a contour is a chain at an extreme slot, a
@@ -26,7 +33,7 @@ import type { PathKind } from "./tool-types.ts";
  */
 
 /** One node of a run, with the address its id carries. */
-export interface PathCloudNode {
+export interface PathRunNode {
   readonly nodeId: string;
   readonly station: number;
   /** Signed slot across the cross-section; `0` is the spine. */
@@ -35,31 +42,31 @@ export interface PathCloudNode {
 }
 
 /** A chain running **along** the run: the spine, or one side of the contour. */
-export interface PathCloudChain {
+export interface PathRunChain {
   readonly across: number;
   /** Ordered by station. */
-  readonly nodes: readonly PathCloudNode[];
+  readonly nodes: readonly PathRunNode[];
   /** The edge between consecutive nodes; one shorter than `nodes`. */
   readonly edgeIds: readonly string[];
 }
 
 /** A chain running **across** the run: one station, contour to contour. */
-export interface PathCloudRib {
+export interface PathRunRib {
   readonly station: number;
   /** Ordered by `across`, so from one contour through the spine to the other. */
-  readonly nodes: readonly PathCloudNode[];
+  readonly nodes: readonly PathRunNode[];
   readonly edgeIds: readonly string[];
   /** The faces this rib bounds. */
   readonly bands: readonly ConstructionSurfaceKey[];
 }
 
-export interface PathCloud {
+export interface PathRun {
   readonly corridorId: string;
   readonly subtype: PathKind | undefined;
-  readonly spine: PathCloudChain | undefined;
+  readonly spine: PathRunChain | undefined;
   /** One per side, outermost slot first. */
-  readonly contours: readonly PathCloudChain[];
-  readonly ribs: readonly PathCloudRib[];
+  readonly contours: readonly PathRunChain[];
+  readonly ribs: readonly PathRunRib[];
   readonly bands: readonly ConstructionSurfaceKey[];
   /**
    * Stations whose spine node belongs to a **different** corridor -- this run
@@ -105,13 +112,13 @@ function edgeBetween(
 
 function chainAt(
   across: number,
-  byStation: ReadonlyMap<number, ReadonlyMap<number, PathCloudNode>>,
+  byStation: ReadonlyMap<number, ReadonlyMap<number, PathRunNode>>,
   stations: readonly number[],
   edges: ReadonlyMap<string, EdgeEnds>,
-): PathCloudChain | undefined {
+): PathRunChain | undefined {
   const nodes = stations
     .map((station) => byStation.get(station)?.get(across))
-    .filter((node): node is PathCloudNode => node !== undefined);
+    .filter((node): node is PathRunNode => node !== undefined);
   if (nodes.length === 0) return undefined;
   const edgeIds: string[] = [];
   for (let index = 0; index + 1 < nodes.length; index += 1) {
@@ -127,7 +134,7 @@ function chainAt(
  * id -- the one node adjacent to both of this station's inner nodes.
  */
 function weldedSpineAt(
-  inner: readonly PathCloudNode[],
+  inner: readonly PathRunNode[],
   edges: ReadonlyMap<string, EdgeEnds>,
   ownIds: ReadonlySet<string>,
 ): string | undefined {
@@ -149,12 +156,19 @@ function weldedSpineAt(
   return undefined;
 }
 
-/** Every path run standing in `topologies`, one cloud each. */
-export function pathClouds(
+/**
+ * Every path run present in `topologies`, one per corridor.
+ *
+ * Takes a plain set of boundaries rather than a cloud, because the caller
+ * that needs *every* standing run -- crossing detection, which is looking
+ * for runs it is not yet connected to -- is by definition looking outside
+ * any one cloud.
+ */
+export function pathRunsIn(
   topologies: readonly ConstructionRegionTopology[],
-): readonly PathCloud[] {
+): readonly PathRun[] {
   const edges = edgesOf(topologies);
-  const byCorridor = new Map<string, Map<number, Map<number, PathCloudNode>>>();
+  const byCorridor = new Map<string, Map<number, Map<number, PathRunNode>>>();
   const bandsByCorridor = new Map<string, ConstructionSurfaceKey[]>();
 
   for (const topology of topologies) {
@@ -210,7 +224,7 @@ export function pathClouds(
     }
 
     const junctionStations: number[] = [];
-    const ribs: PathCloudRib[] = stations.map((station) => {
+    const ribs: PathRunRib[] = stations.map((station) => {
       const perStation = byStation.get(station)!;
       const nodes = [...perStation.values()].sort((left, right) => left.across - right.across);
       if (!perStation.has(0)) {
@@ -237,7 +251,7 @@ export function pathClouds(
       spine: chainAt(0, byStation, stations, edges),
       contours: outermost
         .map((across) => chainAt(across, byStation, stations, edges))
-        .filter((chain): chain is PathCloudChain => chain !== undefined),
+        .filter((chain): chain is PathRunChain => chain !== undefined),
       ribs,
       bands: bandsByCorridor.get(corridorId) ?? [],
       junctionStations,
@@ -245,10 +259,22 @@ export function pathClouds(
   });
 }
 
-/** One run by its corridor id, or `undefined` if nothing standing is from it. */
-export function pathCloudFor(
+/**
+ * The runs inside one cloud -- the cloud-owned view, and the one a tool
+ * should reach for.
+ *
+ * Editing dispatches by cloud, so anything asking "what is this road made
+ * of" is asking about the cloud under the pointer, not about a face and not
+ * about the whole table.
+ */
+export function pathRunsOf(cloud: CloudTopology): readonly PathRun[] {
+  return pathRunsIn(cloud.members);
+}
+
+/** One run by its corridor id, or `undefined` if nothing present is from it. */
+export function pathRunFor(
   topologies: readonly ConstructionRegionTopology[],
   corridorId: string,
-): PathCloud | undefined {
-  return pathClouds(topologies).find((cloud) => cloud.corridorId === corridorId);
+): PathRun | undefined {
+  return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
 }

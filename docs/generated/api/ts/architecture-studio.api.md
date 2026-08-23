@@ -4,9 +4,9 @@
 
 ### `function architecture-studio.route.DELETE(request: Request): Promise<Response>`
 
-### `reference architecture-studio.route.GET`
+### `reference architecture-studio.route.GET -> architecture-studio.route.DELETE`
 
-### `reference architecture-studio.route.POST`
+### `reference architecture-studio.route.POST -> architecture-studio.route.DELETE`
 
 ### `function architecture-studio.server.createMcpServer(): McpServer`
 
@@ -311,8 +311,6 @@ alive behind a page the user has left.
 ### `function architecture-studio.evaluation-client.requestEvaluation(request: EvaluationRequest): Promise<EvaluationOutcome>`
 
 Runs one evaluation pass in the long-lived bench worker.
-
-### `reference architecture-studio.evaluation-client.EvaluationPreview`
 
 ### `interface architecture-studio.evaluation-order-client.EvaluationOrderEdge`
 
@@ -1570,14 +1568,6 @@ face air across it, which is the whole point of materialising air.
 
 Packs `(cell, module)` assignments into the flat pinning array the wasm
 boundary takes -- how the caller nails every air cell to its empty module.
-
-### `reference architecture-studio.shell-cell-graph.FACE_DOWN`
-
-### `reference architecture-studio.shell-cell-graph.FACE_UP`
-
-### `reference architecture-studio.shell-cell-graph.FACES_PER_CELL`
-
-### `reference architecture-studio.shell-cell-graph.LINK_STRIDE`
 
 ### `interface architecture-studio.stacked-terrain.CellCentres`
 
