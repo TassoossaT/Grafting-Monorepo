@@ -24,19 +24,46 @@ export const PATH_COLOR = 0xc084fc;
 const ARC_FLATTENING_TOLERANCE = 0.05;
 
 /**
- * The fitted contour as a plain polyline, arcs sampled by angle.
+ * Longest horizontal gap between stations, in world units.
  *
- * Temporary, and deliberately kept in one function so it is obvious what to
- * delete: `plan_sweep_formation` only samples a polyline, so a true arc has
- * no way to reach it intact. Until it accepts contour geometry, a curve is
- * handed over as chords close enough that the difference is invisible --
- * which is still a world apart from handing over the raw hand.
+ * A road rides the ground it was drawn over, and the only record of that
+ * ground is the stroke itself -- every pointer sample carries the height the
+ * renderer picked there. Fitting deliberately throws most of those samples
+ * away, so a straight run over a hill would be left with height readings at
+ * its two ends and a chord tunnelling through everything between. Stations
+ * at this spacing are what keep the road on the terrain instead of merely
+ * starting and ending on it.
+ *
+ * This is the one place face count is legitimately bought: unlike the blind
+ * subdivision it replaced, each station here exists because the ground under
+ * it might differ from its neighbours.
  */
-function flattenToPolyline(fitted: readonly FittedEdge[]): readonly ConstructionPosition[] {
+const TERRAIN_FOLLOW_STEP = 2;
+
+/** The height the stroke recorded nearest this ground position. */
+function groundHeightNear(
+  stroke: readonly ConstructionPosition[],
+  x: number,
+  z: number,
+): number {
+  let closest: ConstructionPosition | undefined;
+  let closestDistance = Infinity;
+  for (const sample of stroke) {
+    const distance = (sample.x - x) ** 2 + (sample.z - z) ** 2;
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closest = sample;
+    }
+  }
+  return closest?.y ?? 0;
+}
+
+/** The fitted contour as ground positions, arcs sampled by angle. */
+function groundTrack(fitted: readonly FittedEdge[]): readonly (readonly [number, number])[] {
   const first = fitted[0];
   if (first === undefined) return [];
 
-  const polyline: ConstructionPosition[] = [first.start];
+  const track: (readonly [number, number])[] = [[first.start.x, first.start.z]];
   for (const edge of fitted) {
     if (edge.geometry.kind === "arc") {
       const [centerX, centerZ] = edge.geometry.center;
@@ -58,16 +85,51 @@ function flattenToPolyline(fitted: readonly FittedEdge[]): readonly Construction
         const angle = edge.geometry.clockwise
           ? startAngle - (swept * step) / steps
           : startAngle + (swept * step) / steps;
-        polyline.push({
-          x: centerX + radius * Math.cos(angle),
-          y: edge.start.y,
-          z: centerZ + radius * Math.sin(angle),
-        });
+        track.push([centerX + radius * Math.cos(angle), centerZ + radius * Math.sin(angle)]);
       }
     }
-    polyline.push(edge.end);
+    track.push([edge.end.x, edge.end.z]);
   }
-  return polyline;
+  return track;
+}
+
+/**
+ * The reference line to sweep along: where the fit decided the road goes,
+ * at the height the ground was actually picked at.
+ *
+ * Arc flattening here is temporary and deliberately kept in one place so it
+ * is obvious what to delete -- `plan_sweep_formation` only samples a
+ * polyline, so a true arc has no way to reach it intact. Until it accepts
+ * contour geometry, a curve is handed over as chords close enough that the
+ * difference is invisible, which is still a world apart from handing over
+ * the raw hand.
+ */
+function referenceLineFrom(
+  fitted: readonly FittedEdge[],
+  stroke: readonly ConstructionPosition[],
+): readonly ConstructionPosition[] {
+  const track = groundTrack(fitted);
+  const first = track[0];
+  if (first === undefined) return [];
+
+  const atGround = (x: number, z: number): ConstructionPosition => ({
+    x,
+    y: groundHeightNear(stroke, x, z),
+    z,
+  });
+
+  const line: ConstructionPosition[] = [atGround(first[0], first[1])];
+  for (let index = 0; index + 1 < track.length; index += 1) {
+    const from = track[index]!;
+    const to = track[index + 1]!;
+    const span = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const steps = Math.max(1, Math.ceil(span / TERRAIN_FOLLOW_STEP));
+    for (let step = 1; step <= steps; step += 1) {
+      const ratio = step / steps;
+      line.push(atGround(from[0] + (to[0] - from[0]) * ratio, from[1] + (to[1] - from[1]) * ratio));
+    }
+  }
+  return line;
 }
 
 /**
@@ -104,7 +166,7 @@ export function commitPathContour(
   const operationId = scopedToolId(ctx, domain, sequence);
 
   const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
-  const referenceLine = fitted.length === 0 ? stroke : flattenToPolyline(fitted);
+  const referenceLine = fitted.length === 0 ? stroke : referenceLineFrom(fitted, stroke);
   if (referenceLine.length === 0) return;
 
   try {

@@ -49,7 +49,7 @@ Number of profile vertices in every transverse station.
 
 Shared-vertex quad cells between neighbouring stations and profile samples.
 
-### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::reference_line(&self) -> &[[f32; 2]]`
+### `pub fn grafting_procgen_surface_transformations::SweepFormationPlan::reference_line(&self) -> &[[f32; 3]]`
 
 Resampled reference line used by this exact formation.
 
@@ -241,9 +241,14 @@ Largest allowed corner miter, expressed as a multiple of lateral offset.
 
 Strictly left-to-right cross-section samples.
 
-### `pub grafting_procgen_surface_transformations::SweepFormationRequest::reference_line: alloc::vec::Vec<[f32; 2]>`
+### `pub grafting_procgen_surface_transformations::SweepFormationRequest::reference_line: alloc::vec::Vec<[f32; 3]>`
 
-Ordered XZ reference-line samples.
+Ordered reference-line samples as `[x, y, z]`.
+
+The line carries its own height, so a formation rides whatever it was
+drawn along rather than lying on the world floor. Station spacing is
+still measured horizontally: a climb makes a run steeper, never more
+densely sampled.
 
 ### `pub grafting_procgen_surface_transformations::TransverseProfilePoint::elevation: f32`
 
@@ -307,8 +312,10 @@ Input for one deterministic profile sweep.
 One sample of a formation's transverse profile.
 
 `lateral_offset` is measured left/right from the reference line in world
-units. `elevation` is copied directly into the resulting vertex; callers
-own the policy that decides which elevations are valid for their product.
+units. `elevation` is measured **from the reference line's own height at
+that station**, not from the world floor, so one profile describes the
+same cross-section wherever the line happens to run. Callers own the
+policy that decides which elevations are valid for their product.
 
 ### `pub type grafting_procgen_surface_transformations::BoundaryVertex = (grafting_graph_core::model::NodeId, grafting_graph_core::contour::ContourGeometry)`
 

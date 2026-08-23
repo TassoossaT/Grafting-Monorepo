@@ -3692,7 +3692,9 @@ Graph-neutral result of a reusable Rust profile sweep.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.quads: readonly (readonly [number, number, number, number])[]`
 
-### `property vtt.construction-session-port.ConstructionSweepPlan.referenceLine: readonly (readonly [number, number])[]`
+### `property vtt.construction-session-port.ConstructionSweepPlan.referenceLine: readonly ConstructionPosition[]`
+
+The stations the formation actually used, carrying the height each one rides at.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.vertices: readonly ConstructionPosition[]`
 

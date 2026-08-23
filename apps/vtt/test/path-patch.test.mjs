@@ -11,7 +11,7 @@ test("path subtype declares its own shared quad patch from a graph-neutral sweep
     }
   }
   const formation = pathPatch("table-1", "path-1", "path", {
-    referenceLine: [[0, 0], [1, 0], [2, 0]],
+    referenceLine: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }],
     vertices,
     quads: [
       [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3],

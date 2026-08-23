@@ -287,17 +287,21 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       plan_sweep_json(requestJson: string): string;
     };
     const response = JSON.parse(session.plan_sweep_json(JSON.stringify({
-      referenceLine: request.referenceLine.map((sample) => [sample.x, sample.z]),
+      referenceLine: request.referenceLine.map((sample) => [sample.x, sample.y, sample.z]),
       profile: request.parameters.profile,
       maxSegmentLength: request.parameters.maxSegmentLength,
       miterLimit: request.parameters.miterLimit,
     }))) as {
-      readonly referenceLine: readonly (readonly [number, number])[];
+      readonly referenceLine: readonly WirePosition[];
       readonly vertices: readonly WirePosition[];
       readonly quads: readonly (readonly [number, number, number, number])[];
       readonly boundary: readonly number[];
     };
-    return { ...response, vertices: response.vertices.map(fromWirePosition) };
+    return {
+      ...response,
+      referenceLine: response.referenceLine.map(fromWirePosition),
+      vertices: response.vertices.map(fromWirePosition),
+    };
   }
 
   duplicateRegion(request: {

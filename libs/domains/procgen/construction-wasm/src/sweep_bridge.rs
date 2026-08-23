@@ -21,7 +21,7 @@ pub struct SweepProfilePointRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanSweepRequest {
-    reference_line: Vec<[f32; 2]>,
+    reference_line: Vec<[f32; 3]>,
     profile: Vec<SweepProfilePointRequest>,
     max_segment_length: f32,
     miter_limit: f32,
@@ -31,7 +31,7 @@ pub struct PlanSweepRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanSweepResponse {
-    reference_line: Vec<[f32; 2]>,
+    reference_line: Vec<[f32; 3]>,
     vertices: Vec<[f32; 3]>,
     quads: Vec<[usize; 4]>,
     boundary: Vec<usize>,

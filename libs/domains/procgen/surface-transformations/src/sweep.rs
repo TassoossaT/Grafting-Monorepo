@@ -13,8 +13,10 @@ const COINCIDENT_EPSILON: f32 = 0.000_01;
 /// One sample of a formation's transverse profile.
 ///
 /// `lateral_offset` is measured left/right from the reference line in world
-/// units. `elevation` is copied directly into the resulting vertex; callers
-/// own the policy that decides which elevations are valid for their product.
+/// units. `elevation` is measured **from the reference line's own height at
+/// that station**, not from the world floor, so one profile describes the
+/// same cross-section wherever the line happens to run. Callers own the
+/// policy that decides which elevations are valid for their product.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TransverseProfilePoint {
     /// Signed world-space distance from the reference line.
@@ -26,8 +28,13 @@ pub struct TransverseProfilePoint {
 /// Input for one deterministic profile sweep.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SweepFormationRequest {
-    /// Ordered XZ reference-line samples.
-    pub reference_line: Vec<[f32; 2]>,
+    /// Ordered reference-line samples as `[x, y, z]`.
+    ///
+    /// The line carries its own height, so a formation rides whatever it was
+    /// drawn along rather than lying on the world floor. Station spacing is
+    /// still measured horizontally: a climb makes a run steeper, never more
+    /// densely sampled.
+    pub reference_line: Vec<[f32; 3]>,
     /// Strictly left-to-right cross-section samples.
     pub profile: Vec<TransverseProfilePoint>,
     /// Longest allowed spacing between consecutive generated stations.
@@ -75,7 +82,7 @@ impl Error for SweepFormationFailure {}
 /// vertices, so neighbouring strips are topologically connected by design.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SweepFormationPlan {
-    reference_line: Vec<[f32; 2]>,
+    reference_line: Vec<[f32; 3]>,
     vertices: Vec<[f32; 3]>,
     quads: Vec<[usize; 4]>,
     boundary: Vec<usize>,
@@ -84,7 +91,7 @@ pub struct SweepFormationPlan {
 
 impl SweepFormationPlan {
     /// Resampled reference line used by this exact formation.
-    pub fn reference_line(&self) -> &[[f32; 2]] {
+    pub fn reference_line(&self) -> &[[f32; 3]] {
         &self.reference_line
     }
 
@@ -135,8 +142,8 @@ pub fn plan_sweep_formation(
         for profile_point in &request.profile {
             vertices.push([
                 station[0] + frame[0] * profile_point.lateral_offset,
-                profile_point.elevation,
-                station[1] + frame[1] * profile_point.lateral_offset,
+                station[1] + profile_point.elevation,
+                station[2] + frame[1] * profile_point.lateral_offset,
             ]);
         }
     }
@@ -211,12 +218,12 @@ fn validate_request(request: &SweepFormationRequest) -> Result<(), SweepFormatio
     Ok(())
 }
 
-fn resample_reference_line(samples: &[[f32; 2]], max_segment_length: f32) -> Vec<[f32; 2]> {
-    let mut distinct = Vec::with_capacity(samples.len());
+fn resample_reference_line(samples: &[[f32; 3]], max_segment_length: f32) -> Vec<[f32; 3]> {
+    let mut distinct: Vec<[f32; 3]> = Vec::with_capacity(samples.len());
     for sample in samples {
         if distinct
             .last()
-            .is_none_or(|previous| distance(*previous, *sample) > COINCIDENT_EPSILON)
+            .is_none_or(|previous| distance(xz(*previous), xz(*sample)) > COINCIDENT_EPSILON)
         {
             distinct.push(*sample);
         }
@@ -226,30 +233,37 @@ fn resample_reference_line(samples: &[[f32; 2]], max_segment_length: f32) -> Vec
     };
     let mut resampled = vec![first];
     for pair in distinct.windows(2) {
-        let length = distance(pair[0], pair[1]);
+        let length = distance(xz(pair[0]), xz(pair[1]));
         let segments = (length / max_segment_length).ceil().max(1.0) as usize;
         for segment in 1..=segments {
             let ratio = segment as f32 / segments as f32;
             resampled.push([
                 pair[0][0] + (pair[1][0] - pair[0][0]) * ratio,
                 pair[0][1] + (pair[1][1] - pair[0][1]) * ratio,
+                pair[0][2] + (pair[1][2] - pair[0][2]) * ratio,
             ]);
         }
     }
     resampled
 }
 
-fn station_frame(reference_line: &[[f32; 2]], index: usize, miter_limit: f32) -> [f32; 2] {
-    let current = reference_line[index];
+/// A station's ground position. Frames and spacing are horizontal problems;
+/// only the vertex height reads the third component.
+fn xz(point: [f32; 3]) -> [f32; 2] {
+    [point[0], point[2]]
+}
+
+fn station_frame(reference_line: &[[f32; 3]], index: usize, miter_limit: f32) -> [f32; 2] {
+    let current = xz(reference_line[index]);
     if index == 0 {
-        return left_normal(normalize(subtract(reference_line[1], current)));
+        return left_normal(normalize(subtract(xz(reference_line[1]), current)));
     }
     if index + 1 == reference_line.len() {
-        return left_normal(normalize(subtract(current, reference_line[index - 1])));
+        return left_normal(normalize(subtract(current, xz(reference_line[index - 1]))));
     }
 
-    let incoming = normalize(subtract(current, reference_line[index - 1]));
-    let outgoing = normalize(subtract(reference_line[index + 1], current));
+    let incoming = normalize(subtract(current, xz(reference_line[index - 1])));
+    let outgoing = normalize(subtract(xz(reference_line[index + 1]), current));
     let incoming_normal = left_normal(incoming);
     let outgoing_normal = left_normal(outgoing);
     let bisector = normalize(add(incoming_normal, outgoing_normal));
@@ -300,7 +314,10 @@ mod tests {
         profile: Vec<TransverseProfilePoint>,
     ) -> SweepFormationRequest {
         SweepFormationRequest {
-            reference_line,
+            reference_line: reference_line
+                .into_iter()
+                .map(|point| [point[0], 0.0, point[1]])
+                .collect(),
             profile,
             max_segment_length: 1.0,
             miter_limit: 4.0,
@@ -391,6 +408,73 @@ mod tests {
                 .iter()
                 .all(|vertex| vertex.iter().all(|value| value.is_finite()))
         );
+    }
+
+    #[test]
+    fn a_formation_rides_the_height_its_reference_line_carries() {
+        let plan = plan_sweep_formation(&SweepFormationRequest {
+            reference_line: vec![[0.0, 0.0, 0.0], [4.0, 2.0, 0.0]],
+            profile: vec![
+                TransverseProfilePoint {
+                    lateral_offset: -1.0,
+                    elevation: 0.0,
+                },
+                TransverseProfilePoint {
+                    lateral_offset: 1.0,
+                    elevation: 0.5,
+                },
+            ],
+            max_segment_length: 2.0,
+            miter_limit: 4.0,
+        })
+        .expect("valid formation");
+
+        // Three stations climbing 0 -> 1 -> 2, each carrying the profile on
+        // top of its own height rather than on the world floor.
+        assert_eq!(plan.reference_line().len(), 3);
+        assert_eq!(
+            plan.vertices()
+                .iter()
+                .map(|vertex| vertex[1])
+                .collect::<Vec<_>>(),
+            vec![0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+        );
+    }
+
+    #[test]
+    fn station_spacing_is_horizontal_so_a_climb_does_not_densify_a_run() {
+        let flat = plan_sweep_formation(&request(
+            vec![[0.0, 0.0], [4.0, 0.0]],
+            vec![
+                TransverseProfilePoint {
+                    lateral_offset: -1.0,
+                    elevation: 0.0,
+                },
+                TransverseProfilePoint {
+                    lateral_offset: 1.0,
+                    elevation: 0.0,
+                },
+            ],
+        ))
+        .expect("valid formation");
+        let climbing = plan_sweep_formation(&SweepFormationRequest {
+            reference_line: vec![[0.0, 0.0, 0.0], [4.0, 3.0, 0.0]],
+            profile: vec![
+                TransverseProfilePoint {
+                    lateral_offset: -1.0,
+                    elevation: 0.0,
+                },
+                TransverseProfilePoint {
+                    lateral_offset: 1.0,
+                    elevation: 0.0,
+                },
+            ],
+            max_segment_length: 1.0,
+            miter_limit: 4.0,
+        })
+        .expect("valid formation");
+
+        assert_eq!(flat.reference_line().len(), climbing.reference_line().len());
     }
 
     #[test]

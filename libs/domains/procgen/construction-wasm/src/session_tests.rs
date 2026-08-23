@@ -204,14 +204,14 @@ fn fixture_edge_use(
 fn overlay_path_stroke(
     session: &mut ConstructionSession,
     operation_id: &str,
-    samples: &[[f32; 2]],
+    reference_line: &[[f32; 3]],
     formation: &serde_json::Value,
     source_surface_keys: &[serde_json::Value],
 ) -> serde_json::Value {
     let planned = session
         .plan_sweep_json(
             &json!({
-                "referenceLine": samples,
+                "referenceLine": reference_line,
                 "profile": formation["profile"].clone(),
                 "maxSegmentLength": formation["maxSegmentLength"].clone(),
                 "miterLimit": formation["miterLimit"].clone(),
@@ -328,7 +328,7 @@ fn a_profiled_path_is_a_shared_quad_patch_and_can_start_on_empty_ground() {
     let response = overlay_path_stroke(
         &mut session,
         "profiled-path-empty",
-        &[[0.0, 0.0], [2.0, 0.0]],
+        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
         &formation,
         &[],
     );
@@ -378,7 +378,7 @@ fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
     overlay_path_stroke(
         &mut session,
         "profile-cross-a",
-        &[[0.0, 0.0], [2.0, 0.0]],
+        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
         &formation,
         &[],
     );
@@ -389,7 +389,7 @@ fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
     let response = overlay_path_stroke(
         &mut session,
         "profile-cross-b",
-        &[[1.0, -1.0], [1.0, 1.0]],
+        &[[1.0, 0.0, -1.0], [1.0, 0.0, 1.0]],
         &formation,
         &sources,
     );

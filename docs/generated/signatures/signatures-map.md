@@ -447,7 +447,7 @@ pub struct TransverseProfilePoint
 pub struct SweepFormationRequest
 pub enum SweepFormationFailure
 pub struct SweepFormationPlan
-pub fn reference_line(&self) -> &[[f32; 2]]
+pub fn reference_line(&self) -> &[[f32; 3]]
 pub fn vertices(&self) -> &[[f32; 3]]
 pub fn quads(&self) -> &[[usize; 4]]
 pub fn boundary(&self) -> &[usize]

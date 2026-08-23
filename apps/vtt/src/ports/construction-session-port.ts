@@ -236,7 +236,8 @@ export interface ConstructionSweepParameters {
 
 /** Graph-neutral result of a reusable Rust profile sweep. */
 export interface ConstructionSweepPlan {
-  readonly referenceLine: readonly (readonly [number, number])[];
+  /** The stations the formation actually used, carrying the height each one rides at. */
+  readonly referenceLine: readonly ConstructionPosition[];
   readonly vertices: readonly ConstructionPosition[];
   readonly quads: readonly (readonly [number, number, number, number])[];
   readonly boundary: readonly number[];
