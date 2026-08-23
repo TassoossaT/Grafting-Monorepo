@@ -15,5 +15,7 @@ mod path_brush;
 mod region_editing;
 mod region_merge;
 mod session;
+#[cfg(test)]
+mod session_tests;
 
 pub use session::ConstructionSession;
