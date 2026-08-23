@@ -654,6 +654,40 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.edge-overlay.EdgeOverlayGroup`
+
+One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.color: number`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.positions: Float32Array`
+
+### `property vtt.edge-overlay.EdgeOverlayGroup.role: string`
+
+### `variable vtt.edge-overlay.EDGE_FALLBACK_COLOR: 6583435`
+
+Drawn for an edge whose role no palette entry names.
+
+### `variable vtt.edge-overlay.EDGE_ROLE_COLORS: Readonly<Record<string, number>>`
+
+A palette keyed by role, with a fallback for a role nothing has named yet.
+
+### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
+
+The preview channel one role's edges are drawn on.
+
+### `function vtt.edge-overlay.edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor`
+
+One group as the descriptor that draws it.
+
+### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[]): readonly EdgeOverlayGroup[]`
+
+Groups every edge of every region in `topologies` by role.
+
+An edge shared by two faces is drawn once: it is one edge, and drawing it
+twice would only make a shared boundary look heavier than a free one, which
+is the opposite of the truth worth seeing.
+
 ### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
 
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
@@ -960,37 +994,6 @@ path goes through, `path-patch.ts` declares the graph, and Rust supplies
 reusable geometry and executes the resolved overlay without ever being
 told any of it is a path.
 
-### `interface vtt.path-edge-overlay.PathEdgeOverlay`
-
-The three parts, each as a flat `[x, y, z, x, y, z, ...]` segment list.
-
-### `property vtt.path-edge-overlay.PathEdgeOverlay.contour: Float32Array`
-
-### `property vtt.path-edge-overlay.PathEdgeOverlay.rib: Float32Array`
-
-### `property vtt.path-edge-overlay.PathEdgeOverlay.spine: Float32Array`
-
-### `variable vtt.path-edge-overlay.PATH_EDGE_CHANNELS: { contour: "path-edges:contour"; rib: "path-edges:rib"; spine: "path-edges:spine" }`
-
-The preview channel each part is drawn on; separate, so one clear never takes the others.
-
-### `variable vtt.path-edge-overlay.PATH_EDGE_COLORS: { contour: 2282478; rib: 16020150; spine: 16436245 }`
-
-Colours chosen to read against the path's own surface, and against each other.
-
-### `function vtt.path-edge-overlay.pathEdgeOverlayIn(topologies: readonly ConstructionRegionTopology[]): PathEdgeOverlay`
-
-The same, straight from a set of region boundaries.
-
-### `function vtt.path-edge-overlay.pathEdgeOverlayOf(runs: readonly PathRun[]): PathEdgeOverlay`
-
-Groups the edges of `runs` by role.
-
-Drawn from the chains rather than from the edge ids, on purpose: a chain
-is what the structure *claims*, so a missing edge shows up as a visible
-gap instead of quietly not being drawn. A spine broken at a crossing --
-which is exactly what happens today -- therefore looks broken.
-
 ### `interface vtt.path-patch.PathPatchFormation`
 
 Application-owned graph declaration for one generic sweep result.
@@ -1072,16 +1075,6 @@ polyline, so a true arc has no way to reach it intact. Until it accepts
 contour geometry, a curve is handed over as chords close enough that the
 difference is invisible, which is still a world apart from handing over
 the raw hand.
-
-### `function vtt.path-shared.refreshPathEdgeOverlay(ctx: ToolContext): void`
-
-Redraws the spine/contour/rib overlay from whatever is now standing.
-
-Node handles are drawn and edges are not, so how a run is *joined* has
-been invisible -- and joining is the whole of what a junction is. Refreshed
-after a commit rather than per frame: nothing about the graph changes
-between commits, and each part goes on its own channel so the tool's own
-ghost keeps working untouched.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -2488,7 +2481,7 @@ That is the whole of the panel side of the interaction table.
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
 
-### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; edge: "path-edge"; spine: "path-spine"; unknown: "path-unknown" }`
+### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; contourEdge: "path-contour-edge"; edge: "path-edge"; ribEdge: "path-rib-edge"; spine: "path-spine"; spineEdge: "path-spine-edge"; unknown: "path-unknown" }`
 
 The role model for anything swept along a travel line: a spine, whatever
 lies between the spine and the rim, and the rim itself.
@@ -2514,7 +2507,7 @@ anything.
 
 ### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
 
-### `function vtt.path-structure.pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): string`
+### `function vtt.path-structure.pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
 
 ### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 

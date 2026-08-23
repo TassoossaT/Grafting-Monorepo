@@ -3274,6 +3274,31 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
 
+// src/composition/tabletop/tools/core/edge-overlay.ts
+export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
+  "path-spine-edge": 0xfacc15,
+  "path-contour-edge": 0x22d3ee,
+  "path-rib-edge": 0xf472b6,
+  "panel-bottom-edge": 0x34d399,
+  "panel-top-edge": 0x818cf8,
+  "panel-post": 0xfb923c,
+  "organic-boundary-edge": 0x94a3b8,
+export const EDGE_FALLBACK_COLOR = 0x64748b;
+export function edgeOverlayChannel(role: string): string {
+  return `edges:${role}`;
+  }
+export interface EdgeOverlayGroup {
+  readonly role: string;
+  readonly color: number;
+  readonly positions: Float32Array;
+  }
+export function edgeOverlayOf(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly EdgeOverlayGroup[] {
+  const byRole = new Map<string, number[]>();
+export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
+  return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
+
 // src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
@@ -3428,39 +3453,6 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   halfWidth: pathHalfWidth,
 
 
-// src/composition/tabletop/tools/paths/path-edge-overlay.ts
-export interface PathEdgeOverlay {
-  readonly spine: Float32Array;
-  readonly contour: Float32Array;
-  readonly rib: Float32Array;
-  }
-export const PATH_EDGE_COLORS = {
-  spine: 0xfacc15,
-  contour: 0x22d3ee,
-  rib: 0xf472b6,
-  } as const;
-
-  /** The preview channel each part is drawn on; separate, so one clear never takes the others. */
-export const PATH_EDGE_CHANNELS = {
-  spine: "path-edges:spine",
-  contour: "path-edges:contour",
-  rib: "path-edges:rib",
-  } as const;
-
-  function pushSegment(into: number[], from: ConstructionPosition, to: ConstructionPosition): void {
-  into.push(from.x, from.y, from.z, to.x, to.y, to.z);
-export function pathEdgeOverlayOf(runs: readonly PathRun[]): PathEdgeOverlay {
-  const spine: number[] = [];
-  const contour: number[] = [];
-  const rib: number[] = [];
-
-  for (const run of runs) {
-  if (run.spine !== undefined) chainSegments(spine, run.spine.nodes);
-export function pathEdgeOverlayIn(
-  topologies: readonly ConstructionRegionTopology[],
-  ): PathEdgeOverlay {
-  return pathEdgeOverlayOf(pathRunsIn(topologies));
-
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -3478,8 +3470,6 @@ export function pathPatch(
 
 // src/composition/tabletop/tools/paths/path-shared.ts
 export const PATH_COLOR = 0xc084fc;
-export function refreshPathEdgeOverlay(ctx: ToolContext): void {
-  const overlay = pathEdgeOverlayIn(ctx.runtime.getAllRegionTopologies());
 export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
@@ -4411,14 +4401,13 @@ export const PATH_ROLES = {
   spine: "path-spine",
   across: "path-across",
   body: "path-body",
-  edge: "path-edge",
-  unknown: "path-unknown",
-  } as const;
-
-export function pathRoleFor(_topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  /** Along the travel line: the seam the two central bands meet on. */
+  spineEdge: "path-spine-edge",
+  /** Along the run at an extreme slot -- one side of the outer contour. */
+  contourEdge: "path-contour-edge",
+export function pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PATH_ROLES.body;
-  if (target.kind === "edge") return PATH_ROLES.edge;
-  const address = parseStationNodeId(target.nodeId);
+  if (target.kind === "edge") return pathEdgeRole(topology, target.edgeId);
 export function pathPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   // Height included on purpose: lifting a spine station off the ground is

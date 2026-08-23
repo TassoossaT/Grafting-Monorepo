@@ -11,6 +11,11 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
+import {
+  edgeOverlayChannel,
+  edgeOverlayDescriptor,
+  edgeOverlayOf,
+} from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
@@ -81,6 +86,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const lastPreviewAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
+  const shownEdgeChannels = useRef(new Set<string>());
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -90,6 +97,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastPreviewAtRef.current = 0;
     options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
   }, [options.activeTool, options.runtime]);
+
 
 
   const ctx = useMemo<ToolContext>(
@@ -112,6 +120,34 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     }),
     [nextSequence],
   );
+
+  /**
+   * Redraws the construction-edge overlay from whatever is now standing.
+   *
+   * Here rather than inside any one tool: an edge belongs to the table, not
+   * to whichever tool happened to draw it, so a wall's posts show while the
+   * path brush is selected and vice versa. Refreshed after a commit and on
+   * tool change -- nothing about the graph moves in between -- and each role
+   * gets its own channel, which leaves the tool's own ghost untouched.
+   */
+  const refreshEdgeOverlay = useCallback((): void => {
+    const { runtime } = optionsRef.current;
+    for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
+    shownEdgeChannels.current.clear();
+    for (const group of edgeOverlayOf(runtime.getAllRegionTopologies())) {
+      if (group.positions.length === 0) continue;
+      const channel = edgeOverlayChannel(group.role);
+      runtime.showPreview(edgeOverlayDescriptor(group), channel);
+      shownEdgeChannels.current.add(channel);
+    }
+  }, []);
+
+  // Draw what is already standing as soon as the table is live, not only
+  // after the first commit -- an edge that was there before this session
+  // began is exactly as worth seeing as one just drawn.
+  useEffect(() => {
+    refreshEdgeOverlay();
+  }, [options.runtime, refreshEdgeOverlay]);
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {
@@ -228,8 +264,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      refreshEdgeOverlay();
     },
-    [ctx],
+    [ctx, refreshEdgeOverlay],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -249,8 +286,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const sample = sampleAt(event);
       if (sample === undefined) return;
       tool.onClick(ctx, sample, toolParams[activeTool] as never);
+      refreshEdgeOverlay();
     },
-    [ctx, sampleAt],
+    [ctx, refreshEdgeOverlay, sampleAt],
   );
 
   return {
