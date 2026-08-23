@@ -713,6 +713,29 @@ the edge the first split has already replaced.
 
 The closed footprint a pair of rims bounds, walked as one ring.
 
+### `function vtt.contour-fusion.mitrePoint(joint: ConstructionPosition, ownRim: ConstructionPosition, ownDirection: PointXZ, standingRim: ConstructionPosition, standingDirection: PointXZ, limit: number): ConstructionPosition`
+
+Where two rims leaving one joint meet if each keeps going as it was.
+
+This is the mitre, and it is what an L bend needs: the two runs share a
+station, so their cross-sections at that station are the same cut, and the
+question is only where the outer corner of that cut falls. On the outside
+of the bend the two rims cross ahead of themselves; on the inside they
+cross behind. Both are the same intersection of two infinite lines, which
+is why there is no case analysis here.
+
+Parallel rims -- one run continuing straight into the next -- meet nowhere,
+and the honest answer is the point half way between them.
+
+### `function vtt.contour-fusion.sideOf(origin: PointXZ, direction: PointXZ, at: PointXZ): number`
+
+Which side of `direction` the point `at` lies, seen from `origin`.
+
+The sign is all that is used. Two rims belong to the same side of a joint
+when a traveller passing through it keeps them both on the same hand --
+which, since one run's direction points *into* the joint and the other's
+points *out* of it, means their signs are opposite.
+
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
 One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
@@ -1085,6 +1108,28 @@ and the overlay refusing the patch is that fact arriving where it is
 precise. A wall shares `private-when-full` for the opposite reason -- any
 number of walls may legitimately stand on one column.
 
+### `interface vtt.path-shared.SpineJoin`
+
+One arrival that welded onto a station already standing.
+
+### `property vtt.path-shared.SpineJoin.at: number`
+
+Index into the committed reference line where the two meet.
+
+### `property vtt.path-shared.SpineJoin.nodeId: string`
+
+### `property vtt.path-shared.SpineJoin.position: ConstructionPosition`
+
+### `property vtt.path-shared.SpineJoin.run: PathRun`
+
+### `property vtt.path-shared.SpineJoin.standingIndex: number`
+
+Which station of the standing run that was.
+
+### `property vtt.path-shared.SpineJoin.terminal: boolean`
+
+Whether that station is an end of the standing run rather than a middle.
+
 ### `variable vtt.path-shared.PATH_COLOR: 12616956`
 
 ### `function vtt.path-shared.commitPathContour(ctx: ToolContext, stroke: readonly ConstructionPosition[], brushShape: BrushShape, tolerance: number, params: PathBrushParams, domain: string): void`
@@ -1138,7 +1183,7 @@ Positions come back as a fresh vertex list rather than as an edit, because
 this run has not been committed yet -- the sweep proposed where its rim
 went, and the junction is what disposes.
 
-### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.
 
@@ -1158,6 +1203,30 @@ lands on an existing station, so the crossed spine's edge is split and the
 node minted, which is `insertedColumnAt` for paths. The node is numbered on
 the crossed run's own station scale, fractionally, so it stays part of that
 spine's chain and in the right order.
+
+### `function vtt.path-shared.mitreTerminalRibs(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joins: readonly SpineJoin[]): { moves: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
+
+Mitres this run's end rib into the end rib of a run it met at a station.
+
+The L, and the only junction shape that needs no junction face at all.
+Both runs stop at the same station, so their cross-sections there are the
+same cut of the road, and the two ribs are not two ribs: they are one,
+running between the two places the outer rims meet. Each rim keeps the
+direction its own spine gave it until it reaches its opposite number, and
+that meeting point is the corner -- the outside of the bend meets ahead,
+the inside behind, and both are the same intersection.
+
+The join is made by *identity*, as everything else here is. The standing
+run's rim node is moved onto the corner and the run being committed welds
+its own rim node to it, so the rib edge between corner and spine is named
+from the same pair of nodes on both sides and is therefore literally the
+same edge. Two faces to an edge is exactly what `refuse-when-full` allows,
+and it is how a wall shares a column.
+
+Pairing the sides needs no case analysis either. One run's direction points
+out of the joint and the other's points into it, so two rims lie on the
+same hand of a traveller passing through precisely when `sideOf` gives them
+opposite signs.
 
 ### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
 

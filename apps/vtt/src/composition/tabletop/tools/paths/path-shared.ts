@@ -1,4 +1,10 @@
-import type { AtomicEditOp, BrushShape, PathBrushParams, PathRun } from "@/features/edit-construction";
+import type {
+  AtomicEditOp,
+  BrushShape,
+  PathBrushParams,
+  PathRun,
+  PathRunChain,
+} from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionNodeId,
@@ -25,8 +31,18 @@ import {
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
-import { pointInPolygonXZ, projectOntoLineXZ, segmentCrossingXZ } from "../shapes/geometry-2d.ts";
-import { contourFusionsAgainst, footprintOf } from "../core/contour-fusion.ts";
+import {
+  distanceToSegmentXZ,
+  pointInPolygonXZ,
+  projectOntoLineXZ,
+  segmentCrossingXZ,
+} from "../shapes/geometry-2d.ts";
+import {
+  contourFusionsAgainst,
+  footprintOf,
+  mitrePoint,
+  sideOf,
+} from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -256,6 +272,19 @@ function reachOf(run: PathRun): number {
   return widest;
 }
 
+/** One arrival that welded onto a station already standing. */
+export interface SpineJoin {
+  readonly run: PathRun;
+  /** Index into the committed reference line where the two meet. */
+  readonly at: number;
+  readonly nodeId: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+  /** Which station of the standing run that was. */
+  readonly standingIndex: number;
+  /** Whether that station is an end of the standing run rather than a middle. */
+  readonly terminal: boolean;
+}
+
 /**
  * Every place the run being drawn meets a spine already standing.
  *
@@ -301,6 +330,15 @@ export function junctionsWithStandingSpines(
    * that merely overlaps is not one of them.
    */
   readonly joined: readonly PathRun[];
+  /**
+   * Arrivals that landed on a station already standing.
+   *
+   * Kept apart from the rest because they are the only ones whose rims can be
+   * mitred: a run meeting another *at a station* shares that station's whole
+   * cross-section, so the two terminal ribs can become one. An arrival that
+   * split an edge mid-run is a T, and a T needs a face this does not build.
+   */
+  readonly terminals: readonly SpineJoin[];
 } {
   const standing = pathRunsIn(ctx.runtime.getAllRegionTopologies());
   const found: {
@@ -327,6 +365,8 @@ export function junctionsWithStandingSpines(
   /** Records one meeting point, minting the node the crossed spine gains. */
   /** Corridors this run welded a spine node onto. */
   const joinedCorridors = new Set<string>();
+  /** Arrivals that welded to a station already standing, rather than splitting. */
+  const terminals: SpineJoin[] = [];
 
   const record = (
     run: PathRun,
@@ -374,12 +414,50 @@ export function junctionsWithStandingSpines(
       for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
         const edgeId = spine.edgeIds[step];
         if (edgeId === undefined || usedEdges.has(edgeId)) continue;
-        const { t, perp } = projectOntoLineXZ(end, spine.nodes[step]!.position, spine.nodes[step + 1]!.position);
-        if (perp > reach || t < 0 || t > 1) continue;
-        if (best === undefined || perp < best.perp) best = { run, step, edgeId, along: t, perp };
+        const from = spine.nodes[step]!.position;
+        const to = spine.nodes[step + 1]!.position;
+        const { t } = projectOntoLineXZ(end, from, to);
+        // Clamped, not rejected. An end drawn a little *past* another run's
+        // last station is the commonest way an L is drawn, and measuring
+        // against the infinite line threw it away for overshooting by
+        // centimetres -- which is most of why two runs would not bend into
+        // one another at all.
+        const along = Math.min(1, Math.max(0, t));
+        const distance = distanceToSegmentXZ(end, from, to);
+        if (distance > reach) continue;
+        if (best === undefined || distance < best.perp) best = { run, step, edgeId, along, perp: distance };
       }
     }
-    if (best !== undefined) record(best.run, best.step, best.edgeId, best.along, index, index);
+    if (best === undefined) continue;
+    // Landing on a station that already exists welds to it rather than
+    // splitting the edge beside it. This is `resolveColumn`'s first case, and
+    // without it an L minted a second node a few centimetres from the one it
+    // meant to meet, leaving a hair-thin edge and two runs that only looked
+    // joined.
+    const spine = best.run.spine!;
+    const nearIndex = best.along <= 0.5 ? best.step : best.step + 1;
+    const near = spine.nodes[nearIndex]!;
+    const landing = projectOntoLineXZ(
+      line[index]!,
+      spine.nodes[best.step]!.position,
+      spine.nodes[best.step + 1]!.position,
+    );
+    const toNear = Math.hypot(landing.x - near.position.x, landing.z - near.position.z);
+    if (toNear < STATION_MERGE_DISTANCE) {
+      usedEdges.add(best.edgeId);
+      joinedCorridors.add(best.run.corridorId);
+      arrivals.set(index, { position: near.position, nodeId: near.nodeId });
+      terminals.push({
+        run: best.run,
+        at: index,
+        nodeId: near.nodeId,
+        position: near.position,
+        standingIndex: nearIndex,
+        terminal: nearIndex === 0 || nearIndex === spine.nodes.length - 1,
+      });
+      continue;
+    }
+    record(best.run, best.step, best.edgeId, best.along, index, index);
   }
 
   for (const run of standing) {
@@ -399,7 +477,7 @@ export function junctionsWithStandingSpines(
     }
   }
   if (found.length === 0 && arrivals.size === 0) {
-    return { line, welds: new Map(), inserts: [], joined: [] };
+    return { line, welds: new Map(), inserts: [], joined: [], terminals };
   }
 
   const ordered = [...found].sort((left, right) => left.at - right.at);
@@ -466,7 +544,109 @@ export function junctionsWithStandingSpines(
     welds,
     inserts: ops,
     joined: standing.filter((run) => touched.has(run.corridorId)),
+    terminals,
   };
+}
+
+/**
+ * Mitres this run's end rib into the end rib of a run it met at a station.
+ *
+ * The L, and the only junction shape that needs no junction face at all.
+ * Both runs stop at the same station, so their cross-sections there are the
+ * same cut of the road, and the two ribs are not two ribs: they are one,
+ * running between the two places the outer rims meet. Each rim keeps the
+ * direction its own spine gave it until it reaches its opposite number, and
+ * that meeting point is the corner -- the outside of the bend meets ahead,
+ * the inside behind, and both are the same intersection.
+ *
+ * The join is made by *identity*, as everything else here is. The standing
+ * run's rim node is moved onto the corner and the run being committed welds
+ * its own rim node to it, so the rib edge between corner and spine is named
+ * from the same pair of nodes on both sides and is therefore literally the
+ * same edge. Two faces to an edge is exactly what `refuse-when-full` allows,
+ * and it is how a wall shares a column.
+ *
+ * Pairing the sides needs no case analysis either. One run's direction points
+ * out of the joint and the other's points into it, so two rims lie on the
+ * same hand of a traveller passing through precisely when `sideOf` gives them
+ * opposite signs.
+ */
+export function mitreTerminalRibs(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joins: readonly SpineJoin[],
+): {
+  readonly vertices: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<string, ConstructionNodeId>;
+  readonly moves: readonly AtomicEditOp[];
+} {
+  const vertices = [...plan.vertices];
+  const welds = new Map<string, ConstructionNodeId>();
+  const moves: AtomicEditOp[] = [];
+  if (joins.length === 0 || profileLength < 3) return { vertices, welds, moves };
+
+  const stationCount = Math.floor(vertices.length / profileLength);
+  const at = (station: number, across: number): number =>
+    station * profileLength + across + spineSlot;
+  const outerSlots = [...new Set([-spineSlot, profileLength - 1 - spineSlot])].filter(
+    (across) => across !== 0,
+  );
+  const direction = (from: ConstructionPosition, to: ConstructionPosition) => {
+    const length = Math.hypot(to.x - from.x, to.z - from.z);
+    if (length < 1e-9) return undefined;
+    return { x: (to.x - from.x) / length, z: (to.z - from.z) / length };
+  };
+  /** The node a chain carries at one end of its run. */
+  const endOf = (chain: PathRunChain, first: boolean) =>
+    first ? chain.nodes[0] : chain.nodes[chain.nodes.length - 1];
+
+  for (const join of joins) {
+    // Only an end of *this* run can be mitred: a rib in the middle of a run
+    // has road on both sides of it and cannot be rotated onto anything.
+    if (!join.terminal || (join.at !== 0 && join.at !== stationCount - 1)) continue;
+    const inward = join.at === 0 ? 1 : stationCount - 2;
+    if (inward < 0 || inward >= stationCount) continue;
+
+    const spine = join.run.spine;
+    if (spine === undefined || spine.nodes.length < 2 || join.run.contours.length < 2) continue;
+    const standingFirst = join.standingIndex === 0;
+    const standingNext = standingFirst ? spine.nodes[1] : spine.nodes[spine.nodes.length - 2];
+    if (standingNext === undefined) continue;
+
+    const outward = direction(vertices[at(join.at, 0)]!, vertices[at(inward, 0)]!);
+    const standingOut = direction(join.position, standingNext.position);
+    if (outward === undefined || standingOut === undefined) continue;
+
+    for (const across of outerSlots) {
+      const ownRim = vertices[at(join.at, across)]!;
+      const ownSide = sideOf(join.position, outward, ownRim);
+      const paired = join.run.contours
+        .map((chain) => endOf(chain, standingFirst))
+        .find(
+          (node) =>
+            node !== undefined && sideOf(join.position, standingOut, node.position) === -ownSide,
+        );
+      if (paired === undefined) continue;
+
+      const halfWidth = Math.max(
+        Math.hypot(ownRim.x - join.position.x, ownRim.z - join.position.z),
+        Math.hypot(paired.position.x - join.position.x, paired.position.z - join.position.z),
+      );
+      const corner = mitrePoint(
+        join.position,
+        ownRim,
+        outward,
+        paired.position,
+        standingOut,
+        halfWidth,
+      );
+      vertices[at(join.at, across)] = corner;
+      welds.set(`${join.at}:${across}`, paired.nodeId);
+      moves.push({ kind: "move-vertex", nodeId: paired.nodeId, position: corner });
+    }
+  }
+  return { vertices, welds, moves };
 }
 
 /**
@@ -727,7 +907,26 @@ export function commitPathContour(
     // Now that the rim exists, fuse it into the rims of the runs this one
     // joined: a shared spine node without shared contour nodes is two roads
     // drawn over each other, not a junction.
-    const fused = fuseContoursWithStandingRuns(plan, profile.length, spineSlot, aligned ? crossed.joined : []);
+    //
+    // Two shapes, and they are answered in order. A run that met another *at
+    // a station* shares that station's whole cross-section, so its end rib is
+    // mitred into the other's and the two become one rib. Everything else met
+    // mid-run, and there the rim is cut back to where it crossed.
+    const mitred = mitreTerminalRibs(
+      plan,
+      profile.length,
+      spineSlot,
+      aligned ? crossed.terminals.filter((join) => join.terminal) : [],
+    );
+    const mitredCorridors = new Set(
+      crossed.terminals.filter((join) => join.terminal).map((join) => join.run.corridorId),
+    );
+    const fused = fuseContoursWithStandingRuns(
+      { ...plan, vertices: mitred.vertices },
+      profile.length,
+      spineSlot,
+      aligned ? crossed.joined.filter((run) => !mitredCorridors.has(run.corridorId)) : [],
+    );
     const spineWelds = new Map<string, ConstructionNodeId>();
     if (aligned) for (const [station, nodeId] of welds) spineWelds.set(`${station}:0`, nodeId);
     const formation = pathPatch(
@@ -737,7 +936,7 @@ export function commitPathContour(
       { ...plan, vertices: fused.vertices },
       profile.length,
       spineSlot,
-      new Map([...spineWelds, ...fused.welds]),
+      new Map([...spineWelds, ...mitred.welds, ...fused.welds]),
     );
 
     const resolved = resolveCoverage(
@@ -768,7 +967,7 @@ export function commitPathContour(
     // crossing needs and the rim nodes a fusion needs are made by cutting
     // edges of runs already standing, and a refusal above would otherwise
     // leave those cuts behind with nothing referencing them.
-    const splits = [...crossed.inserts, ...fused.inserts];
+    const splits = [...crossed.inserts, ...mitred.moves, ...fused.inserts];
     if (splits.length > 0) {
       ctx.runtime.applyRegionEdit(splits, "local", operationId);
     }

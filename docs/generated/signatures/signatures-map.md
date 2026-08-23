@@ -3300,6 +3300,16 @@ export function footprintOf(
   ): readonly ConstructionPosition[] {
   return [...left, ...[...right].reverse()];
   }
+export function sideOf(origin: PointXZ, direction: PointXZ, at: PointXZ): number {
+  return Math.sign(crossXZ(direction, { x: at.x - origin.x, z: at.z - origin.z }));
+export function mitrePoint(
+  joint: ConstructionPosition,
+  ownRim: ConstructionPosition,
+  ownDirection: PointXZ,
+  standingRim: ConstructionPosition,
+  standingDirection: PointXZ,
+  limit: number,
+  ): ConstructionPosition {
 
 // src/composition/tabletop/tools/core/edge-overlay.ts
 export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
@@ -3503,6 +3513,14 @@ export function referenceLineFrom(
   ridesTerrain: boolean,
   ): readonly ConstructionPosition[] {
   const track = groundTrack(fitted);
+export interface SpineJoin {
+  readonly run: PathRun;
+  /** Index into the committed reference line where the two meet. */
+  readonly at: number;
+  readonly nodeId: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+  /** Which station of the standing run that was. */
+  readonly standingIndex: number;
 export function junctionsWithStandingSpines(
   ctx: ToolContext,
   line: readonly ConstructionPosition[],
@@ -3511,6 +3529,14 @@ export function junctionsWithStandingSpines(
   * standing run's reach, so two roads join when their **surfaces** touch
   * rather than when one centre line reaches the other. Nobody draws up to
   * another road's centre line -- they stop when the two look like they meet,
+export function mitreTerminalRibs(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joins: readonly SpineJoin[],
+  ): {
+  readonly vertices: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<string, ConstructionNodeId>;
 export function fuseContoursWithStandingRuns(
   plan: ConstructionSweepPlan,
   profileLength: number,

@@ -139,3 +139,81 @@ export function footprintOf(
 ): readonly ConstructionPosition[] {
   return [...left, ...[...right].reverse()];
 }
+
+/**
+ * How far a mitre may reach from the joint, as a multiple of the wider half
+ * width.
+ *
+ * Two rims meeting at a sharp angle cross a long way out, and an unbounded
+ * mitre puts a spike there. Every stroking library bounds it the same way and
+ * for the same reason; the number is the usual one.
+ */
+const MITRE_LIMIT = 3;
+
+/** The XZ cross product, positive when `to` lies to one consistent side. */
+function crossXZ(from: PointXZ, to: PointXZ): number {
+  return from.x * to.z - from.z * to.x;
+}
+
+/**
+ * Which side of `direction` the point `at` lies, seen from `origin`.
+ *
+ * The sign is all that is used. Two rims belong to the same side of a joint
+ * when a traveller passing through it keeps them both on the same hand --
+ * which, since one run's direction points *into* the joint and the other's
+ * points *out* of it, means their signs are opposite.
+ */
+export function sideOf(origin: PointXZ, direction: PointXZ, at: PointXZ): number {
+  return Math.sign(crossXZ(direction, { x: at.x - origin.x, z: at.z - origin.z }));
+}
+
+/**
+ * Where two rims leaving one joint meet if each keeps going as it was.
+ *
+ * This is the mitre, and it is what an L bend needs: the two runs share a
+ * station, so their cross-sections at that station are the same cut, and the
+ * question is only where the outer corner of that cut falls. On the outside
+ * of the bend the two rims cross ahead of themselves; on the inside they
+ * cross behind. Both are the same intersection of two infinite lines, which
+ * is why there is no case analysis here.
+ *
+ * Parallel rims -- one run continuing straight into the next -- meet nowhere,
+ * and the honest answer is the point half way between them.
+ */
+export function mitrePoint(
+  joint: ConstructionPosition,
+  ownRim: ConstructionPosition,
+  ownDirection: PointXZ,
+  standingRim: ConstructionPosition,
+  standingDirection: PointXZ,
+  limit: number,
+): ConstructionPosition {
+  const denominator = crossXZ(ownDirection, standingDirection);
+  const height = (ownRim.y + standingRim.y) / 2;
+  const midpoint = {
+    x: (ownRim.x + standingRim.x) / 2,
+    y: height,
+    z: (ownRim.z + standingRim.z) / 2,
+  };
+  if (Math.abs(denominator) < 1e-9) return midpoint;
+
+  const offset = { x: standingRim.x - ownRim.x, z: standingRim.z - ownRim.z };
+  const along = crossXZ(offset, standingDirection) / denominator;
+  const meeting = {
+    x: ownRim.x + ownDirection.x * along,
+    y: height,
+    z: ownRim.z + ownDirection.z * along,
+  };
+
+  const reach = Math.hypot(meeting.x - joint.x, meeting.z - joint.z);
+  const cap = MITRE_LIMIT * limit;
+  if (reach <= cap || reach < 1e-9) return meeting;
+  // Bounded rather than dropped: a spike is wrong, but so is refusing to
+  // join, and pulling the corner in along its own direction keeps the joint.
+  const scale = cap / reach;
+  return {
+    x: joint.x + (meeting.x - joint.x) * scale,
+    y: height,
+    z: joint.z + (meeting.z - joint.z) * scale,
+  };
+}
