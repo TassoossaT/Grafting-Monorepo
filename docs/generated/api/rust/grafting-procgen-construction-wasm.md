@@ -96,6 +96,11 @@ Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::path_formation_outline_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Returns the exact XZ rim of a profile sweep without mutating session
+state, so the application can resolve creation interactions first.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_path_brush(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Restores the state immediately after the latest matching undone path-brush operation.

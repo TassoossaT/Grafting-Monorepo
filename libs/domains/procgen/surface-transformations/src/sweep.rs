@@ -167,14 +167,16 @@ pub fn plan_sweep_formation(
 
 fn outer_boundary(station_len: usize, profile_len: usize) -> Vec<usize> {
     let last_station = station_len - 1;
-    let mut boundary: Vec<usize> = (0..profile_len).collect();
-    boundary.extend((1..station_len).map(|station| station * profile_len + profile_len - 1));
+    let mut boundary: Vec<usize> = (0..station_len)
+        .map(|station| station * profile_len)
+        .collect();
+    boundary.extend((1..profile_len).map(|profile| last_station * profile_len + profile));
     boundary.extend(
-        (0..profile_len - 1)
+        (0..last_station)
             .rev()
-            .map(|profile| last_station * profile_len + profile),
+            .map(|station| station * profile_len + profile_len - 1),
     );
-    boundary.extend((1..last_station).rev().map(|station| station * profile_len));
+    boundary.extend((1..profile_len - 1).rev());
     boundary
 }
 
@@ -325,7 +327,7 @@ mod tests {
         assert_eq!(plan.reference_line().len(), 4);
         assert_eq!(plan.vertices().len(), 8);
         assert_eq!(plan.quads(), &[[0, 2, 3, 1], [2, 4, 5, 3], [4, 6, 7, 5]]);
-        assert_eq!(plan.boundary(), &[0, 1, 3, 5, 7, 6, 4, 2]);
+        assert_eq!(plan.boundary(), &[0, 2, 4, 6, 7, 5, 3, 1]);
         assert!(plan.vertices().iter().all(|vertex| vertex[1] == 0.0));
     }
 

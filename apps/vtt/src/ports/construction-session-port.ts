@@ -233,6 +233,13 @@ export type ConstructionBrushShape =
   | { readonly kind: "square"; readonly size: number; readonly rotationRadians: number }
   | { readonly kind: "hexagon"; readonly radius: number; readonly rotationRadians: number };
 
+/** Declarative cross-section consumed by the generic Rust sweep. */
+export interface ConstructionPathFormation {
+  readonly profile: readonly { readonly lateralOffset: number; readonly elevation: number }[];
+  readonly maxSegmentLength: number;
+  readonly miterLimit: number;
+}
+
 /** One resolved continuous convex terrain-to-path brush request. */
 export interface ApplyPathBrushRequest {
   readonly operationId: string;
@@ -240,11 +247,7 @@ export interface ApplyPathBrushRequest {
   readonly brushShape: ConstructionBrushShape;
   readonly depth: number;
   /** VTT-selected profile; Rust derives the sweep and its terrain-cut rim. */
-  readonly formation: {
-    readonly profile: readonly { readonly lateralOffset: number; readonly elevation: number }[];
-    readonly maxSegmentLength: number;
-    readonly miterLimit: number;
-  };
+  readonly formation: ConstructionPathFormation;
   readonly sourceSurfaceTypes: readonly string[];
   readonly targetSurfaceType: string;
 }
@@ -408,6 +411,11 @@ export interface ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
+  /** Exact XZ rim of the generic profile sweep; pure and read-only. */
+  getPathFormationOutline(request: {
+    readonly samples: readonly ConstructionPosition[];
+    readonly formation: ConstructionPathFormation;
+  }): readonly (readonly [number, number])[];
   /**
    * Which of `points` already sit inside a region -- the per-point form of
    * {@link getFootprintCoverage}, for a generator deciding face by face

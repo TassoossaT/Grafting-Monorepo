@@ -278,6 +278,20 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }));
   }
 
+  getPathFormationOutline(request: {
+    readonly samples: readonly ConstructionPosition[];
+    readonly formation: ApplyPathBrushRequest["formation"];
+  }): readonly (readonly [number, number])[] {
+    const session = this.#require() as ConstructionSession & {
+      path_formation_outline_json(requestJson: string): string;
+    };
+    const response = JSON.parse(session.path_formation_outline_json(JSON.stringify({
+      samples: request.samples.map((sample) => [sample.x, sample.z]),
+      formation: request.formation,
+    }))) as { readonly outline: readonly (readonly [number, number])[] };
+    return response.outline;
+  }
+
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;
     readonly suffix: string;

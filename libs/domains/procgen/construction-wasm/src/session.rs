@@ -295,6 +295,14 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
+    /// Returns the exact XZ rim of a profile sweep without mutating session
+    /// state, so the application can resolve creation interactions first.
+    pub fn path_formation_outline_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: path_brush::PathFormationOutlineRequest = parse(request_json)?;
+        let response = path_brush::path_formation_outline(request).map_err(to_js_error)?;
+        serialize(&response)
+    }
+
     // ---- Terrain mesh lifecycle ----
 
     // ---- Generate-and-apply ----
@@ -859,14 +867,12 @@ mod tests {
         assert!(!meshes.is_empty());
     }
 
-    /// The eligibility gate used to be a type filter (`sourceSurfaceTypes`),
-    /// which meant a path stroke could never cut a region an *earlier* path
-    /// stroke had produced -- that region's own type is "path", never in
-    /// the caller's source list. Cutting must be purely geometric: this
-    /// draws stroke 2 squarely over stroke 1's own *new* "path" region
-    /// (not its terrain remainder) and asserts it gets consumed too.
+    /// The application explicitly resolves path-over-path as `CUT`, then
+    /// supplies "path" as an eligible source type. This draws stroke 2
+    /// squarely over stroke 1's own new region and verifies the executor
+    /// follows that decision.
     #[test]
-    fn a_path_stroke_cuts_a_path_region_from_an_earlier_stroke_regardless_of_type() {
+    fn a_path_stroke_cuts_an_earlier_path_when_the_caller_resolves_it_as_a_source() {
         let mut session = ConstructionSession::new();
         for cell in 0..16 {
             let x = cell % 4;
@@ -910,7 +916,7 @@ mod tests {
             "samples": [[2.0, 1.0]],
             "brushShape": {"kind": "circle", "radius": 0.6},
             "depth": 0.1,
-            "sourceSurfaceTypes": ["terrain"],
+            "sourceSurfaceTypes": ["terrain", "path"],
             "targetSurfaceType": "path",
         })
         .to_string();
@@ -1148,6 +1154,137 @@ mod tests {
             "nothing existed to remove"
         );
         assert!(session.snapshot_json().unwrap().contains("\"path\""));
+    }
+
+    #[test]
+    fn a_profiled_path_is_a_shared_quad_patch_and_can_start_on_empty_ground() {
+        let mut session = ConstructionSession::new();
+        let request = serde_json::json!({
+            "operationId": "profiled-path-empty",
+            "samples": [[0.0, 0.0], [2.0, 0.0]],
+            "brushShape": {"kind": "circle", "radius": 0.25},
+            "depth": 0.1,
+            "sourceSurfaceTypes": [],
+            "targetSurfaceType": "path",
+            "formation": {
+                "profile": [
+                    {"lateralOffset": -1.0, "elevation": 0.4},
+                    {"lateralOffset": -0.5, "elevation": 0.0},
+                    {"lateralOffset": 0.5, "elevation": 0.0},
+                    {"lateralOffset": 1.0, "elevation": 0.4}
+                ],
+                "maxSegmentLength": 1.0,
+                "miterLimit": 2.0
+            }
+        })
+        .to_string();
+
+        let outline = session
+            .path_formation_outline_json(
+                &serde_json::json!({
+                    "samples": [[0.0, 0.0], [2.0, 0.0]],
+                    "formation": {
+                        "profile": [
+                            {"lateralOffset": -1.0, "elevation": 0.4},
+                            {"lateralOffset": -0.5, "elevation": 0.0},
+                            {"lateralOffset": 0.5, "elevation": 0.0},
+                            {"lateralOffset": 1.0, "elevation": 0.4}
+                        ],
+                        "maxSegmentLength": 1.0,
+                        "miterLimit": 2.0
+                    }
+                })
+                .to_string(),
+            )
+            .expect("outline planning is a pure query");
+        let outline: serde_json::Value = serde_json::from_str(&outline).unwrap();
+        assert_eq!(outline["outline"].as_array().unwrap().len(), 10);
+
+        let response = session
+            .apply_path_brush_json(&request)
+            .expect("profile sweep applies");
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            response["surfaceIds"]["created"].as_array().unwrap().len(),
+            6,
+            "two longitudinal segments times three transverse bands"
+        );
+
+        let meshes: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert_eq!(meshes.len(), 6);
+        let heights = meshes
+            .iter()
+            .flat_map(|mesh| {
+                mesh["positions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .skip(1)
+                    .step_by(3)
+            })
+            .map(|height| height.as_f64().unwrap())
+            .collect::<Vec<_>>();
+        assert!(heights.iter().all(|height| *height >= 0.0));
+        assert!(heights.contains(&0.0));
+        assert!(heights.iter().any(|height| *height > 0.0));
+    }
+
+    #[test]
+    fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
+        let mut session = ConstructionSession::new();
+        let formation = serde_json::json!({
+            "profile": [
+                {"lateralOffset": -0.5, "elevation": 0.2},
+                {"lateralOffset": -0.25, "elevation": 0.0},
+                {"lateralOffset": 0.25, "elevation": 0.0},
+                {"lateralOffset": 0.5, "elevation": 0.2}
+            ],
+            "maxSegmentLength": 0.5,
+            "miterLimit": 2.0
+        });
+        let first = serde_json::json!({
+            "operationId": "profile-cross-a",
+            "samples": [[0.0, 0.0], [2.0, 0.0]],
+            "brushShape": {"kind": "circle", "radius": 0.25},
+            "depth": 0.1,
+            "sourceSurfaceTypes": [],
+            "targetSurfaceType": "path",
+            "formation": formation
+        })
+        .to_string();
+        session
+            .apply_path_brush_json(&first)
+            .expect("first profile applies");
+
+        let second = serde_json::json!({
+            "operationId": "profile-cross-b",
+            "samples": [[1.0, -1.0], [1.0, 1.0]],
+            "brushShape": {"kind": "circle", "radius": 0.25},
+            "depth": 0.1,
+            "sourceSurfaceTypes": ["path"],
+            "targetSurfaceType": "path",
+            "formation": formation
+        })
+        .to_string();
+        let response = session
+            .apply_path_brush_json(&second)
+            .expect("crossing profile unions");
+        let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert!(
+            response["surfaceIds"]["created"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|key| {
+                    let id = key[1].as_str().unwrap();
+                    id.contains("remainder") || id.contains("quad")
+                })
+        );
+        let meshes: Vec<serde_json::Value> =
+            serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+        assert!(!meshes.is_empty());
+        assert!(meshes.iter().all(|mesh| mesh["surfaceType"] == "path"));
     }
 
     /// Deterministic xorshift -- no external `rand` dependency needed for

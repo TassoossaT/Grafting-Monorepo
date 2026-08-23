@@ -1,4 +1,10 @@
-import { createPathBrushEffect, DEFAULT_TOOL_PARAMS, pathFormationFor } from "@/features/edit-construction";
+import {
+  createPathBrushEffect,
+  DEFAULT_TOOL_PARAMS,
+  firstRefusal,
+  pathFormationFor,
+  resolveCoverage,
+} from "@/features/edit-construction";
 import type { PathBrushEffect, PathBrushParams } from "@/features/edit-construction";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
@@ -39,7 +45,19 @@ export const pathBrushTool = createBrushTool<"path-brush">({
     const sequence = ctx.nextSequence();
     const effect = effectFor(ctx, region, params, scopedToolId(ctx, "path-brush", sequence));
     try {
-      const outcome = ctx.runtime.applyPathBrush(effect, "local");
+      const outline = ctx.runtime.getPathFormationOutline(effect);
+      const resolved = resolveCoverage(effect.targetType, ctx.runtime.getFootprintCoverage(outline));
+      const refusal = firstRefusal(resolved);
+      if (refusal !== undefined) {
+        ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
+        return;
+      }
+      const sourceSurfaceTypes = [...new Set(
+        resolved
+          .filter((entry) => entry.interaction.kind === "cut")
+          .map((entry) => entry.covered.surfaceType),
+      )];
+      const outcome = ctx.runtime.applyPathBrush(effect, sourceSurfaceTypes, "local");
       const changedSurfaceCount = outcome.surfaceIds.created.length + outcome.surfaceIds.replaced.length;
       if (changedSurfaceCount === 0 && outcome.surfaceIds.removed.length === 0) {
         ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });

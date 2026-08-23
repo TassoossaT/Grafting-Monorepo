@@ -36,6 +36,7 @@ export type {
   ConstructionPatchEdge,
   ConstructionPatchOutcome,
   ConstructionPatchRegion,
+  ConstructionPathFormation,
   ConstructionUnfilledLoop,
   ConstructionEdgeGeometry,
   ConstructionEdgeId,

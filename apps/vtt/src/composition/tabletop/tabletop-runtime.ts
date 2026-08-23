@@ -50,25 +50,11 @@ import type {
 
 import {
   EMPTY_OUTCOME,
-  PATH_BRUSH_SOURCE_SURFACE_TYPES,
   applyEditOp,
   mergeOutcomes,
   type AtomicEditOp,
   type PathBrushEffect,
 } from "../../features/edit-construction/index.ts";
-
-
-/**
- * A stroke must always be eligible to consume its own product type -- a
- * path drawn over an earlier path's region is exactly as valid a merge
- * target as terrain underneath it. Without this, a later stroke can never
- * touch, cut, or remove what an earlier stroke of the same tool created.
- */
-function pathBrushSourceSurfaceTypes(targetType: string): readonly string[] {
-  return PATH_BRUSH_SOURCE_SURFACE_TYPES.includes(targetType)
-    ? PATH_BRUSH_SOURCE_SURFACE_TYPES
-    : [...PATH_BRUSH_SOURCE_SURFACE_TYPES, targetType];
-}
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -140,13 +126,18 @@ export interface TabletopRuntime {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
+  getPathFormationOutline(effect: PathBrushEffect): readonly (readonly [number, number])[];
   /** Which of `points` already sit inside a region -- per-point, for a generator building only over open ground. */
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
-  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome;
+  applyPathBrush(
+    effect: PathBrushEffect,
+    sourceSurfaceTypes: readonly string[],
+    origin: ChangeOrigin,
+  ): ApplyPathBrushOutcome;
   undoPathBrush(operationId: string, origin: ChangeOrigin): void;
   redoPathBrush(operationId: string, origin: ChangeOrigin): void;
   /**
@@ -762,6 +753,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getFootprintCoverage(polygon);
   }
 
+  getPathFormationOutline(effect: PathBrushEffect): readonly (readonly [number, number])[] {
+    this.#requireReady("planning a path formation");
+    return this.#construction.getPathFormationOutline({
+      samples: effect.brushRegion.samples,
+      formation: effect.parameters,
+    });
+  }
+
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
@@ -876,7 +875,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  applyPathBrush(effect: PathBrushEffect, origin: ChangeOrigin): ApplyPathBrushOutcome {
+  applyPathBrush(
+    effect: PathBrushEffect,
+    sourceSurfaceTypes: readonly string[],
+    origin: ChangeOrigin,
+  ): ApplyPathBrushOutcome {
     this.#requireReady("applying a path brush");
     if (effect.brushRegion.samples.length === 0) {
       throw new Error("a confirmed path brush stroke requires at least one sample");
@@ -885,13 +888,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
       operationId: effect.operationId,
       samples: effect.brushRegion.samples,
       brushShape: effect.brushShape,
-      // The legacy brush contour still owns the temporary clipping envelope.
-      // The next bridge increment replaces this compatibility scalar with the
-      // resolved profile sweep; the path bed itself is already fixed at Y=0.
+      // Kept on the wire for legacy single-point brush requests; profile
+      // sweeps derive their complete height field from `formation`.
       depth: 0.1,
       formation: effect.parameters,
       targetSurfaceType: effect.targetType,
-      sourceSurfaceTypes: pathBrushSourceSurfaceTypes(effect.targetType),
+      sourceSurfaceTypes,
     };
     let outcome: ApplyPathBrushOutcome;
     try {

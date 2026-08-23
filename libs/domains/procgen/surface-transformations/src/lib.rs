@@ -154,8 +154,7 @@ pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailu
     if request.operation_id.is_empty() {
         return Err(PathBrushFailure::InvalidOperationId);
     }
-    if request.source_types.is_empty()
-        || request.samples.is_empty()
+    if request.samples.is_empty()
         || request
             .samples
             .iter()
@@ -342,5 +341,12 @@ mod tests {
     #[test]
     fn accepts_a_real_stroke() {
         assert!(validate_request(&request(vec![[0.0, 0.0], [1.0, 0.0]], 0.5)).is_ok());
+    }
+
+    #[test]
+    fn accepts_a_stroke_that_starts_without_any_source_surface() {
+        let mut request = request(vec![[0.0, 0.0], [1.0, 0.0]], 0.5);
+        request.source_types.clear();
+        assert!(validate_request(&request).is_ok());
     }
 }

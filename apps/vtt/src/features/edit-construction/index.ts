@@ -78,7 +78,6 @@ export type {
 
 export { resolveBrushShape } from "./brush-shape-params.ts";
 export {
-  PATH_BRUSH_SOURCE_SURFACE_TYPES,
   SURFACE_EDIT_MODE_DEFINITIONS,
   surfaceEditModeFor,
 } from "./surface-edit-mode-registry.ts";

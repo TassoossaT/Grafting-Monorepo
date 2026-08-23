@@ -176,6 +176,10 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
+    getPathFormationOutline() {
+      requireStarted();
+      return [[0, 0], [1, 0], [1, 1], [0, 1]];
+    },
     applyPathBrush() {
       requireStarted();
       return {
@@ -624,6 +628,7 @@ test("applyPathBrush folds atomic surface and node deltas into the map", async (
       brushRegion: { samples: [{ x: 0.5, y: 0, z: 0.5 }] },
       parameters: { kind: "street", profile: [{ lateralOffset: -0.25, elevation: 0 }, { lateralOffset: 0.25, elevation: 0 }], maxSegmentLength: 0.5, miterLimit: 4 },
     },
+    ["terrain"],
     "local",
   );
 
