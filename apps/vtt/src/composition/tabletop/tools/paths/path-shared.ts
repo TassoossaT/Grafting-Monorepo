@@ -1,4 +1,4 @@
-import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
+import type { AtomicEditOp, BrushShape, PathBrushParams } from "@/features/edit-construction";
 import type { ConstructionNodeId, ConstructionPosition } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -8,11 +8,13 @@ import {
   createPathBrushEffect,
   firstRefusal,
   parseStationNodeId,
+  pathClouds,
   pathCorridorId,
   pathFormationFor,
   pathRidesTerrain,
   pathSpineSlot,
   resolveCoverage,
+  stationNodeId,
 } from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
@@ -213,6 +215,117 @@ export function referenceLineFrom(
  */
 const SPINE_WELD_TOLERANCE = 1e-3;
 
+/**
+ * Where two XZ segments cross, as the parameter along each -- `undefined`
+ * for parallel segments, or for a crossing that falls outside either one.
+ */
+function segmentCrossing(
+  fromA: ConstructionPosition,
+  toA: ConstructionPosition,
+  fromB: ConstructionPosition,
+  toB: ConstructionPosition,
+): { readonly along: number; readonly across: number } | undefined {
+  const ax = toA.x - fromA.x;
+  const az = toA.z - fromA.z;
+  const bx = toB.x - fromB.x;
+  const bz = toB.z - fromB.z;
+  const denominator = ax * bz - az * bx;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const dx = fromB.x - fromA.x;
+  const dz = fromB.z - fromA.z;
+  const along = (dx * bz - dz * bx) / denominator;
+  const across = (dx * az - dz * ax) / denominator;
+  if (along < 0 || along > 1 || across < 0 || across > 1) return undefined;
+  return { along, across };
+}
+
+/**
+ * Every crossing between the run being drawn and a spine already standing.
+ *
+ * This is the half of the wall's junction model that was missing: a crossing
+ * almost never lands on an existing station, so there is nothing to weld
+ * onto until one is *made*. `insertedColumnAt` splits the crossed panel and
+ * mints the column; this splits the crossed spine's own edge and mints the
+ * node, and the run being drawn gains a station at the very same place.
+ *
+ * The inserted node is numbered on the crossed run's own station scale --
+ * fractionally, because it sits between two of its stations -- so it stays
+ * part of that spine's chain and in the right order.
+ */
+export function junctionsWithStandingSpines(
+  ctx: ToolContext,
+  line: readonly ConstructionPosition[],
+): {
+  readonly line: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
+  readonly inserts: readonly AtomicEditOp[];
+} {
+  const clouds = pathClouds(ctx.runtime.getAllRegionTopologies());
+  const found: {
+    readonly at: number;
+    readonly position: ConstructionPosition;
+    readonly nodeId: ConstructionNodeId;
+    readonly edgeId: string;
+  }[] = [];
+  // One insert per crossed edge per commit: the second would name an edge the
+  // first has already split out of existence.
+  const usedEdges = new Set<string>();
+
+  for (const cloud of clouds) {
+    const spine = cloud.spine;
+    if (spine === undefined) continue;
+    for (let step = 0; step + 1 < spine.nodes.length; step += 1) {
+      const edgeId = spine.edgeIds[step];
+      if (edgeId === undefined || usedEdges.has(edgeId)) continue;
+      const fromA = spine.nodes[step]!;
+      const toA = spine.nodes[step + 1]!;
+      for (let index = 0; index + 1 < line.length; index += 1) {
+        const crossing = segmentCrossing(fromA.position, toA.position, line[index]!, line[index + 1]!);
+        if (crossing === undefined) continue;
+        const position: ConstructionPosition = {
+          x: fromA.position.x + (toA.position.x - fromA.position.x) * crossing.along,
+          y: fromA.position.y + (toA.position.y - fromA.position.y) * crossing.along,
+          z: fromA.position.z + (toA.position.z - fromA.position.z) * crossing.along,
+        };
+        const station = Number((fromA.station + (toA.station - fromA.station) * crossing.along).toFixed(3));
+        const nodeId = stationNodeId(cloud.corridorId, station, 0);
+        usedEdges.add(edgeId);
+        found.push({ at: index + crossing.across, position, nodeId, edgeId });
+        break;
+      }
+    }
+  }
+  if (found.length === 0) return { line, welds: new Map(), inserts: [] };
+
+  const ordered = [...found].sort((left, right) => left.at - right.at);
+  const spliced: ConstructionPosition[] = [];
+  const welds = new Map<number, ConstructionNodeId>();
+  let next = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    while (next < ordered.length && ordered[next]!.at < index) {
+      welds.set(spliced.length, ordered[next]!.nodeId);
+      spliced.push(ordered[next]!.position);
+      next += 1;
+    }
+    spliced.push(line[index]!);
+  }
+  while (next < ordered.length) {
+    welds.set(spliced.length, ordered[next]!.nodeId);
+    spliced.push(ordered[next]!.position);
+    next += 1;
+  }
+
+  const inserts: AtomicEditOp[] = ordered.map((crossing) => ({
+    kind: "insert-vertex",
+    edgeId: crossing.edgeId,
+    nodeId: crossing.nodeId,
+    position: crossing.position,
+    firstEdgeId: `${crossing.edgeId}|${crossing.nodeId}|0`,
+    secondEdgeId: `${crossing.edgeId}|${crossing.nodeId}|1`,
+  }));
+  return { line: spliced, welds, inserts };
+}
+
 /** Every spine node standing on the table, with the position it stands at. */
 function standingSpineNodes(
   ctx: ToolContext,
@@ -308,9 +421,18 @@ export function commitPathContour(
       ? stroke
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
   if (drawn.length === 0) return;
-  const { line: referenceLine, welds } = weldedToStandingSpines(ctx, drawn, SPINE_WELD_TOLERANCE);
+  // A crossing is made, not found: the crossed spine is split so a node
+  // exists to share. Whatever still lands exactly on a standing node is
+  // welded to it directly.
+  const crossed = junctionsWithStandingSpines(ctx, drawn);
+  const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
+  const referenceLine = exact.line;
+  const welds = new Map([...crossed.welds, ...exact.welds]);
 
   try {
+    if (crossed.inserts.length > 0) {
+      ctx.runtime.applyRegionEdit(crossed.inserts, "local", operationId);
+    }
     const effect = createPathBrushEffect(
       {
         brushShape,

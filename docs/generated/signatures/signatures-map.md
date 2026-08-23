@@ -3428,6 +3428,14 @@ export function referenceLineFrom(
   ridesTerrain: boolean,
   ): readonly ConstructionPosition[] {
   const track = groundTrack(fitted);
+export function junctionsWithStandingSpines(
+  ctx: ToolContext,
+  line: readonly ConstructionPosition[],
+  ): {
+  readonly line: readonly ConstructionPosition[];
+  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
+  readonly inserts: readonly AtomicEditOp[];
+  } {
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],

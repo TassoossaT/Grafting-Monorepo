@@ -186,7 +186,11 @@ tool for computing that area.
 
 ## Open
 
-- **Junction geometry.** Settled in shape, not written. Insert a node into
+- **Junction geometry.** Identity is done; the *surface* is not, and the two
+  runs still do not read as joined. The overlay consumes the crossed run's
+  bands at the crossing, and with them its spine -- so the node the insert
+  minted survives (the new run references it) while the chain either side of
+  it does not. Settled in shape, not written. Insert a node into
   *both* spines at the crossing; intersect the two contours; cut the four ends
   and relink them into one closed contour around the crossing, so no contour
   runs over another; the enclosed area becomes its own face with both spines

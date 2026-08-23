@@ -1251,6 +1251,20 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[]): { inserts: readonly AtomicEditOp[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
+
+Every crossing between the run being drawn and a spine already standing.
+
+This is the half of the wall's junction model that was missing: a crossing
+almost never lands on an existing station, so there is nothing to weld
+onto until one is *made*. `insertedColumnAt` splits the crossed panel and
+mints the column; this splits the crossed spine's own edge and mints the
+node, and the run being drawn gains a station at the very same place.
+
+The inserted node is numbered on the crossed run's own station scale --
+fractionally, because it sits between two of its stations -- so it stays
+part of that spine's chain and in the right order.
+
 ### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
 
 The reference line to sweep along: where the fit decided the road goes,
