@@ -394,6 +394,24 @@ pulling in opposite directions.
 flank is removed before the road that opens it is declared, and the wedges go
 in last, because they bound edges the road itself has only just minted.
 
+### A patch declares the nodes it walks, including the ones it is about to orphan
+
+Closing a junction removes the flank and lays the wedges that replace it, and
+removal prunes any node left bounding nothing. A rim node at the end of the
+rebuilt stretch is bounded only by the very bands being removed -- so between
+the removal and the wedge, the node the wedge means to hang its corner on
+stops existing, and the patch lands on `edge references unknown node` with
+the road already committed.
+
+The wedges declare every node they walk, at the position it stood. Declaring
+one that still exists is free -- `apply_add_patch` skips it and keeps the
+position it had -- so there is no reason to be clever about which ones
+survive, and every reason not to be.
+
+A node the wedge cannot place at all is a different matter: it means the walk
+left the run it was rebuilding, and the junction is abandoned rather than
+completed with a node invented at the world origin.
+
 ### A station number is not a coordinate system
 
 Splitting a spine mints a node at a fractional station, and the rim gets no

@@ -304,3 +304,46 @@ test("a junction node the run does not carry rebuilds nothing, rather than half"
   // than the kerb it was meant to remove.
   assert.equal(junctionWedges(TABLE, "op-2", ARRIVING, mouth, stranger), undefined);
 });
+
+test("the wedge patch declares every node its edges walk", () => {
+  // Removing the flank prunes any node left bounding nothing, and a rim node
+  // at the end of the rebuilt stretch is bounded only by the very bands being
+  // removed. Assume it survives and the patch lands on a node that is gone --
+  // "edge references unknown node", with the road already committed.
+  const run = standingRun();
+  const [mouth] = mouthInto(run).mouths;
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+
+  const declared = new Set(wedges.patch.nodes.map((node) => node.id));
+  for (const edge of wedges.patch.edges) {
+    for (const nodeId of [edge.startNodeId, edge.endNodeId]) {
+      assert.ok(declared.has(nodeId), `${nodeId} is walked but never declared`);
+    }
+  }
+  for (const node of wedges.patch.nodes) {
+    assert.ok(Number.isFinite(node.position.x), `${node.id} has no position`);
+  }
+});
+
+test("a rim node the removal orphans comes back with the wedge that needs it", () => {
+  const run = standingRun();
+  const [mouth] = mouthInto(run).mouths;
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+
+  // The bands going away carry rim nodes with them. Whichever of those the
+  // wedges still walk must be in the patch, at the place it stood.
+  const removed = new Set(wedges.removed.map((key) => key.join(":")));
+  const doomed = run.bands
+    .filter((band) => removed.has(band.surfaceKey.join(":")))
+    .flatMap((band) => band.stations.flatMap((station) => band.slots.map((across) => stationNodeId(STANDING, station, across))));
+
+  const declared = new Map(wedges.patch.nodes.map((node) => [node.id, node.position]));
+  const walked = new Set(
+    wedges.patch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId]),
+  );
+  const rescued = doomed.filter((nodeId) => walked.has(nodeId));
+  assert.ok(rescued.length > 0, "the rebuilt stretch really does reuse removed nodes");
+  for (const nodeId of rescued) {
+    assert.ok(declared.has(nodeId), `${nodeId} would be pruned and never come back`);
+  }
+});

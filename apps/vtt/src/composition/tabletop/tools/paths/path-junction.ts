@@ -158,11 +158,10 @@ export function junctionWedges(
     ...spineOver.slice(pivot + 1).reverse().map((node) => node.nodeId),
   ]);
 
-  const positionAt = (nodeId: ConstructionNodeId): ConstructionPosition => {
+  const positionAt = (nodeId: ConstructionNodeId): ConstructionPosition | undefined => {
     const known = positionOf.get(nodeId);
     if (known !== undefined) return known;
-    const side = mouth.sides.find((candidate) => cornerId(candidate) === nodeId);
-    return side?.position ?? { x: 0, y: 0, z: 0 };
+    return mouth.sides.find((candidate) => cornerId(candidate) === nodeId)?.position;
   };
 
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
@@ -174,8 +173,11 @@ export function junctionWedges(
     .map((entry) => {
       // Wound the way the sweep winds its own faces, so a wedge and the band
       // beside it agree on which side of a shared edge each of them is on.
-      const ring = entry.ring.map(positionAt);
-      const walk = signedArea(ring) >= 0 ? entry.ring : [...entry.ring].reverse();
+      const ring = entry.ring.map(positionAt).filter((at) => at !== undefined);
+      const walk =
+        ring.length === entry.ring.length && signedArea(ring) < 0
+          ? [...entry.ring].reverse()
+          : entry.ring;
       return {
         regionId: `${operationId}:junction-${entry.name}`,
         boundary: walk.map((nodeId, index) => edges.use(nodeId, walk[(index + 1) % walk.length]!)),
@@ -187,9 +189,34 @@ export function junctionWedges(
   // half open, which is worse than the kerb it was meant to remove.
   if (regions.length < 2) return undefined;
 
+  // Every node the wedges walk, declared rather than assumed.
+  //
+  // Assuming was wrong in the one case that matters. Removing the flank
+  // prunes any node left bounding nothing, and a rim node at the end of the
+  // rebuilt stretch is bounded only by the very bands being removed -- so by
+  // the time the wedge is laid, the node it means to hang its corner on is
+  // gone. A patch declaring a node that already exists is free, since
+  // `apply_add_patch` skips it and keeps the position it had.
+  const declared = new Map<ConstructionNodeId, ConstructionPosition>();
+  for (const edge of edges.all()) {
+    for (const nodeId of [edge.startNodeId, edge.endNodeId]) {
+      if (declared.has(nodeId)) continue;
+      const position = positionAt(nodeId);
+      // Nowhere to put it means the wedge was walking something that is not
+      // on this run and not a corner of the mouth either -- better no
+      // junction than a node invented at the world origin.
+      if (position === undefined) return undefined;
+      declared.set(nodeId, position);
+    }
+  }
+
   return {
     removed: removed.map((band) => band.surfaceKey),
-    patch: { nodes: [], edges: edges.all(), regions },
+    patch: {
+      nodes: [...declared].map(([id, position]) => ({ id, position })),
+      edges: edges.all(),
+      regions,
+    },
   };
 }
 
