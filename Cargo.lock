@@ -428,6 +428,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "grafting-procgen-curve-offset"
+version = "0.0.0"
+dependencies = [
+ "earcut",
+ "i_overlay",
+]
+
+[[package]]
 name = "grafting-procgen-discretize"
 version = "0.0.0"
 dependencies = [
