@@ -99,3 +99,33 @@ test("the node minted for a crossing belongs to the crossed run's spine", () => 
   // Both runs now reference one node, which is the whole of being joined.
   assert.equal(result.welds.get(1), insert.nodeId);
 });
+
+test("every committed station says which drawn one it came from", () => {
+  const ctx = contextWith([band([-1, 0]), band([0, 1])]);
+  const drawn = [
+    { x: 3, y: 0, z: -4 },
+    { x: 3, y: 0, z: 4 },
+  ];
+
+  const result = junctionsWithStandingSpines(ctx, drawn);
+  assert.equal(result.origins.length, result.line.length);
+  // Two drawn stations either side of one minted at the crossing.
+  assert.deepEqual(result.origins, [0, -1, 1]);
+});
+
+test("a stroke that joined nothing reports itself, station for station", () => {
+  const ctx = contextWith([band([-1, 0]), band([0, 1])]);
+  const drawn = [
+    { x: 30, y: 0, z: -4 },
+    { x: 30, y: 0, z: 0 },
+    { x: 30, y: 0, z: 4 },
+  ];
+
+  // The reason this is reported rather than compared: nothing here promises
+  // to hand back the same array, and every step rebuilds one whether or not
+  // it changed anything. Read by identity, a run that was never touched
+  // looks spliced -- which silently threw away every curve the fit found.
+  const result = junctionsWithStandingSpines(ctx, drawn);
+  assert.deepEqual(result.origins, [0, 1, 2]);
+  assert.equal(result.line.length, drawn.length);
+});

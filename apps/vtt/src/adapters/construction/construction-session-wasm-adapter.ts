@@ -25,8 +25,6 @@ import type {
   ConstructionRegionTopology,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
-  ConstructionSweepPlan,
-  ConstructionSweepParameters,
   ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateRegionPartitionRequest,
@@ -277,30 +275,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       centroid: fromWirePosition(entry.centroid),
       nodeIds: entry.nodeIds,
     }));
-  }
-
-  planSweepFormation(request: {
-    readonly referenceLine: readonly ConstructionPosition[];
-    readonly parameters: ConstructionSweepParameters;
-  }): ConstructionSweepPlan {
-    const session = this.#require() as ConstructionSession & {
-      plan_sweep_json(requestJson: string): string;
-    };
-    const response = JSON.parse(session.plan_sweep_json(JSON.stringify({
-      referenceLine: request.referenceLine.map((sample) => [sample.x, sample.y, sample.z]),
-      profile: request.parameters.profile,
-      miterLimit: request.parameters.miterLimit,
-    }))) as {
-      readonly referenceLine: readonly WirePosition[];
-      readonly vertices: readonly WirePosition[];
-      readonly quads: readonly (readonly [number, number, number, number])[];
-      readonly boundary: readonly number[];
-    };
-    return {
-      ...response,
-      referenceLine: response.referenceLine.map(fromWirePosition),
-      vertices: response.vertices.map(fromWirePosition),
-    };
   }
 
   duplicateRegion(request: {

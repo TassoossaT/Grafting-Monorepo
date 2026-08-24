@@ -5,6 +5,7 @@ import type {
 } from "@/ports";
 
 import type { CloudTopology } from "./construction-cloud.ts";
+import { perimeterOf, type PerimeterLoop } from "./surface-perimeter.ts";
 import { pathSubtypeOf } from "./path-corridor.ts";
 import { parseStationNodeId } from "./station-node-id.ts";
 import type { PathKind } from "./tool-types.ts";
@@ -60,6 +61,15 @@ export interface PathRunRib {
   readonly bands: readonly ConstructionSurfaceKey[];
 }
 
+/** One face of a run, with the stretch of the run it covers. */
+export interface PathRunBand {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  /** The stations it spans, in order. */
+  readonly stations: readonly number[];
+  /** The slots it lies between, in order across. */
+  readonly slots: readonly number[];
+}
+
 export interface PathRun {
   readonly corridorId: string;
   readonly subtype: PathKind | undefined;
@@ -67,7 +77,14 @@ export interface PathRun {
   /** One per side, outermost slot first. */
   readonly contours: readonly PathRunChain[];
   readonly ribs: readonly PathRunRib[];
-  readonly bands: readonly ConstructionSurfaceKey[];
+  /**
+   * Every face of the run, each carrying the stretch it covers.
+   *
+   * The stretch is what a junction reads: closing a T means taking out the
+   * faces the arriving road opens into and declaring what replaces them, and
+   * "which faces" is a question about stations and sides, not about keys.
+   */
+  readonly bands: readonly PathRunBand[];
   /**
    * Stations whose spine node belongs to a **different** corridor -- this run
    * welded onto one already standing there. A junction, seen from this side.
@@ -174,7 +191,7 @@ export function pathRunsIn(
     for (const node of topology.nodes) nodePositions.set(node.id, node.position);
   }
   const byCorridor = new Map<string, Map<number, Map<number, PathRunNode>>>();
-  const bandsByCorridor = new Map<string, ConstructionSurfaceKey[]>();
+  const bandsByCorridor = new Map<string, PathRunBand[]>();
 
   for (const topology of topologies) {
     const corridors = new Set<string>();
@@ -210,7 +227,19 @@ export function pathRunsIn(
     if (owner === undefined) continue;
     const bands = bandsByCorridor.get(owner) ?? [];
     bandsByCorridor.set(owner, bands);
-    bands.push(topology.surfaceKey);
+    const stations = new Set<number>();
+    const slots = new Set<number>();
+    for (const node of topology.nodes) {
+      const address = parseStationNodeId(node.id);
+      if (address === undefined || address.operationId !== owner) continue;
+      stations.add(address.station);
+      slots.add(address.across);
+    }
+    bands.push({
+      surfaceKey: topology.surfaceKey,
+      stations: [...stations].sort((left, right) => left - right),
+      slots: [...slots].sort((left, right) => left - right),
+    });
   }
 
   return [...byCorridor].map(([corridorId, byStation]) => {
@@ -259,12 +288,14 @@ export function pathRunsIn(
         const edgeId = edgeBetween(edges, nodes[index]!.nodeId, nodes[index + 1]!.nodeId);
         if (edgeId !== undefined) edgeIds.push(edgeId);
       }
-      const bands = (bandsByCorridor.get(corridorId) ?? []).filter((key) => {
-        const topology = topologies.find(
-          (candidate) => candidate.surfaceKey.join(":") === key.join(":"),
-        );
-        return topology?.nodes.some((node) => nodes.some((rib) => rib.nodeId === node.id)) ?? false;
-      });
+      const bands = (bandsByCorridor.get(corridorId) ?? [])
+        .filter((band) => {
+          const topology = topologies.find(
+            (candidate) => candidate.surfaceKey.join(":") === band.surfaceKey.join(":"),
+          );
+          return topology?.nodes.some((node) => nodes.some((rib) => rib.nodeId === node.id)) ?? false;
+        })
+        .map((band) => band.surfaceKey);
       return { station, nodes, edgeIds, bands };
     });
 
@@ -300,4 +331,29 @@ export function pathRunFor(
   corridorId: string,
 ): PathRun | undefined {
   return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
+}
+
+/**
+ * The outer perimeter of a whole path cloud, as one named thing.
+ *
+ * **This is the contour.** Not the chain a single run reports at its
+ * outermost slot -- that is the rim the sweep laid down, true of a road
+ * standing alone and stale the moment another road joins it. The contour of a
+ * junction is the perimeter of everything joined at it, and the only test
+ * that stays true through a junction is the graph's own: a face on one side
+ * and nothing on the other.
+ *
+ * Kept as its own reading, and separately from `PathRun`, because it is
+ * cloud-shaped rather than run-shaped and because it is the thing worth
+ * editing. Every question about the outside of a road network -- where a kerb
+ * goes, where a pavement is offset from, whether two roads really did fuse --
+ * is a question about this one loop, and having it in one place is what makes
+ * changing any of them a local change.
+ *
+ * A cloud with a hole in it -- roads round a block -- reports more than one
+ * loop, the outer walk and one per hole, which is correct and is why this is
+ * not a single ring.
+ */
+export function pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
+  return perimeterOf(cloud.members);
 }

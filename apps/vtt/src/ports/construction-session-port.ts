@@ -240,6 +240,19 @@ export interface ConstructionSweepPlan {
   readonly vertices: readonly ConstructionPosition[];
   readonly quads: readonly (readonly [number, number, number, number])[];
   readonly boundary: readonly number[];
+  /**
+   * The lengthwise edges that are curves rather than chords, by the pair of
+   * vertices each runs between.
+   *
+   * Sparse: a straight formation reports none. A curved one reports the arc
+   * every offset of that stretch follows -- concentric, so one centre serves
+   * the spine and both rims.
+   */
+  readonly curves?: readonly {
+    readonly from: number;
+    readonly to: number;
+    readonly geometry: ConstructionEdgeGeometry;
+  }[];
 }
 
 /** One generic overlay whose geometry and affected regions were resolved by the application. */
@@ -402,11 +415,6 @@ export interface ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
-  /** Executes only the generic sweep geometry algorithm; never mutates the graph. */
-  planSweepFormation(request: {
-    readonly referenceLine: readonly ConstructionPosition[];
-    readonly parameters: ConstructionSweepParameters;
-  }): ConstructionSweepPlan;
   /**
    * Which of `points` already sit inside a region -- the per-point form of
    * {@link getFootprintCoverage}, for a generator deciding face by face

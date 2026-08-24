@@ -190,8 +190,94 @@ fn fixture_edge_use(
     json!({"edgeId": edge_id, "reversed": !forward})
 }
 
-/// The exact orchestration `tools/paths/path-brush-tool.ts` performs, as a
-/// test fixture: plan the graph-neutral sweep, declare the patch the way
+/// The sweep the application performs before it declares anything, in the
+/// test own hands.
+///
+/// It is here rather than in the crate because it is not the crate to
+/// decide. A sweep says where every vertex of a formation goes, which faces
+/// it is made of, and which rim is its outside -- product decisions, made in
+/// `composition/tabletop/tools/core/sweep-formation.ts` and mirrored here so
+/// that a Rust test can issue the very transaction the application issues.
+/// The engine below gets a finished patch and registers it.
+fn fixture_sweep(
+    reference_line: &[[f32; 3]],
+    profile: &[(f32, f32)],
+    miter_limit: f32,
+) -> (Vec<[f32; 3]>, Vec<Vec<usize>>, Vec<usize>) {
+    let left_normal = |x: f32, z: f32| {
+        let length = x.hypot(z);
+        if length < 1e-4 {
+            [0.0, 0.0]
+        } else {
+            [-z / length, x / length]
+        }
+    };
+    let frame = |index: usize| -> [f32; 2] {
+        let current = reference_line[index];
+        if index == 0 {
+            let next = reference_line[1];
+            return left_normal(next[0] - current[0], next[2] - current[2]);
+        }
+        if index + 1 == reference_line.len() {
+            let previous = reference_line[index - 1];
+            return left_normal(current[0] - previous[0], current[2] - previous[2]);
+        }
+        let previous = reference_line[index - 1];
+        let next = reference_line[index + 1];
+        let incoming = left_normal(current[0] - previous[0], current[2] - previous[2]);
+        let outgoing = left_normal(next[0] - current[0], next[2] - current[2]);
+        let sum = [incoming[0] + outgoing[0], incoming[1] + outgoing[1]];
+        let length = sum[0].hypot(sum[1]);
+        if length < 1e-4 {
+            return outgoing;
+        }
+        let bisector = [sum[0] / length, sum[1] / length];
+        let denominator = bisector[0] * outgoing[0] + bisector[1] * outgoing[1];
+        if denominator.abs() <= 1e-4 {
+            return outgoing;
+        }
+        let scale = (1.0 / denominator).clamp(-miter_limit, miter_limit);
+        [bisector[0] * scale, bisector[1] * scale]
+    };
+
+    let mut vertices = Vec::new();
+    for (index, station) in reference_line.iter().enumerate() {
+        let normal = frame(index);
+        for (lateral_offset, elevation) in profile {
+            vertices.push([
+                station[0] + normal[0] * lateral_offset,
+                station[1] + elevation,
+                station[2] + normal[1] * lateral_offset,
+            ]);
+        }
+    }
+
+    let slots = profile.len();
+    let mut quads = Vec::new();
+    for station in 0..reference_line.len() - 1 {
+        let current = station * slots;
+        let next = (station + 1) * slots;
+        for slot in 0..slots - 1 {
+            quads.push(vec![
+                current + slot,
+                next + slot,
+                next + slot + 1,
+                current + slot + 1,
+            ]);
+        }
+    }
+
+    let last = reference_line.len() - 1;
+    let mut boundary: Vec<usize> = (0..reference_line.len()).map(|s| s * slots).collect();
+    boundary.extend((1..slots).map(|slot| last * slots + slot));
+    boundary.extend((0..last).rev().map(|s| s * slots + slots - 1));
+    boundary.extend((1..slots - 1).rev());
+
+    (vertices, quads, boundary)
+}
+
+/// The exact orchestration `tools/paths/path-shared.ts` performs, as a
+/// test fixture: sweep the formation, declare the patch the way
 /// `tools/paths/path-patch.ts` declares it, and hand both to the generic
 /// overlay.
 ///
@@ -199,8 +285,8 @@ fn fixture_edge_use(
 /// *is* -- which nodes, which shared edges, which faces stand over them --
 /// is the application's to decide, and this crate is not allowed to know.
 /// The fixture only lets a Rust test issue the very transaction the
-/// application issues, so the overlay can be exercised over real sweep
-/// geometry without the crate growing a second opinion about paths.
+/// application issues, so the overlay can be exercised over real geometry
+/// without the crate growing a second opinion about paths.
 fn overlay_path_stroke(
     session: &mut ConstructionSession,
     operation_id: &str,
@@ -208,37 +294,27 @@ fn overlay_path_stroke(
     formation: &serde_json::Value,
     source_surface_keys: &[serde_json::Value],
 ) -> serde_json::Value {
-    let planned = session
-        .plan_sweep_json(
-            &json!({
-                "referenceLine": reference_line,
-                "profile": formation["profile"].clone(),
-                "miterLimit": formation["miterLimit"].clone(),
-            })
-            .to_string(),
-        )
-        .expect("sweep planning is a pure query");
-    let plan: serde_json::Value = serde_json::from_str(&planned).unwrap();
-
-    let vertices = plan["vertices"].as_array().unwrap();
-    let quads = plan["quads"].as_array().unwrap();
-    let rim: Vec<usize> = plan["boundary"]
+    let profile: Vec<(f32, f32)> = formation["profile"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|index| index.as_u64().unwrap() as usize)
+        .map(|point| {
+            (
+                point["lateralOffset"].as_f64().unwrap() as f32,
+                point["elevation"].as_f64().unwrap() as f32,
+            )
+        })
         .collect();
+    let (vertices, quads, rim) = fixture_sweep(
+        reference_line,
+        &profile,
+        formation["miterLimit"].as_f64().unwrap() as f32,
+    );
 
     let mut edges: Vec<serde_json::Value> = Vec::new();
     let mut declared: HashSet<String> = HashSet::new();
     let mut regions: Vec<serde_json::Value> = Vec::new();
-    for (index, quad) in quads.iter().enumerate() {
-        let corners: Vec<usize> = quad
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|corner| corner.as_u64().unwrap() as usize)
-            .collect();
+    for (index, corners) in quads.iter().enumerate() {
         let boundary: Vec<serde_json::Value> = (0..corners.len())
             .map(|step| {
                 fixture_edge_use(
@@ -272,8 +348,8 @@ fn overlay_path_stroke(
     let outline: Vec<[f64; 2]> = rim
         .iter()
         .map(|index| {
-            let vertex = vertices[*index].as_array().unwrap();
-            [vertex[0].as_f64().unwrap(), vertex[2].as_f64().unwrap()]
+            let vertex = vertices[*index];
+            [vertex[0] as f64, vertex[2] as f64]
         })
         .collect();
     let nodes: Vec<serde_json::Value> = vertices

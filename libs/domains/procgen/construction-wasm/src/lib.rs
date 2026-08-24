@@ -16,6 +16,5 @@ mod region_overlay;
 mod session;
 #[cfg(test)]
 mod session_tests;
-mod sweep_bridge;
 
 pub use session::ConstructionSession;

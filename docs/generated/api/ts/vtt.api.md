@@ -382,8 +382,6 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
@@ -504,8 +502,6 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
@@ -578,6 +574,17 @@ the scan.
 ### `function vtt.boundary-edges.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
 
 The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
+
+### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
+
+The name the edge between two nodes carries, wherever it is named.
+
+Exported because declaring a patch is not the only way an edge comes into
+being: splitting one at a node mints two more, and if those are named any
+other way then a face declared later over the same pair of nodes gets a
+second, coincident edge instead of the one already there. One rule, one
+name, everywhere -- which is what lets a junction share a spine seam with
+the run it split.
 
 ### `interface vtt.brush-tool.BrushRegion`
 
@@ -654,6 +661,88 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.contour-fusion.ContourFusion`
+
+One place a rim being committed must fuse into a standing one.
+
+### `property vtt.contour-fusion.ContourFusion.along: number`
+
+Where along that edge the meeting point falls, from 0 to 1.
+
+### `property vtt.contour-fusion.ContourFusion.edgeId: string`
+
+The standing edge that gains the meeting point.
+
+### `property vtt.contour-fusion.ContourFusion.ownIndex: number`
+
+The point of the committed rim that moves onto the meeting point.
+
+### `property vtt.contour-fusion.ContourFusion.position: ConstructionPosition`
+
+Where the two rims meet, at the height the committed rim carries there.
+
+### `property vtt.contour-fusion.ContourFusion.standingIndex: number`
+
+Which segment of the standing rim that was.
+
+### `interface vtt.contour-fusion.FusionPolyline`
+
+One polyline of a rim, with the edge standing between each pair of points.
+
+### `property vtt.contour-fusion.FusionPolyline.edgeIds: readonly (string | undefined)[]`
+
+The edge between consecutive points; one shorter than `points`.
+
+### `property vtt.contour-fusion.FusionPolyline.points: readonly ConstructionPosition[]`
+
+### `function vtt.contour-fusion.contourFusionsAgainst(own: FusionPolyline, standing: FusionPolyline, standingFootprint: readonly PointXZ[]): readonly ContourFusion[]`
+
+Every meeting point between a rim being committed and one already standing.
+
+A crossing counts when it cuts off an **end** of the committed rim: the
+first or last point, sitting inside `standingFootprint` with nothing of the
+rim beyond it. That is the loose end -- the stub poking into the other face
+-- and it is the one that moves onto the meeting point, which both cuts the
+stub and fuses the rims in a single stroke.
+
+An interior point inside the footprint is a rim passing clean **through**
+rather than arriving, and is left alone. Pulling it back would fold the rim
+over on itself; cutting it properly means splitting the committed rim in
+two and filling the gap with a face, and nothing here is allowed to invent
+that face. So a true through-crossing still leaves two rims crossing, and
+closing it is the junction face this does not build.
+
+At most one fusion per committed point and one per standing edge: a point
+can only be in one place, and an edge split twice would name a second time
+the edge the first split has already replaced.
+
+### `function vtt.contour-fusion.footprintOf(left: readonly ConstructionPosition[], right: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
+
+The closed footprint a pair of rims bounds, walked as one ring.
+
+### `function vtt.contour-fusion.mitrePoint(joint: ConstructionPosition, ownRim: ConstructionPosition, ownDirection: PointXZ, standingRim: ConstructionPosition, standingDirection: PointXZ, limit: number): ConstructionPosition`
+
+Where two rims leaving one joint meet if each keeps going as it was.
+
+This is the mitre, and it is what an L bend needs: the two runs share a
+station, so their cross-sections at that station are the same cut, and the
+question is only where the outer corner of that cut falls. On the outside
+of the bend the two rims cross ahead of themselves; on the inside they
+cross behind. Both are the same intersection of two infinite lines, which
+is why there is no case analysis here.
+
+Parallel rims -- one run continuing straight into the next -- meet nowhere,
+and the honest answer is the point half way between them.
+
+### `function vtt.contour-fusion.sideOf(origin: PointXZ, direction: PointXZ, at: PointXZ): number`
+
+Which side of `direction` the point `at` lies, seen from `origin`.
+
+The sign is all that is used. Two rims belong to the same side of a joint
+when a traveller passing through it keeps them both on the same hand --
+which, since one run's direction points *into* the joint and the other's
+points *out* of it, means their signs are opposite.
+
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
 One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list.
@@ -672,6 +761,24 @@ Drawn for an edge whose role no palette entry names.
 
 A palette keyed by role, with a fallback for a role nothing has named yet.
 
+### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
+
+What a rim role becomes once the graph shows a face on both sides.
+
+### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
+
+Roles that claim an edge is on the outside of something, and so are only
+true while it has a face on one side.
+
+A type names the role; whether the graph still bears it out is not the
+type's business, because a type sees one face at a time and this is a
+question about a pair. Left unchecked it produces the one drawing error
+that matters here -- a rim line running through the middle of a road, kept
+by nothing but the addresses its nodes were minted with, long after a
+junction turned it into an interior seam.
+
+Any type may add to this. It is a capability, not a rule about paths.
+
 ### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
 
 The preview channel one role's edges are drawn on.
@@ -687,6 +794,11 @@ Groups every edge of every region in `topologies` by role.
 An edge shared by two faces is drawn once: it is one edge, and drawing it
 twice would only make a shared boundary look heavier than a free one, which
 is the opposite of the truth worth seeing.
+
+Sharing also settles the role. A type that named an edge as some kind of
+rim named it from one face, and one face cannot see the other; if the graph
+shows two, the edge is interior whatever it was called -- see
+RIM_ROLES.
 
 ### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
 
@@ -739,6 +851,82 @@ With `arcs` off every span is a chord, however round the samples look.
 That is for a caller whose samples are no longer a hand -- points landing
 on exact grid intersections, say -- where the circle through any three of
 them is a real circle that nobody drew.
+
+### `class vtt.sweep-formation.SweepFormationError`
+
+Why a sweep could not be planned.
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string): SweepFormationError`
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
+
+### `interface vtt.sweep-formation.SweptArc`
+
+The curve a stretch of a formation runs on, if it is not straight.
+
+### `property vtt.sweep-formation.SweptArc.center: readonly [number, number]`
+
+### `property vtt.sweep-formation.SweptArc.clockwise: boolean`
+
+### `interface vtt.sweep-formation.TransverseProfilePoint`
+
+One sample of a formation's transverse profile.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.elevation: number`
+
+Height above the reference line's own height at that station.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.lateralOffset: number`
+
+Signed world distance from the reference line, left to right.
+
+### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number, arcs: readonly (SweptArc | undefined)[]): readonly [number, number]`
+
+The direction one station offsets its profile along.
+
+At a corner it is the mitre: the bisector of the two neighbouring normals,
+lengthened so the offset rim still meets both straight stretches, and
+bounded so a hairpin gets a corner rather than a spike. Same rule the
+junction mitre follows between two runs -- this one is within one run.
+
+Where a stretch curves, its normal comes from the curve rather than from
+the chord standing in for it. A station in the middle of an arc then has
+the *same* normal arriving and leaving, so the mitre resolves to no corner
+at all -- correctly, because there is none: a circle does not have corners,
+only the polygon that approximates it does. That is what lets a curved road
+be smooth instead of faceted, and it is why the rim of one can be declared
+as a single arc.
+
+### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number, options: { arcs?: readonly (SweptArc | undefined)[] }): ConstructionSweepPlan`
+
+Samples a transverse profile along a reference line into connected quads.
+
+Vertices are station-major: every consecutive `profile.length` entries form
+one transverse station, which is what lets `pathPatch` read a station
+address straight off a vertex index. Quads reference those shared vertices,
+so neighbouring strips are connected by construction rather than by welding
+coincident geometry afterwards.
+
+### `function vtt.sweep-formation.sweptBoundary(stationCount: number, profileLength: number): readonly number[]`
+
+The rim of a plain formation, as vertex indices.
+
+Down the first column, across the last station, back up the last column,
+and across the first station to close. True of a formation standing on its
+own, which is the only thing a sweep can know -- everything that makes it
+*untrue*, a junction above all, is known only where clouds and surface
+types are. Exported so that side can walk it, compare against it, or
+replace it outright.
+
+### `function vtt.sweep-formation.withoutCoincidentStations(samples: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
+
+The caller's stations with any coincident repeat dropped.
+
+Hygiene, not resampling: it only ever removes, never places. Two stations
+at one spot give the frame maths no direction to read, and a pointer held
+still or a grid snap folding samples onto one intersection both produce
+exactly that. Where the stations go is the caller's decision, because it
+depends on what the formation runs over.
 
 ### `interface vtt.tool-context.ConstructionTool`
 
@@ -834,6 +1022,27 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 ### `function vtt.tool-context.scopedToolId(ctx: string | ToolContext, domain: string, suffix?: string | number): string`
 
 Builds a deterministic scoped operation/prefix ID for a given tool/domain on a table.
+
+### `variable vtt.tool-diagnostics.TOOL_DIAGNOSTIC_PREFIX: "[construction]"`
+
+The prefix every line carries, so a console filter finds the lot.
+
+### `function vtt.tool-diagnostics.inStage(tool: string, stage: string, facts: Readonly<Record<string, unknown>>, run: () => T): T`
+
+Runs one stage of a commit, naming it if it throws.
+
+Rethrows: this reports, it does not decide. Whether a failed stage costs
+the stroke or only part of it is the caller's judgement, and swallowing
+here would take that judgement away -- and hide the failure, which is the
+opposite of the point.
+
+### `function vtt.tool-diagnostics.reportToolFailure(tool: string, stage: string, facts: Readonly<Record<string, unknown>>, error: unknown): void`
+
+One failed stage, on the console, with everything known about it.
+
+### `function vtt.tool-diagnostics.reportToolWarning(tool: string, stage: string, facts: Readonly<Record<string, unknown>>): void`
+
+Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
@@ -994,6 +1203,31 @@ path goes through, `path-patch.ts` declares the graph, and Rust supplies
 reusable geometry and executes the resolved overlay without ever being
 told any of it is a path.
 
+### `interface vtt.path-junction.JunctionWedges`
+
+What closing one mouth costs and produces.
+
+### `property vtt.path-junction.JunctionWedges.patch: ConstructionPatch`
+
+Their replacement, either side of the arriving road.
+
+### `property vtt.path-junction.JunctionWedges.removed: readonly ConstructionSurfaceKey[]`
+
+Faces of the standing run that the mouth opens into, and so must go.
+
+### `function vtt.path-junction.junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[]`
+
+The edits that take the faces a mouth opens into out of the graph.
+
+### `function vtt.path-junction.junctionWedges(tableId: string, operationId: string, arrivingCorridorId: string, mouth: PathMouth, junction: { nodeId: string; station: number }): JunctionWedges | undefined`
+
+Rebuilds the standing run's flank around one mouth.
+
+`undefined` when the mouth spans nothing the standing run actually has --
+a graze at the very end of a run, or a corner that landed outside every
+band. Closing nothing is better than declaring a face over a hole that is
+not there.
+
 ### `interface vtt.path-patch.PathPatchFormation`
 
 Application-owned graph declaration for one generic sweep result.
@@ -1004,7 +1238,7 @@ Application-owned graph declaration for one generic sweep result.
 
 ### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
 
-### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, weldedSpines: ReadonlyMap<number, string>): PathPatchFormation`
+### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, welded: ReadonlyMap<string, string>): PathPatchFormation`
 
 Converts graph-neutral Rust geometry into the exact nodes, shared edges,
 and faces the construction graph must register. This mirrors `wallPatch`:
@@ -1025,6 +1259,72 @@ for ground, so an edge with no room left means something is already there,
 and the overlay refusing the patch is that fact arriving where it is
 precise. A wall shares `private-when-full` for the opposite reason -- any
 number of walls may legitimately stand on one column.
+
+### `interface vtt.path-shared.PathMouth`
+
+### `property vtt.path-shared.PathMouth.run: PathRun`
+
+### `property vtt.path-shared.PathMouth.sides: readonly PathMouthSide[]`
+
+### `property vtt.path-shared.PathMouth.station: number`
+
+This run's end station, the one whose rib became the mouth.
+
+### `property vtt.path-shared.PathMouth.through: number`
+
+The slot of the standing rim the mouth opens through.
+
+### `interface vtt.path-shared.PathMouthSide`
+
+Where the run being committed opens into a run already standing.
+
+A T, seen from the arriving side. The arriving run stops at a spine node in
+the middle of the standing run, so its end rib cannot be mitred -- that rib
+has road on both sides of it and cannot be rotated onto anything. What can
+be said is where its two rims cross the standing rim, and those two points
+are the **mouth**: the opening the arriving road makes in the flank of the
+standing one.
+
+Reported rather than acted on, because closing a mouth is not an edit to
+this run at all -- it is a rebuild of the standing run's faces around the
+hole, which `junctionWedges` does.
+
+### `property vtt.path-shared.PathMouthSide.across: number`
+
+This run's own slot, so its corner node can be named.
+
+### `property vtt.path-shared.PathMouthSide.position: ConstructionPosition`
+
+### `property vtt.path-shared.PathMouthSide.standingStation: number`
+
+Roughly where the corner falls on the standing run's station scale.
+
+For ordering the two corners along the rim, and nothing else. Anything
+that has to *find* something on the standing run locates it by position
+instead: a station number is not a coordinate system a later junction
+leaves alone, since splitting a spine mints fractional ones.
+
+### `interface vtt.path-shared.SpineJoin`
+
+One arrival that welded onto a station already standing.
+
+### `property vtt.path-shared.SpineJoin.at: number`
+
+Index into the committed reference line where the two meet.
+
+### `property vtt.path-shared.SpineJoin.nodeId: string`
+
+### `property vtt.path-shared.SpineJoin.position: ConstructionPosition`
+
+### `property vtt.path-shared.SpineJoin.run: PathRun`
+
+### `property vtt.path-shared.SpineJoin.standingIndex: number`
+
+Which station of the standing run that was.
+
+### `property vtt.path-shared.SpineJoin.terminal: boolean`
+
+Whether that station is an end of the standing run rather than a middle.
 
 ### `variable vtt.path-shared.PATH_COLOR: 12616956`
 
@@ -1050,7 +1350,28 @@ read an arc yet. But it is now a polyline of decisions rather than of hand
 samples, and this is the single place that changes when the planner learns
 contour geometry.
 
-### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[]): { inserts: readonly AtomicEditOp[]; line: readonly ConstructionPosition[]; welds: ReadonlyMap<number, string> }`
+### `function vtt.path-shared.joinedCoveredKeys(ctx: ToolContext, outline: readonly (readonly [number, number])[], covered: readonly ConstructionCoveredRegion[], joinedCorridors: ReadonlySet<string>): ReadonlySet<string>`
+
+Which covered faces this run *joins* rather than replaces.
+
+Joined faces are left out of the overlay's sources, so they are not
+consumed -- which is the whole point. A path replacing a path is what made
+one carriageway erase another instead of the two meeting.
+
+**Asked by identity first.** A run that welded a node onto another run's
+spine has joined that run, and every face of it, full stop; whether the
+new footprint happens to swallow one of its spine nodes is beside the
+point. Geometry was the only question available before junctions were
+built, and it stopped being safe the moment a junction started cutting the
+arriving road back at the rim: the footprint no longer reaches the other
+road's travel line, so the purely geometric answer became "cut" for the
+very runs this one had just joined -- and consuming those bands takes the
+crossed run's spine with them.
+
+The geometric rule stays for the case identity cannot see: a footprint
+laid over a run's travel line without any junction having been made.
+
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; origins: readonly number[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.
 
@@ -1071,17 +1392,53 @@ node minted, which is `insertedColumnAt` for paths. The node is numbered on
 the crossed run's own station scale, fractionally, so it stays part of that
 spine's chain and in the right order.
 
-### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
+### `function vtt.path-shared.mitreTerminalRibs(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joins: readonly SpineJoin[], arcs: readonly (SweptArc | undefined)[]): { moves: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
+
+Mitres this run's end rib into the end rib of a run it met at a station.
+
+The L, and the only junction shape that needs no junction face at all.
+Both runs stop at the same station, so their cross-sections there are the
+same cut of the road, and the two ribs are not two ribs: they are one,
+running between the two places the outer rims meet. Each rim keeps the
+direction its own spine gave it until it reaches its opposite number, and
+that meeting point is the corner -- the outside of the bend meets ahead,
+the inside behind, and both are the same intersection.
+
+The join is made by *identity*, as everything else here is. The standing
+run's rim node is moved onto the corner and the run being committed welds
+its own rim node to it, so the rib edge between corner and spine is named
+from the same pair of nodes on both sides and is therefore literally the
+same edge. Two faces to an edge is exactly what `refuse-when-full` allows,
+and it is how a wall shares a column.
+
+Pairing the sides needs no case analysis either. One run's direction points
+out of the joint and the other's points into it, so two rims lie on the
+same hand of a traveller passing through precisely when `sideOf` gives them
+opposite signs.
+
+### `function vtt.path-shared.pathMouthsInto(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joined: readonly PathRun[]): { mouths: readonly PathMouth[]; vertices: readonly ConstructionPosition[] }`
+
+Cuts this run's end rib back onto the rim of the run it arrived at, and
+reports the mouth that leaves.
+
+The rim keeps the direction its own spine gave it until it reaches the
+standing rim, which is the same rule the mitre follows -- an arrival is
+still two L bends, one per side. What differs is only that a T bends into
+the *middle* of a rim rather than into its end, so the two corners are not
+nodes the standing run already has, and the faces behind them have to be
+rebuilt rather than nudged.
+
+### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { arcs: readonly (SweptArc | undefined)[]; line: readonly ConstructionPosition[] }`
 
 The reference line to sweep along: where the fit decided the road goes,
 at the height the ground was actually picked at.
 
 Arc flattening here is temporary and deliberately kept in one place so it
-is obvious what to delete -- `plan_sweep_formation` only samples a
-polyline, so a true arc has no way to reach it intact. Until it accepts
-contour geometry, a curve is handed over as chords close enough that the
-difference is invisible, which is still a world apart from handing over
-the raw hand.
+is obvious what to delete -- `sweepFormation` only samples a polyline, so a
+true arc has no way to reach it intact. Until it accepts contour geometry,
+a curve is handed over as chords close enough that the difference is
+invisible, which is still a world apart from handing over the raw hand.
+Now that the sweep is on this side, teaching it arcs is a local change.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -1122,6 +1479,15 @@ Projects `point` onto the infinite line through `a` and `b` on the XZ plane.
 - `t`: normalized position along the segment (0 at `a`, 1 at `b`, can be <0 or >1 outside the segment).
 - `perp`: perpendicular distance from `point` to the infinite line.
 - `x`, `z`: coordinates of the projected point on the line.
+
+### `function vtt.geometry-2d.segmentCrossingXZ(fromA: PointXZ, toA: PointXZ, fromB: PointXZ, toB: PointXZ): { across: number; along: number } | undefined`
+
+Where two XZ segments cross, as the parameter along each -- `undefined` for
+parallel segments, or for a crossing that falls outside either one.
+
+Both parameters come back because a caller almost always needs the one it
+did not ask about: splitting the segment that was crossed needs `across`,
+while ordering the crossing among a polyline's own points needs `along`.
 
 ### `function vtt.geometry-2d.xzDistance(a: PointXZ, b: PointXZ): number`
 
@@ -2102,7 +2468,13 @@ movement is gone by this point, never clamped later or inside Rust.
 
 ### `interface vtt.path-cloud.PathRun`
 
-### `property vtt.path-cloud.PathRun.bands: readonly ConstructionSurfaceKey[]`
+### `property vtt.path-cloud.PathRun.bands: readonly PathRunBand[]`
+
+Every face of the run, each carrying the stretch it covers.
+
+The stretch is what a junction reads: closing a T means taking out the
+faces the arriving road opens into and declaring what replaces them, and
+"which faces" is a question about stations and sides, not about keys.
 
 ### `property vtt.path-cloud.PathRun.contours: readonly PathRunChain[]`
 
@@ -2120,6 +2492,20 @@ welded onto one already standing there. A junction, seen from this side.
 ### `property vtt.path-cloud.PathRun.spine: PathRunChain | undefined`
 
 ### `property vtt.path-cloud.PathRun.subtype: PathKind | undefined`
+
+### `interface vtt.path-cloud.PathRunBand`
+
+One face of a run, with the stretch of the run it covers.
+
+### `property vtt.path-cloud.PathRunBand.slots: readonly number[]`
+
+The slots it lies between, in order across.
+
+### `property vtt.path-cloud.PathRunBand.stations: readonly number[]`
+
+The stations it spans, in order.
+
+### `property vtt.path-cloud.PathRunBand.surfaceKey: ConstructionSurfaceKey`
 
 ### `interface vtt.path-cloud.PathRunChain`
 
@@ -2164,6 +2550,28 @@ The faces this rib bounds.
 Ordered by `across`, so from one contour through the spine to the other.
 
 ### `property vtt.path-cloud.PathRunRib.station: number`
+
+### `function vtt.path-cloud.pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[]`
+
+The outer perimeter of a whole path cloud, as one named thing.
+
+**This is the contour.** Not the chain a single run reports at its
+outermost slot -- that is the rim the sweep laid down, true of a road
+standing alone and stale the moment another road joins it. The contour of a
+junction is the perimeter of everything joined at it, and the only test
+that stays true through a junction is the graph's own: a face on one side
+and nothing on the other.
+
+Kept as its own reading, and separately from `PathRun`, because it is
+cloud-shaped rather than run-shaped and because it is the thing worth
+editing. Every question about the outside of a road network -- where a kerb
+goes, where a pavement is offset from, whether two roads really did fuse --
+is a question about this one loop, and having it in one place is what makes
+changing any of them a local change.
+
+A cloud with a hole in it -- roads round a block -- reports more than one
+loop, the outer walk and one per hole, which is correct and is why this is
+not a single ring.
 
 ### `function vtt.path-cloud.pathRunFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathRun | undefined`
 
@@ -2775,6 +3183,43 @@ Product-owned edit modes; capabilities stay renderer- and WASM-neutral.
 ### `function vtt.surface-edit-mode-registry.surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined`
 
 Resolves the contextual edit mode for one semantic construction surface type.
+
+### `interface vtt.surface-perimeter.PerimeterLoop`
+
+One closed run of perimeter, walked end to end.
+
+### `property vtt.surface-perimeter.PerimeterLoop.closed: boolean`
+
+Whether the walk closed on itself, as a complete perimeter must.
+
+### `property vtt.surface-perimeter.PerimeterLoop.edgeIds: readonly string[]`
+
+In walk order; one per step.
+
+### `property vtt.surface-perimeter.PerimeterLoop.nodeIds: readonly string[]`
+
+In walk order, `nodeIds[i]` starting `edgeIds[i]`.
+
+### `property vtt.surface-perimeter.PerimeterLoop.positions: readonly ConstructionPosition[]`
+
+### `function vtt.surface-perimeter.edgeUseCounts(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, number>`
+
+How many faces each edge bounds, across the whole set.
+
+### `function vtt.surface-perimeter.perimeterOf(topologies: readonly ConstructionRegionTopology[]): readonly PerimeterLoop[]`
+
+Every perimeter loop of `topologies`, as closed walks.
+
+Takes a whole set rather than one face, because the question is only
+meaningful for a set: an edge is interior *to something*, and one face on
+its own has nothing but perimeter. Hand it a cloud and it answers for the
+cloud, which is the unit a junction actually changes.
+
+A node where three or more perimeter edges meet -- a pinch, where the
+surface touches itself -- is walked by taking whichever edge has not been
+walked yet. That yields loops that partition the perimeter rather than the
+one canonical figure-of-eight, which is the right answer for drawing it and
+an arbitrary one for reasoning about winding.
 
 ### `interface vtt.tool-types.BrushShapeParams`
 
@@ -3450,10 +3895,6 @@ Moves every node on a region's boundary, holes included.
 
 Moves one boundary node to an absolute position.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.planSweepFormation(request: { parameters: ConstructionSweepParameters; referenceLine: readonly ConstructionPosition[] }): ConstructionSweepPlan`
-
-Executes only the generic sweep geometry algorithm; never mutates the graph.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
@@ -3503,6 +3944,15 @@ Declarative cross-section consumed by the generic Rust sweep.
 Graph-neutral result of a reusable Rust profile sweep.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.boundary: readonly number[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.curves?: readonly { from: number; geometry: ConstructionEdgeGeometry; to: number }[]`
+
+The lengthwise edges that are curves rather than chords, by the pair of
+vertices each runs between.
+
+Sparse: a straight formation reports none. A curved one reports the arc
+every offset of that stretch follows -- concentric, so one centre serves
+the spine and both rims.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.quads: readonly (readonly [number, number, number, number])[]`
 

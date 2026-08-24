@@ -161,7 +161,7 @@ declared, not inferred from geometry that cannot carry it.
 Raising the deck afterwards is the ordinary spine edit: `ALL_AXES` on the
 spine role, and the cascade lifts the whole cross-section with it.
 
-## Junction identity is built; junction geometry is not
+## Junction identity is built first
 
 Two runs meet because they reference one spine node. `weldedToStandingSpines`
 snaps a station onto a standing spine node **before** the sweep — the same
@@ -170,39 +170,349 @@ station that will share a node has to be built at that node's position, not
 dragged onto it after. `apply_add_patch` skips a node that already exists, so
 the welded node keeps its own position and both runs bound it.
 
-What is **not** solved is the surface. Measured, and pinned by
-`a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim` in
-`construction-wasm`'s session tests: `apply_region_overlay` rebuilds what it
-consumed from the **outer boundary** of the consumed set, so rim nodes survive
-and interior nodes do not. A spine is interior by construction. Crossing a
-road therefore severs the crossed road's travel line exactly at the junction —
-the welded node itself survives, the chain either side of it does not.
+The surface that identity leaves behind is what the next section is about.
 
-A real junction has to put the crossed spine back onto a face boundary, which
-means the crossing area becoming its own face bounded by **both** runs' cross
-sections rather than simply being replaced by the newer run's bands.
-`i_overlay` is already a dependency of `surface-transformations` and is the
-tool for computing that area.
+## The road is built in the application; Rust registers it
+
+The sweep used to be a call into Rust, and that was the wrong side of the
+line. Rust's job here is to validate and execute what the application decided
+-- `wallPatch` and `pathPatch` both say so, and a wall is built entirely in
+TypeScript for exactly this reason. A sweep is not execution. It decides
+where every vertex of the road goes, which faces exist, and **which rim is
+the outside of it**.
+
+That last one is the whole of the contour problem, and it was being decided
+by index arithmetic over a station-by-slot grid: first column down, last
+station across, last column back. That is the true rim of a road standing
+alone and it cannot be anything else, because the code producing it has never
+heard of a junction, a cloud, or a surface type. All of that lives in the
+application. So the rim came back describing a road with no junctions in it,
+and the application had no seam at which to correct it.
+
+`sweepFormation` is the same maths on this side -- frames, mitre limit,
+boundary walk, unchanged. What changed is who may alter them: `sweptBoundary`
+is exported so the side that *does* know about junctions can walk it, compare
+against it, or replace it outright.
+
+## Curves survive into the graph, because an offset arc is an arc
+
+A fitted arc used to be chopped into chords before it reached the sweep,
+because the sweep was in Rust and took a polyline. With the sweep on this
+side there is no reason for that, and one very good reason against it: the
+rim of a curved road should be **one arc edge**, not fifty chords.
+
+The geometry that makes it free: a point offset radially from a circle lands
+on a **concentric** circle. So every lateral offset of a curved stretch --
+both rims and the spine -- is the same arc at a different radius, with the
+same centre and the same sense of turn. One centre serves the whole
+cross-section, and `ConstructionEdgeGeometry` already carries exactly that.
+
+Two things had to change for it to hold.
+
+**Normals come from the curve, not from the chords.** A chord normal is
+tilted by half the angle the chord subtends, so offsetting along it lands
+slightly off the concentric circle. Tolerable for a polyline; fatal for an
+arc, whose two ends must be equidistant from the centre or it is not an arc.
+`radialNormal` reads the curve.
+
+**A station in the middle of a curve is not a corner.** With normals read
+from the curve, the arriving and leaving normals at such a station are the
+same direction, so the mitre resolves to a plain unit normal. Correctly: a
+circle has no corners, only the polygon approximating it does. That is what
+makes a curved road smooth rather than faceted, and it means the number of
+stations is now purely a question of how finely the ground varies -- not of
+how smooth the road looks.
+
+Sampling still happens, because a station has to read the terrain height
+under it. What changed is that sampling no longer *defines* the road: the
+stations say where the road was measured, the arc says what runs between
+them.
+
+The same tangent is what a junction mitre at a curved end reads. A chord to
+the neighbouring station leans into the bend by half the angle it subtends,
+and the corner would otherwise be built on that lean.
+
+**Which stretches keep their curve is reported, not compared.** A junction
+splices stations in and slides others onto meeting points, and a minted
+station sits on a chord rather than on the circle -- an arc through it would
+be an arc through the wrong points. So a stretch keeps its curve only when
+both its ends are drawn stations that were consecutive before the splice, and
+`junctionsWithStandingSpines` reports the drawn station each committed one
+came from. The first attempt asked that question by array identity instead,
+which is always false: every step rebuilds the array whether or not it
+changed anything, so a run that nothing touched read as spliced and every
+curve the fit had found was silently thrown away.
+
+## A station has to earn its place
+
+A road used to get a station every two metres, everywhere. That is thirty
+stations for sixty metres of flat car park, all of them saying the same thing
+about the ground, and it is the wall pattern abandoned: a wall commits the
+straightest thing that still fits inside the brush, and so should a road.
+
+The rule now is the one the brush already implies. Every point the fit itself
+produced is a station -- a corner because the run genuinely turns there, an
+arc sample because the outline handed to the coverage query is a polygon and
+has to follow the curve even where the edges between those points are true
+arcs. Nothing else is automatic. A stretch buys extra stations only where the
+ground under it strays from the straight line the stretch would otherwise be,
+by more than `TERRAIN_HEIGHT_TOLERANCE`.
+
+So a straight road over flat ground is two stations. A straight road over a
+ridge is exactly as many as the ridge needs, and they land at the ridge. A
+deck subdivides for nothing at all, because it spans rather than rides.
+
+### An arc whose ends disagree is a circle, and it is enormous
+
+An arc edge is stored as a centre and a sense of turn; its radius comes from
+its endpoints. So an arc is only an arc while both ends are the same distance
+from that centre -- and several things move an endpoint *after* the sweep
+placed it. A mitre pulls a corner onto another road; a mouth cuts a rim back
+to a junction. The edge then claims a centre that fits one end and not the
+other, and a renderer asked to draw that draws the whole circle it implies:
+the giant ball that appears on the table now and then.
+
+`pathPatch` checks rather than trusts, because it is the last place that
+knows both the geometry and where the vertices actually ended up. A curve
+whose ends disagree about the radius is declared straight. A straight edge is
+a harmless wrong answer where a wrong arc is not.
+
+## What a contour is, and the definition that was wrong
+
+A road is built as a sweep: a reference line of stations, a profile of three
+slots, and one face per station gap per side. Nothing in that declares a
+contour. The contour was **derived**, by reading node addresses -- the chain
+of nodes at the outermost slot, in station order.
+
+That is true of a road standing on its own and false the moment another road
+joins it. The nodes keep their addresses while the stretch between two of them
+stops being rim and becomes the mouth of a junction, so read by address it is
+still a rim and it draws as one: a line straight through the middle of the
+road. No contour may run inside a road, and address-derived contours will
+keep doing it, because an address records how a node was built and the
+question is about what it bounds now.
+
+There is one definition that survives a junction, and it is the graph's own:
+
+> An edge with a face on both sides is interior. An edge with a face on one
+> side is contour.
+
+`perimeterOf` is that, and `pathCloudPerimeter` is it asked of a whole cloud
+-- which is the right unit, because a junction merges runs and the contour of
+a junction is the perimeter of everything joined at it. It is one named
+reading in one place on purpose: every question about the outside of a road
+network is a question about that loop, so changing any of them stays local.
+
+The drawing follows the same rule. A structure type names an edge from one
+face and one face cannot see the other, so a role that claims to be a rim is
+only kept while the graph still shows a single face; otherwise it is drawn as
+an interior seam. That is also the fastest way to see whether a junction
+really closed or only looks closed.
+
+## A contour never touches the spine
+
+What an edge *is* reads off the slots its two ends carry, and only the slots.
+Two ends on one slot run **along** the road -- the travel line if that slot is
+the spine, an outer contour if it is an extreme. Two ends on different slots
+run **across** it, and that is a rib.
+
+Comparing stations as well is what put a V of contour across every T. The rib
+closing an arriving road onto a junction runs from that road's own corner to
+a spine node the *other* road minted, so the two stations are on different
+scales and never match. Read as neither along nor across, it fell through to
+nothing in particular and drew as a rim -- a contour touching the spine,
+which is exactly what a contour may never do.
+
+Read by slot the rule enforces itself: a contour has both ends on one outer
+slot, so it cannot have an end on the travel line. No case analysis, no
+junction-shaped exception.
+
+**A perimeter is not the same thing as a contour**, and this is where the two
+come apart usefully. The perimeter of a road is everything with a face on one
+side, which includes the rib capping each open end -- and that rib does touch
+the spine, correctly, because the end of a road is open across its whole
+width. So a perimeter is made of contour edges *and* the ribs that close it.
+The rule is about what an edge is, not about which of them happen to be on
+the outside.
+
+## Contour fusion: two shapes, one construction
+
+Sharing a spine node makes two runs one graph. It does not make them one
+road: their outer contours still ran straight through each other, each
+leaving an end inside the other's surface bounding nothing. Three rules from
+the owner settle what that should become.
+
+1. No outer contour may cross another without fusing into it.
+2. Two runs joined at one spine node must have their contours joined too --
+   the L bend.
+3. A T must not become a triangle: the fusion happens **only** where a real
+   crossing occurred, never by linking regions that never met.
+
+Both are the same construction: a rim keeps the direction its own spine gave
+it until it meets the rim it is joining, and there the two become one. What
+differs is only **where on the standing run the arrival landed** -- at one of
+its stations, or between two of them -- and that difference decides whether
+the standing run's faces can stay as they are.
+
+### Met at a station: the mitre, and it is free
+
+Two runs that meet at a station share that station's whole cross-section, so
+their end ribs are not two ribs. They are one rib, running between the two
+places the outer rims meet. Each rim keeps the direction its own spine gave
+it until it reaches its opposite number; on the outside of the bend the two
+cross ahead of themselves, on the inside behind, and both are the same
+intersection of two infinite lines. No case analysis, and no new face: the
+standing run's rim node is *moved* onto the corner and the run being
+committed welds its own rim node to it.
+
+That last step is the whole trick, and it is the wall's trick. Because
+`pathPatch` names an edge after the pair of nodes it runs between, two runs
+that reference the same corner node and the same spine node declare **the
+same edge id** -- so the shared rib is literally one edge with two faces on
+it, which is exactly what `refuse-when-full` allows. Identity, not
+coincidence.
+
+Pairing the sides needs no case analysis either. One run's direction points
+out of the joint and the other's points into it, so two rims lie on the same
+hand of a traveller passing through precisely when `sideOf` gives them
+opposite signs.
+
+Two things had to be fixed before an L could even be *seen*. An arrival was
+measured against the infinite line through a spine segment and thrown away
+for `t > 1`, so an end drawn a few centimetres past the other run's last
+station -- the commonest way anyone draws an L -- found nothing at all. And
+an arrival that did land near an existing station still split the edge beside
+it, minting a second node centimetres from the one it meant to meet. Both are
+`resolveColumn`'s cases, and both are now answered the way walls answer them:
+clamp, then weld to the station that is already there.
+
+### Met mid-run: the T is two bends and a hole
+
+An arrival that landed between two stations cannot be mitred: that rib has
+road on both sides of it and cannot be rotated onto anything. But the bends
+are the same bends. Each arriving rim runs on until it meets the standing
+rim, and there it turns and becomes that rim -- two L joins, one per side.
+
+What is different is the **hole** between them. The stretch of standing rim
+between the two corners is not rim any more: it is the mouth of the road that
+just arrived. Left in place it draws as a kerb laid straight across the
+junction, which is what a T looked like -- the two arriving rims as uprights
+and the standing rim as a crossbar.
+
+That stretch cannot simply be deleted, because it bounds the standing run's
+band and taking it away leaves the band open. So the band goes with it, and
+two **wedges** replace it -- one either side of the arriving road. Each runs
+from the arriving road's corner along what is left of the old rim to where
+the band used to end, back down the spine to the junction node, and closes on
+the arriving road's own end rib.
+
+That last edge is the whole join. The rib between the junction node and a
+corner is named after the pair of nodes it runs between, exactly as the
+road's own patch names it, so the wedge and the road's last band walk **one**
+edge with a face on each side. The two roads are joined because they bound
+the same edges, not because they touch -- and the arriving spine reaches the
+junction node on a seam that bounds something, so it survives
+`prune_unused_edges` and travel connectivity and surface tidiness stop
+pulling in opposite directions.
+
+`pathMouthsInto` finds the mouth, `junctionWedges` rebuilds the flank, and
+`junctionRemovals` takes the old faces out. Order matters in the commit: the
+flank is removed before the road that opens it is declared, and the wedges go
+in last, because they bound edges the road itself has only just minted.
+
+### A patch declares the nodes it walks, including the ones it is about to orphan
+
+Closing a junction removes the flank and lays the wedges that replace it, and
+removal prunes any node left bounding nothing. A rim node at the end of the
+rebuilt stretch is bounded only by the very bands being removed -- so between
+the removal and the wedge, the node the wedge means to hang its corner on
+stops existing, and the patch lands on `edge references unknown node` with
+the road already committed.
+
+The wedges declare every node they walk, at the position it stood. Declaring
+one that still exists is free -- `apply_add_patch` skips it and keeps the
+position it had -- so there is no reason to be clever about which ones
+survive, and every reason not to be.
+
+A node the wedge cannot place at all is a different matter: it means the walk
+left the run it was rebuilding, and the junction is abandoned rather than
+completed with a node invented at the world origin.
+
+### A station number is not a coordinate system
+
+Splitting a spine mints a node at a fractional station, and the rim gets no
+node at all. So after one junction the standing run has a spine numbered
+`0, 1, 1.5, 2` against a rim numbered `0, 1, 2`, and any lookup phrased as
+"the node at station 1.5" finds one on the spine and nothing on the rim.
+
+The flank rebuild was phrased exactly that way, and it did not fail loudly:
+it returned `undefined` and the junction was quietly skipped, so the kerb
+came back or did not depending on whether something had already split the
+spine nearby. That is what makes it read as instability rather than as a bug
+-- the same stroke works or does not depending on the history of the table.
+
+Stations are for *ordering* now. Anything that has to find something on the
+standing run finds it by position: which rim segment a corner projects onto,
+and which spine nodes lie between two rim nodes. A position is still a
+position after somebody else edits the run.
+
+Two other rules fell out of the same pass. The junction node is taken from
+the chain rather than computed, so if it is not on the chain there is nothing
+to rebuild and the rebuild says so. And the flank is rebuilt in both halves
+or neither, because one wedge alone leaves it half open -- worse than the
+kerb it was meant to remove.
+
+### Joining is asked by identity, and that had to be fixed twice
+
+Which faces a stroke *joins* rather than replaces used to be a purely
+geometric question: does the new footprint contain one of that face's spine
+nodes? That was the only question available before junctions existed, and
+closing a junction is exactly what broke it. Once the arriving road is cut
+back at the other road's rim, its footprint no longer reaches that road's
+travel line at all -- so the geometric answer flipped to "replace" for the
+very runs the stroke had just joined, and consuming those bands takes the
+crossed run's spine with them.
+
+A run that welded a node onto another run's spine has joined it, and every
+face of it, full stop. The geometric rule stays for the case identity cannot
+see -- a footprint laid over a travel line with no junction made -- but it is
+the second question now, not the first. `identity, not geometry` keeps being
+the same lesson in a new place.
+
+### The graph a junction reads has to be the graph it is about to edit
+
+Twice now the same mistake, in two costumes. A junction is decided from a
+reading of the table, and between the reading and the edit the table moves.
+
+The first costume was geometric: whether a face is joined or replaced was
+asked of the footprint, and cutting the road back at the rim changed the
+footprint out from under the answer. The second was plain staleness: the
+faces to rebuild were chosen before the overlay ran, and the overlay consumes,
+creates and prunes surfaces -- so the ids named a table that no longer
+existed, and the removal asked the graph for a region that was gone.
+
+So the run is read again, per mouth, immediately before its junction is
+closed. What does *not* need re-reading is the mouth: where two rims crossed
+is a fact about positions, and nothing in the overlay moves a node. Identity
+goes stale; geometry does not.
+
+### One name for an edge, wherever it is minted
+
+None of this works unless a split edge and a declared edge over the same pair
+of nodes are the *same* edge. Splitting one used to mint halves named after
+the edge that was split, so a face declared later over one of those pairs got
+a second, coincident edge lying on the first -- two lines, one drawn over the
+other, and no face sharing either. `sharedEdgeId` is now the single rule, and
+`insert-vertex` names its halves with it.
 
 ## Open
 
-- **Junction geometry.** Identity is done; the *surface* is not, and the two
-  runs still do not read as joined. The overlay consumes the crossed run's
-  bands at the crossing, and with them its spine -- so the node the insert
-  minted survives (the new run references it) while the chain either side of
-  it does not. Settled in shape, not written. Insert a node into
-  *both* spines at the crossing; intersect the two contours; cut the four ends
-  and relink them into one closed contour around the crossing, so no contour
-  runs over another; the enclosed area becomes its own face with both spines
-  crossing inside it, which also puts the crossed spine back on a boundary
-  instead of inside a region about to be replaced. `i_overlay` is already a
-  dependency of `surface-transformations` and is the tool for step two.
-  **Undecided:** whether that contour is the *intersection* of the two runs (a
-  simple quadrilateral) or their *union* trimmed at the four ends (the
-  chamfered corners a real crossing has).
-- **Regeneration.** The corridor id now carries the subtype, so the recipe is
-  recoverable; nothing re-runs it yet. Still undecided: whether a hand-moved
-  lateral vertex survives a regeneration that touches its station.
+- **The X.** A run passing clean *through* another still crosses it. There is
+  no arrival and no loose end: the rim goes in one side and out the other, so
+  there is no corner to bend and no mouth to close. The construction is the
+  same one at four corners instead of two, with the crossed run's flank
+  rebuilt on both sides, and the crossing area itself becoming faces divided
+  by both spines.
 - **Remainder collapse.** `region_overlay.rs` folds every consumed region into
   one remainder carrying the first one's surface type. A network that loses
   surface identity on every stroke cannot be administered.

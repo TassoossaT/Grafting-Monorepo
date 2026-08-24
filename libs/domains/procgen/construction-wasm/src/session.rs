@@ -21,7 +21,6 @@ use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
 use crate::region_editing;
 use crate::region_overlay;
-use crate::sweep_bridge;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -294,13 +293,6 @@ impl ConstructionSession {
             region_editing::all_region_topologies(&self.graph, &self.topology, &self.surfaces)
                 .map_err(to_js_error)?;
         serialize(&dtos)
-    }
-
-    /// Runs the graph-neutral sweep planner without mutating session state.
-    pub fn plan_sweep_json(&self, request_json: &str) -> Result<String, JsValue> {
-        let request: sweep_bridge::PlanSweepRequest = parse(request_json)?;
-        let response = sweep_bridge::plan_sweep(request).map_err(to_js_error)?;
-        serialize(&response)
     }
 
     // ---- Terrain mesh lifecycle ----

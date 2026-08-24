@@ -28,9 +28,12 @@ export {
   pathSpineSlot,
 } from "./path-recipe.ts";
 export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
-export { pathRunFor, pathRunsIn, pathRunsOf } from "./path-cloud.ts";
+export { pathCloudPerimeter, pathRunFor, pathRunsIn, pathRunsOf } from "./path-cloud.ts";
+export { edgeUseCounts, perimeterOf } from "./surface-perimeter.ts";
+export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type {
   PathRun,
+  PathRunBand,
   PathRunChain,
   PathRunNode,
   PathRunRib,

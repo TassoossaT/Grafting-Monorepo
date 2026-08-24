@@ -63,6 +63,34 @@ export function distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): num
 }
 
 /**
+ * Where two XZ segments cross, as the parameter along each -- `undefined` for
+ * parallel segments, or for a crossing that falls outside either one.
+ *
+ * Both parameters come back because a caller almost always needs the one it
+ * did not ask about: splitting the segment that was crossed needs `across`,
+ * while ordering the crossing among a polyline's own points needs `along`.
+ */
+export function segmentCrossingXZ(
+  fromA: PointXZ,
+  toA: PointXZ,
+  fromB: PointXZ,
+  toB: PointXZ,
+): { readonly along: number; readonly across: number } | undefined {
+  const ax = toA.x - fromA.x;
+  const az = toA.z - fromA.z;
+  const bx = toB.x - fromB.x;
+  const bz = toB.z - fromB.z;
+  const denominator = ax * bz - az * bx;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const dx = fromB.x - fromA.x;
+  const dz = fromB.z - fromA.z;
+  const along = (dx * bz - dz * bx) / denominator;
+  const across = (dx * az - dz * ax) / denominator;
+  if (along < 0 || along > 1 || across < 0 || across > 1) return undefined;
+  return { along, across };
+}
+
+/**
  * Ray-casting algorithm to test if a 2D point lies inside a polygon on the XZ plane.
  */
 export function pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean {

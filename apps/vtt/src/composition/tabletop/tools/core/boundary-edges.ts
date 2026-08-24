@@ -26,6 +26,24 @@ import type { ToolContext } from "./tool-context.ts";
 const LINE: ConstructionEdgeGeometry = { kind: "line" };
 
 /**
+ * The name the edge between two nodes carries, wherever it is named.
+ *
+ * Exported because declaring a patch is not the only way an edge comes into
+ * being: splitting one at a node mints two more, and if those are named any
+ * other way then a face declared later over the same pair of nodes gets a
+ * second, coincident edge instead of the one already there. One rule, one
+ * name, everywhere -- which is what lets a junction share a spine seam with
+ * the run it split.
+ */
+export function sharedEdgeId(
+  tableId: string,
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+): ConstructionEdgeId {
+  return from < to ? `${tableId}:seg:${from}~${to}` : `${tableId}:seg:${to}~${from}`;
+}
+
+/**
  * What a generator does when the shared edge it wants has no room left.
  *
  * An edge bounds two faces, one on each side, and the engine refuses a
@@ -121,7 +139,7 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
       const end = forward ? to : from;
       const reversed = !forward;
 
-      let edgeId: ConstructionEdgeId = `${tableId}:seg:${start}~${end}`;
+      let edgeId: ConstructionEdgeId = sharedEdgeId(tableId, start, end);
       if (sharing.kind === "private-when-full" && !hasRoom(edgeId, reversed)) {
         edgeId = `${sharing.runPrefix}:seg:${start}~${end}`;
         for (let suffix = 2; !hasRoom(edgeId, reversed); suffix += 1) {

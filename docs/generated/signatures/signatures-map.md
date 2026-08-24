@@ -91,12 +91,6 @@ pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
-
-// src/sweep_bridge.rs
-pub struct SweepProfilePointRequest
-pub struct PlanSweepRequest
-pub struct PlanSweepResponse
-pub fn plan_sweep(request: PlanSweepRequest) -> Result<PlanSweepResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -441,18 +435,6 @@ pub struct PathBrushRequest
 pub enum PathBrushFailure
 pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
 pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
-
-// src/sweep.rs
-pub struct TransverseProfilePoint
-pub struct SweepFormationRequest
-pub enum SweepFormationFailure
-pub struct SweepFormationPlan
-pub fn reference_line(&self) -> &[[f32; 3]]
-pub fn vertices(&self) -> &[[f32; 3]]
-pub fn quads(&self) -> &[[usize; 4]]
-pub fn boundary(&self) -> &[usize]
-pub fn profile_len(&self) -> usize
-pub fn plan_sweep_formation(
 ```
 
 ### `terrain-generation` (`libs/domains/procgen/terrain-generation`)
@@ -3231,6 +3213,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
+export function sharedEdgeId(
+  tableId: string,
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+  ): ConstructionEdgeId {
+  return from < to ? `${tableId}:seg:${from}~${to}` : `${tableId}:seg:${to}~${from}`;
+  }
 export type EdgeSharing =
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
   const uses = new Map<ConstructionEdgeId, boolean[]>();
@@ -3274,6 +3263,43 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
 
+// src/composition/tabletop/tools/core/contour-fusion.ts
+export interface FusionPolyline {
+  readonly points: readonly ConstructionPosition[];
+  /** The edge between consecutive points; one shorter than `points`. */
+  readonly edgeIds: readonly (string | undefined)[];
+  }
+export interface ContourFusion {
+  /** The point of the committed rim that moves onto the meeting point. */
+  readonly ownIndex: number;
+  /** Where the two rims meet, at the height the committed rim carries there. */
+  readonly position: ConstructionPosition;
+  /** The standing edge that gains the meeting point. */
+  readonly edgeId: string;
+  /** Where along that edge the meeting point falls, from 0 to 1. */
+export function contourFusionsAgainst(
+  own: FusionPolyline,
+  standing: FusionPolyline,
+  standingFootprint: readonly PointXZ[],
+  ): readonly ContourFusion[] {
+  const best = new Map<number, ContourFusion & { readonly distance: number }>();
+export function footprintOf(
+  left: readonly ConstructionPosition[],
+  right: readonly ConstructionPosition[],
+  ): readonly ConstructionPosition[] {
+  return [...left, ...[...right].reverse()];
+  }
+export function sideOf(origin: PointXZ, direction: PointXZ, at: PointXZ): number {
+  return Math.sign(crossXZ(direction, { x: at.x - origin.x, z: at.z - origin.z }));
+export function mitrePoint(
+  joint: ConstructionPosition,
+  ownRim: ConstructionPosition,
+  ownDirection: PointXZ,
+  standingRim: ConstructionPosition,
+  standingDirection: PointXZ,
+  limit: number,
+  ): ConstructionPosition {
+
 // src/composition/tabletop/tools/core/edge-overlay.ts
 export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
   "path-spine-edge": 0xfacc15,
@@ -3283,6 +3309,8 @@ export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze(
   "panel-top-edge": 0x818cf8,
   "panel-post": 0xfb923c,
   "organic-boundary-edge": 0x94a3b8,
+export const RIM_ROLES: ReadonlySet<string> = new Set([
+export const INTERIOR_EDGE_ROLE = "interior-edge";
 export const EDGE_FALLBACK_COLOR = 0x64748b;
 export function edgeOverlayChannel(role: string): string {
   return `edges:${role}`;
@@ -3333,6 +3361,53 @@ export function fitPath(
   const arcs = options.arcs ?? true;
   const budget = Math.max(0, tolerance);
 
+// src/composition/tabletop/tools/core/sweep-formation.ts
+export interface TransverseProfilePoint {
+  /** Signed world distance from the reference line, left to right. */
+  readonly lateralOffset: number;
+  /** Height above the reference line's own height at that station. */
+  readonly elevation: number;
+  }
+export interface SweptArc {
+  readonly center: readonly [number, number];
+  readonly clockwise: boolean;
+  }
+export function withoutCoincidentStations(
+  samples: readonly ConstructionPosition[],
+  ): readonly ConstructionPosition[] {
+  const distinct: ConstructionPosition[] = [];
+  for (const sample of samples) {
+  const previous = distinct[distinct.length - 1];
+  if (previous === undefined || xzDistance(previous, sample) > COINCIDENT_EPSILON) {
+  distinct.push(sample);
+export function stationFrame(
+  line: readonly ConstructionPosition[],
+  index: number,
+  miterLimit: number,
+  arcs: readonly (SweptArc | undefined)[] = [],
+  ): readonly [number, number] {
+  const outgoing = normalLeaving(line, index, arcs);
+export function sweptBoundary(stationCount: number, profileLength: number): readonly number[] {
+  const last = stationCount - 1;
+  const boundary: number[] = [];
+  for (let station = 0; station < stationCount; station += 1) boundary.push(station * profileLength);
+export class SweepFormationError extends Error {}
+
+  /**
+  * Samples a transverse profile along a reference line into connected quads.
+  *
+  * Vertices are station-major: every consecutive `profile.length` entries form
+  * one transverse station, which is what lets `pathPatch` read a station
+  * address straight off a vertex index. Quads reference those shared vertices,
+export function sweepFormation(
+  referenceLine: readonly ConstructionPosition[],
+  profile: readonly TransverseProfilePoint[],
+  miterLimit: number,
+  options: {
+  /** The curve each span runs on; one shorter than `referenceLine`. */
+  readonly arcs?: readonly (SweptArc | undefined)[];
+  } = {},
+
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
   readonly point: ConstructionPosition;
@@ -3370,6 +3445,30 @@ export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?:
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
   }
+
+// src/composition/tabletop/tools/core/tool-diagnostics.ts
+export const TOOL_DIAGNOSTIC_PREFIX = "[construction]";
+export function inStage<T>(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  run: () => T,
+  ): T {
+  try {
+  return run();
+export function reportToolFailure(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  error: unknown,
+  ): void {
+  const message = error instanceof Error ? error.message : String(error);
+export function reportToolWarning(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  ): void {
+  console.warn(`${TOOL_DIAGNOSTIC_PREFIX} ${tool}: ${stage}`, { tool, stage, ...facts });
 
 // src/composition/tabletop/tools/core/tool-registry.ts
 export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
@@ -3453,6 +3552,24 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   halfWidth: pathHalfWidth,
 
 
+// src/composition/tabletop/tools/paths/path-junction.ts
+export interface JunctionWedges {
+  /** Faces of the standing run that the mouth opens into, and so must go. */
+  readonly removed: readonly ConstructionSurfaceKey[];
+  /** Their replacement, either side of the arriving road. */
+  readonly patch: ConstructionPatch;
+  }
+export function junctionWedges(
+  tableId: string,
+  operationId: string,
+  arrivingCorridorId: string,
+  mouth: PathMouth,
+  /** The junction node on the standing spine, which both wedges pivot on. */
+  junction: { readonly nodeId: ConstructionNodeId; readonly station: number },
+  ): JunctionWedges | undefined {
+export function junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[] {
+  const seen = new Set<string>();
+
 // src/composition/tabletop/tools/paths/path-patch.ts
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -3474,16 +3591,63 @@ export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
-  ): readonly ConstructionPosition[] {
+  ): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
   const track = groundTrack(fitted);
+export interface SpineJoin {
+  readonly run: PathRun;
+  /** Index into the committed reference line where the two meet. */
+  readonly at: number;
+  readonly nodeId: ConstructionNodeId;
+  readonly position: ConstructionPosition;
+  /** Which station of the standing run that was. */
+  readonly standingIndex: number;
 export function junctionsWithStandingSpines(
   ctx: ToolContext,
   line: readonly ConstructionPosition[],
+  /**
+  * How far the run being drawn reaches from its own spine. Added to the
+  * standing run's reach, so two roads join when their **surfaces** touch
+  * rather than when one centre line reaches the other. Nobody draws up to
+  * another road's centre line -- they stop when the two look like they meet,
+export function mitreTerminalRibs(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joins: readonly SpineJoin[],
+  /** The curve each span of this run follows, so a curved end mitres on its
+  * true tangent rather than on the chord to its neighbouring station. */
+  arcs: readonly (SweptArc | undefined)[] = [],
+export interface PathMouthSide {
+  /** This run's own slot, so its corner node can be named. */
+  readonly across: number;
+  readonly position: ConstructionPosition;
+  /**
+  * Roughly where the corner falls on the standing run's station scale.
+  *
+  * For ordering the two corners along the rim, and nothing else. Anything
+export interface PathMouth {
+  readonly run: PathRun;
+  /** The slot of the standing rim the mouth opens through. */
+  readonly through: number;
+  /** This run's end station, the one whose rib became the mouth. */
+  readonly station: number;
+  readonly sides: readonly PathMouthSide[];
+  }
+export function pathMouthsInto(
+  plan: ConstructionSweepPlan,
+  profileLength: number,
+  spineSlot: number,
+  joined: readonly PathRun[],
   ): {
-  readonly line: readonly ConstructionPosition[];
-  readonly welds: ReadonlyMap<number, ConstructionNodeId>;
-  readonly inserts: readonly AtomicEditOp[];
-  } {
+  readonly vertices: readonly ConstructionPosition[];
+  readonly mouths: readonly PathMouth[];
+export function joinedCoveredKeys(
+  ctx: ToolContext,
+  outline: readonly (readonly [number, number])[],
+  covered: readonly ConstructionCoveredRegion[],
+  joinedCorridors: ReadonlySet<string>,
+  ): ReadonlySet<string> {
+  const joined = new Set<string>();
 export function commitPathContour(
   ctx: ToolContext,
   stroke: readonly ConstructionPosition[],
@@ -3520,6 +3684,14 @@ export function distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): num
   const abz = b.z - a.z;
   const lengthSq = abx * abx + abz * abz;
   if (lengthSq < 1e-9) return Math.hypot(point.x - a.x, point.z - a.z);
+export function segmentCrossingXZ(
+  fromA: PointXZ,
+  toA: PointXZ,
+  fromB: PointXZ,
+  toB: PointXZ,
+  ): { readonly along: number; readonly across: number } | undefined {
+  const ax = toA.x - fromA.x;
+  const az = toA.z - fromA.z;
 export function pointInPolygonXZ(point: PointXZ, polygon: readonly PointXZ[]): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
@@ -4142,14 +4314,15 @@ export type {
   PathKind,
   PathBrushParams,
   NoToolParams,
+export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type {
   PathRun,
+  PathRunBand,
   PathRunChain,
   PathRunNode,
   PathRunRib,
   } from "./path-cloud.ts";
   export {
-  followsOutward,
 export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   BrushGestureRegion,
@@ -4195,6 +4368,13 @@ export interface PathRunRib {
   /** The faces this rib bounds. */
   readonly bands: readonly ConstructionSurfaceKey[];
   }
+export interface PathRunBand {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  /** The stations it spans, in order. */
+  readonly stations: readonly number[];
+  /** The slots it lies between, in order across. */
+  readonly slots: readonly number[];
+  }
 export interface PathRun {
   readonly corridorId: string;
   readonly subtype: PathKind | undefined;
@@ -4202,7 +4382,7 @@ export interface PathRun {
   /** One per side, outermost slot first. */
   readonly contours: readonly PathRunChain[];
   readonly ribs: readonly PathRunRib[];
-  readonly bands: readonly ConstructionSurfaceKey[];
+  /**
 export function pathRunsIn(
   topologies: readonly ConstructionRegionTopology[],
   ): readonly PathRun[] {
@@ -4214,6 +4394,8 @@ export function pathRunFor(
   corridorId: string,
   ): PathRun | undefined {
   return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
+export function pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
+  return perimeterOf(cloud.members);
 
 // src/features/edit-construction/path-corridor.ts
 export function pathCorridorId(operationId: string, kind: PathKind): string {
@@ -4511,6 +4693,24 @@ export function createPathBrushEffect(
 export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
 export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
   return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
+
+// src/features/edit-construction/surface-perimeter.ts
+export interface PerimeterLoop {
+  /** In walk order; one per step. */
+  readonly edgeIds: readonly string[];
+  /** In walk order, `nodeIds[i]` starting `edgeIds[i]`. */
+  readonly nodeIds: readonly string[];
+  readonly positions: readonly ConstructionPosition[];
+  /** Whether the walk closed on itself, as a complete perimeter must. */
+  readonly closed: boolean;
+export function edgeUseCounts(
+  topologies: readonly ConstructionRegionTopology[],
+  ): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+export function perimeterOf(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly PerimeterLoop[] {
+  const counts = edgeUseCounts(topologies);
 
 // src/features/edit-construction/tool-types.ts
 export type ConstructionToolId =
