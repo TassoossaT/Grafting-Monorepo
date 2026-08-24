@@ -1,7 +1,7 @@
 import type { ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges } from "../../core/boundary-edges.ts";
+import { createBoundaryEdges } from "../../../tools/core/boundary-edges.ts";
 import { nearestSampleY } from "./union-bands.ts";
 
 /**

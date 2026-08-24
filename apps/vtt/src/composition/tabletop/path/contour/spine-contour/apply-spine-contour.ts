@@ -1,6 +1,6 @@
 import type { ConstructionPatchOutcome } from "@/ports";
 
-import type { ToolContext } from "../../core/tool-context.ts";
+import type { ToolContext } from "../../../tools/core/tool-context.ts";
 import type { PlanSpineContourResult } from "./plan-spine-contour.ts";
 
 /**

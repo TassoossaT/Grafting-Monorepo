@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
-import { applyPathBrushEffect } from "../src/composition/tabletop/tools/paths/path-shared.ts";
+import { applyPathBrushEffect } from "../src/composition/tabletop/path/path-effect-executor.ts";
 import {
   createEditHistoryStack,
   createPathBrushEffect,

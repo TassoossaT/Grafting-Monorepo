@@ -8,7 +8,7 @@ import {
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
-import { PATH_COLOR, applyPathBrushEffect } from "./path-shared.ts";
+import { PATH_COLOR, applyPathBrushEffect } from "../../path/path-effect-executor.ts";
 
 function endpointCandidates(sample: BrushRegion["start"]) {
   return {

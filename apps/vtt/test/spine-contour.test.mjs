@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildContourPatch, planSpineContour } from "../src/composition/tabletop/tools/paths/spine-contour/index.ts";
+import { buildContourPatch, planSpineContour } from "../src/composition/tabletop/path/contour/spine-contour/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { referenceLineFrom } from "../src/composition/tabletop/tools/paths/path-shared.ts";
+import { referenceLineFrom } from "../src/composition/tabletop/path/path-effect-executor.ts";
 import {
   stationFrame,
   sweepFormation,
@@ -123,4 +123,3 @@ test("a straight stroke carries no curve through", () => {
   );
   assert.ok(swept.arcs.every((arc) => arc === undefined));
 });
-

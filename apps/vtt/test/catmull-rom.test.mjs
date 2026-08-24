@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sampleCatmullRom } from "../src/composition/tabletop/tools/paths/spine-contour/catmull-rom.ts";
+import { sampleCatmullRom } from "../src/composition/tabletop/path/contour/spine-contour/catmull-rom.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 

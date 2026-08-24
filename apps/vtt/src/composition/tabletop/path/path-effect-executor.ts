@@ -9,12 +9,12 @@ import {
   pathRidesTerrain,
   pathSpineDraftFor,
   resolveCoverage,
-} from "../../../../features/edit-construction/index.ts";
+} from "../../../features/edit-construction/index.ts";
 
-import type { ToolContext } from "../core/tool-context.ts";
-import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
-import type { SweptArc } from "../core/sweep-formation.ts";
-import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
+import type { ToolContext } from "../tools/core/tool-context.ts";
+import { fitPath, type FittedEdge } from "../tools/core/stroke-fitting.ts";
+import type { SweptArc } from "../tools/core/sweep-formation.ts";
+import { inStage, reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnostics.ts";
 import {
   applySpineContour,
   offsetBands,
@@ -22,7 +22,7 @@ import {
   sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
-} from "./spine-contour/index.ts";
+} from "./contour/spine-contour/index.ts";
 
 export const PATH_COLOR = 0xc084fc;
 
