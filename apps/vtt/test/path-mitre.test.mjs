@@ -8,6 +8,7 @@ import {
 } from "../src/composition/tabletop/tools/paths/path-shared.ts";
 import { pathRunsIn } from "../src/features/edit-construction/path-cloud.ts";
 import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
+import { parseStationNodeId } from "../src/features/edit-construction/station-node-id.ts";
 
 const STANDING = pathCorridorId("table:path-brush:1", "road");
 const HALF_WIDTH = 2.1;
@@ -195,4 +196,46 @@ test("a run met in its middle is not mitred: that rib has road on both sides", (
   const mitred = mitreTerminalRibs(bendPlan(), 3, 1, [endJoin(run, 1, false)]);
   assert.equal(mitred.moves.length, 0);
   assert.equal(mitred.welds.size, 0);
+});
+
+test("an end drawn well past a run welds to its last station, never splitting at it", () => {
+  // Overshooting by more than the merge distance used to measure the
+  // unclamped projection, report a distance the run does not have, and fall
+  // through to a split at `along` exactly 1 -- minting a node id the run
+  // already had, and naming one half of the split after the very edge being
+  // split. The graph refuses that, and the whole stroke was lost.
+  // Past the end by more than the merge distance, but still inside the run's
+  // own reach -- which is what makes it a join at all.
+  const result = junctionsWithStandingSpines(contextWithStanding(), [
+    { x: 7.5, y: 0, z: 0 },
+    { x: 7.5, y: 0, z: 6 },
+  ]);
+
+  assert.equal(result.inserts.length, 0, "nothing is split at a station that exists");
+  assert.equal(result.terminals.length, 1);
+  assert.deepEqual(result.line[0], { x: 6, y: 0, z: 0 }, "it welds to the run's own end");
+});
+
+test("no split ever mints a node the run already carries", () => {
+  const ctx = contextWithStanding();
+  // Swept across the run at every offset, including dead on its stations.
+  for (let x = 0; x <= 6; x += 0.25) {
+    const result = junctionsWithStandingSpines(ctx, [
+      { x, y: 0, z: -5 },
+      { x, y: 0, z: 5 },
+    ]);
+    for (const insert of result.inserts) {
+      const address = parseStationNodeId(insert.nodeId);
+      assert.ok(
+        !Number.isInteger(address.station),
+        `x=${x} split at station ${address.station}, which the run already has`,
+      );
+      assert.notEqual(
+        insert.firstEdgeId,
+        insert.edgeId,
+        `x=${x} named a half after the edge it is splitting`,
+      );
+      assert.notEqual(insert.secondEdgeId, insert.edgeId);
+    }
+  }
 });

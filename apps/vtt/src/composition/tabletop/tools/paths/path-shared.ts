@@ -305,6 +305,16 @@ export function referenceLineFrom(
 const SPINE_WELD_TOLERANCE = 1e-3;
 
 /**
+ * How close to an end of a spine edge counts as *being* that end.
+ *
+ * Expressed as a fraction of the edge, because what matters is whether the
+ * meeting point is distinguishable from the station already standing there.
+ * Below this it is not, and splitting would mint a second node on top of the
+ * first -- with an id derived from the same station, so the same id.
+ */
+const END_OF_EDGE = 1e-4;
+
+/**
  * How close (world units, XZ) a crossing may fall to a station already on the
  * run before the two are treated as one.
  *
@@ -467,10 +477,31 @@ export function junctionsWithStandingSpines(
       y: fromA.position.y + (toA.position.y - fromA.position.y) * along,
       z: fromA.position.z + (toA.position.z - fromA.position.z) * along,
     };
+    // Landing on an end of the edge is not a split; it is arriving at the
+    // station that is already there. Minting one anyway asks for a node id
+    // that already exists, and names one half of the "split" after the very
+    // edge being split -- which the graph refuses, taking the stroke with it.
+    const atEnd =
+      along <= END_OF_EDGE ? fromA : along >= 1 - END_OF_EDGE ? toA : undefined;
     const station = Number((fromA.station + (toA.station - fromA.station) * along).toFixed(3));
-    const nodeId = stationNodeId(run.corridorId, station, 0);
+    const nodeId = atEnd?.nodeId ?? stationNodeId(run.corridorId, station, 0);
     usedEdges.add(edgeId);
     joinedCorridors.add(run.corridorId);
+    if (atEnd !== undefined) {
+      const met = { position: atEnd.position, nodeId: atEnd.nodeId };
+      if (arrivalIndex !== undefined) arrivals.set(arrivalIndex, met);
+      else found.push({ at, ...met, edgeId });
+      terminals.push({
+        run,
+        at: arrivalIndex ?? Math.round(at),
+        nodeId: atEnd.nodeId,
+        position: atEnd.position,
+        standingIndex: atEnd === fromA ? step : step + 1,
+        terminal:
+          (atEnd === fromA && step === 0) || (atEnd === toA && step + 2 === spine.nodes.length),
+      });
+      return;
+    }
     if (arrivalIndex !== undefined) {
       arrivals.set(arrivalIndex, { position, nodeId });
       inserts.push({ nodeId, position, edgeId, startNodeId: fromA.nodeId, endNodeId: toA.nodeId });
@@ -520,11 +551,16 @@ export function junctionsWithStandingSpines(
     const spine = best.run.spine!;
     const nearIndex = best.along <= 0.5 ? best.step : best.step + 1;
     const near = spine.nodes[nearIndex]!;
-    const landing = projectOntoLineXZ(
-      line[index]!,
-      spine.nodes[best.step]!.position,
-      spine.nodes[best.step + 1]!.position,
-    );
+    // Where the stroke actually meets the run, which is the clamped point --
+    // an end drawn past the run meets it *at its end*. Measuring the
+    // unclamped projection instead reported a distance the run does not
+    // have, so an overshoot fell through to a split at `along` exactly 1.
+    const from = spine.nodes[best.step]!.position;
+    const to = spine.nodes[best.step + 1]!.position;
+    const landing = {
+      x: from.x + (to.x - from.x) * best.along,
+      z: from.z + (to.z - from.z) * best.along,
+    };
     const toNear = Math.hypot(landing.x - near.position.x, landing.z - near.position.z);
     if (toNear < STATION_MERGE_DISTANCE) {
       usedEdges.add(best.edgeId);
