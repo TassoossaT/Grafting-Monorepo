@@ -46,8 +46,12 @@ import {
 } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
 import { junctionRemovals, junctionWedges } from "./path-junction.ts";
+import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 
 export const PATH_COLOR = 0xc084fc;
+
+/** What this tool calls itself on the console when a stage fails. */
+const TOOL = "path-brush";
 
 
 /**
@@ -937,7 +941,9 @@ export function commitPathContour(
     );
     const profile = effect.parameters.profile;
     const spineSlot = pathSpineSlot(profile);
-    const plan = ctx.runtime.planPathFormation(effect);
+    const plan = inStage(TOOL, "plan the sweep", { operationId, stations: referenceLine.length }, () =>
+      ctx.runtime.planPathFormation(effect),
+    );
     // The sweep drops a station only where two coincide, which the reference
     // line already rules out. Were one dropped anyway the indices would no
     // longer line up, so the run commits unwelded rather than welded to the
@@ -996,11 +1002,22 @@ export function commitPathContour(
 
     const resolved = resolveCoverage(
       effect.targetType,
-      ctx.runtime.getFootprintCoverage(formation.outline),
+      inStage(TOOL, "read the footprint coverage", { operationId, outline: formation.outline.length }, () =>
+        ctx.runtime.getFootprintCoverage(formation.outline),
+      ),
       params.pathKind,
     );
     const refusal = firstRefusal(resolved);
     if (refusal !== undefined) {
+      reportToolWarning(TOOL, "the footprint was refused", {
+        operationId,
+        refusal,
+        covered: resolved.map((entry) => ({
+          surface: entry.covered.surfaceKey.join(":"),
+          type: entry.covered.surfaceType,
+          interaction: entry.interaction.kind,
+        })),
+      });
       ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
       return;
     }
@@ -1031,43 +1048,72 @@ export function commitPathContour(
     // crossing needs and the rim nodes a fusion needs are made by cutting
     // edges of runs already standing, and a refusal above would otherwise
     // leave those cuts behind with nothing referencing them.
-    const splits = [
-      ...crossed.inserts,
-      ...mitred.moves,
-      // The flank the mouth opens into goes before the road that opens it,
-      // so the rim between the two corners is gone rather than left lying
-      // across the junction like a kerb.
-      ...junctionRemovals(rebuilt),
-    ];
+    const splits = [...crossed.inserts, ...mitred.moves];
     if (splits.length > 0) {
-      ctx.runtime.applyRegionEdit(splits, "local", operationId);
+      inStage(TOOL, "split and mitre the runs already standing", { operationId, ops: splits.map((op) => op.kind) }, () =>
+        ctx.runtime.applyRegionEdit(splits, "local", operationId),
+      );
     }
 
-    const outcome = ctx.runtime.applyRegionOverlay(
+    const outcome = inStage(
+      TOOL,
+      "lay the road",
       {
-        operationId: effect.operationId,
-        sourceSurfaceKeys,
-        outline: formation.outline,
-        boundary: formation.boundary,
-        patch: formation.patch,
+        operationId,
+        consuming: sourceSurfaceKeys.map((key) => key.join(":")),
+        faces: formation.patch.regions.length,
       },
-      "local",
-      effect.operationId,
+      () =>
+        ctx.runtime.applyRegionOverlay(
+          {
+            operationId: effect.operationId,
+            sourceSurfaceKeys,
+            outline: formation.outline,
+            boundary: formation.boundary,
+            patch: formation.patch,
+          },
+          "local",
+          effect.operationId,
+        ),
     );
-    // Last, because both wedges bound edges the road itself only just
-    // declared: the rib between the junction node and each corner.
-    const unclosed: string[] = [];
+    // The junction goes in last and on its own. Last, because both wedges
+    // bound edges the road itself only just declared -- the rib between the
+    // junction node and each corner. On its own, because the road is already
+    // standing by now: a junction that cannot be closed is a bad junction on
+    // a real road, and throwing here would take the road down with it. So
+    // the failure is reported at full detail and the stroke survives.
     for (const wedge of rebuilt) {
-      const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
-      unclosed.push(...laid.skippedRegionIds);
-    }
-    if (unclosed.length > 0) {
-      // Worth saying out loud: the flank it replaced is already gone, so a
-      // refused wedge is a hole in the road rather than a cosmetic miss.
-      ctx.reportFeedback({
-        tone: "error",
-        message: `Junção incompleta: ${unclosed.length} face não pôde ser fechada.`,
-      });
+      try {
+        ctx.runtime.applyRegionEdit(junctionRemovals([wedge]), "local", operationId);
+        const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
+        if (laid.skippedRegionIds.length > 0) {
+          reportToolWarning(TOOL, "a junction face was refused", {
+            operationId,
+            skipped: laid.skippedRegionIds,
+            removed: wedge.removed.map((key) => key.join(":")),
+          });
+          ctx.reportFeedback({
+            tone: "error",
+            message: `Junção incompleta: ${laid.skippedRegionIds.length} face não pôde ser fechada.`,
+          });
+        }
+      } catch (error) {
+        reportToolFailure(
+          TOOL,
+          "close the junction",
+          {
+            operationId,
+            removing: wedge.removed.map((key) => key.join(":")),
+            faces: wedge.patch.regions.map((region) => region.regionId),
+            edges: wedge.patch.edges.map((edge) => edge.edgeId),
+          },
+          error,
+        );
+        ctx.reportFeedback({
+          tone: "error",
+          message: "Junção não fechada: a rua foi criada, mas o cruzamento não.",
+        });
+      }
     }
 
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
@@ -1081,6 +1127,9 @@ export function commitPathContour(
       message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
     });
   } catch (error) {
+    // Already named on the console by whichever stage threw; this catches
+    // the ones that have no stage of their own.
+    reportToolFailure(TOOL, "commit the path", { operationId, stroke: stroke.length }, error);
     const message = error instanceof Error ? error.message : String(error);
     ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
   }

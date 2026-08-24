@@ -3415,6 +3415,30 @@ export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?:
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
   }
 
+// src/composition/tabletop/tools/core/tool-diagnostics.ts
+export const TOOL_DIAGNOSTIC_PREFIX = "[construction]";
+export function inStage<T>(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  run: () => T,
+  ): T {
+  try {
+  return run();
+export function reportToolFailure(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  error: unknown,
+  ): void {
+  const message = error instanceof Error ? error.message : String(error);
+export function reportToolWarning(
+  tool: string,
+  stage: string,
+  facts: Readonly<Record<string, unknown>>,
+  ): void {
+  console.warn(`${TOOL_DIAGNOSTIC_PREFIX} ${tool}: ${stage}`, { tool, stage, ...facts });
+
 // src/composition/tabletop/tools/core/tool-registry.ts
 export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
   return TOOL_REGISTRY[id];

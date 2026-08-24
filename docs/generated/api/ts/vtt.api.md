@@ -928,6 +928,27 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 
 Builds a deterministic scoped operation/prefix ID for a given tool/domain on a table.
 
+### `variable vtt.tool-diagnostics.TOOL_DIAGNOSTIC_PREFIX: "[construction]"`
+
+The prefix every line carries, so a console filter finds the lot.
+
+### `function vtt.tool-diagnostics.inStage(tool: string, stage: string, facts: Readonly<Record<string, unknown>>, run: () => T): T`
+
+Runs one stage of a commit, naming it if it throws.
+
+Rethrows: this reports, it does not decide. Whether a failed stage costs
+the stroke or only part of it is the caller's judgement, and swallowing
+here would take that judgement away -- and hide the failure, which is the
+opposite of the point.
+
+### `function vtt.tool-diagnostics.reportToolFailure(tool: string, stage: string, facts: Readonly<Record<string, unknown>>, error: unknown): void`
+
+One failed stage, on the console, with everything known about it.
+
+### `function vtt.tool-diagnostics.reportToolWarning(tool: string, stage: string, facts: Readonly<Record<string, unknown>>): void`
+
+Something a commit survived but should not have had to.
+
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
 ### `variable vtt.house-room-delete-tool.houseRoomDeleteTool: ConstructionTool<"house-room-delete">`
