@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { planEdit } from "../src/features/edit-construction/orchestration/edit-orchestrator.ts";
+import { createPathBrushEffect } from "../src/features/edit-construction/modes/surface-edit-contract.ts";
 import { cloudOf } from "./cloud-fixture.mjs";
 import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
+import { pathSpineDraftFor } from "../src/features/edit-construction/structure-types/path/path-spine-draft.ts";
 import {
   followsOutward,
   parseStationNodeId,
@@ -33,6 +35,26 @@ test("every path profile carries a spine, and it is the middle slot", () => {
   assert.equal(street.length, 3);
   assert.equal(pathSpineSlot(street), 1);
   assert.equal(street[1].lateralOffset, 0);
+});
+
+test("the path type owns the semantic spine derived from a brush effect", () => {
+  const effect = createPathBrushEffect(
+    {
+      brushShape: { kind: "circle", radius: ROAD.radius },
+      brushRegion: { samples: [{ x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }] },
+      parameters: pathFormationFor(ROAD),
+    },
+    { operationId: "table:path-brush:7", tableId: "table", initiatedBy: "path-brush" },
+  );
+
+  const draft = pathSpineDraftFor(effect, effect.brushRegion.samples);
+  assert.deepEqual(draft, {
+    corridorId: "table:path-brush:7#road",
+    controlPoints: [{ x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }],
+    bandOffsets: [-2.1, 0, 2.1],
+    miterLimit: 4,
+  });
+  assert.equal(pathSpineDraftFor(effect, [{ x: 0, y: 0, z: 0 }]), undefined);
 });
 
 test("a station node id carries the corridor, the station and the signed slot", () => {

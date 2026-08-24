@@ -6,8 +6,8 @@ import type { ConstructionPosition } from "@/ports";
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
-  pathCorridorId,
   pathRidesTerrain,
+  pathSpineDraftFor,
   resolveCoverage,
 } from "../../../../features/edit-construction/index.ts";
 
@@ -313,22 +313,18 @@ export function applyPathBrushEffect(
     fitted.length === 0
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
-  const controlPoints = swept.line;
-  // A tap is not a road: one control point has no span to sample a curve
-  // along.
-  if (controlPoints.length < 2) return;
+  const spine = pathSpineDraftFor(effect, swept.line);
+  // A tap is not a road: one control point has no span to sample a curve.
+  if (spine === undefined) return;
 
   try {
     const parameters = effect.parameters;
-    const profile = parameters.profile;
-    const bandOffsets = profile.map((point) => point.lateralOffset);
-    const corridorId = pathCorridorId(operationId, parameters.kind);
 
     const chain: SpineChainInput = {
-      chainId: corridorId,
-      controlPoints,
-      bandOffsets,
-      miterLimit: parameters.miterLimit,
+      chainId: spine.corridorId,
+      controlPoints: spine.controlPoints,
+      bandOffsets: spine.bandOffsets,
+      miterLimit: spine.miterLimit,
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
 
@@ -337,10 +333,10 @@ export function applyPathBrushEffect(
     // It is not the patch: the patch is banded and unioned band by band
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
-    const flatPolyline = sampleCatmullRom(controlPoints, CURVE_FLATTENING_TOLERANCE);
-    const outerOffset = bandOffsets[0]!;
-    const innerOffset = bandOffsets[bandOffsets.length - 1]!;
-    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], parameters.miterLimit));
+    const flatPolyline = sampleCatmullRom(spine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const outerOffset = spine.bandOffsets[0]!;
+    const innerOffset = spine.bandOffsets[spine.bandOffsets.length - 1]!;
+    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], spine.miterLimit));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
 
     const resolved = resolveCoverage(
@@ -369,7 +365,7 @@ export function applyPathBrushEffect(
     const standingRegions = topologies.filter((topology) => topology.surfaceType === "path");
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
 
-    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: controlPoints.length }, () =>
+    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: spine.controlPoints.length }, () =>
       planSpineContour({
         tableId: ctx.tableId,
         operationId,
