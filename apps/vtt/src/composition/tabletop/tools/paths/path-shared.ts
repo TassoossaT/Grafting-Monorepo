@@ -40,6 +40,7 @@ import {
   segmentCrossingXZ,
 } from "../shapes/geometry-2d.ts";
 import {
+  contourCrossingsAgainst,
   contourFusionsAgainst,
   footprintOf,
   mitrePoint,
@@ -323,6 +324,18 @@ const END_OF_EDGE = 1e-4;
  * contour when crossings were first spliced in blindly.
  */
 const STATION_MERGE_DISTANCE = 0.5;
+
+/**
+ * How near a station a crossing must fall to be treated as being *at* it,
+ * as a fraction of the gap between two stations.
+ *
+ * A pass-through corner is only ever as good as the station under it, and
+ * the station is put there on purpose -- so this is a check that the
+ * preparation actually happened, not a tolerance to lean on. A crossing
+ * further off than this is left unclosed rather than dragging a station
+ * sideways across the road.
+ */
+const CROSSING_STATION_TOLERANCE = 0.05;
 
 /**
  * How far this run reaches from its own spine, measured on the run itself.
@@ -847,6 +860,15 @@ export interface PathMouthSide {
   readonly station: number;
   readonly position: ConstructionPosition;
   /**
+   * The node on the standing spine this side's bend closes on.
+   *
+   * Per side rather than per mouth. A road that ends on another closes both
+   * its bends on the one node its spine welded at; a road running clean
+   * through closes each bend where its own rim crosses the standing spine,
+   * and those are two nodes with the whole crossing between them.
+   */
+  readonly pivotNodeId: ConstructionNodeId;
+  /**
    * Roughly where the corner falls on the standing run's station scale.
    *
    * For ordering the two corners along the rim, and nothing else. Anything
@@ -882,6 +904,15 @@ export function pathMouthsInto(
   profileLength: number,
   spineSlot: number,
   joined: readonly PathRun[],
+  /**
+   * The nodes this run has already welded onto runs already standing, keyed
+   * `${station}:${across}` -- the same addressing `pathPatch` welds by.
+   *
+   * A mouth is only half a junction without them: a piece of rebuilt flank
+   * has to close on a node the two runs share, and which node that is, is a
+   * fact about what was welded rather than anything a position can answer.
+   */
+  welds: ReadonlyMap<string, ConstructionNodeId> = new Map(),
 ): {
   readonly vertices: readonly ConstructionPosition[];
   readonly mouths: readonly PathMouth[];
@@ -899,6 +930,7 @@ export function pathMouthsInto(
 
   for (const run of joined) {
     if (run.contours.length < 2) continue;
+    const spine = run.spine;
     const footprint = footprintOf(
       run.contours[0]!.nodes.map((node) => node.position),
       run.contours[1]!.nodes.map((node) => node.position),
@@ -908,8 +940,13 @@ export function pathMouthsInto(
         points: chain.nodes.map((node) => node.position),
         edgeIds: chain.edgeIds,
       };
+      /** Where a point of the standing chain falls on its own station scale. */
+      const standingStationAt = (index: number, along: number): number => {
+        const from = chain.nodes[index]!;
+        const to = chain.nodes[index + 1]!;
+        return from.station + (to.station - from.station) * along;
+      };
       const sides: PathMouthSide[] = [];
-      let station: number | undefined;
       for (const across of outerSlots) {
         const own = {
           points: Array.from(
@@ -918,26 +955,72 @@ export function pathMouthsInto(
           ),
           edgeIds: [],
         };
+
+        // An arrival: this run stops inside the standing one, so its rim has
+        // a loose end to pull onto the meeting point. Both bends of it close
+        // on the single spine node the two runs welded at.
         const [fusion] = contourFusionsAgainst(own, standing, footprint);
-        if (fusion === undefined) continue;
-        const from = chain.nodes[fusion.standingIndex]!;
-        const to = chain.nodes[fusion.standingIndex + 1]!;
-        vertices[at(fusion.ownIndex, across)] = fusion.position;
-        station = fusion.ownIndex;
+        if (fusion !== undefined) {
+          const pivotNodeId = welds.get(`${fusion.ownIndex}:0`);
+          if (pivotNodeId === undefined) continue;
+          vertices[at(fusion.ownIndex, across)] = fusion.position;
+          sides.push({
+            across,
+            station: fusion.ownIndex,
+            position: fusion.position,
+            standingStation: standingStationAt(fusion.standingIndex, fusion.along),
+            pivotNodeId,
+          });
+          continue;
+        }
+
+        // A pass-through: the rim runs clean across, so there is no end to
+        // move and the corner has to be a station of this run's own -- put
+        // there before the sweep, by `throughCrossingStations`. Without one
+        // the crossing is left alone, which is what happened to every
+        // crossing before this: two rims through each other and no junction.
+        if (spine === undefined) continue;
+        const crossing = contourCrossingsAgainst(own, standing)[0];
+        if (crossing === undefined) continue;
+        const station = Math.round(crossing.at);
+        if (Math.abs(crossing.at - station) > CROSSING_STATION_TOLERANCE) continue;
+
+        // The bend closes where this same rim crosses the standing *spine*,
+        // not where the other rim does: the piece being rebuilt runs along
+        // this rim, and a contour never reaches across the road to the far
+        // one. That node is shared with the standing spine, which is why it
+        // has to have been welded rather than merely computed.
+        const onSpine = contourCrossingsAgainst(own, {
+          points: spine.nodes.map((node) => node.position),
+          edgeIds: spine.edgeIds,
+        })
+          .map((candidate) => ({ candidate, distance: Math.abs(candidate.at - crossing.at) }))
+          .sort((left, right) => left.distance - right.distance)[0]?.candidate;
+        if (onSpine === undefined) continue;
+        const pivotStation = Math.round(onSpine.at);
+        if (Math.abs(onSpine.at - pivotStation) > CROSSING_STATION_TOLERANCE) continue;
+        const pivotNodeId = welds.get(`${pivotStation}:${across}`);
+        if (pivotNodeId === undefined) continue;
+
+        // Snapped onto the rim it crosses. The station was put here for this
+        // and is a hair away already, so the road keeps its shape and the
+        // corner lands exactly on the standing rim instead of near it.
+        vertices[at(station, across)] = crossing.position;
         sides.push({
           across,
-          station: fusion.ownIndex,
-          position: fusion.position,
-          standingStation: from.station + (to.station - from.station) * fusion.along,
+          station,
+          position: crossing.position,
+          standingStation: standingStationAt(crossing.standingIndex, crossing.along),
+          pivotNodeId,
         });
       }
       // One side alone is a graze, not a mouth: an opening needs two corners,
       // and rebuilding the flank around half of one would leave it open.
-      if (sides.length < 2 || station === undefined) continue;
+      if (sides.length < 2) continue;
       mouths.push({
         run,
         through: chain.across,
-        station,
+        station: Math.min(...sides.map((side) => side.station)),
         sides: [...sides].sort((left, right) => left.standingStation - right.standingStation),
       });
     }
@@ -1155,14 +1238,16 @@ export function commitPathContour(
     const mitredCorridors = new Set(
       crossed.terminals.filter((join) => join.terminal).map((join) => join.run.corridorId),
     );
+    const spineWelds = new Map<string, ConstructionNodeId>();
+    if (aligned) for (const [station, nodeId] of welds) spineWelds.set(`${station}:0`, nodeId);
+    const welded = new Map([...spineWelds, ...mitred.welds]);
     const fused = pathMouthsInto(
       { ...plan, vertices: mitred.vertices },
       profile.length,
       spineSlot,
       aligned ? crossed.joined.filter((run) => !mitredCorridors.has(run.corridorId)) : [],
+      welded,
     );
-    const spineWelds = new Map<string, ConstructionNodeId>();
-    if (aligned) for (const [station, nodeId] of welds) spineWelds.set(`${station}:0`, nodeId);
     const formation = pathPatch(
       ctx.tableId,
       pathCorridorId(effect.operationId, params.pathKind),
@@ -1170,7 +1255,7 @@ export function commitPathContour(
       { ...plan, vertices: fused.vertices },
       profile.length,
       spineSlot,
-      new Map([...spineWelds, ...mitred.welds]),
+      welded,
     );
 
     const corridorId = pathCorridorId(effect.operationId, params.pathKind);
@@ -1279,17 +1364,10 @@ export function commitPathContour(
       const standingNow = pathRunsIn(live);
       const present = new Map(live.map((topology) => [topology.surfaceKey.join(":"), topology]));
       const run = standingNow.find((candidate) => candidate.corridorId === flank[0]!.run.corridorId);
-      const openings = flank.map((mouth) => {
-        const nodeId = spineWelds.get(`${mouth.station}:0`);
-        const station = parseStationNodeId(nodeId ?? "")?.station;
-        if (nodeId === undefined || station === undefined || run === undefined) return undefined;
-        return { mouth: { ...mouth, run }, junction: { nodeId, station } };
-      });
-      if (openings.some((opening) => opening === undefined)) {
-        reportToolWarning(TOOL, "a mouth had no junction left to close", {
+      if (run === undefined) {
+        reportToolWarning(TOOL, "a mouth had no run left to close into", {
           operationId,
           corridor: flank[0]!.run.corridorId,
-          stillStanding: run !== undefined,
           mouths: flank.map((mouth) => mouth.station),
         });
         continue;
@@ -1301,7 +1379,7 @@ export function commitPathContour(
         // called `<operation>:junction-0`.
         `${effect.operationId}:f${flankKey}`,
         corridorId,
-        openings.filter((opening) => opening !== undefined),
+        flank.map((mouth) => ({ ...mouth, run })),
       );
       if (wedge === undefined) continue;
 
@@ -1315,7 +1393,7 @@ export function commitPathContour(
           operationId,
           corridor: flank[0]!.run.corridorId,
           planned: wedge.removed.map((key) => key.join(":")),
-          standing: run?.bands.map((band) => band.surfaceKey.join(":")) ?? [],
+          standing: run.bands.map((band) => band.surfaceKey.join(":")),
         });
         ctx.reportFeedback({
           tone: "error",
@@ -1392,7 +1470,7 @@ export function commitPathContour(
             edges: wedge.patch.edges.map((edge) => edge.edgeId),
             overlayRemoved: outcome.removedSurfaceKeys.map((key) => key.join(":")),
             overlayCreated: outcome.createdSurfaceKeys.map((key) => key.join(":")),
-            standingBands: run?.bands.map((band) => band.surfaceKey.join(":")) ?? [],
+            standingBands: run.bands.map((band) => band.surfaceKey.join(":")),
           },
           error,
         );

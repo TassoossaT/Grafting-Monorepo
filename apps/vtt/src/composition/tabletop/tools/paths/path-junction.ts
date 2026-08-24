@@ -57,12 +57,6 @@ function signedArea(ring: readonly ConstructionPosition[]): number {
   return total;
 }
 
-/** One mouth and the spine node its two bends pivot on. */
-export interface JunctionOpening {
-  readonly mouth: PathMouth;
-  readonly junction: { readonly nodeId: ConstructionNodeId; readonly station: number };
-}
-
 /**
  * Rebuilds the standing run's flank around every mouth opened into it.
  *
@@ -89,12 +83,12 @@ export function junctionWedges(
   operationId: string,
   arrivingCorridorId: string,
   /** Every mouth through one rim of one standing run. */
-  openings: readonly JunctionOpening[],
+  mouths: readonly PathMouth[],
 ): JunctionWedges | undefined {
-  const first = openings[0];
+  const first = mouths[0];
   if (first === undefined) return undefined;
-  const run = first.mouth.run;
-  const through = first.mouth.through;
+  const run = first.run;
+  const through = first.through;
   const spine = run.spine;
   const rim = run.contours.find((contour) => contour.across === through);
   if (spine === undefined || rim === undefined) return undefined;
@@ -133,11 +127,10 @@ export function junctionWedges(
   const gaps: {
     readonly left: { readonly side: PathMouthSide; readonly at: number };
     readonly right: { readonly side: PathMouthSide; readonly at: number };
-    readonly junction: JunctionOpening["junction"];
   }[] = [];
-  for (const opening of openings) {
-    if (opening.mouth.through !== through || opening.mouth.run !== run) return undefined;
-    const corners = opening.mouth.sides
+  for (const mouth of mouths) {
+    if (mouth.through !== through || mouth.run !== run) return undefined;
+    const corners = mouth.sides
       .map((side) => ({ side, at: rimSegmentOf(side) }))
       .filter((entry): entry is { side: PathMouthSide; at: number } => entry.at !== undefined)
       .sort((a, b) => a.at - b.at || a.side.standingStation - b.side.standingStation);
@@ -146,7 +139,7 @@ export function junctionWedges(
     // Both halves or neither, per mouth: one corner is a graze rather than an
     // opening, and rebuilding a flank around half of one leaves it open.
     if (left === undefined || right === undefined || left === right) return undefined;
-    gaps.push({ left, right, junction: opening.junction });
+    gaps.push({ left, right });
   }
   gaps.sort((a, b) => a.left.at - b.left.at);
   // Overlapping mouths are two openings claiming one stretch of rim, and
@@ -170,16 +163,24 @@ export function junctionWedges(
   const spineOver = spine.nodes.filter(
     (node) => node.station >= before.station && node.station <= after.station,
   );
-  const pivots = gaps.map((gap) =>
-    spineOver.findIndex((node) => node.nodeId === gap.junction.nodeId),
-  );
+  // Where each corner closes onto the spine.
+  //
+  // Per corner, not per mouth, because a mouth need not be a point on the
+  // spine. A road that *ends* on another closes both its bends on the one
+  // node its spine welded to; a road that runs clean **through** closes each
+  // bend where its own rim crosses the standing spine, which is two different
+  // nodes with the whole width of the crossing road between them.
+  const pivots = gaps.flatMap((gap) => [
+    spineOver.findIndex((node) => node.nodeId === gap.left.side.pivotNodeId),
+    spineOver.findIndex((node) => node.nodeId === gap.right.side.pivotNodeId),
+  ]);
   for (let index = 0; index < pivots.length; index += 1) {
     const pivot = pivots[index]!;
     const previous = index === 0 ? -1 : pivots[index - 1]!;
-    // Inside the stretch, and in the order the mouths sit in along the rim: a
-    // pivot at either end has no flank on one side of it to rebuild, and one
-    // out of order would have two pieces crossing each other.
-    if (pivot <= 0 || pivot >= spineOver.length - 1 || pivot <= previous) return undefined;
+    // Inside the stretch, and in the order the corners sit in along the rim:
+    // a pivot at either end has no flank on one side of it to rebuild, and
+    // one out of order would have two pieces crossing each other.
+    if (pivot <= 0 || pivot >= spineOver.length - 1 || pivot < previous) return undefined;
   }
 
   // Only faces the pieces are about to cover completely: a band hanging over
@@ -221,8 +222,11 @@ export function junctionWedges(
       }
     }
     if (closes !== undefined) walk.push(cornerId(closes.left.side));
-    const from = opens === undefined ? 0 : pivots[piece - 1]!;
-    const to = closes === undefined ? spineOver.length - 1 : pivots[piece]!;
+    // `pivots` runs two per gap -- the left corner then the right -- so a
+    // piece closes on the right pivot of the mouth it opens after and the
+    // left pivot of the mouth it closes before.
+    const from = opens === undefined ? 0 : pivots[(piece - 1) * 2 + 1]!;
+    const to = closes === undefined ? spineOver.length - 1 : pivots[piece * 2]!;
     for (const node of spineOver.slice(from, to + 1).reverse()) walk.push(node.nodeId);
     return ring(walk);
   });

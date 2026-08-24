@@ -132,6 +132,63 @@ export function contourFusionsAgainst(
   return fusions.sort((left, right) => left.ownIndex - right.ownIndex);
 }
 
+/** One place a rim being committed passes clean through a standing chain. */
+export interface ContourCrossing {
+  /**
+   * Where the crossing falls along the committed rim: the index of the
+   * segment it lies on plus how far along that segment it sits.
+   *
+   * A parameter rather than a point index because nothing here is at a point
+   * -- that is the whole difference between a crossing and an arrival. A
+   * caller that wants a node there has to put a station at this parameter
+   * first; there is no end lying loose to pull onto it.
+   */
+  readonly at: number;
+  readonly position: ConstructionPosition;
+  /** The standing edge the crossing falls on, and where along it. */
+  readonly edgeId: string;
+  readonly along: number;
+  readonly standingIndex: number;
+}
+
+/**
+ * Every place two chains cross, arrivals and pass-throughs alike.
+ *
+ * The sibling of {@link contourFusionsAgainst}, and the half it deliberately
+ * leaves alone: a rim that runs clean through another road is not arriving,
+ * so there is no loose end to pull back and no fusion to make. What there is
+ * instead is a place the committed run needs a cross-section it does not yet
+ * have -- and the only honest thing to report is where, so the caller can put
+ * one there and sweep again.
+ *
+ * Nameless and geometric, like everything else here: two polylines, every
+ * point they have in common.
+ */
+export function contourCrossingsAgainst(
+  own: FusionPolyline,
+  standing: FusionPolyline,
+): readonly ContourCrossing[] {
+  const crossings: ContourCrossing[] = [];
+  for (let index = 0; index + 1 < own.points.length; index += 1) {
+    const from = own.points[index]!;
+    const to = own.points[index + 1]!;
+    for (let other = 0; other + 1 < standing.points.length; other += 1) {
+      const edgeId = standing.edgeIds[other];
+      if (edgeId === undefined) continue;
+      const crossing = segmentCrossingXZ(from, to, standing.points[other]!, standing.points[other + 1]!);
+      if (crossing === undefined) continue;
+      crossings.push({
+        at: index + crossing.along,
+        position: lerp(from, to, crossing.along),
+        edgeId,
+        along: crossing.across,
+        standingIndex: other,
+      });
+    }
+  }
+  return crossings.sort((left, right) => left.at - right.at);
+}
+
 /** The closed footprint a pair of rims bounds, walked as one ring. */
 export function footprintOf(
   left: readonly ConstructionPosition[],

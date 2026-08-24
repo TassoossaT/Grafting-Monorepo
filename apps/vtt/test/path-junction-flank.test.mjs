@@ -120,6 +120,11 @@ function standingRun(junctions) {
   return runs[0];
 }
 
+/** The weld an arrival leaves: its last station is a node of the standing spine. */
+function weldAt(station, junction) {
+  return new Map([[`${station}:0`, junction.nodeId]]);
+}
+
 /** A narrow run arriving from -Z at `x`, its last station on the standing spine. */
 function arrivingPlan(stationZ, x, half) {
   const vertices = [];
@@ -135,16 +140,13 @@ test("two mouths into one flank are rebuilt together, as three pieces", () => {
   const run = standingRun([west, east]);
 
   // One stroke opening into the same rim twice: two arrivals, two stations.
-  const [first] = pathMouthsInto(arrivingPlan([-6, -3, 0], 1, 0.5), 3, 1, [run]).mouths;
-  const [second] = pathMouthsInto(arrivingPlan([-9, -6, -3, 0], 5, 0.5), 3, 1, [run]).mouths;
+  const [first] = pathMouthsInto(arrivingPlan([-6, -3, 0], 1, 0.5), 3, 1, [run], weldAt(2, west)).mouths;
+  const [second] = pathMouthsInto(arrivingPlan([-9, -6, -3, 0], 5, 0.5), 3, 1, [run], weldAt(3, east)).mouths;
   assert.ok(first !== undefined && second !== undefined);
   assert.equal(first.through, -1);
   assert.equal(second.through, -1);
 
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [
-    { mouth: first, junction: west },
-    { mouth: second, junction: east },
-  ]);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [first, second]);
 
   assert.ok(wedges !== undefined, "one rebuild covers both mouths");
   // Two mouths cut the flank into three pieces: before the first, between
@@ -188,15 +190,12 @@ test("mouths that overlap on the rim close nothing at all", () => {
   const run = standingRun([west, east]);
 
   // Two wide arrivals whose openings run into each other on the rim.
-  const [first] = pathMouthsInto(arrivingPlan([-6, -3, 0], 1.8, 1.5), 3, 1, [run]).mouths;
-  const [second] = pathMouthsInto(arrivingPlan([-9, -6, -3, 0], 4.2, 1.5), 3, 1, [run]).mouths;
+  const [first] = pathMouthsInto(arrivingPlan([-6, -3, 0], 1.8, 1.5), 3, 1, [run], weldAt(2, west)).mouths;
+  const [second] = pathMouthsInto(arrivingPlan([-9, -6, -3, 0], 4.2, 1.5), 3, 1, [run], weldAt(3, east)).mouths;
   assert.ok(first !== undefined && second !== undefined);
 
   assert.equal(
-    junctionWedges(TABLE, "op-2", ARRIVING, [
-      { mouth: first, junction: west },
-      { mouth: second, junction: east },
-    ]),
+    junctionWedges(TABLE, "op-2", ARRIVING, [first, second]),
     undefined,
     "no flank left between them to lay a piece over",
   );
