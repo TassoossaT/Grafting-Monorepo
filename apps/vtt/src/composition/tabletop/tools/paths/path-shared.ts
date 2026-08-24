@@ -8,6 +8,7 @@ import type {
 import type {
   ConstructionCoveredRegion,
   ConstructionNodeId,
+  ConstructionPatch,
   ConstructionPosition,
   ConstructionSweepPlan,
 } from "@/ports";
@@ -53,7 +54,12 @@ import {
   withStationsAt,
   type SpineSplit,
 } from "./path-crossing.ts";
-import { junctionRemovals, junctionWedges, patchRestoring } from "./path-junction.ts";
+import {
+  junctionRemovals,
+  junctionWedges,
+  patchRestoring,
+  type JunctionWedges,
+} from "./path-junction.ts";
 import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -1179,7 +1185,10 @@ export function commitPathContour(
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
   const drawn = swept.line;
-  if (drawn.length === 0) return;
+  // A tap is not a road. One station has no span to sweep along, and the
+  // sweep says so by throwing -- which reached the console as a failure
+  // every time somebody clicked without dragging.
+  if (drawn.length < 2) return;
   // A crossing is made, not found: the crossed spine is split so a node
   // exists for both runs to reference. Whatever still lands exactly on a
   // standing node is welded to it directly.
@@ -1381,43 +1390,6 @@ export function commitPathContour(
       );
     }
 
-    const outcome = inStage(
-      TOOL,
-      "lay the road",
-      {
-        operationId,
-        consuming: sourceSurfaceKeys.map((key) => key.join(":")),
-        faces: formation.patch.regions.length,
-      },
-      () =>
-        ctx.runtime.applyRegionOverlay(
-          {
-            operationId: effect.operationId,
-            sourceSurfaceKeys,
-            outline: formation.outline,
-            boundary: formation.boundary,
-            patch: formation.patch,
-          },
-          "local",
-          effect.operationId,
-        ),
-    );
-    // The junction goes in last and on its own.
-    //
-    // Last for two reasons. Both wedges bound edges the road itself has only
-    // just declared -- the rib between the junction node and each corner --
-    // and, less obviously, **which faces the standing run is made of is only
-    // known now**. The overlay has just consumed, created and pruned
-    // surfaces, so the run read before it ran describes a table that no
-    // longer exists, and deleting a band by an id from that reading asks the
-    // graph for a region that is not there any more. The run is read again
-    // here. The mouth itself survives the re-read untouched: where two rims
-    // crossed is a fact about positions, and the overlay moved nothing.
-    //
-    // On its own, because the road is already standing by now: a junction
-    // that cannot be closed is a bad junction on a real road, and throwing
-    // here would take the road down with it. So the failure is reported at
-    // full detail and the stroke survives.
     // One rebuild per flank, not one per mouth. A stroke can open into the
     // same rim of the same road twice -- an S drawn back into the road it
     // left -- and both mouths cut the same run of bands, so closing them one
@@ -1430,13 +1402,34 @@ export function commitPathContour(
       into.push(mouth);
     }
 
+    // Planned now, after the splits and before the road.
+    //
+    // After the splits because a piece of rebuilt flank closes on the node a
+    // split minted, and it is taken from the standing run's own chain rather
+    // than worked out -- so the chain has to have it. Reading the runs again
+    // here is that, and nothing else.
+    //
+    // Before the road because of what a crossing does that an arrival never
+    // did. A road arriving at another builds its end rib out of its own
+    // nodes, and no edge of it is an edge the standing road already uses. A
+    // road running clean **through** another shares a whole cross-section
+    // with it: its rib at the crossing *is* the stretch of the standing
+    // spine between the two rims, and that stretch already carries the
+    // standing road's own two bands. Laid first, the road is refused for
+    // want of room on an edge -- which is exactly what "region overlay
+    // target patch was refused" was. So the flanks the junctions are about
+    // to replace come out first, and the room is there.
+    const live = ctx.runtime.getAllRegionTopologies();
+    const standingNow = pathRunsIn(live);
+    const present = new Map(live.map((topology) => [topology.surfaceKey.join(":"), topology]));
+    const rebuilds: {
+      readonly wedge: JunctionWedges;
+      /** The faces it removes, as the patch that puts them back. */
+      readonly flankBefore: ConstructionPatch;
+      readonly corridorId: string;
+    }[] = [];
+
     for (const [flankKey, flank] of flanks) {
-      // Read per flank, not once: closing the first one deletes faces and
-      // declares others, so the second flank is looking at a table the first
-      // has already changed.
-      const live = ctx.runtime.getAllRegionTopologies();
-      const standingNow = pathRunsIn(live);
-      const present = new Map(live.map((topology) => [topology.surfaceKey.join(":"), topology]));
       const run = standingNow.find((candidate) => candidate.corridorId === flank[0]!.run.corridorId);
       if (run === undefined) {
         reportToolWarning(TOOL, "a mouth had no run left to close into", {
@@ -1465,7 +1458,7 @@ export function commitPathContour(
       if (removing.some((topology) => topology === undefined)) {
         reportToolWarning(TOOL, "the flank a junction meant to rebuild is not there", {
           operationId,
-          corridor: flank[0]!.run.corridorId,
+          corridor: run.corridorId,
           planned: wedge.removed.map((key) => key.join(":")),
           standing: run.bands.map((band) => band.surfaceKey.join(":")),
         });
@@ -1476,15 +1469,63 @@ export function commitPathContour(
         continue;
       }
 
-      // The swap, made reversible before it is made.
-      //
-      // Removing the flank and laying the pieces are two edits, and only the
-      // first is certain: a piece can be refused for want of room on an edge,
-      // or the patch can throw outright. Left alone that reads on the table
-      // as faces vanishing when a T is drawn -- the road really does lose its
-      // flank, and nothing arrives to take its place. So the faces about to
-      // go are captured first, and put back if the pieces do not stand.
-      const flankBefore = patchRestoring(removing.filter((topology) => topology !== undefined));
+      rebuilds.push({
+        wedge,
+        // Captured before anything is removed, so the swap is reversible: a
+        // piece can still be refused for want of room, and a road that lost
+        // its flank and got nothing back is worse than a junction that did
+        // not close.
+        flankBefore: patchRestoring(removing.filter((topology) => topology !== undefined)),
+        corridorId: run.corridorId,
+      });
+    }
+
+    if (rebuilds.length > 0) {
+      inStage(
+        TOOL,
+        "open the flanks the junctions replace",
+        { operationId, faces: rebuilds.flatMap((rebuild) => rebuild.wedge.removed.map((key) => key.join(":"))) },
+        () =>
+          ctx.runtime.applyRegionEdit(
+            junctionRemovals(rebuilds.map((rebuild) => rebuild.wedge)),
+            "local",
+            operationId,
+          ),
+      );
+    }
+
+    const outcome = inStage(
+      TOOL,
+      "lay the road",
+      {
+        operationId,
+        consuming: sourceSurfaceKeys.map((key) => key.join(":")),
+        faces: formation.patch.regions.length,
+      },
+      () =>
+        ctx.runtime.applyRegionOverlay(
+          {
+            operationId: effect.operationId,
+            sourceSurfaceKeys,
+            outline: formation.outline,
+            boundary: formation.boundary,
+            patch: formation.patch,
+          },
+          "local",
+          effect.operationId,
+        ),
+    );
+
+    // The pieces go in last and on their own, because they bound edges the
+    // road itself has only just declared -- the rib between each corner and
+    // the node its bend closes on.
+    //
+    // On their own, because the road is already standing by now: a junction
+    // that cannot be closed is a bad junction on a real road, and throwing
+    // here would take the road down with it. So the failure is reported at
+    // full detail and the stroke survives.
+    for (const rebuild of rebuilds) {
+      const { wedge } = rebuild;
       const putBack = (laidRegionIds: readonly string[]): void => {
         try {
           // Whatever did stand comes out first. A piece and the band it
@@ -1502,7 +1543,17 @@ export function commitPathContour(
               `${effect.operationId}:junction-undo`,
             );
           }
-          ctx.runtime.addPatch(flankBefore, "local", `${effect.operationId}:junction-undo`);
+          const back = ctx.runtime.addPatch(rebuild.flankBefore, "local", `${effect.operationId}:junction-undo`);
+          if (back.skippedRegionIds.length > 0) {
+            // The road is standing on that ground now, so its own bands may
+            // hold the edges the old flank wants. Reported rather than
+            // forced: taking the road back down to restore a face it
+            // replaced would be a worse answer than a gap.
+            reportToolWarning(TOOL, "part of the flank could not be put back", {
+              operationId,
+              skipped: back.skippedRegionIds,
+            });
+          }
         } catch (error) {
           reportToolFailure(
             TOOL,
@@ -1514,7 +1565,6 @@ export function commitPathContour(
       };
 
       try {
-        ctx.runtime.applyRegionEdit(junctionRemovals([wedge]), "local", operationId);
         const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
         if (laid.skippedRegionIds.length > 0) {
           const skipped = new Set(laid.skippedRegionIds);
@@ -1530,7 +1580,7 @@ export function commitPathContour(
           );
           ctx.reportFeedback({
             tone: "error",
-            message: "Junção não fechada: a rua foi criada, mas o cruzamento não.",
+            message: `Junção incompleta: ${laid.skippedRegionIds.length} face não pôde ser fechada.`,
           });
         }
       } catch (error) {
@@ -1544,11 +1594,10 @@ export function commitPathContour(
             edges: wedge.patch.edges.map((edge) => edge.edgeId),
             overlayRemoved: outcome.removedSurfaceKeys.map((key) => key.join(":")),
             overlayCreated: outcome.createdSurfaceKeys.map((key) => key.join(":")),
-            standingBands: run.bands.map((band) => band.surfaceKey.join(":")),
+            corridor: rebuild.corridorId,
           },
           error,
         );
-        // The pieces threw, so none of them stands: only the flank goes back.
         putBack([]);
         ctx.reportFeedback({
           tone: "error",
