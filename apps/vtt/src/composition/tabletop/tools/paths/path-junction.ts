@@ -150,7 +150,10 @@ export function junctionWedges(
 
   // The stretch of rim the mouths open through: from the node before the
   // first corner to the node after the last.
-  const beforeIndex = Math.floor(gaps[0]!.left.at);
+  // `ceil - 1`, not `floor`: a corner landing exactly on a rim node has that
+  // node *inside* the mouth, not before it, and starting the rebuild there
+  // would leave the first piece with no width at all.
+  const beforeIndex = Math.max(0, Math.ceil(gaps[0]!.left.at) - 1);
   const afterIndex = Math.min(Math.floor(gaps[gaps.length - 1]!.right.at) + 1, rimNodes.length - 1);
   const before = rimNodes[beforeIndex]!;
   const after = rimNodes[afterIndex]!;

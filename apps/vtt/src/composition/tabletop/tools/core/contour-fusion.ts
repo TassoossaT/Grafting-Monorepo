@@ -132,6 +132,9 @@ export function contourFusionsAgainst(
   return fusions.sort((left, right) => left.ownIndex - right.ownIndex);
 }
 
+/** How near two crossings must be to be the same crossing, in world units. */
+const COINCIDENT_CROSSING = 1e-6;
+
 /** One place a rim being committed passes clean through a standing chain. */
 export interface ContourCrossing {
   /**
@@ -186,7 +189,22 @@ export function contourCrossingsAgainst(
       });
     }
   }
-  return crossings.sort((left, right) => left.at - right.at);
+  // A crossing through a point two standing edges share is one crossing, not
+  // two. Both edges report it honestly -- it is on the end of each -- and a
+  // caller that treats them as two puts two stations on one spot, or splits
+  // one edge twice at a node that is already there.
+  return crossings
+    .sort((left, right) => left.at - right.at)
+    .filter((crossing, index, all) => {
+      const previous = all[index - 1];
+      if (previous === undefined) return true;
+      return (
+        Math.hypot(
+          crossing.position.x - previous.position.x,
+          crossing.position.z - previous.position.z,
+        ) > COINCIDENT_CROSSING
+      );
+    });
 }
 
 /** The closed footprint a pair of rims bounds, walked as one ring. */
