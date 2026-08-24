@@ -274,6 +274,23 @@ see -- a footprint laid over a travel line with no junction made -- but it is
 the second question now, not the first. `identity, not geometry` keeps being
 the same lesson in a new place.
 
+### The graph a junction reads has to be the graph it is about to edit
+
+Twice now the same mistake, in two costumes. A junction is decided from a
+reading of the table, and between the reading and the edit the table moves.
+
+The first costume was geometric: whether a face is joined or replaced was
+asked of the footprint, and cutting the road back at the rim changed the
+footprint out from under the answer. The second was plain staleness: the
+faces to rebuild were chosen before the overlay ran, and the overlay consumes,
+creates and prunes surfaces -- so the ids named a table that no longer
+existed, and the removal asked the graph for a region that was gone.
+
+So the run is read again, per mouth, immediately before its junction is
+closed. What does *not* need re-reading is the mouth: where two rims crossed
+is a fact about positions, and nothing in the overlay moves a node. Identity
+goes stale; geometry does not.
+
 ### One name for an edge, wherever it is minted
 
 None of this works unless a split edge and a declared edge over the same pair

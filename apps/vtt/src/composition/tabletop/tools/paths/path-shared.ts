@@ -984,21 +984,7 @@ export function commitPathContour(
       new Map([...spineWelds, ...mitred.welds]),
     );
 
-    // Closing a mouth is not an edit to this run: it is the standing run's
-    // flank rebuilt around the opening. Prepared here so a refusal below
-    // takes it down with everything else.
     const corridorId = pathCorridorId(effect.operationId, params.pathKind);
-    const wedges = fused.mouths
-      .map((mouth) => {
-        const junctionNodeId = spineWelds.get(`${mouth.station}:0`);
-        const junctionStation = parseStationNodeId(junctionNodeId ?? "")?.station;
-        if (junctionNodeId === undefined || junctionStation === undefined) return undefined;
-        return junctionWedges(ctx.tableId, effect.operationId, corridorId, mouth, {
-          nodeId: junctionNodeId,
-          station: junctionStation,
-        });
-      })
-      .filter((wedge): wedge is NonNullable<typeof wedge> => wedge !== undefined);
 
     const resolved = resolveCoverage(
       effect.targetType,
@@ -1036,14 +1022,6 @@ export function commitPathContour(
       .filter((entry) => !joined.has(entry.covered.surfaceKey.join(":")))
       .map((entry) => entry.covered.surfaceKey);
 
-    // A face cannot be both rebuilt and consumed. If one ever were, the
-    // overlay would go looking for a region the removal had already taken
-    // out and the whole stroke would be lost, so the rebuild yields.
-    const consumed = new Set(sourceSurfaceKeys.map((key) => key.join(":")));
-    const rebuilt = wedges.filter((wedge) =>
-      wedge.removed.every((key) => !consumed.has(key.join(":"))),
-    );
-
     // Split only once the commit is going through: both the spine node a
     // crossing needs and the rim nodes a fusion needs are made by cutting
     // edges of runs already standing, and a refusal above would otherwise
@@ -1076,13 +1054,47 @@ export function commitPathContour(
           effect.operationId,
         ),
     );
-    // The junction goes in last and on its own. Last, because both wedges
-    // bound edges the road itself only just declared -- the rib between the
-    // junction node and each corner. On its own, because the road is already
-    // standing by now: a junction that cannot be closed is a bad junction on
-    // a real road, and throwing here would take the road down with it. So
-    // the failure is reported at full detail and the stroke survives.
-    for (const wedge of rebuilt) {
+    // The junction goes in last and on its own.
+    //
+    // Last for two reasons. Both wedges bound edges the road itself has only
+    // just declared -- the rib between the junction node and each corner --
+    // and, less obviously, **which faces the standing run is made of is only
+    // known now**. The overlay has just consumed, created and pruned
+    // surfaces, so the run read before it ran describes a table that no
+    // longer exists, and deleting a band by an id from that reading asks the
+    // graph for a region that is not there any more. The run is read again
+    // here. The mouth itself survives the re-read untouched: where two rims
+    // crossed is a fact about positions, and the overlay moved nothing.
+    //
+    // On its own, because the road is already standing by now: a junction
+    // that cannot be closed is a bad junction on a real road, and throwing
+    // here would take the road down with it. So the failure is reported at
+    // full detail and the stroke survives.
+    for (const mouth of fused.mouths) {
+      // Read per mouth, not once: closing the first one deletes faces and
+      // declares others, so the second mouth is looking at a table the first
+      // has already changed.
+      const standingNow = pathRunsIn(ctx.runtime.getAllRegionTopologies());
+      const junctionNodeId = spineWelds.get(`${mouth.station}:0`);
+      const junctionStation = parseStationNodeId(junctionNodeId ?? "")?.station;
+      const run = standingNow.find((candidate) => candidate.corridorId === mouth.run.corridorId);
+      if (junctionNodeId === undefined || junctionStation === undefined || run === undefined) {
+        reportToolWarning(TOOL, "a mouth had no junction left to close", {
+          operationId,
+          corridor: mouth.run.corridorId,
+          junctionNodeId,
+          stillStanding: run !== undefined,
+        });
+        continue;
+      }
+      const wedge = junctionWedges(
+        ctx.tableId,
+        effect.operationId,
+        corridorId,
+        { ...mouth, run },
+        { nodeId: junctionNodeId, station: junctionStation },
+      );
+      if (wedge === undefined) continue;
       try {
         ctx.runtime.applyRegionEdit(junctionRemovals([wedge]), "local", operationId);
         const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
@@ -1106,6 +1118,9 @@ export function commitPathContour(
             removing: wedge.removed.map((key) => key.join(":")),
             faces: wedge.patch.regions.map((region) => region.regionId),
             edges: wedge.patch.edges.map((edge) => edge.edgeId),
+            overlayRemoved: outcome.removedSurfaceKeys.map((key) => key.join(":")),
+            overlayCreated: outcome.createdSurfaceKeys.map((key) => key.join(":")),
+            standingBands: run.bands.map((band) => band.surfaceKey.join(":")),
           },
           error,
         );
