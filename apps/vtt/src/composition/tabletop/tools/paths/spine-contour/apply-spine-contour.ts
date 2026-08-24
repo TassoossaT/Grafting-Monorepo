@@ -6,10 +6,9 @@ import type { PlanSpineContourResult } from "./plan-spine-contour.ts";
 /**
  * Registers a planned spine contour patch against the live session: the
  * standing regions it replaces come out first, then the freshly unioned
- * ones go in -- the same two-step shape `commitPathContour` already used
- * for a mouth (`junctionRemovals` then `addPatch`), just driven by
- * {@link PlanSpineContourResult.consumedSurfaceKeys} instead of a hand-built
- * wedge list.
+ * ones go in -- one operation after the planner has resolved the spine
+ * effect, driven by {@link PlanSpineContourResult.consumedSurfaceKeys}
+ * instead of a hand-built wedge list.
  *
  * No rollback of its own beyond what `addPatch`'s own refusal already gives
  * for free: `master` today has no rollback beyond that either for the
@@ -20,13 +19,22 @@ export function applySpineContour(
   ctx: ToolContext,
   operationId: string,
   result: PlanSpineContourResult,
+  onRemovalFailure?: (surfaceKey: string, error: unknown) => void,
 ): ConstructionPatchOutcome {
-  if (result.consumedSurfaceKeys.length > 0) {
-    ctx.runtime.applyRegionEdit(
-      result.consumedSurfaceKeys.map((surfaceKey) => ({ kind: "delete-region" as const, surfaceKey })),
-      "local",
-      operationId,
-    );
+  const stillStanding = new Set(
+    ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":")),
+  );
+  for (const surfaceKey of result.consumedSurfaceKeys) {
+    const key = surfaceKey.join(":");
+    if (!stillStanding.has(key)) {
+      onRemovalFailure?.(key, new Error("the standing band was already gone"));
+      continue;
+    }
+    try {
+      ctx.runtime.applyRegionEdit([{ kind: "delete-region" as const, surfaceKey }], "local", operationId);
+    } catch (error) {
+      onRemovalFailure?.(surfaceKey.join(":"), error);
+    }
   }
   return ctx.runtime.addPatch(result.patch, "local", operationId);
 }

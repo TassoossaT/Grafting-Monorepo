@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
-import { commitPathContour } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { createEditHistoryStack } from "../src/features/edit-construction/index.ts";
+import { applyPathBrushEffect } from "../src/composition/tabletop/tools/paths/path-shared.ts";
+import {
+  createEditHistoryStack,
+  createPathBrushEffect,
+  pathFormationFor,
+} from "../src/features/edit-construction/index.ts";
 
 /**
- * A real end-to-end regression harness: `commitPathContour` against a real
+ * A real end-to-end regression harness: `applyPathBrushEffect` against a real
  * `AppTabletopRuntime`, backed by a small but genuinely stateful in-memory
  * `ConstructionSessionPort` fake -- not a canned/scripted one. This is the
  * exact coverage gap that let the "unknown analytic region" bug through
@@ -246,6 +250,20 @@ const ROAD = Object.freeze({
   miterLimit: 4,
 });
 
+/** The executor receives the immutable semantic effect the brush emits. */
+function applyRoadBrushEffect(ctx, samples, tolerance) {
+  const operationId = `table-1:path-brush:${ctx.nextSequence()}`;
+  const effect = createPathBrushEffect(
+    {
+      brushShape: { kind: "circle", radius: ROAD.radius },
+      brushRegion: { samples },
+      parameters: pathFormationFor(ROAD),
+    },
+    { operationId, tableId: "table-1", initiatedBy: "path-brush" },
+  );
+  applyPathBrushEffect(ctx, effect, tolerance);
+}
+
 test("a second road crossing a standing one commits without throwing, end to end", async () => {
   const ctx = await createTestContext();
 
@@ -253,13 +271,13 @@ test("a second road crossing a standing one commits without throwing, end to end
     { x: -10, y: 0, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, main, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, main, 0.1));
 
   const crossing = [
     { x: 0, y: 0, z: -10 },
     { x: 0, y: 0, z: 10 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, crossing, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, crossing, 0.1));
 
   assert.ok(
     !ctx.feedback.some((entry) => entry.tone === "error"),
@@ -284,7 +302,7 @@ test("a sharp hairpin stroke, wide enough to self-intersect when offset, still c
     { x: 0, y: 0, z: 2 },
     { x: 8, y: 0, z: 2 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, hairpin, { kind: "circle", radius: 2.5 }, 0.01, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, hairpin, 0.01));
   assert.ok(
     !ctx.feedback.some((entry) => entry.tone === "error"),
     `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
@@ -294,7 +312,7 @@ test("a sharp hairpin stroke, wide enough to self-intersect when offset, still c
     { x: 4, y: 0, z: -5 },
     { x: 4, y: 0, z: 5 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, second, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, second, 0.1));
   assert.ok(
     !ctx.feedback.some((entry) => entry.tone === "error"),
     `no error feedback expected after the second stroke: ${JSON.stringify(ctx.feedback)}`,
@@ -312,7 +330,7 @@ test("a standing band that refuses to delete is reported, not fatal -- the run s
     { x: -10, y: 0, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
-  commitPathContour(ctx, main, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush");
+  applyRoadBrushEffect(ctx, main, 0.1);
 
   // Patches the runtime's own `applyRegionEdit` to always refuse a
   // delete-region -- exactly the "unknown analytic region" shape the real
@@ -330,7 +348,7 @@ test("a standing band that refuses to delete is reported, not fatal -- the run s
     { x: 0, y: 0, z: -10 },
     { x: 0, y: 0, z: 10 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, crossing, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, crossing, 0.1));
 
   assert.ok(
     ctx.feedback.some((entry) => entry.tone === "success"),
@@ -345,13 +363,13 @@ test("a T where the second road ends inside the first commits without throwing",
     { x: -10, y: 0, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
-  commitPathContour(ctx, main, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush");
+  applyRoadBrushEffect(ctx, main, 0.1);
 
   const branch = [
     { x: 0, y: 0, z: 8 },
     { x: 0, y: 0, z: 0.5 },
   ];
-  assert.doesNotThrow(() => commitPathContour(ctx, branch, { kind: "circle", radius: 2.5 }, 0.1, ROAD, "path-brush"));
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, branch, 0.1));
 
   assert.ok(
     !ctx.feedback.some((entry) => entry.tone === "error"),

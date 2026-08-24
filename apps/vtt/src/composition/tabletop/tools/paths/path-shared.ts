@@ -1,4 +1,4 @@
-import type { BrushShape, PathBrushParams } from "@/features/edit-construction";
+import type { PathBrushEffect } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -7,16 +7,16 @@ import type { ConstructionPosition } from "@/ports";
 import {
   firstRefusal,
   pathCorridorId,
-  pathFormationFor,
   pathRidesTerrain,
   resolveCoverage,
 } from "../../../../features/edit-construction/index.ts";
 
-import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
+import type { ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import type { SweptArc } from "../core/sweep-formation.ts";
 import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 import {
+  applySpineContour,
   offsetBands,
   planSpineContour,
   sampleCatmullRom,
@@ -270,7 +270,7 @@ export function referenceLineFrom(
 }
 
 /**
- * Commits one path run, in one transaction.
+ * Applies one immutable path-brush effect, in one transaction.
  *
  * This is the only path a path is ever built by. A free stroke, and any
  * straight drag or preset that comes later, differ in nothing but the
@@ -299,33 +299,30 @@ export function referenceLineFrom(
  *   it. Drawing a road over terrain leaves that terrain standing rather than
  *   risking an imprecise cut.
  */
-export function commitPathContour(
+export function applyPathBrushEffect(
   ctx: ToolContext,
-  stroke: readonly ConstructionPosition[],
-  brushShape: BrushShape,
+  effect: PathBrushEffect,
   tolerance: number,
-  params: PathBrushParams,
-  domain: string,
 ): void {
+  const stroke = effect.brushRegion.samples;
   if (stroke.length === 0) return;
-  const sequence = ctx.nextSequence();
-  const operationId = scopedToolId(ctx, domain, sequence);
+  const operationId = effect.operationId;
 
   const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
   const swept =
     fitted.length === 0
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
-      : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
+      : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
   const controlPoints = swept.line;
   // A tap is not a road: one control point has no span to sample a curve
   // along.
   if (controlPoints.length < 2) return;
 
   try {
-    const parameters = pathFormationFor(params);
+    const parameters = effect.parameters;
     const profile = parameters.profile;
     const bandOffsets = profile.map((point) => point.lateralOffset);
-    const corridorId = pathCorridorId(operationId, params.pathKind);
+    const corridorId = pathCorridorId(operationId, parameters.kind);
 
     const chain: SpineChainInput = {
       chainId: corridorId,
@@ -351,7 +348,7 @@ export function commitPathContour(
       inStage(TOOL, "read the footprint coverage", { operationId, outline: outline.length }, () =>
         ctx.runtime.getFootprintCoverage(outline),
       ),
-      params.pathKind,
+      parameters.kind,
     );
     const refusal = firstRefusal(resolved);
     if (refusal !== undefined) {
@@ -384,46 +381,18 @@ export function commitPathContour(
     );
     if (planned === undefined) return;
 
-    if (planned.consumedSurfaceKeys.length > 0) {
-      // Re-verified immediately before acting, not trusted from the read
-      // `standingRegions` came from moments earlier -- and removed one key
-      // at a time, in its own try, rather than as one batched transaction.
-      // A face that will not delete is reported loudly and the run
-      // continues without it: the same tolerance the retired junction code
-      // gave a mouth that could not close ("the road still stands"), and
-      // the opposite of hiding the mismatch that let a stale key crash the
-      // whole stroke silently-fatal before.
-      const stillStanding = new Set(
-        ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":")),
-      );
-      for (const surfaceKey of planned.consumedSurfaceKeys) {
-        const key = surfaceKey.join(":");
-        if (!stillStanding.has(key)) {
-          reportToolWarning(TOOL, "a standing band this run meant to replace was already gone", {
-            operationId,
-            surfaceKey: key,
-          });
-          continue;
-        }
-        try {
-          inStage(TOOL, "remove a standing band this run replaces", { operationId, surfaceKey: key }, () =>
-            ctx.runtime.applyRegionEdit([{ kind: "delete-region" as const, surfaceKey }], "local", operationId),
-          );
-        } catch (error) {
-          reportToolWarning(TOOL, "a standing band refused to be removed", {
-            operationId,
-            surfaceKey: key,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    }
-
     const outcome = inStage(
       TOOL,
       "lay the road",
       { operationId, faces: planned.patch.regions.length },
-      () => ctx.runtime.addPatch(planned.patch, "local", operationId),
+      () =>
+        applySpineContour(ctx, operationId, planned, (surfaceKey, error) =>
+          reportToolWarning(TOOL, "a standing band refused to be removed", {
+            operationId,
+            surfaceKey,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        ),
     );
 
     if (outcome.skippedRegionIds.length > 0) {
@@ -451,7 +420,7 @@ export function commitPathContour(
   } catch (error) {
     // Already named on the console by whichever stage threw; this catches
     // the ones that have no stage of their own.
-    reportToolFailure(TOOL, "commit the path", { operationId, stroke: stroke.length }, error);
+    reportToolFailure(TOOL, "apply the path effect", { operationId, stroke: stroke.length }, error);
     const message = error instanceof Error ? error.message : String(error);
     ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
   }

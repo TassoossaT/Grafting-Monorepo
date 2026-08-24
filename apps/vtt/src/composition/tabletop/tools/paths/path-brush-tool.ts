@@ -1,19 +1,25 @@
-import { DEFAULT_TOOL_PARAMS, pathHalfWidth } from "@/features/edit-construction";
+import {
+  createPathBrushEffect,
+  DEFAULT_TOOL_PARAMS,
+  pathFormationFor,
+  pathHalfWidth,
+} from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
-import type { ToolContext } from "../core/tool-context.ts";
+import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
-import { PATH_COLOR, commitPathContour } from "./path-shared.ts";
+import { PATH_COLOR, applyPathBrushEffect } from "./path-shared.ts";
 
 /**
  * A free path stroke, built on the same brush every other brush uses: press,
  * drag, and on release the whole swept region is handed over once.
  *
  * Path creation follows the same ownership split as walls: this tool only
- * chooses the interaction, `path-shared.ts` owns the single commit every
- * path goes through, `spine-contour/` derives the contour from the spine
- * and declares the graph, and Rust supplies reusable geometry and executes
- * the resolved overlay without ever being told any of it is a path.
+ * chooses the interaction and emits a `PathBrushEffect`. The path effect
+ * executor owns the single commit every path goes through;
+ * `spine-contour/` derives the contour from the spine and declares the
+ * graph, while Rust executes the resolved overlay without ever being told
+ * any of it is a path.
  */
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
@@ -24,6 +30,15 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   halfWidth: pathHalfWidth,
 
   applyRegion(region: BrushRegion, ctx: ToolContext, params: PathBrushParams): void {
-    commitPathContour(ctx, region.samples, region.shape, region.tolerance, params, "path-brush");
+    const operationId = scopedToolId(ctx, "path-brush", ctx.nextSequence());
+    const effect = createPathBrushEffect(
+      {
+        brushShape: region.shape,
+        brushRegion: { samples: region.samples },
+        parameters: pathFormationFor(params),
+      },
+      { operationId, tableId: ctx.tableId, initiatedBy: "path-brush" },
+    );
+    applyPathBrushEffect(ctx, effect, region.tolerance);
   },
 });
