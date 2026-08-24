@@ -3379,6 +3379,49 @@ export function fitPath(
   const arcs = options.arcs ?? true;
   const budget = Math.max(0, tolerance);
 
+// src/composition/tabletop/tools/core/sweep-formation.ts
+export interface TransverseProfilePoint {
+  /** Signed world distance from the reference line, left to right. */
+  readonly lateralOffset: number;
+  /** Height above the reference line's own height at that station. */
+  readonly elevation: number;
+  }
+export function withoutCoincidentStations(
+  samples: readonly ConstructionPosition[],
+  ): readonly ConstructionPosition[] {
+  const distinct: ConstructionPosition[] = [];
+  for (const sample of samples) {
+  const previous = distinct[distinct.length - 1];
+  if (previous === undefined || xzDistance(previous, sample) > COINCIDENT_EPSILON) {
+  distinct.push(sample);
+export function stationFrame(
+  line: readonly ConstructionPosition[],
+  index: number,
+  miterLimit: number,
+  ): readonly [number, number] {
+  const current = line[index]!;
+  if (index === 0) {
+  const next = line[1]!;
+export function sweptBoundary(stationCount: number, profileLength: number): readonly number[] {
+  const last = stationCount - 1;
+  const boundary: number[] = [];
+  for (let station = 0; station < stationCount; station += 1) boundary.push(station * profileLength);
+export class SweepFormationError extends Error {}
+
+  /**
+  * Samples a transverse profile along a reference line into connected quads.
+  *
+  * Vertices are station-major: every consecutive `profile.length` entries form
+  * one transverse station, which is what lets `pathPatch` read a station
+  * address straight off a vertex index. Quads reference those shared vertices,
+export function sweepFormation(
+  referenceLine: readonly ConstructionPosition[],
+  profile: readonly TransverseProfilePoint[],
+  miterLimit: number,
+  ): ConstructionSweepPlan {
+  if (!Number.isFinite(miterLimit) || miterLimit < 1) {
+  throw new SweepFormationError(`a sweep needs a mitre limit of at least 1, got ${miterLimit}`);
+
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
   readonly point: ConstructionPosition;

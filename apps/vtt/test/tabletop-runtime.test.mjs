@@ -176,10 +176,6 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
-    planSweepFormation() {
-      requireStarted();
-      return { referenceLine: [], vertices: [], quads: [], boundary: [] };
-    },
     applyRegionOverlay() {
       requireStarted();
       return {

@@ -382,8 +382,6 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
@@ -503,8 +501,6 @@ position it wants (an undo/redo stack replaying a drag), skipping the
 policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
@@ -855,6 +851,66 @@ With `arcs` off every span is a chord, however round the samples look.
 That is for a caller whose samples are no longer a hand -- points landing
 on exact grid intersections, say -- where the circle through any three of
 them is a real circle that nobody drew.
+
+### `class vtt.sweep-formation.SweepFormationError`
+
+Why a sweep could not be planned.
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string): SweepFormationError`
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
+
+### `interface vtt.sweep-formation.TransverseProfilePoint`
+
+One sample of a formation's transverse profile.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.elevation: number`
+
+Height above the reference line's own height at that station.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.lateralOffset: number`
+
+Signed world distance from the reference line, left to right.
+
+### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number): readonly [number, number]`
+
+The direction one station offsets its profile along.
+
+At a corner it is the mitre: the bisector of the two neighbouring normals,
+lengthened so the offset rim still meets both straight stretches, and
+bounded so a hairpin gets a corner rather than a spike. Same rule the
+junction mitre follows between two runs -- this one is within one run.
+
+### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number): ConstructionSweepPlan`
+
+Samples a transverse profile along a reference line into connected quads.
+
+Vertices are station-major: every consecutive `profile.length` entries form
+one transverse station, which is what lets `pathPatch` read a station
+address straight off a vertex index. Quads reference those shared vertices,
+so neighbouring strips are connected by construction rather than by welding
+coincident geometry afterwards.
+
+### `function vtt.sweep-formation.sweptBoundary(stationCount: number, profileLength: number): readonly number[]`
+
+The rim of a plain formation, as vertex indices.
+
+Down the first column, across the last station, back up the last column,
+and across the first station to close. True of a formation standing on its
+own, which is the only thing a sweep can know -- everything that makes it
+*untrue*, a junction above all, is known only where clouds and surface
+types are. Exported so that side can walk it, compare against it, or
+replace it outright.
+
+### `function vtt.sweep-formation.withoutCoincidentStations(samples: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
+
+The caller's stations with any coincident repeat dropped.
+
+Hygiene, not resampling: it only ever removes, never places. Two stations
+at one spot give the frame maths no direction to read, and a pointer held
+still or a grid snap folding samples onto one intersection both produce
+exactly that. Where the stations go is the caller's decision, because it
+depends on what the formation runs over.
 
 ### `interface vtt.tool-context.ConstructionTool`
 
@@ -3817,10 +3873,6 @@ Moves every node on a region's boundary, holes included.
 ### `method vtt.construction-session-port.ConstructionSessionPort.moveVertex(nodeId: string, position: ConstructionPosition): RegionEditOutcome`
 
 Moves one boundary node to an absolute position.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.planSweepFormation(request: { parameters: ConstructionSweepParameters; referenceLine: readonly ConstructionPosition[] }): ConstructionSweepPlan`
-
-Executes only the generic sweep geometry algorithm; never mutates the graph.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 

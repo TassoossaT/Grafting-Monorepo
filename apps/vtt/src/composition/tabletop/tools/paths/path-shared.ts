@@ -45,6 +45,7 @@ import {
   sideOf,
 } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
+import { sweepFormation } from "../core/sweep-formation.ts";
 import { junctionRemovals, junctionWedges } from "./path-junction.ts";
 import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 
@@ -941,8 +942,13 @@ export function commitPathContour(
     );
     const profile = effect.parameters.profile;
     const spineSlot = pathSpineSlot(profile);
+    // Swept here, not in Rust. A sweep decides where every vertex goes, which
+    // faces exist and which rim is the outside -- product decisions, and the
+    // last of them is what all the contour work is about. Rust validates and
+    // registers the patch this produces; it does not get to say what the
+    // product is.
     const plan = inStage(TOOL, "plan the sweep", { operationId, stations: referenceLine.length }, () =>
-      ctx.runtime.planPathFormation(effect),
+      sweepFormation(referenceLine, profile, effect.parameters.miterLimit),
     );
     // The sweep drops a station only where two coincide, which the reference
     // line already rules out. Were one dropped anyway the indices would no

@@ -33,7 +33,6 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
-  ConstructionSweepPlan,
   ConstructionUnfilledLoop,
   DiffOutcome,
   GenerateRegionPartitionRequest,
@@ -54,7 +53,6 @@ import {
   applyEditOp,
   mergeOutcomes,
   type AtomicEditOp,
-  type PathBrushEffect,
 } from "../../features/edit-construction/index.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -127,7 +125,6 @@ export interface TabletopRuntime {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
-  planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan;
   /** Which of `points` already sit inside a region -- per-point, for a generator building only over open ground. */
   classifyPoints(
     points: readonly (readonly [number, number])[],
@@ -743,14 +740,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): readonly ConstructionCoveredRegion[] {
     this.#requireReady("querying a footprint's coverage");
     return this.#construction.getFootprintCoverage(polygon);
-  }
-
-  planPathFormation(effect: PathBrushEffect): ConstructionSweepPlan {
-    this.#requireReady("planning a path formation");
-    return this.#construction.planSweepFormation({
-      referenceLine: effect.brushRegion.samples,
-      parameters: effect.parameters,
-    });
   }
 
   classifyPoints(

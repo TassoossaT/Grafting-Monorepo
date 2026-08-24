@@ -172,6 +172,28 @@ the welded node keeps its own position and both runs bound it.
 
 The surface that identity leaves behind is what the next section is about.
 
+## The road is built in the application; Rust registers it
+
+The sweep used to be a call into Rust, and that was the wrong side of the
+line. Rust's job here is to validate and execute what the application decided
+-- `wallPatch` and `pathPatch` both say so, and a wall is built entirely in
+TypeScript for exactly this reason. A sweep is not execution. It decides
+where every vertex of the road goes, which faces exist, and **which rim is
+the outside of it**.
+
+That last one is the whole of the contour problem, and it was being decided
+by index arithmetic over a station-by-slot grid: first column down, last
+station across, last column back. That is the true rim of a road standing
+alone and it cannot be anything else, because the code producing it has never
+heard of a junction, a cloud, or a surface type. All of that lives in the
+application. So the rim came back describing a road with no junctions in it,
+and the application had no seam at which to correct it.
+
+`sweepFormation` is the same maths on this side -- frames, mitre limit,
+boundary walk, unchanged. What changed is who may alter them: `sweptBoundary`
+is exported so the side that *does* know about junctions can walk it, compare
+against it, or replace it outright.
+
 ## What a contour is, and the definition that was wrong
 
 A road is built as a sweep: a reference line of stations, a profile of three

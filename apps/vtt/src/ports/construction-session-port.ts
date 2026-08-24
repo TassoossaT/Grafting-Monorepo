@@ -402,11 +402,6 @@ export interface ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[];
-  /** Executes only the generic sweep geometry algorithm; never mutates the graph. */
-  planSweepFormation(request: {
-    readonly referenceLine: readonly ConstructionPosition[];
-    readonly parameters: ConstructionSweepParameters;
-  }): ConstructionSweepPlan;
   /**
    * Which of `points` already sit inside a region -- the per-point form of
    * {@link getFootprintCoverage}, for a generator deciding face by face
