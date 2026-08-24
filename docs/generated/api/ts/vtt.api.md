@@ -1366,7 +1366,7 @@ crossed run's spine with them.
 The geometric rule stays for the case identity cannot see: a footprint
 laid over a run's travel line without any junction having been made.
 
-### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
+### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; origins: readonly number[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
 
 Every place the run being drawn meets a spine already standing.
 

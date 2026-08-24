@@ -367,6 +367,18 @@ export function junctionsWithStandingSpines(
    * split an edge mid-run is a T, and a T needs a face this does not build.
    */
   readonly terminals: readonly SpineJoin[];
+  /**
+   * Where each station of the committed line came from in the drawn one, or
+   * `-1` for a station this made up.
+   *
+   * A junction splices stations in and slides others onto meeting points, so
+   * afterwards nothing can be matched to the drawn line by position in it.
+   * Anything that was derived per drawn station -- which curve a stretch
+   * runs on, above all -- needs this to survive the splice, and comparing
+   * array identity does not work: every step here rebuilds the array whether
+   * or not it changed anything.
+   */
+  readonly origins: readonly number[];
 } {
   const standing = pathRunsIn(ctx.runtime.getAllRegionTopologies());
   const found: {
@@ -512,11 +524,20 @@ export function junctionsWithStandingSpines(
     }
   }
   if (found.length === 0 && arrivals.size === 0) {
-    return { line, welds: new Map(), inserts: [], joined: [], terminals };
+    return {
+      line,
+      welds: new Map(),
+      inserts: [],
+      joined: [],
+      terminals,
+      origins: line.map((_station, index) => index),
+    };
   }
 
   const ordered = [...found].sort((left, right) => left.at - right.at);
   const spliced: ConstructionPosition[] = [];
+  /** The drawn station each spliced one came from; `-1` for a minted one. */
+  const origins: number[] = [];
   const welds = new Map<number, ConstructionNodeId>();
 
   const near = (left: ConstructionPosition, right: ConstructionPosition): boolean =>
@@ -534,18 +555,21 @@ export function junctionsWithStandingSpines(
     const previous = spliced[spliced.length - 1];
     if (previous !== undefined && near(previous, crossing.position)) {
       spliced[spliced.length - 1] = crossing.position;
+      origins[origins.length - 1] = -1;
       welds.set(spliced.length - 1, crossing.nodeId);
       return;
     }
     welds.set(spliced.length, crossing.nodeId);
     spliced.push(crossing.position);
+    origins.push(-1);
   };
 
   /** A drawn station, unless a crossing has already claimed that spot. */
-  const pushStation = (station: ConstructionPosition): void => {
+  const pushStation = (station: ConstructionPosition, from: number): void => {
     const previous = spliced[spliced.length - 1];
     if (previous !== undefined && welds.has(spliced.length - 1) && near(previous, station)) return;
     spliced.push(station);
+    origins.push(from);
   };
 
   let next = 0;
@@ -558,7 +582,7 @@ export function junctionsWithStandingSpines(
     // joins, so the station moves onto it rather than one being added beside.
     const arrival = arrivals.get(index);
     if (arrival !== undefined) pushCrossing(arrival);
-    else pushStation(line[index]!);
+    else pushStation(line[index]!, index);
   }
   while (next < ordered.length) {
     pushCrossing(ordered[next]!);
@@ -584,6 +608,7 @@ export function junctionsWithStandingSpines(
     inserts: ops,
     joined: standing.filter((run) => touched.has(run.corridorId)),
     terminals,
+    origins,
   };
 }
 
@@ -985,6 +1010,18 @@ export function commitPathContour(
   const exact = weldedToStandingSpines(ctx, crossed.line, SPINE_WELD_TOLERANCE);
   const referenceLine = exact.line;
   const welds = new Map([...crossed.welds, ...exact.welds]);
+  // Which stretches are still on the curve the fit found. A stretch keeps its
+  // curve only when both its ends are drawn stations that were consecutive
+  // before the junction spliced anything in -- a minted station sits on a
+  // chord, not on the circle, and an arc through it would be an arc through
+  // the wrong points. The exact weld above is left out of this on purpose:
+  // its tolerance is a millimetre, which is coincidence, not movement.
+  const committedArcs = referenceLine.slice(0, -1).map((_station, index) => {
+    const from = crossed.origins[index];
+    const to = crossed.origins[index + 1];
+    if (from === undefined || to === undefined || from < 0 || to !== from + 1) return undefined;
+    return swept.arcs[from];
+  });
 
   try {
     const effect = createPathBrushEffect(
@@ -1003,13 +1040,7 @@ export function commitPathContour(
     // registers the patch this produces; it does not get to say what the
     // product is.
     const plan = inStage(TOOL, "plan the sweep", { operationId, stations: referenceLine.length }, () =>
-      sweepFormation(referenceLine, profile, effect.parameters.miterLimit, {
-        // Only while the stations are the ones the fit produced: a junction
-        // splices its own in, and a spliced station is not on the curve the
-        // fit recorded, so the run commits straight rather than curved to
-        // the wrong circle.
-        arcs: referenceLine === drawn ? swept.arcs : [],
-      }),
+      sweepFormation(referenceLine, profile, effect.parameters.miterLimit, { arcs: committedArcs }),
     );
     // The sweep drops a station only where two coincide, which the reference
     // line already rules out. Were one dropped anyway the indices would no
@@ -1029,7 +1060,7 @@ export function commitPathContour(
       profile.length,
       spineSlot,
       aligned ? crossed.terminals.filter((join) => join.terminal) : [],
-      referenceLine === drawn ? swept.arcs : [],
+      committedArcs,
     );
     const mitredCorridors = new Set(
       crossed.terminals.filter((join) => join.terminal).map((join) => join.run.corridorId),

@@ -232,6 +232,17 @@ The same tangent is what a junction mitre at a curved end reads. A chord to
 the neighbouring station leans into the bend by half the angle it subtends,
 and the corner would otherwise be built on that lean.
 
+**Which stretches keep their curve is reported, not compared.** A junction
+splices stations in and slides others onto meeting points, and a minted
+station sits on a chord rather than on the circle -- an arc through it would
+be an arc through the wrong points. So a stretch keeps its curve only when
+both its ends are drawn stations that were consecutive before the splice, and
+`junctionsWithStandingSpines` reports the drawn station each committed one
+came from. The first attempt asked that question by array identity instead,
+which is always false: every step rebuilds the array whether or not it
+changed anything, so a run that nothing touched read as spliced and every
+curve the fit had found was silently thrown away.
+
 ## What a contour is, and the definition that was wrong
 
 A road is built as a sweep: a reference line of stations, a profile of three
