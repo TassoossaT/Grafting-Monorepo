@@ -1,8 +1,8 @@
-import type { EditTarget } from "../orchestration/atomic-edit.ts";
-import { HORIZONTAL_AXES } from "../orchestration/atomic-edit.ts";
-import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
-import { allowed, denied } from "./structure-type.ts";
-import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "./creation-interaction.ts";
+import type { EditTarget } from "../../orchestration/atomic-edit.ts";
+import { HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
+import type { EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import { allowed, denied } from "../structure-type.ts";
+import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "../creation-interaction.ts";
 
 /**
  * The role model for a procedurally generated, non-enumerable boundary --

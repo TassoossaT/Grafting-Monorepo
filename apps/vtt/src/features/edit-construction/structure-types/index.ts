@@ -5,22 +5,22 @@ import {
   organicStructureType,
   pathInteractionOver,
   terrainInteractionOver,
-} from "./organic-structure.ts";
-import { panelStructureType } from "./panel-structure.ts";
-import { pathStructureType } from "./path-structure.ts";
+} from "./organic/organic-structure.ts";
+import { panelStructureType } from "./panel/panel-structure.ts";
+import { pathStructureType } from "./path/path-structure.ts";
 import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { denied } from "./structure-type.ts";
 import { forbid, type CreationInteraction } from "./creation-interaction.ts";
 
 /**
- * One file per structure type, each pairing creation-shape knowledge with
+ * One module per structure family, each pairing creation-shape knowledge with
  * the role table that shape implies -- the whole TS-owned half of
  * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
  *
  * A definition here is a **cloud's** behaviour, not a face's: the type
  * string a surface carries only selects which of these tables governs the
- * cloud it belongs to (`construction-cloud.ts`). Every type declares the
- * same three things, including how far each of its roles reaches -- there
+ * cloud it belongs to (`topology/construction-cloud.ts`). Every type declares
+ * the same three things, including how far each of its roles reaches -- there
  * is no per-type escape from the rule, and a type that wants a different
  * reach says so in its own role table rather than in a tool.
  *
@@ -147,23 +147,8 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   return undefined;
 }
 
-export {
-  ORGANIC_ROLES,
-  organicStructureType,
-  pathInteractionOver,
-  terrainInteractionOver,
-} from "./organic-structure.ts";
-export { CUT, IGNORE, RESTACK } from "./creation-interaction.ts";
-export type { CreationInteraction, CreationInteractionKind } from "./creation-interaction.ts";
-export { panelStructureType, PANEL_ROLES } from "./panel-structure.ts";
-export { pathStructureType, PATH_ROLES, pathRoleFor, pathPolicyFor } from "./path-structure.ts";
-export { allowed, denied } from "./structure-type.ts";
-export { forbid } from "./creation-interaction.ts";
-export type {
-  CascadeContext,
-  EditResolution,
-  EditRole,
-  EditScope,
-  RolePolicy,
-  StructureTypeDefinition,
-} from "./structure-type.ts";
+export * from "./structure-type.ts";
+export * from "./creation-interaction.ts";
+export * from "./panel/index.ts";
+export * from "./organic/index.ts";
+export * from "./path/index.ts";

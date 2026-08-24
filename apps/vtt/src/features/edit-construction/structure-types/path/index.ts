@@ -31,3 +31,10 @@ export type {
   PathRunNode,
   PathRunRib,
 } from "./path-cloud.ts";
+
+export {
+  PATH_ROLES,
+  pathPolicyFor,
+  pathRoleFor,
+  pathStructureType,
+} from "./path-structure.ts";

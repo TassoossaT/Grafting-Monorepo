@@ -4,11 +4,11 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
-import type { CloudTopology } from "../topology/construction-cloud.ts";
-import { perimeterOf, type PerimeterLoop } from "../topology/surface-perimeter.ts";
+import type { CloudTopology } from "../../topology/construction-cloud.ts";
+import { perimeterOf, type PerimeterLoop } from "../../topology/surface-perimeter.ts";
 import { pathSubtypeOf } from "./path-corridor.ts";
 import { parseStationNodeId } from "./station-node-id.ts";
-import type { PathKind } from "../tools/tool-types.ts";
+import type { PathKind } from "../../tools/tool-types.ts";
 
 /**
  * One committed run of path, read back as the three parts it is built from:

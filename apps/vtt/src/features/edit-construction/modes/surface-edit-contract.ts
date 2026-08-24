@@ -1,4 +1,4 @@
-import type { PathFormationRecipe } from "../paths/path-recipe.ts";
+import type { PathFormationRecipe } from "../structure-types/path/path-recipe.ts";
 
 /**
  * A revision an effect expects to still be current when it lands.

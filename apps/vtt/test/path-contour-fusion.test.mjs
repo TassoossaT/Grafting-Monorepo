@@ -4,9 +4,9 @@ import test from "node:test";
 import { junctionRemovals, junctionWedges } from "../src/composition/tabletop/tools/paths/path-junction.ts";
 import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
 import { pathMouthsInto } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { pathRunsIn } from "../src/features/edit-construction/paths/path-cloud.ts";
-import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
-import { stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
+import { pathRunsIn } from "../src/features/edit-construction/structure-types/path/path-cloud.ts";
+import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
+import { stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 
 const STANDING = pathCorridorId("table:path-brush:1", "road");
 const ARRIVING = pathCorridorId("table:path-brush:2", "road");

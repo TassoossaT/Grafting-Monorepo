@@ -1,4 +1,4 @@
-import type { PathKind } from "../tools/tool-types.ts";
+import type { PathKind } from "../../tools/tool-types.ts";
 
 /**
  * A corridor is one committed run of path, and its id is where the subtype

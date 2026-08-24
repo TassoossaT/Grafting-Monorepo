@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
-import { pathCorridorId, pathSubtypeOf } from "../src/features/edit-construction/paths/path-corridor.ts";
-import { pathCarvesGround, pathRidesTerrain } from "../src/features/edit-construction/paths/path-recipe.ts";
-import { parseStationNodeId, stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
+import { pathCorridorId, pathSubtypeOf } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
+import { pathCarvesGround, pathRidesTerrain } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
+import { parseStationNodeId, stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { resolveCreationInteraction } from "../src/features/edit-construction/structure-types/index.ts";
 
 test("a corridor id carries its subtype without disturbing station addressing", () => {

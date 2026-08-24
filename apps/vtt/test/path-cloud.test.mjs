@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pathRunsIn, pathRunFor } from "../src/features/edit-construction/paths/path-cloud.ts";
-import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
-import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/paths/path-recipe.ts";
-import { stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
+import { pathRunsIn, pathRunFor } from "../src/features/edit-construction/structure-types/path/path-cloud.ts";
+import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
+import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
+import { stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { referenceLineFrom } from "../src/composition/tabletop/tools/paths/path-shared.ts";
 
 const ROAD = Object.freeze({
