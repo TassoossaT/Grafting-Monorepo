@@ -5,6 +5,7 @@ import type {
 } from "@/ports";
 
 import type { CloudTopology } from "./construction-cloud.ts";
+import { perimeterOf, type PerimeterLoop } from "./surface-perimeter.ts";
 import { pathSubtypeOf } from "./path-corridor.ts";
 import { parseStationNodeId } from "./station-node-id.ts";
 import type { PathKind } from "./tool-types.ts";
@@ -330,4 +331,29 @@ export function pathRunFor(
   corridorId: string,
 ): PathRun | undefined {
   return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
+}
+
+/**
+ * The outer perimeter of a whole path cloud, as one named thing.
+ *
+ * **This is the contour.** Not the chain a single run reports at its
+ * outermost slot -- that is the rim the sweep laid down, true of a road
+ * standing alone and stale the moment another road joins it. The contour of a
+ * junction is the perimeter of everything joined at it, and the only test
+ * that stays true through a junction is the graph's own: a face on one side
+ * and nothing on the other.
+ *
+ * Kept as its own reading, and separately from `PathRun`, because it is
+ * cloud-shaped rather than run-shaped and because it is the thing worth
+ * editing. Every question about the outside of a road network -- where a kerb
+ * goes, where a pavement is offset from, whether two roads really did fuse --
+ * is a question about this one loop, and having it in one place is what makes
+ * changing any of them a local change.
+ *
+ * A cloud with a hole in it -- roads round a block -- reports more than one
+ * loop, the outer walk and one per hole, which is correct and is why this is
+ * not a single ring.
+ */
+export function pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
+  return perimeterOf(cloud.members);
 }

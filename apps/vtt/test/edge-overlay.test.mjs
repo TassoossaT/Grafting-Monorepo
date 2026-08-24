@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   EDGE_FALLBACK_COLOR,
   EDGE_ROLE_COLORS,
+  INTERIOR_EDGE_ROLE,
   edgeOverlayChannel,
   edgeOverlayDescriptor,
   edgeOverlayOf,
@@ -128,4 +129,31 @@ test("a group becomes a segments descriptor, never a filled one", () => {
 
 test("nothing standing draws nothing", () => {
   assert.deepEqual(edgeOverlayOf([]), []);
+});
+
+test("a rim with a face on both sides is drawn as interior, not as rim", () => {
+  // The one drawing error that matters: an edge keeps the addresses it was
+  // minted with, so it goes on claiming to be a road's outer contour long
+  // after another face arrived on the far side of it. The graph knows better.
+  const stations = [0, 1];
+  const left = band([-1, 0], stations);
+  const right = band([0, 1], stations);
+  // A third face bounding the -1 rim from outside -- a junction wedge, say.
+  const rim = {
+    surfaceKey: ["wedge"],
+    surfaceType: "path",
+    nodes: left.nodes,
+    outerLoops: [[left.outerLoops[0].find((use) => use.edgeId === "along:-1:0")]],
+    holes: [],
+  };
+
+  const groups = edgeOverlayOf([left, right, rim]);
+  const contour = groupFor(groups, PATH_ROLES.contourEdge);
+  const interior = groupFor(groups, INTERIOR_EDGE_ROLE);
+
+  assert.ok(interior !== undefined, "the shared rim moved to the interior group");
+  assert.equal(interior.positions.length, 1 * 6);
+  // The +1 rim is untouched and still contour.
+  assert.ok(contour !== undefined);
+  assert.equal(contour.positions.length, 1 * 6);
 });

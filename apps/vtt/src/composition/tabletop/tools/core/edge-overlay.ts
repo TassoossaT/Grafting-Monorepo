@@ -3,7 +3,10 @@ import type { ConstructionRegionTopology } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
-import { resolvePolicy } from "../../../../features/edit-construction/index.ts";
+import {
+  edgeUseCounts,
+  resolvePolicy,
+} from "../../../../features/edit-construction/index.ts";
 
 /**
  * Every construction edge on the table, grouped by the role its own structure
@@ -30,7 +33,31 @@ export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze(
   "panel-top-edge": 0x818cf8,
   "panel-post": 0xfb923c,
   "organic-boundary-edge": 0x94a3b8,
+  "interior-edge": 0x475569,
 });
+
+/**
+ * Roles that claim an edge is on the outside of something, and so are only
+ * true while it has a face on one side.
+ *
+ * A type names the role; whether the graph still bears it out is not the
+ * type's business, because a type sees one face at a time and this is a
+ * question about a pair. Left unchecked it produces the one drawing error
+ * that matters here -- a rim line running through the middle of a road, kept
+ * by nothing but the addresses its nodes were minted with, long after a
+ * junction turned it into an interior seam.
+ *
+ * Any type may add to this. It is a capability, not a rule about paths.
+ */
+export const RIM_ROLES: ReadonlySet<string> = new Set([
+  "path-contour-edge",
+  "panel-bottom-edge",
+  "panel-top-edge",
+  "organic-boundary-edge",
+]);
+
+/** What a rim role becomes once the graph shows a face on both sides. */
+export const INTERIOR_EDGE_ROLE = "interior-edge";
 
 /** Drawn for an edge whose role no palette entry names. */
 export const EDGE_FALLBACK_COLOR = 0x64748b;
@@ -53,12 +80,18 @@ export interface EdgeOverlayGroup {
  * An edge shared by two faces is drawn once: it is one edge, and drawing it
  * twice would only make a shared boundary look heavier than a free one, which
  * is the opposite of the truth worth seeing.
+ *
+ * Sharing also settles the role. A type that named an edge as some kind of
+ * rim named it from one face, and one face cannot see the other; if the graph
+ * shows two, the edge is interior whatever it was called -- see
+ * {@link RIM_ROLES}.
  */
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
 ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
   const drawn = new Set<string>();
+  const uses = edgeUseCounts(topologies);
 
   for (const topology of topologies) {
     const positionOf = new Map(topology.nodes.map((node) => [node.id, node.position]));
@@ -69,7 +102,12 @@ export function edgeOverlayOf(
         const end = positionOf.get(use.endNodeId);
         if (start === undefined || end === undefined) continue;
         drawn.add(use.edgeId);
-        const role = resolvePolicy(topology, { kind: "edge", edgeId: use.edgeId }).role;
+        const named = resolvePolicy(topology, { kind: "edge", edgeId: use.edgeId }).role;
+        // A rim with a face on both sides is not a rim. Demoted rather than
+        // dropped: seeing it as an interior seam is exactly how you tell a
+        // junction that closed from one that only looks closed.
+        const shared = (uses.get(use.edgeId) ?? 0) > 1;
+        const role = shared && RIM_ROLES.has(named) ? INTERIOR_EDGE_ROLE : named;
         const into = byRole.get(role) ?? [];
         byRole.set(role, into);
         into.push(start.x, start.y, start.z, end.x, end.y, end.z);

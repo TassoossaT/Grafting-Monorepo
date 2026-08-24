@@ -765,6 +765,24 @@ Drawn for an edge whose role no palette entry names.
 
 A palette keyed by role, with a fallback for a role nothing has named yet.
 
+### `variable vtt.edge-overlay.INTERIOR_EDGE_ROLE: "interior-edge"`
+
+What a rim role becomes once the graph shows a face on both sides.
+
+### `variable vtt.edge-overlay.RIM_ROLES: ReadonlySet<string>`
+
+Roles that claim an edge is on the outside of something, and so are only
+true while it has a face on one side.
+
+A type names the role; whether the graph still bears it out is not the
+type's business, because a type sees one face at a time and this is a
+question about a pair. Left unchecked it produces the one drawing error
+that matters here -- a rim line running through the middle of a road, kept
+by nothing but the addresses its nodes were minted with, long after a
+junction turned it into an interior seam.
+
+Any type may add to this. It is a capability, not a rule about paths.
+
 ### `function vtt.edge-overlay.edgeOverlayChannel(role: string): string`
 
 The preview channel one role's edges are drawn on.
@@ -780,6 +798,11 @@ Groups every edge of every region in `topologies` by role.
 An edge shared by two faces is drawn once: it is one edge, and drawing it
 twice would only make a shared boundary look heavier than a free one, which
 is the opposite of the truth worth seeing.
+
+Sharing also settles the role. A type that named an edge as some kind of
+rim named it from one face, and one face cannot see the other; if the graph
+shows two, the edge is interior whatever it was called -- see
+RIM_ROLES.
 
 ### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
 
@@ -2451,6 +2474,28 @@ Ordered by `across`, so from one contour through the spine to the other.
 
 ### `property vtt.path-cloud.PathRunRib.station: number`
 
+### `function vtt.path-cloud.pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[]`
+
+The outer perimeter of a whole path cloud, as one named thing.
+
+**This is the contour.** Not the chain a single run reports at its
+outermost slot -- that is the rim the sweep laid down, true of a road
+standing alone and stale the moment another road joins it. The contour of a
+junction is the perimeter of everything joined at it, and the only test
+that stays true through a junction is the graph's own: a face on one side
+and nothing on the other.
+
+Kept as its own reading, and separately from `PathRun`, because it is
+cloud-shaped rather than run-shaped and because it is the thing worth
+editing. Every question about the outside of a road network -- where a kerb
+goes, where a pavement is offset from, whether two roads really did fuse --
+is a question about this one loop, and having it in one place is what makes
+changing any of them a local change.
+
+A cloud with a hole in it -- roads round a block -- reports more than one
+loop, the outer walk and one per hole, which is correct and is why this is
+not a single ring.
+
 ### `function vtt.path-cloud.pathRunFor(topologies: readonly ConstructionRegionTopology[], corridorId: string): PathRun | undefined`
 
 One run by its corridor id, or `undefined` if nothing present is from it.
@@ -3061,6 +3106,43 @@ Product-owned edit modes; capabilities stay renderer- and WASM-neutral.
 ### `function vtt.surface-edit-mode-registry.surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined`
 
 Resolves the contextual edit mode for one semantic construction surface type.
+
+### `interface vtt.surface-perimeter.PerimeterLoop`
+
+One closed run of perimeter, walked end to end.
+
+### `property vtt.surface-perimeter.PerimeterLoop.closed: boolean`
+
+Whether the walk closed on itself, as a complete perimeter must.
+
+### `property vtt.surface-perimeter.PerimeterLoop.edgeIds: readonly string[]`
+
+In walk order; one per step.
+
+### `property vtt.surface-perimeter.PerimeterLoop.nodeIds: readonly string[]`
+
+In walk order, `nodeIds[i]` starting `edgeIds[i]`.
+
+### `property vtt.surface-perimeter.PerimeterLoop.positions: readonly ConstructionPosition[]`
+
+### `function vtt.surface-perimeter.edgeUseCounts(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, number>`
+
+How many faces each edge bounds, across the whole set.
+
+### `function vtt.surface-perimeter.perimeterOf(topologies: readonly ConstructionRegionTopology[]): readonly PerimeterLoop[]`
+
+Every perimeter loop of `topologies`, as closed walks.
+
+Takes a whole set rather than one face, because the question is only
+meaningful for a set: an edge is interior *to something*, and one face on
+its own has nothing but perimeter. Hand it a cloud and it answers for the
+cloud, which is the unit a junction actually changes.
+
+A node where three or more perimeter edges meet -- a pinch, where the
+surface touches itself -- is walked by taking whichever edge has not been
+walked yet. That yields loops that partition the perimeter rather than the
+one canonical figure-of-eight, which is the right answer for drawing it and
+an arbitrary one for reasoning about winding.
 
 ### `interface vtt.tool-types.BrushShapeParams`
 

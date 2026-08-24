@@ -172,6 +172,38 @@ the welded node keeps its own position and both runs bound it.
 
 The surface that identity leaves behind is what the next section is about.
 
+## What a contour is, and the definition that was wrong
+
+A road is built as a sweep: a reference line of stations, a profile of three
+slots, and one face per station gap per side. Nothing in that declares a
+contour. The contour was **derived**, by reading node addresses -- the chain
+of nodes at the outermost slot, in station order.
+
+That is true of a road standing on its own and false the moment another road
+joins it. The nodes keep their addresses while the stretch between two of them
+stops being rim and becomes the mouth of a junction, so read by address it is
+still a rim and it draws as one: a line straight through the middle of the
+road. No contour may run inside a road, and address-derived contours will
+keep doing it, because an address records how a node was built and the
+question is about what it bounds now.
+
+There is one definition that survives a junction, and it is the graph's own:
+
+> An edge with a face on both sides is interior. An edge with a face on one
+> side is contour.
+
+`perimeterOf` is that, and `pathCloudPerimeter` is it asked of a whole cloud
+-- which is the right unit, because a junction merges runs and the contour of
+a junction is the perimeter of everything joined at it. It is one named
+reading in one place on purpose: every question about the outside of a road
+network is a question about that loop, so changing any of them stays local.
+
+The drawing follows the same rule. A structure type names an edge from one
+face and one face cannot see the other, so a role that claims to be a rim is
+only kept while the graph still shows a single face; otherwise it is drawn as
+an interior seam. That is also the fastest way to see whether a junction
+really closed or only looks closed.
+
 ## Contour fusion: two shapes, one construction
 
 Sharing a spine node makes two runs one graph. It does not make them one

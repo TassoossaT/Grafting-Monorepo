@@ -3327,6 +3327,8 @@ export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze(
   "panel-top-edge": 0x818cf8,
   "panel-post": 0xfb923c,
   "organic-boundary-edge": 0x94a3b8,
+export const RIM_ROLES: ReadonlySet<string> = new Set([
+export const INTERIOR_EDGE_ROLE = "interior-edge";
 export const EDGE_FALLBACK_COLOR = 0x64748b;
 export function edgeOverlayChannel(role: string): string {
   return `edges:${role}`;
@@ -4282,6 +4284,7 @@ export type {
   PathKind,
   PathBrushParams,
   NoToolParams,
+export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type {
   PathRun,
   PathRunBand,
@@ -4361,6 +4364,8 @@ export function pathRunFor(
   corridorId: string,
   ): PathRun | undefined {
   return pathRunsIn(topologies).find((run) => run.corridorId === corridorId);
+export function pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
+  return perimeterOf(cloud.members);
 
 // src/features/edit-construction/path-corridor.ts
 export function pathCorridorId(operationId: string, kind: PathKind): string {
@@ -4658,6 +4663,24 @@ export function createPathBrushEffect(
 export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
 export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
   return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
+
+// src/features/edit-construction/surface-perimeter.ts
+export interface PerimeterLoop {
+  /** In walk order; one per step. */
+  readonly edgeIds: readonly string[];
+  /** In walk order, `nodeIds[i]` starting `edgeIds[i]`. */
+  readonly nodeIds: readonly string[];
+  readonly positions: readonly ConstructionPosition[];
+  /** Whether the walk closed on itself, as a complete perimeter must. */
+  readonly closed: boolean;
+export function edgeUseCounts(
+  topologies: readonly ConstructionRegionTopology[],
+  ): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+export function perimeterOf(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly PerimeterLoop[] {
+  const counts = edgeUseCounts(topologies);
 
 // src/features/edit-construction/tool-types.ts
 export type ConstructionToolId =
