@@ -1252,7 +1252,9 @@ export function commitPathContour(
       // Read per mouth, not once: closing the first one deletes faces and
       // declares others, so the second mouth is looking at a table the first
       // has already changed.
-      const standingNow = pathRunsIn(ctx.runtime.getAllRegionTopologies());
+      const live = ctx.runtime.getAllRegionTopologies();
+      const standingNow = pathRunsIn(live);
+      const present = new Set(live.map((topology) => topology.surfaceKey.join(":")));
       const junctionNodeId = spineWelds.get(`${mouth.station}:0`);
       const junctionStation = parseStationNodeId(junctionNodeId ?? "")?.station;
       const run = standingNow.find((candidate) => candidate.corridorId === mouth.run.corridorId);
@@ -1267,12 +1269,40 @@ export function commitPathContour(
       }
       const wedge = junctionWedges(
         ctx.tableId,
-        effect.operationId,
+        // Named per mouth: one stroke can open into two roads, or into the
+        // same road twice, and both junctions would otherwise declare a face
+        // called `<operation>:junction-left`.
+        `${effect.operationId}:m${mouth.station}:${mouth.through}`,
         corridorId,
         { ...mouth, run },
         { nodeId: junctionNodeId, station: junctionStation },
       );
       if (wedge === undefined) continue;
+
+      // Verified against the table, not assumed from the reading. Every face
+      // the rebuild is about to remove has to still be there: the wedges are
+      // shaped to replace exactly that flank, so replacing part of one leaves
+      // a gap, and naming a face that has already gone loses the stroke.
+      //
+      // Both halves or neither, once more -- and if the answer is neither,
+      // the road still stands and the junction simply did not close.
+      const missing = wedge.removed
+        .map((key) => key.join(":"))
+        .filter((key) => !present.has(key));
+      if (missing.length > 0) {
+        reportToolWarning(TOOL, "the flank a junction meant to rebuild is not there", {
+          operationId,
+          corridor: mouth.run.corridorId,
+          missing,
+          planned: wedge.removed.map((key) => key.join(":")),
+          standing: run.bands.map((band) => band.surfaceKey.join(":")),
+        });
+        ctx.reportFeedback({
+          tone: "error",
+          message: "Junção não fechada: a rua foi criada, mas o cruzamento não.",
+        });
+        continue;
+      }
       try {
         ctx.runtime.applyRegionEdit(junctionRemovals([wedge]), "local", operationId);
         const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
