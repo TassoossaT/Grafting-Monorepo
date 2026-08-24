@@ -14,6 +14,33 @@ import { nearestSampleY } from "./union-bands.ts";
 const WELD_TOLERANCE = 1e-3;
 
 /**
+ * Below this area (world units squared), a shape is a sliver, not a face.
+ *
+ * `polygon-clipping`'s union of a *self-intersecting* input ring (an
+ * offset ribbon can self-intersect on a tight bend relative to its own
+ * width -- a real hand-drawn stroke, unlike a clean two-point test line,
+ * can do this) does not refuse the input; it normalises it, and a
+ * self-intersection can split one ribbon into several output polygons,
+ * one or more of them a near-zero-area artifact at the crossing point
+ * itself. Every one of those is still a structurally valid ring -- three
+ * or more distinct points, a closed loop -- so nothing upstream of area
+ * would ever catch it, and it would commit as a real, permanent face no
+ * one drew. Filtered here, once, rather than trusted downstream.
+ */
+const MIN_SHAPE_AREA = 1e-4;
+
+/** The shoelace area of a ring, unsigned. */
+function ringArea(ring: Ring): number {
+  let total = 0;
+  for (let index = 0; index < ring.length; index += 1) {
+    const [x1, z1] = ring[index]!;
+    const [x2, z2] = ring[(index + 1) % ring.length]!;
+    total += x1 * z2 - x2 * z1;
+  }
+  return Math.abs(total) / 2;
+}
+
+/**
  * `polygon-clipping` closes every ring by repeating its first point as its
  * last -- the GeoJSON convention. A `ConstructionPatchRegion` boundary is a
  * cycle of distinct nodes with no repeated closing vertex (`useEdge` already
@@ -96,22 +123,27 @@ export function buildContourPatch(
       return id;
     });
 
-  const regions = shapes.map((shape, shapeIndex) => {
-    const [outerRing, ...holeRings] = shape;
-    const outerIds = idsFor(outerRing ?? [], 0);
-    const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
-    const holes = holeRings.map((holeRing, holeIndex) => {
-      const holeIds = idsFor(holeRing, holeIndex + 1);
-      return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
+  const regions = shapes
+    .filter((shape) => {
+      const [outerRing] = shape;
+      return outerRing !== undefined && ringArea(outerRing) >= MIN_SHAPE_AREA;
+    })
+    .map((shape, shapeIndex) => {
+      const [outerRing, ...holeRings] = shape;
+      const outerIds = idsFor(outerRing ?? [], 0);
+      const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
+      const holes = holeRings.map((holeRing, holeIndex) => {
+        const holeIds = idsFor(holeRing, holeIndex + 1);
+        return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
+      });
+      return {
+        regionId: `${operationId}:band-${bandIndex}:${shapeIndex}`,
+        boundary,
+        holes: holes.length > 0 ? holes : undefined,
+        surfaceType,
+        physical: true,
+      };
     });
-    return {
-      regionId: `${operationId}:band-${bandIndex}:${shapeIndex}`,
-      boundary,
-      holes: holes.length > 0 ? holes : undefined,
-      surfaceType,
-      physical: true,
-    };
-  });
 
   return {
     patch: {

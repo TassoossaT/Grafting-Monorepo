@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { planSpineContour } from "../src/composition/tabletop/tools/paths/spine-contour/index.ts";
+import { buildContourPatch, planSpineContour } from "../src/composition/tabletop/tools/paths/spine-contour/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 
@@ -111,6 +111,19 @@ test("a new road crossing a standing one in an X unions into one region", () => 
   assert.ok(result !== undefined);
   assert.equal(result.patch.regions.length, 1, "an X merges into one face, not two overlapping ones");
   assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
+});
+
+test("a sliver shape from a self-intersecting union never becomes a region", () => {
+  // A real quad, plus a near-zero-area triangle -- the shape of artifact
+  // `polygon-clipping` can leave behind when it normalises a self-
+  // intersecting offset ribbon (a tight bend relative to the road's own
+  // width). Every one of these is still a structurally valid ring, which
+  // is exactly why area, not node count, is what has to catch it.
+  const real = [[[0, 0], [10, 0], [10, 2], [0, 2], [0, 0]]];
+  const sliver = [[[5, 1], [5.0001, 1], [5, 1.0001], [5, 1]]];
+  const result = buildContourPatch("table", "op-sliver", "path", 0, [real, sliver], [], []);
+  assert.equal(result.patch.regions.length, 1, "the sliver was filtered out before it became a region");
+  assert.equal(result.regionIds.length, 1);
 });
 
 test("two roads meeting end-to-end in an L stay one connected face, not two touching corners", () => {

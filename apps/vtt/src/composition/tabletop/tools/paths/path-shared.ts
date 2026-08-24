@@ -385,17 +385,38 @@ export function commitPathContour(
     if (planned === undefined) return;
 
     if (planned.consumedSurfaceKeys.length > 0) {
-      inStage(
-        TOOL,
-        "remove the standing bands this run replaces",
-        { operationId, consumed: planned.consumedSurfaceKeys.map((key) => key.join(":")) },
-        () =>
-          ctx.runtime.applyRegionEdit(
-            planned.consumedSurfaceKeys.map((surfaceKey) => ({ kind: "delete-region" as const, surfaceKey })),
-            "local",
-            operationId,
-          ),
+      // Re-verified immediately before acting, not trusted from the read
+      // `standingRegions` came from moments earlier -- and removed one key
+      // at a time, in its own try, rather than as one batched transaction.
+      // A face that will not delete is reported loudly and the run
+      // continues without it: the same tolerance the retired junction code
+      // gave a mouth that could not close ("the road still stands"), and
+      // the opposite of hiding the mismatch that let a stale key crash the
+      // whole stroke silently-fatal before.
+      const stillStanding = new Set(
+        ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":")),
       );
+      for (const surfaceKey of planned.consumedSurfaceKeys) {
+        const key = surfaceKey.join(":");
+        if (!stillStanding.has(key)) {
+          reportToolWarning(TOOL, "a standing band this run meant to replace was already gone", {
+            operationId,
+            surfaceKey: key,
+          });
+          continue;
+        }
+        try {
+          inStage(TOOL, "remove a standing band this run replaces", { operationId, surfaceKey: key }, () =>
+            ctx.runtime.applyRegionEdit([{ kind: "delete-region" as const, surfaceKey }], "local", operationId),
+          );
+        } catch (error) {
+          reportToolWarning(TOOL, "a standing band refused to be removed", {
+            operationId,
+            surfaceKey: key,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     const outcome = inStage(
@@ -404,6 +425,18 @@ export function commitPathContour(
       { operationId, faces: planned.patch.regions.length },
       () => ctx.runtime.addPatch(planned.patch, "local", operationId),
     );
+
+    if (outcome.skippedRegionIds.length > 0) {
+      // Made loud rather than trusted: a skipped region is a face this
+      // commit *thought* it was creating that never actually reached the
+      // graph, and later reporting it as standing (a T or X arriving here
+      // afterwards) is exactly the "unknown region" failure the delete-region
+      // step above cannot recover from on its own.
+      reportToolWarning(TOOL, "a band face was refused", {
+        operationId,
+        skipped: outcome.skippedRegionIds,
+      });
+    }
 
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
     if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
