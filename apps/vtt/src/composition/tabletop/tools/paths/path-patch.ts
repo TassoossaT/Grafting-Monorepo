@@ -11,6 +11,25 @@ import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts"
 // test reaches has to spell out any import it needs at run time.
 import { stationNodeId } from "../../../../features/edit-construction/index.ts";
 
+/** How far two ends of an arc may disagree about its radius, in world units. */
+const ARC_RADIUS_TOLERANCE = 1e-3;
+
+/** Whether both ends of a curve really do sit on one circle about its centre. */
+function concentric(
+  plan: ConstructionSweepPlan,
+  curve: { readonly from: number; readonly to: number; readonly geometry: ConstructionEdgeGeometry },
+): boolean {
+  if (curve.geometry.kind !== "arc") return true;
+  const start = plan.vertices[curve.from];
+  const end = plan.vertices[curve.to];
+  if (start === undefined || end === undefined) return false;
+  const [centerX, centerZ] = curve.geometry.center;
+  const fromRadius = Math.hypot(start.x - centerX, start.z - centerZ);
+  const toRadius = Math.hypot(end.x - centerX, end.z - centerZ);
+  const scale = Math.max(1, fromRadius, toRadius);
+  return Math.abs(fromRadius - toRadius) <= ARC_RADIUS_TOLERANCE * scale;
+}
+
 /** Application-owned graph declaration for one generic sweep result. */
 export interface PathPatchFormation {
   readonly patch: ConstructionPatch;
@@ -75,7 +94,19 @@ export function pathPatch(
   // chord that approximates it, so the road stays smooth however finely or
   // coarsely its stations happen to be spaced.
   const curved = new Map<string, ConstructionEdgeGeometry>();
-  for (const curve of plan.curves ?? []) curved.set(`${curve.from}~${curve.to}`, curve.geometry);
+  for (const curve of plan.curves ?? []) {
+    // An arc is only an arc while both its ends are the same distance from
+    // its centre. Anything that moves one of them afterwards -- a mitre
+    // pulling a corner onto another road, a rim cut back to a junction --
+    // leaves a curve claiming a centre that fits one end and not the other,
+    // and a renderer asked to draw that draws the whole enormous circle it
+    // implies. Checked here rather than trusted, because this is the last
+    // place that knows both the geometry and where the vertices ended up,
+    // and because a straight edge is a harmless wrong answer where a wrong
+    // arc is not.
+    if (curve.geometry.kind === "arc" && !concentric(plan, curve)) continue;
+    curved.set(`${curve.from}~${curve.to}`, curve.geometry);
+  }
 
   const useEdge = (start: number, end: number): ConstructionOrientedEdgeUse => {
     const forward = curved.get(`${start}~${end}`);

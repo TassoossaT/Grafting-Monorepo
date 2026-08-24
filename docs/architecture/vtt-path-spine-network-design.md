@@ -243,6 +243,40 @@ which is always false: every step rebuilds the array whether or not it
 changed anything, so a run that nothing touched read as spliced and every
 curve the fit had found was silently thrown away.
 
+## A station has to earn its place
+
+A road used to get a station every two metres, everywhere. That is thirty
+stations for sixty metres of flat car park, all of them saying the same thing
+about the ground, and it is the wall pattern abandoned: a wall commits the
+straightest thing that still fits inside the brush, and so should a road.
+
+The rule now is the one the brush already implies. Every point the fit itself
+produced is a station -- a corner because the run genuinely turns there, an
+arc sample because the outline handed to the coverage query is a polygon and
+has to follow the curve even where the edges between those points are true
+arcs. Nothing else is automatic. A stretch buys extra stations only where the
+ground under it strays from the straight line the stretch would otherwise be,
+by more than `TERRAIN_HEIGHT_TOLERANCE`.
+
+So a straight road over flat ground is two stations. A straight road over a
+ridge is exactly as many as the ridge needs, and they land at the ridge. A
+deck subdivides for nothing at all, because it spans rather than rides.
+
+### An arc whose ends disagree is a circle, and it is enormous
+
+An arc edge is stored as a centre and a sense of turn; its radius comes from
+its endpoints. So an arc is only an arc while both ends are the same distance
+from that centre -- and several things move an endpoint *after* the sweep
+placed it. A mitre pulls a corner onto another road; a mouth cuts a rim back
+to a junction. The edge then claims a centre that fits one end and not the
+other, and a renderer asked to draw that draws the whole circle it implies:
+the giant ball that appears on the table now and then.
+
+`pathPatch` checks rather than trusts, because it is the last place that
+knows both the geometry and where the vertices actually ended up. A curve
+whose ends disagree about the radius is declared straight. A straight edge is
+a harmless wrong answer where a wrong arc is not.
+
 ## What a contour is, and the definition that was wrong
 
 A road is built as a sweep: a reference line of stations, a profile of three

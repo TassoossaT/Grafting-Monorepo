@@ -155,3 +155,45 @@ test("a straight stroke carries no curve through", () => {
   );
   assert.ok(swept.arcs.every((arc) => arc === undefined));
 });
+
+test("a curve whose end was moved is committed straight, not as a huge circle", () => {
+  const { line, arcs } = quarterCircle();
+  const plan = sweepFormation(line, FLAT, 4, { arcs });
+
+  // What a junction does to a rim: pulls one corner onto another road. The
+  // vertex is now nowhere near the circle its edge still claims, and an arc
+  // whose two ends disagree about the radius is the whole enormous circle
+  // they imply -- the ball that turns up on the table now and then.
+  const moved = plan.vertices.map((vertex, index) =>
+    index === 0 ? { x: 40, y: 0, z: 40 } : vertex,
+  );
+  const formation = pathPatch(
+    "table-1",
+    pathCorridorId("op-1", "road"),
+    "path",
+    { ...plan, vertices: moved },
+    3,
+    1,
+  );
+
+  for (const edge of formation.patch.edges) {
+    if (edge.geometry?.kind !== "arc") continue;
+    const [centerX, centerZ] = edge.geometry.center;
+    const ends = [edge.startNodeId, edge.endNodeId].map((id) =>
+      formation.patch.nodes.find((node) => node.id === id).position,
+    );
+    const radii = ends.map((end) => Math.hypot(end.x - centerX, end.z - centerZ));
+    assert.ok(
+      Math.abs(radii[0] - radii[1]) < 1e-3 * Math.max(1, ...radii),
+      `${edge.edgeId} claims a circle its ends are not on: ${radii}`,
+    );
+  }
+
+  // The stretch that lost its curve is still there, just straight.
+  const straightAtTheMove = formation.patch.edges.filter(
+    (edge) =>
+      edge.geometry === undefined &&
+      [edge.startNodeId, edge.endNodeId].some((id) => id.endsWith(":s0:a-1")),
+  );
+  assert.ok(straightAtTheMove.length > 0, "the moved corner keeps its edges");
+});

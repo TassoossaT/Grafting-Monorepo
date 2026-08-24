@@ -66,21 +66,26 @@ const TOOL = "path-brush";
 const ARC_FLATTENING_TOLERANCE = 0.05;
 
 /**
- * Longest horizontal gap between stations, in world units.
+ * How far the road may float above or below the ground before a station is
+ * spent to bring it back down, in world units.
  *
  * A road rides the ground it was drawn over, and the only record of that
  * ground is the stroke itself -- every pointer sample carries the height the
  * renderer picked there. Fitting deliberately throws most of those samples
- * away, so a straight run over a hill would be left with height readings at
- * its two ends and a chord tunnelling through everything between. Stations
- * at this spacing are what keep the road on the terrain instead of merely
- * starting and ending on it.
+ * away, so a run over a hill would be left with height readings at its two
+ * ends and a chord tunnelling through everything between.
  *
- * This is the one place face count is legitimately bought: unlike the blind
- * subdivision it replaced, each station here exists because the ground under
- * it might differ from its neighbours.
+ * The answer used to be a station every two metres, everywhere. That buys a
+ * hundred stations for a hundred-metre road across a car park, all of them
+ * saying the same thing, and it is the wall pattern abandoned: a wall commits
+ * the straightest thing that still fits, and so should this. A station now
+ * has to earn its place by the ground under it actually differing from what
+ * the stretch either side of it already says.
  */
-const TERRAIN_FOLLOW_STEP = 2;
+const TERRAIN_HEIGHT_TOLERANCE = 0.15;
+
+/** How finely the ground is read while deciding whether it needs a station. */
+const TERRAIN_PROBE_STEP = 0.5;
 
 /** The height the stroke recorded nearest this ground position. */
 function groundHeightNear(
@@ -223,26 +228,57 @@ export function referenceLineFrom(
     arcs.push(arc);
   };
 
-  let sinceStation = 0;
+  // Every point the fit itself produced is a station: a corner because the
+  // run genuinely turns there, an arc sample because the outline handed to
+  // the coverage query is a polygon and has to follow the curve even though
+  // the edges between these points are true arcs.
+  //
+  // What is *not* automatic any more is anything between them. A stretch gets
+  // extra stations only where the ground under it strays from the straight
+  // line the stretch would otherwise be -- so a straight road over flat
+  // ground is two stations, and a straight road over a ridge is exactly as
+  // many as the ridge needs.
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
     const span = Math.hypot(to.x - from.x, to.z - from.z);
     if (span < 1e-9) continue;
-    let cursor = 0;
-    while (sinceStation + (span - cursor) >= TERRAIN_FOLLOW_STEP) {
-      cursor += TERRAIN_FOLLOW_STEP - sinceStation;
-      const ratio = cursor / span;
-      travelled += TERRAIN_FOLLOW_STEP - sinceStation;
-      sinceStation = 0;
-      push(from.x + (to.x - from.x) * ratio, from.z + (to.z - from.z) * ratio, from.arc);
+
+    if (ridesTerrain && span > TERRAIN_PROBE_STEP) {
+      const anchor = line[line.length - 1]!;
+      let anchored = travelled;
+      let lastProbe = 0;
+      for (let probe = TERRAIN_PROBE_STEP; probe < span; probe += TERRAIN_PROBE_STEP) {
+        const ratio = probe / span;
+        const x = from.x + (to.x - from.x) * ratio;
+        const z = from.z + (to.z - from.z) * ratio;
+        const ground = groundHeightNear(stroke, x, z);
+        // What the road would be doing here if the last station were the
+        // only thing holding it up.
+        const reach = Math.hypot(x - anchor.x, z - anchor.z);
+        const run = Math.hypot(to.x - anchor.x, to.z - anchor.z);
+        const carried =
+          run < 1e-9
+            ? anchor.y
+            : anchor.y + (groundHeightNear(stroke, to.x, to.z) - anchor.y) * (reach / run);
+        if (Math.abs(ground - carried) <= TERRAIN_HEIGHT_TOLERANCE) continue;
+        // It strays here, so the stretch buys a station at the last place it
+        // did not -- the road stays on the ground either side of the fault
+        // rather than being dragged through it.
+        const backRatio = Math.max(lastProbe, 0) / span;
+        travelled = anchored + span * backRatio;
+        push(
+          from.x + (to.x - from.x) * backRatio,
+          from.z + (to.z - from.z) * backRatio,
+          from.arc,
+        );
+        anchored = travelled;
+        lastProbe = probe;
+      }
     }
-    travelled += span - cursor;
-    sinceStation += span - cursor;
-    if (to.corner) {
-      push(to.x, to.z, from.arc);
-      sinceStation = 0;
-    }
+
+    travelled += span;
+    push(to.x, to.z, from.arc);
   }
   // The run has to end where it was drawn, corner or not.
   push(last.x, last.z, track[track.length - 2]?.arc);
@@ -276,7 +312,7 @@ const SPINE_WELD_TOLERANCE = 1e-3;
  * declare a band of almost no length -- the sliver faces that ran along the
  * contour when crossings were first spliced in blindly.
  */
-const STATION_MERGE_DISTANCE = TERRAIN_FOLLOW_STEP / 4;
+const STATION_MERGE_DISTANCE = 0.5;
 
 /**
  * How far this run reaches from its own spine, measured on the run itself.
