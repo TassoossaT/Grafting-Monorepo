@@ -7,6 +7,8 @@ import {
   edgeUseCounts,
   resolvePolicy,
 } from "../../../../features/edit-construction/index.ts";
+import { reverseGeometry } from "./boundary-edges.ts";
+import { arcPointsXZ } from "../shapes/geometry-2d.ts";
 
 /**
  * Every construction edge on the table, grouped by the role its own structure
@@ -85,6 +87,12 @@ export interface EdgeOverlayGroup {
  * rim named it from one face, and one face cannot see the other; if the graph
  * shows two, the edge is interior whatever it was called -- see
  * {@link RIM_ROLES}.
+ *
+ * A curved edge is drawn as the curve. Its two ends are all a segment list
+ * can hold, and joining them straight draws the chord -- so every arc in the
+ * table read as a straight line, which is exactly the thing the overlay
+ * exists to let you check. Flattened here rather than stored flat: the edge
+ * is still one edge, and only the drawing of it is subdivided.
  */
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
@@ -110,7 +118,19 @@ export function edgeOverlayOf(
         const role = shared && RIM_ROLES.has(named) ? INTERIOR_EDGE_ROLE : named;
         const into = byRole.get(role) ?? [];
         byRole.set(role, into);
-        into.push(start.x, start.y, start.z, end.x, end.y, end.z);
+        // Walked, not stored: `startNodeId`/`endNodeId` are the loop's
+        // direction while the geometry is the edge's own, so a use walked
+        // backwards turns the other way round the same centre.
+        const geometry = use.reversed ? reverseGeometry(use.geometry) : use.geometry;
+        const along =
+          geometry.kind === "arc"
+            ? arcPointsXZ(start, end, geometry.center, geometry.clockwise)
+            : [start, end];
+        for (let step = 0; step + 1 < along.length; step += 1) {
+          const from = along[step]!;
+          const to = along[step + 1]!;
+          into.push(from.x, from.y, from.z, to.x, to.y, to.z);
+        }
       }
     }
   }

@@ -157,7 +157,7 @@ test("a T reports one mouth, its two corners on the rim it arrived through", () 
 test("closing the mouth takes out the flank it opens into", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   assert.ok(wedges !== undefined);
   // Only the near side goes: the road stopped at the spine, so the far flank
@@ -178,11 +178,11 @@ test("closing the mouth takes out the flank it opens into", () => {
 test("what replaces it is two wedges, one either side of the arriving road", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   assert.equal(wedges.patch.regions.length, 2);
   const ids = wedges.patch.regions.map((region) => region.regionId);
-  assert.deepEqual(ids, ["op-2:junction-left", "op-2:junction-right"]);
+  assert.deepEqual(ids, ["op-2:junction-0", "op-2:junction-1"]);
   for (const region of wedges.patch.regions) {
     assert.equal(region.surfaceType, "path");
     assert.ok(region.boundary.length >= 3, "a face needs a ring");
@@ -192,7 +192,7 @@ test("what replaces it is two wedges, one either side of the arriving road", () 
 test("the kerb across the junction is gone: no wedge declares the rim it spanned", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   const rim = run.contours.find((contour) => contour.across === -1);
   const spanned = rim.nodes
@@ -213,7 +213,7 @@ test("the kerb across the junction is gone: no wedge declares the rim it spanned
 test("each wedge bounds the arriving road's own end rib, so the two are one surface", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   // The rib between the junction node and each corner. Named after the pair
   // of nodes it runs between, exactly as the road's own patch names it, so
@@ -232,7 +232,7 @@ test("each wedge bounds the arriving road's own end rib, so the two are one surf
 test("a wedge is wound the way the sweep winds its own faces", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   const positions = new Map();
   for (const node of [...run.spine.nodes, ...run.contours.flatMap((chain) => chain.nodes)]) {
@@ -290,7 +290,7 @@ test("a fractional station on the spine does not hide the flank from the rebuild
   );
 
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
   assert.ok(wedges !== undefined, "the flank is still found and rebuilt");
   assert.equal(wedges.patch.regions.length, 2);
 });
@@ -302,7 +302,7 @@ test("a junction node the run does not carry rebuilds nothing, rather than half"
 
   // One wedge alone leaves the flank it replaced half open, which is worse
   // than the kerb it was meant to remove.
-  assert.equal(junctionWedges(TABLE, "op-2", ARRIVING, mouth, stranger), undefined);
+  assert.equal(junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: stranger }]), undefined);
 });
 
 test("the wedge patch declares every node its edges walk", () => {
@@ -312,7 +312,7 @@ test("the wedge patch declares every node its edges walk", () => {
   // "edge references unknown node", with the road already committed.
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   const declared = new Set(wedges.patch.nodes.map((node) => node.id));
   for (const edge of wedges.patch.edges) {
@@ -328,7 +328,7 @@ test("the wedge patch declares every node its edges walk", () => {
 test("a rim node the removal orphans comes back with the wedge that needs it", () => {
   const run = standingRun();
   const [mouth] = mouthInto(run).mouths;
-  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, [{ mouth, junction: JUNCTION }]);
 
   // The bands going away carry rim nodes with them. Whichever of those the
   // wedges still walk must be in the patch, at the place it stood.

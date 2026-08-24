@@ -151,3 +151,47 @@ export function pinnedToBaseline<T extends ConstructionPosition>(
 ): T {
   return { ...point, y: baseline.y };
 }
+
+/**
+ * The points along an arc from `start` to `end`, ends included.
+ *
+ * The circle is the one through both ends about `center`, turned the way
+ * `clockwise` says. Sampled by sagitta: a chord deviating by `tolerance`
+ * from a circle of radius `r` subtends `2*acos(1 - tolerance/r)`, so the
+ * step is as coarse as it can be while staying that close to the true curve.
+ *
+ * `y` runs linearly from one end to the other. An arc is a plan-view curve
+ * -- it says where the ground track goes, never how it rises -- so the only
+ * height it can honestly give a sample is the interpolation between the two
+ * heights it was handed.
+ */
+export function arcPointsXZ<T extends ConstructionPosition>(
+  start: T,
+  end: T,
+  center: readonly [number, number],
+  clockwise: boolean,
+  tolerance = 0.05,
+): readonly ConstructionPosition[] {
+  const radius = Math.hypot(start.x - center[0], start.z - center[1]);
+  if (!(radius > tolerance)) return [start, end];
+
+  const startAngle = Math.atan2(start.z - center[1], start.x - center[0]);
+  const endAngle = Math.atan2(end.z - center[1], end.x - center[0]);
+  const turn = clockwise ? startAngle - endAngle : endAngle - startAngle;
+  const swept = ((turn % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const steps = Math.max(1, Math.ceil(swept / (2 * Math.acos(1 - tolerance / radius))));
+  if (steps === 1) return [start, end];
+
+  const points: ConstructionPosition[] = [start];
+  for (let step = 1; step < steps; step += 1) {
+    const fraction = step / steps;
+    const angle = clockwise ? startAngle - swept * fraction : startAngle + swept * fraction;
+    points.push({
+      x: center[0] + radius * Math.cos(angle),
+      y: start.y + (end.y - start.y) * fraction,
+      z: center[1] + radius * Math.sin(angle),
+    });
+  }
+  points.push(end);
+  return points;
+}

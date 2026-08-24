@@ -46,7 +46,7 @@ import {
   sideOf,
 } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
-import { junctionRemovals, junctionWedges } from "./path-junction.ts";
+import { junctionRemovals, junctionWedges, patchRestoring } from "./path-junction.ts";
 import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 
 export const PATH_COLOR = 0xc084fc;
@@ -835,6 +835,16 @@ export function mitreTerminalRibs(
 export interface PathMouthSide {
   /** This run's own slot, so its corner node can be named. */
   readonly across: number;
+  /**
+   * This run's own station the corner belongs to.
+   *
+   * Per side rather than per mouth because the two sides need not meet the
+   * standing rim at the same station: a road ending in a T meets it with one
+   * cross-section, but a road crossing clean through meets each rim at
+   * whatever station its own rim happens to reach it, and the two are only
+   * equal when the crossing is square.
+   */
+  readonly station: number;
   readonly position: ConstructionPosition;
   /**
    * Roughly where the corner falls on the standing run's station scale.
@@ -916,6 +926,7 @@ export function pathMouthsInto(
         station = fusion.ownIndex;
         sides.push({
           across,
+          station: fusion.ownIndex,
           position: fusion.position,
           standingStation: from.station + (to.station - from.station) * fusion.along,
         });
@@ -1248,54 +1259,63 @@ export function commitPathContour(
     // that cannot be closed is a bad junction on a real road, and throwing
     // here would take the road down with it. So the failure is reported at
     // full detail and the stroke survives.
+    // One rebuild per flank, not one per mouth. A stroke can open into the
+    // same rim of the same road twice -- an S drawn back into the road it
+    // left -- and both mouths cut the same run of bands, so closing them one
+    // at a time has the second looking for faces the first already removed.
+    const flanks = new Map<string, PathMouth[]>();
     for (const mouth of fused.mouths) {
-      // Read per mouth, not once: closing the first one deletes faces and
-      // declares others, so the second mouth is looking at a table the first
+      const key = `${mouth.run.corridorId}:${mouth.through}`;
+      const into = flanks.get(key) ?? [];
+      flanks.set(key, into);
+      into.push(mouth);
+    }
+
+    for (const [flankKey, flank] of flanks) {
+      // Read per flank, not once: closing the first one deletes faces and
+      // declares others, so the second flank is looking at a table the first
       // has already changed.
       const live = ctx.runtime.getAllRegionTopologies();
       const standingNow = pathRunsIn(live);
-      const present = new Set(live.map((topology) => topology.surfaceKey.join(":")));
-      const junctionNodeId = spineWelds.get(`${mouth.station}:0`);
-      const junctionStation = parseStationNodeId(junctionNodeId ?? "")?.station;
-      const run = standingNow.find((candidate) => candidate.corridorId === mouth.run.corridorId);
-      if (junctionNodeId === undefined || junctionStation === undefined || run === undefined) {
+      const present = new Map(live.map((topology) => [topology.surfaceKey.join(":"), topology]));
+      const run = standingNow.find((candidate) => candidate.corridorId === flank[0]!.run.corridorId);
+      const openings = flank.map((mouth) => {
+        const nodeId = spineWelds.get(`${mouth.station}:0`);
+        const station = parseStationNodeId(nodeId ?? "")?.station;
+        if (nodeId === undefined || station === undefined || run === undefined) return undefined;
+        return { mouth: { ...mouth, run }, junction: { nodeId, station } };
+      });
+      if (openings.some((opening) => opening === undefined)) {
         reportToolWarning(TOOL, "a mouth had no junction left to close", {
           operationId,
-          corridor: mouth.run.corridorId,
-          junctionNodeId,
+          corridor: flank[0]!.run.corridorId,
           stillStanding: run !== undefined,
+          mouths: flank.map((mouth) => mouth.station),
         });
         continue;
       }
       const wedge = junctionWedges(
         ctx.tableId,
-        // Named per mouth: one stroke can open into two roads, or into the
-        // same road twice, and both junctions would otherwise declare a face
-        // called `<operation>:junction-left`.
-        `${effect.operationId}:m${mouth.station}:${mouth.through}`,
+        // Named per flank: one stroke can open into two roads, or into the
+        // same road twice, and every junction would otherwise declare a face
+        // called `<operation>:junction-0`.
+        `${effect.operationId}:f${flankKey}`,
         corridorId,
-        { ...mouth, run },
-        { nodeId: junctionNodeId, station: junctionStation },
+        openings.filter((opening) => opening !== undefined),
       );
       if (wedge === undefined) continue;
 
       // Verified against the table, not assumed from the reading. Every face
-      // the rebuild is about to remove has to still be there: the wedges are
+      // the rebuild is about to remove has to still be there: the pieces are
       // shaped to replace exactly that flank, so replacing part of one leaves
       // a gap, and naming a face that has already gone loses the stroke.
-      //
-      // Both halves or neither, once more -- and if the answer is neither,
-      // the road still stands and the junction simply did not close.
-      const missing = wedge.removed
-        .map((key) => key.join(":"))
-        .filter((key) => !present.has(key));
-      if (missing.length > 0) {
+      const removing = wedge.removed.map((key) => present.get(key.join(":")));
+      if (removing.some((topology) => topology === undefined)) {
         reportToolWarning(TOOL, "the flank a junction meant to rebuild is not there", {
           operationId,
-          corridor: mouth.run.corridorId,
-          missing,
+          corridor: flank[0]!.run.corridorId,
           planned: wedge.removed.map((key) => key.join(":")),
-          standing: run.bands.map((band) => band.surfaceKey.join(":")),
+          standing: run?.bands.map((band) => band.surfaceKey.join(":")) ?? [],
         });
         ctx.reportFeedback({
           tone: "error",
@@ -1303,18 +1323,62 @@ export function commitPathContour(
         });
         continue;
       }
+
+      // The swap, made reversible before it is made.
+      //
+      // Removing the flank and laying the pieces are two edits, and only the
+      // first is certain: a piece can be refused for want of room on an edge,
+      // or the patch can throw outright. Left alone that reads on the table
+      // as faces vanishing when a T is drawn -- the road really does lose its
+      // flank, and nothing arrives to take its place. So the faces about to
+      // go are captured first, and put back if the pieces do not stand.
+      const flankBefore = patchRestoring(removing.filter((topology) => topology !== undefined));
+      const putBack = (laidRegionIds: readonly string[]): void => {
+        try {
+          // Whatever did stand comes out first. A piece and the band it
+          // replaced want the same edges, and an edge has room for two faces:
+          // restoring on top of a half-laid junction is refused, which would
+          // leave the hole this is here to fill.
+          const prefix = wedge.removed[0]?.slice(0, -1) ?? [];
+          if (laidRegionIds.length > 0) {
+            ctx.runtime.applyRegionEdit(
+              laidRegionIds.map((regionId) => ({
+                kind: "delete-region" as const,
+                surfaceKey: [...prefix, regionId],
+              })),
+              "local",
+              `${effect.operationId}:junction-undo`,
+            );
+          }
+          ctx.runtime.addPatch(flankBefore, "local", `${effect.operationId}:junction-undo`);
+        } catch (error) {
+          reportToolFailure(
+            TOOL,
+            "put back the flank a junction could not replace",
+            { operationId, flank: wedge.removed.map((key) => key.join(":")) },
+            error,
+          );
+        }
+      };
+
       try {
         ctx.runtime.applyRegionEdit(junctionRemovals([wedge]), "local", operationId);
         const laid = ctx.runtime.addPatch(wedge.patch, "local", effect.operationId);
         if (laid.skippedRegionIds.length > 0) {
-          reportToolWarning(TOOL, "a junction face was refused", {
+          const skipped = new Set(laid.skippedRegionIds);
+          reportToolWarning(TOOL, "a junction face was refused, so the flank went back", {
             operationId,
             skipped: laid.skippedRegionIds,
             removed: wedge.removed.map((key) => key.join(":")),
           });
+          putBack(
+            wedge.patch.regions
+              .map((region) => region.regionId)
+              .filter((regionId) => !skipped.has(regionId)),
+          );
           ctx.reportFeedback({
             tone: "error",
-            message: `Junção incompleta: ${laid.skippedRegionIds.length} face não pôde ser fechada.`,
+            message: "Junção não fechada: a rua foi criada, mas o cruzamento não.",
           });
         }
       } catch (error) {
@@ -1328,10 +1392,12 @@ export function commitPathContour(
             edges: wedge.patch.edges.map((edge) => edge.edgeId),
             overlayRemoved: outcome.removedSurfaceKeys.map((key) => key.join(":")),
             overlayCreated: outcome.createdSurfaceKeys.map((key) => key.join(":")),
-            standingBands: run.bands.map((band) => band.surfaceKey.join(":")),
+            standingBands: run?.bands.map((band) => band.surfaceKey.join(":")) ?? [],
           },
           error,
         );
+        // The pieces threw, so none of them stands: only the flank goes back.
+        putBack([]);
         ctx.reportFeedback({
           tone: "error",
           message: "Junção não fechada: a rua foi criada, mas o cruzamento não.",

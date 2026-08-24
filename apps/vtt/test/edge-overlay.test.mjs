@@ -33,6 +33,7 @@ function band(acrossPair, stations) {
         edgeId: `along:${across}:${stations[index]}`,
         startNodeId: stationNodeId(CORRIDOR, stations[index], across),
         endNodeId: stationNodeId(CORRIDOR, stations[index + 1], across),
+        geometry: { kind: "line" },
         reversed: false,
       });
     }
@@ -42,6 +43,7 @@ function band(acrossPair, stations) {
       edgeId: `across:${acrossPair.join("")}:${station}`,
       startNodeId: stationNodeId(CORRIDOR, station, acrossPair[0]),
       endNodeId: stationNodeId(CORRIDOR, station, acrossPair[1]),
+      geometry: { kind: "line" },
       reversed: false,
     });
   }
@@ -98,7 +100,7 @@ test("a type the palette does not name still draws, in the fallback colour", () 
         { id: "t0", position: { x: 0, y: 0, z: 0 } },
         { id: "t1", position: { x: 1, y: 0, z: 0 } },
       ],
-      outerLoops: [[{ edgeId: "t-edge", startNodeId: "t0", endNodeId: "t1", reversed: false }]],
+      outerLoops: [[{ edgeId: "t-edge", startNodeId: "t0", endNodeId: "t1", geometry: { kind: "line" }, reversed: false }]],
       holes: [],
     },
   ]);
@@ -176,7 +178,7 @@ test("a rib closing onto another road's spine is a rib, not a contour", () => {
         { id: junction, position: { x: 2, y: 0, z: 0 } },
       ],
       outerLoops: [
-        [{ edgeId: "closing", startNodeId: corner, endNodeId: junction, reversed: false }],
+        [{ edgeId: "closing", startNodeId: corner, endNodeId: junction, geometry: { kind: "line" }, reversed: false }],
       ],
       holes: [],
     },
@@ -203,7 +205,7 @@ test("nothing that touches the spine is ever called a contour", () => {
             { id: from, position: { x: 0, y: 0, z: start } },
             { id: to, position: { x: 10, y: 0, z: end } },
           ],
-          outerLoops: [[{ edgeId: "e", startNodeId: from, endNodeId: to, reversed: false }]],
+          outerLoops: [[{ edgeId: "e", startNodeId: from, endNodeId: to, geometry: { kind: "line" }, reversed: false }]],
           holes: [],
         },
       ]);
@@ -211,5 +213,41 @@ test("nothing that touches the spine is ever called a contour", () => {
       assert.notEqual(start, 0, "a contour end is never on the spine");
       assert.notEqual(end, 0, "a contour end is never on the spine");
     }
+  }
+});
+
+test("a curved edge is drawn as the curve, not as its chord", () => {
+  const quarter = {
+    surfaceKey: ["curved"],
+    surfaceType: "path",
+    physical: true,
+    nodes: [
+      { id: "a", position: { x: 4, y: 0, z: 0 } },
+      { id: "b", position: { x: 0, y: 0, z: 4 } },
+    ],
+    outerLoops: [
+      [
+        {
+          edgeId: "arc",
+          startNodeId: "a",
+          endNodeId: "b",
+          geometry: { kind: "arc", center: [0, 0], clockwise: false },
+          reversed: false,
+        },
+      ],
+    ],
+    holes: [],
+  };
+
+  const [group] = edgeOverlayOf([quarter]);
+  const segments = group.positions.length / 6;
+  assert.ok(segments > 1, `a quarter circle of radius 4 needs subdividing, got ${segments}`);
+
+  // Every sampled point sits on the circle the edge names, which the chord
+  // between its two ends does not.
+  for (let index = 0; index < group.positions.length; index += 3) {
+    const x = group.positions[index];
+    const z = group.positions[index + 2];
+    assert.ok(Math.abs(Math.hypot(x, z) - 4) < 1e-6, `sample at ${x},${z} is off the circle`);
   }
 });
