@@ -309,6 +309,32 @@ only kept while the graph still shows a single face; otherwise it is drawn as
 an interior seam. That is also the fastest way to see whether a junction
 really closed or only looks closed.
 
+## A contour never touches the spine
+
+What an edge *is* reads off the slots its two ends carry, and only the slots.
+Two ends on one slot run **along** the road -- the travel line if that slot is
+the spine, an outer contour if it is an extreme. Two ends on different slots
+run **across** it, and that is a rib.
+
+Comparing stations as well is what put a V of contour across every T. The rib
+closing an arriving road onto a junction runs from that road's own corner to
+a spine node the *other* road minted, so the two stations are on different
+scales and never match. Read as neither along nor across, it fell through to
+nothing in particular and drew as a rim -- a contour touching the spine,
+which is exactly what a contour may never do.
+
+Read by slot the rule enforces itself: a contour has both ends on one outer
+slot, so it cannot have an end on the travel line. No case analysis, no
+junction-shaped exception.
+
+**A perimeter is not the same thing as a contour**, and this is where the two
+come apart usefully. The perimeter of a road is everything with a face on one
+side, which includes the rib capping each open end -- and that rib does touch
+the spine, correctly, because the end of a road is open across its whole
+width. So a perimeter is made of contour edges *and* the ribs that close it.
+The rule is about what an edge is, not about which of them happen to be on
+the outside.
+
 ## Contour fusion: two shapes, one construction
 
 Sharing a spine node makes two runs one graph. It does not make them one

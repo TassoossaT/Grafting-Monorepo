@@ -157,3 +157,59 @@ test("a rim with a face on both sides is drawn as interior, not as rim", () => {
   assert.ok(contour !== undefined);
   assert.equal(contour.positions.length, 1 * 6);
 });
+
+test("a rib closing onto another road's spine is a rib, not a contour", () => {
+  // The V across a T: the arriving road's end rib runs from its own corner to
+  // a junction node the *other* road minted. Different corridors, so the two
+  // stations are on different scales and never match -- which used to leave
+  // the edge classified as nothing in particular and drawn as a rim.
+  const other = pathCorridorId("op-b", "road");
+  const corner = stationNodeId(CORRIDOR, 2, -1);
+  const junction = stationNodeId(other, 1.5, 0);
+
+  const groups = edgeOverlayOf([
+    {
+      surfaceKey: ["mouth"],
+      surfaceType: "path",
+      nodes: [
+        { id: corner, position: { x: 0, y: 0, z: -2 } },
+        { id: junction, position: { x: 2, y: 0, z: 0 } },
+      ],
+      outerLoops: [
+        [{ edgeId: "closing", startNodeId: corner, endNodeId: junction, reversed: false }],
+      ],
+      holes: [],
+    },
+  ]);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].role, PATH_ROLES.ribEdge);
+});
+
+test("nothing that touches the spine is ever called a contour", () => {
+  // The rule the owner set, and it falls out of reading slots alone: a
+  // contour has both ends on one outer slot, so it can never have an end on
+  // the travel line.
+  const across = [-1, 0, 1];
+  for (const start of across) {
+    for (const end of across) {
+      const from = stationNodeId(CORRIDOR, 0, start);
+      const to = stationNodeId(CORRIDOR, 5, end);
+      const [group] = edgeOverlayOf([
+        {
+          surfaceKey: [`${start}:${end}`],
+          surfaceType: "path",
+          nodes: [
+            { id: from, position: { x: 0, y: 0, z: start } },
+            { id: to, position: { x: 10, y: 0, z: end } },
+          ],
+          outerLoops: [[{ edgeId: "e", startNodeId: from, endNodeId: to, reversed: false }]],
+          holes: [],
+        },
+      ]);
+      if (group.role !== PATH_ROLES.contourEdge) continue;
+      assert.notEqual(start, 0, "a contour end is never on the spine");
+      assert.notEqual(end, 0, "a contour end is never on the spine");
+    }
+  }
+});
