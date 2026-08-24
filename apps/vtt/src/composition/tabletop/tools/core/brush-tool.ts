@@ -6,7 +6,7 @@ import type { BrushShape, PreviewDescriptor, ToolParamsFor } from "@/features/ed
 import { resolveBrushShape } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "@/ports";
 
-import type { ConstructionTool, ToolContext, ToolGesture } from "./tool-context.ts";
+import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import type { BrushOutlineShape } from "../shapes/preview-shapes.ts";
 import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 
@@ -18,6 +18,11 @@ import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
  */
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
+  /** The concrete pointer targets at the two ends of the gesture. A domain
+   * effect may use them as connection candidates; the generic brush never
+   * assigns them any construction meaning. */
+  readonly start: PointerSample;
+  readonly end: PointerSample;
   /**
    * The brush footprint, already widened to hold the product -- see
    * {@link expandedToHold}. This is what the ghost is drawn from, which is
@@ -114,6 +119,8 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
     const shape = expandedToHold(resolveBrushShape(params), halfWidth);
     return {
       samples: gesture.samples.map((sample) => sample.point),
+      start: gesture.start,
+      end: gesture.current,
       shape,
       tolerance: Math.max(0, brushReach(shape) - halfWidth),
     };

@@ -10,6 +10,17 @@ import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
 import { PATH_COLOR, applyPathBrushEffect } from "./path-shared.ts";
 
+function endpointCandidates(sample: BrushRegion["start"]) {
+  return {
+    continuation:
+      sample.nodeId === undefined && sample.surfaceRef === undefined
+        ? undefined
+        : { nodeId: sample.nodeId, surfaceRef: sample.surfaceRef },
+    nodeId: sample.nodeId,
+    unionSurfaceRef: sample.surfaceRef,
+  };
+}
+
 /**
  * A free path stroke, built on the same brush every other brush uses: press,
  * drag, and on release the whole swept region is handed over once.
@@ -35,6 +46,8 @@ export const pathBrushTool = createBrushTool<"path-brush">({
       {
         brushShape: region.shape,
         brushRegion: { samples: region.samples },
+        start: endpointCandidates(region.start),
+        end: endpointCandidates(region.end),
         parameters: pathFormationFor(params),
       },
       { operationId, tableId: ctx.tableId, initiatedBy: "path-brush" },

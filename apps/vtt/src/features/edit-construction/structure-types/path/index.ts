@@ -13,6 +13,13 @@ export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
 export { pathSpineDraftFor } from "./path-spine-draft.ts";
 export type { PathSpineDraft } from "./path-spine-draft.ts";
 
+export { resolvePathSpineEndpoint } from "./path-spine-connection.ts";
+export type {
+  PathSpineConnectionEdge,
+  PathSpineConnectionNode,
+  PathSpineEndpointResolution,
+} from "./path-spine-connection.ts";
+
 export {
   followsOutward,
   isSpineNode,

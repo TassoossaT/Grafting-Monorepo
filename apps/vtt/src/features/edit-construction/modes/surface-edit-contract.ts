@@ -48,6 +48,18 @@ export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
 }
 
+/**
+ * What the interaction observed at one end of a path stroke. These are
+ * candidates, not graph operations: the path cloud resolves them against
+ * its current spine and always tries continuation before a node attachment
+ * or an edge union.
+ */
+export interface PathSpineEndpointCandidates {
+  readonly continuation?: { readonly nodeId?: string; readonly surfaceRef?: string };
+  readonly nodeId?: string;
+  readonly unionSurfaceRef?: string;
+}
+
 /** VTT-selected profile for a generic path-sweep formation. */
 export type PathFormationParameters = PathFormationRecipe;
 
@@ -70,6 +82,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
+  readonly start: PathSpineEndpointCandidates;
+  readonly end: PathSpineEndpointCandidates;
   readonly parameters: PathFormationParameters;
   readonly expected: readonly RevisionPrecondition[];
 }
@@ -109,12 +123,36 @@ function freezeFormation(parameters: PathFormationParameters): PathFormationPara
   return Object.freeze({ kind: parameters.kind, profile: Object.freeze(profile), miterLimit: parameters.miterLimit });
 }
 
+function optionalId(value: string | undefined, field: string): string | undefined {
+  return value === undefined ? undefined : required(value, field);
+}
+
+function freezeEndpointCandidates(
+  candidates: PathSpineEndpointCandidates | undefined,
+  field: string,
+): PathSpineEndpointCandidates {
+  const continuation = candidates?.continuation;
+  const nodeId = optionalId(candidates?.nodeId, `${field}.nodeId`);
+  const unionSurfaceRef = optionalId(candidates?.unionSurfaceRef, `${field}.unionSurfaceRef`);
+  const continuationNodeId = optionalId(continuation?.nodeId, `${field}.continuation.nodeId`);
+  const continuationSurfaceRef = optionalId(continuation?.surfaceRef, `${field}.continuation.surfaceRef`);
+  return Object.freeze({
+    continuation:
+      continuationNodeId === undefined && continuationSurfaceRef === undefined
+        ? undefined
+        : Object.freeze({ nodeId: continuationNodeId, surfaceRef: continuationSurfaceRef }),
+    nodeId,
+    unionSurfaceRef,
+  });
+}
+
 /**
  * Creates one immutable effect for a future release-to-confirm boundary.
  * It deliberately does not resolve geometry or mutate graph topology.
  */
 export function createPathBrushEffect(
-  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">,
+  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "start" | "end"> &
+    Partial<Pick<PathBrushEffect, "start" | "end">>,
   context: ConstructionOperationContext,
   expected: readonly RevisionPrecondition[] = [],
 ): PathBrushEffect {
@@ -133,6 +171,8 @@ export function createPathBrushEffect(
     targetType: "path",
     brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
+    start: freezeEndpointCandidates(payload.start, "start"),
+    end: freezeEndpointCandidates(payload.end, "end"),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });

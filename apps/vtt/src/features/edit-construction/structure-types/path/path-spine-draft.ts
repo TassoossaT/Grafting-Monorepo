@@ -1,4 +1,5 @@
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
+import type { PathSpineEndpointCandidates } from "../../modes/surface-edit-contract.ts";
 import type { ConstructionPosition } from "@/ports";
 
 import { pathCorridorId } from "./path-corridor.ts";
@@ -16,6 +17,8 @@ export interface PathSpineDraft {
   readonly controlPoints: readonly ConstructionPosition[];
   readonly bandOffsets: readonly number[];
   readonly miterLimit: number;
+  readonly start: PathSpineEndpointCandidates;
+  readonly end: PathSpineEndpointCandidates;
 }
 
 /**
@@ -34,5 +37,7 @@ export function pathSpineDraftFor(
     controlPoints: Object.freeze([...controlPoints]),
     bandOffsets: Object.freeze(effect.parameters.profile.map((point) => point.lateralOffset)),
     miterLimit: effect.parameters.miterLimit,
+    start: effect.start,
+    end: effect.end,
   });
 }
