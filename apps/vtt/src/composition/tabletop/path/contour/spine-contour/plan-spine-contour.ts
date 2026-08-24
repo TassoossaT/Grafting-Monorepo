@@ -9,7 +9,7 @@ import type {
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { unionBandLayer } from "./union-bands.ts";
+import { ribbonsOverlap, unionBandLayer } from "./union-bands.ts";
 import { boundsIntersectRegion, dirtyRegionAround } from "./dirty-region.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
 
@@ -54,10 +54,9 @@ export interface PlanSpineContourResult {
   /**
    * Standing regions this patch replaces -- their faces are superseded by
    * the freshly unioned ones in `patch.regions`, even where most of their
-   * own nodes were welded back unchanged. The caller deletes these before
-   * adding the patch, the same two-step "flank comes out, wedges go in"
-   * shape `commitPathContour` already used for a mouth, just driven by a
-   * union instead of a hand-built wedge.
+   * own nodes were welded back unchanged. The caller replaces them in one
+   * atomic transaction with the unioned patch; a refused target can never
+   * leave the standing faces deleted.
    */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
@@ -91,10 +90,10 @@ function halfReachOf(chain: SpineChainInput): number {
  * region) -> `ConstructionPatch`.
  *
  * **The dirty region, not the whole cloud.** `editedChains` says what
- * changed; every standing region is included in the search only to be
- * *ruled out* by {@link boundsIntersectRegion} -- a region whose own
- * footprint never enters the grown box is not in `consumedSurfaceKeys` and
- * is left exactly as it stands, same node ids, same face. This is what
+ * changed; only application-selected standing regions are passed in, and a
+ * candidate must pass both a cheap grown-box broad phase and a true ribbon
+ * intersection before it can be consumed. A nearby path therefore stays
+ * exactly as it stands, same node ids, same face. This is what
  * replaces the old station-sweep engine's per-topology mouth/wedge/mitre
  * machinery: a T, an X, or an L are not cases this function knows about,
  * they are whatever {@link unionBandLayer} happens to produce when an
@@ -138,6 +137,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     const outer = ringOfTopology(topology);
     if (!boundsIntersectRegion(outer, region)) continue;
     const list = ribbonsByBand.get(bandIndex) ?? [];
+    if (!list.some((ribbon) => ribbonsOverlap(ribbon.outer, outer))) continue;
     list.push({ bandIndex, outer });
     ribbonsByBand.set(bandIndex, list);
     consumed.push(topology.surfaceKey);

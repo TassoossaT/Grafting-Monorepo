@@ -155,7 +155,7 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
   assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
 });
 
-test("a spine edit leaves a standing band far outside its reach untouched", () => {
+test("a spine edit does not consume a merely nearby standing band", () => {
   const nearby = standingBand("nearby", 0, [at(11, -1), at(20, -1), at(20, 1), at(11, 1)]);
   const faraway = standingBand("faraway", 0, [at(1000, -1), at(1010, -1), at(1010, 1), at(1000, 1)]);
   const edited = {
@@ -177,7 +177,7 @@ test("a spine edit leaves a standing band far outside its reach untouched", () =
 
   assert.ok(result !== undefined);
   const consumedIds = result.consumedSurfaceKeys.map((key) => key.join(":"));
-  assert.ok(consumedIds.includes(nearby.surfaceKey.join(":")), "a band just within reach is reprocessed");
+  assert.ok(!consumedIds.includes(nearby.surfaceKey.join(":")), "a bounding-box touch is not a contour intersection");
   assert.ok(!consumedIds.includes(faraway.surfaceKey.join(":")), "a band far outside reach is left alone");
   // The untouched band's own nodes never appear in the new patch at all.
   const patchNodeIds = new Set(result.patch.nodes.map((node) => node.id));
@@ -205,7 +205,7 @@ function topologyFromPatchRegion(patch, region) {
   };
 }
 
-test("re-consuming a standing band with nothing overlapping it welds every vertex back onto its own former id", () => {
+test("a standing band with no ribbon overlap is never re-consumed", () => {
   const chain = {
     chainId: "run-1",
     controlPoints: [at(0, 0), at(10, 0)],
@@ -223,13 +223,9 @@ test("re-consuming a standing band with nothing overlapping it welds every verte
   });
   assert.ok(first !== undefined);
 
-  // A second, unrelated stroke drawn close enough that this band falls
-  // inside the new dirty region and gets pulled back through the pipeline,
-  // even though nothing about it actually changed.
-  // Its own ribbon (x: 8..10, z: 1.5..3) never touches the standing band's
-  // (x: 0..10, z: -1..1) -- close enough that the standing band falls
-  // inside the dirty region and is pulled back through the pipeline, but
-  // with nothing to union against, so it must weld onto exactly itself.
+  // This nearby stroke's ribbon never touches the standing band's. The
+  // bounding-box broad phase admits it, but the exact footprint phase must
+  // leave it out of the replacement completely.
   const nudge = {
     chainId: "nudge",
     controlPoints: [at(9, 3), at(9, 1.5)],
@@ -250,11 +246,9 @@ test("re-consuming a standing band with nothing overlapping it welds every verte
   });
   assert.ok(second !== undefined);
 
-  const firstBandZeroIds = new Set(
-    first.patch.nodes.filter((node) => node.id.includes(":band-0:")).map((node) => node.id),
+  assert.deepEqual(second.consumedSurfaceKeys, [], "a non-overlapping band is not a replacement source");
+  assert.ok(
+    !second.patch.nodes.some((node) => node.id.startsWith("contour:op-1:band-0:")),
+    "the standing band's nodes are not re-emitted into the new patch",
   );
-  const secondBandZeroIds = new Set(
-    second.patch.nodes.filter((node) => node.id.startsWith("contour:op-1:band-0:")).map((node) => node.id),
-  );
-  assert.deepEqual(secondBandZeroIds, firstBandZeroIds, "identical geometry welds onto the exact same node ids");
 });

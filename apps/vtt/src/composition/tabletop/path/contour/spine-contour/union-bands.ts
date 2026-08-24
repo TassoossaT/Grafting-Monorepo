@@ -47,6 +47,24 @@ export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
   }
 }
 
+/**
+ * True only when two ribbon footprints share area. Bounding boxes remain a
+ * useful broad-phase, but must never by themselves make a standing road part
+ * of a contour replacement.
+ */
+export function ribbonsOverlap(
+  left: readonly ConstructionPosition[],
+  right: readonly ConstructionPosition[],
+): boolean {
+  if (left.length < 3 || right.length < 3) return false;
+  try {
+    return polygonClipping.intersection([ringOf(left)], [ringOf(right)]).length > 0;
+  } catch {
+    // A malformed standing contour is not a reason to consume it.
+    return false;
+  }
+}
+
 function ringOf(outer: readonly ConstructionPosition[]): Ring {
   return outer.map((point): [number, number] => [point.x, point.z]);
 }

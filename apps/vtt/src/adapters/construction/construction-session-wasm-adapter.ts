@@ -10,6 +10,7 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
+  ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
   CloudOutcome,
   CloudRequest,
@@ -332,6 +333,23 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       sourceSurfaceKeys: request.sourceSurfaceKeys,
       outline: request.outline,
       boundary: request.boundary,
+      patch,
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+  }
+
+  applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome {
+    const session = this.#require() as ConstructionSession & {
+      apply_patch_replacement_json(requestJson: string): string;
+    };
+    const patch = {
+      nodes: request.patch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
+      edges: request.patch.edges,
+      regions: request.patch.regions,
+    };
+    const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({
+      operationId: request.operationId,
+      sourceSurfaceKeys: request.sourceSurfaceKeys,
       patch,
     }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };

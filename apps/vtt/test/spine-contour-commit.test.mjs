@@ -163,6 +163,23 @@ function createFakeConstructionSession() {
     getAllRegionTopologies() {
       return [...regions.values()].map(toTopology);
     },
+    applyPatchReplacement(request) {
+      requireStarted();
+      for (const surfaceKey of request.sourceSurfaceKeys) {
+        if (!regions.has(surfaceKey.join(":"))) {
+          throw new Error(`replacement source is no longer present ${surfaceKey.join(":")}`);
+        }
+      }
+      // The production executor stages this against cloned Rust state. This
+      // stateful fake validates the target before removing a source, which is
+      // the observable all-or-nothing guarantee the path executor relies on.
+      const outcome = this.addPatch(request.patch);
+      if (outcome.skippedRegionIds.length > 0) {
+        throw new Error(`replacement target was refused: ${outcome.skippedRegionIds.join(", ")}`);
+      }
+      for (const surfaceKey of request.sourceSurfaceKeys) regions.delete(surfaceKey.join(":"));
+      return { ...outcome, removedSurfaceKeys: [...request.sourceSurfaceKeys] };
+    },
     applyRegionOverlay() {
       throw new Error("not exercised by this fake");
     },
@@ -189,6 +206,9 @@ function createFakeConstructionSession() {
     },
     getNodePositions() {
       return [...nodes].map(([id, position]) => ({ id, position }));
+    },
+    getGraphSnapshot() {
+      return { nodes: [...nodes].map(([id, position]) => ({ id, position })), edges: [...edges.values()] };
     },
   };
 }
@@ -251,20 +271,21 @@ const ROAD = Object.freeze({
 });
 
 /** The executor receives the immutable semantic effect the brush emits. */
-function applyRoadBrushEffect(ctx, samples, tolerance) {
+function applyRoadBrushEffect(ctx, samples, tolerance, endpoints = {}) {
   const operationId = `table-1:path-brush:${ctx.nextSequence()}`;
   const effect = createPathBrushEffect(
     {
       brushShape: { kind: "circle", radius: ROAD.radius },
       brushRegion: { samples },
       parameters: pathFormationFor(ROAD),
+      ...endpoints,
     },
     { operationId, tableId: "table-1", initiatedBy: "path-brush" },
   );
   applyPathBrushEffect(ctx, effect, tolerance);
 }
 
-test("a second road crossing a standing one commits without throwing, end to end", async () => {
+test("a second unselected crossing road commits without replacing the standing one", async () => {
   const ctx = await createTestContext();
 
   const main = [
@@ -284,8 +305,8 @@ test("a second road crossing a standing one commits without throwing, end to end
     `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
   );
 
-  // The crossing genuinely merged the two roads' bands rather than leaving
-  // the first road's own faces stranded and unreferenced.
+  // A crossing without an explicit endpoint target is a new candidate cloud;
+  // it must still leave valid path faces on the table.
   const topologies = ctx.runtime.getAllRegionTopologies();
   assert.ok(topologies.length > 0, "the table has real path faces standing after both strokes");
 });
@@ -319,29 +340,17 @@ test("a sharp hairpin stroke, wide enough to self-intersect when offset, still c
   );
 });
 
-test("a standing band that refuses to delete is reported, not fatal -- the run still commits", async () => {
-  // Reproduces the reported symptom directly: `deleteRegion` throwing
-  // "unknown analytic region" for a key `getAllRegionTopologies` just
-  // reported as standing. Whatever the deeper cause turns out to be in a
-  // real session, this proves the commit no longer takes the whole stroke
-  // down with it when that happens.
+test("a failed path replacement leaves every standing face untouched", async () => {
   const ctx = await createTestContext();
   const main = [
     { x: -10, y: 0, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
   applyRoadBrushEffect(ctx, main, 0.1);
+  const before = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
 
-  // Patches the runtime's own `applyRegionEdit` to always refuse a
-  // delete-region -- exactly the "unknown analytic region" shape the real
-  // session threw, without needing to reach the private construction port
-  // underneath it.
-  const originalApplyRegionEdit = ctx.runtime.applyRegionEdit.bind(ctx.runtime);
-  ctx.runtime.applyRegionEdit = (ops, origin, causeId) => {
-    if (ops.some((op) => op.kind === "delete-region")) {
-      throw new Error("unknown analytic region (forced for this test)");
-    }
-    return originalApplyRegionEdit(ops, origin, causeId);
+  ctx.runtime.applyPatchReplacement = () => {
+    throw new Error("replacement target was refused (forced for this test)");
   };
 
   const crossing = [
@@ -351,9 +360,35 @@ test("a standing band that refuses to delete is reported, not fatal -- the run s
   assert.doesNotThrow(() => applyRoadBrushEffect(ctx, crossing, 0.1));
 
   assert.ok(
-    ctx.feedback.some((entry) => entry.tone === "success"),
-    `the stroke should still succeed overall: ${JSON.stringify(ctx.feedback)}`,
+    ctx.feedback.some((entry) => entry.tone === "error"),
+    `the failed replacement must be reported: ${JSON.stringify(ctx.feedback)}`,
   );
+  assert.deepEqual(
+    ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":")),
+    before,
+    "a refused replacement must not delete any already-standing road face",
+  );
+});
+
+test("a nearby unselected road never consumes the standing road's faces", async () => {
+  const ctx = await createTestContext();
+  applyRoadBrushEffect(ctx, [
+    { x: -10, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ], 0.1);
+  const firstRoad = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+
+  // The two road footprints overlap by a few centimetres. No endpoint was
+  // selected, so this is a separate PathCloud candidate and must not replace
+  // the already committed one just because their bounds happen to touch.
+  applyRoadBrushEffect(ctx, [
+    { x: -10, y: 0, z: 4 },
+    { x: 10, y: 0, z: 4 },
+  ], 0.1);
+
+  const after = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+  assert.ok(firstRoad.every((surfaceKey) => after.includes(surfaceKey)), "the first road remains intact");
+  assert.ok(after.length > firstRoad.length, "the second road was added without consuming the first");
 });
 
 test("a T where the second road ends inside the first commits without throwing", async () => {

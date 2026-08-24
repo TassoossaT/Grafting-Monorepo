@@ -1,5 +1,5 @@
 import type { PathBrushEffect } from "@/features/edit-construction";
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
@@ -10,6 +10,7 @@ import {
   pathSpineDraftFor,
   resolveCoverage,
 } from "../../../features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../../../entities/map/index.ts";
 
 import type { ToolContext } from "../tools/core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../tools/core/stroke-fitting.ts";
@@ -47,6 +48,40 @@ const ARC_FLATTENING_TOLERANCE = 0.05;
  * free curve through the drawn control points.
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
+
+/**
+ * Endpoint references are candidates for a continuation, never permission to
+ * absorb every nearby road. The PathCloud will ultimately resolve this from
+ * its persisted spine; until then, only explicitly picked path regions may
+ * be handed to contour replacement.
+ */
+function selectedStandingPathRegions(
+  effect: PathBrushEffect,
+  topologies: readonly ConstructionRegionTopology[],
+): readonly ConstructionRegionTopology[] {
+  const surfaceRefs = new Set(
+    [
+      effect.start.continuation?.surfaceRef,
+      effect.start.unionSurfaceRef,
+      effect.end.continuation?.surfaceRef,
+      effect.end.unionSurfaceRef,
+    ].filter((reference): reference is string => reference !== undefined),
+  );
+  const nodeIds = new Set(
+    [
+      effect.start.continuation?.nodeId,
+      effect.start.nodeId,
+      effect.end.continuation?.nodeId,
+      effect.end.nodeId,
+    ].filter((nodeId): nodeId is string => nodeId !== undefined),
+  );
+  if (surfaceRefs.size === 0 && nodeIds.size === 0) return [];
+  return topologies.filter(
+    (topology) =>
+      topology.surfaceType === "path" &&
+      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) || topology.nodes.some((node) => nodeIds.has(node.id))),
+  );
+}
 
 /**
  * How far the road may float above or below the ground before a station is
@@ -281,9 +316,9 @@ export function referenceLineFrom(
  * mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
  * T, an X, and an L are not cases this function distinguishes -- they are
  * whatever `planSpineContour`'s per-band union happens to produce once this
- * stroke's own ribbons are unioned against whatever standing road falls
- * inside the dirty region. `pathCorridorId`/`pathFormationFor` still decide
- * the subtype's profile; everything past that is derived, not hand-closed.
+ * stroke's own ribbons are unioned against an explicitly selected standing
+ * continuation. `pathCorridorId`/`pathFormationFor` still decide the
+ * subtype's profile; everything past that is derived, not hand-closed.
  *
  * **Two things this stage deliberately did not carry over**, both flagged
  * rather than silently dropped:
@@ -362,7 +397,7 @@ export function applyPathBrushEffect(
     }
 
     const topologies = ctx.runtime.getAllRegionTopologies();
-    const standingRegions = topologies.filter((topology) => topology.surfaceType === "path");
+    const standingRegions = selectedStandingPathRegions(effect, topologies);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
 
     const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: spine.controlPoints.length }, () =>
@@ -382,21 +417,12 @@ export function applyPathBrushEffect(
       "lay the road",
       { operationId, faces: planned.patch.regions.length },
       () =>
-        applySpineContour(ctx, operationId, planned, (surfaceKey, error) =>
-          reportToolWarning(TOOL, "a standing band refused to be removed", {
-            operationId,
-            surfaceKey,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        ),
+        applySpineContour(ctx, operationId, planned),
     );
 
     if (outcome.skippedRegionIds.length > 0) {
-      // Made loud rather than trusted: a skipped region is a face this
-      // commit *thought* it was creating that never actually reached the
-      // graph, and later reporting it as standing (a T or X arriving here
-      // afterwards) is exactly the "unknown region" failure the delete-region
-      // step above cannot recover from on its own.
+      // A replacement is atomic, so a refused target preserves its standing
+      // faces. This warning remains useful for an add-only stroke.
       reportToolWarning(TOOL, "a band face was refused", {
         operationId,
         skipped: outcome.skippedRegionIds,

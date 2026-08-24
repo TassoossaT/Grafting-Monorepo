@@ -16,6 +16,7 @@ import {
 } from "../../entities/map/index.ts";
 import type {
   ApplyRegionOverlayRequest,
+  ApplyPatchReplacementRequest,
   CameraControlHandle,
   CameraControlOptions,
   ChangeOrigin,
@@ -136,6 +137,11 @@ export interface TabletopRuntime {
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
     request: ApplyRegionOverlayRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionPatchOutcome;
+  applyPatchReplacement(
+    request: ApplyPatchReplacementRequest,
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionPatchOutcome;
@@ -841,6 +847,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionPatchOutcome {
     this.#requireReady("applying a region overlay");
     const outcome = this.#construction.applyRegionOverlay(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  applyPatchReplacement(
+    request: ApplyPatchReplacementRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionPatchOutcome {
+    this.#requireReady("replacing generated regions");
+    const outcome = this.#construction.applyPatchReplacement(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
     return outcome;
   }

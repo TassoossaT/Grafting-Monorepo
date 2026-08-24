@@ -265,6 +265,17 @@ export interface ApplyRegionOverlayRequest {
 }
 
 /**
+ * Replaces an exact set of application-selected regions with one generated
+ * patch. The executor performs the removal and addition as one all-or-nothing
+ * transaction; it has no product or contour policy of its own.
+ */
+export interface ApplyPatchReplacementRequest {
+  readonly operationId: string;
+  readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly patch: ConstructionPatch;
+}
+
+/**
  * One tick of a continuous cell-painting brush ("Pintar Casa," a
  * wall-brush stroke's closure): the stroke's *whole* current accumulated
  * cell set (not just what changed since the last tick), regenerated and
@@ -455,6 +466,8 @@ export interface ConstructionSessionPort {
 
   /** Atomically overlays an application-generated patch onto exact source regions. */
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
+  /** Atomically replaces exact source regions with an application-generated patch. */
+  applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;

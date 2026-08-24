@@ -11,6 +11,7 @@ mod footprint;
 mod generation;
 mod geometry;
 mod mesh;
+mod patch_replacement;
 mod region_editing;
 mod region_overlay;
 mod session;
