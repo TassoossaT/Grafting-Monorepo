@@ -25,6 +25,54 @@ fn rect(min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Polygon {
 }
 
 #[test]
+fn collinear_but_unevenly_spaced_control_points_still_flatten_straight() {
+    // Centripetal parametrization moves at different "speeds" depending on
+    // spacing, but collinear is collinear under any parametrization -- a
+    // straight stretch subdivided for uneven spacing alone would be the
+    // exact regression this guards.
+    let control = vec![[0.0, 0.0], [1.0, 0.0], [10.0, 0.0]];
+    let sampled = sample_catmull_rom(&control, 0.01);
+    assert_eq!(sampled.points, control);
+}
+
+#[test]
+fn a_long_straight_run_into_a_tight_corner_does_not_loop_or_overshoot() {
+    // Exactly the shape a real spine produces: a long, sparse straight
+    // stretch (A -> B, 50 apart) followed by a short, tight corner (B -> C,
+    // about 2.8 apart, turning roughly 45 degrees) into a continuing leg
+    // (C -> D). Uniform Catmull-Rom's tangent at B is shaped by the *long*
+    // neighbouring span while the curve has to travel the *short* B->C span
+    // in the same unit parameter interval -- that mismatch is exactly what
+    // overshoots into a cusp or a loop right at the corner.
+    let a = [0.0, 0.0];
+    let b = [50.0, 0.0];
+    let c = [52.0, 2.0];
+    let d = [52.0, 10.0];
+    let control = vec![a, b, c, d];
+
+    let sampled = sample_catmull_rom(&control, 0.02);
+
+    let min_x = control.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min);
+    let max_x = control.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
+    let min_y = control.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
+    let max_y = control.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
+    let margin = 3.0 * distance(b, c);
+
+    for point in &sampled.points {
+        assert!(
+            point[0] >= min_x - margin && point[0] <= max_x + margin,
+            "x overshoot: {point:?}"
+        );
+        assert!(
+            point[1] >= min_y - margin && point[1] <= max_y + margin,
+            "y overshoot: {point:?}"
+        );
+    }
+    assert_eq!(sampled.points[0], a);
+    assert_eq!(*sampled.points.last().unwrap(), d);
+}
+
+#[test]
 fn collinear_control_points_flatten_to_a_straight_polyline() {
     let control = vec![[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]];
     let sampled = sample_catmull_rom(&control, 0.01);

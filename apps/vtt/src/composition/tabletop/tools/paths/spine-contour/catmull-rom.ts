@@ -5,15 +5,20 @@ import type { ConstructionPosition } from "@/ports";
  * 1). Kept as a TS port rather than an actual Rust/WASM call for now -- wiring
  * the crate through `construction-wasm`'s wasm-bindgen boundary needs a
  * `wasm-pack build` and a verified load path through this repo's Node test
- * runner, neither of which this stage risks without checking first. The
- * algorithm is identical to `curve-offset/src/curve.rs`, height included: a
- * spine control point carries `y`, and Catmull-Rom's weighted sum applies
- * per component the same as any other, so height rides along for free
- * instead of needing a second interpolation pass. Only the *sagitta test*
- * that decides where to subdivide looks at XZ alone, matching how every
- * other tolerance in this codebase (`ARC_TESSELLATION_TOLERANCE`, the fit
- * tolerances in `stroke-fitting.ts`) is a ground-plane precision, not a
- * height one.
+ * runner, neither of which this stage risks without checking first.
+ *
+ * Uses a *centripetal* parametrization (see `catmullRomPoint`'s own doc for
+ * why), matching `curve-offset/src/curve.rs` -- keep the two in step if
+ * either changes; this file is the one real strokes exercise today, but the
+ * crate is what a future wasm wiring would call instead.
+ *
+ * Height included: a spine control point carries `y`, and every lerp in
+ * `catmullRomPoint` moves all three components together, so height rides
+ * along for free instead of needing a second interpolation pass. Only the
+ * *sagitta test* that decides where to subdivide looks at XZ alone, matching
+ * how every other tolerance in this codebase (`ARC_TESSELLATION_TOLERANCE`,
+ * the fit tolerances in `stroke-fitting.ts`) is a ground-plane precision,
+ * not a height one.
  */
 
 const MAX_DEPTH = 16;
@@ -34,20 +39,71 @@ function distanceXZ(a: ConstructionPosition, b: ConstructionPosition): number {
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
+function lerpPos(a: ConstructionPosition, b: ConstructionPosition, fraction: number): ConstructionPosition {
+  return add(a, scale(sub(b, a), fraction));
+}
+
+/**
+ * `lerpPos(a, b, numerator / denominator)`, except a near-zero denominator
+ * (two coincident control points -- `reflect()` can produce one when the
+ * original neighbours were already close together) returns `a` outright
+ * instead of dividing by it. `a` and `b` are the same point in that case
+ * anyway, so this changes nothing about the curve, only avoids the `NaN`.
+ */
+function safeLerp(a: ConstructionPosition, b: ConstructionPosition, numerator: number, denominator: number): ConstructionPosition {
+  if (Math.abs(denominator) < 1e-9) return a;
+  return lerpPos(a, b, numerator / denominator);
+}
+
+/**
+ * One point on the **centripetal** Catmull-Rom curve running from `p1` to
+ * `p2`, at `localT` (`0` at `p1`, `1` at `p2`), shaped by the neighbours
+ * `p0`/`p3` on either side.
+ *
+ * **Why centripetal, not uniform.** The control points this curve runs
+ * through are not evenly spaced -- `referenceLineFrom` deliberately spaces
+ * them by how much the road actually needs (a long straight stretch is two
+ * points, a corner is a cluster close together), and *uniform* Catmull-Rom
+ * assumes every span takes the same parameter distance regardless of how
+ * far apart its points actually are. On an uneven spacing that assumption
+ * is wrong exactly where a long straight run meets a tight corner, and the
+ * curve overshoots into a cusp or a loop right at the transition -- the
+ * "toda torta" the fix for this exists to answer.
+ *
+ * The centripetal parametrization (`t` growing by the *square root* of the
+ * XZ distance between consecutive points, per Barry & Goldman 1988 -- the
+ * standard fix, and the one the Catlike Coding tutorial this whole spine
+ * model is styled on arrives at after showing the uniform version's own
+ * overshoot) does not have that failure mode: a short span between close
+ * points gets a short parameter interval, so the curve is not asked to
+ * travel through it at the same "speed" a long span gets. Evaluated via
+ * Barry-Goldman's repeated-lerp construction rather than a fixed matrix,
+ * since the matrix form only exists for the uniform case.
+ *
+ * The exponent uses XZ distance only, matching every other tolerance in
+ * this file -- height still interpolates along for free (`lerpPos` moves
+ * every component together), it just is not what decides how the parameter
+ * spaces itself out.
+ */
 function catmullRomPoint(
   p0: ConstructionPosition,
   p1: ConstructionPosition,
   p2: ConstructionPosition,
   p3: ConstructionPosition,
-  t: number,
+  localT: number,
 ): ConstructionPosition {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  const a = scale(p1, 2);
-  const b = scale(sub(p2, p0), t);
-  const c = scale(add(scale(p0, 2), add(scale(p1, -5), add(scale(p2, 4), scale(p3, -1)))), t2);
-  const d = scale(add(scale(p0, -1), add(scale(p1, 3), add(scale(p2, -3), p3))), t3);
-  return scale(add(add(a, b), add(c, d)), 0.5);
+  const t0 = 0;
+  const t1 = t0 + Math.sqrt(distanceXZ(p0, p1));
+  const t2 = t1 + Math.sqrt(distanceXZ(p1, p2));
+  const t3 = t2 + Math.sqrt(distanceXZ(p2, p3));
+  const t = t1 + localT * (t2 - t1);
+
+  const a1 = safeLerp(p0, p1, t - t0, t1 - t0);
+  const a2 = safeLerp(p1, p2, t - t1, t2 - t1);
+  const a3 = safeLerp(p2, p3, t - t2, t3 - t2);
+  const b1 = safeLerp(a1, a2, t - t0, t2 - t0);
+  const b2 = safeLerp(a2, a3, t - t1, t3 - t1);
+  return safeLerp(b1, b2, t - t1, t2 - t1);
 }
 
 /**
@@ -59,6 +115,29 @@ function catmullRomPoint(
  */
 function reflect(known: ConstructionPosition, neighbour: ConstructionPosition): ConstructionPosition {
   return { x: 2 * known.x - neighbour.x, y: 2 * known.y - neighbour.y, z: 2 * known.z - neighbour.z };
+}
+
+/**
+ * The perpendicular XZ distance from `point` to the infinite line through
+ * `a`/`b` -- the true sagitta, and not the same thing as `point`'s distance
+ * to `a`/`b`'s arithmetic midpoint.
+ *
+ * Those two coincide only when the parameter halfway between `from` and
+ * `to` also lands the curve halfway between `a` and `b` in space -- true
+ * for a *uniform* parametrization, false for the centripetal one this file
+ * uses on purpose (`catmullRomPoint`'s own doc): a straight but unevenly
+ * spaced stretch has its midpoint parameter land closer to whichever
+ * neighbour is spaced tighter, off-centre from `a`/`b` even though the
+ * curve itself never leaves the line. Measuring against the arithmetic
+ * midpoint read that as curvature and subdivided a perfectly straight
+ * stretch down to its individual control points for nothing; measuring
+ * perpendicular distance from the line reads it for what it is -- zero.
+ */
+function perpendicularDistanceXZ(point: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
+  const length = distanceXZ(a, b);
+  if (length < 1e-9) return distanceXZ(point, a);
+  const cross = (point.x - a.x) * (b.z - a.z) - (point.z - a.z) * (b.x - a.x);
+  return Math.abs(cross) / length;
 }
 
 function sagittaXZ(
@@ -73,8 +152,7 @@ function sagittaXZ(
   const mid = catmullRomPoint(p0, p1, p2, p3, midT);
   const a = catmullRomPoint(p0, p1, p2, p3, from);
   const b = catmullRomPoint(p0, p1, p2, p3, to);
-  const chordMid = scale(add(a, b), 0.5);
-  return distanceXZ(mid, chordMid);
+  return perpendicularDistanceXZ(mid, a, b);
 }
 
 function flatten(
@@ -98,10 +176,11 @@ function flatten(
 }
 
 /**
- * Samples a uniform Catmull-Rom curve through `controlPoints`, flattened so
- * no chord strays from the true curve (in XZ) by more than `tolerance`.
- * Collinear, evenly spaced control points flatten to their own straight
- * chords -- the sagitta is zero everywhere, so the result is exactly
+ * Samples a centripetal Catmull-Rom curve through `controlPoints`,
+ * flattened so no chord strays from the true curve (in XZ) by more than
+ * `tolerance`. Collinear control points flatten to their own straight
+ * chords regardless of how unevenly they are spaced -- collinear is
+ * collinear under any parametrization -- so the result is exactly
  * `controlPoints` back.
  */
 export function sampleCatmullRom(
