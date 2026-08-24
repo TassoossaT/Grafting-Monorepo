@@ -96,10 +96,6 @@ Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::plan_sweep_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Runs the graph-neutral sweep planner without mutating session state.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_region_overlay(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Restores the state immediately after one undone generic overlay.

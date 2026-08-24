@@ -91,12 +91,6 @@ pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
-
-// src/sweep_bridge.rs
-pub struct SweepProfilePointRequest
-pub struct PlanSweepRequest
-pub struct PlanSweepResponse
-pub fn plan_sweep(request: PlanSweepRequest) -> Result<PlanSweepResponse, String>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -441,18 +435,6 @@ pub struct PathBrushRequest
 pub enum PathBrushFailure
 pub fn validate_request(request: &PathBrushRequest) -> Result<(), PathBrushFailure>
 pub fn swept_brush_contains(shape: &BrushShape, samples: &[[f32; 2]], point: [f32; 2]) -> bool
-
-// src/sweep.rs
-pub struct TransverseProfilePoint
-pub struct SweepFormationRequest
-pub enum SweepFormationFailure
-pub struct SweepFormationPlan
-pub fn reference_line(&self) -> &[[f32; 3]]
-pub fn vertices(&self) -> &[[f32; 3]]
-pub fn quads(&self) -> &[[usize; 4]]
-pub fn boundary(&self) -> &[usize]
-pub fn profile_len(&self) -> usize
-pub fn plan_sweep_formation(
 ```
 
 ### `terrain-generation` (`libs/domains/procgen/terrain-generation`)

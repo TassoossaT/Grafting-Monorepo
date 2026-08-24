@@ -156,11 +156,11 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
  * at the height the ground was actually picked at.
  *
  * Arc flattening here is temporary and deliberately kept in one place so it
- * is obvious what to delete -- `plan_sweep_formation` only samples a
- * polyline, so a true arc has no way to reach it intact. Until it accepts
- * contour geometry, a curve is handed over as chords close enough that the
- * difference is invisible, which is still a world apart from handing over
- * the raw hand.
+ * is obvious what to delete -- `sweepFormation` only samples a polyline, so a
+ * true arc has no way to reach it intact. Until it accepts contour geometry,
+ * a curve is handed over as chords close enough that the difference is
+ * invisible, which is still a world apart from handing over the raw hand.
+ * Now that the sweep is on this side, teaching it arcs is a local change.
  */
 export function referenceLineFrom(
   fitted: readonly FittedEdge[],
