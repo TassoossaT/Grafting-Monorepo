@@ -1,6 +1,6 @@
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
-import type { EditTarget } from "../atomic-edit.ts";
+import type { EditTarget } from "../orchestration/atomic-edit.ts";
 import {
   organicStructureType,
   pathInteractionOver,

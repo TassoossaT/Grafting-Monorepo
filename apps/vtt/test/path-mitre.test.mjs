@@ -6,9 +6,9 @@ import {
   junctionsWithStandingSpines,
   mitreTerminalRibs,
 } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { pathRunsIn } from "../src/features/edit-construction/path-cloud.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
-import { parseStationNodeId } from "../src/features/edit-construction/station-node-id.ts";
+import { pathRunsIn } from "../src/features/edit-construction/paths/path-cloud.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
+import { parseStationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
 
 const STANDING = pathCorridorId("table:path-brush:1", "road");
 const HALF_WIDTH = 2.1;

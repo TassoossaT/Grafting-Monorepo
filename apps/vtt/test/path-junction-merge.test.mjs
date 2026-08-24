@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { junctionsWithStandingSpines } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
-import { stationNodeId } from "../src/features/edit-construction/station-node-id.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
+import { stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
 
 const STANDING = pathCorridorId("op-a", "road");
 

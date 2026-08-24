@@ -1,3 +1,5 @@
+import type { PathFormationRecipe } from "../paths/path-recipe.ts";
+
 /**
  * A revision an effect expects to still be current when it lands.
  *
@@ -123,11 +125,15 @@ export function createPathBrushEffect(
     return Object.freeze({ scope: required(item.scope, "expected.scope"), revision: item.revision });
   });
   return Object.freeze({
-    operationId: required(context.operationId, "operationId"), tableId: required(context.tableId, "tableId"), initiatedBy: required(context.initiatedBy, "initiatedBy"),
-    kind: "surface.path-brush@1", targetScope: "brush-region", targetType: "path", brushShape: freezeShape(payload.brushShape),
+    operationId: required(context.operationId, "operationId"),
+    tableId: required(context.tableId, "tableId"),
+    initiatedBy: required(context.initiatedBy, "initiatedBy"),
+    kind: "surface.path-brush@1",
+    targetScope: "brush-region",
+    targetType: "path",
+    brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
 }
-import type { PathFormationRecipe } from "./path-recipe.ts";

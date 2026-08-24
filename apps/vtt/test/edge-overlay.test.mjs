@@ -10,8 +10,8 @@ import {
   edgeOverlayOf,
 } from "../src/composition/tabletop/tools/core/edge-overlay.ts";
 import { PATH_ROLES } from "../src/features/edit-construction/structure-types/path-structure.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
-import { stationNodeId } from "../src/features/edit-construction/station-node-id.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
+import { stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
 
 const CORRIDOR = pathCorridorId("op-a", "road");
 

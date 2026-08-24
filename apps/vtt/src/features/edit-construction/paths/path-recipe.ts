@@ -1,4 +1,4 @@
-import type { PathBrushParams, PathKind } from "./tool-types.ts";
+import type { PathBrushParams, PathKind } from "../tools/tool-types.ts";
 
 /**
  * The lateral offset the spine sits at.

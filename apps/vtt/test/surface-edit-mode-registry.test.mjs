@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   SURFACE_EDIT_MODE_DEFINITIONS,
   surfaceEditModeFor,
-} from "../src/features/edit-construction/surface-edit-mode-registry.ts";
+} from "../src/features/edit-construction/modes/surface-edit-mode-registry.ts";
 
 test("path-brush contextual modes remain app-owned", () => {
   assert.equal(surfaceEditModeFor("terrain")?.previewPolicy, "gesture-preview");

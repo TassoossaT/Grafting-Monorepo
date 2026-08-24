@@ -1,7 +1,7 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
-import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../atomic-edit.ts";
-import type { CloudTopology } from "../construction-cloud.ts";
+import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
+import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 
 /**

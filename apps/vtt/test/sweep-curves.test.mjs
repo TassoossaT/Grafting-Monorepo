@@ -7,7 +7,7 @@ import {
   stationFrame,
   sweepFormation,
 } from "../src/composition/tabletop/tools/core/sweep-formation.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
 
 const HALF_WIDTH = 2;
 const FLAT = [

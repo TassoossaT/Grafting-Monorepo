@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pathFormationFor } from "../src/features/edit-construction/path-recipe.ts";
-import { createPathBrushEffect } from "../src/features/edit-construction/surface-edit-contract.ts";
+import { pathFormationFor } from "../src/features/edit-construction/paths/path-recipe.ts";
+import { createPathBrushEffect } from "../src/features/edit-construction/modes/surface-edit-contract.ts";
 
 const context = { operationId: "path-1", tableId: "table-1", initiatedBy: "gm-1" };
 const payload = {

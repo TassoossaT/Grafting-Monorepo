@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createBrushTool } from "../src/composition/tabletop/tools/core/brush-tool.ts";
 import { fitPath } from "../src/composition/tabletop/tools/core/stroke-fitting.ts";
-import { pathHalfWidth } from "../src/features/edit-construction/path-recipe.ts";
+import { pathHalfWidth } from "../src/features/edit-construction/paths/path-recipe.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",

@@ -1,8 +1,8 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
-import type { AtomicEditOp, EditTarget } from "../atomic-edit.ts";
-import { ALL_AXES, addPosition } from "../atomic-edit.ts";
-import { followsOutward, parseStationNodeId } from "../station-node-id.ts";
+import type { AtomicEditOp, EditTarget } from "../orchestration/atomic-edit.ts";
+import { ALL_AXES, addPosition } from "../orchestration/atomic-edit.ts";
+import { followsOutward, parseStationNodeId } from "../paths/station-node-id.ts";
 import type { CascadeContext, EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { allowed, denied } from "./structure-type.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";

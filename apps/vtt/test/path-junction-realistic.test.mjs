@@ -3,8 +3,8 @@ import test from "node:test";
 
 import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
 import { junctionsWithStandingSpines } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { pathRunsIn } from "../src/features/edit-construction/path-cloud.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
+import { pathRunsIn } from "../src/features/edit-construction/paths/path-cloud.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
 
 const CORRIDOR = pathCorridorId("table:path-brush:1", "road");
 

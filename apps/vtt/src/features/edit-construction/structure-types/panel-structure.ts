@@ -1,8 +1,8 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
-import type { AtomicEditOp, EditTarget } from "../atomic-edit.ts";
-import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../atomic-edit.ts";
-import { cloudNodes } from "../construction-cloud.ts";
+import type { AtomicEditOp, EditTarget } from "../orchestration/atomic-edit.ts";
+import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../orchestration/atomic-edit.ts";
+import { cloudNodes } from "../topology/construction-cloud.ts";
 import type { CascadeContext, EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { allowed, denied } from "./structure-type.ts";
 import { IGNORE, type CreationInteraction } from "./creation-interaction.ts";

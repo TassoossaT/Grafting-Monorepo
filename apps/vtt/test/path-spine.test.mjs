@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { planEdit } from "../src/features/edit-construction/edit-orchestrator.ts";
+import { planEdit } from "../src/features/edit-construction/orchestration/edit-orchestrator.ts";
 import { cloudOf } from "./cloud-fixture.mjs";
-import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/path-recipe.ts";
+import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/paths/path-recipe.ts";
 import {
   followsOutward,
   parseStationNodeId,
   stationNodeId,
-} from "../src/features/edit-construction/station-node-id.ts";
+} from "../src/features/edit-construction/paths/station-node-id.ts";
 import { PATH_ROLES } from "../src/features/edit-construction/structure-types/path-structure.ts";
 
 const ROAD = Object.freeze({

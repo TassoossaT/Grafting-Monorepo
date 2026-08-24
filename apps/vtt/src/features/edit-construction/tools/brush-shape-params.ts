@@ -1,4 +1,4 @@
-import type { BrushShape } from "./surface-edit-contract.ts";
+import type { BrushShape } from "../modes/surface-edit-contract.ts";
 import type { BrushShapeParams } from "./tool-types.ts";
 
 /** Converts editable shape parameters into the immutable semantic brush contract. */

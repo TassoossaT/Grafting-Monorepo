@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { joinedCoveredKeys } from "../src/composition/tabletop/tools/paths/path-shared.ts";
-import { pathCorridorId } from "../src/features/edit-construction/path-corridor.ts";
-import { stationNodeId } from "../src/features/edit-construction/station-node-id.ts";
+import { pathCorridorId } from "../src/features/edit-construction/paths/path-corridor.ts";
+import { stationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
 
 const STANDING = pathCorridorId("table:path-brush:1", "road");
 const OTHER = pathCorridorId("table:path-brush:9", "road");

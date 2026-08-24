@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveBrushShape } from "../src/features/edit-construction/brush-shape-params.ts";
+import { resolveBrushShape } from "../src/features/edit-construction/tools/brush-shape-params.ts";
 
 test("circle, square, and hexagon UI parameters resolve to the shared brush contract", () => {
   assert.deepEqual(resolveBrushShape({ shape: "circle", radius: 1.25, rotationDegrees: 90 }), {

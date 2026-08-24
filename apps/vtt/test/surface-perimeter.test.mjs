@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   edgeUseCounts,
   perimeterOf,
-} from "../src/features/edit-construction/surface-perimeter.ts";
+} from "../src/features/edit-construction/topology/surface-perimeter.ts";
 
 /** One face, given its ring of node ids. Edges are named after node pairs. */
 function face(regionId, ring, positions) {

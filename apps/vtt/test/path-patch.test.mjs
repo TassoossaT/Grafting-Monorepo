@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
-import { parseStationNodeId } from "../src/features/edit-construction/station-node-id.ts";
+import { parseStationNodeId } from "../src/features/edit-construction/paths/station-node-id.ts";
 
 test("path subtype declares its own shared quad patch from a graph-neutral sweep", () => {
   // Three stations of a five-slot road profile: rim, rib, spine, rib, rim.

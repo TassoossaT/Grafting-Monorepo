@@ -1,4 +1,4 @@
-import type { AtomicEditOp } from "./atomic-edit.ts";
+import type { AtomicEditOp } from "../orchestration/atomic-edit.ts";
 
 /**
  * One completed edit gesture, as the two op sequences that reverse and
@@ -19,7 +19,6 @@ export interface RegionEditHistoryEntry {
   readonly redo: readonly AtomicEditOp[];
 }
 
-
 /** One confirmed path-brush stroke; the construction session owns its before/after checkpoints. */
 export interface PathBrushHistoryEntry {
   readonly kind: "path-brush";
@@ -27,6 +26,7 @@ export interface PathBrushHistoryEntry {
 }
 
 export type ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry;
+
 export interface EditHistoryState {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
