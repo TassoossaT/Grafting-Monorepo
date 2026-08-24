@@ -41,6 +41,8 @@ export type {
   ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
+  ConstructionEdgeSnapshot,
+  ConstructionGraphSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionEdge,

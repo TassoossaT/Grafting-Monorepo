@@ -319,6 +319,19 @@ export interface ConstructionNodeSnapshot {
   readonly position: ConstructionPosition;
 }
 
+/** One generic graph edge, including edges deliberately not used by a face. */
+export interface ConstructionEdgeSnapshot {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+}
+
+/** The durable generic graph; semantic types decide what its primitives mean. */
+export interface ConstructionGraphSnapshot {
+  readonly nodes: readonly ConstructionNodeSnapshot[];
+  readonly edges: readonly ConstructionEdgeSnapshot[];
+}
+
 /**
  * Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
  * (Rust panics are uncatchable on `wasm32-unknown-unknown`, so an adapter
@@ -469,6 +482,8 @@ export interface ConstructionSessionPort {
    * caller so far).
    */
   getNodePositions(): readonly ConstructionNodeSnapshot[];
+  /** Generic graph primitives, including non-region edges such as a path spine. */
+  getGraphSnapshot(): ConstructionGraphSnapshot;
 
   dispose(): Promise<void>;
 }

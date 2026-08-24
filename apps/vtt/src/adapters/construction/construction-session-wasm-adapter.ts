@@ -18,6 +18,7 @@ import type {
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
+  ConstructionGraphSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionPatchOutcome,
@@ -75,6 +76,7 @@ function fromWirePosition(position: WirePosition): ConstructionPosition {
 
 interface SnapshotWire {
   readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string }[];
 }
 
 /** The engine tags an arc `"arc"`; its center is an XZ pair, never a 3D normal. */
@@ -399,8 +401,15 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   getNodePositions(): readonly ConstructionNodeSnapshot[] {
+    return this.getGraphSnapshot().nodes;
+  }
+
+  getGraphSnapshot(): ConstructionGraphSnapshot {
     const wire = JSON.parse(this.#require().snapshot_json()) as SnapshotWire;
-    return wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) }));
+    return {
+      nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
+      edges: wire.edges.map((edge) => ({ edgeId: edge.id, startNodeId: edge.source, endNodeId: edge.target })),
+    };
   }
 
   async dispose(): Promise<void> {

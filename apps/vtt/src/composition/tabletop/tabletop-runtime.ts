@@ -24,6 +24,7 @@ import type {
   ConfirmedTokenRenderChange,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
+  ConstructionGraphSnapshot,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -131,6 +132,8 @@ export interface TabletopRuntime {
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  /** Generic graph primitives, including edges not owned by a region boundary. */
+  getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
     request: ApplyRegionOverlayRequest,
     origin: ChangeOrigin,
@@ -752,6 +755,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
     return this.#construction.getAllRegionTopologies();
+  }
+
+  getGraphSnapshot(): ConstructionGraphSnapshot {
+    this.#requireReady("reading the construction graph");
+    return this.#construction.getGraphSnapshot();
   }
 
   /**
