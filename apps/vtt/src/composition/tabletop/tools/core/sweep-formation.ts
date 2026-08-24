@@ -1,4 +1,8 @@
-import type { ConstructionPosition, ConstructionSweepPlan } from "@/ports";
+import type {
+  ConstructionEdgeGeometry,
+  ConstructionPosition,
+  ConstructionSweepPlan,
+} from "@/ports";
 
 /**
  * Sweeping a transverse profile along a reference line, in the application.
@@ -30,6 +34,12 @@ export interface TransverseProfilePoint {
   readonly lateralOffset: number;
   /** Height above the reference line's own height at that station. */
   readonly elevation: number;
+}
+
+/** The curve a stretch of a formation runs on, if it is not straight. */
+export interface SweptArc {
+  readonly center: readonly [number, number];
+  readonly clockwise: boolean;
 }
 
 /** Two stations closer than this in XZ are the same station. */
@@ -75,26 +85,26 @@ function leftNormal(x: number, z: number): readonly [number, number] {
  * lengthened so the offset rim still meets both straight stretches, and
  * bounded so a hairpin gets a corner rather than a spike. Same rule the
  * junction mitre follows between two runs -- this one is within one run.
+ *
+ * Where a stretch curves, its normal comes from the curve rather than from
+ * the chord standing in for it. A station in the middle of an arc then has
+ * the *same* normal arriving and leaving, so the mitre resolves to no corner
+ * at all -- correctly, because there is none: a circle does not have corners,
+ * only the polygon that approximates it does. That is what lets a curved road
+ * be smooth instead of faceted, and it is why the rim of one can be declared
+ * as a single arc.
  */
 export function stationFrame(
   line: readonly ConstructionPosition[],
   index: number,
   miterLimit: number,
+  arcs: readonly (SweptArc | undefined)[] = [],
 ): readonly [number, number] {
-  const current = line[index]!;
-  if (index === 0) {
-    const next = line[1]!;
-    return leftNormal(next.x - current.x, next.z - current.z);
-  }
-  if (index + 1 === line.length) {
-    const previous = line[index - 1]!;
-    return leftNormal(current.x - previous.x, current.z - previous.z);
-  }
+  const outgoing = normalLeaving(line, index, arcs);
+  const incoming = normalArriving(line, index, arcs);
+  if (incoming === undefined) return outgoing ?? [0, 0];
+  if (outgoing === undefined) return incoming;
 
-  const previous = line[index - 1]!;
-  const next = line[index + 1]!;
-  const incoming = leftNormal(current.x - previous.x, current.z - previous.z);
-  const outgoing = leftNormal(next.x - current.x, next.z - current.z);
   const sumX = incoming[0] + outgoing[0];
   const sumZ = incoming[1] + outgoing[1];
   const length = Math.hypot(sumX, sumZ);
@@ -104,6 +114,55 @@ export function stationFrame(
   if (Math.abs(denominator) <= COINCIDENT_EPSILON) return outgoing;
   const scale = Math.min(miterLimit, Math.max(-miterLimit, 1 / denominator));
   return [bisector[0] * scale, bisector[1] * scale];
+}
+
+/**
+ * The offset direction a curve dictates: straight out from its centre.
+ *
+ * A point offset radially from a circle lands on a **concentric** circle, so
+ * an offset arc is the same arc with a different radius -- same centre, same
+ * sense of turn. That is the whole reason a road can be curved in the graph
+ * rather than chopped: the rim is one arc edge, not fifty chords.
+ *
+ * Read from the curve rather than from the chords between stations, and that
+ * distinction is the point. A chord normal is tilted by half the angle the
+ * chord subtends, so offsetting along it lands slightly off the concentric
+ * circle -- fine for a polyline, fatal for an arc, whose two ends have to be
+ * the same distance from the centre or it is not an arc at all.
+ */
+function radialNormal(at: ConstructionPosition, arc: SweptArc): readonly [number, number] {
+  const dx = at.x - arc.center[0];
+  const dz = at.z - arc.center[1];
+  const radius = Math.hypot(dx, dz);
+  if (radius < COINCIDENT_EPSILON) return [0, 0];
+  const sign = arc.clockwise ? 1 : -1;
+  return [(sign * dx) / radius, (sign * dz) / radius];
+}
+
+/** The normal of the stretch leaving this station, or `undefined` at the end. */
+function normalLeaving(
+  line: readonly ConstructionPosition[],
+  index: number,
+  arcs: readonly (SweptArc | undefined)[],
+): readonly [number, number] | undefined {
+  const next = line[index + 1];
+  if (next === undefined) return undefined;
+  const arc = arcs[index];
+  if (arc !== undefined) return radialNormal(line[index]!, arc);
+  return leftNormal(next.x - line[index]!.x, next.z - line[index]!.z);
+}
+
+/** The normal of the stretch arriving at this station, or `undefined` at the start. */
+function normalArriving(
+  line: readonly ConstructionPosition[],
+  index: number,
+  arcs: readonly (SweptArc | undefined)[],
+): readonly [number, number] | undefined {
+  const previous = line[index - 1];
+  if (previous === undefined) return undefined;
+  const arc = arcs[index - 1];
+  if (arc !== undefined) return radialNormal(line[index]!, arc);
+  return leftNormal(line[index]!.x - previous.x, line[index]!.z - previous.z);
 }
 
 /**
@@ -144,6 +203,10 @@ export function sweepFormation(
   referenceLine: readonly ConstructionPosition[],
   profile: readonly TransverseProfilePoint[],
   miterLimit: number,
+  options: {
+    /** The curve each span runs on; one shorter than `referenceLine`. */
+    readonly arcs?: readonly (SweptArc | undefined)[];
+  } = {},
 ): ConstructionSweepPlan {
   if (!Number.isFinite(miterLimit) || miterLimit < 1) {
     throw new SweepFormationError(`a sweep needs a mitre limit of at least 1, got ${miterLimit}`);
@@ -161,10 +224,13 @@ export function sweepFormation(
   if (line.length < 2) {
     throw new SweepFormationError("a sweep needs two stations that are not the same station");
   }
+  // Dropping a station would slide every later one out from under its curve,
+  // so the curves are only trusted while nothing was dropped.
+  const arcs = line.length === referenceLine.length ? (options.arcs ?? []) : [];
 
   const vertices: ConstructionPosition[] = [];
   for (const [index, station] of line.entries()) {
-    const frame = stationFrame(line, index, miterLimit);
+    const frame = stationFrame(line, index, miterLimit, arcs);
     for (const point of profile) {
       vertices.push({
         x: station.x + frame[0] * point.lateralOffset,
@@ -183,10 +249,27 @@ export function sweepFormation(
     }
   }
 
+  // Every lengthwise edge of a curved span is the same arc offset sideways,
+  // which is a concentric arc: same centre, same turn. Reported per pair of
+  // vertices so the patch can declare the curve itself rather than the chord
+  // that stands in for it.
+  const curves: { readonly from: number; readonly to: number; readonly geometry: ConstructionEdgeGeometry }[] = [];
+  for (const [index, arc] of arcs.entries()) {
+    if (arc === undefined || index + 1 >= line.length) continue;
+    for (let slot = 0; slot < profile.length; slot += 1) {
+      curves.push({
+        from: index * profile.length + slot,
+        to: (index + 1) * profile.length + slot,
+        geometry: { kind: "arc", center: arc.center, clockwise: arc.clockwise },
+      });
+    }
+  }
+
   return {
     referenceLine: line,
     vertices,
     quads,
     boundary: sweptBoundary(line.length, profile.length),
+    curves,
   };
 }

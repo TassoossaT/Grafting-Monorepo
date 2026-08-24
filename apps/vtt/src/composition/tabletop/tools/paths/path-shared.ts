@@ -32,6 +32,7 @@ import {
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { sharedEdgeId } from "../core/boundary-edges.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
+import { sweepFormation, type SweptArc } from "../core/sweep-formation.ts";
 import {
   distanceToSegmentXZ,
   pointInPolygonXZ,
@@ -45,7 +46,6 @@ import {
   sideOf,
 } from "../core/contour-fusion.ts";
 import { pathPatch } from "./path-patch.ts";
-import { sweepFormation } from "../core/sweep-formation.ts";
 import { junctionRemovals, junctionWedges } from "./path-junction.ts";
 import { inStage, reportToolFailure, reportToolWarning } from "../core/tool-diagnostics.ts";
 
@@ -101,15 +101,23 @@ function groundHeightNear(
 }
 
 /**
- * One point of the flattened track, and whether the run genuinely turns
- * there. A corner has to become a station whatever the walk decides, or the
- * road cuts straight across it; an arc sample is only sampling, and the walk
- * is free to place stations wherever it likes along it.
+ * One point of the sampled track, and whether the run genuinely turns there.
+ *
+ * A corner has to become a station whatever the walk decides, or the road
+ * cuts straight across it; an arc sample is only sampling, and the walk is
+ * free to place stations wherever it likes along it.
+ *
+ * `arc` is the curve the run is *on* as it leaves this point. It is what
+ * makes a curved road curved rather than finely chopped: sampling decides
+ * where the stations go, and the arc says what runs between them, so the
+ * graph stores the curve the fit actually found instead of the chords that
+ * happened to approximate it.
  */
 interface TrackPoint {
   readonly x: number;
   readonly z: number;
   readonly corner: boolean;
+  readonly arc: SweptArc | undefined;
 }
 
 /** The fitted contour as ground positions, arcs sampled by angle. */
@@ -117,9 +125,16 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
 
-  const track: TrackPoint[] = [{ x: first.start.x, z: first.start.z, corner: true }];
+  const track: TrackPoint[] = [
+    { x: first.start.x, z: first.start.z, corner: true, arc: undefined },
+  ];
+  const carry = (arc: SweptArc | undefined): void => {
+    const last = track[track.length - 1]!;
+    track[track.length - 1] = { ...last, arc };
+  };
   for (const edge of fitted) {
     if (edge.geometry.kind === "arc") {
+      carry({ center: edge.geometry.center, clockwise: edge.geometry.clockwise });
       const [centerX, centerZ] = edge.geometry.center;
       const radius = Math.hypot(edge.start.x - centerX, edge.start.z - centerZ);
       const startAngle = Math.atan2(edge.start.z - centerZ, edge.start.x - centerX);
@@ -143,10 +158,11 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
           x: centerX + radius * Math.cos(angle),
           z: centerZ + radius * Math.sin(angle),
           corner: false,
+          arc: { center: edge.geometry.center, clockwise: edge.geometry.clockwise },
         });
       }
     }
-    track.push({ x: edge.end.x, z: edge.end.z, corner: true });
+    track.push({ x: edge.end.x, z: edge.end.z, corner: true, arc: undefined });
   }
   return track;
 }
@@ -166,11 +182,11 @@ export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
-): readonly ConstructionPosition[] {
+): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
   const track = groundTrack(fitted);
   const first = track[0];
   const last = track[track.length - 1];
-  if (first === undefined || last === undefined) return [];
+  if (first === undefined || last === undefined) return { line: [], arcs: [] };
 
   // A deck spans: its height comes from its own two ends, so the middle stays
   // level instead of sagging onto whatever it crosses. Everything else reads
@@ -196,12 +212,15 @@ export function referenceLineFrom(
   const line: ConstructionPosition[] = [
     { x: first.x, y: heightAt(first.x, first.z), z: first.z },
   ];
-  const push = (x: number, z: number): void => {
+  /** The curve each span runs on; one shorter than `line`. */
+  const arcs: (SweptArc | undefined)[] = [];
+  const push = (x: number, z: number, arc: SweptArc | undefined): void => {
     const previous = line[line.length - 1]!;
     // Two stations at one spot would be dropped by the sweep, sliding every
     // later station's index and breaking the weld bookkeeping below.
     if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) return;
     line.push({ x, y: heightAt(x, z), z });
+    arcs.push(arc);
   };
 
   let sinceStation = 0;
@@ -216,18 +235,20 @@ export function referenceLineFrom(
       const ratio = cursor / span;
       travelled += TERRAIN_FOLLOW_STEP - sinceStation;
       sinceStation = 0;
-      push(from.x + (to.x - from.x) * ratio, from.z + (to.z - from.z) * ratio);
+      push(from.x + (to.x - from.x) * ratio, from.z + (to.z - from.z) * ratio, from.arc);
     }
     travelled += span - cursor;
     sinceStation += span - cursor;
     if (to.corner) {
-      push(to.x, to.z);
+      push(to.x, to.z, from.arc);
       sinceStation = 0;
     }
   }
   // The run has to end where it was drawn, corner or not.
-  push(last.x, last.z);
-  return line;
+  push(last.x, last.z, track[track.length - 2]?.arc);
+  // One span per gap: a station pushed at the very start has no span behind
+  // it, and the walk above records a span only when it lands somewhere new.
+  return { line, arcs: arcs.slice(0, Math.max(0, line.length - 1)) };
 }
 
 /**
@@ -567,6 +588,28 @@ export function junctionsWithStandingSpines(
 }
 
 /**
+ * The direction a curve runs at one of its points, pointed the way `towards`
+ * already goes.
+ *
+ * A tangent has two directions and the geometry does not say which one is
+ * "onwards"; the chord to the next station does, and it is never more than
+ * half a station's worth of angle away from the right one.
+ */
+function tangentAt(
+  at: ConstructionPosition,
+  arc: SweptArc,
+  towards: { readonly x: number; readonly z: number },
+): { readonly x: number; readonly z: number } {
+  const dx = at.x - arc.center[0];
+  const dz = at.z - arc.center[1];
+  const radius = Math.hypot(dx, dz);
+  if (radius < 1e-9) return towards;
+  const tangent = { x: -dz / radius, z: dx / radius };
+  const forward = tangent.x * towards.x + tangent.z * towards.z >= 0;
+  return forward ? tangent : { x: -tangent.x, z: -tangent.z };
+}
+
+/**
  * Mitres this run's end rib into the end rib of a run it met at a station.
  *
  * The L, and the only junction shape that needs no junction face at all.
@@ -594,6 +637,9 @@ export function mitreTerminalRibs(
   profileLength: number,
   spineSlot: number,
   joins: readonly SpineJoin[],
+  /** The curve each span of this run follows, so a curved end mitres on its
+   * true tangent rather than on the chord to its neighbouring station. */
+  arcs: readonly (SweptArc | undefined)[] = [],
 ): {
   readonly vertices: readonly ConstructionPosition[];
   readonly welds: ReadonlyMap<string, ConstructionNodeId>;
@@ -632,7 +678,15 @@ export function mitreTerminalRibs(
     const standingNext = standingFirst ? spine.nodes[1] : spine.nodes[spine.nodes.length - 2];
     if (standingNext === undefined) continue;
 
-    const outward = direction(vertices[at(join.at, 0)]!, vertices[at(inward, 0)]!);
+    // Leaving the joint along the road, which on a curve is the tangent
+    // there. A chord to the next station leans into the bend by half the
+    // angle it subtends, and the corner would be built on that lean.
+    const endArc = join.at === 0 ? arcs[0] : arcs[stationCount - 2];
+    const chord = direction(vertices[at(join.at, 0)]!, vertices[at(inward, 0)]!);
+    const outward =
+      chord === undefined || endArc === undefined
+        ? chord
+        : tangentAt(vertices[at(join.at, 0)]!, endArc, chord);
     const standingOut = direction(join.position, standingNext.position);
     if (outward === undefined || standingOut === undefined) continue;
 
@@ -918,10 +972,11 @@ export function commitPathContour(
   const operationId = scopedToolId(ctx, domain, sequence);
 
   const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
-  const drawn =
+  const swept =
     fitted.length === 0
-      ? stroke
+      ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(params.pathKind));
+  const drawn = swept.line;
   if (drawn.length === 0) return;
   // A crossing is made, not found: the crossed spine is split so a node
   // exists for both runs to reference. Whatever still lands exactly on a
@@ -948,7 +1003,13 @@ export function commitPathContour(
     // registers the patch this produces; it does not get to say what the
     // product is.
     const plan = inStage(TOOL, "plan the sweep", { operationId, stations: referenceLine.length }, () =>
-      sweepFormation(referenceLine, profile, effect.parameters.miterLimit),
+      sweepFormation(referenceLine, profile, effect.parameters.miterLimit, {
+        // Only while the stations are the ones the fit produced: a junction
+        // splices its own in, and a spliced station is not on the curve the
+        // fit recorded, so the run commits straight rather than curved to
+        // the wrong circle.
+        arcs: referenceLine === drawn ? swept.arcs : [],
+      }),
     );
     // The sweep drops a station only where two coincide, which the reference
     // line already rules out. Were one dropped anyway the indices would no
@@ -968,6 +1029,7 @@ export function commitPathContour(
       profile.length,
       spineSlot,
       aligned ? crossed.terminals.filter((join) => join.terminal) : [],
+      referenceLine === drawn ? swept.arcs : [],
     );
     const mitredCorridors = new Set(
       crossed.terminals.filter((join) => join.terminal).map((join) => join.run.corridorId),

@@ -3368,6 +3368,10 @@ export interface TransverseProfilePoint {
   /** Height above the reference line's own height at that station. */
   readonly elevation: number;
   }
+export interface SweptArc {
+  readonly center: readonly [number, number];
+  readonly clockwise: boolean;
+  }
 export function withoutCoincidentStations(
   samples: readonly ConstructionPosition[],
   ): readonly ConstructionPosition[] {
@@ -3380,10 +3384,9 @@ export function stationFrame(
   line: readonly ConstructionPosition[],
   index: number,
   miterLimit: number,
+  arcs: readonly (SweptArc | undefined)[] = [],
   ): readonly [number, number] {
-  const current = line[index]!;
-  if (index === 0) {
-  const next = line[1]!;
+  const outgoing = normalLeaving(line, index, arcs);
 export function sweptBoundary(stationCount: number, profileLength: number): readonly number[] {
   const last = stationCount - 1;
   const boundary: number[] = [];
@@ -3400,9 +3403,10 @@ export function sweepFormation(
   referenceLine: readonly ConstructionPosition[],
   profile: readonly TransverseProfilePoint[],
   miterLimit: number,
-  ): ConstructionSweepPlan {
-  if (!Number.isFinite(miterLimit) || miterLimit < 1) {
-  throw new SweepFormationError(`a sweep needs a mitre limit of at least 1, got ${miterLimit}`);
+  options: {
+  /** The curve each span runs on; one shorter than `referenceLine`. */
+  readonly arcs?: readonly (SweptArc | undefined)[];
+  } = {},
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
@@ -3587,7 +3591,7 @@ export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
-  ): readonly ConstructionPosition[] {
+  ): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
   const track = groundTrack(fitted);
 export interface SpineJoin {
   readonly run: PathRun;
@@ -3610,9 +3614,9 @@ export function mitreTerminalRibs(
   profileLength: number,
   spineSlot: number,
   joins: readonly SpineJoin[],
-  ): {
-  readonly vertices: readonly ConstructionPosition[];
-  readonly welds: ReadonlyMap<string, ConstructionNodeId>;
+  /** The curve each span of this run follows, so a curved end mitres on its
+  * true tangent rather than on the chord to its neighbouring station. */
+  arcs: readonly (SweptArc | undefined)[] = [],
 export interface PathMouthSide {
   /** This run's own slot, so its corner node can be named. */
   readonly across: number;

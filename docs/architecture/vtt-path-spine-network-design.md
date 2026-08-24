@@ -194,6 +194,44 @@ boundary walk, unchanged. What changed is who may alter them: `sweptBoundary`
 is exported so the side that *does* know about junctions can walk it, compare
 against it, or replace it outright.
 
+## Curves survive into the graph, because an offset arc is an arc
+
+A fitted arc used to be chopped into chords before it reached the sweep,
+because the sweep was in Rust and took a polyline. With the sweep on this
+side there is no reason for that, and one very good reason against it: the
+rim of a curved road should be **one arc edge**, not fifty chords.
+
+The geometry that makes it free: a point offset radially from a circle lands
+on a **concentric** circle. So every lateral offset of a curved stretch --
+both rims and the spine -- is the same arc at a different radius, with the
+same centre and the same sense of turn. One centre serves the whole
+cross-section, and `ConstructionEdgeGeometry` already carries exactly that.
+
+Two things had to change for it to hold.
+
+**Normals come from the curve, not from the chords.** A chord normal is
+tilted by half the angle the chord subtends, so offsetting along it lands
+slightly off the concentric circle. Tolerable for a polyline; fatal for an
+arc, whose two ends must be equidistant from the centre or it is not an arc.
+`radialNormal` reads the curve.
+
+**A station in the middle of a curve is not a corner.** With normals read
+from the curve, the arriving and leaving normals at such a station are the
+same direction, so the mitre resolves to a plain unit normal. Correctly: a
+circle has no corners, only the polygon approximating it does. That is what
+makes a curved road smooth rather than faceted, and it means the number of
+stations is now purely a question of how finely the ground varies -- not of
+how smooth the road looks.
+
+Sampling still happens, because a station has to read the terrain height
+under it. What changed is that sampling no longer *defines* the road: the
+stations say where the road was measured, the arc says what runs between
+them.
+
+The same tangent is what a junction mitre at a curved end reads. A chord to
+the neighbouring station leans into the bend by half the angle it subtends,
+and the corner would otherwise be built on that lean.
+
 ## What a contour is, and the definition that was wrong
 
 A road is built as a sweep: a reference line of stations, a profile of three

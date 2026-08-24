@@ -46,7 +46,7 @@ test("stations are spaced uniformly along the run, not per fitted segment", () =
   ];
   const stroke = [at(0), at(2.1), at(6.0)];
 
-  const line = referenceLineFrom(fitted, stroke, true);
+  const { line } = referenceLineFrom(fitted, stroke, true);
   const gaps = [];
   for (let index = 0; index + 1 < line.length; index += 1) {
     gaps.push(Number((line[index + 1].x - line[index].x).toFixed(6)));

@@ -860,6 +860,14 @@ Why a sweep could not be planned.
 
 ### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
 
+### `interface vtt.sweep-formation.SweptArc`
+
+The curve a stretch of a formation runs on, if it is not straight.
+
+### `property vtt.sweep-formation.SweptArc.center: readonly [number, number]`
+
+### `property vtt.sweep-formation.SweptArc.clockwise: boolean`
+
 ### `interface vtt.sweep-formation.TransverseProfilePoint`
 
 One sample of a formation's transverse profile.
@@ -872,7 +880,7 @@ Height above the reference line's own height at that station.
 
 Signed world distance from the reference line, left to right.
 
-### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number): readonly [number, number]`
+### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number, arcs: readonly (SweptArc | undefined)[]): readonly [number, number]`
 
 The direction one station offsets its profile along.
 
@@ -881,7 +889,15 @@ lengthened so the offset rim still meets both straight stretches, and
 bounded so a hairpin gets a corner rather than a spike. Same rule the
 junction mitre follows between two runs -- this one is within one run.
 
-### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number): ConstructionSweepPlan`
+Where a stretch curves, its normal comes from the curve rather than from
+the chord standing in for it. A station in the middle of an arc then has
+the *same* normal arriving and leaving, so the mitre resolves to no corner
+at all -- correctly, because there is none: a circle does not have corners,
+only the polygon that approximates it does. That is what lets a curved road
+be smooth instead of faceted, and it is why the rim of one can be declared
+as a single arc.
+
+### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number, options: { arcs?: readonly (SweptArc | undefined)[] }): ConstructionSweepPlan`
 
 Samples a transverse profile along a reference line into connected quads.
 
@@ -1371,7 +1387,7 @@ node minted, which is `insertedColumnAt` for paths. The node is numbered on
 the crossed run's own station scale, fractionally, so it stays part of that
 spine's chain and in the right order.
 
-### `function vtt.path-shared.mitreTerminalRibs(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joins: readonly SpineJoin[]): { moves: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
+### `function vtt.path-shared.mitreTerminalRibs(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joins: readonly SpineJoin[], arcs: readonly (SweptArc | undefined)[]): { moves: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
 
 Mitres this run's end rib into the end rib of a run it met at a station.
 
@@ -1407,7 +1423,7 @@ the *middle* of a rim rather than into its end, so the two corners are not
 nodes the standing run already has, and the faces behind them have to be
 rebuilt rather than nudged.
 
-### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): readonly ConstructionPosition[]`
+### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { arcs: readonly (SweptArc | undefined)[]; line: readonly ConstructionPosition[] }`
 
 The reference line to sweep along: where the fit decided the road goes,
 at the height the ground was actually picked at.
@@ -3923,6 +3939,15 @@ Declarative cross-section consumed by the generic Rust sweep.
 Graph-neutral result of a reusable Rust profile sweep.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.boundary: readonly number[]`
+
+### `property vtt.construction-session-port.ConstructionSweepPlan.curves?: readonly { from: number; geometry: ConstructionEdgeGeometry; to: number }[]`
+
+The lengthwise edges that are curves rather than chords, by the pair of
+vertices each runs between.
+
+Sparse: a straight formation reports none. A curved one reports the arc
+every offset of that stretch follows -- concentric, so one centre serves
+the spine and both rims.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.quads: readonly (readonly [number, number, number, number])[]`
 

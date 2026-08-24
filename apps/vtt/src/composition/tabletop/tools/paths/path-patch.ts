@@ -1,10 +1,11 @@
 import type {
+  ConstructionEdgeGeometry,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionSweepPlan,
 } from "@/ports";
 
-import { createBoundaryEdges } from "../core/boundary-edges.ts";
+import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
@@ -69,7 +70,22 @@ export function pathPatch(
   const nodes = plan.vertices.map((position, index) => ({ id: nodeIds[index]!, position }));
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
 
+  // The curves the sweep found, by the pair of vertices each runs between.
+  // A lengthwise edge of a curved stretch is a real arc in the graph, not the
+  // chord that approximates it, so the road stays smooth however finely or
+  // coarsely its stations happen to be spaced.
+  const curved = new Map<string, ConstructionEdgeGeometry>();
+  for (const curve of plan.curves ?? []) curved.set(`${curve.from}~${curve.to}`, curve.geometry);
+
   const useEdge = (start: number, end: number): ConstructionOrientedEdgeUse => {
+    const forward = curved.get(`${start}~${end}`);
+    if (forward !== undefined) return edges.use(nodeIds[start]!, nodeIds[end]!, forward);
+    const backward = curved.get(`${end}~${start}`);
+    if (backward !== undefined) {
+      // Walked the other way round, so the same curve seen from the far end:
+      // one centre, the opposite sense of turn.
+      return edges.use(nodeIds[start]!, nodeIds[end]!, reverseGeometry(backward));
+    }
     return edges.use(nodeIds[start]!, nodeIds[end]!);
   };
 
