@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  EMPTY_OUTCOME,
   PANEL_ROLES,
   applyEditPlan,
+  mergeOutcomes,
   planEdit,
   resolvePolicy,
   structureTypeFor,
@@ -267,4 +269,48 @@ test("a denied plan never reaches the engine", () => {
   applyEditPlan(sink, plan);
 
   assert.equal(calls.length, 0);
+});
+
+test("a face removed later in a transaction is no longer reported as affected", () => {
+  // Two bands side by side: deleting the first reports the second as its
+  // neighbour, and deleting the second reports it as gone. Kept in both
+  // lists, the caller goes looking for the mesh of a face that no longer
+  // exists -- "unknown analytic region", thrown after the delete has already
+  // happened, which is how rebuilding a junction lost the flank it removed.
+  const key = (id) => ["@region", id];
+  const first = {
+    ...EMPTY_OUTCOME,
+    affectedSurfaceKeys: [key("band-b")],
+    removedSurfaceKeys: [key("band-a")],
+  };
+  const second = {
+    ...EMPTY_OUTCOME,
+    affectedSurfaceKeys: [key("band-c")],
+    removedSurfaceKeys: [key("band-b")],
+  };
+
+  const merged = mergeOutcomes(first, second);
+
+  assert.deepEqual(
+    merged.affectedSurfaceKeys.map((entry) => entry.join(":")),
+    ["@region:band-c"],
+  );
+  assert.deepEqual(
+    merged.removedSurfaceKeys.map((entry) => entry.join(":")),
+    ["@region:band-a", "@region:band-b"],
+  );
+});
+
+test("a face created after being removed is standing again, not gone", () => {
+  const key = (id) => ["@region", id];
+  const merged = mergeOutcomes(
+    { ...EMPTY_OUTCOME, removedSurfaceKeys: [key("band-a")] },
+    { ...EMPTY_OUTCOME, createdSurfaceKeys: [key("band-a")] },
+  );
+
+  assert.deepEqual(merged.removedSurfaceKeys, []);
+  assert.deepEqual(
+    merged.createdSurfaceKeys.map((entry) => entry.join(":")),
+    ["@region:band-a"],
+  );
 });

@@ -196,12 +196,45 @@ function mergeIds(left: readonly string[], right: readonly string[]): readonly s
   return [...new Set([...left, ...right])];
 }
 
-/** Folds two outcomes, so a whole transaction reports one combined result. */
+function without(
+  keys: readonly (readonly string[])[],
+  gone: ReadonlySet<string>,
+): readonly (readonly string[])[] {
+  return gone.size === 0 ? keys : keys.filter((key) => !gone.has(key.join(" ")));
+}
+
+/**
+ * Folds two outcomes, so a whole transaction reports one combined result.
+ *
+ * **The later op wins the disagreement**, and the disagreement is real: two
+ * faces sitting side by side are each other's neighbour, so deleting the
+ * first reports the second as *affected* and deleting the second reports it
+ * as *removed*. A merge that kept both leaves the caller a key it must
+ * re-derive a mesh for and a key that no longer exists -- the same key. That
+ * is a thrown `unknown analytic region`, in the middle of a transaction that
+ * has already happened, and it is why rebuilding a junction's flank could
+ * take the flank away and put nothing back.
+ *
+ * `left` is what the transaction has done so far and `right` is the newest
+ * op, so it settles both directions: a face the newest op removed is no
+ * longer affected or created, and a face it created is no longer removed.
+ */
 export function mergeOutcomes(left: RegionEditOutcome, right: RegionEditOutcome): RegionEditOutcome {
+  const removed = new Set(right.removedSurfaceKeys.map((key) => key.join(" ")));
+  const created = new Set(right.createdSurfaceKeys.map((key) => key.join(" ")));
   return {
-    affectedSurfaceKeys: mergeKeys(left.affectedSurfaceKeys, right.affectedSurfaceKeys),
-    createdSurfaceKeys: mergeKeys(left.createdSurfaceKeys, right.createdSurfaceKeys),
-    removedSurfaceKeys: mergeKeys(left.removedSurfaceKeys, right.removedSurfaceKeys),
+    affectedSurfaceKeys: without(
+      mergeKeys(left.affectedSurfaceKeys, right.affectedSurfaceKeys),
+      removed,
+    ),
+    createdSurfaceKeys: without(
+      mergeKeys(left.createdSurfaceKeys, right.createdSurfaceKeys),
+      removed,
+    ),
+    removedSurfaceKeys: without(
+      mergeKeys(left.removedSurfaceKeys, right.removedSurfaceKeys),
+      created,
+    ),
     createdNodeIds: mergeIds(left.createdNodeIds, right.createdNodeIds),
     removedNodeIds: mergeIds(left.removedNodeIds, right.removedNodeIds),
   };

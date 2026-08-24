@@ -2662,6 +2662,19 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
+**The later op wins the disagreement**, and the disagreement is real: two
+faces sitting side by side are each other's neighbour, so deleting the
+first reports the second as *affected* and deleting the second reports it
+as *removed*. A merge that kept both leaves the caller a key it must
+re-derive a mesh for and a key that no longer exists -- the same key. That
+is a thrown `unknown analytic region`, in the middle of a transaction that
+has already happened, and it is why rebuilding a junction's flank could
+take the flank away and put nothing back.
+
+`left` is what the transaction has done so far and `right` is the newest
+op, so it settles both directions: a face the newest op removed is no
+longer affected or created, and a face it created is no longer removed.
+
 ### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
