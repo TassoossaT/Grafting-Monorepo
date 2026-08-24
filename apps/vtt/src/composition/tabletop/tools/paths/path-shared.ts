@@ -764,7 +764,14 @@ export interface PathMouthSide {
   /** This run's own slot, so its corner node can be named. */
   readonly across: number;
   readonly position: ConstructionPosition;
-  /** Where the corner falls on the standing run's own station scale. */
+  /**
+   * Roughly where the corner falls on the standing run's station scale.
+   *
+   * For ordering the two corners along the rim, and nothing else. Anything
+   * that has to *find* something on the standing run locates it by position
+   * instead: a station number is not a coordinate system a later junction
+   * leaves alone, since splitting a spine mints fractional ones.
+   */
   readonly standingStation: number;
 }
 

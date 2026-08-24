@@ -64,10 +64,47 @@ function topologiesFrom(formation) {
   });
 }
 
+/** The junction node the spine split mints at x = 3, between stations 1 and 2. */
+const JUNCTION = { nodeId: stationNodeId(STANDING, 1.5, 0), station: 1.5 };
+const JUNCTION_AT = { x: 3, y: 0, z: 0 };
+
+/**
+ * The spine split a junction performs, applied to the reported topologies.
+ *
+ * The road is *already joined* by the time its flank is rebuilt: the spine
+ * edge between two stations has been cut and the junction node stands on the
+ * chain. A fixture that skips that step describes a table that never exists
+ * at the moment the code under test runs -- and the code is entitled to
+ * expect it, because it reads the junction node off the chain rather than
+ * working out where one ought to be.
+ */
+function withSpineSplit(topologies) {
+  const from = stationNodeId(STANDING, 1, 0);
+  const to = stationNodeId(STANDING, 2, 0);
+  const split = `${TABLE}:seg:${[from, to].sort().join("~")}`;
+  return topologies.map((topology) => {
+    if (!topology.outerLoops[0].some((use) => use.edgeId === split)) return topology;
+    return {
+      ...topology,
+      nodes: [...topology.nodes, { id: JUNCTION.nodeId, position: JUNCTION_AT }],
+      outerLoops: [
+        topology.outerLoops[0].flatMap((use) => {
+          if (use.edgeId !== split) return [use];
+          const [start, end] = use.reversed ? [to, from] : [from, to];
+          return [
+            { ...use, edgeId: `${split}|a`, startNodeId: start, endNodeId: JUNCTION.nodeId },
+            { ...use, edgeId: `${split}|b`, startNodeId: JUNCTION.nodeId, endNodeId: end },
+          ];
+        }),
+      ],
+    };
+  });
+}
+
 /** The standing run: along +X from x = 0 to x = 6, rims at z = +-2.1. */
 function standingRun() {
   const runs = pathRunsIn(
-    topologiesFrom(pathPatch(TABLE, STANDING, "path", planAlongX(4), 3, 1)),
+    withSpineSplit(topologiesFrom(pathPatch(TABLE, STANDING, "path", planAlongX(4), 3, 1))),
   );
   assert.equal(runs.length, 1);
   return runs[0];
@@ -87,9 +124,6 @@ function arrivingPlan(stationZ) {
   }
   return { referenceLine: [], vertices, quads: [], boundary: [] };
 }
-
-/** The junction node the spine weld would have minted at x = 3. */
-const JUNCTION = { nodeId: stationNodeId(STANDING, 1.5, 0), station: 1.5 };
 
 function mouthInto(run, stationZ = [-6, -3, 0]) {
   const found = pathMouthsInto(arrivingPlan(stationZ), 3, 1, [run]);
@@ -207,9 +241,7 @@ test("a wedge is wound the way the sweep winds its own faces", () => {
   for (const side of mouth.sides) {
     positions.set(stationNodeId(ARRIVING, mouth.station, side.across), side.position);
   }
-  // The junction node is not one the standing run minted: the spine split
-  // made it, so its position comes from where the roads met.
-  positions.set(JUNCTION.nodeId, { x: 3, y: 0, z: 0 });
+  positions.set(JUNCTION.nodeId, JUNCTION_AT);
   const ends = new Map(wedges.patch.edges.map((edge) => [edge.edgeId, edge]));
 
   for (const region of wedges.patch.regions) {
@@ -239,4 +271,36 @@ test("a run passing clean through opens nothing either: that is not an arrival",
   const found = mouthInto(run, [-6, 0, 6]);
   assert.equal(found.mouths.length, 0);
   assert.deepEqual(found.vertices, arrivingPlan([-6, 0, 6]).vertices);
+});
+
+test("a fractional station on the spine does not hide the flank from the rebuild", () => {
+  // The junction node sits at station 1.5, and the rim has no node there --
+  // which is exactly what a spine split leaves behind. Anything locating the
+  // stretch by matching station numbers finds nothing here and gives up
+  // without a word, so the kerb comes back depending on where you drew last.
+  const run = standingRun();
+  assert.ok(
+    run.spine.nodes.some((node) => !Number.isInteger(node.station)),
+    "the fixture really does carry a fractional station",
+  );
+  const rim = run.contours.find((contour) => contour.across === -1);
+  assert.ok(
+    rim.nodes.every((node) => Number.isInteger(node.station)),
+    "and the rim really does not",
+  );
+
+  const [mouth] = mouthInto(run).mouths;
+  const wedges = junctionWedges(TABLE, "op-2", ARRIVING, mouth, JUNCTION);
+  assert.ok(wedges !== undefined, "the flank is still found and rebuilt");
+  assert.equal(wedges.patch.regions.length, 2);
+});
+
+test("a junction node the run does not carry rebuilds nothing, rather than half", () => {
+  const run = standingRun();
+  const [mouth] = mouthInto(run).mouths;
+  const stranger = { nodeId: stationNodeId(STANDING, 9.5, 0), station: 9.5 };
+
+  // One wedge alone leaves the flank it replaced half open, which is worse
+  // than the kerb it was meant to remove.
+  assert.equal(junctionWedges(TABLE, "op-2", ARRIVING, mouth, stranger), undefined);
 });

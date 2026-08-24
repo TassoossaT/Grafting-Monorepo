@@ -9,6 +9,7 @@ import type {
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
 import { createBoundaryEdges } from "../core/boundary-edges.ts";
+import { distanceToSegmentXZ } from "../shapes/geometry-2d.ts";
 import { stationNodeId } from "../../../../features/edit-construction/index.ts";
 import type { PathMouth, PathMouthSide } from "./path-shared.ts";
 
@@ -75,71 +76,87 @@ export function junctionWedges(
   const rim = run.contours.find((contour) => contour.across === mouth.through);
   if (spine === undefined || rim === undefined || mouth.sides.length < 2) return undefined;
 
-  const [left, right] = mouth.sides as readonly [PathMouthSide, PathMouthSide];
-  // The faces the mouth opens into: this side of the run, over the stretch
-  // the two corners bracket.
+  const rimNodes = rim.nodes;
+  if (rimNodes.length < 2 || spine.nodes.length < 2) return undefined;
+
+  /**
+   * Where a corner sits on the rim, as the segment of it the corner landed on.
+   *
+   * Found by projection rather than by station arithmetic, and that is the
+   * whole difference between this working and working sometimes. Stations
+   * are not a coordinate system a second junction leaves alone: splitting a
+   * spine mints a node at a fractional station, so any lookup that asks for
+   * "the node at station 2" stops finding one as soon as a 1.5 exists. A
+   * position, on the other hand, is still a position.
+   */
+  const rimSegmentOf = (at: PathMouthSide): number | undefined => {
+    let best: { readonly index: number; readonly distance: number } | undefined;
+    for (let index = 0; index + 1 < rimNodes.length; index += 1) {
+      const distance = distanceToSegmentXZ(
+        at.position,
+        rimNodes[index]!.position,
+        rimNodes[index + 1]!.position,
+      );
+      if (best === undefined || distance < best.distance) best = { index, distance };
+    }
+    return best?.index;
+  };
+
+  const corners = mouth.sides
+    .map((side) => ({ side, segment: rimSegmentOf(side) }))
+    .filter((entry): entry is { side: PathMouthSide; segment: number } => entry.segment !== undefined)
+    .sort((a, b) => a.segment - b.segment || a.side.standingStation - b.side.standingStation);
+  const left = corners[0];
+  const right = corners[corners.length - 1];
+  if (left === undefined || right === undefined || left === right) return undefined;
+
+  // The stretch of rim the mouth opens through: from the node before the
+  // first corner to the node after the last.
+  const before = rimNodes[left.segment]!;
+  const after = rimNodes[Math.min(right.segment + 1, rimNodes.length - 1)]!;
+  if (before.station >= after.station) return undefined;
+
+  // Everything of the spine over that stretch, junction node included -- it
+  // is on the chain now, and taking it from the chain rather than computing
+  // where it ought to be is what keeps a second junction from breaking this.
+  const spineOver = spine.nodes.filter(
+    (node) => node.station >= before.station && node.station <= after.station,
+  );
+  const pivot = spineOver.findIndex((node) => node.nodeId === junction.nodeId);
+  if (pivot <= 0 || pivot >= spineOver.length - 1) return undefined;
+
+  // Only faces the two wedges are about to cover completely: a band hanging
+  // over the end of the stretch would be removed and not replaced.
   const removed = run.bands.filter(
     (band) =>
       band.slots.includes(mouth.through) &&
       band.slots.includes(0) &&
-      band.stations[0]! < right.standingStation &&
-      band.stations[band.stations.length - 1]! > left.standingStation,
+      band.stations[0]! >= before.station &&
+      band.stations[band.stations.length - 1]! <= after.station,
   );
   if (removed.length === 0) return undefined;
 
-  const first = Math.min(...removed.map((band) => band.stations[0]!));
-  const last = Math.max(...removed.map((band) => band.stations[band.stations.length - 1]!));
-
   const positionOf = new Map<ConstructionNodeId, ConstructionPosition>();
-  for (const node of [...spine.nodes, ...rim.nodes]) positionOf.set(node.nodeId, node.position);
-  const rimAt = (station: number) => rim.nodes.find((node) => node.station === station);
-  const spineAt = (station: number) => spine.nodes.find((node) => node.station === station);
-  const between = (low: number, high: number) =>
-    spine.nodes.filter((node) => node.station > low && node.station < high).map((node) => node.station);
-
+  for (const node of [...spine.nodes, ...rimNodes]) positionOf.set(node.nodeId, node.position);
   const cornerId = (side: PathMouthSide) =>
     stationNodeId(arrivingCorridorId, mouth.station, side.across);
 
-  /** Station numbers of the standing run this wedge walks, rim then spine. */
-  const wedge = (
-    side: PathMouthSide,
-    rimStations: readonly number[],
-    spineStations: readonly number[],
-    cornerFirst: boolean,
-  ): readonly ConstructionNodeId[] | undefined => {
-    const rimIds = rimStations.map((station) => rimAt(station)?.nodeId);
-    const spineIds = spineStations.map((station) => spineAt(station)?.nodeId);
-    if ([...rimIds, ...spineIds].some((id) => id === undefined)) return undefined;
-    const corner = cornerId(side);
-    const walk = cornerFirst
-      ? [junction.nodeId, corner, ...(rimIds as string[]), ...(spineIds as string[])]
-      : [...(rimIds as string[]), corner, junction.nodeId, ...(spineIds as string[])];
-    // A ring has to be a ring: two of the same node in a row would declare an
-    // edge from a node to itself.
-    return walk.filter((id, index) => id !== walk[index - 1]) as readonly ConstructionNodeId[];
-  };
+  /** A ring, with any node repeated back to back folded away. */
+  const ring = (walk: readonly ConstructionNodeId[]): readonly ConstructionNodeId[] =>
+    walk.filter((id, index) => id !== walk[index - 1] && id !== (index === 0 ? walk[walk.length - 1] : undefined));
 
-  const leftRing = wedge(
-    left,
-    [first, ...between(first, left.standingStation)].filter(
-      (station, index, all) => all.indexOf(station) === index && station <= left.standingStation,
-    ),
-    [...between(first, junction.station)].reverse().concat(first),
-    false,
-  );
-  const rightRing = wedge(
-    right,
-    [...between(right.standingStation, last), last].filter(
-      (station, index, all) => all.indexOf(station) === index && station >= right.standingStation,
-    ),
-    // Back down the spine from the far end of the rebuilt stretch to the
-    // junction, which is where the wedge closes.
-    [last, ...[...between(junction.station, last)].reverse()].filter(
-      (station, index, all) => all.indexOf(station) === index,
-    ),
-    true,
-  );
-  if (leftRing === undefined || rightRing === undefined) return undefined;
+  const leftRing = ring([
+    before.nodeId,
+    cornerId(left.side),
+    junction.nodeId,
+    ...spineOver.slice(0, pivot).reverse().map((node) => node.nodeId),
+  ]);
+  const rightRing = ring([
+    junction.nodeId,
+    cornerId(right.side),
+    after.nodeId,
+    ...spineOver.slice(pivot + 1).reverse().map((node) => node.nodeId),
+  ]);
 
   const positionAt = (nodeId: ConstructionNodeId): ConstructionPosition => {
     const known = positionOf.get(nodeId);
@@ -153,7 +170,7 @@ export function junctionWedges(
     { ring: leftRing, name: "left" },
     { ring: rightRing, name: "right" },
   ]
-    .filter((entry) => entry.ring.length >= 3)
+    .filter((entry) => new Set(entry.ring).size >= 3)
     .map((entry) => {
       // Wound the way the sweep winds its own faces, so a wedge and the band
       // beside it agree on which side of a shared edge each of them is on.
@@ -166,7 +183,9 @@ export function junctionWedges(
         physical: true,
       };
     });
-  if (regions.length === 0) return undefined;
+  // Both halves or neither. One wedge alone leaves the flank it replaced
+  // half open, which is worse than the kerb it was meant to remove.
+  if (regions.length < 2) return undefined;
 
   return {
     removed: removed.map((band) => band.surfaceKey),

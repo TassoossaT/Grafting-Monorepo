@@ -3621,9 +3621,10 @@ export interface PathMouthSide {
   /** This run's own slot, so its corner node can be named. */
   readonly across: number;
   readonly position: ConstructionPosition;
-  /** Where the corner falls on the standing run's own station scale. */
-  readonly standingStation: number;
-  }
+  /**
+  * Roughly where the corner falls on the standing run's station scale.
+  *
+  * For ordering the two corners along the rim, and nothing else. Anything
 export interface PathMouth {
   readonly run: PathRun;
   /** The slot of the standing rim the mouth opens through. */

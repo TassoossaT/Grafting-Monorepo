@@ -360,6 +360,30 @@ pulling in opposite directions.
 flank is removed before the road that opens it is declared, and the wedges go
 in last, because they bound edges the road itself has only just minted.
 
+### A station number is not a coordinate system
+
+Splitting a spine mints a node at a fractional station, and the rim gets no
+node at all. So after one junction the standing run has a spine numbered
+`0, 1, 1.5, 2` against a rim numbered `0, 1, 2`, and any lookup phrased as
+"the node at station 1.5" finds one on the spine and nothing on the rim.
+
+The flank rebuild was phrased exactly that way, and it did not fail loudly:
+it returned `undefined` and the junction was quietly skipped, so the kerb
+came back or did not depending on whether something had already split the
+spine nearby. That is what makes it read as instability rather than as a bug
+-- the same stroke works or does not depending on the history of the table.
+
+Stations are for *ordering* now. Anything that has to find something on the
+standing run finds it by position: which rim segment a corner projects onto,
+and which spine nodes lie between two rim nodes. A position is still a
+position after somebody else edits the run.
+
+Two other rules fell out of the same pass. The junction node is taken from
+the chain rather than computed, so if it is not on the chain there is nothing
+to rebuild and the rebuild says so. And the flank is rebuilt in both halves
+or neither, because one wedge alone leaves it half open -- worse than the
+kerb it was meant to remove.
+
 ### Joining is asked by identity, and that had to be fixed twice
 
 Which faces a stroke *joins* rather than replaces used to be a purely
