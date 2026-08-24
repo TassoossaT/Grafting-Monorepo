@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { addPosition } from "../src/features/edit-construction/orchestration/atomic-edit.ts";
 import {
+  chainsOf,
   moveSpineControlNode,
   neighborsOf,
   parseSpineControlNodeId,
@@ -120,6 +121,37 @@ test("a control node with no neighbour on one side does not break reading the gr
   assert.equal(graph.nodes.length, 1);
   assert.equal(graph.edges.length, 0);
   assert.deepEqual(neighborsOf(graph, lone), []);
+});
+
+test("chainsOf splits a hub of degree three into three chains, each running from the hub to its own arm", () => {
+  const hub = spineControlNodeId("hub", 0);
+  const armA = spineControlNodeId("run-a", 1);
+  const armB = spineControlNodeId("run-b", 1);
+  const armC = spineControlNodeId("run-c", 1);
+
+  const graph = spineGraphIn([
+    band("run-a", hub, armA, 0),
+    band("run-b", hub, armB, 10),
+    band("run-c", hub, armC, 20),
+  ]);
+
+  const chains = chainsOf(graph);
+  assert.equal(chains.length, 3);
+  for (const arm of [armA, armB, armC]) {
+    const chain = chains.find((candidate) => candidate.nodes.some((node) => node.nodeId === arm));
+    assert.ok(chain !== undefined, `no chain reached ${arm}`);
+    assert.equal(chain.nodes.length, 2, "each chain is just the hub and its own arm");
+    assert.ok(chain.nodes.some((node) => node.nodeId === hub), "every chain starts or ends at the shared hub");
+  }
+});
+
+test("chainsOf walks a straight run of several degree-two nodes as one chain", () => {
+  const a = spineControlNodeId("run-1", 0);
+  const b = spineControlNodeId("run-1", 1);
+  const graph = spineGraphIn([band("run-1", a, b, 0)]);
+  const chains = chainsOf(graph);
+  assert.equal(chains.length, 1);
+  assert.deepEqual(chains[0].nodes.map((node) => node.nodeId), [a, b]);
 });
 
 test("moving a spine control node produces the same move-vertex op the generic edit pipeline already knows", () => {
