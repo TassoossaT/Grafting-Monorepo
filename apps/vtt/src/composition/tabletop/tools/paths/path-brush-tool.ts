@@ -11,9 +11,9 @@ import { PATH_COLOR, commitPathContour } from "./path-shared.ts";
  *
  * Path creation follows the same ownership split as walls: this tool only
  * chooses the interaction, `path-shared.ts` owns the single commit every
- * path goes through, `path-patch.ts` declares the graph, and Rust supplies
- * reusable geometry and executes the resolved overlay without ever being
- * told any of it is a path.
+ * path goes through, `spine-contour/` derives the contour from the spine
+ * and declares the graph, and Rust supplies reusable geometry and executes
+ * the resolved overlay without ever being told any of it is a path.
  */
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",

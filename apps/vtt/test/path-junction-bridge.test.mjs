@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
 import { pathCorridorId, pathSubtypeOf } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
 import { pathCarvesGround, pathRidesTerrain } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
 import { parseStationNodeId, stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { resolveCreationInteraction } from "../src/features/edit-construction/structure-types/index.ts";
+
+// The station-welding tests that used to live here (`pathPatch`'s
+// weld-by-address behaviour) were retired with the station-sweep commit
+// path -- see `path-shared.ts`'s `commitPathContour` doc. The spine-contour
+// engine that replaces it welds by *position* instead; that behaviour is
+// covered in `spine-contour.test.mjs` ("re-consuming a standing band...
+// welds every vertex back onto its own former id"), not here.
+//
+// `station-node-id.ts` itself is still real code -- `path-structure.ts`'s
+// edit-role model still reads it for interactive dragging of an
+// already-committed road (a still-open gap the new engine's own commits
+// don't yet address; see `commitPathContour`'s doc) -- so these three tests
+// of subtype/interaction declarations stay exactly as they were.
 
 test("a corridor id carries its subtype without disturbing station addressing", () => {
   const corridor = pathCorridorId("table-1:path-brush:3", "road");
@@ -39,74 +51,4 @@ test("the interaction table reads the painted subtype, so an overpass declares i
   assert.equal(resolveCreationInteraction("path", "terrain", "bridge").kind, "ignore");
   assert.equal(resolveCreationInteraction("path", "path", "bridge").kind, "ignore");
   assert.equal(resolveCreationInteraction("path", "terrain").kind, "cut");
-});
-
-/** Two stations of a three-slot profile: rim, spine, rim. */
-function twoStationPlan() {
-  const vertices = [];
-  for (const x of [0, 1]) {
-    for (const z of [-1, 0, 1]) vertices.push({ x, y: 0, z });
-  }
-  return {
-    referenceLine: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }],
-    vertices,
-    quads: [[0, 3, 4, 1], [1, 4, 5, 2]],
-    boundary: [0, 3, 4, 5, 2, 1],
-  };
-}
-
-test("a welded station reuses the standing spine node instead of minting one", () => {
-  const corridor = pathCorridorId("op-b", "road");
-  const standing = stationNodeId(pathCorridorId("op-a", "road"), 7, 0);
-
-  const formation = pathPatch(
-    "table-1",
-    corridor,
-    "path",
-    twoStationPlan(),
-    3,
-    1,
-    new Map([["0:0", standing]]),
-  );
-
-  const ids = formation.patch.nodes.map((node) => node.id);
-  // Station 0's spine is the other corridor's node -- the two runs are joined
-  // because they reference it, not because they touch the same coordinate.
-  assert.equal(ids[1], standing);
-  // Everything else is this run's own, station 1's spine included.
-  assert.equal(ids[0], stationNodeId(corridor, 0, -1));
-  assert.equal(ids[2], stationNodeId(corridor, 0, 1));
-  assert.equal(ids[4], stationNodeId(corridor, 1, 0));
-  assert.equal(new Set(ids).size, 6, "no id is minted twice");
-});
-
-test("without a weld every node belongs to the run that drew it", () => {
-  const corridor = pathCorridorId("op-b", "road");
-  const formation = pathPatch("table-1", corridor, "path", twoStationPlan(), 3, 1);
-  for (const node of formation.patch.nodes) {
-    assert.equal(parseStationNodeId(node.id).operationId, corridor);
-  }
-});
-
-test("a welded node still bounds the bands it belongs to, so the junction is one surface", () => {
-  const corridor = pathCorridorId("op-b", "road");
-  const standing = stationNodeId(pathCorridorId("op-a", "road"), 7, 0);
-  const formation = pathPatch(
-    "table-1",
-    corridor,
-    "path",
-    twoStationPlan(),
-    3,
-    1,
-    new Map([["0:0", standing]]),
-  );
-
-  const touching = formation.patch.edges.filter(
-    (edge) => edge.startNodeId === standing || edge.endNodeId === standing,
-  );
-  assert.ok(touching.length >= 2, "the shared node carries this run's own edges too");
-  const bands = formation.patch.regions.filter((region) =>
-    region.boundary.some((use) => touching.some((edge) => edge.edgeId === use.edgeId)),
-  );
-  assert.equal(bands.length, 2, "both bands either side of the spine meet at it");
 });

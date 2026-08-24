@@ -1,13 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pathPatch } from "../src/composition/tabletop/tools/paths/path-patch.ts";
 import { referenceLineFrom } from "../src/composition/tabletop/tools/paths/path-shared.ts";
 import {
   stationFrame,
   sweepFormation,
 } from "../src/composition/tabletop/tools/core/sweep-formation.ts";
-import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
+
+// `pathPatch` (station-node-major patch declaration) and the three tests
+// below that exercised it through `sweepFormation` were retired along with
+// the rest of the station-sweep commit path -- see `path-shared.ts`'s
+// `commitPathContour` doc. `sweepFormation`/`stationFrame` themselves are
+// still real, still-used geometry (this file's own remaining tests), so
+// they stay; only the patch-declaration integration went with the engine
+// that consumed it. The spine-contour engine that replaces it flattens a
+// curve to dense straight chords rather than keeping true arc edges in the
+// graph, which is a real trade-off worth naming: more graph nodes along a
+// curved stretch, no single arc edge a renderer can draw smooth from few
+// points.
 
 const HALF_WIDTH = 2;
 const FLAT = [
@@ -87,48 +97,6 @@ test("a straight run reports no curves at all", () => {
   assert.deepEqual(plan.curves, []);
 });
 
-test("the patch declares the curve, not the chord standing in for it", () => {
-  const { line, arcs } = quarterCircle();
-  const plan = sweepFormation(line, FLAT, 4, { arcs });
-  const formation = pathPatch(
-    "table-1",
-    pathCorridorId("op-1", "road"),
-    "path",
-    plan,
-    3,
-    1,
-  );
-
-  const arced = formation.patch.edges.filter((edge) => edge.geometry?.kind === "arc");
-  assert.equal(arced.length, plan.curves.length, "every lengthwise edge kept its curve");
-  for (const edge of arced) {
-    assert.deepEqual(edge.geometry.center, ARC.center);
-  }
-
-  // The ribs stay straight: a cross-section is a cut, not a curve.
-  const straight = formation.patch.edges.filter((edge) => edge.geometry === undefined);
-  assert.equal(straight.length, line.length * 2, "two rib edges per station");
-});
-
-test("a curve seen from the far end keeps its centre and flips its turn", () => {
-  const { line, arcs } = quarterCircle();
-  const plan = sweepFormation(line, FLAT, 4, { arcs });
-  const formation = pathPatch("table-1", pathCorridorId("op-1", "road"), "path", plan, 3, 1);
-
-  // Edge ids are ordered by node pair, so roughly half the curved edges were
-  // declared walking against the sweep. Whichever way, one centre.
-  const senses = new Set(
-    formation.patch.edges
-      .filter((edge) => edge.geometry?.kind === "arc")
-      .map((edge) => edge.geometry.clockwise),
-  );
-  assert.ok(senses.size >= 1);
-  for (const edge of formation.patch.edges) {
-    if (edge.geometry?.kind !== "arc") continue;
-    assert.deepEqual(edge.geometry.center, ARC.center);
-  }
-});
-
 test("a fitted arc reaches the sweep as a curve, not as a bag of chords", () => {
   // What the tool actually hands over: a fitted arc, ground samples, and the
   // reference line walk in between.
@@ -156,44 +124,3 @@ test("a straight stroke carries no curve through", () => {
   assert.ok(swept.arcs.every((arc) => arc === undefined));
 });
 
-test("a curve whose end was moved is committed straight, not as a huge circle", () => {
-  const { line, arcs } = quarterCircle();
-  const plan = sweepFormation(line, FLAT, 4, { arcs });
-
-  // What a junction does to a rim: pulls one corner onto another road. The
-  // vertex is now nowhere near the circle its edge still claims, and an arc
-  // whose two ends disagree about the radius is the whole enormous circle
-  // they imply -- the ball that turns up on the table now and then.
-  const moved = plan.vertices.map((vertex, index) =>
-    index === 0 ? { x: 40, y: 0, z: 40 } : vertex,
-  );
-  const formation = pathPatch(
-    "table-1",
-    pathCorridorId("op-1", "road"),
-    "path",
-    { ...plan, vertices: moved },
-    3,
-    1,
-  );
-
-  for (const edge of formation.patch.edges) {
-    if (edge.geometry?.kind !== "arc") continue;
-    const [centerX, centerZ] = edge.geometry.center;
-    const ends = [edge.startNodeId, edge.endNodeId].map((id) =>
-      formation.patch.nodes.find((node) => node.id === id).position,
-    );
-    const radii = ends.map((end) => Math.hypot(end.x - centerX, end.z - centerZ));
-    assert.ok(
-      Math.abs(radii[0] - radii[1]) < 1e-3 * Math.max(1, ...radii),
-      `${edge.edgeId} claims a circle its ends are not on: ${radii}`,
-    );
-  }
-
-  // The stretch that lost its curve is still there, just straight.
-  const straightAtTheMove = formation.patch.edges.filter(
-    (edge) =>
-      edge.geometry === undefined &&
-      [edge.startNodeId, edge.endNodeId].some((id) => id.endsWith(":s0:a-1")),
-  );
-  assert.ok(straightAtTheMove.length > 0, "the moved corner keeps its edges");
-});

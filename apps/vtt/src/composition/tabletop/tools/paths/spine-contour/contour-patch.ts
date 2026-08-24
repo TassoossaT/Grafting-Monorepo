@@ -41,8 +41,8 @@ export interface ContourPatchResult {
 
 /**
  * Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
- * same conversion `path-patch.ts`'s `pathPatch` does for a station-major
- * `ConstructionSweepPlan`, but from a union's boundary loops instead of a
+ * same kind of conversion the retired station-sweep engine's own patch
+ * builder used to do, but from a union's boundary loops instead of a
  * sweep's quad grid, and welding by **position** rather than by a station
  * address, because a union vertex has no station: it may be a genuine spine
  * point, or a brand new intersection the union itself created where two

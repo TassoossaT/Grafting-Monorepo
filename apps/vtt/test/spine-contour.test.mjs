@@ -5,7 +5,32 @@ import { planSpineContour } from "../src/composition/tabletop/tools/paths/spine-
 
 const at = (x, z, y = 0) => ({ x, y, z });
 
-test("a straight isolated run produces one region per band, each a clean quad", () => {
+/**
+ * A standing region as this engine's own commit already names it:
+ * `<opId>:band-<bandIndex>:<shapeIndex>`, a plain rectangular ring so a test
+ * can hand-build one without going through a whole prior `planSpineContour`
+ * call.
+ */
+function standingBand(opId, bandIndex, corners) {
+  const nodes = corners.map((corner, index) => ({ id: `${opId}:n${index}`, position: corner }));
+  const outerLoop = nodes.map((node, index) => ({
+    edgeId: `${opId}-${index}`,
+    reversed: false,
+    startNodeId: node.id,
+    endNodeId: nodes[(index + 1) % nodes.length].id,
+    geometry: { kind: "line" },
+  }));
+  return {
+    surfaceKey: ["@region", `${opId}:band-${bandIndex}:0`],
+    surfaceType: "path",
+    physical: true,
+    outerLoops: [outerLoop],
+    holes: [],
+    nodes,
+  };
+}
+
+test("a straight isolated run produces one region per band, each a clean quad, and consumes nothing standing", () => {
   const chain = {
     chainId: "run-1",
     controlPoints: [at(0, 0), at(10, 0)],
@@ -17,13 +42,13 @@ test("a straight isolated run produces one region per band, each a clean quad", 
     tableId: "table",
     operationId: "op-1",
     surfaceType: "path",
-    chains: [chain],
-    changedChainIds: ["run-1"],
+    editedChains: [chain],
+    standingRegions: [],
     existingNodes: [],
   });
 
   assert.ok(result !== undefined);
-  assert.deepEqual(result.touchedChainIds, ["run-1"]);
+  assert.deepEqual(result.consumedSurfaceKeys, []);
   // Two bands (-2.1..0 and 0..2.1), no overlap between them, so no union
   // merges anything -- one region per band.
   assert.equal(result.patch.regions.length, 2);
@@ -33,17 +58,11 @@ test("a straight isolated run produces one region per band, each a clean quad", 
   }
 });
 
-test("two roads meeting in a T union into one region, with no rim left in the middle", () => {
-  const main = {
-    chainId: "main",
-    controlPoints: [at(-5, 0), at(5, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  // Stops just inside the main road's band (z: 1 -> -4), the way a T's
-  // arriving road does -- its own ribbon overlaps main's band rather than
-  // merely touching it.
+test("a new road meeting a standing one in a T unions into one region and consumes the standing band", () => {
+  const standing = standingBand("main", 0, [at(-5, -1), at(5, -1), at(5, 1), at(-5, 1)]);
+  // Stops just inside the standing road's band (z: 1 -> -4), the way a T's
+  // arriving road does -- its own ribbon overlaps the standing band rather
+  // than merely touching it.
   const branch = {
     chainId: "branch",
     controlPoints: [at(0, 1), at(0, -4)],
@@ -56,28 +75,22 @@ test("two roads meeting in a T union into one region, with no rim left in the mi
     tableId: "table",
     operationId: "op-t",
     surfaceType: "path",
-    chains: [main, branch],
-    changedChainIds: ["branch"],
-    existingNodes: [],
+    editedChains: [branch],
+    standingRegions: [standing],
+    existingNodes: standing.nodes,
   });
 
   assert.ok(result !== undefined);
-  assert.deepEqual(new Set(result.touchedChainIds), new Set(["main", "branch"]));
-  // Both chains share one band index (0) and their ribbons overlap, so the
-  // union merges them into a single face -- no leftover rim splitting the
-  // junction into two regions the way the old mouth/wedge machinery had to
-  // special-case.
+  assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
+  // The standing band and the arriving ribbon share one band index and
+  // overlap, so the union merges them into a single face -- no leftover rim
+  // splitting the junction into two regions the way the old mouth/wedge
+  // machinery had to special-case.
   assert.equal(result.patch.regions.length, 1, "a T merges into one face, not two");
 });
 
-test("two roads crossing in an X union into one region", () => {
-  const horizontal = {
-    chainId: "horizontal",
-    controlPoints: [at(-5, 0), at(5, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+test("a new road crossing a standing one in an X unions into one region", () => {
+  const standing = standingBand("horizontal", 0, [at(-5, -1), at(5, -1), at(5, 1), at(-5, 1)]);
   const vertical = {
     chainId: "vertical",
     controlPoints: [at(0, -5), at(0, 5)],
@@ -90,33 +103,51 @@ test("two roads crossing in an X union into one region", () => {
     tableId: "table",
     operationId: "op-x",
     surfaceType: "path",
-    chains: [horizontal, vertical],
-    changedChainIds: ["vertical"],
-    existingNodes: [],
+    editedChains: [vertical],
+    standingRegions: [standing],
+    existingNodes: standing.nodes,
   });
 
   assert.ok(result !== undefined);
   assert.equal(result.patch.regions.length, 1, "an X merges into one face, not two overlapping ones");
+  assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
 });
 
-test("a spine edit only reprocesses chains within reach of the change", () => {
+test("two roads meeting end-to-end in an L stay one connected face, not two touching corners", () => {
+  // A standing run ending at the origin, and a new run turning off it at a
+  // right angle -- the shape an L reduces to once both are offset into
+  // ribbons. Their bands overlap near the shared corner (the turn is sharp
+  // relative to the width), which is exactly what used to need a hand-built
+  // mitre; here it is just more area for the same union to cover.
+  const standing = standingBand("main", 0, [at(-5, -1), at(0, -1), at(0, 1), at(-5, 1)]);
+  const turn = {
+    chainId: "turn",
+    controlPoints: [at(0, 0), at(0, 5)],
+    bandOffsets: [-1, 1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-l",
+    surfaceType: "path",
+    editedChains: [turn],
+    standingRegions: [standing],
+    existingNodes: standing.nodes,
+  });
+
+  assert.ok(result !== undefined);
+  assert.equal(result.patch.regions.length, 1, "an L stays one connected face at the corner");
+  assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
+});
+
+test("a spine edit leaves a standing band far outside its reach untouched", () => {
+  const nearby = standingBand("nearby", 0, [at(11, -1), at(20, -1), at(20, 1), at(11, 1)]);
+  const faraway = standingBand("faraway", 0, [at(1000, -1), at(1010, -1), at(1010, 1), at(1000, 1)]);
   const edited = {
     chainId: "edited",
     controlPoints: [at(0, 0), at(10, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  const nearby = {
-    chainId: "nearby",
-    controlPoints: [at(11, 0), at(20, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  const faraway = {
-    chainId: "faraway",
-    controlPoints: [at(1000, 0), at(1010, 0)],
     bandOffsets: [-1, 1],
     miterLimit: 4,
     tolerance: 0.05,
@@ -126,18 +157,42 @@ test("a spine edit only reprocesses chains within reach of the change", () => {
     tableId: "table",
     operationId: "op-dirty",
     surfaceType: "path",
-    chains: [edited, nearby, faraway],
-    changedChainIds: ["edited"],
-    existingNodes: [],
+    editedChains: [edited],
+    standingRegions: [nearby, faraway],
+    existingNodes: [...nearby.nodes, ...faraway.nodes],
   });
 
   assert.ok(result !== undefined);
-  assert.ok(result.touchedChainIds.includes("edited"));
-  assert.ok(result.touchedChainIds.includes("nearby"), "a chain just within reach is still reprocessed");
-  assert.ok(!result.touchedChainIds.includes("faraway"), "a chain far outside reach is left alone");
+  const consumedIds = result.consumedSurfaceKeys.map((key) => key.join(":"));
+  assert.ok(consumedIds.includes(nearby.surfaceKey.join(":")), "a band just within reach is reprocessed");
+  assert.ok(!consumedIds.includes(faraway.surfaceKey.join(":")), "a band far outside reach is left alone");
+  // The untouched band's own nodes never appear in the new patch at all.
+  const patchNodeIds = new Set(result.patch.nodes.map((node) => node.id));
+  for (const node of faraway.nodes) assert.ok(!patchNodeIds.has(node.id));
 });
 
-test("re-planning an untouched chain welds back onto the same node ids -- zero churn", () => {
+/** A `ConstructionRegionTopology` reconstructed from one region of a patch this engine already produced -- what a real session would report back on the next read. */
+function topologyFromPatchRegion(patch, region) {
+  const edgeById = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  const positionById = new Map(patch.nodes.map((node) => [node.id, node.position]));
+  const outerLoop = region.boundary.map((use) => {
+    const edge = edgeById.get(use.edgeId);
+    const startNodeId = use.reversed ? edge.endNodeId : edge.startNodeId;
+    const endNodeId = use.reversed ? edge.startNodeId : edge.endNodeId;
+    return { edgeId: use.edgeId, reversed: use.reversed, startNodeId, endNodeId, geometry: edge.geometry ?? { kind: "line" } };
+  });
+  const nodes = outerLoop.map((use) => ({ id: use.startNodeId, position: positionById.get(use.startNodeId) }));
+  return {
+    surfaceKey: ["@region", region.regionId],
+    surfaceType: region.surfaceType,
+    physical: region.physical,
+    outerLoops: [outerLoop],
+    holes: [],
+    nodes,
+  };
+}
+
+test("re-consuming a standing band with nothing overlapping it welds every vertex back onto its own former id", () => {
   const chain = {
     chainId: "run-1",
     controlPoints: [at(0, 0), at(10, 0)],
@@ -149,26 +204,44 @@ test("re-planning an untouched chain welds back onto the same node ids -- zero c
     tableId: "table",
     operationId: "op-1",
     surfaceType: "path",
-    chains: [chain],
-    changedChainIds: ["run-1"],
+    editedChains: [chain],
+    standingRegions: [],
     existingNodes: [],
   });
   assert.ok(first !== undefined);
 
-  // The same chain, re-planned as if a wholly unrelated edit elsewhere in
-  // the cloud pulled it back into a (differently scoped) dirty region --
-  // handed the first run's own nodes as the live table it must weld onto.
+  // A second, unrelated stroke drawn close enough that this band falls
+  // inside the new dirty region and gets pulled back through the pipeline,
+  // even though nothing about it actually changed.
+  // Its own ribbon (x: 8..10, z: 1.5..3) never touches the standing band's
+  // (x: 0..10, z: -1..1) -- close enough that the standing band falls
+  // inside the dirty region and is pulled back through the pipeline, but
+  // with nothing to union against, so it must weld onto exactly itself.
+  const nudge = {
+    chainId: "nudge",
+    controlPoints: [at(9, 3), at(9, 1.5)],
+    bandOffsets: [-1, 1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+  const bandZeroRegion = first.patch.regions.find((region) => region.regionId.includes(":band-0:"));
+  const standingTopology = topologyFromPatchRegion(first.patch, bandZeroRegion);
+
   const second = planSpineContour({
     tableId: "table",
     operationId: "op-2",
     surfaceType: "path",
-    chains: [chain],
-    changedChainIds: ["run-1"],
+    editedChains: [nudge],
+    standingRegions: [standingTopology],
     existingNodes: first.patch.nodes,
   });
   assert.ok(second !== undefined);
 
-  const firstIds = new Set(first.patch.nodes.map((node) => node.id));
-  const secondIds = new Set(second.patch.nodes.map((node) => node.id));
-  assert.deepEqual(secondIds, firstIds, "identical geometry welds onto the exact same node ids");
+  const firstBandZeroIds = new Set(
+    first.patch.nodes.filter((node) => node.id.includes(":band-0:")).map((node) => node.id),
+  );
+  const secondBandZeroIds = new Set(
+    second.patch.nodes.filter((node) => node.id.startsWith("contour:op-1:band-0:")).map((node) => node.id),
+  );
+  assert.deepEqual(secondBandZeroIds, firstBandZeroIds, "identical geometry welds onto the exact same node ids");
 });
