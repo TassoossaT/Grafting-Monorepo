@@ -95,19 +95,44 @@ function createFakeConstructionSession() {
       for (const edge of patch.edges) {
         if (!edges.has(edge.edgeId)) edges.set(edge.edgeId, edge);
       }
+      // Mirrors the real Rust `boundary_has_room`: an edge bounds at most two
+      // faces, one per direction. Registering a region walks each of its
+      // boundary/hole edges in that region's own commit order, so a use is
+      // only ever provisional until the whole region clears every edge --
+      // exactly like the live session's own region-by-region loop.
+      const usage = new Map();
+      for (const topology of regions.values()) {
+        for (const use of topology.boundary) {
+          const list = usage.get(use.edgeId) ?? [];
+          list.push(use.reversed);
+          usage.set(use.edgeId, list);
+        }
+      }
+      const hasRoom = (edgeId, reversed) => {
+        const uses = usage.get(edgeId) ?? [];
+        if (uses.length >= 2) return false;
+        return uses[0] === undefined || uses[0] !== reversed;
+      };
       const createdSurfaceKeys = [];
       const skippedRegionIds = [];
       for (const region of patch.regions) {
         const surfaceKey = ["@region", region.regionId];
         const walked = boundaryNodeIds(region.boundary);
         const distinct = walked === undefined ? undefined : new Set(walked);
-        if (walked === undefined || distinct.size < 3) {
-          // A degenerate boundary is refused, exactly like the real
-          // session -- reported, never silently registered.
+        const roomy = region.boundary.every((use) => hasRoom(use.edgeId, use.reversed));
+        if (walked === undefined || distinct.size < 3 || !roomy) {
+          // A degenerate boundary, or one with no room left on a shared
+          // edge, is refused, exactly like the real session -- reported,
+          // never silently registered.
           skippedRegionIds.push(region.regionId);
           continue;
         }
-        regions.set(surfaceKey.join(":"), { ...region, surfaceKey });
+        for (const use of region.boundary) {
+          const list = usage.get(use.edgeId) ?? [];
+          list.push(use.reversed);
+          usage.set(use.edgeId, list);
+        }
+        regions.set(surfaceKey.join(":"), { ...region, surfaceKey, boundary: region.boundary });
         createdSurfaceKeys.push(surfaceKey);
       }
       return { ...emptyOutcome(), createdSurfaceKeys, createdNodeIds, skippedRegionIds };
@@ -170,20 +195,35 @@ function createFakeConstructionSession() {
           throw new Error(`replacement source is no longer present ${surfaceKey.join(":")}`);
         }
       }
-      // The production executor stages this against cloned Rust state. This
-      // stateful fake validates the target before removing a source, which is
-      // the observable all-or-nothing guarantee the path executor relies on.
+      // The real Rust session removes the source regions from its topology
+      // *before* validating the target patch (see
+      // `apply_patch_replacement`), so a source's own edge uses are already
+      // freed by the time room is checked -- a target that reclaims a
+      // source's own shared edge is exactly the common case (a band being
+      // rebuilt reuses its own seam). Removing sources only *after*
+      // `addPatch` here would refuse that room-freeing and reject targets
+      // the real session accepts. The production executor stages this
+      // against cloned Rust state; this fake mirrors that all-or-nothing
+      // guarantee by rolling the removal back on any failure below.
+      const removed = request.sourceSurfaceKeys.map((surfaceKey) => [surfaceKey.join(":"), regions.get(surfaceKey.join(":"))]);
+      for (const [key] of removed) regions.delete(key);
       for (const node of request.graphPatch?.nodes ?? []) {
         if (!nodes.has(node.id)) nodes.set(node.id, node.position);
       }
       for (const edge of request.graphPatch?.edges ?? []) {
         if (!edges.has(edge.edgeId)) edges.set(edge.edgeId, edge);
       }
-      const outcome = this.addPatch(request.patch);
+      let outcome;
+      try {
+        outcome = this.addPatch(request.patch);
+      } catch (error) {
+        for (const [key, value] of removed) regions.set(key, value);
+        throw error;
+      }
       if (outcome.skippedRegionIds.length > 0) {
+        for (const [key, value] of removed) regions.set(key, value);
         throw new Error(`replacement target was refused: ${outcome.skippedRegionIds.join(", ")}`);
       }
-      for (const surfaceKey of request.sourceSurfaceKeys) regions.delete(surfaceKey.join(":"));
       return { ...outcome, removedSurfaceKeys: [...request.sourceSurfaceKeys] };
     },
     applyRegionOverlay() {

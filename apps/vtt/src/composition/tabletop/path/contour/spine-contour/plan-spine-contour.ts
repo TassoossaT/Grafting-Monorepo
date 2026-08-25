@@ -212,6 +212,20 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     for (const edge of built.patch.edges) edges.set(edge.edgeId, edge);
     regions.push(...built.patch.regions);
     liveNodes = [...liveNodes, ...built.patch.nodes];
+    // This band's own regions can claim an edge two adjacent bands share
+    // (their common seam) or one a later band's own weld happens to land
+    // back on. `buildContourPatch`'s own edge budget only sees uses already
+    // live on the table plus whatever *it* claims -- the next band in this
+    // same transaction must see this one's claims too, or two regions in
+    // one patch can walk the same edge past its two-use budget without
+    // either call ever knowing about the other.
+    for (const region of built.patch.regions) {
+      for (const use of [...region.boundary, ...(region.holes ?? []).flat()]) {
+        const uses = retainedEdgeUses.get(use.edgeId) ?? [];
+        uses.push(use.reversed);
+        retainedEdgeUses.set(use.edgeId, uses);
+      }
+    }
   }
 
   return {
