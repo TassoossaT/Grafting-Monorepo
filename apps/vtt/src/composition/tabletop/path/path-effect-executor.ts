@@ -420,7 +420,6 @@ export function applyPathBrushEffect(
         editedChains: [chain],
         standingRegions,
         existingNodes,
-        allowSelectedBoundaryJoin: standingRegions.length > 0,
       }),
     );
     if (planned === undefined) return;

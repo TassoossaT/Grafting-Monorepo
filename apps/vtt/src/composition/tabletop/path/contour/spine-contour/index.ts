@@ -8,4 +8,4 @@ export { offsetBands } from "./offset-bands.ts";
 export type { BandRibbon } from "./offset-bands.ts";
 export { planSpineContour } from "./plan-spine-contour.ts";
 export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
-export { nearestSampleY, ribbonsOverlap, unionBandLayer } from "./union-bands.ts";
+export { nearestSampleY, ribbonsMeet, ribbonsOverlap, unionBandLayer } from "./union-bands.ts";

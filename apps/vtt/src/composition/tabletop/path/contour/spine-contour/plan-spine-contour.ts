@@ -9,7 +9,7 @@ import type {
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { ribbonsOverlap, unionBandLayer } from "./union-bands.ts";
+import { ribbonsMeet, unionBandLayer } from "./union-bands.ts";
 import { boundsIntersectRegion, dirtyRegionAround } from "./dirty-region.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
 
@@ -47,12 +47,6 @@ export interface PlanSpineContourInput {
   readonly standingRegions: readonly ConstructionRegionTopology[];
   /** Every node already standing on the table, for welding by position. */
   readonly existingNodes: readonly ExistingNode[];
-  /**
-   * Set only after the path type resolved an explicit continuation/union
-   * target. A selected cloud may join at a shared rim without overlapping
-   * area; unselected nearby roads must still pass exact ribbon intersection.
-   */
-  readonly allowSelectedBoundaryJoin?: boolean;
 }
 
 export interface PlanSpineContourResult {
@@ -98,7 +92,7 @@ function halfReachOf(chain: SpineChainInput): number {
  * **The dirty region, not the whole cloud.** `editedChains` says what
  * changed; only application-selected standing regions are passed in, and a
  * candidate must pass both a cheap grown-box broad phase and a true ribbon
- * intersection before it can be consumed. A nearby path therefore stays
+ * contact test before it can be consumed. A nearby path therefore stays
  * exactly as it stands, same node ids, same face. This is what
  * replaces the old station-sweep engine's per-topology mouth/wedge/mitre
  * machinery: a T, an X, or an L are not cases this function knows about,
@@ -143,7 +137,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     const outer = ringOfTopology(topology);
     if (!boundsIntersectRegion(outer, region)) continue;
     const list = ribbonsByBand.get(bandIndex) ?? [];
-    if (!input.allowSelectedBoundaryJoin && !list.some((ribbon) => ribbonsOverlap(ribbon.outer, outer))) continue;
+    if (!list.some((ribbon) => ribbonsMeet(ribbon.outer, outer))) continue;
     list.push({ bandIndex, outer });
     ribbonsByBand.set(bandIndex, list);
     consumed.push(topology.surfaceKey);
