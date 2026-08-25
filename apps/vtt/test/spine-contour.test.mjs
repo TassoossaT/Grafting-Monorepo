@@ -278,3 +278,42 @@ test("a standing band with no ribbon overlap is never re-consumed", () => {
     "the standing band's nodes are not re-emitted into the new patch",
   );
 });
+
+test("a standing region touched only through another standing region is still consumed, whatever order they arrive in", () => {
+  // The edited chain (x in [-2, 2], z in [-5, 5]) overlaps band A directly
+  // (z 4..6). Band B (z 6..7) sits past the chain's own z-end, inside the
+  // grown dirty region only because of the reach margin, and only touches A
+  // -- never the chain's own ribbon. Handed to planSpineContour as [B, A]
+  // (B before the thing it touches): a single pass that only checks each
+  // candidate against ribbons collected *so far* would consume A (touches
+  // the chain) but miss B, since at the moment B is checked, A is not yet in
+  // the list. The union would then leave B standing while A's own new face
+  // is welded right up against it, and the whole replacement gets refused
+  // by the runtime for the overlap -- this is the "faces disappear when
+  // roads join" failure mode.
+  const bandA = standingBand("chain-a", 0, [at(-2, 4), at(2, 4), at(2, 6), at(-2, 6)]);
+  const bandB = standingBand("chain-b", 0, [at(-2, 6), at(2, 6), at(2, 7), at(-2, 7)]);
+  const chain = {
+    chainId: "through-a",
+    controlPoints: [at(0, -5), at(0, 5)],
+    bandOffsets: [-2, 2],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-chain",
+    surfaceType: "path",
+    editedChains: [chain],
+    standingRegions: [bandB, bandA],
+    existingNodes: [...bandA.nodes, ...bandB.nodes],
+  });
+
+  assert.ok(result !== undefined);
+  const consumedKeys = new Set(result.consumedSurfaceKeys.map((key) => key.join(":")));
+  for (const band of [bandA, bandB]) {
+    assert.ok(consumedKeys.has(band.surfaceKey.join(":")), `${band.surfaceKey.join(":")} must be consumed`);
+  }
+  assert.equal(result.patch.regions.length, 1, "the whole chain unions into one face, not a mix of new and stale ones");
+});

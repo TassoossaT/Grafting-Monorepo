@@ -134,18 +134,40 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const consumed: ConstructionSurfaceKey[] = [];
   const consumedTopologies: ConstructionRegionTopology[] = [];
+  const candidatesByBand = new Map<number, { readonly topology: ConstructionRegionTopology; readonly outer: readonly ConstructionPosition[] }[]>();
   for (const topology of input.standingRegions) {
     const regionId = topology.surfaceKey[topology.surfaceKey.length - 1] ?? "";
     const bandIndex = bandIndexOfRegionId(regionId);
     if (bandIndex === undefined) continue;
     const outer = ringOfTopology(topology);
     if (!boundsIntersectRegion(outer, region)) continue;
+    const list = candidatesByBand.get(bandIndex) ?? [];
+    list.push({ topology, outer });
+    candidatesByBand.set(bandIndex, list);
+  }
+  // A standing region can touch another standing region without touching an
+  // edited chain directly -- a short connector sitting between two junctions
+  // being reworked, say. Consuming in one pass over `input.standingRegions`
+  // would cut that chain of contact short whenever such a region happens to
+  // come before whatever it touches; repeat passes per band until one adds
+  // nothing, so contact through any number of standing regions is found
+  // regardless of their order in `input.standingRegions`.
+  for (const [bandIndex, candidates] of candidatesByBand) {
     const list = ribbonsByBand.get(bandIndex) ?? [];
-    if (!list.some((ribbon) => ribbonsMeet(ribbon.outer, outer))) continue;
-    list.push({ bandIndex, outer });
+    let remaining = candidates;
+    let changed = true;
+    while (changed) {
+      changed = false;
+      remaining = remaining.filter((candidate) => {
+        if (!list.some((ribbon) => ribbonsMeet(ribbon.outer, candidate.outer))) return true;
+        list.push({ bandIndex, outer: candidate.outer });
+        consumed.push(candidate.topology.surfaceKey);
+        consumedTopologies.push(candidate.topology);
+        changed = true;
+        return false;
+      });
+    }
     ribbonsByBand.set(bandIndex, list);
-    consumed.push(topology.surfaceKey);
-    consumedTopologies.push(topology);
   }
 
   // `applyPatchReplacement` removes these faces before it registers the new
