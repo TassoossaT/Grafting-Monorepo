@@ -1,13 +1,16 @@
 import type { PathBrushEffect } from "@/features/edit-construction";
-import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
+  chainsOf,
   pathRidesTerrain,
   pathSpineDraftFor,
+  spineGraphFromSnapshot,
+  spineControlNodeId,
   resolveCoverage,
 } from "../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../entities/map/index.ts";
@@ -93,6 +96,92 @@ function selectedPathCloudRegions(
   return topologies.filter(
     (topology) => topology.surfaceType === "path" && cloudSurfaceKeys.has(topology.surfaceKey.join(":")),
   );
+}
+
+/** Materializes the type-owned spine as generic graph primitives. */
+function graphPatchForSpine(ctx: ToolContext, spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>): ConstructionGraphPatch {
+  const snapshot = ctx.runtime.getGraphSnapshot();
+  const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
+  const shouldJoin = (end: typeof spine.start) =>
+    end.continuation !== undefined || end.nodeId !== undefined || end.unionSurfaceRef !== undefined;
+  const nearest = (point: ConstructionPosition) => spineNodes
+    .map((node) => ({ node, distance: Math.hypot(node.position.x - point.x, node.position.z - point.z) }))
+    .filter((candidate) => candidate.distance <= 1e-3)
+    .sort((left, right) => left.distance - right.distance)[0]?.node;
+  const nodeById = new Map(spineNodes.map((node) => [node.id, node]));
+  const nearestEdge = (point: ConstructionPosition) => snapshot.edges
+    .flatMap((edge) => {
+      const from = nodeById.get(edge.startNodeId);
+      const to = nodeById.get(edge.endNodeId);
+      return from === undefined || to === undefined ? [] : [{ edge, from, to }];
+    })
+    .map((candidate) => {
+      const dx = candidate.to.position.x - candidate.from.position.x;
+      const dz = candidate.to.position.z - candidate.from.position.z;
+      const lengthSquared = dx * dx + dz * dz;
+      const t = lengthSquared < 1e-9 ? 0 : Math.max(0, Math.min(1, ((point.x - candidate.from.position.x) * dx + (point.z - candidate.from.position.z) * dz) / lengthSquared));
+      return { ...candidate, distance: Math.hypot(point.x - (candidate.from.position.x + dx * t), point.z - (candidate.from.position.z + dz * t)) };
+    })
+    .filter((candidate) => candidate.distance <= 1e-3)
+    .sort((left, right) => left.distance - right.distance)[0];
+  const removedEdgeIds: string[] = [];
+  const splitEdges: ConstructionGraphPatch["edges"][number][] = [];
+  const ids = spine.controlPoints.map((point, index) => {
+    const endpoint = index === 0 ? spine.start : index === spine.controlPoints.length - 1 ? spine.end : undefined;
+    const minted = spineControlNodeId(spine.corridorId, index);
+    if (endpoint === undefined || !shouldJoin(endpoint)) return minted;
+    const node = nearest(point);
+    if (node !== undefined) return node.id;
+    const edge = nearestEdge(point);
+    if (edge === undefined) return minted;
+    removedEdgeIds.push(edge.edge.edgeId);
+    splitEdges.push(
+      { edgeId: `spine-split:${edge.edge.edgeId}:${minted}:start`, startNodeId: edge.edge.startNodeId, endNodeId: minted },
+      { edgeId: `spine-split:${edge.edge.edgeId}:${minted}:end`, startNodeId: minted, endNodeId: edge.edge.endNodeId },
+    );
+    return minted;
+  });
+  return {
+    nodes: spine.controlPoints.map((position, index) => ({ id: ids[index]!, position })),
+    removedEdgeIds,
+    edges: [
+      ...ids.slice(0, -1).map((startNodeId, index) => ({
+        edgeId: `spine-edge:${spine.corridorId}:${index}`,
+        startNodeId,
+        endNodeId: ids[index + 1]!,
+      })).filter((edge) => edge.startNodeId !== edge.endNodeId),
+      ...splitEdges,
+    ],
+  };
+}
+
+/** The connected spine component changed by this stroke, after its graph patch. */
+function changedSpineChains(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): readonly (readonly ConstructionPosition[])[] {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  for (const node of patch.nodes) nodes.set(node.id, node);
+  const edges = new Map(snapshot.edges.map((edge) => [edge.edgeId, edge]));
+  for (const edgeId of patch.removedEdgeIds ?? []) edges.delete(edgeId);
+  for (const edge of patch.edges) edges.set(edge.edgeId, edge);
+  const graph = spineGraphFromSnapshot({ nodes: [...nodes.values()], edges: [...edges.values()] });
+  const adjacent = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    adjacent.set(edge.fromNodeId, [...(adjacent.get(edge.fromNodeId) ?? []), edge.toNodeId]);
+    adjacent.set(edge.toNodeId, [...(adjacent.get(edge.toNodeId) ?? []), edge.fromNodeId]);
+  }
+  const connected = new Set(patch.nodes.map((node) => node.id));
+  const pending = [...connected];
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!;
+    for (const neighbor of adjacent.get(nodeId) ?? []) {
+      if (connected.has(neighbor)) continue;
+      connected.add(neighbor);
+      pending.push(neighbor);
+    }
+  }
+  return chainsOf({
+    nodes: graph.nodes.filter((node) => connected.has(node.nodeId)),
+    edges: graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId)),
+  }).map((chain) => chain.nodes.map((node) => node.position));
 }
 
 /**
@@ -374,6 +463,14 @@ export function applyPathBrushEffect(
       miterLimit: spine.miterLimit,
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
+    const graphPatch = graphPatchForSpine(ctx, spine);
+    const regeneratedChains = changedSpineChains(ctx.runtime.getGraphSnapshot(), graphPatch)
+      .filter((controlPoints) => controlPoints.length >= 2)
+      .map((controlPoints, index): SpineChainInput => ({
+        ...chain,
+        chainId: `${spine.corridorId}:component-${index}`,
+        controlPoints,
+      }));
 
     // The footprint this stroke alone claims -- full width, one ribbon, no
     // band separation -- is what a terrain coverage query is asked about.
@@ -417,7 +514,11 @@ export function applyPathBrushEffect(
         tableId: ctx.tableId,
         operationId,
         surfaceType: "path",
-        editedChains: [chain],
+        // The changed component is read from the prospective spine graph,
+        // not inferred from its old contour faces. A continuation therefore
+        // regenerates one continuous road; a branch regenerates its whole
+        // junction component.
+        editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
         existingNodes,
       }),
@@ -429,7 +530,7 @@ export function applyPathBrushEffect(
       "lay the road",
       { operationId, faces: planned.patch.regions.length },
       () =>
-        applySpineContour(ctx, operationId, planned),
+        applySpineContour(ctx, operationId, planned, graphPatch),
     );
 
     if (outcome.skippedRegionIds.length > 0) {

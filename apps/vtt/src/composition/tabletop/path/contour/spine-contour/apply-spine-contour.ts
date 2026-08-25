@@ -1,4 +1,4 @@
-import type { ConstructionPatchOutcome } from "@/ports";
+import type { ConstructionGraphPatch, ConstructionPatchOutcome } from "@/ports";
 
 import type { ToolContext } from "../../../tools/core/tool-context.ts";
 import type { PlanSpineContourResult } from "./plan-spine-contour.ts";
@@ -14,12 +14,14 @@ export function applySpineContour(
   ctx: ToolContext,
   operationId: string,
   result: PlanSpineContourResult,
+  graphPatch?: ConstructionGraphPatch,
 ): ConstructionPatchOutcome {
   return ctx.runtime.applyPatchReplacement(
     {
       operationId,
       sourceSurfaceKeys: result.consumedSurfaceKeys,
       patch: result.patch,
+      graphPatch,
     },
     "local",
     operationId,

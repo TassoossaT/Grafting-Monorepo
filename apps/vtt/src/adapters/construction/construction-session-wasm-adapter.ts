@@ -350,6 +350,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({
       operationId: request.operationId,
       sourceSurfaceKeys: request.sourceSurfaceKeys,
+      graphPatch: request.graphPatch === undefined ? undefined : {
+        nodes: request.graphPatch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
+        removedEdgeIds: request.graphPatch.removedEdgeIds,
+        edges: request.graphPatch.edges,
+      },
       patch,
     }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };

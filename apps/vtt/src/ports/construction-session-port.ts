@@ -273,6 +273,7 @@ export interface ApplyPatchReplacementRequest {
   readonly operationId: string;
   readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly patch: ConstructionPatch;
+  readonly graphPatch?: ConstructionGraphPatch;
 }
 
 /**
@@ -341,6 +342,14 @@ export interface ConstructionEdgeSnapshot {
 export interface ConstructionGraphSnapshot {
   readonly nodes: readonly ConstructionNodeSnapshot[];
   readonly edges: readonly ConstructionEdgeSnapshot[];
+}
+
+/** Generic graph primitives committed with a surface replacement. */
+export interface ConstructionGraphPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /** Generic edges superseded by this patch, e.g. one spine segment split at a new junction. */
+  readonly removedEdgeIds?: readonly ConstructionEdgeId[];
+  readonly edges: readonly { readonly edgeId: ConstructionEdgeId; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }[];
 }
 
 /**

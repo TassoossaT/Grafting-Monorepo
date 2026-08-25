@@ -1,4 +1,4 @@
-import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 import type { CloudTopology } from "../../../topology/construction-cloud.ts";
 import { isSpineControlNodeId } from "./spine-node-id.ts";
@@ -43,6 +43,22 @@ export interface SpineCurveEdge {
 export interface SpineGraph {
   readonly nodes: readonly SpineControlNode[];
   readonly edges: readonly SpineCurveEdge[];
+}
+
+/**
+ * Reads the durable, type-owned spine from the generic construction graph.
+ * Face boundaries are deliberately excluded: a contour is a generated view
+ * of this graph and must never be mistaken for its source of truth.
+ */
+export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph {
+  const nodes = snapshot.nodes
+    .filter((node) => isSpineControlNodeId(node.id))
+    .map((node) => ({ nodeId: node.id, position: node.position }));
+  const nodeIds = new Set(nodes.map((node) => node.nodeId));
+  const edges = snapshot.edges
+    .filter((edge) => nodeIds.has(edge.startNodeId) && nodeIds.has(edge.endNodeId))
+    .map((edge) => ({ edgeId: edge.edgeId, fromNodeId: edge.startNodeId, toNodeId: edge.endNodeId }));
+  return { nodes, edges };
 }
 
 /**

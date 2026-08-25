@@ -18,10 +18,9 @@ export interface SpineChain {
 /**
  * Every chain in `graph`, split at every node whose degree is not 2.
  *
- * Does not walk a closed loop with no boundary node at all (a ring with no
- * free end and no junction) -- nothing in this codebase draws one yet, and
- * guessing a start point on a cycle is a decision this function should not
- * make silently. Such a loop is left out rather than mis-chained.
+ * A closed component has no natural free end, so it starts deterministically
+ * at its lowest graph id and returns to that same control point. Keeping the
+ * closing point makes the generated Catmull-Rom contour continuous there.
  */
 export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
   const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]));
@@ -64,6 +63,32 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
         .filter((candidate): candidate is SpineControlNode => candidate !== undefined);
       if (nodes.length >= 2) chains.push({ nodes });
     }
+  }
+
+  // Every edge left over belongs to a component with degree 2 everywhere: a
+  // closed spine. Walk it once, including its closing point, so O-shaped
+  // roads are regenerated from the same source graph as open roads.
+  for (const edge of graph.edges) {
+    const startKey = edgeKey(edge.fromNodeId, edge.toNodeId);
+    if (visited.has(startKey)) continue;
+    const nodeIds = [edge.fromNodeId, edge.toNodeId];
+    visited.add(startKey);
+    let previous = edge.fromNodeId;
+    let current = edge.toNodeId;
+    while (current !== edge.fromNodeId) {
+      const next = (adjacency.get(current) ?? []).find((candidate) => candidate !== previous);
+      if (next === undefined) break;
+      const key = edgeKey(current, next);
+      if (visited.has(key)) break;
+      visited.add(key);
+      nodeIds.push(next);
+      previous = current;
+      current = next;
+    }
+    const nodes = nodeIds
+      .map((id) => byId.get(id))
+      .filter((candidate): candidate is SpineControlNode => candidate !== undefined);
+    if (current === edge.fromNodeId && nodes.length >= 4) chains.push({ nodes });
   }
 
   return chains;

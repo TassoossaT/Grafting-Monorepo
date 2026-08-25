@@ -173,6 +173,12 @@ function createFakeConstructionSession() {
       // The production executor stages this against cloned Rust state. This
       // stateful fake validates the target before removing a source, which is
       // the observable all-or-nothing guarantee the path executor relies on.
+      for (const node of request.graphPatch?.nodes ?? []) {
+        if (!nodes.has(node.id)) nodes.set(node.id, node.position);
+      }
+      for (const edge of request.graphPatch?.edges ?? []) {
+        if (!edges.has(edge.edgeId)) edges.set(edge.edgeId, edge);
+      }
       const outcome = this.addPatch(request.patch);
       if (outcome.skippedRegionIds.length > 0) {
         throw new Error(`replacement target was refused: ${outcome.skippedRegionIds.join(", ")}`);
@@ -436,7 +442,44 @@ test("an explicitly selected continuation replaces the whole path cloud and rebu
   const after = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
   assert.ok(after.length > 0, "the rebuilt cloud has contour faces");
   assert.ok(before.every((surfaceKey) => !after.includes(surfaceKey)), "the old cloud faces were replaced as one unit");
+  const spine = ctx.runtime.getGraphSnapshot();
+  const join = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 10 && node.position.z === 0);
+  assert.equal(join.length, 1, "the continuation reuses the old spine end, rather than laying a coincident second node");
+  assert.equal(
+    spine.edges.filter((edge) => edge.startNodeId === join[0].id || edge.endNodeId === join[0].id).length,
+    2,
+    "the shared end joins both curve segments in the durable spine graph",
+  );
   assert.ok(!ctx.feedback.some((entry) => entry.tone === "error"), `the continuation must succeed: ${JSON.stringify(ctx.feedback)}`);
+});
+
+test("a selected union splits the touched spine edge and makes one shared junction", async () => {
+  const ctx = await createTestContext();
+  applyRoadBrushEffect(ctx, [
+    { x: -10, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ], 0.1);
+  const unionSurfaceRef = [...ctx.runtime.getAllRegionTopologies()[0].surfaceKey].sort().join(",");
+
+  applyRoadBrushEffect(
+    ctx,
+    [
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0, z: 8 },
+    ],
+    0.1,
+    { start: { unionSurfaceRef } },
+  );
+
+  const spine = ctx.runtime.getGraphSnapshot();
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  assert.equal(junction.length, 1, "the intersection is represented by one graph node");
+  assert.equal(
+    spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length,
+    3,
+    "splitting the old segment leaves three arms at the junction",
+  );
+  assert.ok(!ctx.feedback.some((entry) => entry.tone === "error"), `the joined contour must commit: ${JSON.stringify(ctx.feedback)}`);
 });
 
 test("a T where the second road ends inside the first commits without throwing", async () => {

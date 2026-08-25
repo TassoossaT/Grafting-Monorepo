@@ -29,6 +29,12 @@ export {
 export type { StationNodeAddress } from "./station-node-id.ts";
 
 export {
+  chainsOf,
+  spineControlNodeId,
+  spineGraphFromSnapshot,
+} from "./spine-graph/index.ts";
+
+export {
   pathCloudPerimeter,
   pathRunFor,
   pathRunsIn,
