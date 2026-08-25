@@ -18,11 +18,8 @@ import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
  */
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
-  /** The concrete pointer targets at the two ends of the gesture. A domain
-   * effect may use them as connection candidates; the generic brush never
-   * assigns them any construction meaning. */
-  readonly start: PointerSample;
-  readonly end: PointerSample;
+  /** Raw construction hits seen during the sweep; the domain assigns meaning. */
+  readonly observations: readonly PointerSample[];
   /**
    * The brush footprint, already widened to hold the product -- see
    * {@link expandedToHold}. This is what the ghost is drawn from, which is
@@ -119,8 +116,7 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
     const shape = expandedToHold(resolveBrushShape(params), halfWidth);
     return {
       samples: gesture.samples.map((sample) => sample.point),
-      start: gesture.start,
-      end: gesture.current,
+      observations: [gesture.start, ...gesture.samples, gesture.current],
       shape,
       tolerance: Math.max(0, brushReach(shape) - halfWidth),
     };

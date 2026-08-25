@@ -501,4 +501,8 @@ test("a T where the second road ends inside the first commits without throwing",
     !ctx.feedback.some((entry) => entry.tone === "error"),
     `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
   );
+  const spine = ctx.runtime.getGraphSnapshot();
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  assert.equal(junction.length, 1, "a geometric contact inside the brush snaps automatically, without a connection flag");
+  assert.equal(spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length, 3);
 });

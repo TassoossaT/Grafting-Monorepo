@@ -53,8 +53,6 @@ test("the path type owns the semantic spine derived from a brush effect", () => 
     controlPoints: [{ x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }],
     bandOffsets: [-2.1, 0, 2.1],
     miterLimit: 4,
-    start: { continuation: undefined, nodeId: undefined, unionSurfaceRef: undefined },
-    end: { continuation: undefined, nodeId: undefined, unionSurfaceRef: undefined },
   });
   assert.equal(pathSpineDraftFor(effect, [{ x: 0, y: 0, z: 0 }]), undefined);
 });

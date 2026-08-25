@@ -8,6 +8,7 @@ import {
   neighborsOf,
   parseSpineControlNodeId,
   spineControlNodeId,
+  spineGraphFromSnapshot,
   spineGraphIn,
   spineGraphOf,
 } from "../src/features/edit-construction/structure-types/path/spine-graph/index.ts";
@@ -152,6 +153,32 @@ test("chainsOf walks a straight run of several degree-two nodes as one chain", (
   const chains = chainsOf(graph);
   assert.equal(chains.length, 1);
   assert.deepEqual(chains[0].nodes.map((node) => node.nodeId), [a, b]);
+});
+
+test("chainsOf keeps the through-road smooth across a T while leaving the branch at the junction", () => {
+  const [a, junction, b, branch] = [
+    spineControlNodeId("main", 0),
+    spineControlNodeId("main", 1),
+    spineControlNodeId("main", 2),
+    spineControlNodeId("branch", 0),
+  ];
+  const graph = spineGraphFromSnapshot({
+    nodes: [
+      { id: a, position: { x: -10, y: 0, z: 0 } },
+      { id: junction, position: { x: 0, y: 0, z: 0 } },
+      { id: b, position: { x: 10, y: 0, z: 0 } },
+      { id: branch, position: { x: 0, y: 0, z: 8 } },
+    ],
+    edges: [
+      { edgeId: "a-j", startNodeId: a, endNodeId: junction },
+      { edgeId: "j-b", startNodeId: junction, endNodeId: b },
+      { edgeId: "j-c", startNodeId: junction, endNodeId: branch },
+    ],
+  });
+
+  const chains = chainsOf(graph).map((chain) => chain.nodes.map((node) => node.nodeId));
+  assert.ok(chains.some((chain) => chain.join("|") === `${a}|${junction}|${b}`), "the straight arms become one smooth through-chain");
+  assert.ok(chains.some((chain) => chain.length === 2 && chain.includes(junction) && chain.includes(branch)), "the perpendicular arm remains a branch");
 });
 
 test("moving a spine control node produces the same move-vertex op the generic edit pipeline already knows", () => {

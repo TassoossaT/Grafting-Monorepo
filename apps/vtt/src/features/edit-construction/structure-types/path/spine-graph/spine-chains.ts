@@ -15,6 +15,9 @@ export interface SpineChain {
   readonly nodes: readonly SpineControlNode[];
 }
 
+/** A branch crosses a junction only when it is visibly the same road. */
+const THROUGH_JUNCTION_COSINE = Math.cos(Math.PI / 4);
+
 /**
  * Every chain in `graph`, split at every node whose degree is not 2.
  *
@@ -32,11 +35,39 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
   const degreeOf = (nodeId: string): number => adjacency.get(nodeId)?.length ?? 0;
   const isBoundary = (nodeId: string): boolean => degreeOf(nodeId) !== 2;
   const edgeKey = (a: string, b: string): string => (a < b ? `${a}~${b}` : `${b}~${a}`);
+  const continuationFrom = (previousId: string, nodeId: string): string | undefined => {
+    const candidates = (adjacency.get(nodeId) ?? []).filter((candidate) => candidate !== previousId);
+    if (candidates.length === 0) return undefined;
+    // A degree-two point is an ordinary bend: it always remains one smooth
+    // curve, however sharp the bend itself is.
+    if (degreeOf(nodeId) === 2) return candidates[0];
+    const previous = byId.get(previousId)?.position;
+    const current = byId.get(nodeId)?.position;
+    if (previous === undefined || current === undefined) return undefined;
+    const inX = current.x - previous.x;
+    const inZ = current.z - previous.z;
+    const inLength = Math.hypot(inX, inZ);
+    if (inLength < 1e-9) return undefined;
+    const best = candidates
+      .map((candidate) => {
+        const next = byId.get(candidate)?.position;
+        if (next === undefined) return undefined;
+        const outX = next.x - current.x;
+        const outZ = next.z - current.z;
+        const outLength = Math.hypot(outX, outZ);
+        return outLength < 1e-9 ? undefined : { candidate, cosine: (inX * outX + inZ * outZ) / (inLength * outLength) };
+      })
+      .filter((candidate): candidate is { candidate: string; cosine: number } => candidate !== undefined)
+      .sort((left, right) => right.cosine - left.cosine)[0];
+    return best !== undefined && best.cosine >= THROUGH_JUNCTION_COSINE ? best.candidate : undefined;
+  };
 
   const visited = new Set<string>();
   const chains: SpineChain[] = [];
 
-  for (const node of graph.nodes) {
+  // Start at free ends before junctions. That lets the two opposite arms of
+  // a T/H/X claim the through-route before a short branch is visited.
+  for (const node of [...graph.nodes].sort((left, right) => degreeOf(left.nodeId) - degreeOf(right.nodeId))) {
     if (!isBoundary(node.nodeId)) continue;
     for (const neighborId of adjacency.get(node.nodeId) ?? []) {
       const startKey = edgeKey(node.nodeId, neighborId);
@@ -46,9 +77,8 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
       const nodeIds = [node.nodeId, neighborId];
       let previous = node.nodeId;
       let current = neighborId;
-      while (!isBoundary(current)) {
-        const neighbors = adjacency.get(current) ?? [];
-        const next = neighbors.find((candidate) => candidate !== previous);
+      while (true) {
+        const next = continuationFrom(previous, current);
         if (next === undefined) break;
         const key = edgeKey(current, next);
         if (visited.has(key)) break;

@@ -53,37 +53,29 @@ const ARC_FLATTENING_TOLERANCE = 0.05;
 const CURVE_FLATTENING_TOLERANCE = 0.05;
 
 /**
- * Endpoint references are candidates for a continuation, never permission to
- * absorb every nearby road. The PathCloud will ultimately resolve this from
- * its persisted spine; until then, only explicitly picked path regions may
- * be handed to contour replacement.
+ * The swept brush is the local correction window. Pointer hits are useful
+ * evidence, but geometry in this window decides which path faces participate
+ * in regeneration; a path does not require a pre-labelled endpoint union.
  */
 function selectedPathCloudRegions(
   ctx: ToolContext,
   effect: PathBrushEffect,
   topologies: readonly ConstructionRegionTopology[],
 ): readonly ConstructionRegionTopology[] {
+  const reach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
+  const nearStroke = (point: ConstructionPosition) => effect.brushRegion.samples.some((sample) =>
+    Math.hypot(point.x - sample.x, point.z - sample.z) <= reach,
+  );
   const surfaceRefs = new Set(
-    [
-      effect.start.continuation?.surfaceRef,
-      effect.start.unionSurfaceRef,
-      effect.end.continuation?.surfaceRef,
-      effect.end.unionSurfaceRef,
-    ].filter((reference): reference is string => reference !== undefined),
+    effect.observedElements.map((element) => element.surfaceRef).filter((reference): reference is string => reference !== undefined),
   );
   const nodeIds = new Set(
-    [
-      effect.start.continuation?.nodeId,
-      effect.start.nodeId,
-      effect.end.continuation?.nodeId,
-      effect.end.nodeId,
-    ].filter((nodeId): nodeId is string => nodeId !== undefined),
+    effect.observedElements.map((element) => element.nodeId).filter((nodeId): nodeId is string => nodeId !== undefined),
   );
-  if (surfaceRefs.size === 0 && nodeIds.size === 0) return [];
   const directlyTargeted = topologies.filter(
     (topology) =>
       topology.surfaceType === "path" &&
-      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) || topology.nodes.some((node) => nodeIds.has(node.id))),
+      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) || topology.nodes.some((node) => nodeIds.has(node.id) || nearStroke(node.position))),
   );
   const cloudSurfaceKeys = new Set<string>();
   for (const topology of directlyTargeted) {
@@ -98,15 +90,22 @@ function selectedPathCloudRegions(
   );
 }
 
-/** Materializes the type-owned spine as generic graph primitives. */
-function graphPatchForSpine(ctx: ToolContext, spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>): ConstructionGraphPatch {
+interface MaterializedSpine {
+  readonly graphPatch: ConstructionGraphPatch;
+  readonly controlPoints: readonly ConstructionPosition[];
+}
+
+/** Materializes and locally snaps the type-owned spine against its own network. */
+function graphPatchForSpine(
+  ctx: ToolContext,
+  spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
+  snapTolerance: number,
+): MaterializedSpine {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
-  const shouldJoin = (end: typeof spine.start) =>
-    end.continuation !== undefined || end.nodeId !== undefined || end.unionSurfaceRef !== undefined;
   const nearest = (point: ConstructionPosition) => spineNodes
     .map((node) => ({ node, distance: Math.hypot(node.position.x - point.x, node.position.z - point.z) }))
-    .filter((candidate) => candidate.distance <= 1e-3)
+    .filter((candidate) => candidate.distance <= snapTolerance)
     .sort((left, right) => left.distance - right.distance)[0]?.node;
   const nodeById = new Map(spineNodes.map((node) => [node.id, node]));
   const nearestEdge = (point: ConstructionPosition) => snapshot.edges
@@ -120,20 +119,35 @@ function graphPatchForSpine(ctx: ToolContext, spine: NonNullable<ReturnType<type
       const dz = candidate.to.position.z - candidate.from.position.z;
       const lengthSquared = dx * dx + dz * dz;
       const t = lengthSquared < 1e-9 ? 0 : Math.max(0, Math.min(1, ((point.x - candidate.from.position.x) * dx + (point.z - candidate.from.position.z) * dz) / lengthSquared));
-      return { ...candidate, distance: Math.hypot(point.x - (candidate.from.position.x + dx * t), point.z - (candidate.from.position.z + dz * t)) };
+      return {
+        ...candidate,
+        t,
+        position: {
+          x: candidate.from.position.x + dx * t,
+          y: candidate.from.position.y + (candidate.to.position.y - candidate.from.position.y) * t,
+          z: candidate.from.position.z + dz * t,
+        },
+        distance: Math.hypot(point.x - (candidate.from.position.x + dx * t), point.z - (candidate.from.position.z + dz * t)),
+      };
     })
-    .filter((candidate) => candidate.distance <= 1e-3)
+    .filter((candidate) => candidate.distance <= snapTolerance)
     .sort((left, right) => left.distance - right.distance)[0];
   const removedEdgeIds: string[] = [];
   const splitEdges: ConstructionGraphPatch["edges"][number][] = [];
+  const resolvedPoints: ConstructionPosition[] = [];
   const ids = spine.controlPoints.map((point, index) => {
-    const endpoint = index === 0 ? spine.start : index === spine.controlPoints.length - 1 ? spine.end : undefined;
     const minted = spineControlNodeId(spine.corridorId, index);
-    if (endpoint === undefined || !shouldJoin(endpoint)) return minted;
     const node = nearest(point);
-    if (node !== undefined) return node.id;
+    if (node !== undefined) {
+      resolvedPoints.push(node.position);
+      return node.id;
+    }
     const edge = nearestEdge(point);
-    if (edge === undefined) return minted;
+    if (edge === undefined) {
+      resolvedPoints.push(point);
+      return minted;
+    }
+    resolvedPoints.push(edge.position);
     removedEdgeIds.push(edge.edge.edgeId);
     splitEdges.push(
       { edgeId: `spine-split:${edge.edge.edgeId}:${minted}:start`, startNodeId: edge.edge.startNodeId, endNodeId: minted },
@@ -142,7 +156,9 @@ function graphPatchForSpine(ctx: ToolContext, spine: NonNullable<ReturnType<type
     return minted;
   });
   return {
-    nodes: spine.controlPoints.map((position, index) => ({ id: ids[index]!, position })),
+    controlPoints: resolvedPoints,
+    graphPatch: {
+    nodes: resolvedPoints.map((position, index) => ({ id: ids[index]!, position })),
     removedEdgeIds,
     edges: [
       ...ids.slice(0, -1).map((startNodeId, index) => ({
@@ -152,6 +168,7 @@ function graphPatchForSpine(ctx: ToolContext, spine: NonNullable<ReturnType<type
       })).filter((edge) => edge.startNodeId !== edge.endNodeId),
       ...splitEdges,
     ],
+    },
   };
 }
 
@@ -455,20 +472,26 @@ export function applyPathBrushEffect(
 
   try {
     const parameters = effect.parameters;
+    // The full painted brush area is the local repair window. A hit only
+    // helps identify the neighbourhood; snapping is a geometric decision
+    // made against the PathCloud's spine, never an endpoint permission.
+    const correctionReach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
+    const materialized = graphPatchForSpine(ctx, spine, Math.max(correctionReach, tolerance, 1e-4));
+    const correctedSpine = { ...spine, controlPoints: materialized.controlPoints };
 
     const chain: SpineChainInput = {
-      chainId: spine.corridorId,
-      controlPoints: spine.controlPoints,
-      bandOffsets: spine.bandOffsets,
-      miterLimit: spine.miterLimit,
+      chainId: correctedSpine.corridorId,
+      controlPoints: correctedSpine.controlPoints,
+      bandOffsets: correctedSpine.bandOffsets,
+      miterLimit: correctedSpine.miterLimit,
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
-    const graphPatch = graphPatchForSpine(ctx, spine);
+    const graphPatch = materialized.graphPatch;
     const regeneratedChains = changedSpineChains(ctx.runtime.getGraphSnapshot(), graphPatch)
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
         ...chain,
-        chainId: `${spine.corridorId}:component-${index}`,
+        chainId: `${correctedSpine.corridorId}:component-${index}`,
         controlPoints,
       }));
 
@@ -477,10 +500,10 @@ export function applyPathBrushEffect(
     // It is not the patch: the patch is banded and unioned band by band
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
-    const flatPolyline = sampleCatmullRom(spine.controlPoints, CURVE_FLATTENING_TOLERANCE);
-    const outerOffset = spine.bandOffsets[0]!;
-    const innerOffset = spine.bandOffsets[spine.bandOffsets.length - 1]!;
-    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], spine.miterLimit));
+    const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const outerOffset = correctedSpine.bandOffsets[0]!;
+    const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
+    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
 
     const resolved = resolveCoverage(
@@ -509,7 +532,7 @@ export function applyPathBrushEffect(
     const standingRegions = selectedPathCloudRegions(ctx, effect, topologies);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
 
-    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: spine.controlPoints.length }, () =>
+    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: correctedSpine.controlPoints.length }, () =>
       planSpineContour({
         tableId: ctx.tableId,
         operationId,

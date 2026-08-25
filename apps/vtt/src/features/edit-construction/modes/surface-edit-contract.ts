@@ -1,4 +1,5 @@
 import type { PathFormationRecipe } from "../structure-types/path/path-recipe.ts";
+import type { ConstructionPosition } from "@/ports";
 
 /**
  * A revision an effect expects to still be current when it lands.
@@ -48,16 +49,11 @@ export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
 }
 
-/**
- * What the interaction observed at one end of a path stroke. These are
- * candidates, not graph operations: the path cloud resolves them against
- * its current spine and always tries continuation before a node attachment
- * or an edge union.
- */
-export interface PathSpineEndpointCandidates {
-  readonly continuation?: { readonly nodeId?: string; readonly surfaceRef?: string };
+/** A generic construction element the brush observed while sweeping. */
+export interface BrushElementObservation {
+  readonly point: ConstructionPosition;
   readonly nodeId?: string;
-  readonly unionSurfaceRef?: string;
+  readonly surfaceRef?: string;
 }
 
 /** VTT-selected profile for a generic path-sweep formation. */
@@ -82,8 +78,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
-  readonly start: PathSpineEndpointCandidates;
-  readonly end: PathSpineEndpointCandidates;
+  /** Raw brush observations, never pre-interpreted as path topology. */
+  readonly observedElements: readonly BrushElementObservation[];
   readonly parameters: PathFormationParameters;
   readonly expected: readonly RevisionPrecondition[];
 }
@@ -127,23 +123,16 @@ function optionalId(value: string | undefined, field: string): string | undefine
   return value === undefined ? undefined : required(value, field);
 }
 
-function freezeEndpointCandidates(
-  candidates: PathSpineEndpointCandidates | undefined,
-  field: string,
-): PathSpineEndpointCandidates {
-  const continuation = candidates?.continuation;
-  const nodeId = optionalId(candidates?.nodeId, `${field}.nodeId`);
-  const unionSurfaceRef = optionalId(candidates?.unionSurfaceRef, `${field}.unionSurfaceRef`);
-  const continuationNodeId = optionalId(continuation?.nodeId, `${field}.continuation.nodeId`);
-  const continuationSurfaceRef = optionalId(continuation?.surfaceRef, `${field}.continuation.surfaceRef`);
-  return Object.freeze({
-    continuation:
-      continuationNodeId === undefined && continuationSurfaceRef === undefined
-        ? undefined
-        : Object.freeze({ nodeId: continuationNodeId, surfaceRef: continuationSurfaceRef }),
-    nodeId,
-    unionSurfaceRef,
-  });
+function freezeObservedElements(elements: readonly BrushElementObservation[] | undefined): readonly BrushElementObservation[] {
+  return Object.freeze((elements ?? []).map((element, index) => Object.freeze({
+    point: Object.freeze({
+      x: finite(element.point.x, `observedElements[${index}].point.x`),
+      y: finite(element.point.y, `observedElements[${index}].point.y`),
+      z: finite(element.point.z, `observedElements[${index}].point.z`),
+    }),
+    nodeId: optionalId(element.nodeId, `observedElements[${index}].nodeId`),
+    surfaceRef: optionalId(element.surfaceRef, `observedElements[${index}].surfaceRef`),
+  })));
 }
 
 /**
@@ -151,8 +140,8 @@ function freezeEndpointCandidates(
  * It deliberately does not resolve geometry or mutate graph topology.
  */
 export function createPathBrushEffect(
-  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "start" | "end"> &
-    Partial<Pick<PathBrushEffect, "start" | "end">>,
+  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "observedElements"> &
+    Partial<Pick<PathBrushEffect, "observedElements">>,
   context: ConstructionOperationContext,
   expected: readonly RevisionPrecondition[] = [],
 ): PathBrushEffect {
@@ -171,8 +160,7 @@ export function createPathBrushEffect(
     targetType: "path",
     brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
-    start: freezeEndpointCandidates(payload.start, "start"),
-    end: freezeEndpointCandidates(payload.end, "end"),
+    observedElements: freezeObservedElements(payload.observedElements),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
