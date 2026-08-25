@@ -47,6 +47,12 @@ export interface PlanSpineContourInput {
   readonly standingRegions: readonly ConstructionRegionTopology[];
   /** Every node already standing on the table, for welding by position. */
   readonly existingNodes: readonly ExistingNode[];
+  /**
+   * Set only after the path type resolved an explicit continuation/union
+   * target. A selected cloud may join at a shared rim without overlapping
+   * area; unselected nearby roads must still pass exact ribbon intersection.
+   */
+  readonly allowSelectedBoundaryJoin?: boolean;
 }
 
 export interface PlanSpineContourResult {
@@ -137,7 +143,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     const outer = ringOfTopology(topology);
     if (!boundsIntersectRegion(outer, region)) continue;
     const list = ribbonsByBand.get(bandIndex) ?? [];
-    if (!list.some((ribbon) => ribbonsOverlap(ribbon.outer, outer))) continue;
+    if (!input.allowSelectedBoundaryJoin && !list.some((ribbon) => ribbonsOverlap(ribbon.outer, outer))) continue;
     list.push({ bandIndex, outer });
     ribbonsByBand.set(bandIndex, list);
     consumed.push(topology.surfaceKey);

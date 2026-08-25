@@ -55,7 +55,8 @@ const CURVE_FLATTENING_TOLERANCE = 0.05;
  * its persisted spine; until then, only explicitly picked path regions may
  * be handed to contour replacement.
  */
-function selectedStandingPathRegions(
+function selectedPathCloudRegions(
+  ctx: ToolContext,
   effect: PathBrushEffect,
   topologies: readonly ConstructionRegionTopology[],
 ): readonly ConstructionRegionTopology[] {
@@ -76,10 +77,21 @@ function selectedStandingPathRegions(
     ].filter((nodeId): nodeId is string => nodeId !== undefined),
   );
   if (surfaceRefs.size === 0 && nodeIds.size === 0) return [];
-  return topologies.filter(
+  const directlyTargeted = topologies.filter(
     (topology) =>
       topology.surfaceType === "path" &&
       (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) || topology.nodes.some((node) => nodeIds.has(node.id))),
+  );
+  const cloudSurfaceKeys = new Set<string>();
+  for (const topology of directlyTargeted) {
+    const cloud = ctx.runtime.cloudFor({ seed: topology.surfaceKey, surfaceType: "path" });
+    // A stale/partial cloud response cannot silently widen the operation;
+    // keep the picked face as the narrow fallback until the next live read.
+    const members = cloud.surfaceKeys.length === 0 ? [topology.surfaceKey] : cloud.surfaceKeys;
+    for (const surfaceKey of members) cloudSurfaceKeys.add(surfaceKey.join(":"));
+  }
+  return topologies.filter(
+    (topology) => topology.surfaceType === "path" && cloudSurfaceKeys.has(topology.surfaceKey.join(":")),
   );
 }
 
@@ -397,7 +409,7 @@ export function applyPathBrushEffect(
     }
 
     const topologies = ctx.runtime.getAllRegionTopologies();
-    const standingRegions = selectedStandingPathRegions(effect, topologies);
+    const standingRegions = selectedPathCloudRegions(ctx, effect, topologies);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
 
     const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: spine.controlPoints.length }, () =>
@@ -408,6 +420,7 @@ export function applyPathBrushEffect(
         editedChains: [chain],
         standingRegions,
         existingNodes,
+        allowSelectedBoundaryJoin: standingRegions.length > 0,
       }),
     );
     if (planned === undefined) return;

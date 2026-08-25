@@ -189,8 +189,31 @@ function createFakeConstructionSession() {
       throw new Error("not exercised by this fake");
     },
     removeSurface() {},
-    cloudFor() {
-      return { surfaceKeys: [] };
+    cloudFor(request) {
+      const all = [...regions.values()]
+        .filter((region) => region.surfaceType === request.surfaceType)
+        .map(toTopology);
+      const seed = request.seed.join(":");
+      const seedTopology = all.find((topology) => topology.surfaceKey.join(":") === seed);
+      if (seedTopology === undefined) return { surfaceKeys: [] };
+      const connected = new Set([seed]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const topology of all) {
+          const key = topology.surfaceKey.join(":");
+          if (connected.has(key)) continue;
+          const nodes = new Set(topology.nodes.map((node) => node.id));
+          const touchesCloud = all.some(
+            (member) =>
+              connected.has(member.surfaceKey.join(":")) && member.nodes.some((node) => nodes.has(node.id)),
+          );
+          if (!touchesCloud) continue;
+          connected.add(key);
+          changed = true;
+        }
+      }
+      return { surfaceKeys: all.filter((topology) => connected.has(topology.surfaceKey.join(":"))).map((topology) => topology.surfaceKey) };
     },
     getSurfaceMesh(surfaceKey) {
       const region = regions.get(surfaceKey.join(":"));
@@ -389,6 +412,31 @@ test("a nearby unselected road never consumes the standing road's faces", async 
   const after = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
   assert.ok(firstRoad.every((surfaceKey) => after.includes(surfaceKey)), "the first road remains intact");
   assert.ok(after.length > firstRoad.length, "the second road was added without consuming the first");
+});
+
+test("an explicitly selected continuation replaces the whole path cloud and rebuilds its contour", async () => {
+  const ctx = await createTestContext();
+  applyRoadBrushEffect(ctx, [
+    { x: -10, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ], 0.1);
+  const before = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+  const continuationSurfaceRef = [...ctx.runtime.getAllRegionTopologies()[0].surfaceKey].sort().join(",");
+
+  applyRoadBrushEffect(
+    ctx,
+    [
+      { x: 10, y: 0, z: 0 },
+      { x: 30, y: 0, z: 0 },
+    ],
+    0.1,
+    { start: { continuation: { surfaceRef: continuationSurfaceRef } } },
+  );
+
+  const after = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+  assert.ok(after.length > 0, "the rebuilt cloud has contour faces");
+  assert.ok(before.every((surfaceKey) => !after.includes(surfaceKey)), "the old cloud faces were replaced as one unit");
+  assert.ok(!ctx.feedback.some((entry) => entry.tone === "error"), `the continuation must succeed: ${JSON.stringify(ctx.feedback)}`);
 });
 
 test("a T where the second road ends inside the first commits without throwing", async () => {
