@@ -23,6 +23,7 @@ import {
   applySpineContour,
   offsetBands,
   planSpineContour,
+  ringOfTopology,
   sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
@@ -52,10 +53,32 @@ const ARC_FLATTENING_TOLERANCE = 0.05;
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
 
+/** The XZ distance from `point` to the segment `a`-`b`. */
+function distanceToSegmentXZ(point: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const lengthSq = abx * abx + abz * abz;
+  if (lengthSq < 1e-12) return Math.hypot(point.x - a.x, point.z - a.z);
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lengthSq));
+  return Math.hypot(point.x - (a.x + abx * t), point.z - (a.z + abz * t));
+}
+
 /**
  * The swept brush is the local correction window. Pointer hits are useful
  * evidence, but geometry in this window decides which path faces participate
  * in regeneration; a path does not require a pre-labelled endpoint union.
+ *
+ * **A stroke can overlap a standing road's face without ever coming near one
+ * of its nodes.** A long straight stretch has few control points -- that is
+ * the point of `referenceLineFrom`'s own decimation -- so a stroke crossing
+ * or running alongside it mid-span, far from either end, can miss every one
+ * of its nodes' own `reach` circles while still visibly sitting on top of
+ * the face. Missed here, that road's cloud never enters `standingRegions`,
+ * so the new stroke's own bands never consume and union with it -- they are
+ * simply added as a second, independent set of faces on the same ground,
+ * which is what shows up as the road duplicating instead of joining.
+ * Checked against the ring's own edges, not just its vertices, for exactly
+ * that reason.
  */
 function selectedPathCloudRegions(
   ctx: ToolContext,
@@ -66,6 +89,13 @@ function selectedPathCloudRegions(
   const nearStroke = (point: ConstructionPosition) => effect.brushRegion.samples.some((sample) =>
     Math.hypot(point.x - sample.x, point.z - sample.z) <= reach,
   );
+  const nearFace = (topology: ConstructionRegionTopology) => {
+    const ring = ringOfTopology(topology);
+    if (ring.length < 2) return false;
+    return effect.brushRegion.samples.some((sample) =>
+      ring.some((point, index) => distanceToSegmentXZ(sample, point, ring[(index + 1) % ring.length]!) <= reach),
+    );
+  };
   const surfaceRefs = new Set(
     effect.observedElements.map((element) => element.surfaceRef).filter((reference): reference is string => reference !== undefined),
   );
@@ -75,7 +105,9 @@ function selectedPathCloudRegions(
   const directlyTargeted = topologies.filter(
     (topology) =>
       topology.surfaceType === "path" &&
-      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) || topology.nodes.some((node) => nodeIds.has(node.id) || nearStroke(node.position))),
+      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) ||
+        topology.nodes.some((node) => nodeIds.has(node.id) || nearStroke(node.position)) ||
+        nearFace(topology)),
   );
   const cloudSurfaceKeys = new Set<string>();
   for (const topology of directlyTargeted) {

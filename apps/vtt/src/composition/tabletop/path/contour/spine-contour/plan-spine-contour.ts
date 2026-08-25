@@ -75,7 +75,7 @@ function bandIndexOfRegionId(regionId: string): number | undefined {
 }
 
 /** A standing region's own outer ring, as world positions in boundary order. */
-function ringOfTopology(topology: ConstructionRegionTopology): readonly ConstructionPosition[] {
+export function ringOfTopology(topology: ConstructionRegionTopology): readonly ConstructionPosition[] {
   const [outer] = topology.outerLoops;
   if (outer === undefined) return [];
   const positionById = new Map(topology.nodes.map((node) => [node.id, node.position]));

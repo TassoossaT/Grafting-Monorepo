@@ -546,3 +546,53 @@ test("a T where the second road ends inside the first commits without throwing",
   assert.equal(junction.length, 1, "a geometric contact inside the brush snaps automatically, without a connection flag");
   assert.equal(spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length, 3);
 });
+
+test("a T touching a long straight road mid-span merges into it instead of duplicating its face", async () => {
+  // A straight run's own control points are only its two far-apart ends
+  // (a straight line has nothing for the fitter to add in between), so a
+  // branch landing mid-span, kilometres from either one, has no standing
+  // node anywhere near it -- and this harness sends no observed pointer
+  // hits either. The spine graph still snaps the contact (previous test),
+  // but the *contour* replacement has its own, independent selection: if it
+  // relied on node proximity alone it would never see this road as touched,
+  // never consume its standing bands, and just add the branch's own bands
+  // as a second, overlapping set next to the first -- the road visibly
+  // duplicating instead of becoming one face.
+  const ctx = await createTestContext();
+  const main = [
+    { x: -60, y: 0, z: 0 },
+    { x: 60, y: 0, z: 0 },
+  ];
+  applyRoadBrushEffect(ctx, main, 0.1);
+  const before = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+  assert.ok(before.length > 0, "the main road has real faces standing");
+
+  const branch = [
+    { x: 0, y: 0, z: 8 },
+    { x: 0, y: 0, z: 0.5 },
+  ];
+  applyRoadBrushEffect(ctx, branch, 0.1);
+  assert.ok(
+    !ctx.feedback.some((entry) => entry.tone === "error"),
+    `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
+  );
+
+  const after = ctx.runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === "path");
+  assert.ok(
+    before.every((surfaceKey) => !after.some((topology) => topology.surfaceKey.join(":") === surfaceKey)),
+    "the main road's original faces were replaced by the merge, not left standing beside a duplicate",
+  );
+
+  // Two overlapping-but-unmerged faces would both claim ground around
+  // (0, 0) on the main road's own band; a real merge leaves exactly one.
+  const atJunction = after.filter((topology) => {
+    const xs = topology.nodes.map((node) => node.position.x);
+    const zs = topology.nodes.map((node) => node.position.z);
+    return Math.min(...xs) <= 0 && Math.max(...xs) >= 0 && Math.min(...zs) <= 0.5 && Math.max(...zs) >= 0;
+  });
+  const bandsAtJunction = new Set(atJunction.map((topology) => /:band-(\d+):/.exec(topology.surfaceKey.join(":"))?.[1]));
+  for (const band of bandsAtJunction) {
+    const withThisBand = atJunction.filter((topology) => topology.surfaceKey.join(":").includes(`:band-${band}:`));
+    assert.equal(withThisBand.length, 1, `band ${band} must be one merged face at the junction, not ${withThisBand.length} overlapping ones`);
+  }
+});
