@@ -126,6 +126,32 @@ test("a sliver shape from a self-intersecting union never becomes a region", () 
   assert.equal(result.regionIds.length, 1);
 });
 
+test("a local contour rebuild gives a full retained edge a private identity", () => {
+  const nodes = [
+    { id: "n0", position: at(0, 0) },
+    { id: "n1", position: at(10, 0) },
+    { id: "n2", position: at(10, 2) },
+    { id: "n3", position: at(0, 2) },
+  ];
+  const shape = [[[0, 0], [10, 0], [10, 2], [0, 2], [0, 0]]];
+  const fullEdge = "table:seg:n0~n1";
+  const result = buildContourPatch(
+    "table",
+    "op-local",
+    "path",
+    0,
+    [shape],
+    [],
+    nodes,
+    new Map([[fullEdge, [false, true]]]),
+  );
+
+  assert.ok(
+    result.patch.edges.some((edge) => edge.edgeId.startsWith("contour:op-local:band-0:seg:n0~n1")),
+    "the rebuilt face does not claim a third use of the retained edge",
+  );
+});
+
 test("two roads meeting end-to-end in an L stay one connected face, not two touching corners", () => {
   // A standing run ending at the origin, and a new run turning off it at a
   // right angle -- the shape an L reduces to once both are offset into

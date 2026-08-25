@@ -1,4 +1,4 @@
-import type { ConstructionPatch, ConstructionPosition } from "@/ports";
+import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
 import { createBoundaryEdges } from "../../../tools/core/boundary-edges.ts";
@@ -95,8 +95,19 @@ export function buildContourPatch(
   shapes: MultiPolygon,
   heightSamples: readonly ConstructionPosition[],
   existingNodes: readonly ExistingNode[],
+  /** Uses already live on the table; a new local patch must never overfill one. */
+  existingEdgeUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]> = new Map(),
 ): ContourPatchResult {
-  const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
+  // Contours rebuilt in a small brush window can weld to faces deliberately
+  // left outside that window. A shared edge may therefore already be full;
+  // keep its identity only when its two-sided manifold budget allows it and
+  // mint a private boundary otherwise. Refusing the whole road leaves the
+  // renderer with stale/dark geometry, which is worse than a local seam.
+  const edges = createBoundaryEdges(tableId, {
+    kind: "private-when-full",
+    runPrefix: `contour:${operationId}:band-${bandIndex}`,
+    existingUses: existingEdgeUses,
+  });
   const nodePositions = new Map<string, ConstructionPosition>();
 
   const nearestExisting = (x: number, z: number): ExistingNode | undefined => {

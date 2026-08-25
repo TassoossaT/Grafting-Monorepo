@@ -531,6 +531,12 @@ export function applyPathBrushEffect(
     const topologies = ctx.runtime.getAllRegionTopologies();
     const standingRegions = selectedPathCloudRegions(ctx, effect, topologies);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
+    const existingEdgeUses = new Map<string, boolean[]>();
+    for (const topology of topologies) {
+      for (const loop of [...topology.outerLoops, ...topology.holes]) {
+        for (const use of loop) existingEdgeUses.set(use.edgeId, [...(existingEdgeUses.get(use.edgeId) ?? []), use.reversed]);
+      }
+    }
 
     const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: correctedSpine.controlPoints.length }, () =>
       planSpineContour({
@@ -544,6 +550,7 @@ export function applyPathBrushEffect(
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
         existingNodes,
+        existingEdgeUses,
       }),
     );
     if (planned === undefined) return;

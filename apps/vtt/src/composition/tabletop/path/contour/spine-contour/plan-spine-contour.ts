@@ -1,5 +1,6 @@
 import type {
   ConstructionPatch,
+  ConstructionEdgeId,
   ConstructionPatchEdge,
   ConstructionPatchRegion,
   ConstructionPosition,
@@ -47,6 +48,8 @@ export interface PlanSpineContourInput {
   readonly standingRegions: readonly ConstructionRegionTopology[];
   /** Every node already standing on the table, for welding by position. */
   readonly existingNodes: readonly ExistingNode[];
+  /** All currently live contour uses, including faces outside this local edit. */
+  readonly existingEdgeUses?: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>;
 }
 
 export interface PlanSpineContourResult {
@@ -130,6 +133,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   }
 
   const consumed: ConstructionSurfaceKey[] = [];
+  const consumedTopologies: ConstructionRegionTopology[] = [];
   for (const topology of input.standingRegions) {
     const regionId = topology.surfaceKey[topology.surfaceKey.length - 1] ?? "";
     const bandIndex = bandIndexOfRegionId(regionId);
@@ -141,6 +145,24 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     list.push({ bandIndex, outer });
     ribbonsByBand.set(bandIndex, list);
     consumed.push(topology.surfaceKey);
+    consumedTopologies.push(topology);
+  }
+
+  // `applyPatchReplacement` removes these faces before it registers the new
+  // contour. Their old uses therefore do not occupy an edge budget; only
+  // faces outside this local rewrite must reserve a side of an edge.
+  const retainedEdgeUses = new Map<ConstructionEdgeId, boolean[]>();
+  for (const [edgeId, uses] of input.existingEdgeUses ?? []) retainedEdgeUses.set(edgeId, [...uses]);
+  for (const topology of consumedTopologies) {
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) {
+        const uses = retainedEdgeUses.get(use.edgeId);
+        if (uses === undefined) continue;
+        const index = uses.indexOf(use.reversed);
+        if (index >= 0) uses.splice(index, 1);
+        if (uses.length === 0) retainedEdgeUses.delete(use.edgeId);
+      }
+    }
   }
 
   const nodes = new Map<string, ConstructionPosition>();
@@ -154,7 +176,16 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   for (const [bandIndex, ribbons] of [...ribbonsByBand].sort(([left], [right]) => left - right)) {
     const shapes = unionBandLayer(ribbons);
     const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
-    const built = buildContourPatch(input.tableId, input.operationId, input.surfaceType, bandIndex, shapes, heightSamples, liveNodes);
+    const built = buildContourPatch(
+      input.tableId,
+      input.operationId,
+      input.surfaceType,
+      bandIndex,
+      shapes,
+      heightSamples,
+      liveNodes,
+      retainedEdgeUses,
+    );
     for (const node of built.patch.nodes) nodes.set(node.id, node.position);
     for (const edge of built.patch.edges) edges.set(edge.edgeId, edge);
     regions.push(...built.patch.regions);
