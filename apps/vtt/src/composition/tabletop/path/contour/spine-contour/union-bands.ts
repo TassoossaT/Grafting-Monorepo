@@ -47,57 +47,6 @@ export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
   }
 }
 
-/**
- * True only when two ribbon footprints share area. Bounding boxes remain a
- * useful broad-phase, but must never by themselves make a standing road part
- * of a contour replacement.
- */
-export function ribbonsOverlap(
-  left: readonly ConstructionPosition[],
-  right: readonly ConstructionPosition[],
-): boolean {
-  if (left.length < 3 || right.length < 3) return false;
-  try {
-    return polygonClipping.intersection([ringOf(left)], [ringOf(right)]).length > 0;
-  } catch {
-    // A malformed standing contour is not a reason to consume it.
-    return false;
-  }
-}
-
-/** Whether two ribbon footprints overlap or meet on the same contour rim. */
-export function ribbonsMeet(
-  left: readonly ConstructionPosition[],
-  right: readonly ConstructionPosition[],
-): boolean {
-  if (ribbonsOverlap(left, right)) return true;
-  if (left.length < 2 || right.length < 2) return false;
-  const segments = (ring: readonly ConstructionPosition[]) =>
-    ring.map((point, index) => [point, ring[(index + 1) % ring.length]!] as const);
-  return segments(left).some(([a, b]) => segments(right).some(([c, d]) => segmentsMeet(a, b, c, d)));
-}
-
-function segmentsMeet(
-  a: ConstructionPosition,
-  b: ConstructionPosition,
-  c: ConstructionPosition,
-  d: ConstructionPosition,
-): boolean {
-  const cross = (p: ConstructionPosition, q: ConstructionPosition, r: ConstructionPosition) =>
-    (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
-  const side = (value: number) => (value > 1e-6 ? 1 : value < -1e-6 ? -1 : 0);
-  const abC = side(cross(a, b, c));
-  const abD = side(cross(a, b, d));
-  const cdA = side(cross(c, d, a));
-  const cdB = side(cross(c, d, b));
-  if (abC !== abD && cdA !== cdB) return true;
-  const on = (p: ConstructionPosition, q: ConstructionPosition, r: ConstructionPosition) =>
-    Math.abs(cross(p, q, r)) <= 1e-6 &&
-    r.x >= Math.min(p.x, q.x) - 1e-6 && r.x <= Math.max(p.x, q.x) + 1e-6 &&
-    r.z >= Math.min(p.z, q.z) - 1e-6 && r.z <= Math.max(p.z, q.z) + 1e-6;
-  return on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b);
-}
-
 function ringOf(outer: readonly ConstructionPosition[]): Ring {
   return outer.map((point): [number, number] => [point.x, point.z]);
 }

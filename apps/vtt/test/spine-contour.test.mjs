@@ -181,8 +181,16 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
   assert.deepEqual(result.consumedSurfaceKeys, [standing.surfaceKey]);
 });
 
-test("a spine edit does not consume a merely nearby standing band", () => {
-  const nearby = standingBand("nearby", 0, [at(11, -1), at(20, -1), at(20, 1), at(11, 1)]);
+test("planSpineContour consumes every standingRegion it is given, unconditionally, however far its geometry sits from the edited chain", () => {
+  // planSpineContour no longer decides *which* standing faces belong to the
+  // edit -- that selection is the caller's job (`standingRegionsForCloud` in
+  // `path-effect-executor.ts`, driven by spine-graph node membership, not
+  // brush geometry or bounding boxes). Once a region is in `standingRegions`
+  // it is retired in full, full stop, even if its footprint has nothing to
+  // do with where the edited chain runs today -- deliberately, since the
+  // whole point of the caller's own selection is that a region only ends up
+  // here when it is *known* to belong to the same cloud, not merely
+  // suspected of overlapping it.
   const faraway = standingBand("faraway", 0, [at(1000, -1), at(1010, -1), at(1010, 1), at(1000, 1)]);
   const edited = {
     chainId: "edited",
@@ -194,126 +202,13 @@ test("a spine edit does not consume a merely nearby standing band", () => {
 
   const result = planSpineContour({
     tableId: "table",
-    operationId: "op-dirty",
+    operationId: "op-whole-cloud",
     surfaceType: "path",
     editedChains: [edited],
-    standingRegions: [nearby, faraway],
-    existingNodes: [...nearby.nodes, ...faraway.nodes],
+    standingRegions: [faraway],
+    existingNodes: faraway.nodes,
   });
 
   assert.ok(result !== undefined);
-  const consumedIds = result.consumedSurfaceKeys.map((key) => key.join(":"));
-  assert.ok(!consumedIds.includes(nearby.surfaceKey.join(":")), "a bounding-box touch is not a contour intersection");
-  assert.ok(!consumedIds.includes(faraway.surfaceKey.join(":")), "a band far outside reach is left alone");
-  // The untouched band's own nodes never appear in the new patch at all.
-  const patchNodeIds = new Set(result.patch.nodes.map((node) => node.id));
-  for (const node of faraway.nodes) assert.ok(!patchNodeIds.has(node.id));
-});
-
-/** A `ConstructionRegionTopology` reconstructed from one region of a patch this engine already produced -- what a real session would report back on the next read. */
-function topologyFromPatchRegion(patch, region) {
-  const edgeById = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
-  const positionById = new Map(patch.nodes.map((node) => [node.id, node.position]));
-  const outerLoop = region.boundary.map((use) => {
-    const edge = edgeById.get(use.edgeId);
-    const startNodeId = use.reversed ? edge.endNodeId : edge.startNodeId;
-    const endNodeId = use.reversed ? edge.startNodeId : edge.endNodeId;
-    return { edgeId: use.edgeId, reversed: use.reversed, startNodeId, endNodeId, geometry: edge.geometry ?? { kind: "line" } };
-  });
-  const nodes = outerLoop.map((use) => ({ id: use.startNodeId, position: positionById.get(use.startNodeId) }));
-  return {
-    surfaceKey: ["@region", region.regionId],
-    surfaceType: region.surfaceType,
-    physical: region.physical,
-    outerLoops: [outerLoop],
-    holes: [],
-    nodes,
-  };
-}
-
-test("a standing band with no ribbon overlap is never re-consumed", () => {
-  const chain = {
-    chainId: "run-1",
-    controlPoints: [at(0, 0), at(10, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  const first = planSpineContour({
-    tableId: "table",
-    operationId: "op-1",
-    surfaceType: "path",
-    editedChains: [chain],
-    standingRegions: [],
-    existingNodes: [],
-  });
-  assert.ok(first !== undefined);
-
-  // This nearby stroke's ribbon never touches the standing band's. The
-  // bounding-box broad phase admits it, but the exact footprint phase must
-  // leave it out of the replacement completely.
-  const nudge = {
-    chainId: "nudge",
-    controlPoints: [at(9, 3), at(9, 1.5)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  const bandZeroRegion = first.patch.regions.find((region) => region.regionId.includes(":band-0:"));
-  const standingTopology = topologyFromPatchRegion(first.patch, bandZeroRegion);
-
-  const second = planSpineContour({
-    tableId: "table",
-    operationId: "op-2",
-    surfaceType: "path",
-    editedChains: [nudge],
-    standingRegions: [standingTopology],
-    existingNodes: first.patch.nodes,
-  });
-  assert.ok(second !== undefined);
-
-  assert.deepEqual(second.consumedSurfaceKeys, [], "a non-overlapping band is not a replacement source");
-  assert.ok(
-    !second.patch.nodes.some((node) => node.id.startsWith("contour:op-1:band-0:")),
-    "the standing band's nodes are not re-emitted into the new patch",
-  );
-});
-
-test("a standing region touched only through another standing region is still consumed, whatever order they arrive in", () => {
-  // The edited chain (x in [-2, 2], z in [-5, 5]) overlaps band A directly
-  // (z 4..6). Band B (z 6..7) sits past the chain's own z-end, inside the
-  // grown dirty region only because of the reach margin, and only touches A
-  // -- never the chain's own ribbon. Handed to planSpineContour as [B, A]
-  // (B before the thing it touches): a single pass that only checks each
-  // candidate against ribbons collected *so far* would consume A (touches
-  // the chain) but miss B, since at the moment B is checked, A is not yet in
-  // the list. The union would then leave B standing while A's own new face
-  // is welded right up against it, and the whole replacement gets refused
-  // by the runtime for the overlap -- this is the "faces disappear when
-  // roads join" failure mode.
-  const bandA = standingBand("chain-a", 0, [at(-2, 4), at(2, 4), at(2, 6), at(-2, 6)]);
-  const bandB = standingBand("chain-b", 0, [at(-2, 6), at(2, 6), at(2, 7), at(-2, 7)]);
-  const chain = {
-    chainId: "through-a",
-    controlPoints: [at(0, -5), at(0, 5)],
-    bandOffsets: [-2, 2],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-
-  const result = planSpineContour({
-    tableId: "table",
-    operationId: "op-chain",
-    surfaceType: "path",
-    editedChains: [chain],
-    standingRegions: [bandB, bandA],
-    existingNodes: [...bandA.nodes, ...bandB.nodes],
-  });
-
-  assert.ok(result !== undefined);
-  const consumedKeys = new Set(result.consumedSurfaceKeys.map((key) => key.join(":")));
-  for (const band of [bandA, bandB]) {
-    assert.ok(consumedKeys.has(band.surfaceKey.join(":")), `${band.surfaceKey.join(":")} must be consumed`);
-  }
-  assert.equal(result.patch.regions.length, 1, "the whole chain unions into one face, not a mix of new and stale ones");
+  assert.deepEqual(result.consumedSurfaceKeys, [faraway.surfaceKey]);
 });

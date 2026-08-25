@@ -10,16 +10,15 @@ import type {
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { ribbonsMeet, unionBandLayer } from "./union-bands.ts";
-import { boundsIntersectRegion, dirtyRegionAround } from "./dirty-region.ts";
+import { unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
 
 /**
  * One curve chain's spine, already resolved to an ordered list of control
  * points. Kept decoupled from `spine-graph.ts`'s own types (and from
  * `PathKind`/`pathFormationFor`) on purpose: this module only knows "a
- * curve, a band profile, a reach," never a corridor, a subtype, or a
- * station -- the same genericity the Rust primitives themselves keep.
+ * curve, a band profile," never a corridor, a subtype, or a station -- the
+ * same genericity the Rust primitives themselves keep.
  */
 export interface SpineChainInput {
   readonly chainId: string;
@@ -36,14 +35,26 @@ export interface PlanSpineContourInput {
   /** Scopes every node/region id this call mints -- one edit, one operation. */
   readonly operationId: string;
   readonly surfaceType: string;
-  /** The chain(s) a stroke or a control-node drag just changed. */
+  /**
+   * Every chain of the touched spine cloud -- not just the one a stroke or a
+   * control-node drag directly changed, but every chain the caller's own
+   * connectivity walk (`changedSpineCloud` in `path-effect-executor.ts`)
+   * found reachable from it. Each is resampled fresh from its own *current*
+   * control points every time this function runs; nothing here ever reads
+   * a chain's own previous contour back as input, which is what keeps
+   * floating-point noise from one union pass compounding into the next.
+   */
   readonly editedChains: readonly SpineChainInput[];
   /**
-   * Every region of `surfaceType` already standing on the table -- read
-   * live, not reconstructed from a persisted spine graph. A standing
-   * region's own bandIndex is read back from its own `regionId` (this
-   * engine's own naming, `<op>:band-<n>:<shape>`); anything not shaped that
-   * way was not built by this engine and is left alone.
+   * Every standing region of `surfaceType` belonging to this same cloud --
+   * always replaced in full. *Which* regions belong to the cloud is decided
+   * once, by the caller, from the spine graph itself (exact node-id
+   * membership); this function does not re-derive or filter that answer by
+   * geometry -- there is no partial, "only what actually overlaps" version
+   * of this list any more. A road duplicating or a face going missing was
+   * always this file and the caller silently disagreeing about which faces
+   * belonged together; giving the caller's answer nothing left to second-
+   * guess is what closes that gap for good.
    */
   readonly standingRegions: readonly ConstructionRegionTopology[];
   /** Every node already standing on the table, for welding by position. */
@@ -55,72 +66,34 @@ export interface PlanSpineContourInput {
 export interface PlanSpineContourResult {
   readonly patch: ConstructionPatch;
   /**
-   * Standing regions this patch replaces -- their faces are superseded by
-   * the freshly unioned ones in `patch.regions`, even where most of their
-   * own nodes were welded back unchanged. The caller replaces them in one
-   * atomic transaction with the unioned patch; a refused target can never
-   * leave the standing faces deleted.
+   * Every one of `input.standingRegions`, unconditionally -- their faces are
+   * superseded by the freshly unioned ones in `patch.regions`, even where
+   * most of their own nodes were welded back unchanged. The caller replaces
+   * them in one atomic transaction with the unioned patch; a refused target
+   * can never leave the standing faces deleted.
    */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
 
-const BAND_INDEX_PATTERN = /:band-(\d+):/;
-
-/** The band index encoded in one of this engine's own region ids, or `undefined` for a region it did not build. */
-function bandIndexOfRegionId(regionId: string): number | undefined {
-  const match = BAND_INDEX_PATTERN.exec(regionId);
-  if (match === null) return undefined;
-  const index = Number(match[1]);
-  return Number.isNaN(index) ? undefined : index;
-}
-
-/** A standing region's own outer ring, as world positions in boundary order. */
-export function ringOfTopology(topology: ConstructionRegionTopology): readonly ConstructionPosition[] {
-  const [outer] = topology.outerLoops;
-  if (outer === undefined) return [];
-  const positionById = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  return outer.map((use) => positionById.get(use.startNodeId)).filter((position): position is ConstructionPosition => position !== undefined);
-}
-
-function halfReachOf(chain: SpineChainInput): number {
-  return chain.bandOffsets.reduce((widest, offset) => Math.max(widest, Math.abs(offset)), 0);
-}
-
 /**
- * Derives the contour patch for one spine edit: dirty region -> Catmull-Rom
- * sample -> banded offset -> union each band layer (the edited chains' own
- * fresh ribbons, plus whatever standing band already sits inside the dirty
- * region) -> `ConstructionPatch`.
+ * Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
+ * offset -> union each band layer, across every chain of the touched cloud
+ * at once -> `ConstructionPatch`.
  *
- * **The dirty region, not the whole cloud.** `editedChains` says what
- * changed; only application-selected standing regions are passed in, and a
- * candidate must pass both a cheap grown-box broad phase and a true ribbon
- * contact test before it can be consumed. A nearby path therefore stays
- * exactly as it stands, same node ids, same face. This is what
- * replaces the old station-sweep engine's per-topology mouth/wedge/mitre
- * machinery: a T, an X, or an L are not cases this function knows about,
- * they are whatever {@link unionBandLayer} happens to produce when an
- * edited chain's ribbon and a standing region's own ring overlap.
- *
- * **Welding, not reconstruction, is what keeps a standing chain's own
- * width right.** This function never needs to know what profile produced a
- * standing region -- it reads that region's *current* boundary positions
- * straight off the live table and feeds them into the same union a fresh
- * ribbon goes through. A stretch of standing road nowhere near the edit
- * unions with nothing, and every one of its vertices welds straight back
- * onto itself by position, so it survives the round trip with the exact
- * ids it already had.
+ * **The whole cloud, derived fresh, every time -- never patched onto what
+ * was already there.** `input.editedChains` is every chain the touched
+ * cloud has; `input.standingRegions` is every face that cloud currently
+ * owns. This function reads the *first* for geometry and the *second* only
+ * for which surface keys to retire -- a standing region's own boundary is
+ * never fed back into a union as input. A T, an X, or an L are not cases
+ * this function knows about, they are whatever {@link unionBandLayer}
+ * happens to produce when two chains' ribbons overlap.
  *
  * Returns `undefined` when `editedChains` is empty -- nothing changed, so
  * nothing to regenerate.
  */
 export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
   if (input.editedChains.length === 0) return undefined;
-
-  const reach = input.editedChains.reduce((widest, chain) => Math.max(widest, halfReachOf(chain)), 0);
-  const changedPoints = input.editedChains.flatMap((chain) => chain.controlPoints);
-  const region = dirtyRegionAround(changedPoints, reach);
-  if (region === undefined) return undefined;
 
   const ribbonsByBand = new Map<number, BandRibbon[]>();
   for (const chain of input.editedChains) {
@@ -132,50 +105,14 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
-  const consumed: ConstructionSurfaceKey[] = [];
-  const consumedTopologies: ConstructionRegionTopology[] = [];
-  const candidatesByBand = new Map<number, { readonly topology: ConstructionRegionTopology; readonly outer: readonly ConstructionPosition[] }[]>();
-  for (const topology of input.standingRegions) {
-    const regionId = topology.surfaceKey[topology.surfaceKey.length - 1] ?? "";
-    const bandIndex = bandIndexOfRegionId(regionId);
-    if (bandIndex === undefined) continue;
-    const outer = ringOfTopology(topology);
-    if (!boundsIntersectRegion(outer, region)) continue;
-    const list = candidatesByBand.get(bandIndex) ?? [];
-    list.push({ topology, outer });
-    candidatesByBand.set(bandIndex, list);
-  }
-  // A standing region can touch another standing region without touching an
-  // edited chain directly -- a short connector sitting between two junctions
-  // being reworked, say. Consuming in one pass over `input.standingRegions`
-  // would cut that chain of contact short whenever such a region happens to
-  // come before whatever it touches; repeat passes per band until one adds
-  // nothing, so contact through any number of standing regions is found
-  // regardless of their order in `input.standingRegions`.
-  for (const [bandIndex, candidates] of candidatesByBand) {
-    const list = ribbonsByBand.get(bandIndex) ?? [];
-    let remaining = candidates;
-    let changed = true;
-    while (changed) {
-      changed = false;
-      remaining = remaining.filter((candidate) => {
-        if (!list.some((ribbon) => ribbonsMeet(ribbon.outer, candidate.outer))) return true;
-        list.push({ bandIndex, outer: candidate.outer });
-        consumed.push(candidate.topology.surfaceKey);
-        consumedTopologies.push(candidate.topology);
-        changed = true;
-        return false;
-      });
-    }
-    ribbonsByBand.set(bandIndex, list);
-  }
+  const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 
   // `applyPatchReplacement` removes these faces before it registers the new
   // contour. Their old uses therefore do not occupy an edge budget; only
-  // faces outside this local rewrite must reserve a side of an edge.
+  // faces outside this cloud must reserve a side of an edge.
   const retainedEdgeUses = new Map<ConstructionEdgeId, boolean[]>();
   for (const [edgeId, uses] of input.existingEdgeUses ?? []) retainedEdgeUses.set(edgeId, [...uses]);
-  for (const topology of consumedTopologies) {
+  for (const topology of input.standingRegions) {
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
       for (const use of loop) {
         const uses = retainedEdgeUses.get(use.edgeId);

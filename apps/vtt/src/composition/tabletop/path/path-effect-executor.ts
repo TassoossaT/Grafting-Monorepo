@@ -13,7 +13,6 @@ import {
   spineControlNodeId,
   resolveCoverage,
 } from "../../../features/edit-construction/index.ts";
-import { surfaceRefFromNodeSet } from "../../../entities/map/index.ts";
 
 import type { ToolContext } from "../tools/core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../tools/core/stroke-fitting.ts";
@@ -23,7 +22,6 @@ import {
   applySpineContour,
   offsetBands,
   planSpineContour,
-  ringOfTopology,
   sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
@@ -52,75 +50,6 @@ const ARC_FLATTENING_TOLERANCE = 0.05;
  * free curve through the drawn control points.
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
-
-/** The XZ distance from `point` to the segment `a`-`b`. */
-function distanceToSegmentXZ(point: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const lengthSq = abx * abx + abz * abz;
-  if (lengthSq < 1e-12) return Math.hypot(point.x - a.x, point.z - a.z);
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lengthSq));
-  return Math.hypot(point.x - (a.x + abx * t), point.z - (a.z + abz * t));
-}
-
-/**
- * The swept brush is the local correction window. Pointer hits are useful
- * evidence, but geometry in this window decides which path faces participate
- * in regeneration; a path does not require a pre-labelled endpoint union.
- *
- * **A stroke can overlap a standing road's face without ever coming near one
- * of its nodes.** A long straight stretch has few control points -- that is
- * the point of `referenceLineFrom`'s own decimation -- so a stroke crossing
- * or running alongside it mid-span, far from either end, can miss every one
- * of its nodes' own `reach` circles while still visibly sitting on top of
- * the face. Missed here, that road's cloud never enters `standingRegions`,
- * so the new stroke's own bands never consume and union with it -- they are
- * simply added as a second, independent set of faces on the same ground,
- * which is what shows up as the road duplicating instead of joining.
- * Checked against the ring's own edges, not just its vertices, for exactly
- * that reason.
- */
-function selectedPathCloudRegions(
-  ctx: ToolContext,
-  effect: PathBrushEffect,
-  topologies: readonly ConstructionRegionTopology[],
-): readonly ConstructionRegionTopology[] {
-  const reach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
-  const nearStroke = (point: ConstructionPosition) => effect.brushRegion.samples.some((sample) =>
-    Math.hypot(point.x - sample.x, point.z - sample.z) <= reach,
-  );
-  const nearFace = (topology: ConstructionRegionTopology) => {
-    const ring = ringOfTopology(topology);
-    if (ring.length < 2) return false;
-    return effect.brushRegion.samples.some((sample) =>
-      ring.some((point, index) => distanceToSegmentXZ(sample, point, ring[(index + 1) % ring.length]!) <= reach),
-    );
-  };
-  const surfaceRefs = new Set(
-    effect.observedElements.map((element) => element.surfaceRef).filter((reference): reference is string => reference !== undefined),
-  );
-  const nodeIds = new Set(
-    effect.observedElements.map((element) => element.nodeId).filter((nodeId): nodeId is string => nodeId !== undefined),
-  );
-  const directlyTargeted = topologies.filter(
-    (topology) =>
-      topology.surfaceType === "path" &&
-      (surfaceRefs.has(surfaceRefFromNodeSet(topology.surfaceKey)) ||
-        topology.nodes.some((node) => nodeIds.has(node.id) || nearStroke(node.position)) ||
-        nearFace(topology)),
-  );
-  const cloudSurfaceKeys = new Set<string>();
-  for (const topology of directlyTargeted) {
-    const cloud = ctx.runtime.cloudFor({ seed: topology.surfaceKey, surfaceType: "path" });
-    // A stale/partial cloud response cannot silently widen the operation;
-    // keep the picked face as the narrow fallback until the next live read.
-    const members = cloud.surfaceKeys.length === 0 ? [topology.surfaceKey] : cloud.surfaceKeys;
-    for (const surfaceKey of members) cloudSurfaceKeys.add(surfaceKey.join(":"));
-  }
-  return topologies.filter(
-    (topology) => topology.surfaceType === "path" && cloudSurfaceKeys.has(topology.surfaceKey.join(":")),
-  );
-}
 
 interface MaterializedSpine {
   readonly graphPatch: ConstructionGraphPatch;
@@ -204,8 +133,21 @@ function graphPatchForSpine(
   };
 }
 
-/** The connected spine component changed by this stroke, after its graph patch. */
-function changedSpineChains(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): readonly (readonly ConstructionPosition[])[] {
+/** The connected spine component changed by this stroke, after its graph patch, and every node id in it. */
+interface ChangedSpineCloud {
+  readonly chains: readonly (readonly ConstructionPosition[])[];
+  /**
+   * Every spine control point position in the touched component -- the one
+   * and only signal used to decide which standing contour faces this edit
+   * replaces (see {@link standingRegionsForCloud}). Built from the same
+   * graph walk that already decides which chains to resample, so cloud
+   * membership can never disagree between "what gets rebuilt" and "what
+   * gets replaced" the way two independently-guessed answers could.
+   */
+  readonly positions: readonly ConstructionPosition[];
+}
+
+function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   for (const node of patch.nodes) nodes.set(node.id, node);
   const edges = new Map(snapshot.edges.map((edge) => [edge.edgeId, edge]));
@@ -227,10 +169,50 @@ function changedSpineChains(snapshot: ConstructionGraphSnapshot, patch: Construc
       pending.push(neighbor);
     }
   }
-  return chainsOf({
-    nodes: graph.nodes.filter((node) => connected.has(node.nodeId)),
+  const clusterNodes = graph.nodes.filter((node) => connected.has(node.nodeId));
+  const chains = chainsOf({
+    nodes: clusterNodes,
     edges: graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId)),
   }).map((chain) => chain.nodes.map((node) => node.position));
+  return { chains, positions: clusterNodes.map((node) => node.position) };
+}
+
+/**
+ * Every standing "path" face that belongs to the touched spine cloud --
+ * every profile puts a point at `PATH_SPINE_OFFSET` on purpose, so the seam
+ * between any two adjacent bands sits exactly on top of the real spine's own
+ * control point, at every control point, including every junction. A
+ * contour face therefore always has a vertex sitting exactly where some
+ * spine control point of its own chain does, and cloud membership can be
+ * read off that directly instead of guessed from brush geometry.
+ *
+ * **By position, not by node id.** A contour vertex welded onto a spine
+ * control point still mints its *own* `contour:...` id -- nothing today
+ * ever seeds a spine node into a contour weld's own candidate set, so a
+ * band's seam vertex never actually carries its spine node's id, only its
+ * exact position. Matching id-for-id would therefore match nothing at all;
+ * matching by XZ position is what the profile's own `PATH_SPINE_OFFSET`
+ * point guarantees instead -- every control point of a chain has a band
+ * vertex sitting exactly there, on both sides of the seam.
+ *
+ * **This replaces geometric proximity as the selection signal entirely.**
+ * A brush stroke or an observed pointer hit is evidence of where the user
+ * touched the *screen*; `cloudPositions` is the graph's own, exact answer to
+ * what is topologically the same road -- the two used to disagree whenever
+ * a stroke touched a face far from any of its own sparse nodes (a long
+ * straight has only two), which is what made a join sometimes duplicate a
+ * face instead of replacing it.
+ */
+function standingRegionsForCloud(
+  topologies: readonly ConstructionRegionTopology[],
+  cloudPositions: readonly ConstructionPosition[],
+): readonly ConstructionRegionTopology[] {
+  const near = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.x - b.x, a.z - b.z) <= 1e-3;
+  return topologies.filter(
+    (topology) =>
+      topology.surfaceType === "path" &&
+      topology.nodes.some((node) => cloudPositions.some((position) => near(node.position, position))),
+  );
 }
 
 /**
@@ -460,7 +442,7 @@ export function referenceLineFrom(
  * This is the only path a path is ever built by. A free stroke, and any
  * straight drag or preset that comes later, differ in nothing but the
  * reference line they hand over: they all resolve to the same spine, go
- * through the same dirty-region contour engine, and declare the same faces.
+ * through the same whole-cloud contour engine, and declare the same faces.
  *
  * **What changed from the station-sweep engine this replaces.** There is no
  * mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
@@ -519,7 +501,8 @@ export function applyPathBrushEffect(
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
     const graphPatch = materialized.graphPatch;
-    const regeneratedChains = changedSpineChains(ctx.runtime.getGraphSnapshot(), graphPatch)
+    const touchedCloud = changedSpineCloud(ctx.runtime.getGraphSnapshot(), graphPatch);
+    const regeneratedChains = touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
         ...chain,
@@ -561,7 +544,7 @@ export function applyPathBrushEffect(
     }
 
     const topologies = ctx.runtime.getAllRegionTopologies();
-    const standingRegions = selectedPathCloudRegions(ctx, effect, topologies);
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
