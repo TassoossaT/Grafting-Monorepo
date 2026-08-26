@@ -23,7 +23,7 @@ prefix_rule(
         ["pip install"],
         ["uv add"],
     ],
-    decision = "deny",
+    decision = "forbidden",
     justification = "Direct manual git and package installations are forbidden. Use .\\ia-graft.cmd task/deps/delegate commands instead.",
 )
 
