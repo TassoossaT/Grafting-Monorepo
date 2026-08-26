@@ -5,7 +5,7 @@ import {
   pathHalfWidth,
 } from "@/features/edit-construction";
 
-import { createBrushTool } from "../core/brush-tool.ts";
+import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
 import { PATH_COLOR, applyPathBrushEffect } from "../../path/path-effect-executor.ts";
