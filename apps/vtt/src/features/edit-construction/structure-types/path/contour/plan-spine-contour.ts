@@ -10,7 +10,7 @@ import type {
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { unionBandLayer } from "./union-bands.ts";
+import { ringOf, unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
 
 /**
@@ -38,7 +38,7 @@ export interface PlanSpineContourInput {
   /**
    * Every chain of the touched spine cloud -- not just the one a stroke or a
    * control-node drag directly changed, but every chain the caller's own
-   * connectivity walk (`changedSpineCloud` in `path-effect-executor.ts`)
+   * connectivity walk (`changedSpineCloud` in `path-cloud-mutation.ts`)
    * found reachable from it. Each is resampled fresh from its own *current*
    * control points every time this function runs; nothing here ever reads
    * a chain's own previous contour back as input, which is what keeps
@@ -95,13 +95,13 @@ export interface PlanSpineContourResult {
 export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
   if (input.editedChains.length === 0) return undefined;
 
-  const ribbonsByBand = new Map<number, BandRibbon[]>();
+  const ribbons: BandRibbon[] = [];
   for (const chain of input.editedChains) {
     const polyline = sampleCatmullRom(chain.controlPoints, chain.tolerance);
-    for (const ribbon of offsetBands(polyline, chain.bandOffsets, chain.miterLimit)) {
-      const list = ribbonsByBand.get(ribbon.bandIndex) ?? [];
-      list.push(ribbon);
-      ribbonsByBand.set(ribbon.bandIndex, list);
+    const minOffset = Math.min(...chain.bandOffsets);
+    const maxOffset = Math.max(...chain.bandOffsets);
+    for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
+      ribbons.push(ribbon);
     }
   }
 
@@ -124,49 +124,24 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
-  const nodes = new Map<string, ConstructionPosition>();
-  const edges = new Map<string, ConstructionPatchEdge>();
-  const regions: ConstructionPatchRegion[] = [];
-  // Nodes fresh out of one band's own patch are candidates the *next* band
-  // must be able to weld onto too -- offset 0 is exactly the same position
-  // whichever band computed it, and without this the seam between two
-  // adjacent bands would mint two different ids for one shared point.
-  let liveNodes: readonly ExistingNode[] = input.existingNodes;
-  for (const [bandIndex, ribbons] of [...ribbonsByBand].sort(([left], [right]) => left - right)) {
-    const shapes = unionBandLayer(ribbons);
-    const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
-    const built = buildContourPatch(
-      input.tableId,
-      input.operationId,
-      input.surfaceType,
-      bandIndex,
-      shapes,
-      heightSamples,
-      liveNodes,
-      retainedEdgeUses,
-    );
-    for (const node of built.patch.nodes) nodes.set(node.id, node.position);
-    for (const edge of built.patch.edges) edges.set(edge.edgeId, edge);
-    regions.push(...built.patch.regions);
-    liveNodes = [...liveNodes, ...built.patch.nodes];
-    // This band's own regions can claim an edge two adjacent bands share
-    // (their common seam) or one a later band's own weld happens to land
-    // back on. `buildContourPatch`'s own edge budget only sees uses already
-    // live on the table plus whatever *it* claims -- the next band in this
-    // same transaction must see this one's claims too, or two regions in
-    // one patch can walk the same edge past its two-use budget without
-    // either call ever knowing about the other.
-    for (const region of built.patch.regions) {
-      for (const use of [...region.boundary, ...(region.holes ?? []).flat()]) {
-        const uses = retainedEdgeUses.get(use.edgeId) ?? [];
-        uses.push(use.reversed);
-        retainedEdgeUses.set(use.edgeId, uses);
-      }
-    }
+  let shapes = unionBandLayer(ribbons);
+  if (shapes.length === 0 && ribbons.length > 0) {
+    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
   }
+  const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
+  const built = buildContourPatch(
+    input.tableId,
+    input.operationId,
+    input.surfaceType,
+    0,
+    shapes,
+    heightSamples,
+    input.existingNodes,
+    retainedEdgeUses,
+  );
 
   return {
-    patch: { nodes: [...nodes].map(([id, position]) => ({ id, position })), edges: [...edges.values()], regions },
+    patch: built.patch,
     consumedSurfaceKeys: consumed,
   };
 }

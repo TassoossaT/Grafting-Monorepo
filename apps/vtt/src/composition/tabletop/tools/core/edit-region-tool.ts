@@ -1,6 +1,17 @@
-import { planEdit, refreshCloudTopology, resolveCloudTopology, cloudNodes } from "@/features/edit-construction";
+import {
+  cloudNodes,
+  planEdit,
+  refreshCloudTopology,
+  resolveCloudTopology,
+  resolvePolicy,
+} from "@/features/edit-construction";
 import type { AtomicEditOp, CloudTopology, EditTarget } from "@/features/edit-construction";
-import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ConstructionGraphSnapshot,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
@@ -53,11 +64,14 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample): GrabbedTarget |
   const topologies = ctx.runtime.getAllRegionTopologies();
 
   if (sample.nodeId !== undefined) {
-    const nodeId = sample.nodeId;
-    const topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === nodeId));
+    const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
+    let topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+    if (topology === undefined) {
+      topology = topologies.find((candidate) => resolvePolicy(candidate, target).resolve.kind !== "deny");
+    }
     return topology === undefined
       ? undefined
-      : { seedKey: topology.surfaceKey, target: { kind: "vertex", nodeId } };
+      : { seedKey: topology.surfaceKey, target };
   }
 
   if (sample.surfaceRef === undefined) return undefined;
@@ -104,10 +118,11 @@ function delta(from: ConstructionPosition, to: ConstructionPosition): Constructi
 function restoreOps(
   before: ReadonlyMap<string, ConstructionPosition>,
   after: CloudTopology,
+  graphSnapshot?: ConstructionGraphSnapshot,
 ): { readonly undo: readonly AtomicEditOp[]; readonly redo: readonly AtomicEditOp[] } {
   const undo: AtomicEditOp[] = [];
   const redo: AtomicEditOp[] = [];
-  for (const node of cloudNodes(after)) {
+  for (const node of cloudNodes(after, graphSnapshot)) {
     const original = before.get(node.id);
     if (original === undefined) continue;
     if (
@@ -149,10 +164,11 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       ctx.reportSelection(undefined);
       return;
     }
+    const snapshot = ctx.runtime.getGraphSnapshot();
     active = {
       cloud,
       target: grabbed.target,
-      before: new Map(cloudNodes(cloud).map((node) => [node.id, node.position])),
+      before: new Map(cloudNodes(cloud, snapshot).map((node) => [node.id, node.position])),
       previous: sample.point,
     };
     if (grabbed.target.kind === "vertex") {
@@ -174,11 +190,12 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     const cloud = refreshCloudTopology(ctx.runtime, active.cloud.cloud);
     if (cloud === undefined) return;
 
+    const snapshot = ctx.runtime.getGraphSnapshot();
     const plan = planEdit(cloud, {
       surfaceKey: cloud.cloud.seed,
       target: active.target,
       delta: step,
-    });
+    }, snapshot);
     if (plan.kind === "deny") {
       ctx.reportFeedback({ tone: "error", message: plan.reason });
       active = undefined;
@@ -190,6 +207,7 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       return;
     }
     ctx.runtime.applyRegionEdit(plan.ops, "local", `edit:${plan.role}`);
+
     // The handle-design notes call out that a drag gives no signal of how
     // much it is about to affect. The plan already knows, so say it.
     ctx.reportFeedback({
@@ -210,7 +228,8 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     if (drag === undefined) return;
     const cloud = refreshCloudTopology(ctx.runtime, drag.cloud.cloud);
     if (cloud === undefined) return;
-    const { undo, redo } = restoreOps(drag.before, cloud);
+    const snapshot = ctx.runtime.getGraphSnapshot();
+    const { undo, redo } = restoreOps(drag.before, cloud, snapshot);
     if (undo.length === 0) return;
     ctx.history.record({ kind: "region-edit", undo, redo });
   },

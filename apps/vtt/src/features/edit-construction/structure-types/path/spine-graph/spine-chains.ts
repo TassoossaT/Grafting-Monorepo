@@ -32,6 +32,9 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
     adjacency.set(edge.fromNodeId, [...(adjacency.get(edge.fromNodeId) ?? []), edge.toNodeId]);
     adjacency.set(edge.toNodeId, [...(adjacency.get(edge.toNodeId) ?? []), edge.fromNodeId]);
   }
+  for (const neighbors of adjacency.values()) {
+    neighbors.sort((a, b) => a.localeCompare(b));
+  }
   const degreeOf = (nodeId: string): number => adjacency.get(nodeId)?.length ?? 0;
   const isBoundary = (nodeId: string): boolean => degreeOf(nodeId) !== 2;
   const edgeKey = (a: string, b: string): string => (a < b ? `${a}~${b}` : `${b}~${a}`);
@@ -58,7 +61,7 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
         return outLength < 1e-9 ? undefined : { candidate, cosine: (inX * outX + inZ * outZ) / (inLength * outLength) };
       })
       .filter((candidate): candidate is { candidate: string; cosine: number } => candidate !== undefined)
-      .sort((left, right) => right.cosine - left.cosine)[0];
+      .sort((left, right) => right.cosine - left.cosine || left.candidate.localeCompare(right.candidate))[0];
     return best !== undefined && best.cosine >= THROUGH_JUNCTION_COSINE ? best.candidate : undefined;
   };
 
@@ -67,7 +70,7 @@ export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
 
   // Start at free ends before junctions. That lets the two opposite arms of
   // a T/H/X claim the through-route before a short branch is visited.
-  for (const node of [...graph.nodes].sort((left, right) => degreeOf(left.nodeId) - degreeOf(right.nodeId))) {
+  for (const node of [...graph.nodes].sort((left, right) => (degreeOf(left.nodeId) - degreeOf(right.nodeId)) || left.nodeId.localeCompare(right.nodeId))) {
     if (!isBoundary(node.nodeId)) continue;
     for (const neighborId of adjacency.get(node.nodeId) ?? []) {
       const startKey = edgeKey(node.nodeId, neighborId);

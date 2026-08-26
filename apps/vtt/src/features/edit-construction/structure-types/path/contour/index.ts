@@ -1,4 +1,3 @@
-export { applySpineContour } from "./apply-spine-contour.ts";
 export { sampleCatmullRom } from "./catmull-rom.ts";
 export type { ExistingNode } from "./contour-patch.ts";
 export { buildContourPatch } from "./contour-patch.ts";

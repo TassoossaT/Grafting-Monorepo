@@ -23,9 +23,12 @@ export type { StationNodeAddress } from "./station-node-id.ts";
 
 export {
   chainsOf,
+  isSpineControlNodeId,
   spineControlNodeId,
   spineGraphFromSnapshot,
 } from "./spine-graph/index.ts";
+
+export { planSpineContour } from "./contour/index.ts";
 
 export {
   pathCloudPerimeter,
@@ -40,6 +43,9 @@ export type {
   PathRunNode,
   PathRunRib,
 } from "./path-cloud.ts";
+
+export { planPathCloudMutation, referenceLineFrom } from "./path-cloud-mutation.ts";
+export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
 
 export {
   PATH_ROLES,

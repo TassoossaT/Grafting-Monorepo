@@ -29,26 +29,37 @@ import type { BandRibbon } from "./offset-bands.ts";
  * loop or it doesn't, and both are the same code path.
  */
 export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
-  const polygons: Polygon[] = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
-  const [first, ...rest] = polygons;
-  if (first === undefined) return [];
+  const polygons: Polygon[] = ribbons
+    .map((ribbon) => [ringOf(ribbon.outer)])
+    .filter(([ring]) => ring.length >= 4);
+  if (polygons.length === 0) return [];
+  if (polygons.length === 1) return [polygons[0]!];
   try {
-    return polygonClipping.union(first, ...rest);
+    const [first, ...rest] = polygons;
+    return polygonClipping.union(first!, ...rest);
   } catch {
-    let merged: MultiPolygon = [first];
-    for (const polygon of rest) {
+    let merged: MultiPolygon = [polygons[0]!];
+    for (let i = 1; i < polygons.length; i++) {
       try {
-        merged = polygonClipping.union(merged, polygon);
+        merged = polygonClipping.union(merged, polygons[i]!);
       } catch {
-        merged = [...merged, polygon];
+        merged = [...merged, polygons[i]!];
       }
     }
     return merged;
   }
 }
 
-function ringOf(outer: readonly ConstructionPosition[]): Ring {
-  return outer.map((point): [number, number] => [point.x, point.z]);
+export function ringOf(outer: readonly ConstructionPosition[]): Ring {
+  const points = outer.map((point): [number, number] => [point.x, point.z]);
+  if (points.length >= 3) {
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    if (Math.hypot(first[0] - last[0], first[1] - last[1]) > 1e-6) {
+      points.push([first[0], first[1]]);
+    }
+  }
+  return points;
 }
 
 /** The `y` of whichever `samples` point is nearest `(x, z)` -- same lookup `preview-shapes.ts`'s `nearestSampleY` already uses to give a union's new vertices a height. */

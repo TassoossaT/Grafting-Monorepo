@@ -8,18 +8,18 @@ import {
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
-import { PATH_COLOR, applyPathBrushEffect } from "../../path/path-effect-executor.ts";
+import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
+
+const PATH_COLOR = 0xc084fc;
 
 /**
  * A free path stroke, built on the same brush every other brush uses: press,
  * drag, and on release the whole swept region is handed over once.
  *
  * Path creation follows the same ownership split as walls: this tool only
- * chooses the interaction and emits a `PathBrushEffect`. The path effect
- * executor owns the single commit every path goes through;
- * `spine-contour/` derives the contour from the spine and declares the
- * graph, while Rust executes the resolved overlay without ever being told
- * any of it is a path.
+ * chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
+ * the resulting graph and contour plan; the composition boundary commits its
+ * generic transaction without interpreting path topology.
  */
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
@@ -40,6 +40,6 @@ export const pathBrushTool = createBrushTool<"path-brush">({
       },
       { operationId, tableId: ctx.tableId, initiatedBy: "path-brush" },
     );
-    applyPathBrushEffect(ctx, effect, region.tolerance);
+    commitPathCloudIntent(ctx, effect, region.tolerance);
   },
 });

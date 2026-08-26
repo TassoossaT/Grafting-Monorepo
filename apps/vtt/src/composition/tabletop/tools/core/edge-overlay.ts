@@ -1,11 +1,12 @@
 import type { PreviewDescriptor } from "@/features/edit-construction";
-import type { ConstructionRegionTopology } from "@/ports";
+import type { ConstructionGraphSnapshot, ConstructionRegionTopology } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
 import {
   edgeUseCounts,
   resolvePolicy,
+  spineGraphFromSnapshot,
 } from "../../../../features/edit-construction/index.ts";
 
 /**
@@ -88,6 +89,7 @@ export interface EdgeOverlayGroup {
  */
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
+  graphSnapshot?: ConstructionGraphSnapshot,
 ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
   const drawn = new Set<string>();
@@ -112,6 +114,23 @@ export function edgeOverlayOf(
         byRole.set(role, into);
         into.push(start.x, start.y, start.z, end.x, end.y, end.z);
       }
+    }
+  }
+
+  if (graphSnapshot !== undefined) {
+    const spineGraph = spineGraphFromSnapshot(graphSnapshot);
+    const nodeById = new Map(spineGraph.nodes.map((node) => [node.nodeId, node.position]));
+    const spineInto = byRole.get("path-spine-edge") ?? [];
+    for (const edge of spineGraph.edges) {
+      if (drawn.has(edge.edgeId)) continue;
+      drawn.add(edge.edgeId);
+      const from = nodeById.get(edge.fromNodeId);
+      const to = nodeById.get(edge.toNodeId);
+      if (from === undefined || to === undefined) continue;
+      spineInto.push(from.x, from.y, from.z, to.x, to.y, to.z);
+    }
+    if (spineInto.length > 0) {
+      byRole.set("path-spine-edge", spineInto);
     }
   }
 

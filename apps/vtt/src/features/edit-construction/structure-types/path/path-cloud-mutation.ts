@@ -1,37 +1,32 @@
-import type { PathBrushEffect } from "@/features/edit-construction";
-import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
+import type {
+  ApplyPatchReplacementRequest,
+  ConstructionCoveredRegion,
+  ConstructionGraphPatch,
+  ConstructionGraphSnapshot,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+} from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
-  chainsOf,
-  pathRidesTerrain,
-  pathSpineDraftFor,
-  spineGraphFromSnapshot,
-  spineControlNodeId,
   resolveCoverage,
-} from "../../../features/edit-construction/index.ts";
+} from "../index.ts";
+import { chainsOf, parseSpineControlNodeId, spineControlNodeId, spineGraphFromSnapshot } from "./spine-graph/index.ts";
+import { pathRidesTerrain } from "./path-recipe.ts";
+import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
-import type { ToolContext } from "../tools/core/tool-context.ts";
-import { fitPath, type FittedEdge } from "../tools/core/stroke-fitting.ts";
-import type { SweptArc } from "../tools/core/sweep-formation.ts";
-import { inStage, reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnostics.ts";
+import { fitPath, type FittedEdge, type SweptArc } from "../../topology/index.ts";
 import {
-  applySpineContour,
   offsetBands,
   planSpineContour,
   sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
-} from "./contour/spine-contour/index.ts";
-
-export const PATH_COLOR = 0xc084fc;
-
-/** What this tool calls itself on the console when a stage fails. */
-const TOOL = "path-brush";
-
+} from "./contour/index.ts";
 
 /**
  * How far a flattened arc may sit from the true circle, in world units.
@@ -56,79 +51,170 @@ interface MaterializedSpine {
   readonly controlPoints: readonly ConstructionPosition[];
 }
 
+interface SpineEdgeCandidate {
+  readonly edge: ConstructionGraphPatch["edges"][number];
+  readonly from: ConstructionPosition & { readonly id: string };
+  readonly to: ConstructionPosition & { readonly id: string };
+}
+
+interface SpineEdgeCut {
+  readonly nodeId: string;
+  readonly position: ConstructionPosition;
+  readonly t: number;
+}
+
+interface SpineIntersection {
+  readonly t: number;
+  readonly u: number;
+}
+
+const SPINE_INTERSECTION_EPSILON = 1e-6;
+
+/** The proper crossing of two XZ line segments, with both segment parameters. */
+function segmentIntersection(
+  from: ConstructionPosition,
+  to: ConstructionPosition,
+  otherFrom: ConstructionPosition,
+  otherTo: ConstructionPosition,
+): SpineIntersection | undefined {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const otherDx = otherTo.x - otherFrom.x;
+  const otherDz = otherTo.z - otherFrom.z;
+  const determinant = dx * otherDz - dz * otherDx;
+  if (Math.abs(determinant) < SPINE_INTERSECTION_EPSILON) return undefined;
+  const betweenX = otherFrom.x - from.x;
+  const betweenZ = otherFrom.z - from.z;
+  const t = (betweenX * otherDz - betweenZ * otherDx) / determinant;
+  const u = (betweenX * dz - betweenZ * dx) / determinant;
+  if (
+    t <= SPINE_INTERSECTION_EPSILON ||
+    t >= 1 - SPINE_INTERSECTION_EPSILON ||
+    u < -SPINE_INTERSECTION_EPSILON ||
+    u > 1 + SPINE_INTERSECTION_EPSILON
+  ) {
+    return undefined;
+  }
+  return { t, u: Math.max(0, Math.min(1, u)) };
+}
+
 /** Materializes and locally snaps the type-owned spine against its own network. */
 function graphPatchForSpine(
-  ctx: ToolContext,
+  snapshot: ConstructionGraphSnapshot,
   spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
   snapTolerance: number,
 ): MaterializedSpine {
-  const snapshot = ctx.runtime.getGraphSnapshot();
   const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
   const nearest = (point: ConstructionPosition) => spineNodes
     .map((node) => ({ node, distance: Math.hypot(node.position.x - point.x, node.position.z - point.z) }))
     .filter((candidate) => candidate.distance <= snapTolerance)
     .sort((left, right) => left.distance - right.distance)[0]?.node;
   const nodeById = new Map(spineNodes.map((node) => [node.id, node]));
-  const nearestEdge = (point: ConstructionPosition) => snapshot.edges
-    .flatMap((edge) => {
+  const edges = snapshot.edges
+    .flatMap((edge): SpineEdgeCandidate[] => {
       const from = nodeById.get(edge.startNodeId);
       const to = nodeById.get(edge.endNodeId);
-      return from === undefined || to === undefined ? [] : [{ edge, from, to }];
-    })
+      return from === undefined || to === undefined ? [] : [{ edge, from: { ...from.position, id: from.id }, to: { ...to.position, id: to.id } }];
+    });
+  const nearestEdge = (point: ConstructionPosition) => edges
     .map((candidate) => {
-      const dx = candidate.to.position.x - candidate.from.position.x;
-      const dz = candidate.to.position.z - candidate.from.position.z;
+      const dx = candidate.to.x - candidate.from.x;
+      const dz = candidate.to.z - candidate.from.z;
       const lengthSquared = dx * dx + dz * dz;
-      const t = lengthSquared < 1e-9 ? 0 : Math.max(0, Math.min(1, ((point.x - candidate.from.position.x) * dx + (point.z - candidate.from.position.z) * dz) / lengthSquared));
+      const t = lengthSquared < 1e-9 ? 0 : Math.max(0, Math.min(1, ((point.x - candidate.from.x) * dx + (point.z - candidate.from.z) * dz) / lengthSquared));
       return {
         ...candidate,
         t,
         position: {
-          x: candidate.from.position.x + dx * t,
-          y: candidate.from.position.y + (candidate.to.position.y - candidate.from.position.y) * t,
-          z: candidate.from.position.z + dz * t,
+          x: candidate.from.x + dx * t,
+          y: candidate.from.y + (candidate.to.y - candidate.from.y) * t,
+          z: candidate.from.z + dz * t,
         },
-        distance: Math.hypot(point.x - (candidate.from.position.x + dx * t), point.z - (candidate.from.position.z + dz * t)),
+        distance: Math.hypot(point.x - (candidate.from.x + dx * t), point.z - (candidate.from.z + dz * t)),
       };
     })
     .filter((candidate) => candidate.distance <= snapTolerance)
     .sort((left, right) => left.distance - right.distance)[0];
-  const removedEdgeIds: string[] = [];
-  const splitEdges: ConstructionGraphPatch["edges"][number][] = [];
-  const resolvedPoints: ConstructionPosition[] = [];
-  const ids = spine.controlPoints.map((point, index) => {
+  const cutsByEdge = new Map<string, SpineEdgeCut[]>();
+  const cutsByPosition: SpineEdgeCut[] = [];
+  let nextMintedIndex = spine.controlPoints.length;
+  const mint = (): string => spineControlNodeId(spine.corridorId, nextMintedIndex++);
+  const samePosition = (left: ConstructionPosition, right: ConstructionPosition): boolean =>
+    Math.hypot(left.x - right.x, left.z - right.z) <= SPINE_INTERSECTION_EPSILON;
+  const cutFor = (candidate: SpineEdgeCandidate, position: ConstructionPosition, t: number): SpineEdgeCut => {
+    if (t <= SPINE_INTERSECTION_EPSILON) return { nodeId: candidate.from.id, position: candidate.from, t: 0 };
+    if (t >= 1 - SPINE_INTERSECTION_EPSILON) return { nodeId: candidate.to.id, position: candidate.to, t: 1 };
+    const existing = cutsByPosition.find((cut) => samePosition(cut.position, position));
+    const cut = { nodeId: existing?.nodeId ?? mint(), position: existing?.position ?? position, t };
+    if (existing === undefined) cutsByPosition.push(cut);
+    const edgeCuts = cutsByEdge.get(candidate.edge.edgeId) ?? [];
+    if (!edgeCuts.some((other) => other.nodeId === cut.nodeId)) {
+      cutsByEdge.set(candidate.edge.edgeId, [...edgeCuts, cut]);
+    }
+    return cut;
+  };
+  const resolved = spine.controlPoints.map((point, index) => {
     const minted = spineControlNodeId(spine.corridorId, index);
     const node = nearest(point);
     if (node !== undefined) {
-      resolvedPoints.push(node.position);
-      return node.id;
+      return { nodeId: node.id, position: node.position };
     }
     const edge = nearestEdge(point);
     if (edge === undefined) {
-      resolvedPoints.push(point);
-      return minted;
+      return { nodeId: minted, position: point };
     }
-    resolvedPoints.push(edge.position);
-    removedEdgeIds.push(edge.edge.edgeId);
-    splitEdges.push(
-      { edgeId: `spine-split:${edge.edge.edgeId}:${minted}:start`, startNodeId: edge.edge.startNodeId, endNodeId: minted },
-      { edgeId: `spine-split:${edge.edge.edgeId}:${minted}:end`, startNodeId: minted, endNodeId: edge.edge.endNodeId },
-    );
-    return minted;
+    const cut = cutFor(edge, edge.position, edge.t);
+    return { nodeId: cut.nodeId, position: cut.position };
   });
+
+  const expanded = resolved.flatMap((point, index) => {
+    if (index === 0) return [point];
+    const previous = resolved[index - 1]!;
+    const crossings = edges
+      .flatMap((edge) => {
+        const intersection = segmentIntersection(previous.position, point.position, edge.from, edge.to);
+        if (intersection === undefined) return [];
+        const position = {
+          x: previous.position.x + (point.position.x - previous.position.x) * intersection.t,
+          y: edge.from.y + (edge.to.y - edge.from.y) * intersection.u,
+          z: previous.position.z + (point.position.z - previous.position.z) * intersection.t,
+        };
+        const cut = cutFor(edge, position, intersection.u);
+        return [{ t: intersection.t, nodeId: cut.nodeId, position: cut.position }];
+      })
+      .sort((left, right) => left.t - right.t)
+      .filter((crossing, crossingIndex, all) => crossingIndex === 0 || crossing.nodeId !== all[crossingIndex - 1]!.nodeId);
+    return [...crossings, point];
+  });
+
+  const splitEdges = [...cutsByEdge.entries()].flatMap(([edgeId, cuts]) => {
+    const edge = edges.find((candidate) => candidate.edge.edgeId === edgeId)!;
+    const nodes = [
+      { nodeId: edge.from.id, position: edge.from, t: 0 },
+      ...cuts.sort((left, right) => left.t - right.t),
+      { nodeId: edge.to.id, position: edge.to, t: 1 },
+    ];
+    return nodes.slice(0, -1).flatMap((from, index) => {
+      const to = nodes[index + 1]!;
+      return from.nodeId === to.nodeId
+        ? []
+        : [{ edgeId: `spine-split:${edgeId}:${index}`, startNodeId: from.nodeId, endNodeId: to.nodeId }];
+    });
+  });
+  const nodes = new Map(expanded.map((point) => [point.nodeId, point.position]));
   return {
-    controlPoints: resolvedPoints,
+    controlPoints: expanded.map((point) => point.position),
     graphPatch: {
-    nodes: resolvedPoints.map((position, index) => ({ id: ids[index]!, position })),
-    removedEdgeIds,
-    edges: [
-      ...ids.slice(0, -1).map((startNodeId, index) => ({
-        edgeId: `spine-edge:${spine.corridorId}:${index}`,
-        startNodeId,
-        endNodeId: ids[index + 1]!,
-      })).filter((edge) => edge.startNodeId !== edge.endNodeId),
-      ...splitEdges,
-    ],
+      nodes: [...nodes].map(([id, position]) => ({ id, position })),
+      removedEdgeIds: [...cutsByEdge.keys()],
+      edges: [
+        ...expanded.slice(0, -1).map((from, index) => ({
+          edgeId: `spine-edge:${spine.corridorId}:${index}`,
+          startNodeId: from.nodeId,
+          endNodeId: expanded[index + 1]!.nodeId,
+        })).filter((edge) => edge.startNodeId !== edge.endNodeId),
+        ...splitEdges,
+      ],
     },
   };
 }
@@ -137,14 +223,12 @@ function graphPatchForSpine(
 interface ChangedSpineCloud {
   readonly chains: readonly (readonly ConstructionPosition[])[];
   /**
-   * Every spine control point position in the touched component -- the one
-   * and only signal used to decide which standing contour faces this edit
-   * replaces (see {@link standingRegionsForCloud}). Built from the same
-   * graph walk that already decides which chains to resample, so cloud
-   * membership can never disagree between "what gets rebuilt" and "what
-   * gets replaced" the way two independently-guessed answers could.
+   * Every spine control point position in the touched component -- used to
+   * decide which standing contour faces this edit replaces.
    */
   readonly positions: readonly ConstructionPosition[];
+  /** Every corridor/operation id participating in this connected spine cluster. */
+  readonly corridorIds: ReadonlySet<string>;
 }
 
 function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud {
@@ -174,45 +258,58 @@ function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Construct
     nodes: clusterNodes,
     edges: graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId)),
   }).map((chain) => chain.nodes.map((node) => node.position));
-  return { chains, positions: clusterNodes.map((node) => node.position) };
+
+  const corridorIds = new Set<string>();
+  for (const node of clusterNodes) {
+    const address = parseSpineControlNodeId(node.nodeId);
+    if (address !== undefined) {
+      corridorIds.add(address.operationId);
+      const at = address.operationId.lastIndexOf("#");
+      if (at >= 0) corridorIds.add(address.operationId.slice(0, at));
+    }
+  }
+
+  return { chains, positions: clusterNodes.map((node) => node.position), corridorIds };
 }
 
 /**
- * Every standing "path" face that belongs to the touched spine cloud --
- * every profile puts a point at `PATH_SPINE_OFFSET` on purpose, so the seam
- * between any two adjacent bands sits exactly on top of the real spine's own
- * control point, at every control point, including every junction. A
- * contour face therefore always has a vertex sitting exactly where some
- * spine control point of its own chain does, and cloud membership can be
- * read off that directly instead of guessed from brush geometry.
- *
- * **By position, not by node id.** A contour vertex welded onto a spine
- * control point still mints its *own* `contour:...` id -- nothing today
- * ever seeds a spine node into a contour weld's own candidate set, so a
- * band's seam vertex never actually carries its spine node's id, only its
- * exact position. Matching id-for-id would therefore match nothing at all;
- * matching by XZ position is what the profile's own `PATH_SPINE_OFFSET`
- * point guarantees instead -- every control point of a chain has a band
- * vertex sitting exactly there, on both sides of the seam.
- *
- * **This replaces geometric proximity as the selection signal entirely.**
- * A brush stroke or an observed pointer hit is evidence of where the user
- * touched the *screen*; `cloudPositions` is the graph's own, exact answer to
- * what is topologically the same road -- the two used to disagree whenever
- * a stroke touched a face far from any of its own sparse nodes (a long
- * straight has only two), which is what made a join sometimes duplicate a
- * face instead of replacing it.
+ * Every standing "path" face that belongs to the touched spine cloud.
+ * Matched by corridor/operation identity first, node identity second, and
+ * geometric proximity as a fallback.
  */
 function standingRegionsForCloud(
   topologies: readonly ConstructionRegionTopology[],
   cloudPositions: readonly ConstructionPosition[],
+  corridorIds: ReadonlySet<string> = new Set(),
 ): readonly ConstructionRegionTopology[] {
-  const near = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.x - b.x, a.z - b.z) <= 1e-3;
-  return topologies.filter(
-    (topology) =>
-      topology.surfaceType === "path" &&
-      topology.nodes.some((node) => cloudPositions.some((position) => near(node.position, position))),
-  );
+  if (corridorIds.size === 0) return [];
+  return topologies.filter((topology) => {
+    if (topology.surfaceType !== "path") return false;
+    const regionId = topology.surfaceKey[1] ?? "";
+    for (const corridorId of corridorIds) {
+      if (
+        regionId === corridorId ||
+        regionId.startsWith(`${corridorId}:`) ||
+        regionId.startsWith(`${corridorId}#`)
+      ) {
+        return true;
+      }
+    }
+    for (const node of topology.nodes) {
+      for (const corridorId of corridorIds) {
+        if (
+          node.id.startsWith(`contour:${corridorId}:`) ||
+          node.id.startsWith(`contour:${corridorId}#`) ||
+          node.id.startsWith(`along:${corridorId}:`) ||
+          node.id.startsWith(`across:${corridorId}:`) ||
+          node.id.startsWith(`${corridorId}:`)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 }
 
 /**
@@ -436,8 +533,27 @@ export function referenceLineFrom(
   return { line, arcs: arcs.slice(0, Math.max(0, line.length - 1)) };
 }
 
+/** The table facts supplied to the PathCloud before it plans a mutation. */
+export interface PathCloudMutationInput {
+  readonly tableId: string;
+  readonly snapToGrid: boolean;
+  readonly graphSnapshot: ConstructionGraphSnapshot;
+  readonly regionTopologies: readonly ConstructionRegionTopology[];
+  readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
+  readonly effect: PathBrushEffect;
+  readonly tolerance: number;
+}
+
+/** The PathCloud's decision; the runtime only executes the ready request. */
+export type PathCloudMutationPlan =
+  | { readonly kind: "noop"; readonly message: string }
+  | { readonly kind: "refused"; readonly reason: string }
+  | { readonly kind: "ready"; readonly request: ApplyPatchReplacementRequest; readonly plannedRegionCount: number };
+
 /**
- * Applies one immutable path-brush effect, in one transaction.
+ * Turns a draw intent into the next state of the entire touched PathCloud.
+ * Junction resolution, spine splitting, face ownership and contour rebuild
+ * all live here; callers merely provide snapshots and apply the result.
  *
  * This is the only path a path is ever built by. A free stroke, and any
  * straight drag or preset that comes later, differ in nothing but the
@@ -466,31 +582,26 @@ export function referenceLineFrom(
  *   it. Drawing a road over terrain leaves that terrain standing rather than
  *   risking an imprecise cut.
  */
-export function applyPathBrushEffect(
-  ctx: ToolContext,
-  effect: PathBrushEffect,
-  tolerance: number,
-): void {
+export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
+  const { effect, tolerance } = input;
   const stroke = effect.brushRegion.samples;
-  if (stroke.length === 0) return;
+  if (stroke.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
   const operationId = effect.operationId;
 
-  const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
+  const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
   const swept =
     fitted.length === 0
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
-  // A tap is not a road: one control point has no span to sample a curve.
-  if (spine === undefined) return;
+  if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
-  try {
-    const parameters = effect.parameters;
+  const parameters = effect.parameters;
     // The full painted brush area is the local repair window. A hit only
     // helps identify the neighbourhood; snapping is a geometric decision
     // made against the PathCloud's spine, never an endpoint permission.
     const correctionReach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
-    const materialized = graphPatchForSpine(ctx, spine, Math.max(correctionReach, tolerance, 1e-4));
+    const materialized = graphPatchForSpine(input.graphSnapshot, spine, Math.max(correctionReach, tolerance, 1e-4));
     const correctedSpine = { ...spine, controlPoints: materialized.controlPoints };
 
     const chain: SpineChainInput = {
@@ -501,7 +612,7 @@ export function applyPathBrushEffect(
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
     const graphPatch = materialized.graphPatch;
-    const touchedCloud = changedSpineCloud(ctx.runtime.getGraphSnapshot(), graphPatch);
+    const touchedCloud = changedSpineCloud(input.graphSnapshot, graphPatch);
     const regeneratedChains = touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
@@ -516,6 +627,10 @@ export function applyPathBrushEffect(
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
     const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
+    if (flatLength < 1e-4) {
+      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
+    }
     const outerOffset = correctedSpine.bandOffsets[0]!;
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
     const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
@@ -527,35 +642,21 @@ export function applyPathBrushEffect(
     // here rather than handing an empty/degenerate polygon to the session's
     // own coverage query, which refuses one outright.
     if (outline.length < 3) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não teve extensão suficiente." });
-      return;
+      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
 
     const resolved = resolveCoverage(
       "path",
-      inStage(TOOL, "read the footprint coverage", { operationId, outline: outline.length }, () =>
-        ctx.runtime.getFootprintCoverage(outline),
-      ),
+      input.coverageFor(outline),
       parameters.kind,
     );
     const refusal = firstRefusal(resolved);
     if (refusal !== undefined) {
-      reportToolWarning(TOOL, "the footprint was refused", {
-        operationId,
-        refusal,
-        covered: resolved.map((entry) => ({
-          surface: entry.covered.surfaceKey.join(":"),
-          type: entry.covered.surfaceType,
-          interaction: entry.interaction.kind,
-        })),
-      });
-      ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
-      return;
+      return { kind: "refused", reason: refusal };
     }
 
-    const topologies = ctx.runtime.getAllRegionTopologies();
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions);
-    const existingNodes = topologies.flatMap((topology) => topology.nodes);
+    const topologies = input.regionTopologies;
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -563,9 +664,8 @@ export function applyPathBrushEffect(
       }
     }
 
-    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: correctedSpine.controlPoints.length }, () =>
-      planSpineContour({
-        tableId: ctx.tableId,
+    const planned = planSpineContour({
+        tableId: input.tableId,
         operationId,
         surfaceType: "path",
         // The changed component is read from the prospective spine graph,
@@ -574,44 +674,18 @@ export function applyPathBrushEffect(
         // junction component.
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
-        existingNodes,
+        existingNodes: [],
         existingEdgeUses,
-      }),
-    );
-    if (planned === undefined) return;
-
-    const outcome = inStage(
-      TOOL,
-      "lay the road",
-      { operationId, faces: planned.patch.regions.length },
-      () =>
-        applySpineContour(ctx, operationId, planned, graphPatch),
-    );
-
-    if (outcome.skippedRegionIds.length > 0) {
-      // A replacement is atomic, so a refused target preserves its standing
-      // faces. This warning remains useful for an add-only stroke.
-      reportToolWarning(TOOL, "a band face was refused", {
-        operationId,
-        skipped: outcome.skippedRegionIds,
       });
-    }
-
-    const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
-    if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
-      return;
-    }
-    ctx.history.record({ kind: "path-brush", operationId });
-    ctx.reportFeedback({
-      tone: "success",
-      message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
-    });
-  } catch (error) {
-    // Already named on the console by whichever stage threw; this catches
-    // the ones that have no stage of their own.
-    reportToolFailure(TOOL, "apply the path effect", { operationId, stroke: stroke.length }, error);
-    const message = error instanceof Error ? error.message : String(error);
-    ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
-  }
+    if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
+    return {
+      kind: "ready",
+      request: {
+        operationId,
+        sourceSurfaceKeys: planned.consumedSurfaceKeys,
+        patch: planned.patch,
+        graphPatch,
+      },
+      plannedRegionCount: planned.patch.regions.length,
+    };
 }

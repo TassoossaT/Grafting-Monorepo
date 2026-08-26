@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
-import { applyPathBrushEffect } from "../src/composition/tabletop/path/path-effect-executor.ts";
+import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-cloud-transaction.ts";
 import {
   createEditHistoryStack,
   createPathBrushEffect,
@@ -10,7 +10,7 @@ import {
 } from "../src/features/edit-construction/index.ts";
 
 /**
- * A real end-to-end regression harness: `applyPathBrushEffect` against a real
+ * A real end-to-end regression harness: `commitPathCloudIntent` against a real
  * `AppTabletopRuntime`, backed by a small but genuinely stateful in-memory
  * `ConstructionSessionPort` fake -- not a canned/scripted one. This is the
  * exact coverage gap that let the "unknown analytic region" bug through
@@ -351,7 +351,7 @@ function applyRoadBrushEffect(ctx, samples, tolerance, endpoints = {}) {
     },
     { operationId, tableId: "table-1", initiatedBy: "path-brush" },
   );
-  applyPathBrushEffect(ctx, effect, tolerance);
+  commitPathCloudIntent(ctx, effect, tolerance);
 }
 
 test("a second unselected crossing road commits without replacing the standing one", async () => {
@@ -594,6 +594,47 @@ test("a T touching a long straight road mid-span merges into it instead of dupli
   for (const band of bandsAtJunction) {
     const withThisBand = atJunction.filter((topology) => topology.surfaceKey.join(":").includes(`:band-${band}:`));
     assert.equal(withThisBand.length, 1, `band ${band} must be one merged face at the junction, not ${withThisBand.length} overlapping ones`);
+  }
+});
+
+test("an interior-to-interior crossing splits both spines into one connected road cloud", async () => {
+  const ctx = await createTestContext();
+  applyRoadBrushEffect(ctx, [
+    { x: -60, y: 0, z: 0 },
+    { x: 60, y: 0, z: 0 },
+  ], 0.1);
+  const before = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+
+  // Neither endpoint comes close enough to snap. The only way to connect
+  // these roads is to insert one shared node where their two interiors cross.
+  applyRoadBrushEffect(ctx, [
+    { x: 0, y: 0, z: -20 },
+    { x: 0, y: 0, z: 20 },
+  ], 0.1);
+
+  const spine = ctx.runtime.getGraphSnapshot();
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  assert.equal(junction.length, 1, "the crossing has one shared spine node");
+  assert.equal(
+    spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length,
+    4,
+    "both former segments are split through the same four-way junction",
+  );
+
+  const after = ctx.runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === "path");
+  assert.ok(
+    before.every((surfaceKey) => !after.some((topology) => topology.surfaceKey.join(":") === surfaceKey)),
+    "the original road faces are replaced as part of the connected cloud",
+  );
+  const atJunction = after.filter((topology) => {
+    const xs = topology.nodes.map((node) => node.position.x);
+    const zs = topology.nodes.map((node) => node.position.z);
+    return Math.min(...xs) <= 0 && Math.max(...xs) >= 0 && Math.min(...zs) <= 0 && Math.max(...zs) >= 0;
+  });
+  const bands = new Set(atJunction.map((topology) => /:band-(\d+):/.exec(topology.surfaceKey.join(":"))?.[1]));
+  for (const band of bands) {
+    const faces = atJunction.filter((topology) => topology.surfaceKey.join(":").includes(`:band-${band}:`));
+    assert.equal(faces.length, 1, `band ${band} is one unioned face at the crossing`);
   }
 });
 

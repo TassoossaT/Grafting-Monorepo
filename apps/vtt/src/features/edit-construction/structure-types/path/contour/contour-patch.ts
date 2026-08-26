@@ -1,7 +1,7 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges } from "../../../tools/core/boundary-edges.ts";
+import { createBoundaryEdges } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
 
 /**
@@ -11,7 +11,7 @@ import { nearestSampleY } from "./union-bands.ts";
  * station-sweep engine, kept exact for the same reason: a generous tolerance
  * would drag a vertex sideways onto whichever node happened to be near.
  */
-const WELD_TOLERANCE = 1e-3;
+const WELD_TOLERANCE = 1e-3; // PathCloud contour weld tolerance.
 
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.
@@ -29,15 +29,30 @@ const WELD_TOLERANCE = 1e-3;
  */
 const MIN_SHAPE_AREA = 1e-4;
 
-/** The shoelace area of a ring, unsigned. */
-function ringArea(ring: Ring): number {
+function signedRingArea(ring: Ring): number {
   let total = 0;
   for (let index = 0; index < ring.length; index += 1) {
     const [x1, z1] = ring[index]!;
     const [x2, z2] = ring[(index + 1) % ring.length]!;
-    total += x1 * z2 - x2 * z1;
+    total += z1 * x2 - x1 * z2;
   }
-  return Math.abs(total) / 2;
+  return total / 2;
+}
+
+/** The shoelace area of a ring, unsigned. */
+function ringArea(ring: Ring): number {
+  return Math.abs(signedRingArea(ring));
+}
+
+/**
+ * Ensures an outer ring is wound with positive normal (+Y, facing upwards).
+ * In XZ coordinates with Y up, a positive signed area (total > 0) means the normal
+ * points up (+Y). If total < 0, reversing the ring flips the normal to point up (+Y).
+ */
+function ensureUpwardWinding(ring: Ring, isHole: boolean): Ring {
+  const area = signedRingArea(ring);
+  const shouldReverse = isHole ? area > 0 : area < 0;
+  return shouldReverse ? [...ring].reverse() : ring;
 }
 
 /**
@@ -141,10 +156,10 @@ export function buildContourPatch(
     })
     .map((shape, shapeIndex) => {
       const [outerRing, ...holeRings] = shape;
-      const outerIds = idsFor(outerRing ?? [], 0);
+      const outerIds = idsFor(ensureUpwardWinding(outerRing ?? [], false), 0);
       const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const holeIds = idsFor(holeRing, holeIndex + 1);
+        const holeIds = idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1);
         return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });
       return {

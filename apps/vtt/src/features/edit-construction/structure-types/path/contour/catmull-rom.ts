@@ -21,7 +21,7 @@ import type { ConstructionPosition } from "@/ports";
  * not a height one.
  */
 
-const MAX_DEPTH = 16;
+const MAX_DEPTH = 16; // PathCloud curve flattening guard.
 
 function add(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition {
   return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };

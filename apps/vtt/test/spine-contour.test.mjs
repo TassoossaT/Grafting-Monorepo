@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildContourPatch, planSpineContour } from "../src/composition/tabletop/path/contour/spine-contour/index.ts";
+import { buildContourPatch, planSpineContour } from "../src/features/edit-construction/structure-types/path/contour/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 
@@ -30,7 +30,7 @@ function standingBand(opId, bandIndex, corners) {
   };
 }
 
-test("a straight isolated run produces one region per band, each a clean quad, and consumes nothing standing", () => {
+test("a straight isolated run produces one unified region, a clean quad, and consumes nothing standing", () => {
   const chain = {
     chainId: "run-1",
     controlPoints: [at(0, 0), at(10, 0)],
@@ -49,9 +49,7 @@ test("a straight isolated run produces one region per band, each a clean quad, a
 
   assert.ok(result !== undefined);
   assert.deepEqual(result.consumedSurfaceKeys, []);
-  // Two bands (-2.1..0 and 0..2.1), no overlap between them, so no union
-  // merges anything -- one region per band.
-  assert.equal(result.patch.regions.length, 2);
+  assert.equal(result.patch.regions.length, 1);
   for (const region of result.patch.regions) {
     assert.equal(region.boundary.length, 4, "a straight run's band is a clean quad");
     assert.equal(region.holes, undefined, "no hole in an isolated band");
@@ -184,7 +182,7 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
 test("planSpineContour consumes every standingRegion it is given, unconditionally, however far its geometry sits from the edited chain", () => {
   // planSpineContour no longer decides *which* standing faces belong to the
   // edit -- that selection is the caller's job (`standingRegionsForCloud` in
-  // `path-effect-executor.ts`, driven by spine-graph node membership, not
+  // `path-cloud-mutation.ts`, driven by spine-graph node membership, not
   // brush geometry or bounding boxes). Once a region is in `standingRegions`
   // it is retired in full, full stop, even if its footprint has nothing to
   // do with where the edited chain runs today -- deliberately, since the
@@ -211,4 +209,61 @@ test("planSpineContour consumes every standingRegion it is given, unconditionall
 
   assert.ok(result !== undefined);
   assert.deepEqual(result.consumedSurfaceKeys, [faraway.surfaceKey]);
+});
+
+test("two roads meeting in a Y-junction merge into one single seamless region without crossing seams", () => {
+  const stem = {
+    chainId: "stem-and-left",
+    controlPoints: [at(0, -10), at(0, 0), at(-6, 8)],
+    bandOffsets: [-2.1, 0, 2.1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+  const rightBranch = {
+    chainId: "right-branch",
+    controlPoints: [at(0, 0), at(6, 8)],
+    bandOffsets: [-2.1, 0, 2.1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-y",
+    surfaceType: "path",
+    editedChains: [stem, rightBranch],
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.equal(result.patch.regions.length, 1, "a Y-junction merges into one seamless polygon region");
+  assert.equal(result.patch.regions[0].holes, undefined, "no holes or internal cuts inside the Y-junction");
+});
+
+test("a complex network of 6 intersecting streets produces valid non-empty regions and never drops faces", () => {
+  const center = at(0, 0);
+  const chains = [
+    { chainId: "c1", controlPoints: [at(0, -15), center, at(0, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c2", controlPoints: [at(-15, 0), center, at(15, 0)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c3", controlPoints: [at(-10, -10), center, at(10, 10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c4", controlPoints: [at(-10, 10), center, at(10, -10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c5", controlPoints: [at(5, -15), at(5, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c6", controlPoints: [at(-15, 5), at(15, 5)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+  ];
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-complex-hub",
+    surfaceType: "path",
+    editedChains: chains,
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.ok(result.patch.regions.length > 0, "must produce at least 1 region and never drop faces");
+  for (const region of result.patch.regions) {
+    assert.ok(region.boundary.length >= 3, "every generated region has a valid boundary");
+  }
 });

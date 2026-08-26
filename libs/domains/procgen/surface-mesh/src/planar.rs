@@ -2,7 +2,7 @@
 
 use earcut::{Earcut, utils3d};
 
-use crate::math::face_normal;
+use crate::math::{cross, face_normal, sub};
 use crate::types::TriangulatedMesh;
 
 /// Triangulates a planar surface consisting of an outer boundary loop and
@@ -35,6 +35,18 @@ pub fn triangulate_contour_loops<'a>(
     let mut earcut = Earcut::new();
     let mut indices = Vec::new();
     earcut.earcut(projected, &hole_indices, &mut indices);
+
+    // Ensure every triangle index triple is wound Counter-Clockwise (CCW) in XZ
+    // so that gl_FrontFacing is true and normals point +Y towards the sky/lights.
+    for chunk in indices.chunks_exact_mut(3) {
+        let a = positions[chunk[0] as usize];
+        let b = positions[chunk[1] as usize];
+        let c = positions[chunk[2] as usize];
+        let normal = cross(sub(b, a), sub(c, a));
+        if normal[1] < 0.0 {
+            chunk.swap(1, 2);
+        }
+    }
     // World `xz` rather than the best-fit basis just used for triangulation:
     // that basis is whatever the ring's own fit produced, so it can rotate or
     // flip between two rebuilds of the same face and would slide the pattern
@@ -46,10 +58,14 @@ pub fn triangulate_contour_loops<'a>(
     // shadow rather than its surface. Nothing produces one today -- upright
     // faces unroll instead, and everything left is XZ-planar -- and a real
     // tilted case wants the plane's own basis anchored to something stable,
-    // which is a frame that does not exist yet rather than a fix to this one.
     let uvs = positions.iter().map(|point| [point[0], point[2]]).collect();
     (!indices.is_empty()).then(|| TriangulatedMesh {
-        normals: vec![face_normal(outer).unwrap_or([0.0, 1.0, 0.0]); positions.len()],
+        normals: vec![
+            face_normal(outer)
+                .map(|n| if n[1] < 0.0 { [-n[0], -n[1], -n[2]] } else { n })
+                .unwrap_or([0.0, 1.0, 0.0]);
+            positions.len()
+        ],
         positions,
         uvs,
         indices,
