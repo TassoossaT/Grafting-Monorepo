@@ -1,7 +1,7 @@
-import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
+import type { ConstructionEdgeGeometry, ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges, type SweptArc } from "../../../topology/index.ts";
+import { createBoundaryEdges, simplifyClosedRing, type SweptArc } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
 import { arcGeometryFor } from "./arc-geometry-lookup.ts";
 
@@ -159,16 +159,27 @@ export function buildContourPatch(
     })
     .map((shape, shapeIndex) => {
       const [outerRing, ...holeRings] = shape;
+      const geometryBetween = (from: string, to: string): ConstructionEdgeGeometry | undefined =>
+        arcGeometryFor(arcGeometry, nodePositions.get(from)!, nodePositions.get(to)!);
       const boundaryUse = (ids: readonly string[], index: number) => {
         const from = ids[index]!;
         const to = ids[(index + 1) % ids.length]!;
-        const geometry = arcGeometryFor(arcGeometry, nodePositions.get(from)!, nodePositions.get(to)!);
-        return edges.use(from, to, geometry);
+        return edges.use(from, to, geometryBetween(from, to));
       };
-      const outerIds = idsFor(ensureUpwardWinding(outerRing ?? [], false), 0);
+      // A curve the union tessellated into many small chords or many small
+      // arc samples of the same circle is still, geometrically, one edge --
+      // simplified here, once, so every consumer downstream (the graph, the
+      // renderer, a future edit) sees the road it actually is rather than
+      // the polyline a boolean union happened to produce.
+      const simplifyRing = (ids: readonly string[]): readonly string[] => {
+        const positions = ids.map((id) => nodePositions.get(id)!);
+        const kept = simplifyClosedRing(positions, (fromIndex, toIndex) => geometryBetween(ids[fromIndex]!, ids[toIndex]!));
+        return kept.map((index) => ids[index]!);
+      };
+      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(outerRing ?? [], false), 0));
       const boundary = outerIds.map((_id, index) => boundaryUse(outerIds, index));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const holeIds = idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1);
+        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1));
         return holeIds.map((_id, index) => boundaryUse(holeIds, index));
       });
       return {
@@ -180,10 +191,22 @@ export function buildContourPatch(
       };
     });
 
+  // Simplification mints ids for points the ring no longer walks through --
+  // still in `nodePositions` from `idsFor`, but on no edge any boundary or
+  // hole above actually declared. Reported only for what the patch still
+  // uses, so a collapsed run of arc samples does not resurrect its own
+  // discarded middle as orphaned nodes nobody references.
+  const declaredEdges = edges.all();
+  const usedNodeIds = new Set<string>();
+  for (const edge of declaredEdges) {
+    usedNodeIds.add(edge.startNodeId);
+    usedNodeIds.add(edge.endNodeId);
+  }
+
   return {
     patch: {
-      nodes: [...nodePositions].map(([id, position]) => ({ id, position })),
-      edges: edges.all(),
+      nodes: [...nodePositions].filter(([id]) => usedNodeIds.has(id)).map(([id, position]) => ({ id, position })),
+      edges: declaredEdges,
       regions,
     },
     regionIds: regions.map((region) => region.regionId),
