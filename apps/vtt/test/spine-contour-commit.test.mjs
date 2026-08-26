@@ -596,3 +596,43 @@ test("a T touching a long straight road mid-span merges into it instead of dupli
     assert.equal(withThisBand.length, 1, `band ${band} must be one merged face at the junction, not ${withThisBand.length} overlapping ones`);
   }
 });
+
+test("a stroke whose both ends snap onto the same existing node is a no-op, not a crash", async () => {
+  // In a dense junction (several roads meeting near one point), a very
+  // short new stroke can have both its own ends snap onto the very same
+  // existing spine node -- collapsing its own control points to one
+  // repeated position. The chain still has "length >= 2" by count, but its
+  // own offset ribbon is degenerate (zero normal direction, zero area), so
+  // the footprint-coverage query this stroke builds ends up with fewer than
+  // three points. The real session's own coverage query refuses that
+  // outright ("a footprint polygon needs at least three points"); this
+  // must be caught before ever reaching that call, as a graceful no-op.
+  const ctx = await createTestContext();
+  const main = [
+    { x: -60, y: 0, z: 0 },
+    { x: 60, y: 0, z: 0 },
+  ];
+  applyRoadBrushEffect(ctx, main, 0.1);
+  const before = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+
+  // Both ends sit a couple of centimetres from the road's own left end
+  // (-60, 0) -- well inside the brush's own snap tolerance (its radius,
+  // 2.5) and nowhere near the road's other end, so both resolve to the same
+  // single node.
+  const collapsed = [
+    { x: -60.02, y: 0, z: 0.01 },
+    { x: -59.98, y: 0, z: -0.01 },
+  ];
+  assert.doesNotThrow(() => applyRoadBrushEffect(ctx, collapsed, 0.1));
+
+  assert.ok(
+    !ctx.feedback.some((entry) => entry.tone === "error"),
+    `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
+  );
+  assert.ok(
+    ctx.feedback.some((entry) => entry.tone === "info"),
+    `an info feedback explaining nothing happened is expected: ${JSON.stringify(ctx.feedback)}`,
+  );
+  const after = ctx.runtime.getAllRegionTopologies().map((topology) => topology.surfaceKey.join(":"));
+  assert.deepEqual(after, before, "the standing road is untouched by a stroke with no real extent");
+});

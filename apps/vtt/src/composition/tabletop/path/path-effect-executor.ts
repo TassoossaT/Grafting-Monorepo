@@ -520,6 +520,16 @@ export function applyPathBrushEffect(
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
     const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
+    // A stroke that survived the earlier tap check can still collapse to a
+    // degenerate footprint once its own ends snap onto existing spine
+    // geometry -- both landing on the same node in a dense junction, say.
+    // Not a road either, for the same reason a tap is not one; bailing out
+    // here rather than handing an empty/degenerate polygon to the session's
+    // own coverage query, which refuses one outright.
+    if (outline.length < 3) {
+      ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não teve extensão suficiente." });
+      return;
+    }
 
     const resolved = resolveCoverage(
       "path",
