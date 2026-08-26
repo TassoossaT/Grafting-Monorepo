@@ -35,6 +35,18 @@ pub fn triangulate_contour_loops<'a>(
     let mut earcut = Earcut::new();
     let mut indices = Vec::new();
     earcut.earcut(projected, &hole_indices, &mut indices);
+
+    // Ensure every triangle index triple is wound Counter-Clockwise (CCW) in XZ
+    // so that gl_FrontFacing is true and normals point +Y towards the sky/lights.
+    for chunk in indices.chunks_exact_mut(3) {
+        let a = positions[chunk[0] as usize];
+        let b = positions[chunk[1] as usize];
+        let c = positions[chunk[2] as usize];
+        let y_cross = (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0]);
+        if y_cross < 0.0 {
+            chunk.swap(1, 2);
+        }
+    }
     // World `xz` rather than the best-fit basis just used for triangulation:
     // that basis is whatever the ring's own fit produced, so it can rotate or
     // flip between two rebuilds of the same face and would slide the pattern
