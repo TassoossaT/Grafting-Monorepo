@@ -4,7 +4,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
-import { isSpineControlNodeId } from "../structure-types/path/spine-graph/spine-node-id.ts";
+import { resolvePolicy } from "../structure-types/index.ts";
 
 /**
  * The cloud: the connected component of same-`type` surfaces reachable from
@@ -62,43 +62,46 @@ export interface CloudTopology {
    * answer.
    */
   readonly seed: ConstructionRegionTopology;
-  /** Every member's boundary, the seed included. */
+  /** Every member, the seed included. */
   readonly members: readonly ConstructionRegionTopology[];
 }
 
 function sameKey(left: ConstructionSurfaceKey, right: ConstructionSurfaceKey): boolean {
-  return left.length === right.length && left.every((id, index) => id === right[index]);
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((nodeId) => rightSet.has(nodeId));
 }
 
 /**
- * The cloud the surface at `seed` belongs to.
+ * Resolves which surfaces belong to the same cloud as `seed`.
  *
- * The engine answers which surfaces are connected and share the type; it is
- * never asked what the type *means*. `undefined` only when the key is stale
- * -- a live surface always belongs to at least its own cloud, so an empty
- * membership is treated as the seed alone rather than as an error, which is
- * what keeps a component of size one on the same path as any other.
+ * Pure read-through to the engine query (`ADR-0022`), returning the
+ * cloud-level view the rest of the layer plans against. Returns `undefined`
+ * when `seed` is not a registered surface -- an uncommitted gesture or a
+ * stale pick target cannot seed a cloud.
  */
 export function resolveCloud(
   source: CloudSource,
   seed: ConstructionSurfaceKey,
 ): ConstructionCloud | undefined {
-  const topology = source.getRegionTopology(seed);
-  if (topology === undefined) return undefined;
-  const surfaceType = topology.surfaceType;
-  const reported = source.cloudFor({ seed, surfaceType }).surfaceKeys;
+  const seedTopology = source.getRegionTopology(seed);
+  if (seedTopology === undefined) return undefined;
+  const outcome = source.cloudFor({ seed, surfaceType: seedTopology.surfaceType });
+  const reported = outcome.surfaceKeys;
   const members = reported.some((key) => sameKey(key, seed)) ? reported : [seed, ...reported];
-  return { surfaceType, seed, members };
+  return {
+    surfaceType: seedTopology.surfaceType,
+    seed,
+    members,
+  };
 }
 
 /**
- * {@link resolveCloud} plus every member's live boundary, which is what a
- * gesture is actually planned against.
+ * Resolves the whole cloud topology -- the cloud and every member's current
+ * boundary -- in one call.
  *
- * A member whose topology has since gone stale is dropped rather than
- * failing the whole resolution: the cloud query and the topology reads are
- * separate calls, and a surface that disappeared between them is exactly the
- * case where continuing with what is still there is right.
+ * Fails as a whole when any member cannot be read: a cloud in the middle of
+ * changing is not in a state to plan an edit against.
  */
 export function resolveCloudTopology(
   source: CloudSource,
@@ -146,9 +149,12 @@ export function cloudNodes(
       if (!byId.has(node.id)) byId.set(node.id, node);
     }
   }
-  if (graphSnapshot !== undefined && topology.cloud.surfaceType === "path") {
+  if (graphSnapshot !== undefined) {
     for (const node of graphSnapshot.nodes) {
-      if (isSpineControlNodeId(node.id) && !byId.has(node.id)) {
+      if (
+        !byId.has(node.id) &&
+        resolvePolicy(topology.seed, { kind: "vertex", nodeId: node.id }).resolve.kind !== "deny"
+      ) {
         byId.set(node.id, node);
       }
     }

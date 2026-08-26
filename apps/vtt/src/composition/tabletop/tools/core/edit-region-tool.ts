@@ -1,12 +1,9 @@
 import {
-  chainsOf,
   cloudNodes,
-  isSpineControlNodeId,
   planEdit,
-  planSpineContour,
   refreshCloudTopology,
   resolveCloudTopology,
-  spineGraphFromSnapshot,
+  resolvePolicy,
 } from "@/features/edit-construction";
 import type { AtomicEditOp, CloudTopology, EditTarget } from "@/features/edit-construction";
 import type {
@@ -67,14 +64,14 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample): GrabbedTarget |
   const topologies = ctx.runtime.getAllRegionTopologies();
 
   if (sample.nodeId !== undefined) {
-    const nodeId = sample.nodeId;
-    let topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === nodeId));
-    if (topology === undefined && isSpineControlNodeId(nodeId)) {
-      topology = topologies.find((candidate) => candidate.surfaceType === "path");
+    const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
+    let topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+    if (topology === undefined) {
+      topology = topologies.find((candidate) => resolvePolicy(candidate, target).resolve.kind !== "deny");
     }
     return topology === undefined
       ? undefined
-      : { seedKey: topology.surfaceKey, target: { kind: "vertex", nodeId } };
+      : { seedKey: topology.surfaceKey, target };
   }
 
   if (sample.surfaceRef === undefined) return undefined;
@@ -210,37 +207,6 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       return;
     }
     ctx.runtime.applyRegionEdit(plan.ops, "local", `edit:${plan.role}`);
-
-    if (cloud.cloud.surfaceType === "path") {
-      const graphSnapshot = ctx.runtime.getGraphSnapshot();
-      const spineGraph = spineGraphFromSnapshot(graphSnapshot);
-      const chains = chainsOf(spineGraph);
-      if (chains.length > 0) {
-        const editedChains = chains.map((chain, idx) => ({
-          chainId: `edited-${idx}`,
-          controlPoints: chain.nodes.map((node) => node.position),
-          bandOffsets: [-2.1, 0, 2.1],
-          miterLimit: 4,
-          tolerance: 0.05,
-        }));
-        const standing = ctx.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
-        const planned = planSpineContour({
-          tableId: ctx.tableId,
-          operationId: `edit-spine-${ctx.nextSequence()}`,
-          surfaceType: "path",
-          editedChains,
-          standingRegions: standing,
-          existingNodes: standing.flatMap((t) => t.nodes),
-        });
-        if (planned !== undefined) {
-          ctx.runtime.applyPatchReplacement({
-            operationId: planned.patch.regions[0]?.regionId ?? `op-${ctx.nextSequence()}`,
-            sourceSurfaceKeys: planned.consumedSurfaceKeys,
-            patch: planned.patch,
-          }, "local", "edit:path-spine");
-        }
-      }
-    }
 
     // The handle-design notes call out that a drag gives no signal of how
     // much it is about to affect. The plan already knows, so say it.
