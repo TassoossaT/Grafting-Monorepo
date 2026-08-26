@@ -67,16 +67,14 @@ function BrushShapeFields<Params extends BrushShapeParams>(props: {
  * brush itself only ever writes `"street"` now. `pathFormationFor` only
  * adds a shoulder to a road's width for the other three kinds and never
  * reads `shoulderHeight` at all (no raised rim exists yet), so this only
- * shows the sliders `street`'s own profile actually answers to -- bed width
- * and the corner mitre limit -- instead of also showing two more that would
- * sit there doing nothing.
+ * shows the one slider `street`'s own profile actually answers to: bed
+ * width.
  */
 function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
-      {sliderRow("Limite de curva", params.miterLimit, 1, 8, 0.5, (miterLimit) => onChange({ ...params, miterLimit }))}
     </div>
   );
 }
