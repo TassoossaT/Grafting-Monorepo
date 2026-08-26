@@ -316,5 +316,8 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ),
   };
 
-  return <Collapse panels={[panel]} bordered={false} />;
+  // `Collapse` owns its expanded keys internally. Remount it when the tool
+  // changes so its new single panel starts expanded rather than inheriting
+  // the previous tool's key and appearing empty.
+  return <Collapse key={activeTool} panels={[panel]} bordered={false} />;
 }
