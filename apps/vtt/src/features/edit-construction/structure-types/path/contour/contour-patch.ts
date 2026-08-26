@@ -1,7 +1,7 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges } from "../../../tools/core/boundary-edges.ts";
+import { createBoundaryEdges } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
 
 /**
@@ -11,7 +11,7 @@ import { nearestSampleY } from "./union-bands.ts";
  * station-sweep engine, kept exact for the same reason: a generous tolerance
  * would drag a vertex sideways onto whichever node happened to be near.
  */
-const WELD_TOLERANCE = 1e-3;
+const WELD_TOLERANCE = 1e-3; // PathCloud contour weld tolerance.
 
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.

@@ -7,3 +7,9 @@ export {
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export { edgeUseCounts, perimeterOf } from "./surface-perimeter.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
+export { fitPath } from "./stroke-fitting.ts";
+export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
+export { createBoundaryEdges, reverseGeometry, sharedEdgeId } from "./boundary-edges.ts";
+export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
+export { stationFrame, sweptBoundary, sweepFormation, withoutCoincidentStations, SweepFormationError } from "./sweep-formation.ts";
+export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";

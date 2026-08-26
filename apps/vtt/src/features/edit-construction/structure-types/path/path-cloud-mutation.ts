@@ -1,37 +1,32 @@
-import type { PathBrushEffect } from "@/features/edit-construction";
-import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
+import type {
+  ApplyPatchReplacementRequest,
+  ConstructionCoveredRegion,
+  ConstructionGraphPatch,
+  ConstructionGraphSnapshot,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+} from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
-  chainsOf,
-  pathRidesTerrain,
-  pathSpineDraftFor,
-  spineGraphFromSnapshot,
-  spineControlNodeId,
   resolveCoverage,
-} from "../../../features/edit-construction/index.ts";
+} from "../index.ts";
+import { chainsOf, spineControlNodeId, spineGraphFromSnapshot } from "./spine-graph/index.ts";
+import { pathRidesTerrain } from "./path-recipe.ts";
+import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
-import type { ToolContext } from "../tools/core/tool-context.ts";
-import { fitPath, type FittedEdge } from "../tools/core/stroke-fitting.ts";
-import type { SweptArc } from "../tools/core/sweep-formation.ts";
-import { inStage, reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnostics.ts";
+import { fitPath, type FittedEdge, type SweptArc } from "../../topology/index.ts";
 import {
-  applySpineContour,
   offsetBands,
   planSpineContour,
   sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
-} from "./contour/spine-contour/index.ts";
-
-export const PATH_COLOR = 0xc084fc;
-
-/** What this tool calls itself on the console when a stage fails. */
-const TOOL = "path-brush";
-
+} from "./contour/index.ts";
 
 /**
  * How far a flattened arc may sit from the true circle, in world units.
@@ -105,11 +100,10 @@ function segmentIntersection(
 
 /** Materializes and locally snaps the type-owned spine against its own network. */
 function graphPatchForSpine(
-  ctx: ToolContext,
+  snapshot: ConstructionGraphSnapshot,
   spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
   snapTolerance: number,
 ): MaterializedSpine {
-  const snapshot = ctx.runtime.getGraphSnapshot();
   const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
   const nearest = (point: ConstructionPosition) => spineNodes
     .map((node) => ({ node, distance: Math.hypot(node.position.x - point.x, node.position.z - point.z) }))
@@ -528,8 +522,27 @@ export function referenceLineFrom(
   return { line, arcs: arcs.slice(0, Math.max(0, line.length - 1)) };
 }
 
+/** The table facts supplied to the PathCloud before it plans a mutation. */
+export interface PathCloudMutationInput {
+  readonly tableId: string;
+  readonly snapToGrid: boolean;
+  readonly graphSnapshot: ConstructionGraphSnapshot;
+  readonly regionTopologies: readonly ConstructionRegionTopology[];
+  readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
+  readonly effect: PathBrushEffect;
+  readonly tolerance: number;
+}
+
+/** The PathCloud's decision; the runtime only executes the ready request. */
+export type PathCloudMutationPlan =
+  | { readonly kind: "noop"; readonly message: string }
+  | { readonly kind: "refused"; readonly reason: string }
+  | { readonly kind: "ready"; readonly request: ApplyPatchReplacementRequest; readonly plannedRegionCount: number };
+
 /**
- * Applies one immutable path-brush effect, in one transaction.
+ * Turns a draw intent into the next state of the entire touched PathCloud.
+ * Junction resolution, spine splitting, face ownership and contour rebuild
+ * all live here; callers merely provide snapshots and apply the result.
  *
  * This is the only path a path is ever built by. A free stroke, and any
  * straight drag or preset that comes later, differ in nothing but the
@@ -558,31 +571,26 @@ export function referenceLineFrom(
  *   it. Drawing a road over terrain leaves that terrain standing rather than
  *   risking an imprecise cut.
  */
-export function applyPathBrushEffect(
-  ctx: ToolContext,
-  effect: PathBrushEffect,
-  tolerance: number,
-): void {
+export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
+  const { effect, tolerance } = input;
   const stroke = effect.brushRegion.samples;
-  if (stroke.length === 0) return;
+  if (stroke.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
   const operationId = effect.operationId;
 
-  const fitted = fitPath(stroke, tolerance, { arcs: !ctx.snapToGrid });
+  const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
   const swept =
     fitted.length === 0
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
-  // A tap is not a road: one control point has no span to sample a curve.
-  if (spine === undefined) return;
+  if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
-  try {
-    const parameters = effect.parameters;
+  const parameters = effect.parameters;
     // The full painted brush area is the local repair window. A hit only
     // helps identify the neighbourhood; snapping is a geometric decision
     // made against the PathCloud's spine, never an endpoint permission.
     const correctionReach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
-    const materialized = graphPatchForSpine(ctx, spine, Math.max(correctionReach, tolerance, 1e-4));
+    const materialized = graphPatchForSpine(input.graphSnapshot, spine, Math.max(correctionReach, tolerance, 1e-4));
     const correctedSpine = { ...spine, controlPoints: materialized.controlPoints };
 
     const chain: SpineChainInput = {
@@ -593,7 +601,7 @@ export function applyPathBrushEffect(
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
     const graphPatch = materialized.graphPatch;
-    const touchedCloud = changedSpineCloud(ctx.runtime.getGraphSnapshot(), graphPatch);
+    const touchedCloud = changedSpineCloud(input.graphSnapshot, graphPatch);
     const regeneratedChains = touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
@@ -619,33 +627,20 @@ export function applyPathBrushEffect(
     // here rather than handing an empty/degenerate polygon to the session's
     // own coverage query, which refuses one outright.
     if (outline.length < 3) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não teve extensão suficiente." });
-      return;
+      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
 
     const resolved = resolveCoverage(
       "path",
-      inStage(TOOL, "read the footprint coverage", { operationId, outline: outline.length }, () =>
-        ctx.runtime.getFootprintCoverage(outline),
-      ),
+      input.coverageFor(outline),
       parameters.kind,
     );
     const refusal = firstRefusal(resolved);
     if (refusal !== undefined) {
-      reportToolWarning(TOOL, "the footprint was refused", {
-        operationId,
-        refusal,
-        covered: resolved.map((entry) => ({
-          surface: entry.covered.surfaceKey.join(":"),
-          type: entry.covered.surfaceType,
-          interaction: entry.interaction.kind,
-        })),
-      });
-      ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${refusal}` });
-      return;
+      return { kind: "refused", reason: refusal };
     }
 
-    const topologies = ctx.runtime.getAllRegionTopologies();
+    const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions);
     const existingNodes = topologies.flatMap((topology) => topology.nodes);
     const existingEdgeUses = new Map<string, boolean[]>();
@@ -655,9 +650,8 @@ export function applyPathBrushEffect(
       }
     }
 
-    const planned = inStage(TOOL, "plan the spine contour", { operationId, controlPoints: correctedSpine.controlPoints.length }, () =>
-      planSpineContour({
-        tableId: ctx.tableId,
+    const planned = planSpineContour({
+        tableId: input.tableId,
         operationId,
         surfaceType: "path",
         // The changed component is read from the prospective spine graph,
@@ -668,42 +662,16 @@ export function applyPathBrushEffect(
         standingRegions,
         existingNodes,
         existingEdgeUses,
-      }),
-    );
-    if (planned === undefined) return;
-
-    const outcome = inStage(
-      TOOL,
-      "lay the road",
-      { operationId, faces: planned.patch.regions.length },
-      () =>
-        applySpineContour(ctx, operationId, planned, graphPatch),
-    );
-
-    if (outcome.skippedRegionIds.length > 0) {
-      // A replacement is atomic, so a refused target preserves its standing
-      // faces. This warning remains useful for an add-only stroke.
-      reportToolWarning(TOOL, "a band face was refused", {
-        operationId,
-        skipped: outcome.skippedRegionIds,
       });
-    }
-
-    const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
-    if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
-      return;
-    }
-    ctx.history.record({ kind: "path-brush", operationId });
-    ctx.reportFeedback({
-      tone: "success",
-      message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
-    });
-  } catch (error) {
-    // Already named on the console by whichever stage threw; this catches
-    // the ones that have no stage of their own.
-    reportToolFailure(TOOL, "apply the path effect", { operationId, stroke: stroke.length }, error);
-    const message = error instanceof Error ? error.message : String(error);
-    ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
-  }
+    if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
+    return {
+      kind: "ready",
+      request: {
+        operationId,
+        sourceSurfaceKeys: planned.consumedSurfaceKeys,
+        patch: planned.patch,
+        graphPatch,
+      },
+      plannedRegionCount: planned.patch.regions.length,
+    };
 }

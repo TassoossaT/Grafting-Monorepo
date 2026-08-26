@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
-import { applyPathBrushEffect } from "../src/composition/tabletop/path/path-effect-executor.ts";
+import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-cloud-transaction.ts";
 import {
   createEditHistoryStack,
   createPathBrushEffect,
@@ -10,7 +10,7 @@ import {
 } from "../src/features/edit-construction/index.ts";
 
 /**
- * A real end-to-end regression harness: `applyPathBrushEffect` against a real
+ * A real end-to-end regression harness: `commitPathCloudIntent` against a real
  * `AppTabletopRuntime`, backed by a small but genuinely stateful in-memory
  * `ConstructionSessionPort` fake -- not a canned/scripted one. This is the
  * exact coverage gap that let the "unknown analytic region" bug through
@@ -351,7 +351,7 @@ function applyRoadBrushEffect(ctx, samples, tolerance, endpoints = {}) {
     },
     { operationId, tableId: "table-1", initiatedBy: "path-brush" },
   );
-  applyPathBrushEffect(ctx, effect, tolerance);
+  commitPathCloudIntent(ctx, effect, tolerance);
 }
 
 test("a second unselected crossing road commits without replacing the standing one", async () => {

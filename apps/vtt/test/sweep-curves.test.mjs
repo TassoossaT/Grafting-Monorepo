@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { referenceLineFrom } from "../src/composition/tabletop/path/path-effect-executor.ts";
+import { referenceLineFrom } from "../src/features/edit-construction/structure-types/path/path-cloud-mutation.ts";
 import {
   stationFrame,
   sweepFormation,
