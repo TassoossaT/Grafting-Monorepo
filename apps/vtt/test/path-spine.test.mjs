@@ -11,7 +11,7 @@ import {
   parseStationNodeId,
   stationNodeId,
 } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
-import { PATH_ROLES } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
+import { PATH_ROLES, pathRoleFor } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",
@@ -183,4 +183,20 @@ test("a spine station may be lifted, which is what a bridge deck is", () => {
 
   assert.equal(plan.kind, "apply");
   assert.ok(plan.ops.every((op) => op.position.y === 3), "the whole cross-section rises together");
+});
+
+test("pathRoleFor recognizes spine control nodes and contour nodes", () => {
+  const dummyTopology = {
+    surfaceKey: ["@region", "test"],
+    surfaceType: "path",
+    nodes: [],
+    outerLoops: [],
+    holes: [],
+  };
+
+  assert.equal(pathRoleFor(dummyTopology, { kind: "vertex", nodeId: "spine:op1#road:0" }), PATH_ROLES.spine);
+  assert.equal(pathRoleFor(dummyTopology, { kind: "vertex", nodeId: "contour:op1:band-0:0:1" }), PATH_ROLES.across);
+  assert.equal(pathRoleFor(dummyTopology, { kind: "vertex", nodeId: "op1:s2:a0" }), PATH_ROLES.spine);
+  assert.equal(pathRoleFor(dummyTopology, { kind: "vertex", nodeId: "op1:s2:a-1" }), PATH_ROLES.across);
+  assert.equal(pathRoleFor(dummyTopology, { kind: "region" }), PATH_ROLES.body);
 });

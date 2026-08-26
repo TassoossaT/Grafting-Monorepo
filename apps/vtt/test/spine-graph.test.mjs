@@ -193,3 +193,42 @@ test("moving a spine control node produces the same move-vertex op the generic e
   });
   assert.deepEqual(op.position, { x: 4, y: 0, z: 1 });
 });
+
+test("chainsOf is deterministic regardless of graph node insertion order", () => {
+  const hub = spineControlNodeId("hub", 0);
+  const arm1 = spineControlNodeId("run-1", 1);
+  const arm2 = spineControlNodeId("run-2", 1);
+  const arm3 = spineControlNodeId("run-3", 1);
+
+  const graph1 = spineGraphFromSnapshot({
+    nodes: [
+      { id: hub, position: { x: 0, y: 0, z: 0 } },
+      { id: arm1, position: { x: 10, y: 0, z: 0 } },
+      { id: arm2, position: { x: 0, y: 0, z: 10 } },
+      { id: arm3, position: { x: -10, y: 0, z: 0 } },
+    ],
+    edges: [
+      { edgeId: "e1", startNodeId: hub, endNodeId: arm1 },
+      { edgeId: "e2", startNodeId: hub, endNodeId: arm2 },
+      { edgeId: "e3", startNodeId: hub, endNodeId: arm3 },
+    ],
+  });
+
+  const graph2 = spineGraphFromSnapshot({
+    nodes: [
+      { id: arm3, position: { x: -10, y: 0, z: 0 } },
+      { id: arm1, position: { x: 10, y: 0, z: 0 } },
+      { id: hub, position: { x: 0, y: 0, z: 0 } },
+      { id: arm2, position: { x: 0, y: 0, z: 10 } },
+    ],
+    edges: [
+      { edgeId: "e3", startNodeId: hub, endNodeId: arm3 },
+      { edgeId: "e1", startNodeId: hub, endNodeId: arm1 },
+      { edgeId: "e2", startNodeId: hub, endNodeId: arm2 },
+    ],
+  });
+
+  const chains1 = chainsOf(graph1).map((c) => c.nodes.map((n) => n.nodeId));
+  const chains2 = chainsOf(graph2).map((c) => c.nodes.map((n) => n.nodeId));
+  assert.deepEqual(chains1, chains2);
+});

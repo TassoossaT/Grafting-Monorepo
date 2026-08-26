@@ -3,6 +3,7 @@ import type { ConstructionRegionTopology } from "@/ports";
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { ALL_AXES, addPosition } from "../../orchestration/atomic-edit.ts";
 import { followsOutward, parseStationNodeId } from "./station-node-id.ts";
+import { isSpineControlNodeId } from "./spine-graph/index.ts";
 import type { CascadeContext, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
@@ -64,25 +65,19 @@ function pathEdgeRole(
       if (use.edgeId !== edgeId) continue;
       const start = parseStationNodeId(use.startNodeId);
       const end = parseStationNodeId(use.endNodeId);
-      if (start === undefined || end === undefined) return PATH_ROLES.edge;
-      // Read off the slots alone, and only the slots.
-      //
-      // Two ends on one slot run *along* the road: the travel line if that
-      // slot is the spine, an outer contour if it is an extreme. Two ends on
-      // different slots run *across* it, which is a rib -- however far apart
-      // their stations are, and whichever runs they were minted by.
-      //
-      // Comparing stations as well is what put a V of contour across every T.
-      // The rib closing an arriving road onto the junction goes from that
-      // road's own corner to a spine node the *other* road minted, so the two
-      // stations are on different scales and never match. Read as neither
-      // along nor across, it fell through to nothing in particular and drew
-      // as a rim -- a contour touching the spine, which is precisely what a
-      // contour may never do.
-      if (start.across === end.across) {
-        return start.across === 0 ? PATH_ROLES.spineEdge : PATH_ROLES.contourEdge;
+      if (start !== undefined && end !== undefined) {
+        if (start.across === end.across) {
+          return start.across === 0 ? PATH_ROLES.spineEdge : PATH_ROLES.contourEdge;
+        }
+        return PATH_ROLES.ribEdge;
       }
-      return PATH_ROLES.ribEdge;
+      if (isSpineControlNodeId(use.startNodeId) && isSpineControlNodeId(use.endNodeId)) {
+        return PATH_ROLES.spineEdge;
+      }
+      if (use.startNodeId.startsWith("contour:") || use.endNodeId.startsWith("contour:")) {
+        return PATH_ROLES.contourEdge;
+      }
+      return PATH_ROLES.edge;
     }
   }
   return PATH_ROLES.edge;
@@ -92,8 +87,16 @@ export function pathRoleFor(topology: ConstructionRegionTopology, target: EditTa
   if (target.kind === "region") return PATH_ROLES.body;
   if (target.kind === "edge") return pathEdgeRole(topology, target.edgeId);
   const address = parseStationNodeId(target.nodeId);
-  if (address === undefined) return PATH_ROLES.unknown;
-  return address.across === 0 ? PATH_ROLES.spine : PATH_ROLES.across;
+  if (address !== undefined) {
+    return address.across === 0 ? PATH_ROLES.spine : PATH_ROLES.across;
+  }
+  if (isSpineControlNodeId(target.nodeId)) {
+    return PATH_ROLES.spine;
+  }
+  if (target.nodeId.startsWith("contour:")) {
+    return PATH_ROLES.across;
+  }
+  return PATH_ROLES.unknown;
 }
 
 /**
@@ -115,7 +118,30 @@ function outwardOfGrabbed(context: CascadeContext): readonly AtomicEditOp[] {
   const { cloud, target, delta } = context;
   if (target.kind !== "vertex") return [];
   const moved = parseStationNodeId(target.nodeId);
-  if (moved === undefined) return [];
+  if (moved === undefined) {
+    if (isSpineControlNodeId(target.nodeId)) {
+      const ops = new Map<string, AtomicEditOp>();
+      const nodePos = cloud.members
+        .flatMap((region) => region.nodes)
+        .find((n) => n.id === target.nodeId)?.position;
+      if (nodePos !== undefined) {
+        for (const region of cloud.members) {
+          for (const node of region.nodes) {
+            if (node.id === target.nodeId || ops.has(node.id)) continue;
+            if (Math.hypot(node.position.x - nodePos.x, node.position.z - nodePos.z) <= 2.5) {
+              ops.set(node.id, {
+                kind: "move-vertex",
+                nodeId: node.id,
+                position: addPosition(node.position, delta),
+              });
+            }
+          }
+        }
+      }
+      return [...ops.values()];
+    }
+    return [];
+  }
 
   const ops = new Map<string, AtomicEditOp>();
   for (const region of cloud.members) {
