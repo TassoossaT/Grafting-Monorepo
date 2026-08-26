@@ -240,3 +240,30 @@ test("two roads meeting in a Y-junction merge into one single seamless region wi
   assert.equal(result.patch.regions.length, 1, "a Y-junction merges into one seamless polygon region");
   assert.equal(result.patch.regions[0].holes, undefined, "no holes or internal cuts inside the Y-junction");
 });
+
+test("a complex network of 6 intersecting streets produces valid non-empty regions and never drops faces", () => {
+  const center = at(0, 0);
+  const chains = [
+    { chainId: "c1", controlPoints: [at(0, -15), center, at(0, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c2", controlPoints: [at(-15, 0), center, at(15, 0)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c3", controlPoints: [at(-10, -10), center, at(10, 10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c4", controlPoints: [at(-10, 10), center, at(10, -10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c5", controlPoints: [at(5, -15), at(5, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    { chainId: "c6", controlPoints: [at(-15, 5), at(15, 5)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+  ];
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-complex-hub",
+    surfaceType: "path",
+    editedChains: chains,
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.ok(result.patch.regions.length > 0, "must produce at least 1 region and never drop faces");
+  for (const region of result.patch.regions) {
+    assert.ok(region.boundary.length >= 3, "every generated region has a valid boundary");
+  }
+});

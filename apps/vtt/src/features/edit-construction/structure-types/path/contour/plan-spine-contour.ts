@@ -10,7 +10,7 @@ import type {
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { unionBandLayer } from "./union-bands.ts";
+import { ringOf, unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
 
 /**
@@ -124,7 +124,10 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
-  const shapes = unionBandLayer(ribbons);
+  let shapes = unionBandLayer(ribbons);
+  if (shapes.length === 0 && ribbons.length > 0) {
+    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
+  }
   const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
   const built = buildContourPatch(
     input.tableId,

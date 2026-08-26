@@ -627,6 +627,10 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
     const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
+    if (flatLength < 1e-4) {
+      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
+    }
     const outerOffset = correctedSpine.bandOffsets[0]!;
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
     const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
