@@ -213,3 +213,44 @@ test("nothing that touches the spine is ever called a contour", () => {
     }
   }
 });
+
+test("edgeOverlayOf renders spine edges from ConstructionGraphSnapshot alongside contour edges", () => {
+  const snapshot = {
+    nodes: [
+      { id: "spine:road-1:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "spine:road-1:1", position: { x: 10, y: 0, z: 0 } },
+    ],
+    edges: [
+      { edgeId: "spine-edge:road-1:0", startNodeId: "spine:road-1:0", endNodeId: "spine:road-1:1" },
+    ],
+  };
+
+  const contourTopology = {
+    surfaceKey: ["@region", "road-1:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "contour:road-1:0:0", position: { x: 0, y: 0, z: -2.1 } },
+      { id: "contour:road-1:0:1", position: { x: 10, y: 0, z: -2.1 } },
+      { id: "contour:road-1:0:2", position: { x: 10, y: 0, z: 2.1 } },
+      { id: "contour:road-1:0:3", position: { x: 0, y: 0, z: 2.1 } },
+    ],
+    outerLoops: [[
+      { edgeId: "c0", startNodeId: "contour:road-1:0:0", endNodeId: "contour:road-1:0:1", reversed: false },
+      { edgeId: "c1", startNodeId: "contour:road-1:0:1", endNodeId: "contour:road-1:0:2", reversed: false },
+      { edgeId: "c2", startNodeId: "contour:road-1:0:2", endNodeId: "contour:road-1:0:3", reversed: false },
+      { edgeId: "c3", startNodeId: "contour:road-1:0:3", endNodeId: "contour:road-1:0:0", reversed: false },
+    ]],
+    holes: [],
+  };
+
+  const groups = edgeOverlayOf([contourTopology], snapshot);
+  const spineGroup = groupFor(groups, PATH_ROLES.spineEdge);
+  const contourGroup = groupFor(groups, PATH_ROLES.contourEdge);
+
+  assert.ok(spineGroup !== undefined, "spine edges from snapshot must be drawn");
+  assert.equal(spineGroup.color, EDGE_ROLE_COLORS[PATH_ROLES.spineEdge], "spine must be yellow");
+  assert.equal(spineGroup.positions.length, 1 * 6, "one segment for the spine edge");
+
+  assert.ok(contourGroup !== undefined, "contour edges from topology must be drawn");
+  assert.equal(contourGroup.color, EDGE_ROLE_COLORS[PATH_ROLES.contourEdge], "contour must be cyan");
+});
