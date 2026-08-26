@@ -138,7 +138,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     if (runtime.getSnapshot().status !== "ready") return;
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
-    for (const group of edgeOverlayOf(runtime.getAllRegionTopologies())) {
+    for (const group of edgeOverlayOf(runtime.getAllRegionTopologies(), runtime.getGraphSnapshot())) {
       if (group.positions.length === 0) continue;
       const channel = edgeOverlayChannel(group.role);
       runtime.showPreview(edgeOverlayDescriptor(group), channel);
