@@ -58,3 +58,5 @@ packages/cloudflared.exe
 Thumbs.db
 *.user
 .idea/
+
+.tmp.driveupload
