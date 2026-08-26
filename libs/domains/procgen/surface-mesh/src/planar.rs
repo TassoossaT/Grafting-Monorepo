@@ -2,7 +2,7 @@
 
 use earcut::{Earcut, utils3d};
 
-use crate::math::face_normal;
+use crate::math::{cross, face_normal, sub};
 use crate::types::TriangulatedMesh;
 
 /// Triangulates a planar surface consisting of an outer boundary loop and
@@ -42,8 +42,8 @@ pub fn triangulate_contour_loops<'a>(
         let a = positions[chunk[0] as usize];
         let b = positions[chunk[1] as usize];
         let c = positions[chunk[2] as usize];
-        let y_cross = (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0]);
-        if y_cross < 0.0 {
+        let normal = cross(sub(b, a), sub(c, a));
+        if normal[1] < 0.0 {
             chunk.swap(1, 2);
         }
     }
