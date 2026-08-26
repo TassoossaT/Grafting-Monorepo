@@ -1,4 +1,4 @@
-export { sampleCatmullRom, sampleSpineCurve } from "./catmull-rom.ts";
+export { sampleCatmullRom } from "./catmull-rom.ts";
 export type { ExistingNode } from "./contour-patch.ts";
 export { buildContourPatch } from "./contour-patch.ts";
 export { offsetBands } from "./offset-bands.ts";

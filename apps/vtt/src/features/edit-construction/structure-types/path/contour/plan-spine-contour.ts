@@ -8,12 +8,10 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
-import { sampleSpineCurve } from "./catmull-rom.ts";
+import { sampleCatmullRom } from "./catmull-rom.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
 import { ringOf, unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
-import { buildArcGeometryLookup } from "./arc-geometry-lookup.ts";
-import type { SweptArc } from "../../../topology/index.ts";
 
 /**
  * One curve chain's spine, already resolved to an ordered list of control
@@ -30,14 +28,6 @@ export interface SpineChainInput {
   readonly miterLimit: number;
   /** Curve flattening tolerance, world units (XZ). */
   readonly tolerance: number;
-  /**
-   * The true circle (if any) each span from `controlPoints[index]` to
-   * `controlPoints[index + 1]` actually runs on -- one shorter than
-   * `controlPoints`, `undefined` wherever the fit found an ordinary bend
-   * instead. Absent entirely for a caller with no arc data of its own,
-   * which is the same as every span being `undefined`.
-   */
-  readonly arcs?: readonly (SweptArc | undefined)[];
 }
 
 export interface PlanSpineContourInput {
@@ -107,14 +97,13 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const ribbons: BandRibbon[] = [];
   for (const chain of input.editedChains) {
-    const { points, segmentArcs } = sampleSpineCurve(chain.controlPoints, chain.arcs ?? [], chain.tolerance);
+    const polyline = sampleCatmullRom(chain.controlPoints, chain.tolerance);
     const minOffset = Math.min(...chain.bandOffsets);
     const maxOffset = Math.max(...chain.bandOffsets);
-    for (const ribbon of offsetBands(points, [minOffset, maxOffset], chain.miterLimit, segmentArcs)) {
+    for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
       ribbons.push(ribbon);
     }
   }
-  const arcGeometry = buildArcGeometryLookup(ribbons);
 
   const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 
@@ -149,7 +138,6 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     heightSamples,
     input.existingNodes,
     retainedEdgeUses,
-    arcGeometry,
   );
 
   return {

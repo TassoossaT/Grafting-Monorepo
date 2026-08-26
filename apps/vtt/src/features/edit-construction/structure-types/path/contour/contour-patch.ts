@@ -1,9 +1,8 @@
-import type { ConstructionEdgeGeometry, ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
+import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges, simplifyClosedRing, type SweptArc } from "../../../topology/index.ts";
+import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
-import { arcGeometryFor } from "./arc-geometry-lookup.ts";
 
 /**
  * How close (world units, XZ) a union's own vertex may sit to a node already
@@ -113,8 +112,6 @@ export function buildContourPatch(
   existingNodes: readonly ExistingNode[],
   /** Uses already live on the table; a new local patch must never overfill one. */
   existingEdgeUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]> = new Map(),
-  /** Which of this union's own edges are still real arcs -- {@link buildArcGeometryLookup}'s output, read back by position. */
-  arcGeometry: ReadonlyMap<string, SweptArc> = new Map(),
 ): ContourPatchResult {
   // Contours rebuilt in a small brush window can weld to faces deliberately
   // left outside that window. A shared edge may therefore already be full;
@@ -159,28 +156,21 @@ export function buildContourPatch(
     })
     .map((shape, shapeIndex) => {
       const [outerRing, ...holeRings] = shape;
-      const geometryBetween = (from: string, to: string): ConstructionEdgeGeometry | undefined =>
-        arcGeometryFor(arcGeometry, nodePositions.get(from)!, nodePositions.get(to)!);
-      const boundaryUse = (ids: readonly string[], index: number) => {
-        const from = ids[index]!;
-        const to = ids[(index + 1) % ids.length]!;
-        return edges.use(from, to, geometryBetween(from, to));
-      };
-      // A curve the union tessellated into many small chords or many small
-      // arc samples of the same circle is still, geometrically, one edge --
-      // simplified here, once, so every consumer downstream (the graph, the
-      // renderer, a future edit) sees the road it actually is rather than
-      // the polyline a boolean union happened to produce.
+      // A run of collinear points the union happened to leave standing is
+      // still, geometrically, one straight edge -- simplified here, once, so
+      // a self-intersection cleanup or a welded-in existing vertex does not
+      // leave the patch with more boundary edges than the shape actually
+      // has.
       const simplifyRing = (ids: readonly string[]): readonly string[] => {
         const positions = ids.map((id) => nodePositions.get(id)!);
-        const kept = simplifyClosedRing(positions, (fromIndex, toIndex) => geometryBetween(ids[fromIndex]!, ids[toIndex]!));
+        const kept = simplifyClosedRing(positions, () => undefined);
         return kept.map((index) => ids[index]!);
       };
       const outerIds = simplifyRing(idsFor(ensureUpwardWinding(outerRing ?? [], false), 0));
-      const boundary = outerIds.map((_id, index) => boundaryUse(outerIds, index));
+      const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
         const holeIds = simplifyRing(idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1));
-        return holeIds.map((_id, index) => boundaryUse(holeIds, index));
+        return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });
       return {
         regionId: `${operationId}:band-${bandIndex}:${shapeIndex}`,

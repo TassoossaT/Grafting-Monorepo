@@ -19,32 +19,30 @@ import { chainsOf, parseSpineControlNodeId, spineControlNodeId, spineGraphFromSn
 import { pathRidesTerrain } from "./path-recipe.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
-import { fitPath, type FittedEdge, type SweptArc } from "../../topology/index.ts";
+import { fitPath, type FittedEdge } from "../../topology/index.ts";
 import {
   offsetBands,
   planSpineContour,
-  sampleSpineCurve,
+  sampleCatmullRom,
   unionBandLayer,
   type SpineChainInput,
 } from "./contour/index.ts";
 
 /**
- * How finely the committed curve is tessellated for the contour union and
- * the footprint/coverage outline, in world units (XZ) -- an ordinary bend
- * gets this via Catmull-Rom, a real fitted arc via `sampleSpineCurve`'s own
- * sagitta walk. The spine's own control points no longer carry this
- * tolerance's cost: an arc a hundred metres long is still exactly two of
- * them (`groundTrack` keeps corners only), so this only governs how densely
- * that arc is re-sampled downstream, on demand, never how many nodes the
- * graph itself holds.
+ * How finely the committed curve follows the true Catmull-Rom shape, in
+ * world units (XZ). The spine's own control points stay few -- `groundTrack`
+ * keeps one per real corner, never one per flattening step -- and this is
+ * what turns that handful of points into a smooth curve for the contour
+ * union and the footprint/coverage outline, the same Catmull-Rom-through-
+ * few-anchors model this whole spine is styled on (no attempt to prove any
+ * one span is a literal circle; a smooth spline through the right corners
+ * already looks right).
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
 
 interface MaterializedSpine {
   readonly graphPatch: ConstructionGraphPatch;
   readonly controlPoints: readonly ConstructionPosition[];
-  /** One shorter than `controlPoints` -- the true circle each surviving span still runs on, `undefined` wherever welding or a crossing broke it. */
-  readonly controlPointArcs: readonly (SweptArc | undefined)[];
 }
 
 interface SpineEdgeCandidate {
@@ -149,32 +147,23 @@ function graphPatchForSpine(
     }
     return cut;
   };
-  const mintedIds = spine.controlPoints.map((_point, index) => spineControlNodeId(spine.corridorId, index));
   const resolved = spine.controlPoints.map((point, index) => {
+    const minted = spineControlNodeId(spine.corridorId, index);
     const node = nearest(point);
     if (node !== undefined) {
       return { nodeId: node.id, position: node.position };
     }
     const edge = nearestEdge(point);
     if (edge === undefined) {
-      return { nodeId: mintedIds[index]!, position: point };
+      return { nodeId: minted, position: point };
     }
     const cut = cutFor(edge, edge.position, edge.t);
     return { nodeId: cut.nodeId, position: cut.position };
   });
-  // Untouched by either weld branch above -- still exactly the point the
-  // fit itself produced, which is the only case an original span's arc is
-  // still trustworthy.
-  const unweldedAt = (index: number): boolean => resolved[index]?.nodeId === mintedIds[index];
 
-  const expanded: { readonly nodeId: string; readonly position: ConstructionPosition }[] = [resolved[0]!];
-  /** `originalIndexInExpanded[i]` -- where `resolved[i]` landed in `expanded`, for reading `spine.arcs` back off it below. */
-  const originalIndexInExpanded: number[] = [0];
-  /** `spanHadCrossing[i]` -- whether the original span `resolved[i] -> resolved[i + 1]` gained any inserted crossing, which breaks that span's own arc regardless of what the fit said. */
-  const spanHadCrossing: boolean[] = [];
-  for (let index = 1; index < resolved.length; index += 1) {
+  const expanded = resolved.flatMap((point, index) => {
+    if (index === 0) return [point];
     const previous = resolved[index - 1]!;
-    const point = resolved[index]!;
     const crossings = edges
       .flatMap((edge) => {
         const intersection = segmentIntersection(previous.position, point.position, edge.from, edge.to);
@@ -189,21 +178,8 @@ function graphPatchForSpine(
       })
       .sort((left, right) => left.t - right.t)
       .filter((crossing, crossingIndex, all) => crossingIndex === 0 || crossing.nodeId !== all[crossingIndex - 1]!.nodeId);
-    spanHadCrossing.push(crossings.length > 0);
-    for (const crossing of crossings) expanded.push(crossing);
-    originalIndexInExpanded.push(expanded.length);
-    expanded.push(point);
-  }
-
-  const controlPointArcs: (SweptArc | undefined)[] = new Array(Math.max(0, expanded.length - 1)).fill(undefined);
-  for (let span = 0; span + 1 < spine.controlPoints.length; span += 1) {
-    if (spanHadCrossing[span] || !unweldedAt(span) || !unweldedAt(span + 1)) continue;
-    const arc = spine.arcs[span];
-    if (arc === undefined) continue;
-    const from = originalIndexInExpanded[span]!;
-    if (originalIndexInExpanded[span + 1] !== from + 1) continue;
-    controlPointArcs[from] = arc;
-  }
+    return [...crossings, point];
+  });
 
   const splitEdges = [...cutsByEdge.entries()].flatMap(([edgeId, cuts]) => {
     const edge = edges.find((candidate) => candidate.edge.edgeId === edgeId)!;
@@ -222,7 +198,6 @@ function graphPatchForSpine(
   const nodes = new Map(expanded.map((point) => [point.nodeId, point.position]));
   return {
     controlPoints: expanded.map((point) => point.position),
-    controlPointArcs,
     graphPatch: {
       nodes: [...nodes].map(([id, position]) => ({ id, position })),
       removedEdgeIds: [...cutsByEdge.keys()],
@@ -371,41 +346,27 @@ function groundHeightNear(
   return closest?.y ?? 0;
 }
 
-/**
- * One point of the sampled track, and whether the run genuinely turns there.
- *
- * A corner has to become a control point whatever the walk decides, or the
- * road cuts straight across it.
- *
- * `arc` is the curve the run is *on* as it leaves this point -- one entry
- * per {@link FittedEdge}, never subdivided. `sampleSpineCurve` re-tessellates
- * it for the contour union, and `referenceLineFrom`'s own footprint walk
- * reads it too, so an arc a hundred metres long still costs exactly the two
- * control points its two corners need, the same way a wall's does -- not one
- * per flattening step. Terrain probing (below) still walks a long straight
- * span for extra height stations; it does not for an arc span, since a
- * straight-line probe across one would cut inside the curve instead of
- * following it.
- */
+/** One point of the sampled track: where it sits, and whether the run genuinely turns there. */
 interface TrackPoint {
   readonly x: number;
   readonly z: number;
   readonly corner: boolean;
-  readonly arc: SweptArc | undefined;
 }
 
-/** The fitted contour as ground positions -- one control point per fitted corner, arcs kept as arcs rather than pre-flattened into samples. */
+/**
+ * The fitted contour as ground positions -- one control point per fitted
+ * corner. Kept few on purpose: `planSpineContour`'s own Catmull-Rom already
+ * turns a handful of well-placed corners into a smooth curve (the same
+ * few-anchors-plus-a-spline model a wall's own fit uses), so subdividing a
+ * corner-to-corner run further here would only add points the curve never
+ * needed.
+ */
 function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
-
-  const track: TrackPoint[] = [
-    { x: first.start.x, z: first.start.z, corner: true, arc: undefined },
-  ];
+  const track: TrackPoint[] = [{ x: first.start.x, z: first.start.z, corner: true }];
   for (const edge of fitted) {
-    const arc = edge.geometry.kind === "arc" ? { center: edge.geometry.center, clockwise: edge.geometry.clockwise } : undefined;
-    track[track.length - 1] = { ...track[track.length - 1]!, arc };
-    track.push({ x: edge.end.x, z: edge.end.z, corner: true, arc: undefined });
+    track.push({ x: edge.end.x, z: edge.end.z, corner: true });
   }
   return track;
 }
@@ -424,11 +385,11 @@ export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
-): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
+): { readonly line: readonly ConstructionPosition[] } {
   const track = groundTrack(fitted);
   const first = track[0];
   const last = track[track.length - 1];
-  if (first === undefined || last === undefined) return { line: [], arcs: [] };
+  if (first === undefined || last === undefined) return { line: [] };
 
   // A deck spans: its height comes from its own two ends, so the middle stays
   // level instead of sagging onto whatever it crosses. Everything else reads
@@ -454,38 +415,28 @@ export function referenceLineFrom(
   const line: ConstructionPosition[] = [
     { x: first.x, y: heightAt(first.x, first.z), z: first.z },
   ];
-  /** The curve each span runs on; one shorter than `line`. */
-  const arcs: (SweptArc | undefined)[] = [];
-  const push = (x: number, z: number, arc: SweptArc | undefined): void => {
+  const push = (x: number, z: number): void => {
     const previous = line[line.length - 1]!;
     // Two stations at one spot would collapse into a zero-length curve
     // segment.
     if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) return;
     line.push({ x, y: heightAt(x, z), z });
-    arcs.push(arc);
   };
 
-  // Every point the fit itself produced is a control point -- a corner,
-  // whether the run turns there or an arc simply ends there. What is *not*
-  // automatic any more is anything between two corners. A straight stretch
-  // gets extra control points only where the ground under it strays from
-  // the straight line it would otherwise be, so a straight road over flat
-  // ground is two control points and one over a ridge is exactly as many as
-  // the ridge needs. An arc stretch never gets extra control points at all:
-  // it is handed downstream as the one true circle it is, and it is
-  // {@link sampleSpineCurve} -- not this walk -- that re-samples it, on
-  // demand, for the contour union and the footprint outline.
+  // Every point the fit itself produced is a control point: a corner because
+  // the run genuinely turns there. What is *not* automatic any more is
+  // anything between them. A stretch gets extra control points only where
+  // the ground under it strays from the straight line the stretch would
+  // otherwise be -- so a straight road over flat ground is two control
+  // points, and a straight road over a ridge is exactly as many as the
+  // ridge needs.
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
     const span = Math.hypot(to.x - from.x, to.z - from.z);
     if (span < 1e-9) continue;
 
-    // A straight-line probe across a real arc span would cut inside the
-    // curve rather than follow it, so a stretch already declared as one
-    // true circle skips terrain probing outright -- its two ends still ride
-    // the ground `heightAt` reads for them.
-    if (ridesTerrain && span > TERRAIN_PROBE_STEP && from.arc === undefined) {
+    if (ridesTerrain && span > TERRAIN_PROBE_STEP) {
       const anchor = line[line.length - 1]!;
       let anchored = travelled;
       let lastProbe = 0;
@@ -508,24 +459,18 @@ export function referenceLineFrom(
         // rather than being dragged through it.
         const backRatio = Math.max(lastProbe, 0) / span;
         travelled = anchored + span * backRatio;
-        push(
-          from.x + (to.x - from.x) * backRatio,
-          from.z + (to.z - from.z) * backRatio,
-          from.arc,
-        );
+        push(from.x + (to.x - from.x) * backRatio, from.z + (to.z - from.z) * backRatio);
         anchored = travelled;
         lastProbe = probe;
       }
     }
 
     travelled += span;
-    push(to.x, to.z, from.arc);
+    push(to.x, to.z);
   }
   // The run has to end where it was drawn, corner or not.
-  push(last.x, last.z, track[track.length - 2]?.arc);
-  // One span per gap: a station pushed at the very start has no span behind
-  // it, and the walk above records a span only when it lands somewhere new.
-  return { line, arcs: arcs.slice(0, Math.max(0, line.length - 1)) };
+  push(last.x, last.z);
+  return { line };
 }
 
 /** The table facts supplied to the PathCloud before it plans a mutation. */
@@ -592,11 +537,8 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
-  const swept =
-    fitted.length === 0
-      ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
-      : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
-  const spine = pathSpineDraftFor(effect, swept.line, swept.arcs);
+  const swept = fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
+  const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
   const parameters = effect.parameters;
@@ -616,41 +558,12 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     };
     const graphPatch = materialized.graphPatch;
     const touchedCloud = changedSpineCloud(input.graphSnapshot, graphPatch);
-    // Keyed by exact position -- `touchedCloud.chains` walks the very same
-    // node positions `materialized.controlPoints` just minted, so a span
-    // this stroke drew reads its own arc straight back, and a span that
-    // belongs to some other, already-standing corridor (no entry here)
-    // falls back to a straight chord rather than a guess.
-    const spanArcByPosition = new Map<string, SweptArc>();
-    const positionKey = (point: ConstructionPosition): string => `${point.x},${point.z}`;
-    for (let index = 0; index + 1 < materialized.controlPoints.length; index += 1) {
-      const arc = materialized.controlPointArcs[index];
-      if (arc === undefined) continue;
-      const key = `${positionKey(materialized.controlPoints[index]!)}->${positionKey(materialized.controlPoints[index + 1]!)}`;
-      spanArcByPosition.set(key, arc);
-    }
-    const arcsForChain = (controlPoints: readonly ConstructionPosition[]): readonly (SweptArc | undefined)[] => {
-      const arcs: (SweptArc | undefined)[] = [];
-      for (let index = 0; index + 1 < controlPoints.length; index += 1) {
-        const from = controlPoints[index]!;
-        const to = controlPoints[index + 1]!;
-        const forward = spanArcByPosition.get(`${positionKey(from)}->${positionKey(to)}`);
-        if (forward !== undefined) {
-          arcs.push(forward);
-          continue;
-        }
-        const backward = spanArcByPosition.get(`${positionKey(to)}->${positionKey(from)}`);
-        arcs.push(backward === undefined ? undefined : { center: backward.center, clockwise: !backward.clockwise });
-      }
-      return arcs;
-    };
     const regeneratedChains = touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
         ...chain,
         chainId: `${correctedSpine.corridorId}:component-${index}`,
         controlPoints,
-        arcs: arcsForChain(controlPoints),
       }));
 
     // The footprint this stroke alone claims -- full width, one ribbon, no
@@ -658,18 +571,14 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // It is not the patch: the patch is banded and unioned band by band
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
-    const { points: flatPolyline, segmentArcs: flatArcs } = sampleSpineCurve(
-      correctedSpine.controlPoints,
-      materialized.controlPointArcs,
-      CURVE_FLATTENING_TOLERANCE,
-    );
+    const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
     const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
     if (flatLength < 1e-4) {
       return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
     const outerOffset = correctedSpine.bandOffsets[0]!;
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
-    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit, flatArcs));
+    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
     // A stroke that survived the earlier tap check can still collapse to a
     // degenerate footprint once its own ends snap onto existing spine
