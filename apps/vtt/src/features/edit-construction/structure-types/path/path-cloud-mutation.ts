@@ -653,7 +653,6 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
 
     const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
-    const existingNodes = topologies.flatMap((topology) => topology.nodes);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -671,7 +670,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // junction component.
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
-        existingNodes,
+        existingNodes: [],
         existingEdgeUses,
       });
     if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
