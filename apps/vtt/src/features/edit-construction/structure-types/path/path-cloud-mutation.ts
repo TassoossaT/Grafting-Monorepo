@@ -282,23 +282,33 @@ function standingRegionsForCloud(
   cloudPositions: readonly ConstructionPosition[],
   corridorIds: ReadonlySet<string> = new Set(),
 ): readonly ConstructionRegionTopology[] {
-  const near = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.x - b.x, a.z - b.z) <= 0.05;
+  if (corridorIds.size === 0) return [];
   return topologies.filter((topology) => {
     if (topology.surfaceType !== "path") return false;
     const regionId = topology.surfaceKey[1] ?? "";
     for (const corridorId of corridorIds) {
-      if (regionId === corridorId || regionId.startsWith(`${corridorId}:`) || regionId.startsWith(corridorId)) {
+      if (
+        regionId === corridorId ||
+        regionId.startsWith(`${corridorId}:`) ||
+        regionId.startsWith(`${corridorId}#`)
+      ) {
         return true;
       }
     }
     for (const node of topology.nodes) {
       for (const corridorId of corridorIds) {
-        if (node.id.startsWith(`contour:${corridorId}:`) || node.id.includes(corridorId)) {
+        if (
+          node.id.startsWith(`contour:${corridorId}:`) ||
+          node.id.startsWith(`contour:${corridorId}#`) ||
+          node.id.startsWith(`along:${corridorId}:`) ||
+          node.id.startsWith(`across:${corridorId}:`) ||
+          node.id.startsWith(`${corridorId}:`)
+        ) {
           return true;
         }
       }
     }
-    return topology.nodes.some((node) => cloudPositions.some((position) => near(node.position, position)));
+    return false;
   });
 }
 

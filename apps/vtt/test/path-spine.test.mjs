@@ -12,6 +12,7 @@ import {
   stationNodeId,
 } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { PATH_ROLES, pathRoleFor } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
+import { planPathCloudMutation } from "../src/features/edit-construction/structure-types/path/path-cloud-mutation.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",
@@ -239,4 +240,61 @@ test("planEdit moves a spine control node when graphSnapshot is provided", () =>
     nodeId: "spine:op1#road:0",
     position: { x: 2, y: 1, z: -3 },
   });
+});
+
+test("planPathCloudMutation does not consume standing regions of unrelated path clouds with similar ID prefixes", () => {
+  const unrelatedTopology = {
+    surfaceKey: ["@region", "op-10#road:band-0:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "contour:op-10#road:band-0:0:1", position: { x: 50, y: 0, z: 50 } },
+      { id: "contour:op-10#road:band-0:0:2", position: { x: 60, y: 0, z: 50 } },
+      { id: "contour:op-10#road:band-0:0:3", position: { x: 60, y: 0, z: 55 } },
+      { id: "contour:op-10#road:band-0:0:4", position: { x: 50, y: 0, z: 55 } },
+    ],
+    outerLoops: [],
+    holes: [],
+  };
+
+  const graphSnapshot = {
+    nodes: [
+      { id: "spine:op-10#road:0", position: { x: 50, y: 0, z: 52.5 } },
+      { id: "spine:op-10#road:1", position: { x: 60, y: 0, z: 52.5 } },
+    ],
+    edges: [
+      { edgeId: "spine-edge:op-10#road:0", startNodeId: "spine:op-10#road:0", endNodeId: "spine:op-10#road:1" },
+    ],
+  };
+
+  const effect = createPathBrushEffect(
+    {
+      brushShape: { kind: "circle", radius: 2.5 },
+      brushRegion: {
+        samples: [
+          { x: 0, y: 0, z: 0 },
+          { x: 10, y: 0, z: 0 },
+        ],
+      },
+      observedElements: [],
+      parameters: pathFormationFor(ROAD),
+    },
+    { operationId: "op-1", tableId: "table-1", initiatedBy: "path-brush" },
+  );
+
+  const plan = planPathCloudMutation({
+    tableId: "table-1",
+    snapToGrid: false,
+    graphSnapshot,
+    regionTopologies: [unrelatedTopology],
+    coverageFor: () => [],
+    effect,
+    tolerance: 0.05,
+  });
+
+  assert.equal(plan.kind, "ready");
+  assert.deepEqual(
+    plan.request.sourceSurfaceKeys,
+    [],
+    "unrelated road op-10 must NOT be consumed or deleted when drawing op-1",
+  );
 });
