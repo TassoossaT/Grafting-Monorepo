@@ -23,26 +23,20 @@ import { fitPath, type FittedEdge, type SweptArc } from "../../topology/index.ts
 import {
   offsetBands,
   planSpineContour,
-  sampleCatmullRom,
+  sampleSpineCurve,
   unionBandLayer,
   type SpineChainInput,
 } from "./contour/index.ts";
 
 /**
- * How far a flattened arc may sit from the true circle, in world units.
- *
- * This is a smoothness knob, not a fidelity one: the fit has already decided
- * where the road goes, and this only controls how finely that decision is
- * spelled out before it becomes Catmull-Rom control points. It disappears
- * the moment the fitter takes contour geometry directly.
- */
-const ARC_FLATTENING_TOLERANCE = 0.05;
-
-/**
- * How finely the committed curve follows the true Catmull-Rom shape, in
- * world units (XZ) -- the spine-contour engine's own equivalent of
- * `ARC_FLATTENING_TOLERANCE` above, generalised from a circular arc to a
- * free curve through the drawn control points.
+ * How finely the committed curve is tessellated for the contour union and
+ * the footprint/coverage outline, in world units (XZ) -- an ordinary bend
+ * gets this via Catmull-Rom, a real fitted arc via `sampleSpineCurve`'s own
+ * sagitta walk. The spine's own control points no longer carry this
+ * tolerance's cost: an arc a hundred metres long is still exactly two of
+ * them (`groundTrack` keeps corners only), so this only governs how densely
+ * that arc is re-sampled downstream, on demand, never how many nodes the
+ * graph itself holds.
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
 
@@ -381,14 +375,17 @@ function groundHeightNear(
  * One point of the sampled track, and whether the run genuinely turns there.
  *
  * A corner has to become a control point whatever the walk decides, or the
- * road cuts straight across it; an arc sample is only sampling, and the walk
- * is free to place control points wherever it likes along it.
+ * road cuts straight across it.
  *
- * `arc` is the curve the run is *on* as it leaves this point -- carried
- * through fitting and flattening, but no longer read once the point becomes
- * a Catmull-Rom control point: the spine-contour engine re-derives its own
- * curvature from the control points themselves, rather than being handed a
- * circular arc it would have to approximate anyway.
+ * `arc` is the curve the run is *on* as it leaves this point -- one entry
+ * per {@link FittedEdge}, never subdivided. `sampleSpineCurve` re-tessellates
+ * it for the contour union, and `referenceLineFrom`'s own footprint walk
+ * reads it too, so an arc a hundred metres long still costs exactly the two
+ * control points its two corners need, the same way a wall's does -- not one
+ * per flattening step. Terrain probing (below) still walks a long straight
+ * span for extra height stations; it does not for an arc span, since a
+ * straight-line probe across one would cut inside the curve instead of
+ * following it.
  */
 interface TrackPoint {
   readonly x: number;
@@ -397,7 +394,7 @@ interface TrackPoint {
   readonly arc: SweptArc | undefined;
 }
 
-/** The fitted contour as ground positions, arcs sampled by angle. */
+/** The fitted contour as ground positions -- one control point per fitted corner, arcs kept as arcs rather than pre-flattened into samples. */
 function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
@@ -405,40 +402,9 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const track: TrackPoint[] = [
     { x: first.start.x, z: first.start.z, corner: true, arc: undefined },
   ];
-  const carry = (arc: SweptArc | undefined): void => {
-    const last = track[track.length - 1]!;
-    track[track.length - 1] = { ...last, arc };
-  };
   for (const edge of fitted) {
-    if (edge.geometry.kind === "arc") {
-      carry({ center: edge.geometry.center, clockwise: edge.geometry.clockwise });
-      const [centerX, centerZ] = edge.geometry.center;
-      const radius = Math.hypot(edge.start.x - centerX, edge.start.z - centerZ);
-      const startAngle = Math.atan2(edge.start.z - centerZ, edge.start.x - centerX);
-      const endAngle = Math.atan2(edge.end.z - centerZ, edge.end.x - centerX);
-      const counterClockwise = (endAngle - startAngle + Math.PI * 2) % (Math.PI * 2);
-      const swept = edge.geometry.clockwise ? Math.PI * 2 - counterClockwise : counterClockwise;
-
-      // Sagitta: a chord deviating by `t` from a circle of radius `r`
-      // subtends 2*acos(1 - t/r). A radius under the tolerance has no
-      // meaningful arc left to sample, so one chord is the whole of it.
-      const maxStep =
-        radius > ARC_FLATTENING_TOLERANCE
-          ? 2 * Math.acos(1 - ARC_FLATTENING_TOLERANCE / radius)
-          : Math.PI;
-      const steps = Math.max(1, Math.ceil(swept / maxStep));
-      for (let step = 1; step < steps; step += 1) {
-        const angle = edge.geometry.clockwise
-          ? startAngle - (swept * step) / steps
-          : startAngle + (swept * step) / steps;
-        track.push({
-          x: centerX + radius * Math.cos(angle),
-          z: centerZ + radius * Math.sin(angle),
-          corner: false,
-          arc: { center: edge.geometry.center, clockwise: edge.geometry.clockwise },
-        });
-      }
-    }
+    const arc = edge.geometry.kind === "arc" ? { center: edge.geometry.center, clockwise: edge.geometry.clockwise } : undefined;
+    track[track.length - 1] = { ...track[track.length - 1]!, arc };
     track.push({ x: edge.end.x, z: edge.end.z, corner: true, arc: undefined });
   }
   return track;
@@ -499,23 +465,27 @@ export function referenceLineFrom(
     arcs.push(arc);
   };
 
-  // Every point the fit itself produced is a control point: a corner because
-  // the run genuinely turns there, an arc sample because the outline handed
-  // to the coverage query is a polygon and has to follow the curve even
-  // though the edges between these points are true arcs.
-  //
-  // What is *not* automatic any more is anything between them. A stretch gets
-  // extra control points only where the ground under it strays from the
-  // straight line the stretch would otherwise be -- so a straight road over
-  // flat ground is two control points, and a straight road over a ridge is
-  // exactly as many as the ridge needs.
+  // Every point the fit itself produced is a control point -- a corner,
+  // whether the run turns there or an arc simply ends there. What is *not*
+  // automatic any more is anything between two corners. A straight stretch
+  // gets extra control points only where the ground under it strays from
+  // the straight line it would otherwise be, so a straight road over flat
+  // ground is two control points and one over a ridge is exactly as many as
+  // the ridge needs. An arc stretch never gets extra control points at all:
+  // it is handed downstream as the one true circle it is, and it is
+  // {@link sampleSpineCurve} -- not this walk -- that re-samples it, on
+  // demand, for the contour union and the footprint outline.
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
     const span = Math.hypot(to.x - from.x, to.z - from.z);
     if (span < 1e-9) continue;
 
-    if (ridesTerrain && span > TERRAIN_PROBE_STEP) {
+    // A straight-line probe across a real arc span would cut inside the
+    // curve rather than follow it, so a stretch already declared as one
+    // true circle skips terrain probing outright -- its two ends still ride
+    // the ground `heightAt` reads for them.
+    if (ridesTerrain && span > TERRAIN_PROBE_STEP && from.arc === undefined) {
       const anchor = line[line.length - 1]!;
       let anchored = travelled;
       let lastProbe = 0;
@@ -606,6 +576,14 @@ export type PathCloudMutationPlan =
  *   something it must not touch; it does not cut or consume terrain underneath
  *   it. Drawing a road over terrain leaves that terrain standing rather than
  *   risking an imprecise cut.
+ * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
+ *   span by its chord (`spine.controlPoints` no longer carries intermediate
+ *   samples along one -- see `groundTrack`), the same way every other span
+ *   here always has. A gentle curve's chord and its true arc barely differ;
+ *   a very tight, wide-swinging one could weld or cross slightly off from
+ *   where the curve itself actually runs. Not a case this stage resolves,
+ *   only one it accepts in exchange for never chopping a real arc into
+ *   graph nodes it does not need.
  */
 export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
   const { effect, tolerance } = input;
@@ -680,14 +658,18 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // It is not the patch: the patch is banded and unioned band by band
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
-    const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const { points: flatPolyline, segmentArcs: flatArcs } = sampleSpineCurve(
+      correctedSpine.controlPoints,
+      materialized.controlPointArcs,
+      CURVE_FLATTENING_TOLERANCE,
+    );
     const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
     if (flatLength < 1e-4) {
       return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
     const outerOffset = correctedSpine.bandOffsets[0]!;
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
-    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
+    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit, flatArcs));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
     // A stroke that survived the earlier tap check can still collapse to a
     // degenerate footprint once its own ends snap onto existing spine

@@ -182,10 +182,13 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({}),
   "path-brush": Object.freeze({
-    // The brush has to hold the road: bed 3 plus two 0.6 shoulders reaches
-    // 2.1 from the centerline, so a radius of 2.5 leaves 0.4 of correction.
+    // The brush has to hold the road: half of a 3-wide bed reaches 1.5 from
+    // the centerline, so a radius of 2.5 leaves a full metre of correction.
+    // `street` is the only preset the UI still writes -- its own bed-only
+    // profile is the one everything else in the recipe (shoulder width and
+    // height, the still-unbuilt raised rim) is deliberately left inert for.
     shape: "circle", radius: 2.5, rotationDegrees: 0,
-    pathKind: "road", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
+    pathKind: "street", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
     miterLimit: 4,
   }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
