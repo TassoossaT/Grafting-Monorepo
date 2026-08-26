@@ -1,8 +1,9 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges } from "../../../topology/index.ts";
+import { createBoundaryEdges, type SweptArc } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
+import { arcGeometryFor } from "./arc-geometry-lookup.ts";
 
 /**
  * How close (world units, XZ) a union's own vertex may sit to a node already
@@ -112,6 +113,8 @@ export function buildContourPatch(
   existingNodes: readonly ExistingNode[],
   /** Uses already live on the table; a new local patch must never overfill one. */
   existingEdgeUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]> = new Map(),
+  /** Which of this union's own edges are still real arcs -- {@link buildArcGeometryLookup}'s output, read back by position. */
+  arcGeometry: ReadonlyMap<string, SweptArc> = new Map(),
 ): ContourPatchResult {
   // Contours rebuilt in a small brush window can weld to faces deliberately
   // left outside that window. A shared edge may therefore already be full;
@@ -156,11 +159,17 @@ export function buildContourPatch(
     })
     .map((shape, shapeIndex) => {
       const [outerRing, ...holeRings] = shape;
+      const boundaryUse = (ids: readonly string[], index: number) => {
+        const from = ids[index]!;
+        const to = ids[(index + 1) % ids.length]!;
+        const geometry = arcGeometryFor(arcGeometry, nodePositions.get(from)!, nodePositions.get(to)!);
+        return edges.use(from, to, geometry);
+      };
       const outerIds = idsFor(ensureUpwardWinding(outerRing ?? [], false), 0);
-      const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
+      const boundary = outerIds.map((_id, index) => boundaryUse(outerIds, index));
       const holes = holeRings.map((holeRing, holeIndex) => {
         const holeIds = idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1);
-        return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
+        return holeIds.map((_id, index) => boundaryUse(holeIds, index));
       });
       return {
         regionId: `${operationId}:band-${bandIndex}:${shapeIndex}`,

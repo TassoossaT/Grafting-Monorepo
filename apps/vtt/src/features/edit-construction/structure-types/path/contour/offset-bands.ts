@@ -1,4 +1,5 @@
 import type { ConstructionPosition } from "@/ports";
+import { stationFrame, type SweptArc } from "../../../topology/index.ts";
 
 /**
  * TS mirror of `grafting-procgen-curve-offset`'s `offset_bands` (Estágio 1) --
@@ -9,6 +10,12 @@ import type { ConstructionPosition } from "@/ports";
  * ships today is flat (`pathFormationFor`'s doc: "no raised rim in this
  * version") -- a raised shoulder is a per-point elevation this function would
  * need to add once one exists, not a reason to block on it now.
+ *
+ * Mitre/frame maths is `topology/sweep-formation.ts`'s own `stationFrame` --
+ * the same function a wall's sweep already uses -- rather than a private
+ * copy, so a curved span offsets onto a genuinely concentric circle here too
+ * instead of the chord-mitre approximation a private reimplementation would
+ * drift back towards.
  */
 
 /** One band's ribbon: the ring between two consecutive `bandOffsets`. */
@@ -16,88 +23,58 @@ export interface BandRibbon {
   readonly bandIndex: number;
   /** Closed ring in the sweep's own winding, first curve forward then the next reversed. */
   readonly outer: readonly ConstructionPosition[];
+  /**
+   * The arc (if any) every consecutive pair of `outer` actually runs on --
+   * wrapping, so `ringArcs[k]` describes `outer[k] -> outer[(k+1) %
+   * outer.length]`. `undefined` on the two end caps (never part of the
+   * original curve) and on any span the polyline itself was not an arc for.
+   */
+  readonly ringArcs: readonly (SweptArc | undefined)[];
 }
 
-interface StationFrame {
-  readonly normalX: number;
-  readonly normalZ: number;
-  readonly scale: number;
-}
-
-function edgeNormalXZ(from: ConstructionPosition, to: ConstructionPosition): { readonly x: number; readonly z: number } {
-  const dx = to.x - from.x;
-  const dz = to.z - from.z;
-  const len = Math.max(Math.hypot(dx, dz), 1e-9);
-  return { x: -dz / len, z: dx / len };
-}
-
-/**
- * The offset direction and mitre scale at every point of `points` -- same
- * algorithm as `curve-offset/src/offset.rs`'s `station_frames`, and as
- * `apps/vtt`'s own `sweep-formation.ts` (`stationFrame`) before that. An
- * interior corner's mitre length is clamped to `miterLimit` rather than left
- * to grow without bound as the corner sharpens.
- */
-function stationFrames(points: readonly ConstructionPosition[], miterLimit: number): readonly StationFrame[] {
-  const last = points.length - 1;
-  return points.map((_point, index) => {
-    if (index === 0) {
-      const normal = edgeNormalXZ(points[0]!, points[1]!);
-      return { normalX: normal.x, normalZ: normal.z, scale: 1 };
-    }
-    if (index === last) {
-      const normal = edgeNormalXZ(points[last - 1]!, points[last]!);
-      return { normalX: normal.x, normalZ: normal.z, scale: 1 };
-    }
-    const incoming = edgeNormalXZ(points[index - 1]!, points[index]!);
-    const outgoing = edgeNormalXZ(points[index]!, points[index + 1]!);
-    const sumX = incoming.x + outgoing.x;
-    const sumZ = incoming.z + outgoing.z;
-    const sumLen = Math.hypot(sumX, sumZ);
-    if (sumLen < 1e-6) {
-      // A reversal has no meaningful mitre direction; fall back to the
-      // outgoing edge's own normal rather than divide by zero.
-      return { normalX: outgoing.x, normalZ: outgoing.z, scale: 1 };
-    }
-    const mitreX = sumX / sumLen;
-    const mitreZ = sumZ / sumLen;
-    const cosHalf = Math.max(mitreX * incoming.x + mitreZ * incoming.z, 1e-6);
-    return { normalX: mitreX, normalZ: mitreZ, scale: Math.min(1 / cosHalf, miterLimit) };
-  });
-}
-
-function offsetCurve(
-  points: readonly ConstructionPosition[],
-  frames: readonly StationFrame[],
-  offset: number,
-): readonly ConstructionPosition[] {
-  return points.map((point, index) => {
-    const frame = frames[index]!;
-    return {
-      x: point.x + frame.normalX * frame.scale * offset,
-      y: point.y,
-      z: point.z + frame.normalZ * frame.scale * offset,
-    };
-  });
+/** The same circle read from the opposite direction of travel. */
+function reverseArc(arc: SweptArc | undefined): SweptArc | undefined {
+  return arc === undefined ? undefined : { center: arc.center, clockwise: !arc.clockwise };
 }
 
 /**
- * One ribbon per consecutive pair of `bandOffsets`, following `polyline`'s
+ * One band per consecutive pair of `bandOffsets`, following `polyline`'s
  * own shape. Returns no bands for a polyline shorter than two points or a
  * profile with fewer than two offsets.
+ *
+ * `arcs[index]` -- one shorter than `polyline`, same convention
+ * `sweep-formation.ts` and `catmull-rom.ts`'s `sampleSpineCurve` already
+ * use -- names the true circle the span from `polyline[index]` to
+ * `polyline[index + 1]` runs on, so a curved stretch offsets radially
+ * (concentric, same centre) instead of by the chord mitre an ordinary bend
+ * gets.
  */
 export function offsetBands(
   polyline: readonly ConstructionPosition[],
   bandOffsets: readonly number[],
   miterLimit: number,
+  arcs: readonly (SweptArc | undefined)[] = [],
 ): readonly BandRibbon[] {
   if (polyline.length < 2 || bandOffsets.length < 2) return [];
-  const frames = stationFrames(polyline, Math.max(miterLimit, 1));
-  const curves = bandOffsets.map((offset) => offsetCurve(polyline, frames, offset));
+  const clampedMiter = Math.max(miterLimit, 1);
+  const frames = polyline.map((_point, index) => stationFrame(polyline, index, clampedMiter, arcs));
+  const curves = bandOffsets.map((offset) =>
+    polyline.map((point, index) => {
+      const frame = frames[index]!;
+      return { x: point.x + frame[0] * offset, y: point.y, z: point.z + frame[1] * offset };
+    }),
+  );
+
+  const spanCount = polyline.length - 1;
   const bands: BandRibbon[] = [];
   for (let index = 0; index + 1 < curves.length; index += 1) {
     const outer = [...curves[index]!, ...[...curves[index + 1]!].reverse()];
-    bands.push({ bandIndex: index, outer });
+    const ringArcs: (SweptArc | undefined)[] = [];
+    for (let span = 0; span < spanCount; span += 1) ringArcs.push(arcs[span]);
+    ringArcs.push(undefined); // end cap: this band's two offset curves meet at the run's far end.
+    for (let span = spanCount - 1; span >= 0; span -= 1) ringArcs.push(reverseArc(arcs[span]));
+    ringArcs.push(undefined); // start cap: closes the ring back to the run's near end.
+    bands.push({ bandIndex: index, outer, ringArcs });
   }
   return bands;
 }

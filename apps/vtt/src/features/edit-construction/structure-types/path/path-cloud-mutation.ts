@@ -49,6 +49,8 @@ const CURVE_FLATTENING_TOLERANCE = 0.05;
 interface MaterializedSpine {
   readonly graphPatch: ConstructionGraphPatch;
   readonly controlPoints: readonly ConstructionPosition[];
+  /** One shorter than `controlPoints` -- the true circle each surviving span still runs on, `undefined` wherever welding or a crossing broke it. */
+  readonly controlPointArcs: readonly (SweptArc | undefined)[];
 }
 
 interface SpineEdgeCandidate {
@@ -153,23 +155,32 @@ function graphPatchForSpine(
     }
     return cut;
   };
+  const mintedIds = spine.controlPoints.map((_point, index) => spineControlNodeId(spine.corridorId, index));
   const resolved = spine.controlPoints.map((point, index) => {
-    const minted = spineControlNodeId(spine.corridorId, index);
     const node = nearest(point);
     if (node !== undefined) {
       return { nodeId: node.id, position: node.position };
     }
     const edge = nearestEdge(point);
     if (edge === undefined) {
-      return { nodeId: minted, position: point };
+      return { nodeId: mintedIds[index]!, position: point };
     }
     const cut = cutFor(edge, edge.position, edge.t);
     return { nodeId: cut.nodeId, position: cut.position };
   });
+  // Untouched by either weld branch above -- still exactly the point the
+  // fit itself produced, which is the only case an original span's arc is
+  // still trustworthy.
+  const unweldedAt = (index: number): boolean => resolved[index]?.nodeId === mintedIds[index];
 
-  const expanded = resolved.flatMap((point, index) => {
-    if (index === 0) return [point];
+  const expanded: { readonly nodeId: string; readonly position: ConstructionPosition }[] = [resolved[0]!];
+  /** `originalIndexInExpanded[i]` -- where `resolved[i]` landed in `expanded`, for reading `spine.arcs` back off it below. */
+  const originalIndexInExpanded: number[] = [0];
+  /** `spanHadCrossing[i]` -- whether the original span `resolved[i] -> resolved[i + 1]` gained any inserted crossing, which breaks that span's own arc regardless of what the fit said. */
+  const spanHadCrossing: boolean[] = [];
+  for (let index = 1; index < resolved.length; index += 1) {
     const previous = resolved[index - 1]!;
+    const point = resolved[index]!;
     const crossings = edges
       .flatMap((edge) => {
         const intersection = segmentIntersection(previous.position, point.position, edge.from, edge.to);
@@ -184,8 +195,21 @@ function graphPatchForSpine(
       })
       .sort((left, right) => left.t - right.t)
       .filter((crossing, crossingIndex, all) => crossingIndex === 0 || crossing.nodeId !== all[crossingIndex - 1]!.nodeId);
-    return [...crossings, point];
-  });
+    spanHadCrossing.push(crossings.length > 0);
+    for (const crossing of crossings) expanded.push(crossing);
+    originalIndexInExpanded.push(expanded.length);
+    expanded.push(point);
+  }
+
+  const controlPointArcs: (SweptArc | undefined)[] = new Array(Math.max(0, expanded.length - 1)).fill(undefined);
+  for (let span = 0; span + 1 < spine.controlPoints.length; span += 1) {
+    if (spanHadCrossing[span] || !unweldedAt(span) || !unweldedAt(span + 1)) continue;
+    const arc = spine.arcs[span];
+    if (arc === undefined) continue;
+    const from = originalIndexInExpanded[span]!;
+    if (originalIndexInExpanded[span + 1] !== from + 1) continue;
+    controlPointArcs[from] = arc;
+  }
 
   const splitEdges = [...cutsByEdge.entries()].flatMap(([edgeId, cuts]) => {
     const edge = edges.find((candidate) => candidate.edge.edgeId === edgeId)!;
@@ -204,6 +228,7 @@ function graphPatchForSpine(
   const nodes = new Map(expanded.map((point) => [point.nodeId, point.position]));
   return {
     controlPoints: expanded.map((point) => point.position),
+    controlPointArcs,
     graphPatch: {
       nodes: [...nodes].map(([id, position]) => ({ id, position })),
       removedEdgeIds: [...cutsByEdge.keys()],
@@ -593,7 +618,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     fitted.length === 0
       ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
       : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
-  const spine = pathSpineDraftFor(effect, swept.line);
+  const spine = pathSpineDraftFor(effect, swept.line, swept.arcs);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
   const parameters = effect.parameters;
@@ -613,12 +638,41 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     };
     const graphPatch = materialized.graphPatch;
     const touchedCloud = changedSpineCloud(input.graphSnapshot, graphPatch);
+    // Keyed by exact position -- `touchedCloud.chains` walks the very same
+    // node positions `materialized.controlPoints` just minted, so a span
+    // this stroke drew reads its own arc straight back, and a span that
+    // belongs to some other, already-standing corridor (no entry here)
+    // falls back to a straight chord rather than a guess.
+    const spanArcByPosition = new Map<string, SweptArc>();
+    const positionKey = (point: ConstructionPosition): string => `${point.x},${point.z}`;
+    for (let index = 0; index + 1 < materialized.controlPoints.length; index += 1) {
+      const arc = materialized.controlPointArcs[index];
+      if (arc === undefined) continue;
+      const key = `${positionKey(materialized.controlPoints[index]!)}->${positionKey(materialized.controlPoints[index + 1]!)}`;
+      spanArcByPosition.set(key, arc);
+    }
+    const arcsForChain = (controlPoints: readonly ConstructionPosition[]): readonly (SweptArc | undefined)[] => {
+      const arcs: (SweptArc | undefined)[] = [];
+      for (let index = 0; index + 1 < controlPoints.length; index += 1) {
+        const from = controlPoints[index]!;
+        const to = controlPoints[index + 1]!;
+        const forward = spanArcByPosition.get(`${positionKey(from)}->${positionKey(to)}`);
+        if (forward !== undefined) {
+          arcs.push(forward);
+          continue;
+        }
+        const backward = spanArcByPosition.get(`${positionKey(to)}->${positionKey(from)}`);
+        arcs.push(backward === undefined ? undefined : { center: backward.center, clockwise: !backward.clockwise });
+      }
+      return arcs;
+    };
     const regeneratedChains = touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
         ...chain,
         chainId: `${correctedSpine.corridorId}:component-${index}`,
         controlPoints,
+        arcs: arcsForChain(controlPoints),
       }));
 
     // The footprint this stroke alone claims -- full width, one ribbon, no

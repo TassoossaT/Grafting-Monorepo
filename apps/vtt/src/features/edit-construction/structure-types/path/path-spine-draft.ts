@@ -1,5 +1,6 @@
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
 import type { ConstructionPosition } from "@/ports";
+import type { SweptArc } from "../../topology/index.ts";
 
 import { pathCorridorId } from "./path-corridor.ts";
 
@@ -16,6 +17,8 @@ export interface PathSpineDraft {
   readonly controlPoints: readonly ConstructionPosition[];
   readonly bandOffsets: readonly number[];
   readonly miterLimit: number;
+  /** The true circle (if any) each span of `controlPoints` runs on -- {@link referenceLineFrom}'s own reading of the stroke fit, carried rather than re-derived. */
+  readonly arcs: readonly (SweptArc | undefined)[];
 }
 
 /**
@@ -27,6 +30,7 @@ export interface PathSpineDraft {
 export function pathSpineDraftFor(
   effect: PathBrushEffect,
   controlPoints: readonly ConstructionPosition[],
+  arcs: readonly (SweptArc | undefined)[] = [],
 ): PathSpineDraft | undefined {
   if (controlPoints.length < 2) return undefined;
   return Object.freeze({
@@ -34,5 +38,6 @@ export function pathSpineDraftFor(
     controlPoints: Object.freeze([...controlPoints]),
     bandOffsets: Object.freeze(effect.parameters.profile.map((point) => point.lateralOffset)),
     miterLimit: effect.parameters.miterLimit,
+    arcs: Object.freeze([...arcs]),
   });
 }
