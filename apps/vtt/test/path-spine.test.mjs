@@ -200,3 +200,43 @@ test("pathRoleFor recognizes spine control nodes and contour nodes", () => {
   assert.equal(pathRoleFor(dummyTopology, { kind: "vertex", nodeId: "op1:s2:a-1" }), PATH_ROLES.across);
   assert.equal(pathRoleFor(dummyTopology, { kind: "region" }), PATH_ROLES.body);
 });
+
+test("planEdit moves a spine control node when graphSnapshot is provided", () => {
+  const dummyTopology = {
+    surfaceKey: ["@region", "op1#road:band-0:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "contour:op1#road:band-0:0:1", position: { x: 0, y: 0, z: -2.1 } },
+      { id: "contour:op1#road:band-0:0:2", position: { x: 10, y: 0, z: -2.1 } },
+      { id: "contour:op1#road:band-0:0:3", position: { x: 10, y: 0, z: 2.1 } },
+      { id: "contour:op1#road:band-0:0:4", position: { x: 0, y: 0, z: 2.1 } },
+    ],
+    outerLoops: [],
+    holes: [],
+  };
+
+  const graphSnapshot = {
+    nodes: [
+      { id: "spine:op1#road:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "spine:op1#road:1", position: { x: 10, y: 0, z: 0 } },
+    ],
+    edges: [
+      { edgeId: "spine-edge:op1#road:0", startNodeId: "spine:op1#road:0", endNodeId: "spine:op1#road:1" },
+    ],
+  };
+
+  const plan = planEdit(cloudOf(dummyTopology), {
+    surfaceKey: dummyTopology.surfaceKey,
+    target: { kind: "vertex", nodeId: "spine:op1#road:0" },
+    delta: { x: 2, y: 1, z: -3 },
+  }, graphSnapshot);
+
+  assert.equal(plan.kind, "apply");
+  assert.equal(plan.role, PATH_ROLES.spine);
+  assert.equal(plan.ops.length, 1);
+  assert.deepEqual(plan.ops[0], {
+    kind: "move-vertex",
+    nodeId: "spine:op1#road:0",
+    position: { x: 2, y: 1, z: -3 },
+  });
+});

@@ -1,4 +1,4 @@
-import type { RegionEditOutcome } from "@/ports";
+import type { ConstructionGraphSnapshot, RegionEditOutcome } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
@@ -58,11 +58,12 @@ function primaryOps(
   gesture: EditGesture,
   scope: EditScope,
   delta: { readonly x: number; readonly y: number; readonly z: number },
+  graphSnapshot?: ConstructionGraphSnapshot,
 ): readonly AtomicEditOp[] {
   switch (gesture.target.kind) {
     case "vertex": {
       const nodeId = gesture.target.nodeId;
-      const node = cloudNodes(cloud).find((candidate) => candidate.id === nodeId);
+      const node = cloudNodes(cloud, graphSnapshot).find((candidate) => candidate.id === nodeId);
       if (node === undefined) return [];
       return [{ kind: "move-vertex", nodeId: node.id, position: addPosition(node.position, delta) }];
     }
@@ -82,7 +83,7 @@ function primaryOps(
       // Addressing the cloud's distinct nodes instead moves each of them
       // once, whatever number of members happens to reference it, and says
       // in the op list what the gesture actually meant.
-      return cloudNodes(cloud).map((node) => ({
+      return cloudNodes(cloud, graphSnapshot).map((node) => ({
         kind: "move-vertex" as const,
         nodeId: node.id,
         position: addPosition(node.position, delta),
@@ -96,7 +97,11 @@ function primaryOps(
  * returned ops are already constrained -- a height-only role's horizontal
  * movement is gone by this point, never clamped later or inside Rust.
  */
-export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
+export function planEdit(
+  cloud: CloudTopology,
+  gesture: EditGesture,
+  graphSnapshot?: ConstructionGraphSnapshot,
+): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
     return { kind: "deny", role: policy.role, reason: policy.resolve.reason };
@@ -106,7 +111,7 @@ export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
   }
 
   const delta = constrainToAxes(gesture.delta, policy.axes);
-  const primary = primaryOps(cloud, gesture, policy.scope, delta);
+  const primary = primaryOps(cloud, gesture, policy.scope, delta, graphSnapshot);
   if (primary.length === 0) {
     return {
       kind: "deny",

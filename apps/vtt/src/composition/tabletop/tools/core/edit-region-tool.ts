@@ -1,6 +1,20 @@
-import { planEdit, refreshCloudTopology, resolveCloudTopology, cloudNodes } from "@/features/edit-construction";
+import {
+  chainsOf,
+  cloudNodes,
+  isSpineControlNodeId,
+  planEdit,
+  planSpineContour,
+  refreshCloudTopology,
+  resolveCloudTopology,
+  spineGraphFromSnapshot,
+} from "@/features/edit-construction";
 import type { AtomicEditOp, CloudTopology, EditTarget } from "@/features/edit-construction";
-import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ConstructionGraphSnapshot,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
@@ -54,7 +68,10 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample): GrabbedTarget |
 
   if (sample.nodeId !== undefined) {
     const nodeId = sample.nodeId;
-    const topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === nodeId));
+    let topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === nodeId));
+    if (topology === undefined && isSpineControlNodeId(nodeId)) {
+      topology = topologies.find((candidate) => candidate.surfaceType === "path");
+    }
     return topology === undefined
       ? undefined
       : { seedKey: topology.surfaceKey, target: { kind: "vertex", nodeId } };
@@ -104,10 +121,11 @@ function delta(from: ConstructionPosition, to: ConstructionPosition): Constructi
 function restoreOps(
   before: ReadonlyMap<string, ConstructionPosition>,
   after: CloudTopology,
+  graphSnapshot?: ConstructionGraphSnapshot,
 ): { readonly undo: readonly AtomicEditOp[]; readonly redo: readonly AtomicEditOp[] } {
   const undo: AtomicEditOp[] = [];
   const redo: AtomicEditOp[] = [];
-  for (const node of cloudNodes(after)) {
+  for (const node of cloudNodes(after, graphSnapshot)) {
     const original = before.get(node.id);
     if (original === undefined) continue;
     if (
@@ -149,10 +167,11 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       ctx.reportSelection(undefined);
       return;
     }
+    const snapshot = ctx.runtime.getGraphSnapshot();
     active = {
       cloud,
       target: grabbed.target,
-      before: new Map(cloudNodes(cloud).map((node) => [node.id, node.position])),
+      before: new Map(cloudNodes(cloud, snapshot).map((node) => [node.id, node.position])),
       previous: sample.point,
     };
     if (grabbed.target.kind === "vertex") {
@@ -174,11 +193,12 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     const cloud = refreshCloudTopology(ctx.runtime, active.cloud.cloud);
     if (cloud === undefined) return;
 
+    const snapshot = ctx.runtime.getGraphSnapshot();
     const plan = planEdit(cloud, {
       surfaceKey: cloud.cloud.seed,
       target: active.target,
       delta: step,
-    });
+    }, snapshot);
     if (plan.kind === "deny") {
       ctx.reportFeedback({ tone: "error", message: plan.reason });
       active = undefined;
@@ -190,6 +210,38 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       return;
     }
     ctx.runtime.applyRegionEdit(plan.ops, "local", `edit:${plan.role}`);
+
+    if (cloud.cloud.surfaceType === "path") {
+      const graphSnapshot = ctx.runtime.getGraphSnapshot();
+      const spineGraph = spineGraphFromSnapshot(graphSnapshot);
+      const chains = chainsOf(spineGraph);
+      if (chains.length > 0) {
+        const editedChains = chains.map((chain, idx) => ({
+          chainId: `edited-${idx}`,
+          controlPoints: chain.nodes.map((node) => node.position),
+          bandOffsets: [-2.1, 0, 2.1],
+          miterLimit: 4,
+          tolerance: 0.05,
+        }));
+        const standing = ctx.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+        const planned = planSpineContour({
+          tableId: ctx.tableId,
+          operationId: `edit-spine-${ctx.nextSequence()}`,
+          surfaceType: "path",
+          editedChains,
+          standingRegions: standing,
+          existingNodes: standing.flatMap((t) => t.nodes),
+        });
+        if (planned !== undefined) {
+          ctx.runtime.applyPatchReplacement({
+            operationId: planned.patch.regions[0]?.regionId ?? `op-${ctx.nextSequence()}`,
+            sourceSurfaceKeys: planned.consumedSurfaceKeys,
+            patch: planned.patch,
+          }, "local", "edit:path-spine");
+        }
+      }
+    }
+
     // The handle-design notes call out that a drag gives no signal of how
     // much it is about to affect. The plan already knows, so say it.
     ctx.reportFeedback({
@@ -210,7 +262,8 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     if (drag === undefined) return;
     const cloud = refreshCloudTopology(ctx.runtime, drag.cloud.cloud);
     if (cloud === undefined) return;
-    const { undo, redo } = restoreOps(drag.before, cloud);
+    const snapshot = ctx.runtime.getGraphSnapshot();
+    const { undo, redo } = restoreOps(drag.before, cloud, snapshot);
     if (undo.length === 0) return;
     ctx.history.record({ kind: "region-edit", undo, redo });
   },

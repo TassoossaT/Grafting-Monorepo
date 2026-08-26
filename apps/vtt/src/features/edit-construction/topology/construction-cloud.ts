@@ -1,7 +1,10 @@
 import type {
+  ConstructionGraphSnapshot,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
 } from "@/ports";
+
+import { isSpineControlNodeId } from "../structure-types/path/spine-graph/spine-node-id.ts";
 
 /**
  * The cloud: the connected component of same-`type` surfaces reachable from
@@ -135,11 +138,19 @@ export function refreshCloudTopology(
 /** Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded. */
 export function cloudNodes(
   topology: CloudTopology,
+  graphSnapshot?: ConstructionGraphSnapshot,
 ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
   const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
   for (const member of topology.members) {
     for (const node of member.nodes) {
       if (!byId.has(node.id)) byId.set(node.id, node);
+    }
+  }
+  if (graphSnapshot !== undefined && topology.cloud.surfaceType === "path") {
+    for (const node of graphSnapshot.nodes) {
+      if (isSpineControlNodeId(node.id) && !byId.has(node.id)) {
+        byId.set(node.id, node);
+      }
     }
   }
   return [...byId.values()];
