@@ -265,6 +265,18 @@ export interface ApplyRegionOverlayRequest {
 }
 
 /**
+ * Replaces an exact set of application-selected regions with one generated
+ * patch. The executor performs the removal and addition as one all-or-nothing
+ * transaction; it has no product or contour policy of its own.
+ */
+export interface ApplyPatchReplacementRequest {
+  readonly operationId: string;
+  readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
+  readonly patch: ConstructionPatch;
+  readonly graphPatch?: ConstructionGraphPatch;
+}
+
+/**
  * One tick of a continuous cell-painting brush ("Pintar Casa," a
  * wall-brush stroke's closure): the stroke's *whole* current accumulated
  * cell set (not just what changed since the last tick), regenerated and
@@ -317,6 +329,27 @@ export interface SurfaceMeshResult {
 export interface ConstructionNodeSnapshot {
   readonly id: ConstructionNodeId;
   readonly position: ConstructionPosition;
+}
+
+/** One generic graph edge, including edges deliberately not used by a face. */
+export interface ConstructionEdgeSnapshot {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+}
+
+/** The durable generic graph; semantic types decide what its primitives mean. */
+export interface ConstructionGraphSnapshot {
+  readonly nodes: readonly ConstructionNodeSnapshot[];
+  readonly edges: readonly ConstructionEdgeSnapshot[];
+}
+
+/** Generic graph primitives committed with a surface replacement. */
+export interface ConstructionGraphPatch {
+  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /** Generic edges superseded by this patch, e.g. one spine segment split at a new junction. */
+  readonly removedEdgeIds?: readonly ConstructionEdgeId[];
+  readonly edges: readonly { readonly edgeId: ConstructionEdgeId; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }[];
 }
 
 /**
@@ -442,6 +475,8 @@ export interface ConstructionSessionPort {
 
   /** Atomically overlays an application-generated patch onto exact source regions. */
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
+  /** Atomically replaces exact source regions with an application-generated patch. */
+  applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
@@ -469,6 +504,8 @@ export interface ConstructionSessionPort {
    * caller so far).
    */
   getNodePositions(): readonly ConstructionNodeSnapshot[];
+  /** Generic graph primitives, including non-region edges such as a path spine. */
+  getGraphSnapshot(): ConstructionGraphSnapshot;
 
   dispose(): Promise<void>;
 }

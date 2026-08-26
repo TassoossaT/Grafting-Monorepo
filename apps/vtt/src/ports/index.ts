@@ -25,6 +25,7 @@ export { TOOL_GHOST_PREVIEW_CHANNEL } from "./scene-render-port.ts";
 export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
+  ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
   CellCoordinate,
   CloudOutcome,
@@ -41,6 +42,9 @@ export type {
   ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
+  ConstructionEdgeSnapshot,
+  ConstructionGraphSnapshot,
+  ConstructionGraphPatch,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionEdge,

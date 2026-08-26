@@ -10,6 +10,7 @@
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
 import type {
+  ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
   CloudOutcome,
   CloudRequest,
@@ -18,6 +19,7 @@ import type {
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
+  ConstructionGraphSnapshot,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionPatchOutcome,
@@ -75,6 +77,7 @@ function fromWirePosition(position: WirePosition): ConstructionPosition {
 
 interface SnapshotWire {
   readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string }[];
 }
 
 /** The engine tags an arc `"arc"`; its center is an XZ pair, never a 3D normal. */
@@ -335,6 +338,28 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
   }
 
+  applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome {
+    const session = this.#require() as ConstructionSession & {
+      apply_patch_replacement_json(requestJson: string): string;
+    };
+    const patch = {
+      nodes: request.patch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
+      edges: request.patch.edges,
+      regions: request.patch.regions,
+    };
+    const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({
+      operationId: request.operationId,
+      sourceSurfaceKeys: request.sourceSurfaceKeys,
+      graphPatch: request.graphPatch === undefined ? undefined : {
+        nodes: request.graphPatch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
+        removedEdgeIds: request.graphPatch.removedEdgeIds,
+        edges: request.graphPatch.edges,
+      },
+      patch,
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+  }
+
   undoRegionOverlay(operationId: string): void {
     const session = this.#require() as ConstructionSession & { undo_region_overlay(id: string): void };
     session.undo_region_overlay(operationId);
@@ -399,8 +424,15 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   getNodePositions(): readonly ConstructionNodeSnapshot[] {
+    return this.getGraphSnapshot().nodes;
+  }
+
+  getGraphSnapshot(): ConstructionGraphSnapshot {
     const wire = JSON.parse(this.#require().snapshot_json()) as SnapshotWire;
-    return wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) }));
+    return {
+      nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
+      edges: wire.edges.map((edge) => ({ edgeId: edge.id, startNodeId: edge.source, endNodeId: edge.target })),
+    };
   }
 
   async dispose(): Promise<void> {

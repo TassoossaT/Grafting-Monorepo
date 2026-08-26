@@ -1,6 +1,7 @@
 export { createPathBrushEffect } from "./surface-edit-contract.ts";
 export type {
   BrushGestureRegion,
+  BrushElementObservation,
   BrushGestureSample,
   BrushShape,
   ConstructionOperationContext,

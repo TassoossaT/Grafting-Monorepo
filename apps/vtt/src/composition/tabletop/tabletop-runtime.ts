@@ -16,6 +16,7 @@ import {
 } from "../../entities/map/index.ts";
 import type {
   ApplyRegionOverlayRequest,
+  ApplyPatchReplacementRequest,
   CameraControlHandle,
   CameraControlOptions,
   ChangeOrigin,
@@ -24,6 +25,7 @@ import type {
   ConfirmedTokenRenderChange,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
+  ConstructionGraphSnapshot,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -131,8 +133,15 @@ export interface TabletopRuntime {
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  /** Generic graph primitives, including edges not owned by a region boundary. */
+  getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
     request: ApplyRegionOverlayRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionPatchOutcome;
+  applyPatchReplacement(
+    request: ApplyPatchReplacementRequest,
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionPatchOutcome;
@@ -754,6 +763,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getAllRegionTopologies();
   }
 
+  getGraphSnapshot(): ConstructionGraphSnapshot {
+    this.#requireReady("reading the construction graph");
+    return this.#construction.getGraphSnapshot();
+  }
+
   /**
    * The projection/render sync every atomic edit shares. Node positions come
    * from a full re-scan rather than a known target: an edit's cascade (and
@@ -833,6 +847,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionPatchOutcome {
     this.#requireReady("applying a region overlay");
     const outcome = this.#construction.applyRegionOverlay(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  applyPatchReplacement(
+    request: ApplyPatchReplacementRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): ConstructionPatchOutcome {
+    this.#requireReady("replacing generated regions");
+    const outcome = this.#construction.applyPatchReplacement(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
     return outcome;
   }

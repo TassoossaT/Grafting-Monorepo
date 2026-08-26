@@ -19,6 +19,7 @@ use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
 use crate::mesh::{self, region_id_to_wire};
+use crate::patch_replacement;
 use crate::region_editing;
 use crate::region_overlay;
 
@@ -235,6 +236,42 @@ impl ConstructionSession {
         .map_err(to_js_error)?;
         self.track(&dto.outcome);
         serialize(&dto)
+    }
+
+    /// Atomically replaces exact application-selected regions with an
+    /// application-generated patch. Unlike a geometric overlay, this keeps
+    /// no remainder and makes no product decision; it simply publishes the
+    /// replacement iff every target face can be registered.
+    pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request: patch_replacement::ApplyPatchReplacementRequest = parse(request_json)?;
+        let operation_id = request.operation_id.clone();
+        let before = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        let response = patch_replacement::apply_patch_replacement(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            &mut self.known_regions,
+            request,
+        )
+        .map_err(to_js_error)?;
+        let after = ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+        };
+        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
+            operation_id,
+            before,
+            after,
+        });
+        self.region_overlay_redo.clear();
+        serialize(&response)
     }
 
     /// Every closed loop of free boundary, among the nodes the request

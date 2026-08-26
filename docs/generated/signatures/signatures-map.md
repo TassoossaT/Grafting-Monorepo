@@ -54,6 +54,13 @@ pub struct SurfaceMeshRequest
 pub fn all_surface_meshes(
 pub fn surface_mesh(
 
+// src/patch_replacement.rs
+pub struct ApplyPatchReplacementRequest
+pub struct GraphPatchRequest
+pub struct GraphPatchNode
+pub struct GraphPatchEdge
+pub fn apply_patch_replacement(
+
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
 pub enum ContourGeometryDto
@@ -90,7 +97,7 @@ pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue
 pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn unfilled_loops_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -3186,6 +3193,121 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
+// src/composition/tabletop/path/contour/spine-contour/apply-spine-contour.ts
+export function applySpineContour(
+  ctx: ToolContext,
+  operationId: string,
+  result: PlanSpineContourResult,
+  graphPatch?: ConstructionGraphPatch,
+  ): ConstructionPatchOutcome {
+  return ctx.runtime.applyPatchReplacement(
+  {
+
+// src/composition/tabletop/path/contour/spine-contour/catmull-rom.ts
+export function sampleCatmullRom(
+  controlPoints: readonly ConstructionPosition[],
+  tolerance: number,
+  ): readonly ConstructionPosition[] {
+  if (controlPoints.length < 2) return controlPoints;
+  const last = controlPoints.length - 1;
+  const clampedTolerance = Math.max(tolerance, 1e-6);
+
+// src/composition/tabletop/path/contour/spine-contour/contour-patch.ts
+export interface ExistingNode {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export interface ContourPatchResult {
+  readonly patch: ConstructionPatch;
+  readonly regionIds: readonly string[];
+  }
+export function buildContourPatch(
+  tableId: string,
+  operationId: string,
+  surfaceType: string,
+  bandIndex: number,
+  shapes: MultiPolygon,
+  heightSamples: readonly ConstructionPosition[],
+  existingNodes: readonly ExistingNode[],
+
+// src/composition/tabletop/path/contour/spine-contour/index.ts
+export type { ExistingNode } from "./contour-patch.ts";
+export type { BandRibbon } from "./offset-bands.ts";
+export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
+
+// src/composition/tabletop/path/contour/spine-contour/offset-bands.ts
+export interface BandRibbon {
+  readonly bandIndex: number;
+  /** Closed ring in the sweep's own winding, first curve forward then the next reversed. */
+  readonly outer: readonly ConstructionPosition[];
+  }
+export function offsetBands(
+  polyline: readonly ConstructionPosition[],
+  bandOffsets: readonly number[],
+  miterLimit: number,
+  ): readonly BandRibbon[] {
+  if (polyline.length < 2 || bandOffsets.length < 2) return [];
+  const frames = stationFrames(polyline, Math.max(miterLimit, 1));
+
+// src/composition/tabletop/path/contour/spine-contour/plan-spine-contour.ts
+export interface SpineChainInput {
+  readonly chainId: string;
+  readonly controlPoints: readonly ConstructionPosition[];
+  /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
+  readonly bandOffsets: readonly number[];
+  readonly miterLimit: number;
+  /** Curve flattening tolerance, world units (XZ). */
+  readonly tolerance: number;
+export interface PlanSpineContourInput {
+  readonly tableId: string;
+  /** Scopes every node/region id this call mints -- one edit, one operation. */
+  readonly operationId: string;
+  readonly surfaceType: string;
+  /**
+  * Every chain of the touched spine cloud -- not just the one a stroke or a
+  * control-node drag directly changed, but every chain the caller's own
+export interface PlanSpineContourResult {
+  readonly patch: ConstructionPatch;
+  /**
+  * Every one of `input.standingRegions`, unconditionally -- their faces are
+  * superseded by the freshly unioned ones in `patch.regions`, even where
+  * most of their own nodes were welded back unchanged. The caller replaces
+  * them in one atomic transaction with the unioned patch; a refused target
+  * can never leave the standing faces deleted.
+export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
+  if (input.editedChains.length === 0) return undefined;
+
+  const ribbonsByBand = new Map<number, BandRibbon[]>();
+
+// src/composition/tabletop/path/contour/spine-contour/union-bands.ts
+export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
+  const polygons: Polygon[] = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
+export function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number {
+  let bestY = samples[0]?.y ?? 0;
+  let bestDistanceSq = Infinity;
+  for (const sample of samples) {
+  const dx = sample.x - x;
+  const dz = sample.z - z;
+  const distanceSq = dx * dx + dz * dz;
+  if (distanceSq < bestDistanceSq) {
+
+// src/composition/tabletop/path/path-effect-executor.ts
+export const PATH_COLOR = 0xc084fc;
+export function referenceLineFrom(
+  fitted: readonly FittedEdge[],
+  stroke: readonly ConstructionPosition[],
+  ridesTerrain: boolean,
+  ): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
+  const track = groundTrack(fitted);
+export function applyPathBrushEffect(
+  ctx: ToolContext,
+  effect: PathBrushEffect,
+  tolerance: number,
+  ): void {
+  const stroke = effect.brushRegion.samples;
+  if (stroke.length === 0) return;
+  const operationId = effect.operationId;
+
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 export interface TabletopSnapshot {
@@ -3240,12 +3362,12 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
 // src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
   readonly samples: readonly ConstructionPosition[];
+  /** Raw construction hits seen during the sweep; the domain assigns meaning. */
+  readonly observations: readonly PointerSample[];
   /**
   * The brush footprint, already widened to hold the product -- see
   * {@link expandedToHold}. This is what the ghost is drawn from, which is
   * what makes the ghost an honest envelope rather than a decoration.
-  */
-  readonly shape: BrushShape;
 export type BrushableToolId = "path-brush" | "wall-brush";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
@@ -3551,111 +3673,6 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   // what is left over may be spent straightening the stroke.
   halfWidth: pathHalfWidth,
 
-
-// src/composition/tabletop/tools/paths/path-junction.ts
-export interface JunctionWedges {
-  /** Faces of the standing run that the mouth opens into, and so must go. */
-  readonly removed: readonly ConstructionSurfaceKey[];
-  /** Their replacement, either side of the arriving road. */
-  readonly patch: ConstructionPatch;
-  }
-export function junctionWedges(
-  tableId: string,
-  operationId: string,
-  arrivingCorridorId: string,
-  mouth: PathMouth,
-  /** The junction node on the standing spine, which both wedges pivot on. */
-  junction: { readonly nodeId: ConstructionNodeId; readonly station: number },
-  ): JunctionWedges | undefined {
-export function junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[] {
-  const seen = new Set<string>();
-
-// src/composition/tabletop/tools/paths/path-patch.ts
-export interface PathPatchFormation {
-  readonly patch: ConstructionPatch;
-  readonly outline: readonly (readonly [number, number])[];
-  readonly boundary: readonly ConstructionOrientedEdgeUse[];
-  }
-export function pathPatch(
-  tableId: string,
-  corridorId: string,
-  surfaceType: string,
-  plan: ConstructionSweepPlan,
-  profileLength: number,
-  spineSlot: number,
-  /**
-
-// src/composition/tabletop/tools/paths/path-shared.ts
-export const PATH_COLOR = 0xc084fc;
-export function referenceLineFrom(
-  fitted: readonly FittedEdge[],
-  stroke: readonly ConstructionPosition[],
-  ridesTerrain: boolean,
-  ): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
-  const track = groundTrack(fitted);
-export interface SpineJoin {
-  readonly run: PathRun;
-  /** Index into the committed reference line where the two meet. */
-  readonly at: number;
-  readonly nodeId: ConstructionNodeId;
-  readonly position: ConstructionPosition;
-  /** Which station of the standing run that was. */
-  readonly standingIndex: number;
-export function junctionsWithStandingSpines(
-  ctx: ToolContext,
-  line: readonly ConstructionPosition[],
-  /**
-  * How far the run being drawn reaches from its own spine. Added to the
-  * standing run's reach, so two roads join when their **surfaces** touch
-  * rather than when one centre line reaches the other. Nobody draws up to
-  * another road's centre line -- they stop when the two look like they meet,
-export function mitreTerminalRibs(
-  plan: ConstructionSweepPlan,
-  profileLength: number,
-  spineSlot: number,
-  joins: readonly SpineJoin[],
-  /** The curve each span of this run follows, so a curved end mitres on its
-  * true tangent rather than on the chord to its neighbouring station. */
-  arcs: readonly (SweptArc | undefined)[] = [],
-export interface PathMouthSide {
-  /** This run's own slot, so its corner node can be named. */
-  readonly across: number;
-  readonly position: ConstructionPosition;
-  /**
-  * Roughly where the corner falls on the standing run's station scale.
-  *
-  * For ordering the two corners along the rim, and nothing else. Anything
-export interface PathMouth {
-  readonly run: PathRun;
-  /** The slot of the standing rim the mouth opens through. */
-  readonly through: number;
-  /** This run's end station, the one whose rib became the mouth. */
-  readonly station: number;
-  readonly sides: readonly PathMouthSide[];
-  }
-export function pathMouthsInto(
-  plan: ConstructionSweepPlan,
-  profileLength: number,
-  spineSlot: number,
-  joined: readonly PathRun[],
-  ): {
-  readonly vertices: readonly ConstructionPosition[];
-  readonly mouths: readonly PathMouth[];
-export function joinedCoveredKeys(
-  ctx: ToolContext,
-  outline: readonly (readonly [number, number])[],
-  covered: readonly ConstructionCoveredRegion[],
-  joinedCorridors: ReadonlySet<string>,
-  ): ReadonlySet<string> {
-  const joined = new Set<string>();
-export function commitPathContour(
-  ctx: ToolContext,
-  stroke: readonly ConstructionPosition[],
-  brushShape: BrushShape,
-  tolerance: number,
-  params: PathBrushParams,
-  domain: string,
-  ): void {
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -4157,84 +4174,7 @@ export function applyTokenProjectionDelta(
   if (delta.type === "token-removed") {
   const previous = current.byId.get(delta.tokenId);
 
-// src/features/edit-construction/atomic-edit.ts
-export type AtomicEditOp =
-export type AtomicEditOpKind = AtomicEditOp["kind"];
-export type EditTarget =
-export interface EditGesture {
-  readonly surfaceKey: ConstructionSurfaceKey;
-  readonly target: EditTarget;
-  /** World-space movement the pointer accumulated over the drag. */
-  readonly delta: ConstructionPosition;
-  }
-export const ZERO_DELTA: ConstructionPosition = Object.freeze({ x: 0, y: 0, z: 0 });
-export function addPosition(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition {
-  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
-export function scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition {
-  return { x: position.x * factor, y: position.y * factor, z: position.z * factor };
-export type EditAxis = "x" | "y" | "z";
-export function constrainToAxes(
-  delta: ConstructionPosition,
-  axes: readonly EditAxis[],
-  ): ConstructionPosition {
-  return {
-  x: axes.includes("x") ? delta.x : 0,
-  y: axes.includes("y") ? delta.y : 0,
-  z: axes.includes("z") ? delta.z : 0,
-export const ALL_AXES: readonly EditAxis[] = Object.freeze(["x", "y", "z"] as const);
-export const HORIZONTAL_AXES: readonly EditAxis[] = Object.freeze(["x", "z"] as const);
-export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
-
-// src/features/edit-construction/brush-shape-params.ts
-export function resolveBrushShape(params: BrushShapeParams): BrushShape {
-  const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
-  if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
-
-// src/features/edit-construction/construction-cloud.ts
-export interface ConstructionCloud {
-  /** The one type every member shares; a cloud never spans two. */
-  readonly surfaceType: string;
-  /** The member the gesture actually landed on. */
-  readonly seed: ConstructionSurfaceKey;
-  /** Every member, the seed included, in the engine's own stable order. */
-  readonly members: readonly ConstructionSurfaceKey[];
-  }
-export interface CloudSource {
-  cloudFor(request: {
-  readonly seed: ConstructionSurfaceKey;
-  readonly surfaceType: string;
-  }): { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
-export interface CloudTopology {
-  readonly cloud: ConstructionCloud;
-  /**
-  * The member the gesture landed on. Role resolution reads this one and
-  * only this one: a corner is a corner of the face it belongs to, and
-  * asking the whole cloud what a single grabbed node means would have no
-  * answer.
-  */
-export function resolveCloud(
-  source: CloudSource,
-  seed: ConstructionSurfaceKey,
-  ): ConstructionCloud | undefined {
-  const topology = source.getRegionTopology(seed);
-export function resolveCloudTopology(
-  source: CloudSource,
-  seed: ConstructionSurfaceKey,
-  ): CloudTopology | undefined {
-  const cloud = resolveCloud(source, seed);
-export function refreshCloudTopology(
-  source: CloudSource,
-  cloud: ConstructionCloud,
-  ): CloudTopology | undefined {
-  const members = cloud.members
-  .map((key) => source.getRegionTopology(key))
-  .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-export function cloudNodes(
-  topology: CloudTopology,
-  ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
-  const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
-
-// src/features/edit-construction/edit-history.ts
+// src/features/edit-construction/history/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
   readonly undo: readonly AtomicEditOp[];
@@ -4266,7 +4206,110 @@ export function createEditHistoryStack(): EditHistoryStack {
   undoStack = [...undoStack, entry];
   redoStack = [];
 
-// src/features/edit-construction/edit-orchestrator.ts
+// src/features/edit-construction/history/index.ts
+export type {
+  ConstructionHistoryEntry,
+  EditHistoryStack,
+  EditHistoryState,
+  PathBrushHistoryEntry,
+  RegionEditHistoryEntry,
+  } from "./edit-history.ts";
+
+
+// src/features/edit-construction/modes/index.ts
+export type {
+  BrushGestureRegion,
+  BrushElementObservation,
+  BrushGestureSample,
+  BrushShape,
+  ConstructionOperationContext,
+  PathBrushEffect,
+  PathFormationParameters,
+
+// src/features/edit-construction/modes/surface-edit-contract.ts
+export interface RevisionPrecondition {
+  readonly scope: string;
+  readonly revision: number;
+  }
+export interface ConstructionOperationContext {
+  readonly operationId: string;
+  readonly tableId: string;
+  readonly initiatedBy: string;
+  }
+export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
+export interface BrushGestureSample {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  }
+export type BrushShape =
+export interface BrushGestureRegion {
+  readonly samples: readonly BrushGestureSample[];
+  }
+export interface BrushElementObservation {
+  readonly point: ConstructionPosition;
+  readonly nodeId?: string;
+  readonly surfaceRef?: string;
+  }
+export type PathFormationParameters = PathFormationRecipe;
+export interface SurfaceEditModeDefinition {
+  readonly id: string;
+  readonly sourceSurfaceType: string;
+  readonly label: string;
+  readonly supportedTargetScopes: readonly SurfaceEditTargetScope[];
+  readonly effectKinds: readonly string[];
+  readonly transformerCapability: string;
+  readonly scopePolicy: "local" | "explicit-global";
+export interface PathBrushEffect extends ConstructionOperationContext {
+  readonly kind: "surface.path-brush@1";
+  readonly targetScope: "brush-region";
+  readonly targetType: "path";
+  readonly brushShape: BrushShape;
+  readonly brushRegion: BrushGestureRegion;
+  /** Raw brush observations, never pre-interpreted as path topology. */
+  readonly observedElements: readonly BrushElementObservation[];
+export function createPathBrushEffect(
+  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "observedElements"> &
+  Partial<Pick<PathBrushEffect, "observedElements">>,
+  context: ConstructionOperationContext,
+  expected: readonly RevisionPrecondition[] = [],
+  ): PathBrushEffect {
+  if (payload.brushRegion.samples.length === 0) throw new Error("brushRegion.samples must not be empty");
+
+// src/features/edit-construction/modes/surface-edit-mode-registry.ts
+export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
+export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
+  return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
+
+// src/features/edit-construction/orchestration/atomic-edit.ts
+export type AtomicEditOp =
+export type AtomicEditOpKind = AtomicEditOp["kind"];
+export type EditTarget =
+export interface EditGesture {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly target: EditTarget;
+  /** World-space movement the pointer accumulated over the drag. */
+  readonly delta: ConstructionPosition;
+  }
+export const ZERO_DELTA: ConstructionPosition = Object.freeze({ x: 0, y: 0, z: 0 });
+export function addPosition(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+export function scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition {
+  return { x: position.x * factor, y: position.y * factor, z: position.z * factor };
+export type EditAxis = "x" | "y" | "z";
+export function constrainToAxes(
+  delta: ConstructionPosition,
+  axes: readonly EditAxis[],
+  ): ConstructionPosition {
+  return {
+  x: axes.includes("x") ? delta.x : 0,
+  y: axes.includes("y") ? delta.y : 0,
+  z: axes.includes("z") ? delta.z : 0,
+export const ALL_AXES: readonly EditAxis[] = Object.freeze(["x", "y", "z"] as const);
+export const HORIZONTAL_AXES: readonly EditAxis[] = Object.freeze(["x", "z"] as const);
+export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
+
+// src/features/edit-construction/orchestration/edit-orchestrator.ts
 export type EditPlan =
 export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
@@ -4304,17 +4347,128 @@ export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutco
   EMPTY_OUTCOME,
   );
 
-// src/features/edit-construction/index.ts
-export type { ConstructionHistoryEntry, EditHistoryStack, EditHistoryState, PathBrushHistoryEntry, RegionEditHistoryEntry } from "./edit-history.ts";
+// src/features/edit-construction/orchestration/index.ts
 export type {
-  BrushShapeKind,
-  BrushShapeParams,
-  ConstructionToolId,
-  InteriorGenerateParams,
-  PathKind,
-  PathBrushParams,
-  NoToolParams,
-export type { PerimeterLoop } from "./surface-perimeter.ts";
+  AtomicEditOp,
+  AtomicEditOpKind,
+  EditAxis,
+  EditGesture,
+  EditTarget,
+  } from "./atomic-edit.ts";
+
+export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+
+// src/features/edit-construction/structure-types/creation-interaction.ts
+export type CreationInteraction =
+export type CreationInteractionKind = CreationInteraction["kind"];
+export const IGNORE: CreationInteraction = Object.freeze({ kind: "ignore" });
+export const CUT: CreationInteraction = Object.freeze({ kind: "cut" });
+export const RESTACK: CreationInteraction = Object.freeze({ kind: "restack" });
+export function forbid(reason: string): CreationInteraction {
+  return Object.freeze({ kind: "forbid", reason });
+
+// src/features/edit-construction/structure-types/index.ts
+export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
+export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
+  return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
+  const definition = structureTypeFor(topology.surfaceType);
+export function resolveCreationInteraction(
+  paintedType: string,
+  coveredType: string,
+  paintedSubtype?: string,
+  ): CreationInteraction {
+  const definition = structureTypeFor(paintedType);
+export interface ResolvedCoverage {
+  readonly covered: ConstructionCoveredRegion;
+  readonly interaction: CreationInteraction;
+  }
+export function resolveCoverage(
+  paintedType: string,
+  covered: readonly ConstructionCoveredRegion[],
+  paintedSubtype?: string,
+  ): readonly ResolvedCoverage[] {
+  return covered.map((entry) => ({
+  covered: entry,
+  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
+export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
+  for (const entry of resolved) {
+  if (entry.interaction.kind === "forbid") return entry.interaction.reason;
+  }
+
+// src/features/edit-construction/structure-types/organic/organic-structure.ts
+export const ORGANIC_ROLES = {
+  boundaryVertex: "organic-boundary-vertex",
+  boundaryEdge: "organic-boundary-edge",
+  body: "organic-body",
+  } as const;
+
+export function organicRoleFor(_topology: unknown, target: EditTarget): EditRole {
+  if (target.kind === "vertex") return ORGANIC_ROLES.boundaryVertex;
+  if (target.kind === "edge") return ORGANIC_ROLES.boundaryEdge;
+  return ORGANIC_ROLES.body;
+  }
+export function organicPolicyFactory(structural: "regenerate" | "deny") {
+  return function organicPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  case ORGANIC_ROLES.boundaryVertex:
+  case ORGANIC_ROLES.boundaryEdge:
+  return allowed(role, HORIZONTAL_AXES, "surface");
+export function organicStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  structural: "regenerate" | "deny",
+  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
+  ): StructureTypeDefinition {
+  return Object.freeze({
+export function terrainInteractionOver(coveredType: string): CreationInteraction {
+  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
+  return forbid(`terrain cannot be created above "${coveredType}"`);
+export function pathInteractionOver(
+  _coveredType: string,
+  paintedSubtype?: string,
+  ): CreationInteraction {
+  return paintedSubtype === "bridge" ? IGNORE : CUT;
+  }
+
+// src/features/edit-construction/structure-types/panel/panel-structure.ts
+export const PANEL_ROLES = {
+  bottomCorner: "panel-bottom-corner",
+  topCorner: "panel-top-corner",
+  bottomEdge: "panel-bottom-edge",
+  topEdge: "panel-top-edge",
+  post: "panel-post",
+  body: "panel-body",
+  unknown: "panel-unknown",
+export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+  if (target.kind === "region") return PANEL_ROLES.body;
+  if (target.kind === "vertex") {
+  return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
+  }
+export function panelPolicyFor(role: EditRole): RolePolicy {
+  switch (role) {
+  case PANEL_ROLES.bottomCorner:
+  // One corner of one panel. Whatever else references the node moves
+  // with it because the graph says so, not because the gesture reached
+  // for it.
+  return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
+export function panelInteractionOver(_coveredType: string): CreationInteraction {
+  return IGNORE;
+  }
+export function panelStructureType(
+  surfaceType: string,
+  label: string,
+  creation: string,
+  ): StructureTypeDefinition {
+  return Object.freeze({
+  surfaceType,
+  label,
+
+// src/features/edit-construction/structure-types/path/index.ts
+export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
+export type { PathSpineDraft } from "./path-spine-draft.ts";
+export type { StationNodeAddress } from "./station-node-id.ts";
 export type {
   PathRun,
   PathRunBand,
@@ -4322,30 +4476,9 @@ export type {
   PathRunNode,
   PathRunRib,
   } from "./path-cloud.ts";
-  export {
-export type { StationNodeAddress } from "./station-node-id.ts";
-export type {
-  BrushGestureRegion,
-  ConstructionOperationContext,
-  RevisionPrecondition,
-  BrushGestureSample,
-  BrushShape,
-  PathBrushEffect,
-  PathFormationParameters,
-export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
-export type { AtomicEditOp, AtomicEditOpKind, EditAxis, EditGesture, EditTarget } from "./atomic-edit.ts";
-export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
-export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
-export type {
-  CascadeContext,
-  CreationInteraction,
-  CreationInteractionKind,
-  EditResolution,
-  EditRole,
-  EditScope,
-  ResolvedCoverage,
 
-// src/features/edit-construction/path-cloud.ts
+
+// src/features/edit-construction/structure-types/path/path-cloud.ts
 export interface PathRunNode {
   readonly nodeId: string;
   readonly station: number;
@@ -4397,14 +4530,14 @@ export function pathRunFor(
 export function pathCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
   return perimeterOf(cloud.members);
 
-// src/features/edit-construction/path-corridor.ts
+// src/features/edit-construction/structure-types/path/path-corridor.ts
 export function pathCorridorId(operationId: string, kind: PathKind): string {
   return `${operationId}${MARKER}${kind}`;
   }
 export function pathSubtypeOf(corridorId: string): PathKind | undefined {
   const at = corridorId.lastIndexOf(MARKER);
 
-// src/features/edit-construction/path-recipe.ts
+// src/features/edit-construction/structure-types/path/path-recipe.ts
 export const PATH_SPINE_OFFSET = 0;
 export interface PathProfilePoint {
   readonly lateralOffset: number;
@@ -4437,148 +4570,23 @@ export function pathHalfWidth(params: PathBrushParams): number {
   0,
   );
 
-// src/features/edit-construction/station-node-id.ts
-export interface StationNodeAddress {
-  /** The operation that minted it -- the corridor this node belongs to. */
-  readonly operationId: string;
-  /** Which cross-section along the line. */
-  readonly station: number;
-  /** Signed slot across the cross-section; `0` is the spine. */
-  readonly across: number;
+// src/features/edit-construction/structure-types/path/path-spine-draft.ts
+export interface PathSpineDraft {
+  readonly corridorId: string;
+  readonly controlPoints: readonly ConstructionPosition[];
+  readonly bandOffsets: readonly number[];
+  readonly miterLimit: number;
   }
-export function stationNodeId(operationId: string, station: number, across: number): string {
-  return `${operationId}:s${station}:a${across}`;
-  }
-export function parseStationNodeId(id: string): StationNodeAddress | undefined {
-  const match = PATTERN.exec(id);
-export function isSpineNode(id: string): boolean {
-  return parseStationNodeId(id)?.across === 0;
-  }
-export function followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean {
-  if (candidate.operationId !== moved.operationId) return false;
-  if (candidate.station !== moved.station) return false;
-  if (candidate.across === moved.across) return false;
-  if (moved.across === 0) return true;
-  return Math.sign(candidate.across) === Math.sign(moved.across)
-  && Math.abs(candidate.across) > Math.abs(moved.across);
-
-// src/features/edit-construction/structure-types/creation-interaction.ts
-export type CreationInteraction =
-export type CreationInteractionKind = CreationInteraction["kind"];
-export const IGNORE: CreationInteraction = Object.freeze({ kind: "ignore" });
-export const CUT: CreationInteraction = Object.freeze({ kind: "cut" });
-export const RESTACK: CreationInteraction = Object.freeze({ kind: "restack" });
-export function forbid(reason: string): CreationInteraction {
-  return Object.freeze({ kind: "forbid", reason });
-
-// src/features/edit-construction/structure-types/index.ts
-export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
-export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
-  return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
-export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
-  const definition = structureTypeFor(topology.surfaceType);
-export function resolveCreationInteraction(
-  paintedType: string,
-  coveredType: string,
-  paintedSubtype?: string,
-  ): CreationInteraction {
-  const definition = structureTypeFor(paintedType);
-export interface ResolvedCoverage {
-  readonly covered: ConstructionCoveredRegion;
-  readonly interaction: CreationInteraction;
-  }
-export function resolveCoverage(
-  paintedType: string,
-  covered: readonly ConstructionCoveredRegion[],
-  paintedSubtype?: string,
-  ): readonly ResolvedCoverage[] {
-  return covered.map((entry) => ({
-  covered: entry,
-  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
-export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
-  for (const entry of resolved) {
-  if (entry.interaction.kind === "forbid") return entry.interaction.reason;
-  }
-export type { CreationInteraction, CreationInteractionKind } from "./creation-interaction.ts";
-export type {
-  CascadeContext,
-  EditResolution,
-  EditRole,
-  EditScope,
-  RolePolicy,
-  StructureTypeDefinition,
-  } from "./structure-type.ts";
-
-// src/features/edit-construction/structure-types/organic-structure.ts
-export const ORGANIC_ROLES = {
-  boundaryVertex: "organic-boundary-vertex",
-  boundaryEdge: "organic-boundary-edge",
-  body: "organic-body",
-  } as const;
-
-export function organicRoleFor(_topology: unknown, target: EditTarget): EditRole {
-  if (target.kind === "vertex") return ORGANIC_ROLES.boundaryVertex;
-  if (target.kind === "edge") return ORGANIC_ROLES.boundaryEdge;
-  return ORGANIC_ROLES.body;
-  }
-export function organicPolicyFactory(structural: "regenerate" | "deny") {
-  return function organicPolicyFor(role: EditRole): RolePolicy {
-  switch (role) {
-  case ORGANIC_ROLES.boundaryVertex:
-  case ORGANIC_ROLES.boundaryEdge:
-  return allowed(role, HORIZONTAL_AXES, "surface");
-export function organicStructureType(
-  surfaceType: string,
-  label: string,
-  creation: string,
-  structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
-  ): StructureTypeDefinition {
+export function pathSpineDraftFor(
+  effect: PathBrushEffect,
+  controlPoints: readonly ConstructionPosition[],
+  ): PathSpineDraft | undefined {
+  if (controlPoints.length < 2) return undefined;
   return Object.freeze({
-export function terrainInteractionOver(coveredType: string): CreationInteraction {
-  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
-  return forbid(`terrain cannot be created above "${coveredType}"`);
-export function pathInteractionOver(
-  _coveredType: string,
-  paintedSubtype?: string,
-  ): CreationInteraction {
-  return paintedSubtype === "bridge" ? IGNORE : CUT;
-  }
+  corridorId: pathCorridorId(effect.operationId, effect.parameters.kind),
+  controlPoints: Object.freeze([...controlPoints]),
 
-// src/features/edit-construction/structure-types/panel-structure.ts
-export const PANEL_ROLES = {
-  bottomCorner: "panel-bottom-corner",
-  topCorner: "panel-top-corner",
-  bottomEdge: "panel-bottom-edge",
-  topEdge: "panel-top-edge",
-  post: "panel-post",
-  body: "panel-body",
-  unknown: "panel-unknown",
-export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
-  if (target.kind === "region") return PANEL_ROLES.body;
-  if (target.kind === "vertex") {
-  return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
-  }
-export function panelPolicyFor(role: EditRole): RolePolicy {
-  switch (role) {
-  case PANEL_ROLES.bottomCorner:
-  // One corner of one panel. Whatever else references the node moves
-  // with it because the graph says so, not because the gesture reached
-  // for it.
-  return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
-export function panelInteractionOver(_coveredType: string): CreationInteraction {
-  return IGNORE;
-  }
-export function panelStructureType(
-  surfaceType: string,
-  label: string,
-  creation: string,
-  ): StructureTypeDefinition {
-  return Object.freeze({
-  surfaceType,
-  label,
-
-// src/features/edit-construction/structure-types/path-structure.ts
+// src/features/edit-construction/structure-types/path/path-structure.ts
 export const PATH_ROLES = {
   spine: "path-spine",
   across: "path-across",
@@ -4606,6 +4614,91 @@ export function pathStructureType(
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
+
+// src/features/edit-construction/structure-types/path/spine-graph/index.ts
+export type { SpineChain } from "./spine-chains.ts";
+export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
+export type { SpineControlNodeAddress } from "./spine-node-id.ts";
+
+// src/features/edit-construction/structure-types/path/spine-graph/spine-chains.ts
+export interface SpineChain {
+  readonly nodes: readonly SpineControlNode[];
+  }
+export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
+  const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]));
+
+// src/features/edit-construction/structure-types/path/spine-graph/spine-edit.ts
+export function moveSpineControlNode(
+  node: SpineControlNode,
+  delta: ConstructionPosition,
+  ): AtomicEditOp {
+  return { kind: "move-vertex", nodeId: node.nodeId, position: addPosition(node.position, delta) };
+
+// src/features/edit-construction/structure-types/path/spine-graph/spine-graph.ts
+export interface SpineControlNode {
+  readonly nodeId: string;
+  readonly position: ConstructionPosition;
+  }
+export interface SpineCurveEdge {
+  readonly edgeId: string;
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+  }
+export interface SpineGraph {
+  readonly nodes: readonly SpineControlNode[];
+  readonly edges: readonly SpineCurveEdge[];
+  }
+export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph {
+  const nodes = snapshot.nodes
+  .filter((node) => isSpineControlNodeId(node.id))
+  .map((node) => ({ nodeId: node.id, position: node.position }));
+export function spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph {
+  const nodes = new Map<string, SpineControlNode>();
+export function spineGraphOf(cloud: CloudTopology): SpineGraph {
+  return spineGraphIn(cloud.members);
+export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[] {
+  const found = new Set<string>();
+
+// src/features/edit-construction/structure-types/path/spine-graph/spine-node-id.ts
+export interface SpineControlNodeAddress {
+  /** The edit that minted this node. Provenance only, never ownership. */
+  readonly operationId: string;
+  /** Which point of that edit this was. */
+  readonly index: number;
+  }
+export function spineControlNodeId(operationId: string, index: number): string {
+  return `${MARKER}:${operationId}:${index}`;
+  }
+export function parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined {
+  const match = PATTERN.exec(id);
+export function isSpineControlNodeId(id: string): boolean {
+  return parseSpineControlNodeId(id) !== undefined;
+  }
+
+// src/features/edit-construction/structure-types/path/station-node-id.ts
+export interface StationNodeAddress {
+  /** The operation that minted it -- the corridor this node belongs to. */
+  readonly operationId: string;
+  /** Which cross-section along the line. */
+  readonly station: number;
+  /** Signed slot across the cross-section; `0` is the spine. */
+  readonly across: number;
+  }
+export function stationNodeId(operationId: string, station: number, across: number): string {
+  return `${operationId}:s${station}:a${across}`;
+  }
+export function parseStationNodeId(id: string): StationNodeAddress | undefined {
+  const match = PATTERN.exec(id);
+export function isSpineNode(id: string): boolean {
+  return parseStationNodeId(id)?.across === 0;
+  }
+export function followsOutward(moved: StationNodeAddress, candidate: StationNodeAddress): boolean {
+  if (candidate.operationId !== moved.operationId) return false;
+  if (candidate.station !== moved.station) return false;
+  if (candidate.across === moved.across) return false;
+  if (moved.across === 0) return true;
+  return Math.sign(candidate.across) === Math.sign(moved.across)
+  && Math.abs(candidate.across) > Math.abs(moved.across);
 
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
@@ -4645,74 +4738,22 @@ export function allowed(
   return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 export type { EditGesture };
 
-// src/features/edit-construction/surface-edit-contract.ts
-export interface RevisionPrecondition {
-  readonly scope: string;
-  readonly revision: number;
-  }
-export interface ConstructionOperationContext {
-  readonly operationId: string;
-  readonly tableId: string;
-  readonly initiatedBy: string;
-  }
-export type SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud";
-export interface BrushGestureSample {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-  }
-export type BrushShape =
-export interface BrushGestureRegion {
-  readonly samples: readonly BrushGestureSample[];
-  }
-export type PathFormationParameters = PathFormationRecipe;
-export interface SurfaceEditModeDefinition {
-  readonly id: string;
-  readonly sourceSurfaceType: string;
-  readonly label: string;
-  readonly supportedTargetScopes: readonly SurfaceEditTargetScope[];
-  readonly effectKinds: readonly string[];
-  readonly transformerCapability: string;
-  readonly scopePolicy: "local" | "explicit-global";
-export interface PathBrushEffect extends ConstructionOperationContext {
-  readonly kind: "surface.path-brush@1";
-  readonly targetScope: "brush-region";
-  readonly targetType: "path";
-  readonly brushShape: BrushShape;
-  readonly brushRegion: BrushGestureRegion;
-  readonly parameters: PathFormationParameters;
-  readonly expected: readonly RevisionPrecondition[];
-export function createPathBrushEffect(
-  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">,
-  context: ConstructionOperationContext,
-  expected: readonly RevisionPrecondition[] = [],
-  ): PathBrushEffect {
-  if (payload.brushRegion.samples.length === 0) throw new Error("brushRegion.samples must not be empty");
+// src/features/edit-construction/tools/brush-shape-params.ts
+export function resolveBrushShape(params: BrushShapeParams): BrushShape {
+  const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
+  if (params.shape === "square") return { kind: "square", size: params.radius * 2, rotationRadians };
 
-// src/features/edit-construction/surface-edit-mode-registry.ts
-export const SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[] = Object.freeze([
-export function surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined {
-  return MODE_BY_SOURCE_TYPE.get(sourceSurfaceType);
+// src/features/edit-construction/tools/index.ts
+export type {
+  BrushShapeKind,
+  BrushShapeParams,
+  ConstructionToolId,
+  InteriorGenerateParams,
+  NoToolParams,
+  OpeningParams,
+  PathBrushParams,
 
-// src/features/edit-construction/surface-perimeter.ts
-export interface PerimeterLoop {
-  /** In walk order; one per step. */
-  readonly edgeIds: readonly string[];
-  /** In walk order, `nodeIds[i]` starting `edgeIds[i]`. */
-  readonly nodeIds: readonly string[];
-  readonly positions: readonly ConstructionPosition[];
-  /** Whether the walk closed on itself, as a complete perimeter must. */
-  readonly closed: boolean;
-export function edgeUseCounts(
-  topologies: readonly ConstructionRegionTopology[],
-  ): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-export function perimeterOf(
-  topologies: readonly ConstructionRegionTopology[],
-  ): readonly PerimeterLoop[] {
-  const counts = edgeUseCounts(topologies);
-
-// src/features/edit-construction/tool-types.ts
+// src/features/edit-construction/tools/tool-types.ts
 export type ConstructionToolId =
 export type BrushShapeKind = "circle" | "square" | "hexagon";
 export interface BrushShapeParams {
@@ -4783,6 +4824,72 @@ export interface ToolParamsByTool {
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
+
+// src/features/edit-construction/topology/construction-cloud.ts
+export interface ConstructionCloud {
+  /** The one type every member shares; a cloud never spans two. */
+  readonly surfaceType: string;
+  /** The member the gesture actually landed on. */
+  readonly seed: ConstructionSurfaceKey;
+  /** Every member, the seed included, in the engine's own stable order. */
+  readonly members: readonly ConstructionSurfaceKey[];
+  }
+export interface CloudSource {
+  cloudFor(request: {
+  readonly seed: ConstructionSurfaceKey;
+  readonly surfaceType: string;
+  }): { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+export interface CloudTopology {
+  readonly cloud: ConstructionCloud;
+  /**
+  * The member the gesture landed on. Role resolution reads this one and
+  * only this one: a corner is a corner of the face it belongs to, and
+  * asking the whole cloud what a single grabbed node means would have no
+  * answer.
+  */
+export function resolveCloud(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): ConstructionCloud | undefined {
+  const topology = source.getRegionTopology(seed);
+export function resolveCloudTopology(
+  source: CloudSource,
+  seed: ConstructionSurfaceKey,
+  ): CloudTopology | undefined {
+  const cloud = resolveCloud(source, seed);
+export function refreshCloudTopology(
+  source: CloudSource,
+  cloud: ConstructionCloud,
+  ): CloudTopology | undefined {
+  const members = cloud.members
+  .map((key) => source.getRegionTopology(key))
+  .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+export function cloudNodes(
+  topology: CloudTopology,
+  ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
+  const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
+
+// src/features/edit-construction/topology/index.ts
+export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
+export type { PerimeterLoop } from "./surface-perimeter.ts";
+
+// src/features/edit-construction/topology/surface-perimeter.ts
+export interface PerimeterLoop {
+  /** In walk order; one per step. */
+  readonly edgeIds: readonly string[];
+  /** In walk order, `nodeIds[i]` starting `edgeIds[i]`. */
+  readonly nodeIds: readonly string[];
+  readonly positions: readonly ConstructionPosition[];
+  /** Whether the walk closed on itself, as a complete perimeter must. */
+  readonly closed: boolean;
+export function edgeUseCounts(
+  topologies: readonly ConstructionRegionTopology[],
+  ): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+export function perimeterOf(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly PerimeterLoop[] {
+  const counts = edgeUseCounts(topologies);
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {
@@ -4941,12 +5048,12 @@ export type {
 export type { TerrainNoisePort } from "./terrain-noise-port.ts";
 export type {
   AffectedSurfaces,
+  ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
   CellCoordinate,
   CloudOutcome,
   CloudRequest,
   ConstructionCoverageKind,
-  ConstructionCoveredRegion,
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";

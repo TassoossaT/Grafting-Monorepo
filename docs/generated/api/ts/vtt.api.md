@@ -283,6 +283,237 @@ single-ghost behaviour every tool already relies on.
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
+### `function vtt.apply-spine-contour.applySpineContour(ctx: ToolContext, operationId: string, result: PlanSpineContourResult, graphPatch?: ConstructionGraphPatch): ConstructionPatchOutcome`
+
+Registers a planned spine contour patch against the live session: the
+standing regions it replaces and the freshly unioned patch are committed
+by the generic runtime replacement transaction. The clone-and-publish
+executor validates the target first, so a refused face cannot make a
+nearby standing road disappear.
+
+### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
+
+Samples a centripetal Catmull-Rom curve through `controlPoints`,
+flattened so no chord strays from the true curve (in XZ) by more than
+`tolerance`. Collinear control points flatten to their own straight
+chords regardless of how unevenly they are spaced -- collinear is
+collinear under any parametrization -- so the result is exactly
+`controlPoints` back.
+
+### `interface vtt.contour-patch.ContourPatchResult`
+
+### `property vtt.contour-patch.ContourPatchResult.patch: ConstructionPatch`
+
+### `property vtt.contour-patch.ContourPatchResult.regionIds: readonly string[]`
+
+### `interface vtt.contour-patch.ExistingNode`
+
+### `property vtt.contour-patch.ExistingNode.id: string`
+
+### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
+
+### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+
+Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
+same kind of conversion the retired station-sweep engine's own patch
+builder used to do, but from a union's boundary loops instead of a
+sweep's quad grid, and welding by **position** rather than by a station
+address, because a union vertex has no station: it may be a genuine spine
+point, or a brand new intersection the union itself created where two
+ribbons crossed.
+
+A vertex within WELD_TOLERANCE of a node already on the table
+reuses that node's id -- which is what keeps everything **outside** the
+region this call was scoped to untouched: those nodes are simply never
+candidates for a fresh id, because they were never inside any ribbon this
+call was handed.
+
+`heightSamples` supplies `y` for a vertex the union minted (a crossing
+point no original ribbon vertex sits exactly on) via nearest-neighbour
+lookup -- the same approximation `preview-shapes.ts` already uses for its
+own union output, and the same shape of approximation `groundHeightNear`
+uses elsewhere in this codebase for "the height nearest sample said."
+
+### `interface vtt.offset-bands.BandRibbon`
+
+One band's ribbon: the ring between two consecutive `bandOffsets`.
+
+### `property vtt.offset-bands.BandRibbon.bandIndex: number`
+
+### `property vtt.offset-bands.BandRibbon.outer: readonly ConstructionPosition[]`
+
+Closed ring in the sweep's own winding, first curve forward then the next reversed.
+
+### `function vtt.offset-bands.offsetBands(polyline: readonly ConstructionPosition[], bandOffsets: readonly number[], miterLimit: number): readonly BandRibbon[]`
+
+One ribbon per consecutive pair of `bandOffsets`, following `polyline`'s
+own shape. Returns no bands for a polyline shorter than two points or a
+profile with fewer than two offsets.
+
+### `interface vtt.plan-spine-contour.PlanSpineContourInput`
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.editedChains: readonly SpineChainInput[]`
+
+Every chain of the touched spine cloud -- not just the one a stroke or a
+control-node drag directly changed, but every chain the caller's own
+connectivity walk (`changedSpineCloud` in `path-effect-executor.ts`)
+found reachable from it. Each is resampled fresh from its own *current*
+control points every time this function runs; nothing here ever reads
+a chain's own previous contour back as input, which is what keeps
+floating-point noise from one union pass compounding into the next.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.existingEdgeUses?: ReadonlyMap<string, readonly boolean[]>`
+
+All currently live contour uses, including faces outside this local edit.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.existingNodes: readonly ExistingNode[]`
+
+Every node already standing on the table, for welding by position.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.operationId: string`
+
+Scopes every node/region id this call mints -- one edit, one operation.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.standingRegions: readonly ConstructionRegionTopology[]`
+
+Every standing region of `surfaceType` belonging to this same cloud --
+always replaced in full. *Which* regions belong to the cloud is decided
+once, by the caller, from the spine graph itself (exact node-id
+membership); this function does not re-derive or filter that answer by
+geometry -- there is no partial, "only what actually overlaps" version
+of this list any more. A road duplicating or a face going missing was
+always this file and the caller silently disagreeing about which faces
+belonged together; giving the caller's answer nothing left to second-
+guess is what closes that gap for good.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.surfaceType: string`
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.tableId: string`
+
+### `interface vtt.plan-spine-contour.PlanSpineContourResult`
+
+### `property vtt.plan-spine-contour.PlanSpineContourResult.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Every one of `input.standingRegions`, unconditionally -- their faces are
+superseded by the freshly unioned ones in `patch.regions`, even where
+most of their own nodes were welded back unchanged. The caller replaces
+them in one atomic transaction with the unioned patch; a refused target
+can never leave the standing faces deleted.
+
+### `property vtt.plan-spine-contour.PlanSpineContourResult.patch: ConstructionPatch`
+
+### `interface vtt.plan-spine-contour.SpineChainInput`
+
+One curve chain's spine, already resolved to an ordered list of control
+points. Kept decoupled from `spine-graph.ts`'s own types (and from
+`PathKind`/`pathFormationFor`) on purpose: this module only knows "a
+curve, a band profile," never a corridor, a subtype, or a station -- the
+same genericity the Rust primitives themselves keep.
+
+### `property vtt.plan-spine-contour.SpineChainInput.bandOffsets: readonly number[]`
+
+Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour.
+
+### `property vtt.plan-spine-contour.SpineChainInput.chainId: string`
+
+### `property vtt.plan-spine-contour.SpineChainInput.controlPoints: readonly ConstructionPosition[]`
+
+### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
+
+### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
+
+Curve flattening tolerance, world units (XZ).
+
+### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`
+
+Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
+offset -> union each band layer, across every chain of the touched cloud
+at once -> `ConstructionPatch`.
+
+**The whole cloud, derived fresh, every time -- never patched onto what
+was already there.** `input.editedChains` is every chain the touched
+cloud has; `input.standingRegions` is every face that cloud currently
+owns. This function reads the *first* for geometry and the *second* only
+for which surface keys to retire -- a standing region's own boundary is
+never fed back into a union as input. A T, an X, or an L are not cases
+this function knows about, they are whatever unionBandLayer
+happens to produce when two chains' ribbons overlap.
+
+Returns `undefined` when `editedChains` is empty -- nothing changed, so
+nothing to regenerate.
+
+### `function vtt.union-bands.nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number`
+
+The `y` of whichever `samples` point is nearest `(x, z)` -- same lookup `preview-shapes.ts`'s `nearestSampleY` already uses to give a union's new vertices a height.
+
+### `function vtt.union-bands.unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon`
+
+Unions every ribbon of one band layer into its own outer loop(s) and
+hole(s) -- the same `polygon-clipping` union `preview-shapes.ts`'s
+`unionCapsules` already proves works in this codebase, including its
+incremental fallback for the rare case the library throws on a whole
+batch at once.
+
+**Union only, deliberately no triangulation here.** The construction graph
+stores a region as a boundary *cycle*, not a mesh -- triangulating a face
+is `grafting-procgen-surface-mesh`'s job, done later from that cycle at
+render time (see that crate's own doc: "turning that into geometry is the
+caller's job", read at mesh-generation time, never at patch-authoring
+time). `grafting-procgen-curve-offset`'s Rust `union_and_triangulate`
+(Estágio 1) triangulates too, which is the wrong shape for *this* step --
+a design note carried forward for whenever that crate is wired in: the
+Rust primitive this function will eventually call needs a union-only
+variant (or the boundary loop exposed before triangulation), not the
+`TriangulatedMesh` it hands back today.
+
+A T, an X, or an L of overlapping ribbons all fall out of this one call
+with no per-topology branch: the union either merges two ribbons into one
+loop or it doesn't, and both are the same code path.
+
+### `variable vtt.path-effect-executor.PATH_COLOR: 12616956`
+
+### `function vtt.path-effect-executor.applyPathBrushEffect(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
+
+Applies one immutable path-brush effect, in one transaction.
+
+This is the only path a path is ever built by. A free stroke, and any
+straight drag or preset that comes later, differ in nothing but the
+reference line they hand over: they all resolve to the same spine, go
+through the same whole-cloud contour engine, and declare the same faces.
+
+**What changed from the station-sweep engine this replaces.** There is no
+mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
+T, an X, and an L are not cases this function distinguishes -- they are
+whatever `planSpineContour`'s per-band union happens to produce once this
+stroke's own ribbons are unioned against an explicitly selected standing
+continuation. `pathCorridorId`/`pathFormationFor` still decide the
+subtype's profile; everything past that is derived, not hand-closed.
+
+**Two things this stage deliberately did not carry over**, both flagged
+rather than silently dropped:
+- Dragging an already-committed road's own nodes still resolves roles
+  through `station-node-id.ts`'s address scheme (`path-structure.ts`),
+  which a contour node minted by this engine does not carry. A newly
+  drawn road commits correctly; editing it interactively afterwards is a
+  follow-up, not something this function attempts.
+- The old engine cut the exact remainder of any terrain patch a road's
+  footprint partially overlapped (`applyRegionOverlay`'s own
+  overlap-planning). This function only refuses a stroke that overlaps
+  something it must not touch; it does not cut or consume terrain underneath
+  it. Drawing a road over terrain leaves that terrain standing rather than
+  risking an imprecise cut.
+
+### `function vtt.path-effect-executor.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { arcs: readonly (SweptArc | undefined)[]; line: readonly ConstructionPosition[] }`
+
+The reference line to build the spine from: where the fit decided the
+road goes, at the height the ground was actually picked at.
+
+These points become the spine's own Catmull-Rom control points --
+`planSpineContour` samples a smooth curve through them, so a corner this
+function keeps as one point still reads as a genuine bend, and a run of
+points along a straight, flat stretch still flattens back to the straight
+chord it was drawn as (`sampleCatmullRom`'s own collinear case).
+
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[]): AppTabletopRuntime`
@@ -299,6 +530,8 @@ Registers a whole generated patch -- nodes, shared boundary edges, and
 the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -362,6 +595,10 @@ Every region's boundary.
 
 What a brush footprint currently covers, before anything is generated.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getGraphSnapshot(): ConstructionGraphSnapshot`
+
+Generic graph primitives, including edges not owned by a region boundary.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 One region's live boundary -- what a handle/hit-test layer reads.
@@ -423,6 +660,8 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
+### `method vtt.tabletop-runtime.TabletopRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Applies a resolved sequence of atomic edit ops as one transaction --
@@ -481,6 +720,10 @@ Every region's boundary.
 ### `method vtt.tabletop-runtime.TabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 
 What a brush footprint currently covers, before anything is generated.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getGraphSnapshot(): ConstructionGraphSnapshot`
+
+Generic graph primitives, including edges not owned by a region boundary.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
@@ -592,6 +835,10 @@ The one geometric fact a brush produces: its shape plus every sample the
 gesture has swept through, start to end. No fitting, no element selection,
 no domain effect -- what the sweep means is entirely up to
 BrushToolSpec.applyRegion.
+
+### `property vtt.brush-tool.BrushRegion.observations: readonly PointerSample[]`
+
+Raw construction hits seen during the sweep; the domain assigns meaning.
 
 ### `property vtt.brush-tool.BrushRegion.samples: readonly ConstructionPosition[]`
 
@@ -1198,247 +1445,11 @@ A free path stroke, built on the same brush every other brush uses: press,
 drag, and on release the whole swept region is handed over once.
 
 Path creation follows the same ownership split as walls: this tool only
-chooses the interaction, `path-shared.ts` owns the single commit every
-path goes through, `path-patch.ts` declares the graph, and Rust supplies
-reusable geometry and executes the resolved overlay without ever being
-told any of it is a path.
-
-### `interface vtt.path-junction.JunctionWedges`
-
-What closing one mouth costs and produces.
-
-### `property vtt.path-junction.JunctionWedges.patch: ConstructionPatch`
-
-Their replacement, either side of the arriving road.
-
-### `property vtt.path-junction.JunctionWedges.removed: readonly ConstructionSurfaceKey[]`
-
-Faces of the standing run that the mouth opens into, and so must go.
-
-### `function vtt.path-junction.junctionRemovals(wedges: readonly JunctionWedges[]): readonly AtomicEditOp[]`
-
-The edits that take the faces a mouth opens into out of the graph.
-
-### `function vtt.path-junction.junctionWedges(tableId: string, operationId: string, arrivingCorridorId: string, mouth: PathMouth, junction: { nodeId: string; station: number }): JunctionWedges | undefined`
-
-Rebuilds the standing run's flank around one mouth.
-
-`undefined` when the mouth spans nothing the standing run actually has --
-a graze at the very end of a run, or a corner that landed outside every
-band. Closing nothing is better than declaring a face over a hole that is
-not there.
-
-### `interface vtt.path-patch.PathPatchFormation`
-
-Application-owned graph declaration for one generic sweep result.
-
-### `property vtt.path-patch.PathPatchFormation.boundary: readonly ConstructionOrientedEdgeUse[]`
-
-### `property vtt.path-patch.PathPatchFormation.outline: readonly (readonly [number, number])[]`
-
-### `property vtt.path-patch.PathPatchFormation.patch: ConstructionPatch`
-
-### `function vtt.path-patch.pathPatch(tableId: string, corridorId: string, surfaceType: string, plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, welded: ReadonlyMap<string, string>): PathPatchFormation`
-
-Converts graph-neutral Rust geometry into the exact nodes, shared edges,
-and faces the construction graph must register. This mirrors `wallPatch`:
-the application defines what the product is; Rust only validates and
-executes the resulting patch.
-
-Edges are named after the table and the pair of nodes they run between,
-exactly as `wallPatch` names them, because that shared name is the whole
-mechanism by which two independently declared faces agree on one edge.
-Namespacing them per operation instead would guarantee that no path could
-ever share an edge with anything -- the interior edges of one sweep would
-still be shared, since they carry the same prefix, which is precisely what
-made the mistake invisible.
-
-`refuse-when-full` is the right rule here, and only becomes meaningful now
-that the name can actually collide: two faces to an edge is the true limit
-for ground, so an edge with no room left means something is already there,
-and the overlay refusing the patch is that fact arriving where it is
-precise. A wall shares `private-when-full` for the opposite reason -- any
-number of walls may legitimately stand on one column.
-
-### `interface vtt.path-shared.PathMouth`
-
-### `property vtt.path-shared.PathMouth.run: PathRun`
-
-### `property vtt.path-shared.PathMouth.sides: readonly PathMouthSide[]`
-
-### `property vtt.path-shared.PathMouth.station: number`
-
-This run's end station, the one whose rib became the mouth.
-
-### `property vtt.path-shared.PathMouth.through: number`
-
-The slot of the standing rim the mouth opens through.
-
-### `interface vtt.path-shared.PathMouthSide`
-
-Where the run being committed opens into a run already standing.
-
-A T, seen from the arriving side. The arriving run stops at a spine node in
-the middle of the standing run, so its end rib cannot be mitred -- that rib
-has road on both sides of it and cannot be rotated onto anything. What can
-be said is where its two rims cross the standing rim, and those two points
-are the **mouth**: the opening the arriving road makes in the flank of the
-standing one.
-
-Reported rather than acted on, because closing a mouth is not an edit to
-this run at all -- it is a rebuild of the standing run's faces around the
-hole, which `junctionWedges` does.
-
-### `property vtt.path-shared.PathMouthSide.across: number`
-
-This run's own slot, so its corner node can be named.
-
-### `property vtt.path-shared.PathMouthSide.position: ConstructionPosition`
-
-### `property vtt.path-shared.PathMouthSide.standingStation: number`
-
-Roughly where the corner falls on the standing run's station scale.
-
-For ordering the two corners along the rim, and nothing else. Anything
-that has to *find* something on the standing run locates it by position
-instead: a station number is not a coordinate system a later junction
-leaves alone, since splitting a spine mints fractional ones.
-
-### `interface vtt.path-shared.SpineJoin`
-
-One arrival that welded onto a station already standing.
-
-### `property vtt.path-shared.SpineJoin.at: number`
-
-Index into the committed reference line where the two meet.
-
-### `property vtt.path-shared.SpineJoin.nodeId: string`
-
-### `property vtt.path-shared.SpineJoin.position: ConstructionPosition`
-
-### `property vtt.path-shared.SpineJoin.run: PathRun`
-
-### `property vtt.path-shared.SpineJoin.standingIndex: number`
-
-Which station of the standing run that was.
-
-### `property vtt.path-shared.SpineJoin.terminal: boolean`
-
-Whether that station is an end of the standing run rather than a middle.
-
-### `variable vtt.path-shared.PATH_COLOR: 12616956`
-
-### `function vtt.path-shared.commitPathContour(ctx: ToolContext, stroke: readonly ConstructionPosition[], brushShape: BrushShape, tolerance: number, params: PathBrushParams, domain: string): void`
-
-Commits one path run, in one transaction.
-
-This is the only path a path is ever built by, the way
-`walls/wall-shared.ts`'s `commitWallContour` is the only path a wall is
-built by. A free stroke, and any straight drag or preset that comes
-later, differ in nothing but the reference line they hand over: they all
-resolve their formation the same way, claim their edges the same way, and
-declare the same faces. Nothing here knows which tool called it.
-
-The raw stroke is fitted before anything else, exactly as
-`commitWallStroke` fits one: `tolerance` is whatever of the brush's reach
-the road itself does not occupy, so the committed road always lands inside
-the ghost that was drawn. At zero slack -- a brush no wider than the road
--- the stroke is committed literally.
-
-What reaches Rust is still a polyline, because the sweep planner cannot
-read an arc yet. But it is now a polyline of decisions rather than of hand
-samples, and this is the single place that changes when the planner learns
-contour geometry.
-
-### `function vtt.path-shared.joinedCoveredKeys(ctx: ToolContext, outline: readonly (readonly [number, number])[], covered: readonly ConstructionCoveredRegion[], joinedCorridors: ReadonlySet<string>): ReadonlySet<string>`
-
-Which covered faces this run *joins* rather than replaces.
-
-Joined faces are left out of the overlay's sources, so they are not
-consumed -- which is the whole point. A path replacing a path is what made
-one carriageway erase another instead of the two meeting.
-
-**Asked by identity first.** A run that welded a node onto another run's
-spine has joined that run, and every face of it, full stop; whether the
-new footprint happens to swallow one of its spine nodes is beside the
-point. Geometry was the only question available before junctions were
-built, and it stopped being safe the moment a junction started cutting the
-arriving road back at the rim: the footprint no longer reaches the other
-road's travel line, so the purely geometric answer became "cut" for the
-very runs this one had just joined -- and consuming those bands takes the
-crossed run's spine with them.
-
-The geometric rule stays for the case identity cannot see: a footprint
-laid over a run's travel line without any junction having been made.
-
-### `function vtt.path-shared.junctionsWithStandingSpines(ctx: ToolContext, line: readonly ConstructionPosition[], ownReach: number): { inserts: readonly AtomicEditOp[]; joined: readonly PathRun[]; line: readonly ConstructionPosition[]; origins: readonly number[]; terminals: readonly SpineJoin[]; welds: ReadonlyMap<number, string> }`
-
-Every place the run being drawn meets a spine already standing.
-
-Two ways to meet, and only the first existed before: a stroke drawn
-**across** another run crosses its spine, and a stroke that **ends on**
-another run touches it without ever crossing anything. The second is the
-ordinary T -- one road arriving at another -- and is far more common than
-the first. Segment intersection cannot see it at all, because there is no
-intersection: the drawn line simply stops.
-
-So an endpoint is handled by projection instead. If either end of the
-stroke lands within the standing run's own reach of its spine -- which is
-to say, on that road -- it is moved onto the spine and joined there.
-
-Either way the join is *made*, not found: a meeting point almost never
-lands on an existing station, so the crossed spine's edge is split and the
-node minted, which is `insertedColumnAt` for paths. The node is numbered on
-the crossed run's own station scale, fractionally, so it stays part of that
-spine's chain and in the right order.
-
-### `function vtt.path-shared.mitreTerminalRibs(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joins: readonly SpineJoin[], arcs: readonly (SweptArc | undefined)[]): { moves: readonly AtomicEditOp[]; vertices: readonly ConstructionPosition[]; welds: ReadonlyMap<string, string> }`
-
-Mitres this run's end rib into the end rib of a run it met at a station.
-
-The L, and the only junction shape that needs no junction face at all.
-Both runs stop at the same station, so their cross-sections there are the
-same cut of the road, and the two ribs are not two ribs: they are one,
-running between the two places the outer rims meet. Each rim keeps the
-direction its own spine gave it until it reaches its opposite number, and
-that meeting point is the corner -- the outside of the bend meets ahead,
-the inside behind, and both are the same intersection.
-
-The join is made by *identity*, as everything else here is. The standing
-run's rim node is moved onto the corner and the run being committed welds
-its own rim node to it, so the rib edge between corner and spine is named
-from the same pair of nodes on both sides and is therefore literally the
-same edge. Two faces to an edge is exactly what `refuse-when-full` allows,
-and it is how a wall shares a column.
-
-Pairing the sides needs no case analysis either. One run's direction points
-out of the joint and the other's points into it, so two rims lie on the
-same hand of a traveller passing through precisely when `sideOf` gives them
-opposite signs.
-
-### `function vtt.path-shared.pathMouthsInto(plan: ConstructionSweepPlan, profileLength: number, spineSlot: number, joined: readonly PathRun[]): { mouths: readonly PathMouth[]; vertices: readonly ConstructionPosition[] }`
-
-Cuts this run's end rib back onto the rim of the run it arrived at, and
-reports the mouth that leaves.
-
-The rim keeps the direction its own spine gave it until it reaches the
-standing rim, which is the same rule the mitre follows -- an arrival is
-still two L bends, one per side. What differs is only that a T bends into
-the *middle* of a rim rather than into its end, so the two corners are not
-nodes the standing run already has, and the faces behind them have to be
-rebuilt rather than nudged.
-
-### `function vtt.path-shared.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { arcs: readonly (SweptArc | undefined)[]; line: readonly ConstructionPosition[] }`
-
-The reference line to sweep along: where the fit decided the road goes,
-at the height the ground was actually picked at.
-
-Arc flattening here is temporary and deliberately kept in one place so it
-is obvious what to delete -- `sweepFormation` only samples a polyline, so a
-true arc has no way to reach it intact. Until it accepts contour geometry,
-a curve is handed over as chords close enough that the difference is
-invisible, which is still a world apart from handing over the raw hand.
-Now that the sweep is on this side, teaching it arcs is a local change.
+chooses the interaction and emits a `PathBrushEffect`. The path effect
+executor owns the single commit every path goes through;
+`spine-contour/` derives the contour from the spine and declares the
+graph, while Rust executes the resolved overlay without ever being told
+any of it is a path.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -2199,157 +2210,6 @@ for it now.
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
 
-### `interface vtt.atomic-edit.EditGesture`
-
-One user gesture, before any policy has looked at it.
-
-### `property vtt.atomic-edit.EditGesture.delta: ConstructionPosition`
-
-World-space movement the pointer accumulated over the drag.
-
-### `property vtt.atomic-edit.EditGesture.surfaceKey: ConstructionSurfaceKey`
-
-### `property vtt.atomic-edit.EditGesture.target: EditTarget`
-
-### `type vtt.atomic-edit.AtomicEditOp = { kind: "move-vertex"; nodeId: ConstructionNodeId; position: ConstructionPosition } | { edgeId: ConstructionEdgeId; firstEdgeId: ConstructionEdgeId; kind: "insert-vertex"; nodeId: ConstructionNodeId; position: ConstructionPosition; secondEdgeId: ConstructionEdgeId } | { kind: "remove-vertex"; nodeId: ConstructionNodeId; weldedEdgeId: ConstructionEdgeId } | { edgeId: ConstructionEdgeId; geometry: ConstructionEdgeGeometry; kind: "retype-edge" } | { delta: ConstructionPosition; edgeId: ConstructionEdgeId; kind: "move-edge" } | { delta: ConstructionPosition; kind: "move-region"; surfaceKey: ConstructionSurfaceKey } | { kind: "delete-region"; surfaceKey: ConstructionSurfaceKey } | { kind: "duplicate-region"; offset: ConstructionPosition; physical: boolean; suffix: string; surfaceKey: ConstructionSurfaceKey; surfaceType: string }`
-
-The atomic edit vocabulary, as data. Every entry maps one-to-one onto a
-`ConstructionSessionPort` primitive; nothing here knows what a wall or a
-terrain patch is.
-
-Expressing an op as a value rather than a direct port call is what lets a
-structure type's policy *substitute* one op for another, and lets a
-cascade be a plain list of further ops applied in the same transaction --
-see `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
-
-### `type vtt.atomic-edit.AtomicEditOpKind = AtomicEditOp["kind"]`
-
-### `type vtt.atomic-edit.EditAxis = "x" | "y" | "z"`
-
-Zeroes out every axis a role does not allow -- the "constraint on the op's
-own parameter" half of a role policy, enforced here on the TS side
-*before* the engine call, never inside Rust.
-
-### `type vtt.atomic-edit.EditTarget = { kind: "vertex"; nodeId: ConstructionNodeId } | { edgeId: ConstructionEdgeId; kind: "edge" } | { kind: "region" }`
-
-Which part of a region the user grabbed.
-
-### `variable vtt.atomic-edit.ALL_AXES: readonly EditAxis[]`
-
-### `variable vtt.atomic-edit.HEIGHT_AXIS: readonly EditAxis[]`
-
-### `variable vtt.atomic-edit.HORIZONTAL_AXES: readonly EditAxis[]`
-
-### `variable vtt.atomic-edit.ZERO_DELTA: ConstructionPosition`
-
-### `function vtt.atomic-edit.addPosition(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition`
-
-### `function vtt.atomic-edit.constrainToAxes(delta: ConstructionPosition, axes: readonly EditAxis[]): ConstructionPosition`
-
-### `function vtt.atomic-edit.scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition`
-
-### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
-
-Converts editable shape parameters into the immutable semantic brush contract.
-
-### `interface vtt.construction-cloud.CloudSource`
-
-The slice of the runtime a cloud resolution needs, named here so
-`features/` stays free of the composition root and a test can supply two
-functions instead of a runtime.
-
-### `method vtt.construction-cloud.CloudSource.cloudFor(request: { seed: ConstructionSurfaceKey; surfaceType: string }): { surfaceKeys: readonly ConstructionSurfaceKey[] }`
-
-### `method vtt.construction-cloud.CloudSource.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
-
-### `interface vtt.construction-cloud.CloudTopology`
-
-A cloud together with the live boundary of every member.
-
-### `property vtt.construction-cloud.CloudTopology.cloud: ConstructionCloud`
-
-### `property vtt.construction-cloud.CloudTopology.members: readonly ConstructionRegionTopology[]`
-
-Every member's boundary, the seed included.
-
-### `property vtt.construction-cloud.CloudTopology.seed: ConstructionRegionTopology`
-
-The member the gesture landed on. Role resolution reads this one and
-only this one: a corner is a corner of the face it belongs to, and
-asking the whole cloud what a single grabbed node means would have no
-answer.
-
-### `interface vtt.construction-cloud.ConstructionCloud`
-
-The cloud: the connected component of same-`type` surfaces reachable from
-one of them by shared graph nodes.
-
-`ADR-0022` puts this fourth in the layering (graph -> mesh -> surface ->
-**cloud** -> asset) and is explicit about what it is for: "this is the
-unit generation and editing operate on -- never an individual `Surface` in
-isolation," and "editing dispatches by cloud, not by individual surface."
-A cloud of one surface is not a special case; it is a component of size
-one, same code path as one of a thousand.
-
-Derived, never stored, exactly like a mesh. There is no cloud object in
-the graph to keep in sync: two separately drawn walls become one cloud the
-moment a stroke welds a node they both reference, because the *next*
-query walks across it. Nothing performs a merge, and nothing can forget
-to.
-
-The type is what the cloud carries, and the reason the whole layer exists:
-a surface holds the `type` string, but the cloud is the thing that string
-names as one construction. Which is why a type's editing behaviour is
-declared against the cloud (`structure-types/`), and why a tool preset --
-"a tower," "a house" -- can only choose parameters and a generator, never
-hold behaviour of its own.
-
-### `property vtt.construction-cloud.ConstructionCloud.members: readonly ConstructionSurfaceKey[]`
-
-Every member, the seed included, in the engine's own stable order.
-
-### `property vtt.construction-cloud.ConstructionCloud.seed: ConstructionSurfaceKey`
-
-The member the gesture actually landed on.
-
-### `property vtt.construction-cloud.ConstructionCloud.surfaceType: string`
-
-The one type every member shares; a cloud never spans two.
-
-### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology): readonly { id: string; position: { x: number; y: number; z: number } }[]`
-
-Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded.
-
-### `function vtt.construction-cloud.refreshCloudTopology(source: CloudSource, cloud: ConstructionCloud): CloudTopology | undefined`
-
-Re-reads every member's boundary against the live session, keeping the
-membership already resolved.
-
-A drag re-plans on every tick and must see current positions, but must not
-re-resolve membership mid-gesture: a move that welds onto a neighbour
-would silently enlarge the cloud under the pointer and start dragging
-geometry the gesture never grabbed. Membership is settled once, on press.
-
-### `function vtt.construction-cloud.resolveCloud(source: CloudSource, seed: ConstructionSurfaceKey): ConstructionCloud | undefined`
-
-The cloud the surface at `seed` belongs to.
-
-The engine answers which surfaces are connected and share the type; it is
-never asked what the type *means*. `undefined` only when the key is stale
--- a live surface always belongs to at least its own cloud, so an empty
-membership is treated as the seed alone rather than as an error, which is
-what keeps a component of size one on the same path as any other.
-
-### `function vtt.construction-cloud.resolveCloudTopology(source: CloudSource, seed: ConstructionSurfaceKey): CloudTopology | undefined`
-
-resolveCloud plus every member's live boundary, which is what a
-gesture is actually planned against.
-
-A member whose topology has since gone stale is dropped rather than
-failing the whole resolution: the cloud query and the topology reads are
-separate calls, and a surface that disappeared between them is exactly the
-case where continuing with what is still there is right.
-
 ### `interface vtt.edit-history.EditHistoryStack`
 
 ### `method vtt.edit-history.EditHistoryStack.getState(): EditHistoryState`
@@ -2403,6 +2263,182 @@ that only put the grabbed corner back would leave the panel sheared. See
 ### `type vtt.edit-history.ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry`
 
 ### `function vtt.edit-history.createEditHistoryStack(): EditHistoryStack`
+
+### `interface vtt.surface-edit-contract.BrushElementObservation`
+
+A generic construction element the brush observed while sweeping.
+
+### `property vtt.surface-edit-contract.BrushElementObservation.nodeId?: string`
+
+### `property vtt.surface-edit-contract.BrushElementObservation.point: ConstructionPosition`
+
+### `property vtt.surface-edit-contract.BrushElementObservation.surfaceRef?: string`
+
+### `interface vtt.surface-edit-contract.BrushGestureRegion`
+
+The complete world-space sweep supplied by one gesture.
+
+### `property vtt.surface-edit-contract.BrushGestureRegion.samples: readonly BrushGestureSample[]`
+
+### `interface vtt.surface-edit-contract.BrushGestureSample`
+
+A world-space pointer sample collected for one brush gesture.
+
+### `property vtt.surface-edit-contract.BrushGestureSample.x: number`
+
+### `property vtt.surface-edit-contract.BrushGestureSample.y: number`
+
+### `property vtt.surface-edit-contract.BrushGestureSample.z: number`
+
+### `interface vtt.surface-edit-contract.ConstructionOperationContext`
+
+Who asked for an effect, and on which table. Only `operationId` crosses to the engine; the rest is for undo/redo bookkeeping and attribution.
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.initiatedBy: string`
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.operationId: string`
+
+### `property vtt.surface-edit-contract.ConstructionOperationContext.tableId: string`
+
+### `interface vtt.surface-edit-contract.PathBrushEffect`
+
+One semantic path-paint intent. It contains no graph mutations.
+
+### `property vtt.surface-edit-contract.PathBrushEffect.brushRegion: BrushGestureRegion`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.brushShape: BrushShape`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.expected: readonly RevisionPrecondition[]`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.initiatedBy: string`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.kind: "surface.path-brush@1"`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.observedElements: readonly BrushElementObservation[]`
+
+Raw brush observations, never pre-interpreted as path topology.
+
+### `property vtt.surface-edit-contract.PathBrushEffect.operationId: string`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationRecipe`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.tableId: string`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.targetScope: "brush-region"`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.targetType: "path"`
+
+### `interface vtt.surface-edit-contract.RevisionPrecondition`
+
+A revision an effect expects to still be current when it lands.
+
+Nothing supplies one today -- every effect is built with an empty list --
+so this is the shape a concurrent-edit check would take, not a check that
+runs.
+
+### `property vtt.surface-edit-contract.RevisionPrecondition.revision: number`
+
+### `property vtt.surface-edit-contract.RevisionPrecondition.scope: string`
+
+### `interface vtt.surface-edit-contract.SurfaceEditModeDefinition`
+
+App-owned metadata for a mode, without renderer or Rust types.
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.effectKinds: readonly string[]`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.id: string`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.label: string`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "none" | "gesture-preview"`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.scopePolicy: "local" | "explicit-global"`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.sourceSurfaceType: string`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.supportedTargetScopes: readonly SurfaceEditTargetScope[]`
+
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.transformerCapability: string`
+
+### `type vtt.surface-edit-contract.BrushShape = { kind: "circle"; radius: number } | { kind: "square"; rotationRadians: number; size: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
+
+A renderer-neutral external brush footprint.
+
+### `type vtt.surface-edit-contract.PathFormationParameters = PathFormationRecipe`
+
+VTT-selected profile for a generic path-sweep formation.
+
+### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
+
+A product-owned scope supported by a surface edit mode -- *what a mode
+accepts as a target*.
+
+Not to be confused with `structure-types`' own `EditScope`, which is *how
+far one role's op reaches* once a target has been grabbed. A mode can
+accept a `"node"` target whose role nevertheless reaches the whole cloud;
+the two answer different questions and share only the word.
+
+### `function vtt.surface-edit-contract.createPathBrushEffect(payload: Omit<PathBrushEffect, "kind" | (keyof ConstructionOperationContext) | "targetScope" | "targetType" | "expected" | "observedElements"> & Partial<Pick<PathBrushEffect, "observedElements">>, context: ConstructionOperationContext, expected: readonly RevisionPrecondition[]): PathBrushEffect`
+
+Creates one immutable effect for a future release-to-confirm boundary.
+It deliberately does not resolve geometry or mutate graph topology.
+
+### `variable vtt.surface-edit-mode-registry.SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[]`
+
+Product-owned edit modes; capabilities stay renderer- and WASM-neutral.
+
+### `function vtt.surface-edit-mode-registry.surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined`
+
+Resolves the contextual edit mode for one semantic construction surface type.
+
+### `interface vtt.atomic-edit.EditGesture`
+
+One user gesture, before any policy has looked at it.
+
+### `property vtt.atomic-edit.EditGesture.delta: ConstructionPosition`
+
+World-space movement the pointer accumulated over the drag.
+
+### `property vtt.atomic-edit.EditGesture.surfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.atomic-edit.EditGesture.target: EditTarget`
+
+### `type vtt.atomic-edit.AtomicEditOp = { kind: "move-vertex"; nodeId: ConstructionNodeId; position: ConstructionPosition } | { edgeId: ConstructionEdgeId; firstEdgeId: ConstructionEdgeId; kind: "insert-vertex"; nodeId: ConstructionNodeId; position: ConstructionPosition; secondEdgeId: ConstructionEdgeId } | { kind: "remove-vertex"; nodeId: ConstructionNodeId; weldedEdgeId: ConstructionEdgeId } | { edgeId: ConstructionEdgeId; geometry: ConstructionEdgeGeometry; kind: "retype-edge" } | { delta: ConstructionPosition; edgeId: ConstructionEdgeId; kind: "move-edge" } | { delta: ConstructionPosition; kind: "move-region"; surfaceKey: ConstructionSurfaceKey } | { kind: "delete-region"; surfaceKey: ConstructionSurfaceKey } | { kind: "duplicate-region"; offset: ConstructionPosition; physical: boolean; suffix: string; surfaceKey: ConstructionSurfaceKey; surfaceType: string }`
+
+The atomic edit vocabulary, as data. Every entry maps one-to-one onto a
+`ConstructionSessionPort` primitive; nothing here knows what a wall or a
+terrain patch is.
+
+Expressing an op as a value rather than a direct port call is what lets a
+structure type's policy *substitute* one op for another, and lets a
+cascade be a plain list of further ops applied in the same transaction --
+see `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+### `type vtt.atomic-edit.AtomicEditOpKind = AtomicEditOp["kind"]`
+
+### `type vtt.atomic-edit.EditAxis = "x" | "y" | "z"`
+
+Zeroes out every axis a role does not allow -- the "constraint on the op's
+own parameter" half of a role policy, enforced here on the TS side
+*before* the engine call, never inside Rust.
+
+### `type vtt.atomic-edit.EditTarget = { kind: "vertex"; nodeId: ConstructionNodeId } | { edgeId: ConstructionEdgeId; kind: "edge" } | { kind: "region" }`
+
+Which part of a region the user grabbed.
+
+### `variable vtt.atomic-edit.ALL_AXES: readonly EditAxis[]`
+
+### `variable vtt.atomic-edit.HEIGHT_AXIS: readonly EditAxis[]`
+
+### `variable vtt.atomic-edit.HORIZONTAL_AXES: readonly EditAxis[]`
+
+### `variable vtt.atomic-edit.ZERO_DELTA: ConstructionPosition`
+
+### `function vtt.atomic-edit.addPosition(a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition`
+
+### `function vtt.atomic-edit.constrainToAxes(delta: ConstructionPosition, axes: readonly EditAxis[]): ConstructionPosition`
+
+### `function vtt.atomic-edit.scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition`
 
 ### `interface vtt.edit-orchestrator.EditOpSink`
 
@@ -2465,6 +2501,179 @@ Folds two outcomes, so a whole transaction reports one combined result.
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
+
+### `interface vtt.structure-types.ResolvedCoverage`
+
+One covered region, paired with what the painted type wants to do about it.
+
+### `property vtt.structure-types.ResolvedCoverage.covered: ConstructionCoveredRegion`
+
+### `property vtt.structure-types.ResolvedCoverage.interaction: CreationInteraction`
+
+### `variable vtt.structure-types.STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[]`
+
+One module per structure family, each pairing creation-shape knowledge with
+the role table that shape implies -- the whole TS-owned half of
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+A definition here is a **cloud's** behaviour, not a face's: the type
+string a surface carries only selects which of these tables governs the
+cloud it belongs to (`topology/construction-cloud.ts`). Every type declares
+the same three things, including how far each of its roles reaches -- there
+is no per-type escape from the rule, and a type that wants a different
+reach says so in its own role table rather than in a tool.
+
+Types sharing a shape share a definition rather than restating one: every
+upright panel (wall, tower, door jamb) is one type built by one builder --
+a tower is a wall someone stamped a circle of, not a kind of its own --
+and both terrain flavours are the same non-enumerable boundary. Splitting
+those per product name would be duplication, not per-type policy.
+
+A path is its own definition despite also being generated, because its
+shape genuinely differs: a swept run has addressable stations, so it has
+real roles to name, where terrain has none and can only regenerate. Shape
+is what decides whether two products share a table -- not whether they
+happen to share a generator.
+
+### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
+
+The first refusal in a resolved coverage, if any.
+
+### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
+
+Pairs every region a footprint touches with its resolved interaction --
+the creation-side counterpart to `planEdit`. Pure: it decides, it does not
+act, and the caller performs whatever the resolutions imply.
+
+A `"forbid"` anywhere in the result is the caller's cue to abandon the
+whole stroke rather than apply the rest: painting terrain across a wall
+must not quietly terraform everything except the wall.
+
+### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
+
+What painting `paintedType` over one already-present region means.
+
+An unrecognized covered type is refused rather than defaulting to
+`"ignore"`: silently stacking on top of something nobody declared is
+exactly how geometry accumulates unnoticed.
+
+### `function vtt.structure-types.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
+
+The role a grabbed part of a region carries, plus the policy governing it.
+A surface type with no definition at all resolves to a denial rather than
+a permissive default -- an unrecognized type is exactly the case where
+guessing would corrupt geometry.
+
+### `function vtt.structure-types.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
+
+The definition governing one surface type, or `undefined` if it has none.
+
+### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
+
+What happens when one structure type is painted over another.
+
+Creation and editing are two faces of the same coin: a type declares what
+its own parts allow (the role table) *and* how it meets every other type.
+Neither half lives in Rust -- the engine answers "what is already here"
+(`getFootprintCoverage`) and performs primitives; which of them to run is
+this table's call.
+
+**The relation is directional, and that is the point.** A wall goes on top
+of terrain; terrain does not go on top of a wall. Declaring one direction
+says nothing about the other, so both are declared separately rather than
+inferred from a symmetric "compatible" flag.
+
+### `type vtt.creation-interaction.CreationInteractionKind = CreationInteraction["kind"]`
+
+### `variable vtt.creation-interaction.CUT: CreationInteraction`
+
+### `variable vtt.creation-interaction.IGNORE: CreationInteraction`
+
+### `variable vtt.creation-interaction.RESTACK: CreationInteraction`
+
+### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
+
+### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
+
+The role model for a procedurally generated, non-enumerable boundary --
+terrain sculpted from a noise lattice, a path swept by a brush. There is
+no "this vertex is always the corner" to assign, because generation never
+promised one: the vertex count and layout follow the stroke, not a fixed
+shape this side requested.
+
+Consequences, straight from
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`: the table
+is near-empty on purpose. Anything structural (subdividing, welding,
+cutting) escalates to a whole-region regeneration rather than a sequence
+of primitives, because no atomic sequence can express "re-roll this
+terrain." What *is* role-independent -- sliding a boundary vertex, edge,
+or the whole patch around -- stays allowed, since it needs no knowledge of
+what the vertex means.
+
+### `function vtt.organic-structure.organicPolicyFactory(structural: "deny" | "regenerate"): (role: string) => RolePolicy`
+
+### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
+
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
+
+### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
+
+A path **carves**: it consumes what it crosses and keeps the leftover with
+the path's own shape cut out of it. Over terrain that is a road; over a
+wall the same cut reads as an opening through it.
+
+Over another path the two formations become one connected path surface:
+the same cut-and-refill flow consumes the overlap instead of leaving
+coincident path geometry behind.
+
+Except a deck, which spans rather than carves. That is a declared property
+of the subtype, not something read back from geometry -- which is exactly
+why an overpass needs no height-aware coverage query to be told apart from
+a crossing at the same level. The run that passes over says so.
+
+### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
+
+Terrain painted over terrain **raises** it: the covered faces are deleted,
+the new ones generated above, and the result stitched back onto the rim
+the removal exposed. It does not overlay a second lattice on top of the
+first, which is what used to stack geometry on every stroke.
+
+Terrain over anything else is refused. Ground is not something that can
+come into being above a wall or a path -- there is no meaning to assign,
+so nothing is generated and the caller says why. This is the direction
+that does *not* mirror: a wall over terrain is perfectly ordinary.
+
+### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
+
+The shared role model for every type generated by `extrude_path`: an
+upright panel whose boundary is a bottom run at the baseline and a top run
+one `height` above it. Walls and towers are both this shape -- a tower is
+a closed ring of such panels with arc edges instead of straight ones, not
+a different topology.
+
+**Where the roles come from.** `extrude_path` emits one panel's cycle as
+`[bottomStart, bottomEnd, topEnd, topStart]`, and `straight_cycle_region`
+turns that into edges `0: bottom`, `1: end post`, `2: top`, `3: start
+post`. This side issued that generation call, so it knows the meaning of
+each slot by construction -- Rust neither tags nor reports a role. Height
+comparison is used rather than the raw index so a panel that has since
+been subdivided (a T-junction weld inserting a vertex mid-run) still
+classifies correctly; both rules describe the very same creation shape.
+
+### `function vtt.panel-structure.panelInteractionOver(_coveredType: string): CreationInteraction`
+
+A panel is built *on top of* whatever is already there and consumes
+nothing: a wall standing on terrain leaves that terrain intact, and two
+walls crossing weld at their shared corners rather than eating each other.
+That is the whole of the panel side of the interaction table.
+
+### `function vtt.panel-structure.panelPolicyFor(role: string): RolePolicy`
+
+### `function vtt.panel-structure.panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
+
+### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string): StructureTypeDefinition`
+
+Builds one `extrude_path`-generated structure type on the shared panel model.
 
 ### `interface vtt.path-cloud.PathRun`
 
@@ -2686,6 +2895,162 @@ Node identity is minted relative to this slot, so that "outward" is a fact
 an id carries rather than something a later edit has to infer from
 geometry that has since moved.
 
+### `interface vtt.path-spine-draft.PathSpineDraft`
+
+The path-owned input to contour generation.
+
+A brush effect is intent; this is the semantic spine it creates from the
+resolved reference line. Keeping the corridor identity and cross-section
+here prevents an interaction tool or the contour engine from inventing
+their own path model.
+
+### `property vtt.path-spine-draft.PathSpineDraft.bandOffsets: readonly number[]`
+
+### `property vtt.path-spine-draft.PathSpineDraft.controlPoints: readonly ConstructionPosition[]`
+
+### `property vtt.path-spine-draft.PathSpineDraft.corridorId: string`
+
+### `property vtt.path-spine-draft.PathSpineDraft.miterLimit: number`
+
+### `function vtt.path-spine-draft.pathSpineDraftFor(effect: PathBrushEffect, controlPoints: readonly ConstructionPosition[]): PathSpineDraft | undefined`
+
+Resolves the path-specific spine and profile from an immutable effect.
+
+The caller owns fitting a gesture into a reference line; this type owns
+what that line means as a path corridor and which bands it must generate.
+
+### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; contourEdge: "path-contour-edge"; edge: "path-edge"; ribEdge: "path-rib-edge"; spine: "path-spine"; spineEdge: "path-spine-edge"; unknown: "path-unknown" }`
+
+The role model for anything swept along a travel line: a spine, whatever
+lies between the spine and the rim, and the rim itself.
+
+**The whole rule is one sentence.** Dragging a node carries every node of
+its own station that lies further out on the same side. The spine's "further
+out" is the entire cross-section; a node partway out carries only what is
+beyond it; the rim carries nothing, because nothing is beyond it. That
+single rule replaces a per-slot table, and it is why there is no separate
+`contour` role here to keep in sync with a `rib` one.
+
+**Same-delta, deliberately.** Nothing is recomputed. A drag does not re-run
+the recipe or re-derive the mitre frame, so a corner made by dragging the
+spine narrows the way any hand-edited shape narrows. That is the model this
+repo already commits to for walls -- the graph is the truth and the recipe
+only seeds it -- and it is what lets the whole cascade be plain same-delta
+ops, which is all `RolePolicy` supports.
+
+**Widening has a direction now.** Because the cross-section is materialised
+as real nodes out to the rim, pushing the rim outward is an ordinary edit
+rather than a width parameter that would need the frame recomputed to mean
+anything.
+
+### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
+
+### `function vtt.path-structure.pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
+
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
+
+Builds one swept-product structure type on the shared spine model.
+
+### `interface vtt.spine-chains.SpineChain`
+
+One continuous, ordered walk of control nodes -- the unit a curve is
+sampled along.
+
+A chain starts and ends at a **boundary** node: one whose degree is not 2,
+which is either a free end (degree 1) or a real junction (degree 3+). A
+degree-2 node in the middle carries the curve through, never splits it.
+This is what lets a junction be one shared control node reached by
+several chains, rather than something a curve has to special-case: the
+chain simply stops there, exactly as it stops at a free end.
+
+### `property vtt.spine-chains.SpineChain.nodes: readonly SpineControlNode[]`
+
+### `function vtt.spine-chains.chainsOf(graph: SpineGraph): readonly SpineChain[]`
+
+Every chain in `graph`, split at every node whose degree is not 2.
+
+A closed component has no natural free end, so it starts deterministically
+at its lowest graph id and returns to that same control point. Keeping the
+closing point makes the generated Catmull-Rom contour continuous there.
+
+### `function vtt.spine-edit.moveSpineControlNode(node: SpineControlNode, delta: ConstructionPosition): AtomicEditOp`
+
+The op that moves one spine control node by `delta`.
+
+Deliberately the same `move-vertex` op, built with the same `addPosition`
+helper, that `edit-orchestrator.ts`'s own vertex case already produces --
+there is no separate edit pipeline for a spine control node to bypass.
+`move-vertex` only ever names a node id and a position; nothing about it
+assumes degree 2, so a junction node with three or more curve edges moves
+through this exact op the same as an ordinary point on a straight run. The
+graph, not this function, is what makes a junction share one id in the
+first place (see `spine-node-id.ts`).
+
+### `interface vtt.spine-graph.SpineControlNode`
+
+One control point of a spine curve.
+
+### `property vtt.spine-graph.SpineControlNode.nodeId: string`
+
+### `property vtt.spine-graph.SpineControlNode.position: ConstructionPosition`
+
+### `interface vtt.spine-graph.SpineCurveEdge`
+
+One curve segment between two control nodes, as it stands in the graph.
+
+### `property vtt.spine-graph.SpineCurveEdge.edgeId: string`
+
+### `property vtt.spine-graph.SpineCurveEdge.fromNodeId: string`
+
+### `property vtt.spine-graph.SpineCurveEdge.toNodeId: string`
+
+### `interface vtt.spine-graph.SpineGraph`
+
+### `property vtt.spine-graph.SpineGraph.edges: readonly SpineCurveEdge[]`
+
+### `property vtt.spine-graph.SpineGraph.nodes: readonly SpineControlNode[]`
+
+### `function vtt.spine-graph.neighborsOf(graph: SpineGraph, nodeId: string): readonly string[]`
+
+Every node id directly joined to `nodeId` by one curve edge -- this node's own degree is `neighborsOf(...).length`.
+
+### `function vtt.spine-graph.spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph`
+
+Reads the durable, type-owned spine from the generic construction graph.
+Face boundaries are deliberately excluded: a contour is a generated view
+of this graph and must never be mistaken for its source of truth.
+
+### `function vtt.spine-graph.spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph`
+
+Every spine control node and curve edge present in `topologies`,
+deduplicated by id -- a node or edge shared by more than one band (the two
+faces either side of the travel line, a junction shared by more than one
+run) is reported once.
+
+### `function vtt.spine-graph.spineGraphOf(cloud: CloudTopology): SpineGraph`
+
+spineGraphIn over one cloud's own members -- the reading a tool should reach for.
+
+### `interface vtt.spine-node-id.SpineControlNodeAddress`
+
+One control node's id, as the parts it is built from.
+
+### `property vtt.spine-node-id.SpineControlNodeAddress.index: number`
+
+Which point of that edit this was.
+
+### `property vtt.spine-node-id.SpineControlNodeAddress.operationId: string`
+
+The edit that minted this node. Provenance only, never ownership.
+
+### `function vtt.spine-node-id.isSpineControlNodeId(id: string): boolean`
+
+### `function vtt.spine-node-id.parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined`
+
+The address inside `id`, or `undefined` for an id no spine edit minted.
+
+### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
+
 ### `interface vtt.station-node-id.StationNodeAddress`
 
 One node of a station-major sweep, as the parts its id is built from.
@@ -2722,211 +3087,6 @@ Whether `id` names the travel line itself rather than anything beside it.
 The address inside `id`, or `undefined` for an id no sweep minted.
 
 ### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
-
-### `interface vtt.structure-types.ResolvedCoverage`
-
-One covered region, paired with what the painted type wants to do about it.
-
-### `property vtt.structure-types.ResolvedCoverage.covered: ConstructionCoveredRegion`
-
-### `property vtt.structure-types.ResolvedCoverage.interaction: CreationInteraction`
-
-### `variable vtt.structure-types.STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[]`
-
-One file per structure type, each pairing creation-shape knowledge with
-the role table that shape implies -- the whole TS-owned half of
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
-
-A definition here is a **cloud's** behaviour, not a face's: the type
-string a surface carries only selects which of these tables governs the
-cloud it belongs to (`construction-cloud.ts`). Every type declares the
-same three things, including how far each of its roles reaches -- there
-is no per-type escape from the rule, and a type that wants a different
-reach says so in its own role table rather than in a tool.
-
-Types sharing a shape share a definition rather than restating one: every
-upright panel (wall, tower, door jamb) is one type built by one builder --
-a tower is a wall someone stamped a circle of, not a kind of its own --
-and both terrain flavours are the same non-enumerable boundary. Splitting
-those per product name would be duplication, not per-type policy.
-
-A path is its own definition despite also being generated, because its
-shape genuinely differs: a swept run has addressable stations, so it has
-real roles to name, where terrain has none and can only regenerate. Shape
-is what decides whether two products share a table -- not whether they
-happen to share a generator.
-
-### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
-
-The first refusal in a resolved coverage, if any.
-
-### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
-
-Pairs every region a footprint touches with its resolved interaction --
-the creation-side counterpart to `planEdit`. Pure: it decides, it does not
-act, and the caller performs whatever the resolutions imply.
-
-A `"forbid"` anywhere in the result is the caller's cue to abandon the
-whole stroke rather than apply the rest: painting terrain across a wall
-must not quietly terraform everything except the wall.
-
-### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
-
-What painting `paintedType` over one already-present region means.
-
-An unrecognized covered type is refused rather than defaulting to
-`"ignore"`: silently stacking on top of something nobody declared is
-exactly how geometry accumulates unnoticed.
-
-### `function vtt.structure-types.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
-
-The role a grabbed part of a region carries, plus the policy governing it.
-A surface type with no definition at all resolves to a denial rather than
-a permissive default -- an unrecognized type is exactly the case where
-guessing would corrupt geometry.
-
-### `function vtt.structure-types.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
-
-The definition governing one surface type, or `undefined` if it has none.
-
-### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
-
-What happens when one structure type is painted over another.
-
-Creation and editing are two faces of the same coin: a type declares what
-its own parts allow (the role table) *and* how it meets every other type.
-Neither half lives in Rust -- the engine answers "what is already here"
-(`getFootprintCoverage`) and performs primitives; which of them to run is
-this table's call.
-
-**The relation is directional, and that is the point.** A wall goes on top
-of terrain; terrain does not go on top of a wall. Declaring one direction
-says nothing about the other, so both are declared separately rather than
-inferred from a symmetric "compatible" flag.
-
-### `type vtt.creation-interaction.CreationInteractionKind = CreationInteraction["kind"]`
-
-### `variable vtt.creation-interaction.CUT: CreationInteraction`
-
-### `variable vtt.creation-interaction.IGNORE: CreationInteraction`
-
-### `variable vtt.creation-interaction.RESTACK: CreationInteraction`
-
-### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
-
-### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
-
-The role model for a procedurally generated, non-enumerable boundary --
-terrain sculpted from a noise lattice, a path swept by a brush. There is
-no "this vertex is always the corner" to assign, because generation never
-promised one: the vertex count and layout follow the stroke, not a fixed
-shape this side requested.
-
-Consequences, straight from
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`: the table
-is near-empty on purpose. Anything structural (subdividing, welding,
-cutting) escalates to a whole-region regeneration rather than a sequence
-of primitives, because no atomic sequence can express "re-roll this
-terrain." What *is* role-independent -- sliding a boundary vertex, edge,
-or the whole patch around -- stays allowed, since it needs no knowledge of
-what the vertex means.
-
-### `function vtt.organic-structure.organicPolicyFactory(structural: "deny" | "regenerate"): (role: string) => RolePolicy`
-
-### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
-
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
-
-### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
-
-A path **carves**: it consumes what it crosses and keeps the leftover with
-the path's own shape cut out of it. Over terrain that is a road; over a
-wall the same cut reads as an opening through it.
-
-Over another path the two formations become one connected path surface:
-the same cut-and-refill flow consumes the overlap instead of leaving
-coincident path geometry behind.
-
-Except a deck, which spans rather than carves. That is a declared property
-of the subtype, not something read back from geometry -- which is exactly
-why an overpass needs no height-aware coverage query to be told apart from
-a crossing at the same level. The run that passes over says so.
-
-### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
-
-Terrain painted over terrain **raises** it: the covered faces are deleted,
-the new ones generated above, and the result stitched back onto the rim
-the removal exposed. It does not overlay a second lattice on top of the
-first, which is what used to stack geometry on every stroke.
-
-Terrain over anything else is refused. Ground is not something that can
-come into being above a wall or a path -- there is no meaning to assign,
-so nothing is generated and the caller says why. This is the direction
-that does *not* mirror: a wall over terrain is perfectly ordinary.
-
-### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
-
-The shared role model for every type generated by `extrude_path`: an
-upright panel whose boundary is a bottom run at the baseline and a top run
-one `height` above it. Walls and towers are both this shape -- a tower is
-a closed ring of such panels with arc edges instead of straight ones, not
-a different topology.
-
-**Where the roles come from.** `extrude_path` emits one panel's cycle as
-`[bottomStart, bottomEnd, topEnd, topStart]`, and `straight_cycle_region`
-turns that into edges `0: bottom`, `1: end post`, `2: top`, `3: start
-post`. This side issued that generation call, so it knows the meaning of
-each slot by construction -- Rust neither tags nor reports a role. Height
-comparison is used rather than the raw index so a panel that has since
-been subdivided (a T-junction weld inserting a vertex mid-run) still
-classifies correctly; both rules describe the very same creation shape.
-
-### `function vtt.panel-structure.panelInteractionOver(_coveredType: string): CreationInteraction`
-
-A panel is built *on top of* whatever is already there and consumes
-nothing: a wall standing on terrain leaves that terrain intact, and two
-walls crossing weld at their shared corners rather than eating each other.
-That is the whole of the panel side of the interaction table.
-
-### `function vtt.panel-structure.panelPolicyFor(role: string): RolePolicy`
-
-### `function vtt.panel-structure.panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
-
-### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string): StructureTypeDefinition`
-
-Builds one `extrude_path`-generated structure type on the shared panel model.
-
-### `variable vtt.path-structure.PATH_ROLES: { across: "path-across"; body: "path-body"; contourEdge: "path-contour-edge"; edge: "path-edge"; ribEdge: "path-rib-edge"; spine: "path-spine"; spineEdge: "path-spine-edge"; unknown: "path-unknown" }`
-
-The role model for anything swept along a travel line: a spine, whatever
-lies between the spine and the rim, and the rim itself.
-
-**The whole rule is one sentence.** Dragging a node carries every node of
-its own station that lies further out on the same side. The spine's "further
-out" is the entire cross-section; a node partway out carries only what is
-beyond it; the rim carries nothing, because nothing is beyond it. That
-single rule replaces a per-slot table, and it is why there is no separate
-`contour` role here to keep in sync with a `rib` one.
-
-**Same-delta, deliberately.** Nothing is recomputed. A drag does not re-run
-the recipe or re-derive the mitre frame, so a corner made by dragging the
-spine narrows the way any hand-edited shape narrows. That is the model this
-repo already commits to for walls -- the graph is the truth and the recipe
-only seeds it -- and it is what lets the whole cascade be plain same-delta
-ops, which is all `RolePolicy` supports.
-
-**Widening has a direction now.** Because the cross-section is materialised
-as real nodes out to the rim, pushing the rim outward is an ordinary edit
-rather than a width parameter that would need the frame recomputed to mean
-anything.
-
-### `function vtt.path-structure.pathPolicyFor(role: string): RolePolicy`
-
-### `function vtt.path-structure.pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
-
-### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
-
-Builds one swept-product structure type on the shared spine model.
 
 ### `interface vtt.structure-type.CascadeContext`
 
@@ -3071,155 +3231,9 @@ Convenience for the common "allowed, on these axes, at this reach, no cascade" p
 
 The policy every unknown role falls back to: refuse rather than guess.
 
-### `interface vtt.surface-edit-contract.BrushGestureRegion`
+### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
-The complete world-space sweep supplied by one gesture.
-
-### `property vtt.surface-edit-contract.BrushGestureRegion.samples: readonly BrushGestureSample[]`
-
-### `interface vtt.surface-edit-contract.BrushGestureSample`
-
-A world-space pointer sample collected for one brush gesture.
-
-### `property vtt.surface-edit-contract.BrushGestureSample.x: number`
-
-### `property vtt.surface-edit-contract.BrushGestureSample.y: number`
-
-### `property vtt.surface-edit-contract.BrushGestureSample.z: number`
-
-### `interface vtt.surface-edit-contract.ConstructionOperationContext`
-
-Who asked for an effect, and on which table. Only `operationId` crosses to the engine; the rest is for undo/redo bookkeeping and attribution.
-
-### `property vtt.surface-edit-contract.ConstructionOperationContext.initiatedBy: string`
-
-### `property vtt.surface-edit-contract.ConstructionOperationContext.operationId: string`
-
-### `property vtt.surface-edit-contract.ConstructionOperationContext.tableId: string`
-
-### `interface vtt.surface-edit-contract.PathBrushEffect`
-
-One semantic path-paint intent. It contains no graph mutations.
-
-### `property vtt.surface-edit-contract.PathBrushEffect.brushRegion: BrushGestureRegion`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.brushShape: BrushShape`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.expected: readonly RevisionPrecondition[]`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.initiatedBy: string`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.kind: "surface.path-brush@1"`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.operationId: string`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationRecipe`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.tableId: string`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.targetScope: "brush-region"`
-
-### `property vtt.surface-edit-contract.PathBrushEffect.targetType: "path"`
-
-### `interface vtt.surface-edit-contract.RevisionPrecondition`
-
-A revision an effect expects to still be current when it lands.
-
-Nothing supplies one today -- every effect is built with an empty list --
-so this is the shape a concurrent-edit check would take, not a check that
-runs.
-
-### `property vtt.surface-edit-contract.RevisionPrecondition.revision: number`
-
-### `property vtt.surface-edit-contract.RevisionPrecondition.scope: string`
-
-### `interface vtt.surface-edit-contract.SurfaceEditModeDefinition`
-
-App-owned metadata for a mode, without renderer or Rust types.
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.effectKinds: readonly string[]`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.id: string`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.label: string`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "none" | "gesture-preview"`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.scopePolicy: "local" | "explicit-global"`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.sourceSurfaceType: string`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.supportedTargetScopes: readonly SurfaceEditTargetScope[]`
-
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.transformerCapability: string`
-
-### `type vtt.surface-edit-contract.BrushShape = { kind: "circle"; radius: number } | { kind: "square"; rotationRadians: number; size: number } | { kind: "hexagon"; radius: number; rotationRadians: number }`
-
-A renderer-neutral external brush footprint.
-
-### `type vtt.surface-edit-contract.PathFormationParameters = PathFormationRecipe`
-
-VTT-selected profile for a generic path-sweep formation.
-
-### `type vtt.surface-edit-contract.SurfaceEditTargetScope = "brush-region" | "surface" | "edge" | "node" | "cloud"`
-
-A product-owned scope supported by a surface edit mode -- *what a mode
-accepts as a target*.
-
-Not to be confused with `structure-types`' own `EditScope`, which is *how
-far one role's op reaches* once a target has been grabbed. A mode can
-accept a `"node"` target whose role nevertheless reaches the whole cloud;
-the two answer different questions and share only the word.
-
-### `function vtt.surface-edit-contract.createPathBrushEffect(payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">, context: ConstructionOperationContext, expected: readonly RevisionPrecondition[]): PathBrushEffect`
-
-Creates one immutable effect for a future release-to-confirm boundary.
-It deliberately does not resolve geometry or mutate graph topology.
-
-### `variable vtt.surface-edit-mode-registry.SURFACE_EDIT_MODE_DEFINITIONS: readonly SurfaceEditModeDefinition[]`
-
-Product-owned edit modes; capabilities stay renderer- and WASM-neutral.
-
-### `function vtt.surface-edit-mode-registry.surfaceEditModeFor(sourceSurfaceType: string): SurfaceEditModeDefinition | undefined`
-
-Resolves the contextual edit mode for one semantic construction surface type.
-
-### `interface vtt.surface-perimeter.PerimeterLoop`
-
-One closed run of perimeter, walked end to end.
-
-### `property vtt.surface-perimeter.PerimeterLoop.closed: boolean`
-
-Whether the walk closed on itself, as a complete perimeter must.
-
-### `property vtt.surface-perimeter.PerimeterLoop.edgeIds: readonly string[]`
-
-In walk order; one per step.
-
-### `property vtt.surface-perimeter.PerimeterLoop.nodeIds: readonly string[]`
-
-In walk order, `nodeIds[i]` starting `edgeIds[i]`.
-
-### `property vtt.surface-perimeter.PerimeterLoop.positions: readonly ConstructionPosition[]`
-
-### `function vtt.surface-perimeter.edgeUseCounts(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, number>`
-
-How many faces each edge bounds, across the whole set.
-
-### `function vtt.surface-perimeter.perimeterOf(topologies: readonly ConstructionRegionTopology[]): readonly PerimeterLoop[]`
-
-Every perimeter loop of `topologies`, as closed walks.
-
-Takes a whole set rather than one face, because the question is only
-meaningful for a set: an edge is interior *to something*, and one face on
-its own has nothing but perimeter. Hand it a cloud and it answers for the
-cloud, which is the unit a junction actually changes.
-
-A node where three or more perimeter edges meet -- a pinch, where the
-surface touches itself -- is walked by taking whichever edge has not been
-walked yet. That yields loops that partition the perimeter rather than the
-one canonical figure-of-eight, which is the right answer for drawing it and
-an arbitrary one for reasoning about winding.
+Converts editable shape parameters into the immutable semantic brush contract.
 
 ### `interface vtt.tool-types.BrushShapeParams`
 
@@ -3483,6 +3497,141 @@ closed catalog, not a free numeric field -- so every tower on a table is
 one of a few known sizes a later room-generation pass (Note 0008) can
 reason about, not an arbitrary one a careless drag produced.
 
+### `interface vtt.construction-cloud.CloudSource`
+
+The slice of the runtime a cloud resolution needs, named here so
+`features/` stays free of the composition root and a test can supply two
+functions instead of a runtime.
+
+### `method vtt.construction-cloud.CloudSource.cloudFor(request: { seed: ConstructionSurfaceKey; surfaceType: string }): { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+### `method vtt.construction-cloud.CloudSource.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `interface vtt.construction-cloud.CloudTopology`
+
+A cloud together with the live boundary of every member.
+
+### `property vtt.construction-cloud.CloudTopology.cloud: ConstructionCloud`
+
+### `property vtt.construction-cloud.CloudTopology.members: readonly ConstructionRegionTopology[]`
+
+Every member's boundary, the seed included.
+
+### `property vtt.construction-cloud.CloudTopology.seed: ConstructionRegionTopology`
+
+The member the gesture landed on. Role resolution reads this one and
+only this one: a corner is a corner of the face it belongs to, and
+asking the whole cloud what a single grabbed node means would have no
+answer.
+
+### `interface vtt.construction-cloud.ConstructionCloud`
+
+The cloud: the connected component of same-`type` surfaces reachable from
+one of them by shared graph nodes.
+
+`ADR-0022` puts this fourth in the layering (graph -> mesh -> surface ->
+**cloud** -> asset) and is explicit about what it is for: "this is the
+unit generation and editing operate on -- never an individual `Surface` in
+isolation," and "editing dispatches by cloud, not by individual surface."
+A cloud of one surface is not a special case; it is a component of size
+one, same code path as one of a thousand.
+
+Derived, never stored, exactly like a mesh. There is no cloud object in
+the graph to keep in sync: two separately drawn walls become one cloud the
+moment a stroke welds a node they both reference, because the *next*
+query walks across it. Nothing performs a merge, and nothing can forget
+to.
+
+The type is what the cloud carries, and the reason the whole layer exists:
+a surface holds the `type` string, but the cloud is the thing that string
+names as one construction. Which is why a type's editing behaviour is
+declared against the cloud (`structure-types/`), and why a tool preset --
+"a tower," "a house" -- can only choose parameters and a generator, never
+hold behaviour of its own.
+
+### `property vtt.construction-cloud.ConstructionCloud.members: readonly ConstructionSurfaceKey[]`
+
+Every member, the seed included, in the engine's own stable order.
+
+### `property vtt.construction-cloud.ConstructionCloud.seed: ConstructionSurfaceKey`
+
+The member the gesture actually landed on.
+
+### `property vtt.construction-cloud.ConstructionCloud.surfaceType: string`
+
+The one type every member shares; a cloud never spans two.
+
+### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology): readonly { id: string; position: { x: number; y: number; z: number } }[]`
+
+Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded.
+
+### `function vtt.construction-cloud.refreshCloudTopology(source: CloudSource, cloud: ConstructionCloud): CloudTopology | undefined`
+
+Re-reads every member's boundary against the live session, keeping the
+membership already resolved.
+
+A drag re-plans on every tick and must see current positions, but must not
+re-resolve membership mid-gesture: a move that welds onto a neighbour
+would silently enlarge the cloud under the pointer and start dragging
+geometry the gesture never grabbed. Membership is settled once, on press.
+
+### `function vtt.construction-cloud.resolveCloud(source: CloudSource, seed: ConstructionSurfaceKey): ConstructionCloud | undefined`
+
+The cloud the surface at `seed` belongs to.
+
+The engine answers which surfaces are connected and share the type; it is
+never asked what the type *means*. `undefined` only when the key is stale
+-- a live surface always belongs to at least its own cloud, so an empty
+membership is treated as the seed alone rather than as an error, which is
+what keeps a component of size one on the same path as any other.
+
+### `function vtt.construction-cloud.resolveCloudTopology(source: CloudSource, seed: ConstructionSurfaceKey): CloudTopology | undefined`
+
+resolveCloud plus every member's live boundary, which is what a
+gesture is actually planned against.
+
+A member whose topology has since gone stale is dropped rather than
+failing the whole resolution: the cloud query and the topology reads are
+separate calls, and a surface that disappeared between them is exactly the
+case where continuing with what is still there is right.
+
+### `interface vtt.surface-perimeter.PerimeterLoop`
+
+One closed run of perimeter, walked end to end.
+
+### `property vtt.surface-perimeter.PerimeterLoop.closed: boolean`
+
+Whether the walk closed on itself, as a complete perimeter must.
+
+### `property vtt.surface-perimeter.PerimeterLoop.edgeIds: readonly string[]`
+
+In walk order; one per step.
+
+### `property vtt.surface-perimeter.PerimeterLoop.nodeIds: readonly string[]`
+
+In walk order, `nodeIds[i]` starting `edgeIds[i]`.
+
+### `property vtt.surface-perimeter.PerimeterLoop.positions: readonly ConstructionPosition[]`
+
+### `function vtt.surface-perimeter.edgeUseCounts(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, number>`
+
+How many faces each edge bounds, across the whole set.
+
+### `function vtt.surface-perimeter.perimeterOf(topologies: readonly ConstructionRegionTopology[]): readonly PerimeterLoop[]`
+
+Every perimeter loop of `topologies`, as closed walks.
+
+Takes a whole set rather than one face, because the question is only
+meaningful for a set: an edge is interior *to something*, and one face on
+its own has nothing but perimeter. Hand it a cloud and it answers for the
+cloud, which is the unit a junction actually changes.
+
+A node where three or more perimeter edges meet -- a pinch, where the
+surface touches itself -- is walked by taking whichever edge has not been
+walked yet. That yields loops that partition the perimeter rather than the
+one canonical figure-of-eight, which is the right answer for drawing it and
+an arbitrary one for reasoning about winding.
+
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 
 The minimum a target needs for this feature to drive its camera. A
@@ -3576,6 +3725,20 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
+### `interface vtt.construction-session-port.ApplyPatchReplacementRequest`
+
+Replaces an exact set of application-selected regions with one generated
+patch. The executor performs the removal and addition as one all-or-nothing
+transaction; it has no product or contour policy of its own.
+
+### `property vtt.construction-session-port.ApplyPatchReplacementRequest.graphPatch?: ConstructionGraphPatch`
+
+### `property vtt.construction-session-port.ApplyPatchReplacementRequest.operationId: string`
+
+### `property vtt.construction-session-port.ApplyPatchReplacementRequest.patch: ConstructionPatch`
+
+### `property vtt.construction-session-port.ApplyPatchReplacementRequest.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
 ### `interface vtt.construction-session-port.ApplyRegionOverlayRequest`
 
 One generic overlay whose geometry and affected regions were resolved by the application.
@@ -3633,6 +3796,36 @@ World-space centroid; `y` is the height the face currently sits at.
 ### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceKey: ConstructionSurfaceKey`
 
 ### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceType: string`
+
+### `interface vtt.construction-session-port.ConstructionEdgeSnapshot`
+
+One generic graph edge, including edges deliberately not used by a face.
+
+### `property vtt.construction-session-port.ConstructionEdgeSnapshot.edgeId: string`
+
+### `property vtt.construction-session-port.ConstructionEdgeSnapshot.endNodeId: string`
+
+### `property vtt.construction-session-port.ConstructionEdgeSnapshot.startNodeId: string`
+
+### `interface vtt.construction-session-port.ConstructionGraphPatch`
+
+Generic graph primitives committed with a surface replacement.
+
+### `property vtt.construction-session-port.ConstructionGraphPatch.edges: readonly { edgeId: string; endNodeId: string; startNodeId: string }[]`
+
+### `property vtt.construction-session-port.ConstructionGraphPatch.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.construction-session-port.ConstructionGraphPatch.removedEdgeIds?: readonly string[]`
+
+Generic edges superseded by this patch, e.g. one spine segment split at a new junction.
+
+### `interface vtt.construction-session-port.ConstructionGraphSnapshot`
+
+The durable generic graph; semantic types decide what its primitives mean.
+
+### `property vtt.construction-session-port.ConstructionGraphSnapshot.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.construction-session-port.ConstructionGraphSnapshot.nodes: readonly ConstructionNodeSnapshot[]`
 
 ### `interface vtt.construction-session-port.ConstructionNodeSnapshot`
 
@@ -3796,6 +3989,10 @@ Nodes, edges, and regions already present are skipped, not rejected: a
 stroke overlapping an earlier one re-declares what they share, and that
 must not mint a second copy.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome`
+
+Atomically replaces exact source regions with an application-generated patch.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome`
 
 Atomically overlays an application-generated patch onto exact source regions.
@@ -3839,6 +4036,10 @@ Every currently-known surface's mesh -- the bootstrap/full-render call.
 What a footprint currently covers, before anything is generated -- the
 creation-side counterpart to getRegionTopology. The engine
 reports; `features/edit-construction`'s per-type table decides.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.getGraphSnapshot(): ConstructionGraphSnapshot`
+
+Generic graph primitives, including non-region edges such as a path spine.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getNodePositions(): readonly ConstructionNodeSnapshot[]`
 

@@ -1,0 +1,13 @@
+[package]
+name = "grafting-procgen-curve-offset"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Generic curve sampling, banded lateral offset, and boolean union+triangulation. Pure geometry, no dependency on grafting-graph-core's storage and no vocabulary for what a curve is for -- matching the isolation grafting-procgen-surface-mesh already uses for generation-only crates."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+earcut = "0.4"
+i_overlay = "^8.1"

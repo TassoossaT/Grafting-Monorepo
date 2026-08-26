@@ -10,6 +10,9 @@ export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 
 export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
 
+export { pathSpineDraftFor } from "./path-spine-draft.ts";
+export type { PathSpineDraft } from "./path-spine-draft.ts";
+
 export {
   followsOutward,
   isSpineNode,
@@ -17,6 +20,12 @@ export {
   stationNodeId,
 } from "./station-node-id.ts";
 export type { StationNodeAddress } from "./station-node-id.ts";
+
+export {
+  chainsOf,
+  spineControlNodeId,
+  spineGraphFromSnapshot,
+} from "./spine-graph/index.ts";
 
 export {
   pathCloudPerimeter,

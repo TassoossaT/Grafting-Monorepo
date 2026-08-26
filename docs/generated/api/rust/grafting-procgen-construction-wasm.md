@@ -23,6 +23,13 @@ Every currently-known surface's triangulated mesh, in stable key
 order -- the one bootstrap call a renderer uses to draw everything
 already in the session. See `mesh::all_surface_meshes`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::apply_patch_replacement_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Atomically replaces exact application-selected regions with an
+application-generated patch. Unlike a geometric overlay, this keeps
+no remainder and makes no product decision; it simply publishes the
+replacement iff every target face can be registered.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::apply_region_overlay_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Applies an application-generated patch over an exact, already-resolved

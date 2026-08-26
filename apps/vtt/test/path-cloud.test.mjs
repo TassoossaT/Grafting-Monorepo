@@ -5,7 +5,7 @@ import { pathRunsIn, pathRunFor } from "../src/features/edit-construction/struct
 import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
 import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
 import { stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
-import { referenceLineFrom } from "../src/composition/tabletop/tools/paths/path-shared.ts";
+import { referenceLineFrom } from "../src/composition/tabletop/path/path-effect-executor.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",

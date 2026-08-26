@@ -1,4 +1,5 @@
 import type { PathFormationRecipe } from "../structure-types/path/path-recipe.ts";
+import type { ConstructionPosition } from "@/ports";
 
 /**
  * A revision an effect expects to still be current when it lands.
@@ -48,6 +49,13 @@ export interface BrushGestureRegion {
   readonly samples: readonly BrushGestureSample[];
 }
 
+/** A generic construction element the brush observed while sweeping. */
+export interface BrushElementObservation {
+  readonly point: ConstructionPosition;
+  readonly nodeId?: string;
+  readonly surfaceRef?: string;
+}
+
 /** VTT-selected profile for a generic path-sweep formation. */
 export type PathFormationParameters = PathFormationRecipe;
 
@@ -70,6 +78,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
+  /** Raw brush observations, never pre-interpreted as path topology. */
+  readonly observedElements: readonly BrushElementObservation[];
   readonly parameters: PathFormationParameters;
   readonly expected: readonly RevisionPrecondition[];
 }
@@ -109,12 +119,29 @@ function freezeFormation(parameters: PathFormationParameters): PathFormationPara
   return Object.freeze({ kind: parameters.kind, profile: Object.freeze(profile), miterLimit: parameters.miterLimit });
 }
 
+function optionalId(value: string | undefined, field: string): string | undefined {
+  return value === undefined ? undefined : required(value, field);
+}
+
+function freezeObservedElements(elements: readonly BrushElementObservation[] | undefined): readonly BrushElementObservation[] {
+  return Object.freeze((elements ?? []).map((element, index) => Object.freeze({
+    point: Object.freeze({
+      x: finite(element.point.x, `observedElements[${index}].point.x`),
+      y: finite(element.point.y, `observedElements[${index}].point.y`),
+      z: finite(element.point.z, `observedElements[${index}].point.z`),
+    }),
+    nodeId: optionalId(element.nodeId, `observedElements[${index}].nodeId`),
+    surfaceRef: optionalId(element.surfaceRef, `observedElements[${index}].surfaceRef`),
+  })));
+}
+
 /**
  * Creates one immutable effect for a future release-to-confirm boundary.
  * It deliberately does not resolve geometry or mutate graph topology.
  */
 export function createPathBrushEffect(
-  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected">,
+  payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "observedElements"> &
+    Partial<Pick<PathBrushEffect, "observedElements">>,
   context: ConstructionOperationContext,
   expected: readonly RevisionPrecondition[] = [],
 ): PathBrushEffect {
@@ -133,6 +160,7 @@ export function createPathBrushEffect(
     targetType: "path",
     brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
+    observedElements: freezeObservedElements(payload.observedElements),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
