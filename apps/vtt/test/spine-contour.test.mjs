@@ -30,7 +30,7 @@ function standingBand(opId, bandIndex, corners) {
   };
 }
 
-test("a straight isolated run produces one region per band, each a clean quad, and consumes nothing standing", () => {
+test("a straight isolated run produces one unified region, a clean quad, and consumes nothing standing", () => {
   const chain = {
     chainId: "run-1",
     controlPoints: [at(0, 0), at(10, 0)],
@@ -49,9 +49,7 @@ test("a straight isolated run produces one region per band, each a clean quad, a
 
   assert.ok(result !== undefined);
   assert.deepEqual(result.consumedSurfaceKeys, []);
-  // Two bands (-2.1..0 and 0..2.1), no overlap between them, so no union
-  // merges anything -- one region per band.
-  assert.equal(result.patch.regions.length, 2);
+  assert.equal(result.patch.regions.length, 1);
   for (const region of result.patch.regions) {
     assert.equal(region.boundary.length, 4, "a straight run's band is a clean quad");
     assert.equal(region.holes, undefined, "no hole in an isolated band");
@@ -211,4 +209,34 @@ test("planSpineContour consumes every standingRegion it is given, unconditionall
 
   assert.ok(result !== undefined);
   assert.deepEqual(result.consumedSurfaceKeys, [faraway.surfaceKey]);
+});
+
+test("two roads meeting in a Y-junction merge into one single seamless region without crossing seams", () => {
+  const stem = {
+    chainId: "stem-and-left",
+    controlPoints: [at(0, -10), at(0, 0), at(-6, 8)],
+    bandOffsets: [-2.1, 0, 2.1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+  const rightBranch = {
+    chainId: "right-branch",
+    controlPoints: [at(0, 0), at(6, 8)],
+    bandOffsets: [-2.1, 0, 2.1],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-y",
+    surfaceType: "path",
+    editedChains: [stem, rightBranch],
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.equal(result.patch.regions.length, 1, "a Y-junction merges into one seamless polygon region");
+  assert.equal(result.patch.regions[0].holes, undefined, "no holes or internal cuts inside the Y-junction");
 });
