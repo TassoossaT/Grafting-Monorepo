@@ -23,10 +23,26 @@ export interface BandRibbon {
   readonly outer: readonly ConstructionPosition[];
 }
 
+/** Whether `polyline` is a closed loop -- an O-shaped road's own first and last station coincide. */
+function isClosedRing(polyline: readonly ConstructionPosition[]): boolean {
+  if (polyline.length < 3) return false;
+  const first = polyline[0]!;
+  const last = polyline[polyline.length - 1]!;
+  return Math.hypot(first.x - last.x, first.z - last.z) < 1e-6;
+}
+
 /**
  * One band per consecutive pair of `bandOffsets`, following `polyline`'s
  * own shape. Returns no bands for a polyline shorter than two points or a
  * profile with fewer than two offsets.
+ *
+ * A closed loop's first and last station are the same physical point, but
+ * `stationFrame` reads each end of the array it is handed as a free end --
+ * treated separately, they would offset that one seam point two different
+ * ways, leaving a gap or an overlap right where the loop closes. Framed
+ * instead through a tiny wraparound window (its own neighbour on the far
+ * side of the loop, standing in for the "next"/"previous" station an open
+ * run would not have), both ends get the identical, correctly mitred frame.
  */
 export function offsetBands(
   polyline: readonly ConstructionPosition[],
@@ -35,7 +51,15 @@ export function offsetBands(
 ): readonly BandRibbon[] {
   if (polyline.length < 2 || bandOffsets.length < 2) return [];
   const clampedMiter = Math.max(miterLimit, 1);
-  const frames = polyline.map((_point, index) => stationFrame(polyline, index, clampedMiter));
+  const closed = isClosedRing(polyline);
+  const last = polyline.length - 1;
+  const seamFrame = closed
+    ? stationFrame([polyline[last - 1]!, polyline[0]!, polyline[1]!], 1, clampedMiter)
+    : undefined;
+  const frames = polyline.map((point, index) => {
+    if (seamFrame !== undefined && (index === 0 || index === last)) return seamFrame;
+    return stationFrame(polyline, index, clampedMiter);
+  });
   const curves = bandOffsets.map((offset) =>
     polyline.map((point, index) => {
       const frame = frames[index]!;
