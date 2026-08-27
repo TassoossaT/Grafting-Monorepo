@@ -60,18 +60,21 @@ function BrushShapeFields<Params extends BrushShapeParams>(props: {
   );
 }
 
+/**
+ * Every path a player draws is a `street` -- `PathKind` still carries
+ * `"trail" | "street" | "road" | "bridge"` for the engine and for corridors
+ * committed before this panel stopped exposing the other three, but the
+ * brush itself only ever writes `"street"` now. `pathFormationFor` only
+ * adds a shoulder to a road's width for the other three kinds and never
+ * reads `shoulderHeight` at all (no raised rim exists yet), so this only
+ * shows the one slider `street`'s own profile actually answers to: bed
+ * width.
+ */
 function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid">
-        <SelectableChip label="Trilha" selected={params.pathKind === "trail"} onSelect={() => onChange({ ...params, pathKind: "trail" })} />
-        <SelectableChip label="Rua" selected={params.pathKind === "street"} onSelect={() => onChange({ ...params, pathKind: "street" })} />
-        <SelectableChip label="Estrada" selected={params.pathKind === "road"} onSelect={() => onChange({ ...params, pathKind: "road" })} />
-      </div>
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
-      {params.pathKind !== "street" && sliderRow("Largura do ombro", params.shoulderWidth, 0.1, 4, 0.1, (shoulderWidth) => onChange({ ...params, shoulderWidth }))}
-      {params.pathKind !== "street" && sliderRow("Altura do ombro", params.shoulderHeight, 0, 2, 0.05, (shoulderHeight) => onChange({ ...params, shoulderHeight }))}
     </div>
   );
 }

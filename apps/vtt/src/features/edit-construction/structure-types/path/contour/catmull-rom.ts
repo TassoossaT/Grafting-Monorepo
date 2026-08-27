@@ -176,12 +176,34 @@ function flatten(
 }
 
 /**
+ * Whether `controlPoints` is a closed loop -- its own first and last points
+ * coincide, the convention {@link chainsOf} already uses to keep an O-shaped
+ * spine's own closing point in the chain it hands this function.
+ */
+function isClosedLoop(controlPoints: readonly ConstructionPosition[]): boolean {
+  if (controlPoints.length < 4) return false;
+  const first = controlPoints[0]!;
+  const last = controlPoints[controlPoints.length - 1]!;
+  return distanceXZ(first, last) < 1e-6;
+}
+
+/**
  * Samples a centripetal Catmull-Rom curve through `controlPoints`,
  * flattened so no chord strays from the true curve (in XZ) by more than
  * `tolerance`. Collinear control points flatten to their own straight
  * chords regardless of how unevenly they are spaced -- collinear is
  * collinear under any parametrization -- so the result is exactly
  * `controlPoints` back.
+ *
+ * A closed loop (first and last point coincide) is walked with wraparound
+ * neighbours at that seam -- the point one step before the start is the
+ * loop's own second-to-last point, and the point one step after the end is
+ * its own second point -- rather than {@link reflect}'s fabricated free
+ * end. `reflect` assumes the run stops there; a loop's own closing point is
+ * not a stop, and treating it as one gives the two spans that meet there
+ * two different, wrong tangents at what is physically one single point,
+ * which is what left an O-shaped road not actually closed around its own
+ * seam.
  */
 export function sampleCatmullRom(
   controlPoints: readonly ConstructionPosition[],
@@ -189,13 +211,14 @@ export function sampleCatmullRom(
 ): readonly ConstructionPosition[] {
   if (controlPoints.length < 2) return controlPoints;
   const last = controlPoints.length - 1;
+  const closed = isClosedLoop(controlPoints);
   const clampedTolerance = Math.max(tolerance, 1e-6);
   const points: ConstructionPosition[] = [controlPoints[0]!];
   for (let index = 0; index < last; index += 1) {
     const p1 = controlPoints[index]!;
     const p2 = controlPoints[index + 1]!;
-    const p0 = index === 0 ? reflect(p1, p2) : controlPoints[index - 1]!;
-    const p3 = index + 1 === last ? reflect(p2, p1) : controlPoints[index + 2]!;
+    const p0 = index === 0 ? (closed ? controlPoints[last - 1]! : reflect(p1, p2)) : controlPoints[index - 1]!;
+    const p3 = index + 1 === last ? (closed ? controlPoints[1]! : reflect(p2, p1)) : controlPoints[index + 2]!;
     flatten(p0, p1, p2, p3, 0, 1, clampedTolerance, 0, points);
   }
   return points;

@@ -19,7 +19,7 @@ import { chainsOf, parseSpineControlNodeId, spineControlNodeId, spineGraphFromSn
 import { pathRidesTerrain } from "./path-recipe.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
-import { fitPath, type FittedEdge, type SweptArc } from "../../topology/index.ts";
+import { fitPath, type FittedEdge } from "../../topology/index.ts";
 import {
   offsetBands,
   planSpineContour,
@@ -29,20 +29,14 @@ import {
 } from "./contour/index.ts";
 
 /**
- * How far a flattened arc may sit from the true circle, in world units.
- *
- * This is a smoothness knob, not a fidelity one: the fit has already decided
- * where the road goes, and this only controls how finely that decision is
- * spelled out before it becomes Catmull-Rom control points. It disappears
- * the moment the fitter takes contour geometry directly.
- */
-const ARC_FLATTENING_TOLERANCE = 0.05;
-
-/**
  * How finely the committed curve follows the true Catmull-Rom shape, in
- * world units (XZ) -- the spine-contour engine's own equivalent of
- * `ARC_FLATTENING_TOLERANCE` above, generalised from a circular arc to a
- * free curve through the drawn control points.
+ * world units (XZ). The spine's own control points stay few -- `groundTrack`
+ * keeps one per real corner, never one per flattening step -- and this is
+ * what turns that handful of points into a smooth curve for the contour
+ * union and the footprint/coverage outline, the same Catmull-Rom-through-
+ * few-anchors model this whole spine is styled on (no attempt to prove any
+ * one span is a literal circle; a smooth spline through the right corners
+ * already looks right).
  */
 const CURVE_FLATTENING_TOLERANCE = 0.05;
 
@@ -352,69 +346,27 @@ function groundHeightNear(
   return closest?.y ?? 0;
 }
 
-/**
- * One point of the sampled track, and whether the run genuinely turns there.
- *
- * A corner has to become a control point whatever the walk decides, or the
- * road cuts straight across it; an arc sample is only sampling, and the walk
- * is free to place control points wherever it likes along it.
- *
- * `arc` is the curve the run is *on* as it leaves this point -- carried
- * through fitting and flattening, but no longer read once the point becomes
- * a Catmull-Rom control point: the spine-contour engine re-derives its own
- * curvature from the control points themselves, rather than being handed a
- * circular arc it would have to approximate anyway.
- */
+/** One point of the sampled track: where it sits, and whether the run genuinely turns there. */
 interface TrackPoint {
   readonly x: number;
   readonly z: number;
   readonly corner: boolean;
-  readonly arc: SweptArc | undefined;
 }
 
-/** The fitted contour as ground positions, arcs sampled by angle. */
+/**
+ * The fitted contour as ground positions -- one control point per fitted
+ * corner. Kept few on purpose: `planSpineContour`'s own Catmull-Rom already
+ * turns a handful of well-placed corners into a smooth curve (the same
+ * few-anchors-plus-a-spline model a wall's own fit uses), so subdividing a
+ * corner-to-corner run further here would only add points the curve never
+ * needed.
+ */
 function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
   const first = fitted[0];
   if (first === undefined) return [];
-
-  const track: TrackPoint[] = [
-    { x: first.start.x, z: first.start.z, corner: true, arc: undefined },
-  ];
-  const carry = (arc: SweptArc | undefined): void => {
-    const last = track[track.length - 1]!;
-    track[track.length - 1] = { ...last, arc };
-  };
+  const track: TrackPoint[] = [{ x: first.start.x, z: first.start.z, corner: true }];
   for (const edge of fitted) {
-    if (edge.geometry.kind === "arc") {
-      carry({ center: edge.geometry.center, clockwise: edge.geometry.clockwise });
-      const [centerX, centerZ] = edge.geometry.center;
-      const radius = Math.hypot(edge.start.x - centerX, edge.start.z - centerZ);
-      const startAngle = Math.atan2(edge.start.z - centerZ, edge.start.x - centerX);
-      const endAngle = Math.atan2(edge.end.z - centerZ, edge.end.x - centerX);
-      const counterClockwise = (endAngle - startAngle + Math.PI * 2) % (Math.PI * 2);
-      const swept = edge.geometry.clockwise ? Math.PI * 2 - counterClockwise : counterClockwise;
-
-      // Sagitta: a chord deviating by `t` from a circle of radius `r`
-      // subtends 2*acos(1 - t/r). A radius under the tolerance has no
-      // meaningful arc left to sample, so one chord is the whole of it.
-      const maxStep =
-        radius > ARC_FLATTENING_TOLERANCE
-          ? 2 * Math.acos(1 - ARC_FLATTENING_TOLERANCE / radius)
-          : Math.PI;
-      const steps = Math.max(1, Math.ceil(swept / maxStep));
-      for (let step = 1; step < steps; step += 1) {
-        const angle = edge.geometry.clockwise
-          ? startAngle - (swept * step) / steps
-          : startAngle + (swept * step) / steps;
-        track.push({
-          x: centerX + radius * Math.cos(angle),
-          z: centerZ + radius * Math.sin(angle),
-          corner: false,
-          arc: { center: edge.geometry.center, clockwise: edge.geometry.clockwise },
-        });
-      }
-    }
-    track.push({ x: edge.end.x, z: edge.end.z, corner: true, arc: undefined });
+    track.push({ x: edge.end.x, z: edge.end.z, corner: true });
   }
   return track;
 }
@@ -433,11 +385,11 @@ export function referenceLineFrom(
   fitted: readonly FittedEdge[],
   stroke: readonly ConstructionPosition[],
   ridesTerrain: boolean,
-): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
+): { readonly line: readonly ConstructionPosition[] } {
   const track = groundTrack(fitted);
   const first = track[0];
   const last = track[track.length - 1];
-  if (first === undefined || last === undefined) return { line: [], arcs: [] };
+  if (first === undefined || last === undefined) return { line: [] };
 
   // A deck spans: its height comes from its own two ends, so the middle stays
   // level instead of sagging onto whatever it crosses. Everything else reads
@@ -463,27 +415,21 @@ export function referenceLineFrom(
   const line: ConstructionPosition[] = [
     { x: first.x, y: heightAt(first.x, first.z), z: first.z },
   ];
-  /** The curve each span runs on; one shorter than `line`. */
-  const arcs: (SweptArc | undefined)[] = [];
-  const push = (x: number, z: number, arc: SweptArc | undefined): void => {
+  const push = (x: number, z: number): void => {
     const previous = line[line.length - 1]!;
     // Two stations at one spot would collapse into a zero-length curve
     // segment.
     if (Math.hypot(x - previous.x, z - previous.z) < 1e-4) return;
     line.push({ x, y: heightAt(x, z), z });
-    arcs.push(arc);
   };
 
   // Every point the fit itself produced is a control point: a corner because
-  // the run genuinely turns there, an arc sample because the outline handed
-  // to the coverage query is a polygon and has to follow the curve even
-  // though the edges between these points are true arcs.
-  //
-  // What is *not* automatic any more is anything between them. A stretch gets
-  // extra control points only where the ground under it strays from the
-  // straight line the stretch would otherwise be -- so a straight road over
-  // flat ground is two control points, and a straight road over a ridge is
-  // exactly as many as the ridge needs.
+  // the run genuinely turns there. What is *not* automatic any more is
+  // anything between them. A stretch gets extra control points only where
+  // the ground under it strays from the straight line the stretch would
+  // otherwise be -- so a straight road over flat ground is two control
+  // points, and a straight road over a ridge is exactly as many as the
+  // ridge needs.
   for (let index = 0; index + 1 < track.length; index += 1) {
     const from = track[index]!;
     const to = track[index + 1]!;
@@ -513,24 +459,18 @@ export function referenceLineFrom(
         // rather than being dragged through it.
         const backRatio = Math.max(lastProbe, 0) / span;
         travelled = anchored + span * backRatio;
-        push(
-          from.x + (to.x - from.x) * backRatio,
-          from.z + (to.z - from.z) * backRatio,
-          from.arc,
-        );
+        push(from.x + (to.x - from.x) * backRatio, from.z + (to.z - from.z) * backRatio);
         anchored = travelled;
         lastProbe = probe;
       }
     }
 
     travelled += span;
-    push(to.x, to.z, from.arc);
+    push(to.x, to.z);
   }
   // The run has to end where it was drawn, corner or not.
-  push(last.x, last.z, track[track.length - 2]?.arc);
-  // One span per gap: a station pushed at the very start has no span behind
-  // it, and the walk above records a span only when it lands somewhere new.
-  return { line, arcs: arcs.slice(0, Math.max(0, line.length - 1)) };
+  push(last.x, last.z);
+  return { line };
 }
 
 /** The table facts supplied to the PathCloud before it plans a mutation. */
@@ -581,6 +521,14 @@ export type PathCloudMutationPlan =
  *   something it must not touch; it does not cut or consume terrain underneath
  *   it. Drawing a road over terrain leaves that terrain standing rather than
  *   risking an imprecise cut.
+ * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
+ *   span by its chord (`spine.controlPoints` no longer carries intermediate
+ *   samples along one -- see `groundTrack`), the same way every other span
+ *   here always has. A gentle curve's chord and its true arc barely differ;
+ *   a very tight, wide-swinging one could weld or cross slightly off from
+ *   where the curve itself actually runs. Not a case this stage resolves,
+ *   only one it accepts in exchange for never chopping a real arc into
+ *   graph nodes it does not need.
  */
 export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
   const { effect, tolerance } = input;
@@ -589,10 +537,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
-  const swept =
-    fitted.length === 0
-      ? { line: stroke, arcs: [] as readonly (SweptArc | undefined)[] }
-      : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
+  const swept = fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 

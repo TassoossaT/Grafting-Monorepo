@@ -13,3 +13,4 @@ export { createBoundaryEdges, reverseGeometry, sharedEdgeId } from "./boundary-e
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export { stationFrame, sweptBoundary, sweepFormation, withoutCoincidentStations, SweepFormationError } from "./sweep-formation.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
+export { simplifyClosedRing } from "./ring-simplify.ts";

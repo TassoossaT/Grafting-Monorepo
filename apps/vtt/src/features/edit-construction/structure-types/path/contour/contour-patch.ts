@@ -1,7 +1,7 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
-import { createBoundaryEdges } from "../../../topology/index.ts";
+import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
 import { nearestSampleY } from "./union-bands.ts";
 
 /**
@@ -156,10 +156,20 @@ export function buildContourPatch(
     })
     .map((shape, shapeIndex) => {
       const [outerRing, ...holeRings] = shape;
-      const outerIds = idsFor(ensureUpwardWinding(outerRing ?? [], false), 0);
+      // A run of collinear points the union happened to leave standing is
+      // still, geometrically, one straight edge -- simplified here, once, so
+      // a self-intersection cleanup or a welded-in existing vertex does not
+      // leave the patch with more boundary edges than the shape actually
+      // has.
+      const simplifyRing = (ids: readonly string[]): readonly string[] => {
+        const positions = ids.map((id) => nodePositions.get(id)!);
+        const kept = simplifyClosedRing(positions, () => undefined);
+        return kept.map((index) => ids[index]!);
+      };
+      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(outerRing ?? [], false), 0));
       const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const holeIds = idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1);
+        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1));
         return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });
       return {
@@ -171,10 +181,22 @@ export function buildContourPatch(
       };
     });
 
+  // Simplification mints ids for points the ring no longer walks through --
+  // still in `nodePositions` from `idsFor`, but on no edge any boundary or
+  // hole above actually declared. Reported only for what the patch still
+  // uses, so a collapsed run of arc samples does not resurrect its own
+  // discarded middle as orphaned nodes nobody references.
+  const declaredEdges = edges.all();
+  const usedNodeIds = new Set<string>();
+  for (const edge of declaredEdges) {
+    usedNodeIds.add(edge.startNodeId);
+    usedNodeIds.add(edge.endNodeId);
+  }
+
   return {
     patch: {
-      nodes: [...nodePositions].map(([id, position]) => ({ id, position })),
-      edges: edges.all(),
+      nodes: [...nodePositions].filter(([id]) => usedNodeIds.has(id)).map(([id, position]) => ({ id, position })),
+      edges: declaredEdges,
       regions,
     },
     regionIds: regions.map((region) => region.regionId),
