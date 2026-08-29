@@ -401,14 +401,16 @@ Goal: evolve the technical map edit mode into a deliberate construction workspac
 
 | # | Task | Status | Difficulty | Impact |
 | --- | --- | --- | --- | --- |
-| E7.1 | Construction-editor foundation: toolbar/tool state, hover and selection model, property inspector, preview/cancel lifecycle, keyboard shortcuts, and a typed tool-to-operation boundary over E3.7 | Open - depends on E3.8 | High | High - establishes safe authoring ergonomics |
-| E7.2 | Wall, terrain, and node authoring tools: create/select/move/delete construction intent with guides, snapping previews, clear no-op/cancel behavior, and targeted invalidation | Open - depends on E7.1 | High | High - makes the map practical to build |
+| # | Task | Status | Difficulty | Impact |
+| --- | --- | --- | --- | --- |
+| E7.1 | Construction-editor foundation: toolbar/tool state, hover and selection model, property inspector, preview/cancel lifecycle, direct 3D element gizmos (#235), and construction cloud multi-surface handles (#241) | Open (#235, #241) - depends on E3.8 | High | High - establishes safe authoring ergonomics |
+| E7.2 | Wall, terrain, and node authoring tools: terrain interlacing fix (#226), categories (#227), stone subtype (#228), path over terrain (#229), and sculpt tools (add/sub/flatten/smooth, #230) | Open (#226, #227, #228, #229, #230, #240) | High | High - makes the map practical to build |
 | E7.3 | Relationship composition: recognize shared edges and intersections, preview and confirm wall corners/miters, and retain canonical graph/surface authority | Open - depends on E7.1-E7.2 | High | High - first reactive construction chemistry |
-| E7.4 | Opening tools: place, resize, move, and remove doors/windows; a path crossing a wall may propose an opening preview, but confirmation remains explicit and produces canonical sibling surfaces | Open - depends on E7.3 | High | High - turns simple walls into usable structures |
+| E7.4 | Opening tools: parametric windows at any height, opening edit gizmo, 1D union of overlapping openings (#231), and synchronized cuts across shared/double walls with connector jambs (#237) | Open (#231, #237) - depends on E7.3 | High | High - turns simple walls into usable structures |
 | E7.5 | Surface-pattern editor: choose a covering, edit frame anchor, bond/layout, joint, seed, variants, and boundary policy through SurfacePatternBinding operations | Open - depends on E4.5-E4.6 and E7.1 | Medium | High - makes procedural visual detail controllable |
-| E7.6 | Room and enclosure composition: derive/select room boundaries, floor and ceiling surfaces, and inspect relationships without introducing parallel free geometry | Open - depends on E7.2-E7.4 | High | High - required before interior generation |
-| E7.7 | Roof research decision and first footprint-to-roof surface generator, with a separate license/algorithm evaluation before any straight-skeleton dependency is introduced | Open - depends on E7.6 | High | Medium - extends construction above walls |
-| E7.8 | Stairs, platforms, and railings: preview attachment to construction surfaces and commit semantic operations; collision/physics claims remain deferred to Epic 6 | Open - depends on E7.2 and E7.6 | High | Medium |
+| E7.6 | Room and enclosure composition: derive/select room boundaries, explicit floor and ceiling slab generation in Y levels (#233), and intelligent interior partitioning without perimeter duplication (#234) | Open (#233, #234) - depends on E7.2-E7.4 | High | High - required before interior generation |
+| E7.7 | Roof generator: footprint-to-roof surfaces (gable, hip, flat, conical/tower) with pitch, overhang, and semantic tile/shingle surfaces | Open (#232) - depends on E7.6 | High | Medium - extends construction above walls |
+| E7.8 | Stairs, platforms, and railings: parametric step generator connecting elevation levels (#236) and attachment to construction surfaces; collision/physics claims remain deferred to Epic 6 | Open (#236) - depends on E7.2 and E7.6 | High | Medium |
 | E7.9 | Rule-driven visual dressing: beams, trim, shingles, ivy, clutter, and other derived decoration with dependency-scoped invalidation and no individual-entity explosion | Open - depends on E4.6 and E7.3-E7.6 | Medium | Medium |
 
 ## Epic 8 - Placeables and interior composition
@@ -425,6 +427,18 @@ Goal: give movable props and generated interiors their own placement authority, 
 | E8.6 | Evaluate one offline interior generator, beginning with Infinigen Indoors and ProcTHOR as reference/proposal producers. Audit code, asset, model, and dataset licenses separately; do not make either a runtime authority | Open - depends on E8.5 | Medium | Medium |
 | E8.7 | Deterministic furnishing and clutter rules using the VTT asset catalog, room constraints, and placement queries; provide seedable variants and explicit user refinement | Open - depends on E8.3-E8.5 | High | Medium |
 | E8.8 | Decide whether editable movable assemblies are a real product requirement. If accepted, build a local-space assembly definition plus world-space placement slice; otherwise keep movable structures as rigid placeables | Open - owner gate; depends on E8.1 | High | Medium |
+| E8.9 | Map persistence: serialize and deserialize the tabletop construction state (Graph, Surfaces, Asset Bindings, Placeables) to lightweight JSON/binary snapshot files for local save/load and export | Open (#239) | Medium | High |
+
+## Epic 9 - Atmosphere, Lighting & Post-Processing
+
+Goal: provide tactile diorama rendering quality through soft directional lighting, Screen-Space Ambient Occlusion (SSAO), silhouette outline shaders, and atmospheric sky/fog.
+
+| # | Task | Status | Difficulty | Impact |
+| --- | --- | --- | --- | --- |
+| E9.1 | Screen-Space Ambient Occlusion (SSAO) post-processing pass in `@grafting/render-3d` | Open (#238) | Medium | High |
+| E9.2 | Directional sun lighting with soft shadow maps and time-of-day presets | Open (#238) | Medium | High |
+| E9.3 | Silhouette edge/depth outline shader for miniature diorama clarity | Open (#238) | Medium | Medium |
+| E9.4 | Atmospheric sky dome and depth fog | Open (#238) | Low | Medium |
 
 ---
 
