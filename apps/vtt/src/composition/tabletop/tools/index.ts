@@ -20,7 +20,7 @@ export { editRegionTool } from "./core/edit-region-tool.ts";
 
 export { terrainSculptTool } from "./terrain/terrain-sculpt-tool.ts";
 export { restackTerrain } from "./terrain/terrain-restack.ts";
-export { buildIrregularQuadGrid, type QuadMesh, type Vec2 as IrregularGridVec2 } from "./terrain/irregular-grid.ts";
+export { buildIrregularQuadGrid, type QuadMesh, type Vec2 as IrregularGridVec2 } from "@/features/edit-construction";
 
 export { wallLineTool } from "./walls/wall-line-tool.ts";
 export { wallBrushTool } from "./walls/wall-brush-tool.ts";

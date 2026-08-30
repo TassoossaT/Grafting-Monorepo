@@ -20,12 +20,18 @@
  * mattered here.
  *
  * Ported verbatim from `apps/architecture-studio/src/vtt/irregular-grid.ts`
- * (2026-08-08 lab trial, tested, never wired to any UI) into `composition/tabletop/tools/`
- * so `terrain-sculpt-tool.ts` can submit its output as graph nodes/surfaces
- * through `ConstructionSessionPort`'s existing generic operations. No change
- * to the algorithm itself -- apps/architecture-studio and apps/vtt are
- * separate Nx apps with no cross-app import path today, so this is a copy,
- * not a shared package.
+ * (2026-08-08 lab trial, tested, never wired to any UI). No change to the
+ * algorithm itself -- apps/architecture-studio and apps/vtt are separate Nx
+ * apps with no cross-app import path today, so this is a copy, not a shared
+ * package.
+ *
+ * Lives here, under `structure-types`' own `topology/` (generic capability
+ * layer, alongside `boundary-edges.ts`), rather than under
+ * `composition/tabletop/tools/terrain/` where it first landed: a structure
+ * type's own repair (`organic/organic-cut-repair.ts`) needs this generator
+ * exactly as much as `terrain-sculpt-tool.ts` does, and `structure-types/`
+ * must not import `composition/` -- so the generator moved to the one place
+ * both sides can already reach.
  *
  * PENDING (not scheduled): this stays TypeScript, unlike every other
  * procedural generator in the app (`generateTerrainCell`/`generatePathExtrusion` are

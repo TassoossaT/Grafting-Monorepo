@@ -1,5 +1,5 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
-import type { TerrainSculptParams } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, buildIrregularQuadGrid } from "@/features/edit-construction";
+import type { TerrainSculptParams, QuadMesh, Vec2 } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionOrientedEdgeUse,
@@ -10,7 +10,6 @@ import type {
   ConstructionSurfaceSpec,
 } from "@/ports";
 
-import { buildIrregularQuadGrid, type QuadMesh, type Vec2 } from "./irregular-grid.ts";
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { restackTerrain } from "./terrain-restack.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";

@@ -8,7 +8,7 @@ import {
   pairTriangles,
   relax,
   weld,
-} from "../src/composition/tabletop/tools/terrain/irregular-grid.ts";
+} from "../src/features/edit-construction/topology/irregular-grid.ts";
 
 const hex = () => buildTriangleHex({ trianglesPerSide: 4, triangleSide: 0.5 });
 
