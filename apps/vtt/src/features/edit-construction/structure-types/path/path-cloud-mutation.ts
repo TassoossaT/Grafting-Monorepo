@@ -3,7 +3,6 @@ import type {
   ApplyPatchReplacementRequest,
   ConstructionCoveredRegion,
   ConstructionGraphSnapshot,
-  ConstructionNodeId,
   ConstructionRegionTopology,
 } from "@/ports";
 
@@ -14,6 +13,7 @@ import {
   firstRefusal,
   resolveCoverage,
   resolveCutRepair,
+  type CutFallout,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
 import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
@@ -53,20 +53,6 @@ export interface PathCloudMutationInput {
   readonly tolerance: number;
 }
 
-/**
- * The covered-side fallout of a `"cut"`, when this stroke actually consumed
- * something -- carried on the plan rather than acted on here, since this
- * module has no runtime to act with. `outline` is the same footprint
- * polygon the coverage query itself used, offered back as the boundary a
- * caller's own repair pass should conform the leftover to; `nodeScope` is
- * every node the consumed faces stood on, the right scope for a caller to
- * ask the engine which of them survived and now sit exposed.
- */
-export interface TerrainCutFallout {
-  readonly outline: readonly (readonly [number, number])[];
-  readonly nodeScope: readonly ConstructionNodeId[];
-}
-
 /** The PathCloud's decision; the runtime only executes the ready request. */
 export type PathCloudMutationPlan =
   | { readonly kind: "noop"; readonly message: string }
@@ -75,8 +61,14 @@ export type PathCloudMutationPlan =
       readonly kind: "ready";
       readonly request: ApplyPatchReplacementRequest;
       readonly plannedRegionCount: number;
-      /** `undefined` when this stroke consumed nothing. */
-      readonly terrainCut: TerrainCutFallout | undefined;
+      /**
+       * `undefined` when this stroke consumed nothing. This module only
+       * reports what it did -- which regions, of which type, it consumed --
+       * and has no idea what a caller does with that beyond here; whichever
+       * covered type actually repairs itself owns that logic entirely on
+       * its own side. See `CutFallout`.
+       */
+      readonly cutFallout: CutFallout | undefined;
     };
 
 /**
@@ -134,9 +126,9 @@ function cutRegionsFor(resolved: ReturnType<typeof resolveCoverage>) {
  *   not reproduced here. Only a face the footprint covers whole
  *   (`coverage: "centroid"`) is consumed, the same fidelity trade-off
  *   `terrain-restack.ts` already accepts for raising (see `cutRegionsFor`
- *   above). The `terrainCut` fallout this returns is what lets a caller
- *   close that seam -- conforming the leftover's exposed rim to `outline`
- *   -- without this module reaching for a runtime of its own to do it here.
+ *   above). The `cutFallout` this returns reports what happened; closing
+ *   that seam is entirely the covered type's own business, done in its own
+ *   module (terrain's is `terrain-cut-repair.ts`), never this one's.
  * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
  *   span by its chord (`spine.controlPoints` no longer carries intermediate
  *   samples along one -- see `groundTrack`), the same way every other span
@@ -249,6 +241,6 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         graphPatch,
       },
       plannedRegionCount: planned.patch.regions.length,
-      terrainCut: cutRegions.surfaceKeys.length === 0 ? undefined : { outline, nodeScope: cutRegions.nodeScope },
+      cutFallout: cutRegions.surfaceKeys.length === 0 ? undefined : { outline, nodeScope: cutRegions.nodeScope },
     };
 }

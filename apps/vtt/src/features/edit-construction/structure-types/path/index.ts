@@ -45,7 +45,7 @@ export type {
 } from "./path-cloud.ts";
 
 export { planPathCloudMutation } from "./path-cloud-mutation.ts";
-export type { PathCloudMutationInput, PathCloudMutationPlan, TerrainCutFallout } from "./path-cloud-mutation.ts";
+export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
 export { referenceLineFrom } from "./path-reference-line.ts";
 
 export {

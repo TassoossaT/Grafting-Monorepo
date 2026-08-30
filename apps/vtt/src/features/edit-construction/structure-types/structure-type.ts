@@ -1,4 +1,4 @@
-import type { ConstructionRegionTopology } from "@/ports";
+import type { ConstructionNodeId, ConstructionRegionTopology } from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
@@ -120,6 +120,32 @@ export type CutRepair =
   | { readonly kind: "regenerate"; readonly reason: string }
   /** No repair has been designed for this type yet; the leftover is left as the cut leaves it. */
   | { readonly kind: "unsupported"; readonly reason: string };
+
+/**
+ * What a painted stroke reports about a `"cut"` it actually carried out --
+ * the seam a `"regenerate"`-capable covered type now needs to close.
+ *
+ * Deliberately painter-agnostic and covered-type-agnostic: a stroke that
+ * paints and cuts (today, only path) produces this from its own footprint
+ * and the regions it consumed, with no idea which type is on the other
+ * side, or how that type intends to repair itself -- it only reports what
+ * happened. Whichever type actually implements `"regenerate"` owns reading
+ * this and doing something with it, in its own module, entirely outside
+ * `structure-types/`: this shape is the contract between the two sides, not
+ * the repair itself, which needs a runtime this pure layer does not have.
+ */
+export interface CutFallout {
+  /** The painted shape's own footprint, the boundary the leftover should conform to. */
+  readonly outline: readonly (readonly [number, number])[];
+  /**
+   * Every node the consumed regions stood on. Whichever of them a surviving
+   * neighbour still references is exactly the rim the cut exposed --
+   * `ConstructionSessionPort.getUnfilledLoops` reports it when asked about
+   * this same scope, since the painted shape's own faces reference a
+   * disjoint set of nodes and never close the loop themselves.
+   */
+  readonly nodeScope: readonly ConstructionNodeId[];
+}
 
 /**
  * One structure type's definition -- which is to say, **what a cloud of this

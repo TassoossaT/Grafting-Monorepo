@@ -338,9 +338,9 @@ test("a terrain face the road covers whole is consumed, and reported as a terrai
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [terrainFace.surfaceKey], "the whole terrain face is consumed");
-  assert.notEqual(plan.terrainCut, undefined, "a terrain cut actually happened");
-  assert.deepEqual(plan.terrainCut.nodeScope, terrainFace.nodeIds);
-  assert.ok(plan.terrainCut.outline.length >= 3, "the road's own footprint is offered back as the boundary to conform to");
+  assert.notEqual(plan.cutFallout, undefined, "a terrain cut actually happened");
+  assert.deepEqual(plan.cutFallout.nodeScope, terrainFace.nodeIds);
+  assert.ok(plan.cutFallout.outline.length >= 3, "the road's own footprint is offered back as the boundary to conform to");
 });
 
 test("a terrain face the road only clips is left standing, not consumed", () => {
@@ -365,7 +365,7 @@ test("a terrain face the road only clips is left standing, not consumed", () => 
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a merely-clipped face is never consumed");
-  assert.equal(plan.terrainCut, undefined, "nothing was actually cut");
+  assert.equal(plan.cutFallout, undefined, "nothing was actually cut");
 });
 
 test("a wall the road crosses is left standing: panels have no repair for a cut yet", () => {
@@ -390,5 +390,5 @@ test("a wall the road crosses is left standing: panels have no repair for a cut 
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a wall is never consumed -- resolveCutRepair says unsupported");
-  assert.equal(plan.terrainCut, undefined);
+  assert.equal(plan.cutFallout, undefined);
 });
