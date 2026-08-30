@@ -316,7 +316,12 @@ function straightRoadEffect() {
   );
 }
 
-test("a terrain face the road covers whole is consumed, and the request carries the road's own footprint", () => {
+test("planPathCloudMutation never consumes another type's regions itself, whatever they are, and always carries its own footprint", () => {
+  // Consumption of a foreign type is entirely TabletopRuntime.applyPatchReplacement's
+  // call now, resolved fresh from footprintOutline -- this function's own
+  // sourceSurfaceKeys names only a path absorbing another path
+  // (planned.consumedSurfaceKeys). What it owes any foreign-type repair is
+  // just the footprint to resolve coverage against.
   const terrainFace = {
     surfaceKey: ["@region", "terrain:0:0"],
     surfaceType: "terrain",
@@ -337,59 +342,6 @@ test("a terrain face the road covers whole is consumed, and the request carries 
   });
 
   assert.equal(plan.kind, "ready");
-  assert.deepEqual(plan.request.sourceSurfaceKeys, [terrainFace.surfaceKey], "the whole terrain face is consumed");
-  // planPathCloudMutation itself decides nothing about repairing what it
-  // consumed -- that dispatch lives entirely in
-  // TabletopRuntime.applyPatchReplacement, generic across every caller of
-  // that method. This only checks the fact the request needs to carry for
-  // that dispatch to be possible at all.
-  assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request");
-});
-
-test("a terrain face the road only clips is left standing, not consumed", () => {
-  const clippedFace = {
-    surfaceKey: ["@region", "terrain:1:0"],
-    surfaceType: "terrain",
-    physical: true,
-    coverage: "overlap",
-    centroid: { x: 5, y: 0, z: 4 },
-    nodeIds: ["terrain-node-c", "terrain-node-d"],
-  };
-
-  const plan = planPathCloudMutation({
-    tableId: "table-1",
-    snapToGrid: false,
-    graphSnapshot: { nodes: [], edges: [] },
-    regionTopologies: [],
-    coverageFor: () => [clippedFace],
-    effect: straightRoadEffect(),
-    tolerance: 0.05,
-  });
-
-  assert.equal(plan.kind, "ready");
-  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a merely-clipped face is never consumed");
-});
-
-test("a wall the road crosses is left standing: panels have no repair for a cut yet", () => {
-  const wallFace = {
-    surfaceKey: ["@region", "wall-white:0:0"],
-    surfaceType: "wall-white",
-    physical: true,
-    coverage: "centroid",
-    centroid: { x: 5, y: 0, z: 0 },
-    nodeIds: ["wall-node-a", "wall-node-b"],
-  };
-
-  const plan = planPathCloudMutation({
-    tableId: "table-1",
-    snapToGrid: false,
-    graphSnapshot: { nodes: [], edges: [] },
-    regionTopologies: [],
-    coverageFor: () => [wallFace],
-    effect: straightRoadEffect(),
-    tolerance: 0.05,
-  });
-
-  assert.equal(plan.kind, "ready");
-  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a wall is never consumed -- resolveCutRepair says unsupported");
+  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a foreign region is never in this function's own sourceSurfaceKeys");
+  assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request regardless");
 });

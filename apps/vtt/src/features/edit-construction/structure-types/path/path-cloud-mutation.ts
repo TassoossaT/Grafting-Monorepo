@@ -4,7 +4,6 @@ import type {
   ConstructionCoveredRegion,
   ConstructionGraphSnapshot,
   ConstructionRegionTopology,
-  ConstructionSurfaceKey,
 } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -13,7 +12,6 @@ import type {
 import {
   firstRefusal,
   resolveCoverage,
-  resolveCutRepair,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
 import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
@@ -60,29 +58,6 @@ export type PathCloudMutationPlan =
   | { readonly kind: "ready"; readonly request: ApplyPatchReplacementRequest; readonly plannedRegionCount: number };
 
 /**
- * Every terrain-like face this footprint covers whole and is allowed to
- * consume -- the creation-side half of `CUT`, resolved generically through
- * `resolveCutRepair` rather than by naming terrain here.
- *
- * `CUT`'s meaning is universal -- consume what is covered -- but only a face
- * the covered type can actually survive losing gets consumed. A face the
- * footprint merely clips is left standing regardless (the same "whole faces
- * only" fidelity `terrain-restack.ts` already accepts), and a covered type
- * that answers `resolveCutRepair` with `"unsupported"` is left standing too:
- * deleting it with no way to repair the leftover would trade a visible
- * overlap for an unrepairable hole, which is worse. Whether the survivors
- * ever get repaired at all is not decided here either -- that is the
- * runtime's own call once it sees what this stroke actually consumed; this
- * function only decides what a `"cut"` may safely take.
- */
-function cutSurfaceKeysFor(resolved: ReturnType<typeof resolveCoverage>): readonly ConstructionSurfaceKey[] {
-  return resolved
-    .filter((entry) => entry.interaction.kind === "cut" && entry.covered.coverage === "centroid")
-    .filter((entry) => resolveCutRepair(entry.covered.surfaceType).kind === "regenerate")
-    .map((entry) => entry.covered.surfaceKey);
-}
-
-/**
  * Turns a draw intent into the next state of the entire touched PathCloud.
  * Junction resolution, spine splitting, face ownership and contour rebuild
  * all live here; callers merely provide snapshots and apply the result.
@@ -107,17 +82,13 @@ function cutSurfaceKeysFor(resolved: ReturnType<typeof resolveCoverage>): readon
  *   which a contour node minted by this engine does not carry. A newly
  *   drawn road commits correctly; editing it interactively afterwards is a
  *   follow-up, not something this function attempts.
- * - A terrain face the footprint only clips (`coverage: "overlap"`) is left
- *   standing rather than cut to the road's exact contour -- the old engine's
- *   partial-overlap precision (`applyRegionOverlay`'s overlap-planning) is
- *   not reproduced here. Only a face the footprint covers whole
- *   (`coverage: "centroid"`) is consumed, the same fidelity trade-off
- *   `terrain-restack.ts` already accepts for raising (see `cutSurfaceKeysFor`
- *   above). This function has no part in closing that seam at all: the
- *   request it returns carries `footprintOutline` alongside the consumed
- *   `sourceSurfaceKeys`, and it is `TabletopRuntime.applyPatchReplacement`
- *   that notices a consumed region's type answers `resolveCutRepair` with
- *   `"regenerate"` and dispatches its repair -- generically, for whichever
+ * - This function decides nothing about what its own footprint cuts into.
+ *   `sourceSurfaceKeys` on the request below names only what a *path*
+ *   consumes of its own kind (`planned.consumedSurfaceKeys` -- absorbing an
+ *   adjoining road); `footprintOutline` is the one thing a foreign type
+ *   needs from this stroke, and `TabletopRuntime.applyPatchReplacement` is
+ *   what resolves coverage against it, decides what got cut, and lets the
+ *   covered type repair -- and delete -- itself, generically, for whichever
  *   type painted the cut, this one or any other that calls the same method.
  * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
  *   span by its chord (`spine.controlPoints` no longer carries intermediate
@@ -197,7 +168,6 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     if (refusal !== undefined) {
       return { kind: "refused", reason: refusal };
     }
-    const cutSurfaceKeys = cutSurfaceKeysFor(resolved);
 
     const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
@@ -226,7 +196,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       kind: "ready",
       request: {
         operationId,
-        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutSurfaceKeys],
+        sourceSurfaceKeys: planned.consumedSurfaceKeys,
         patch: planned.patch,
         graphPatch,
         footprintOutline: outline,

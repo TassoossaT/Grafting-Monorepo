@@ -1,4 +1,4 @@
-import type { ConstructionNodeId, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionNodeId, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
@@ -122,29 +122,34 @@ export type CutRepair =
   | { readonly kind: "unsupported"; readonly reason: string };
 
 /**
- * What a painted stroke reports about a `"cut"` it actually carried out --
- * the seam a `"regenerate"`-capable covered type now needs to close.
+ * What a `"cut"` actually did to one covered type -- the seam a
+ * `"regenerate"`-capable covered type now needs to close by welding onto
+ * the painter's own geometry, not merely echoing its position.
  *
- * Deliberately painter-agnostic and covered-type-agnostic: a stroke that
- * paints and cuts (today, only path) produces this from its own footprint
- * and the regions it consumed, with no idea which type is on the other
- * side, or how that type intends to repair itself -- it only reports what
- * happened. Whichever type actually implements `"regenerate"` owns reading
- * this and doing something with it, in its own module, entirely outside
- * `structure-types/`: this shape is the contract between the two sides, not
- * the repair itself, which needs a runtime this pure layer does not have.
+ * Deliberately painter-agnostic: this is assembled by whichever generic
+ * layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
+ * tool -- see its own `applyPatchReplacement`), from a fact neither side
+ * privately owns -- what the paint actually registered, and what it
+ * resolved to consume. The covered type reads this and repairs itself
+ * entirely on its own, in its own module, outside `structure-types/`: this
+ * shape is the contract, not the repair, which needs a runtime this pure
+ * layer does not have.
  */
 export interface CutFallout {
-  /** The painted shape's own footprint, the boundary the leftover should conform to. */
-  readonly outline: readonly (readonly [number, number])[];
   /**
-   * Every node the consumed regions stood on. Whichever of them a surviving
-   * neighbour still references is exactly the rim the cut exposed --
-   * `ConstructionSessionPort.getUnfilledLoops` reports it when asked about
-   * this same scope, since the painted shape's own faces reference a
-   * disjoint set of nodes and never close the loop themselves.
+   * Every node the painter's own patch actually registered, real graph
+   * nodes with real ids -- not a bare outline of numbers. This is what lets
+   * a repair *weld*: `ConstructionSessionPort.addPatch`'s own node handling
+   * already skips minting a node whose id already exists and reuses the
+   * live one instead, so a covered type's regenerated boundary that reuses
+   * one of these ids outright becomes the same node as the painter's,
+   * sharing a real edge with it -- not a second node merely sitting at the
+   * same position, which is what "coincident, never connected" describes
+   * and this exists to avoid.
    */
-  readonly nodeScope: readonly ConstructionNodeId[];
+  readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
+  readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
 
 /**
