@@ -3,6 +3,7 @@ import type {
   ApplyPatchReplacementRequest,
   ConstructionCoveredRegion,
   ConstructionGraphSnapshot,
+  ConstructionNodeId,
   ConstructionRegionTopology,
 } from "@/ports";
 
@@ -52,11 +53,31 @@ export interface PathCloudMutationInput {
   readonly tolerance: number;
 }
 
+/**
+ * The covered-side fallout of a `"cut"`, when this stroke actually consumed
+ * something -- carried on the plan rather than acted on here, since this
+ * module has no runtime to act with. `outline` is the same footprint
+ * polygon the coverage query itself used, offered back as the boundary a
+ * caller's own repair pass should conform the leftover to; `nodeScope` is
+ * every node the consumed faces stood on, the right scope for a caller to
+ * ask the engine which of them survived and now sit exposed.
+ */
+export interface TerrainCutFallout {
+  readonly outline: readonly (readonly [number, number])[];
+  readonly nodeScope: readonly ConstructionNodeId[];
+}
+
 /** The PathCloud's decision; the runtime only executes the ready request. */
 export type PathCloudMutationPlan =
   | { readonly kind: "noop"; readonly message: string }
   | { readonly kind: "refused"; readonly reason: string }
-  | { readonly kind: "ready"; readonly request: ApplyPatchReplacementRequest; readonly plannedRegionCount: number };
+  | {
+      readonly kind: "ready";
+      readonly request: ApplyPatchReplacementRequest;
+      readonly plannedRegionCount: number;
+      /** `undefined` when this stroke consumed nothing. */
+      readonly terrainCut: TerrainCutFallout | undefined;
+    };
 
 /**
  * Every terrain-like face this footprint covers whole and is allowed to
@@ -71,11 +92,15 @@ export type PathCloudMutationPlan =
  * deleting it with no way to repair the leftover would trade a visible
  * overlap for an unrepairable hole, which is worse.
  */
-function cutSurfaceKeysFor(resolved: ReturnType<typeof resolveCoverage>) {
-  return resolved
+function cutRegionsFor(resolved: ReturnType<typeof resolveCoverage>) {
+  const consumed = resolved
     .filter((entry) => entry.interaction.kind === "cut" && entry.covered.coverage === "centroid")
     .filter((entry) => resolveCutRepair(entry.covered.surfaceType).kind === "regenerate")
-    .map((entry) => entry.covered.surfaceKey);
+    .map((entry) => entry.covered);
+  return {
+    surfaceKeys: consumed.map((covered) => covered.surfaceKey),
+    nodeScope: [...new Set(consumed.flatMap((covered) => covered.nodeIds))],
+  };
 }
 
 /**
@@ -108,12 +133,10 @@ function cutSurfaceKeysFor(resolved: ReturnType<typeof resolveCoverage>) {
  *   partial-overlap precision (`applyRegionOverlay`'s overlap-planning) is
  *   not reproduced here. Only a face the footprint covers whole
  *   (`coverage: "centroid"`) is consumed, the same fidelity trade-off
- *   `terrain-restack.ts` already accepts for raising (see `cutSurfaceKeysFor`
- *   above). A visible seam of terrain quads just outside the road's smooth
- *   curve is the known consequence; closing it needs the covered face's own
- *   boundary regenerated pinned to the road's contour, which
- *   `resolveCutRepair` already declares terrain capable of (`"regenerate"`)
- *   but nothing executes yet -- this stage only deletes.
+ *   `terrain-restack.ts` already accepts for raising (see `cutRegionsFor`
+ *   above). The `terrainCut` fallout this returns is what lets a caller
+ *   close that seam -- conforming the leftover's exposed rim to `outline`
+ *   -- without this module reaching for a runtime of its own to do it here.
  * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
  *   span by its chord (`spine.controlPoints` no longer carries intermediate
  *   samples along one -- see `groundTrack`), the same way every other span
@@ -192,7 +215,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     if (refusal !== undefined) {
       return { kind: "refused", reason: refusal };
     }
-    const cutSurfaceKeys = cutSurfaceKeysFor(resolved);
+    const cutRegions = cutRegionsFor(resolved);
 
     const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
@@ -221,10 +244,11 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       kind: "ready",
       request: {
         operationId,
-        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutSurfaceKeys],
+        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutRegions.surfaceKeys],
         patch: planned.patch,
         graphPatch,
       },
       plannedRegionCount: planned.patch.regions.length,
+      terrainCut: cutRegions.surfaceKeys.length === 0 ? undefined : { outline, nodeScope: cutRegions.nodeScope },
     };
 }

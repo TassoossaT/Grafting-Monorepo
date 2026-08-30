@@ -298,3 +298,97 @@ test("planPathCloudMutation does not consume standing regions of unrelated path 
     "unrelated road op-10 must NOT be consumed or deleted when drawing op-1",
   );
 });
+
+function straightRoadEffect() {
+  return createPathBrushEffect(
+    {
+      brushShape: { kind: "circle", radius: 2.5 },
+      brushRegion: {
+        samples: [
+          { x: 0, y: 0, z: 0 },
+          { x: 10, y: 0, z: 0 },
+        ],
+      },
+      observedElements: [],
+      parameters: pathFormationFor(ROAD),
+    },
+    { operationId: "op-1", tableId: "table-1", initiatedBy: "path-brush" },
+  );
+}
+
+test("a terrain face the road covers whole is consumed, and reported as a terrain cut", () => {
+  const terrainFace = {
+    surfaceKey: ["@region", "terrain:0:0"],
+    surfaceType: "terrain",
+    physical: true,
+    coverage: "centroid",
+    centroid: { x: 5, y: 0, z: 0 },
+    nodeIds: ["terrain-node-a", "terrain-node-b"],
+  };
+
+  const plan = planPathCloudMutation({
+    tableId: "table-1",
+    snapToGrid: false,
+    graphSnapshot: { nodes: [], edges: [] },
+    regionTopologies: [],
+    coverageFor: () => [terrainFace],
+    effect: straightRoadEffect(),
+    tolerance: 0.05,
+  });
+
+  assert.equal(plan.kind, "ready");
+  assert.deepEqual(plan.request.sourceSurfaceKeys, [terrainFace.surfaceKey], "the whole terrain face is consumed");
+  assert.notEqual(plan.terrainCut, undefined, "a terrain cut actually happened");
+  assert.deepEqual(plan.terrainCut.nodeScope, terrainFace.nodeIds);
+  assert.ok(plan.terrainCut.outline.length >= 3, "the road's own footprint is offered back as the boundary to conform to");
+});
+
+test("a terrain face the road only clips is left standing, not consumed", () => {
+  const clippedFace = {
+    surfaceKey: ["@region", "terrain:1:0"],
+    surfaceType: "terrain",
+    physical: true,
+    coverage: "overlap",
+    centroid: { x: 5, y: 0, z: 4 },
+    nodeIds: ["terrain-node-c", "terrain-node-d"],
+  };
+
+  const plan = planPathCloudMutation({
+    tableId: "table-1",
+    snapToGrid: false,
+    graphSnapshot: { nodes: [], edges: [] },
+    regionTopologies: [],
+    coverageFor: () => [clippedFace],
+    effect: straightRoadEffect(),
+    tolerance: 0.05,
+  });
+
+  assert.equal(plan.kind, "ready");
+  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a merely-clipped face is never consumed");
+  assert.equal(plan.terrainCut, undefined, "nothing was actually cut");
+});
+
+test("a wall the road crosses is left standing: panels have no repair for a cut yet", () => {
+  const wallFace = {
+    surfaceKey: ["@region", "wall-white:0:0"],
+    surfaceType: "wall-white",
+    physical: true,
+    coverage: "centroid",
+    centroid: { x: 5, y: 0, z: 0 },
+    nodeIds: ["wall-node-a", "wall-node-b"],
+  };
+
+  const plan = planPathCloudMutation({
+    tableId: "table-1",
+    snapToGrid: false,
+    graphSnapshot: { nodes: [], edges: [] },
+    regionTopologies: [],
+    coverageFor: () => [wallFace],
+    effect: straightRoadEffect(),
+    tolerance: 0.05,
+  });
+
+  assert.equal(plan.kind, "ready");
+  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a wall is never consumed -- resolveCutRepair says unsupported");
+  assert.equal(plan.terrainCut, undefined);
+});
