@@ -343,6 +343,22 @@ export interface RelaxOptions {
    * what a chunked implementation replaces.
    */
   readonly pinBoundary?: boolean;
+  /**
+   * Explicit pin targets, keyed by vertex index.
+   *
+   * `pinBoundary` only ever holds a vertex at wherever the mesh happened to
+   * place it -- which is all a *free-standing* chunk needs, since nothing
+   * outside it is fixed yet either. A patch regenerated to fill a hole
+   * another cloud already cut is different: its rim must land exactly on
+   * that cut's own boundary, a position this mesh never produced on its own.
+   * A vertex named here is held at the given position outright, the same
+   * "excluded from the update" treatment `pinBoundary` gives its own
+   * boundary -- easing toward it instead would leave a residual gap after a
+   * fixed iteration count, and the whole point of this option is landing
+   * exactly on a rim another cloud already committed to, not merely near
+   * it. Wins over `pinBoundary` for the same vertex.
+   */
+  readonly pinnedTargets?: ReadonlyMap<number, Vec2>;
 }
 
 /**
@@ -362,6 +378,7 @@ export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
   const iterations = options.iterations ?? 12;
   const strength = options.strength ?? 0.5;
   const pinned = options.pinBoundary === false ? new Set<number>() : boundaryVertices(mesh);
+  const pinnedTargets = options.pinnedTargets;
 
   let current = mesh.vertices.map((vertex) => ({ ...vertex }));
 
@@ -397,6 +414,8 @@ export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
     }
 
     current = current.map((vertex, index) => {
+      const pinnedTarget = pinnedTargets?.get(index);
+      if (pinnedTarget !== undefined) return { ...pinnedTarget };
       const count = counts[index] ?? 0;
       if (count === 0 || pinned.has(index)) return vertex;
       const targetX = (sumX[index] ?? 0) / count;

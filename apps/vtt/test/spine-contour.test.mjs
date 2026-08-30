@@ -182,7 +182,7 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
 test("planSpineContour consumes every standingRegion it is given, unconditionally, however far its geometry sits from the edited chain", () => {
   // planSpineContour no longer decides *which* standing faces belong to the
   // edit -- that selection is the caller's job (`standingRegionsForCloud` in
-  // `path-cloud-mutation.ts`, driven by spine-graph node membership, not
+  // `path-cloud-scope.ts`, driven by spine-graph node membership, not
   // brush geometry or bounding boxes). Once a region is in `standingRegions`
   // it is retired in full, full stop, even if its footprint has nothing to
   // do with where the edited chain runs today -- deliberately, since the
