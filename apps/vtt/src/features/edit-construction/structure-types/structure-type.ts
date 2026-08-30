@@ -91,6 +91,37 @@ export interface CascadeContext {
 }
 
 /**
+ * How a type fixes itself once `"cut"` has consumed part of it and left a
+ * rim exposed where the consumed piece used to be.
+ *
+ * This is deliberately not folded into `EditResolution`'s own `"regenerate"`
+ * kind, even though the organic case answers it the same way: that kind
+ * resolves a *gesture* against a role the type already named, where a cut is
+ * not a gesture on this type's own geometry at all -- it is a side effect of
+ * *another* type's stroke landing on top of it. There is no role, no target,
+ * nothing for `roleFor` to classify; only a leftover shape and the rim the
+ * removal exposed.
+ *
+ * `"unsupported"` is not a permanent design choice the way `EditResolution`'s
+ * `"deny"` is -- it is a declared gap, present so every structure type states
+ * its position instead of one silently doing nothing when cut. The organic
+ * doc comment already lists cutting alongside subdividing and welding as
+ * structural work that escalates to regeneration; a type built on that same
+ * capability answers `"regenerate"`, and a type that has never had a repair
+ * path designed says so honestly rather than pretending the geometry stayed
+ * valid.
+ */
+export type CutRepair =
+  /**
+   * Regenerate the region from scratch, pinned to the rim the cut exposed --
+   * the same mechanism a structural interactive edit already escalates to
+   * for this type, applied to a cut's leftover instead of a grabbed role.
+   */
+  | { readonly kind: "regenerate"; readonly reason: string }
+  /** No repair has been designed for this type yet; the leftover is left as the cut leaves it. */
+  | { readonly kind: "unsupported"; readonly reason: string };
+
+/**
  * One structure type's definition -- which is to say, **what a cloud of this
  * type does**, since the cloud is what the type names (`ADR-0022`, and
  * `construction-cloud.ts`). Nothing below is a property of a single face;
@@ -141,6 +172,13 @@ export interface StructureTypeDefinition {
     coveredType: string,
     paintedSubtype?: string,
   ) => CreationInteraction;
+  /**
+   * How this type repairs itself after `"cut"` has consumed part of it.
+   * Required rather than optional so a new structure type has to say where
+   * it stands -- `"unsupported"` is a legitimate, honest answer, silence is
+   * not.
+   */
+  readonly repairAfterCut: CutRepair;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */
