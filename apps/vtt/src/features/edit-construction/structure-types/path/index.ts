@@ -44,8 +44,9 @@ export type {
   PathRunRib,
 } from "./path-cloud.ts";
 
-export { planPathCloudMutation, referenceLineFrom } from "./path-cloud-mutation.ts";
+export { planPathCloudMutation } from "./path-cloud-mutation.ts";
 export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
+export { referenceLineFrom } from "./path-reference-line.ts";
 
 export {
   PATH_ROLES,

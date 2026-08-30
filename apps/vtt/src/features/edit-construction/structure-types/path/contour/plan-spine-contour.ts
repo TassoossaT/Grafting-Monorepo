@@ -38,7 +38,7 @@ export interface PlanSpineContourInput {
   /**
    * Every chain of the touched spine cloud -- not just the one a stroke or a
    * control-node drag directly changed, but every chain the caller's own
-   * connectivity walk (`changedSpineCloud` in `path-cloud-mutation.ts`)
+   * connectivity walk (`changedSpineCloud` in `path-cloud-scope.ts`)
    * found reachable from it. Each is resampled fresh from its own *current*
    * control points every time this function runs; nothing here ever reads
    * a chain's own previous contour back as input, which is what keeps

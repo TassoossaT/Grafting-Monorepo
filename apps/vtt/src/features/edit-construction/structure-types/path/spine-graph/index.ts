@@ -1,6 +1,8 @@
 export { chainsOf } from "./spine-chains.ts";
 export type { SpineChain } from "./spine-chains.ts";
 export { moveSpineControlNode } from "./spine-edit.ts";
+export { graphPatchForSpine } from "./materialize-spine.ts";
+export type { MaterializedSpine } from "./materialize-spine.ts";
 export { neighborsOf, spineGraphFromSnapshot, spineGraphIn, spineGraphOf } from "./spine-graph.ts";
 export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
 export {
