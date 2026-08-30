@@ -54,11 +54,9 @@ import {
   EMPTY_OUTCOME,
   applyEditOp,
   mergeOutcomes,
-  resolveCoverage,
-  resolveCutRepair,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { CUT_REPAIR_EXECUTORS } from "./tools/cut-repair-registry.ts";
+import { dispatchCutRepairs } from "./tools/cut-repair-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -856,22 +854,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /**
    * Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
-   * type this patch's own footprint cuts into repair itself -- the
-   * runtime's own choke point for `CUT`'s repair half, so any caller of
-   * this one method gets it, not only whichever tool happens to import a
-   * repair function by name. Neither side is named here: coverage is
-   * resolved fresh from `request.footprintOutline` and `resolveCutRepair`
-   * decides who is entitled, the same table any other caller of
-   * `resolveCoverage` reads. See `CutRepair`/`CutFallout`
-   * (`structure-types/structure-type.ts`) for the contract, and
-   * `CUT_REPAIR_EXECUTORS` for who actually implements one.
-   *
-   * Deliberately does not fold `request.sourceSurfaceKeys` into this at
-   * all: that list is `patch`'s own painter consuming its own kind (a road
-   * absorbing an adjoining road), never another type's regions. A covered
-   * type this cuts into deletes those itself, inside its own executor --
-   * the runtime only tells it which ones and hands it real nodes to weld
-   * onto, never deletes on its behalf.
+   * type this patch's own footprint cuts into repair itself, via
+   * `dispatchCutRepairs` (`tools/cut-repair-dispatch.ts`) -- the runtime's
+   * own choke point for `CUT`'s repair half, so any caller of this one
+   * method gets it, not only whichever tool happens to import a repair
+   * function by name. See `CutRepair`/`CutFallout`
+   * (`structure-types/structure-type.ts`) for the contract; the decision of
+   * *what* got cut and *who* repairs it is entirely `dispatchCutRepairs`'s
+   * and `resolveCutRepair`'s, not this method's.
    */
   applyPatchReplacement(
     request: ApplyPatchReplacementRequest,
@@ -881,32 +871,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("replacing generated regions");
     const outcome = this.#construction.applyPatchReplacement(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
-    this.#repairCuts(request, causeId);
+    dispatchCutRepairs(this, request, causeId);
     return outcome;
-  }
-
-  /** Resolves what `request`'s own footprint cuts into, and dispatches each covered type's own repair once the replacement above has landed. */
-  #repairCuts(request: ApplyPatchReplacementRequest, causeId: string): void {
-    const outline = request.footprintOutline;
-    if (outline === undefined || outline.length === 0) return;
-    const paintedType = request.patch.regions[0]?.surfaceType;
-    if (paintedType === undefined) return;
-
-    const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
-    for (const entry of resolveCoverage(paintedType, this.getFootprintCoverage(outline))) {
-      if (entry.interaction.kind !== "cut" || entry.covered.coverage !== "centroid") continue;
-      if (resolveCutRepair(entry.covered.surfaceType).kind !== "regenerate") continue;
-      const keys = consumedByType.get(entry.covered.surfaceType) ?? [];
-      keys.push(entry.covered.surfaceKey);
-      consumedByType.set(entry.covered.surfaceType, keys);
-    }
-    if (consumedByType.size === 0) return;
-
-    for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
-      const executor = CUT_REPAIR_EXECUTORS[surfaceType];
-      if (executor === undefined) continue;
-      executor(this, { paintedNodes: request.patch.nodes, consumedSurfaceKeys }, causeId);
-    }
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
     this.#requireReady("undoing a path brush");
