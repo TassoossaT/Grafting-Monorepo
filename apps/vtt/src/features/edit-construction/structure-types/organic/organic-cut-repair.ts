@@ -1,6 +1,16 @@
-import type { ConstructionNodeId, ConstructionPatch, ConstructionPatchRegion, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ConstructionNodeId,
+  ConstructionPatch,
+  ConstructionPatchRegion,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+  ConstructionUnfilledLoop,
+} from "@/ports";
 
+import type { AtomicEditOp } from "../../orchestration/atomic-edit.ts";
 import { createBoundaryEdges } from "../../topology/boundary-edges.ts";
+import type { CutFallout } from "../structure-type.ts";
 
 /**
  * How close (world units, XZ) an exposed terrain rim node must land to one
@@ -65,10 +75,12 @@ function nearestPaintedNode(position: ConstructionPosition, paintedNodes: readon
 }
 
 /**
- * Organic's own repair strategy for `resolveCutRepair`'s `"regenerate"`
- * answer, as a pure decision -- no runtime, no engine call, only what to
- * delete and what patch to register in its place, for a caller (terrain's
- * own composition-layer executor) to actually perform.
+ * Organic's own repair *decision* for `resolveCutRepair`'s `"regenerate"`
+ * answer -- no runtime, no engine call, only what to delete and what patch
+ * to register in its place. Kept as its own pure step within
+ * {@link repairOrganicCut} (not a separate file) because the weld-matching
+ * and cycle-rebuild math is worth being able to call, and test, with plain
+ * data alone.
  *
  * **The whole point: a weld is a shared node id, not a shared position.**
  * `ConstructionSessionPort.addPatch`'s own node handling skips minting a
@@ -137,4 +149,102 @@ export function planOrganicCutRepair(input: OrganicCutRepairInput): OrganicCutRe
     affectedSurfaceKeys: affected.map((face) => face.surfaceKey),
     patch: { nodes: [...nodes].map(([id, position]) => ({ id, position })), edges: edges.all(), regions },
   };
+}
+
+/**
+ * The minimal runtime capability {@link repairOrganicCut} needs, declared
+ * here rather than imported from `composition/tabletop/tabletop-runtime.ts`
+ * -- this module depends on composition for nothing at all. `TabletopRuntime`
+ * satisfies this structurally, with room to spare; nothing here names it,
+ * so a future runtime with the same handful of methods works exactly as
+ * well without this file changing at all.
+ */
+export interface OrganicCutRepairRuntime {
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
+  getSnapshot(): {
+    readonly tableId: string;
+    readonly map: { readonly nodePositions: ReadonlyMap<ConstructionNodeId, { readonly position: ConstructionPosition }> };
+  };
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): unknown;
+}
+
+/**
+ * Terrain's own complete answer to `resolveCutRepair`'s `"regenerate"`:
+ * fetches what it needs from the live table, decides its own repair
+ * ({@link planOrganicCutRepair}), and performs it -- entirely inside the
+ * organic type's own module, not a "decides" half here and an "acts" half
+ * in `composition/`. The type manages this because it is the type's own
+ * operation, the same way `terrain-restack.ts`'s `restackTerrain` is
+ * terrain's own operation when terrain paints over terrain.
+ *
+ * Called from `composition/tabletop/tools/cut-repair-dispatch.ts`, the
+ * runtime's own choke point for `CUT`'s repair half (`TabletopRuntime.applyPatchReplacement`)
+ * -- that caller supplies the live runtime and the `CutFallout` a stroke's
+ * own footprint resolved, and knows nothing past that about how terrain
+ * repairs itself.
+ *
+ * **The steps:**
+ * 1. Read every consumed face's own topology before deleting it -- once
+ *    gone, there is nothing left to ask.
+ * 2. Delete the consumed faces. Terrain's own call, not the painter's.
+ * 3. `getUnfilledLoops`, scoped to what those faces stood on, reports
+ *    exactly the rim the deletion exposed.
+ * 4. Every existing region with a single outer loop and no holes is a
+ *    candidate the plan might need to rebuild -- resolved to a plain id
+ *    cycle here, so `planOrganicCutRepair` never has to call the engine.
+ * 5. `planOrganicCutRepair` decides the weld and the rebuild.
+ * 6. Delete every affected survivor, then register the replacement patch.
+ */
+export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string): number {
+  if (fallout.consumedSurfaceKeys.length === 0) return 0;
+
+  const preScope = new Set<ConstructionNodeId>();
+  for (const surfaceKey of fallout.consumedSurfaceKeys) {
+    const topology = runtime.getRegionTopology(surfaceKey);
+    if (topology === undefined) continue;
+    for (const node of topology.nodes) preScope.add(node.id);
+  }
+  if (preScope.size === 0) return 0;
+
+  runtime.applyRegionEdit(
+    fallout.consumedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
+    "local",
+    causeId,
+  );
+
+  const loops = runtime.getUnfilledLoops([...preScope]);
+  if (loops.length === 0) return 0;
+  const rimNodeIds = [...new Set(loops.flatMap((loop) => loop.nodeIds))];
+  if (rimNodeIds.length === 0) return 0;
+
+  const survivingFaces: SurvivingFace[] = runtime
+    .getAllRegionTopologies()
+    .filter((topology) => topology.outerLoops.length === 1 && topology.holes.length === 0)
+    .map((topology) => ({
+      surfaceKey: topology.surfaceKey,
+      surfaceType: topology.surfaceType,
+      physical: topology.physical,
+      cycle: topology.outerLoops[0]!.map((edge) => edge.startNodeId),
+    }));
+
+  const snapshot = runtime.getSnapshot();
+  const plan = planOrganicCutRepair({
+    tableId: snapshot.tableId,
+    rimNodeIds,
+    nodePositions: new Map([...snapshot.map.nodePositions].map(([id, entry]) => [id, entry.position])),
+    paintedNodes: fallout.paintedNodes,
+    survivingFaces,
+  });
+  if (plan === undefined) return 0;
+
+  runtime.applyRegionEdit(
+    plan.affectedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
+    "local",
+    causeId,
+  );
+  runtime.addPatch(plan.patch, "local", causeId);
+  return plan.patch.regions.length;
 }

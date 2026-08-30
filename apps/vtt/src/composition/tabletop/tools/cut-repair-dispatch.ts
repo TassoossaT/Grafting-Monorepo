@@ -2,18 +2,25 @@
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
 import type { ApplyPatchReplacementRequest, ConstructionSurfaceKey } from "@/ports";
-import { resolveCoverage, resolveCutRepair, type CutFallout } from "../../../features/edit-construction/index.ts";
+import {
+  resolveCoverage,
+  resolveCutRepair,
+  repairOrganicCut,
+  type CutFallout,
+  type OrganicCutRepairRuntime,
+} from "../../../features/edit-construction/index.ts";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
-import { repairTerrainCut } from "./terrain/terrain-cut-repair.ts";
 
 /**
  * One covered type's own answer to being cut -- `resolveCutRepair`'s
- * `"regenerate"`, made real. Pure declaration lives in `structure-types/`
- * (`CutRepair`); this is its composition-layer counterpart, since actually
- * repairing something needs a runtime that pure layer does not have.
+ * `"regenerate"`, made real. The type itself owns the whole thing, decision
+ * and execution both (`repairOrganicCut`, `structure-types/organic/organic-cut-repair.ts`);
+ * this only needs to know it by a runtime-shaped signature, never a
+ * concrete `TabletopRuntime` import, so this table stays as thin as the
+ * types it points at.
  */
-export type CutRepairExecutor = (runtime: TabletopRuntime, fallout: CutFallout, causeId: string) => number;
+export type CutRepairExecutor = (runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string) => number;
 
 /**
  * Every structure type that has actually implemented `resolveCutRepair`'s
@@ -27,8 +34,8 @@ export type CutRepairExecutor = (runtime: TabletopRuntime, fallout: CutFallout, 
  * entry is treated as nothing to do.
  */
 export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
-  terrain: repairTerrainCut,
-  "terrain-grass": repairTerrainCut,
+  terrain: repairOrganicCut,
+  "terrain-grass": repairOrganicCut,
 });
 
 /**

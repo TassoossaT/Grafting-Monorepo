@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { repairTerrainCut } from "../src/composition/tabletop/tools/terrain/terrain-cut-repair.ts";
+import { repairOrganicCut } from "../src/features/edit-construction/structure-types/organic/organic-cut-repair.ts";
 
 /**
  * A hand-built two-quad terrain patch and the minimal runtime surface
- * repairTerrainCut actually calls -- not a re-implementation of the engine's
- * own topology/edge-sharing rules (Rust's own test suite already covers
- * getUnfilledLoops), only enough state for this function's own JS-side
+ * repairOrganicCut actually calls -- not a re-implementation of the
+ * engine's own topology/edge-sharing rules (Rust's own test suite already
+ * covers getUnfilledLoops), only enough state for this function's own
  * orchestration to be verified: which regions it deletes, which nodes it
  * welds, and what it rebuilds.
  *
  * T1 -- the consumed face -- and T2 -- the survivor -- share the edge
  * n2~n3. The road's own patch registered two nodes, p-a and p-b, sitting
  * exactly where n2 and n3 already are, so the weld match is exact and the
- * test is not also asserting on WELD_SEARCH_RADIUS's own value.
+ * test is not also asserting on the weld search radius's own value.
  */
 function createFakeTerrainRuntime() {
   const positions = new Map([
@@ -87,7 +87,7 @@ function createFakeTerrainRuntime() {
     getUnfilledLoops(scope) {
       // T1's own nodes shared with the still-standing T2 -- exactly what a
       // real deletion exposes as free boundary. Hard-coded rather than
-      // derived: this fake exists to verify repairTerrainCut's own use of
+      // derived: this fake exists to verify repairOrganicCut's own use of
       // the primitive, not to re-derive what it reports.
       const exposed = ["n2", "n3"].filter((id) => scope.includes(id));
       if (exposed.length === 0) return [];
@@ -107,7 +107,7 @@ function createFakeTerrainRuntime() {
   return { runtime, deleted, addedPatches };
 }
 
-test("repairTerrainCut deletes the consumed face itself, then rebuilds the surviving neighbour welded onto the road's own nodes", () => {
+test("repairOrganicCut deletes the consumed face itself, then rebuilds the surviving neighbour welded onto the painter's own nodes", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
   const fallout = {
     consumedSurfaceKeys: [["@region", "T1"]],
@@ -117,7 +117,7 @@ test("repairTerrainCut deletes the consumed face itself, then rebuilds the survi
     ],
   };
 
-  const rebuilt = repairTerrainCut(runtime, fallout, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, fallout, "cause-1");
 
   assert.equal(rebuilt, 1, "exactly the one surviving neighbour needed rebuilding");
   assert.deepEqual(
@@ -138,7 +138,7 @@ test("repairTerrainCut deletes the consumed face itself, then rebuilds the survi
   assert.deepEqual(nodeIds, ["n5", "n6", "p-a", "p-b"], "n2 and n3 do not appear -- p-a and p-b took their place");
 
   const pA = patch.nodes.find((node) => node.id === "p-a");
-  assert.deepEqual(pA.position, { x: 2, y: 0, z: 0 }, "the welded node keeps the road's own position, not the old terrain node's");
+  assert.deepEqual(pA.position, { x: 2, y: 0, z: 0 }, "the welded node keeps the painter's own position, not the old terrain node's");
 });
 
 test("a rim node with no painted node close enough is left exactly as the deletion left it", () => {
@@ -148,7 +148,7 @@ test("a rim node with no painted node close enough is left exactly as the deleti
     paintedNodes: [{ id: "p-far", position: { x: 500, y: 0, z: 500 } }],
   };
 
-  const rebuilt = repairTerrainCut(runtime, fallout, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, fallout, "cause-1");
 
   assert.equal(rebuilt, 0, "nothing was close enough to weld onto");
   assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"], "only the actually-consumed face is deleted");
@@ -157,7 +157,7 @@ test("a rim node with no painted node close enough is left exactly as the deleti
 
 test("consuming nothing is a no-op", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
-  const rebuilt = repairTerrainCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [] }, "cause-1");
 
   assert.equal(rebuilt, 0);
   assert.equal(deleted.length, 0);

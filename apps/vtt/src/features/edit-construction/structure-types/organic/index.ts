@@ -6,5 +6,10 @@ export {
   pathInteractionOver,
   terrainInteractionOver,
 } from "./organic-structure.ts";
-export { planOrganicCutRepair } from "./organic-cut-repair.ts";
-export type { OrganicCutRepairInput, OrganicCutRepairPlan, SurvivingFace } from "./organic-cut-repair.ts";
+export { planOrganicCutRepair, repairOrganicCut } from "./organic-cut-repair.ts";
+export type {
+  OrganicCutRepairInput,
+  OrganicCutRepairPlan,
+  OrganicCutRepairRuntime,
+  SurvivingFace,
+} from "./organic-cut-repair.ts";
