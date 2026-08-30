@@ -56,13 +56,25 @@ test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's 
   assert.deepEqual(["p0", "p1", "p2", "p3"].filter((id) => usedIds.has(id)).sort(), ["p0", "p1", "p2", "p3"]);
 });
 
-test("planOrganicCutRepair welds a lattice vertex onto a real painted node, not merely near it", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE, [], "cause-square");
-  // A vertex the lattice itself already generated -- placing a painted node
-  // exactly there is what a real weld looks like: the same id must appear in
-  // the patch, not a second node coincident with it.
-  const interior = lattice.mesh.vertices[10];
-  const world = { x: lattice.originX + interior.x, y: 1.5, z: lattice.originZ + interior.y };
+test("buildCutRepairLattice pins a lattice vertex exactly onto a real painted node's own position", () => {
+  // A position nowhere near any lattice vertex the *unpinned* generator
+  // would have produced on its own -- if it shows up exactly, pinning (not
+  // luck) put it there.
+  const painted = { id: "painted-A", position: { x: 2.137, y: 1.5, z: 1.863 } };
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [painted], "cause-square");
+
+  const landedExactly = lattice.mesh.vertices.some(
+    (local) => lattice.originX + local.x === painted.position.x && lattice.originZ + local.y === painted.position.z,
+  );
+  assert.ok(landedExactly, "some lattice vertex was pinned exactly onto the painted node's own position");
+});
+
+test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted node, not merely near it", () => {
+  // The hole's own centre -- comfortably inside every candidate quad's own
+  // reach, so whichever quad ends up owning this vertex is a plain, simple
+  // one, not one straddling the rim.
+  const painted = { id: "painted-A", position: { x: 2, y: 1.5, z: 2 } };
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [painted], "cause-square");
 
   const patch = planOrganicCutRepair({
     tableId: "table-1",
@@ -71,13 +83,13 @@ test("planOrganicCutRepair welds a lattice vertex onto a real painted node, not 
     physical: true,
     lattice,
     holeLoops: SQUARE_HOLE,
-    paintedNodes: [{ id: "painted-A", position: world }],
+    paintedNodes: [painted],
     occupiedQuads: new Set(),
   });
 
   const weldedNode = patch.nodes.find((node) => node.id === "painted-A");
   assert.notEqual(weldedNode, undefined, "the painted node's own id was reused, not shadowed by a minted one");
-  assert.deepEqual(weldedNode.position, world);
+  assert.deepEqual(weldedNode.position, painted.position);
 });
 
 test("planOrganicCutRepair drops every quad already claimed by something else", () => {

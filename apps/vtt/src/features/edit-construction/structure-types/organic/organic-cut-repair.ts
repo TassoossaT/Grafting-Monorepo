@@ -124,6 +124,42 @@ function insideHole(x: number, z: number, holeLoops: readonly (readonly Construc
   return holeLoops.some((ring) => insideRing(x, z, ring));
 }
 
+/** Signed twice-the-area cross product of `o->a` and `o->b`, XZ plane. */
+function cross(o: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
+  return (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
+}
+
+/** Whether segment `a1-a2` properly crosses segment `b1-b2` -- ignores merely touching or collinear cases, which never arise between a quad's own opposite edges unless it has already collapsed (caught separately by the duplicate-corner check). */
+function segmentsCross(a1: ConstructionPosition, a2: ConstructionPosition, b1: ConstructionPosition, b2: ConstructionPosition): boolean {
+  const d1 = cross(b1, b2, a1);
+  const d2 = cross(b1, b2, a2);
+  const d3 = cross(a1, a2, b1);
+  const d4 = cross(a1, a2, b2);
+  return (d1 > 0 !== d2 > 0) && (d3 > 0 !== d4 > 0);
+}
+
+/**
+ * Whether `corners` (in cyclic order) forms a bowtie -- one pair of opposite
+ * edges crossing -- rather than a simple quad. See {@link planOrganicCutRepair}'s
+ * own doc for how each corner welding independently onto its own nearest
+ * real candidate can produce exactly this.
+ */
+function quadCrossesItself(corners: readonly ConstructionPosition[]): boolean {
+  return segmentsCross(corners[0]!, corners[1]!, corners[2]!, corners[3]!) || segmentsCross(corners[1]!, corners[2]!, corners[3]!, corners[0]!);
+}
+
+/** Whether any of `corners`' own consecutive edges exceeds {@link MAX_EDGE_LENGTH} -- the coarser backstop for a quad that stayed simple but still ended up implausibly stretched. */
+function quadEdgeTooLong(corners: readonly ConstructionPosition[]): boolean {
+  for (let position = 0; position < corners.length; position += 1) {
+    const a = corners[position]!;
+    const b = corners[(position + 1) % corners.length]!;
+    const dx = a.x - b.x;
+    const dz = a.z - b.z;
+    if (dx * dx + dz * dz > MAX_EDGE_LENGTH * MAX_EDGE_LENGTH) return true;
+  }
+  return false;
+}
+
 function nearestWithin(
   x: number,
   z: number,
@@ -344,19 +380,22 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
     const cycle = quad.map((vertexIndex) => resolveVertex(vertexIndex)).filter((id): id is ConstructionNodeId => id !== undefined);
     if (cycle.length !== quad.length || new Set(cycle).size !== cycle.length) return;
 
-    // A corner that welded onto real geometry moved from wherever the
-    // lattice generated it to that real node's own position -- see
-    // MAX_EDGE_LENGTH's own doc for why a quad whose welded corners ended up
-    // implausibly far apart is bridging across ground, not filling the hole,
-    // and gets dropped rather than submitted.
-    for (let position = 0; position < quad.length; position += 1) {
-      const a = resolvedPosition[quad[position]!];
-      const b = resolvedPosition[quad[(position + 1) % quad.length]!];
-      if (a === undefined || b === undefined) return;
-      const dx = a.x - b.x;
-      const dz = a.z - b.z;
-      if (dx * dx + dz * dz > MAX_EDGE_LENGTH * MAX_EDGE_LENGTH) return;
-    }
+    const corners = quad.map((vertexIndex) => resolvedPosition[vertexIndex]);
+    if (corners.some((corner) => corner === undefined)) return;
+    const sane = corners as ConstructionPosition[];
+
+    // Each corner pinned/welded independently onto its own *nearest* real
+    // candidate -- correct for that one corner in isolation, but nothing
+    // stops two DIFFERENT corners of the same quad from each latching onto
+    // real geometry from two DIFFERENT, non-adjacent parts of an irregular
+    // or densely-packed rim (two unrelated terrain-sculpt strokes bordering
+    // the same hole, say). That produces a bowtie -- two opposite edges
+    // crossing -- which is not a real quad and is what `unknown analytic
+    // region` traced back to a second time. A crossing check catches this
+    // regardless of *why* the mismatch happened; MAX_EDGE_LENGTH is the
+    // cheaper, coarser backstop for a quad that stayed simple but still
+    // ended up implausibly stretched.
+    if (quadCrossesItself(sane) || quadEdgeTooLong(sane)) return;
 
     const boundary = cycle.map((id, position) => edges.use(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
