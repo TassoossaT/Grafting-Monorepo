@@ -3,15 +3,16 @@ import { planPathCloudMutation } from "../../../features/edit-construction/index
 
 import type { ToolContext } from "../tools/core/tool-context.ts";
 import { reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnostics.ts";
-import { repairTerrainCut } from "../tools/terrain/terrain-cut-repair.ts";
 
 /**
  * Runtime boundary for a PathCloud decision. This file deliberately contains
  * no path geometry or topology policy: it reads snapshots, invokes the type,
- * and submits the generic replacement transaction it returns. The same
- * applies to `plan.cutFallout` below -- this file only hands it to whichever
- * covered type actually knows how to repair itself; it carries no opinion of
- * its own on how that repair happens.
+ * and submits the generic replacement transaction it returns. It has no
+ * opinion, and no code, for what happens when that replacement cuts into
+ * another type -- `plan.request.footprintOutline` rides along on the request
+ * itself, and `TabletopRuntime.applyPatchReplacement` is what notices a
+ * consumed region needs repairing and dispatches it, the same for any caller
+ * of that method, not a path-specific step this file performs.
  */
 export function commitPathCloudIntent(
   ctx: ToolContext,
@@ -43,9 +44,6 @@ export function commitPathCloudIntent(
         operationId: effect.operationId,
         skipped: outcome.skippedRegionIds,
       });
-    }
-    if (plan.cutFallout !== undefined) {
-      repairTerrainCut(ctx, plan.cutFallout, effect.operationId);
     }
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
     if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {

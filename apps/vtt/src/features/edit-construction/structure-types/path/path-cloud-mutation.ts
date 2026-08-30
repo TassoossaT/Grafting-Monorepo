@@ -4,6 +4,7 @@ import type {
   ConstructionCoveredRegion,
   ConstructionGraphSnapshot,
   ConstructionRegionTopology,
+  ConstructionSurfaceKey,
 } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -13,7 +14,6 @@ import {
   firstRefusal,
   resolveCoverage,
   resolveCutRepair,
-  type CutFallout,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
 import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
@@ -57,19 +57,7 @@ export interface PathCloudMutationInput {
 export type PathCloudMutationPlan =
   | { readonly kind: "noop"; readonly message: string }
   | { readonly kind: "refused"; readonly reason: string }
-  | {
-      readonly kind: "ready";
-      readonly request: ApplyPatchReplacementRequest;
-      readonly plannedRegionCount: number;
-      /**
-       * `undefined` when this stroke consumed nothing. This module only
-       * reports what it did -- which regions, of which type, it consumed --
-       * and has no idea what a caller does with that beyond here; whichever
-       * covered type actually repairs itself owns that logic entirely on
-       * its own side. See `CutFallout`.
-       */
-      readonly cutFallout: CutFallout | undefined;
-    };
+  | { readonly kind: "ready"; readonly request: ApplyPatchReplacementRequest; readonly plannedRegionCount: number };
 
 /**
  * Every terrain-like face this footprint covers whole and is allowed to
@@ -82,17 +70,16 @@ export type PathCloudMutationPlan =
  * only" fidelity `terrain-restack.ts` already accepts), and a covered type
  * that answers `resolveCutRepair` with `"unsupported"` is left standing too:
  * deleting it with no way to repair the leftover would trade a visible
- * overlap for an unrepairable hole, which is worse.
+ * overlap for an unrepairable hole, which is worse. Whether the survivors
+ * ever get repaired at all is not decided here either -- that is the
+ * runtime's own call once it sees what this stroke actually consumed; this
+ * function only decides what a `"cut"` may safely take.
  */
-function cutRegionsFor(resolved: ReturnType<typeof resolveCoverage>) {
-  const consumed = resolved
+function cutSurfaceKeysFor(resolved: ReturnType<typeof resolveCoverage>): readonly ConstructionSurfaceKey[] {
+  return resolved
     .filter((entry) => entry.interaction.kind === "cut" && entry.covered.coverage === "centroid")
     .filter((entry) => resolveCutRepair(entry.covered.surfaceType).kind === "regenerate")
-    .map((entry) => entry.covered);
-  return {
-    surfaceKeys: consumed.map((covered) => covered.surfaceKey),
-    nodeScope: [...new Set(consumed.flatMap((covered) => covered.nodeIds))],
-  };
+    .map((entry) => entry.covered.surfaceKey);
 }
 
 /**
@@ -125,10 +112,13 @@ function cutRegionsFor(resolved: ReturnType<typeof resolveCoverage>) {
  *   partial-overlap precision (`applyRegionOverlay`'s overlap-planning) is
  *   not reproduced here. Only a face the footprint covers whole
  *   (`coverage: "centroid"`) is consumed, the same fidelity trade-off
- *   `terrain-restack.ts` already accepts for raising (see `cutRegionsFor`
- *   above). The `cutFallout` this returns reports what happened; closing
- *   that seam is entirely the covered type's own business, done in its own
- *   module (terrain's is `terrain-cut-repair.ts`), never this one's.
+ *   `terrain-restack.ts` already accepts for raising (see `cutSurfaceKeysFor`
+ *   above). This function has no part in closing that seam at all: the
+ *   request it returns carries `footprintOutline` alongside the consumed
+ *   `sourceSurfaceKeys`, and it is `TabletopRuntime.applyPatchReplacement`
+ *   that notices a consumed region's type answers `resolveCutRepair` with
+ *   `"regenerate"` and dispatches its repair -- generically, for whichever
+ *   type painted the cut, this one or any other that calls the same method.
  * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
  *   span by its chord (`spine.controlPoints` no longer carries intermediate
  *   samples along one -- see `groundTrack`), the same way every other span
@@ -207,7 +197,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     if (refusal !== undefined) {
       return { kind: "refused", reason: refusal };
     }
-    const cutRegions = cutRegionsFor(resolved);
+    const cutSurfaceKeys = cutSurfaceKeysFor(resolved);
 
     const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
@@ -236,11 +226,11 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       kind: "ready",
       request: {
         operationId,
-        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutRegions.surfaceKeys],
+        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutSurfaceKeys],
         patch: planned.patch,
         graphPatch,
+        footprintOutline: outline,
       },
       plannedRegionCount: planned.patch.regions.length,
-      cutFallout: cutRegions.surfaceKeys.length === 0 ? undefined : { outline, nodeScope: cutRegions.nodeScope },
     };
 }

@@ -1,18 +1,20 @@
 import { nearestPointOnPolygonBoundaryXZ } from "../shapes/geometry-2d.ts";
 import type { AtomicEditOp, CutFallout } from "@/features/edit-construction";
 
-import type { ToolContext } from "../core/tool-context.ts";
+import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 
 /**
  * Terrain's own answer to `resolveCutRepair`'s `"regenerate"`: how it closes
  * up after some other type's stroke cut it.
  *
- * A caller that just performed a cut -- `path-cloud-transaction.ts` today --
- * still has to trigger this, since nothing in this codebase pushes events on
- * its own. But the trigger is where that caller's involvement ends: it hands
- * over a plain `CutFallout` (what it consumed, and the shape it consumed it
- * with), a fact about its own stroke it would report regardless of who is
- * listening, and knows nothing about *how* terrain repairs itself -- no
+ * Takes the runtime directly, never a `ToolContext` -- this has nothing to
+ * do with any one tool. `TabletopRuntime.applyPatchReplacement` is this
+ * function's only caller, and it is the runtime's own choke point: every
+ * type that ever consumes another type's regions goes through that one
+ * method, whichever tool or gesture got it there, so wiring the trigger
+ * there is what makes this apply to a future painter this codebase does not
+ * have yet, and not only to today's path brush. Nothing upstream of that
+ * method knows this function exists, or how terrain repairs itself -- no
  * geometry, no strategy, not even that "nearest point on the outline" is the
  * answer. All of that lives here, the same way `terrain-restack.ts`'s
  * `restackTerrain` is terrain's own business when terrain paints over
@@ -39,11 +41,11 @@ import type { ToolContext } from "../core/tool-context.ts";
  * were drawn, so the two should already agree closely wherever the cut
  * actually happened.
  */
-export function repairTerrainCut(ctx: ToolContext, fallout: CutFallout, causeId: string): number {
-  const loops = ctx.runtime.getUnfilledLoops(fallout.nodeScope);
+export function repairTerrainCut(runtime: TabletopRuntime, fallout: CutFallout, causeId: string): number {
+  const loops = runtime.getUnfilledLoops(fallout.nodeScope);
   if (loops.length === 0) return 0;
   const polygon = fallout.outline.map(([x, z]) => ({ x, z }));
-  const nodePositions = ctx.runtime.getSnapshot().map.nodePositions;
+  const nodePositions = runtime.getSnapshot().map.nodePositions;
   const ops: AtomicEditOp[] = [];
   const moved = new Set<string>();
   for (const loop of loops) {
@@ -57,6 +59,6 @@ export function repairTerrainCut(ctx: ToolContext, fallout: CutFallout, causeId:
     }
   }
   if (ops.length === 0) return 0;
-  ctx.runtime.applyRegionEdit(ops, "local", causeId);
+  runtime.applyRegionEdit(ops, "local", causeId);
   return ops.length;
 }

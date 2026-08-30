@@ -316,7 +316,7 @@ function straightRoadEffect() {
   );
 }
 
-test("a terrain face the road covers whole is consumed, and reported as a terrain cut", () => {
+test("a terrain face the road covers whole is consumed, and the request carries the road's own footprint", () => {
   const terrainFace = {
     surfaceKey: ["@region", "terrain:0:0"],
     surfaceType: "terrain",
@@ -338,9 +338,12 @@ test("a terrain face the road covers whole is consumed, and reported as a terrai
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [terrainFace.surfaceKey], "the whole terrain face is consumed");
-  assert.notEqual(plan.cutFallout, undefined, "a terrain cut actually happened");
-  assert.deepEqual(plan.cutFallout.nodeScope, terrainFace.nodeIds);
-  assert.ok(plan.cutFallout.outline.length >= 3, "the road's own footprint is offered back as the boundary to conform to");
+  // planPathCloudMutation itself decides nothing about repairing what it
+  // consumed -- that dispatch lives entirely in
+  // TabletopRuntime.applyPatchReplacement, generic across every caller of
+  // that method. This only checks the fact the request needs to carry for
+  // that dispatch to be possible at all.
+  assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request");
 });
 
 test("a terrain face the road only clips is left standing, not consumed", () => {
@@ -365,7 +368,6 @@ test("a terrain face the road only clips is left standing, not consumed", () => 
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a merely-clipped face is never consumed");
-  assert.equal(plan.cutFallout, undefined, "nothing was actually cut");
 });
 
 test("a wall the road crosses is left standing: panels have no repair for a cut yet", () => {
@@ -390,5 +392,4 @@ test("a wall the road crosses is left standing: panels have no repair for a cut 
 
   assert.equal(plan.kind, "ready");
   assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a wall is never consumed -- resolveCutRepair says unsupported");
-  assert.equal(plan.cutFallout, undefined);
 });

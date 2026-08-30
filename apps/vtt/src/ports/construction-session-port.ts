@@ -274,6 +274,15 @@ export interface ApplyPatchReplacementRequest {
   readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly patch: ConstructionPatch;
   readonly graphPatch?: ConstructionGraphPatch;
+  /**
+   * This patch's own flat footprint, XZ, offered back for the runtime's own
+   * use -- never sent to the engine. A `sourceSurfaceKey` this replaces may
+   * belong to a type that needs to conform its own leftover to this outline
+   * once the swap lands (`resolveCutRepair`'s `"regenerate"`); the runtime
+   * is what checks for that and dispatches it, generically, for any caller
+   * of this method, not a concern this port or any one caller decides.
+   */
+  readonly footprintOutline?: readonly (readonly [number, number])[];
 }
 
 /**

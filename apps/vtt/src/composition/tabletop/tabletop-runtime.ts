@@ -54,8 +54,10 @@ import {
   EMPTY_OUTCOME,
   applyEditOp,
   mergeOutcomes,
+  resolveCutRepair,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
+import { CUT_REPAIR_EXECUTORS } from "./tools/cut-repair-registry.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -851,15 +853,59 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
+  /**
+   * Replaces `sourceSurfaceKeys` with `patch`, then closes up behind
+   * whichever of those regions belonged to a type that answers
+   * `resolveCutRepair` with `"regenerate"` -- the runtime's own choke point
+   * for `CUT`'s repair half, so any caller of this one method gets it, not
+   * only whichever tool happens to import a repair function by name. See
+   * `CutRepair`/`CutFallout` (`structure-types/structure-type.ts`) for the
+   * contract, and `CUT_REPAIR_EXECUTORS` for who actually implements one.
+   */
   applyPatchReplacement(
     request: ApplyPatchReplacementRequest,
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionPatchOutcome {
     this.#requireReady("replacing generated regions");
+    const repairScopes = this.#cutRepairScopesFor(request.sourceSurfaceKeys);
     const outcome = this.#construction.applyPatchReplacement(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
+    this.#repairCuts(repairScopes, request.footprintOutline, causeId);
     return outcome;
+  }
+
+  /**
+   * Groups every node a about-to-be-consumed region stood on by that
+   * region's own `surfaceType`, for the types actually entitled to a repair
+   * -- read *before* `applyPatchReplacement` performs the removal, since a
+   * region's topology is gone once it does.
+   */
+  #cutRepairScopesFor(sourceSurfaceKeys: readonly ConstructionSurfaceKey[]): ReadonlyMap<string, readonly ConstructionNodeId[]> {
+    const scopes = new Map<string, ConstructionNodeId[]>();
+    for (const surfaceKey of sourceSurfaceKeys) {
+      const topology = this.getRegionTopology(surfaceKey);
+      if (topology === undefined) continue;
+      if (resolveCutRepair(topology.surfaceType).kind !== "regenerate") continue;
+      const nodeIds = scopes.get(topology.surfaceType) ?? [];
+      for (const node of topology.nodes) nodeIds.push(node.id);
+      scopes.set(topology.surfaceType, nodeIds);
+    }
+    return scopes;
+  }
+
+  /** Dispatches each repair-entitled scope to whichever type actually implements one, once the replacement above has landed. */
+  #repairCuts(
+    scopes: ReadonlyMap<string, readonly ConstructionNodeId[]>,
+    outline: ApplyPatchReplacementRequest["footprintOutline"],
+    causeId: string,
+  ): void {
+    if (scopes.size === 0 || outline === undefined || outline.length === 0) return;
+    for (const [surfaceType, nodeScope] of scopes) {
+      const executor = CUT_REPAIR_EXECUTORS[surfaceType];
+      if (executor === undefined) continue;
+      executor(this, { outline, nodeScope: [...new Set(nodeScope)] }, causeId);
+    }
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
     this.#requireReady("undoing a path brush");
