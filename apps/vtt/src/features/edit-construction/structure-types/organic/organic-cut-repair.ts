@@ -512,11 +512,28 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   for (const topology of consumedTopologies) for (const node of topology.nodes) preScope.add(node.id);
   if (preScope.size === 0) return 0;
 
-  runtime.applyRegionEdit(
-    fallout.consumedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
-    "local",
-    causeId,
-  );
+  // Not wrapped for the delete itself -- the WASM mutation this performs
+  // either lands or throws before anything below runs. It *is* wrapped here
+  // because the runtime's own post-mutation step re-fetches a mesh for
+  // every affected region to keep rendering in sync, and one batch commonly
+  // deletes several consumed regions that border each other -- a region
+  // this same call is also deleting can legitimately be reported as
+  // "affected" by its sibling's removal, and by the time that mesh refetch
+  // runs, it is *also* already gone, throwing `unknown analytic region` for
+  // a region that was never meant to survive this call anyway. The graph
+  // mutation itself already committed by then; only that redundant refetch
+  // failed, so the repair continues into the fill below rather than
+  // aborting before it ever attempted one -- exactly the "terrain deletes
+  // but nothing reconnects" symptom this was traced from.
+  try {
+    runtime.applyRegionEdit(
+      fallout.consumedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
+      "local",
+      causeId,
+    );
+  } catch {
+    // Deliberately swallowed -- see the comment above.
+  }
 
   const loops = runtime.getUnfilledLoops([...preScope]);
   if (loops.length === 0) return 0;
