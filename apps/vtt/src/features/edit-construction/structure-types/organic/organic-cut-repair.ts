@@ -252,7 +252,24 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // reports and swallows it rather than failing the whole stroke, but a
   // silently accepted partial rebuild would hide exactly the failure this
   // repair exists to prevent.
-  const outcome = runtime.addPatch(plan.patch, "local", causeId);
+  //
+  // The try/catch below is diagnostic, not corrective: an engine-side throw
+  // here (not just a silent skip) means Rust itself rejected the submitted
+  // patch, and the raw error names only the one regionId, not why. Every
+  // rebuilt region's own cycle is dumped alongside it so a real occurrence
+  // is diagnosable from the console alone, without a live debugger.
+  let outcome: { readonly skippedRegionIds: readonly string[] };
+  try {
+    outcome = runtime.addPatch(plan.patch, "local", causeId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `terrain cut repair's own addPatch rejected the whole batch -- ${message}. Submitted regions: ${JSON.stringify(
+        plan.patch.regions.map((region) => ({ regionId: region.regionId, edges: region.boundary.length })),
+      )}`,
+      { cause: error },
+    );
+  }
   if (outcome.skippedRegionIds.length > 0) {
     throw new Error(
       `terrain cut repair left ${outcome.skippedRegionIds.length} of ${plan.patch.regions.length} rebuilt face(s) unregistered: ${outcome.skippedRegionIds.join(", ")}`,
