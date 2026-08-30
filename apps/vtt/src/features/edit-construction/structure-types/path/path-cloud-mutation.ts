@@ -14,6 +14,7 @@ import type {
 import {
   firstRefusal,
   resolveCoverage,
+  resolveCutRepair,
 } from "../index.ts";
 import { chainsOf, parseSpineControlNodeId, spineControlNodeId, spineGraphFromSnapshot } from "./spine-graph/index.ts";
 import { pathRidesTerrain } from "./path-recipe.ts";
@@ -508,19 +509,24 @@ export type PathCloudMutationPlan =
  * continuation. `pathCorridorId`/`pathFormationFor` still decide the
  * subtype's profile; everything past that is derived, not hand-closed.
  *
- * **Two things this stage deliberately did not carry over**, both flagged
- * rather than silently dropped:
+ * **What this stage deliberately did not carry over**, flagged rather than
+ * silently dropped:
  * - Dragging an already-committed road's own nodes still resolves roles
  *   through `station-node-id.ts`'s address scheme (`path-structure.ts`),
  *   which a contour node minted by this engine does not carry. A newly
  *   drawn road commits correctly; editing it interactively afterwards is a
  *   follow-up, not something this function attempts.
- * - The old engine cut the exact remainder of any terrain patch a road's
- *   footprint partially overlapped (`applyRegionOverlay`'s own
- *   overlap-planning). This function only refuses a stroke that overlaps
- *   something it must not touch; it does not cut or consume terrain underneath
- *   it. Drawing a road over terrain leaves that terrain standing rather than
- *   risking an imprecise cut.
+ * - A terrain face the footprint only clips (`coverage: "overlap"`) is left
+ *   standing rather than cut to the road's exact contour -- the old engine's
+ *   partial-overlap precision (`applyRegionOverlay`'s overlap-planning) is
+ *   not reproduced here. Only a face the footprint covers whole
+ *   (`coverage: "centroid"`) is consumed, the same fidelity trade-off
+ *   `terrain-restack.ts` already accepts for raising. A visible seam of
+ *   terrain quads just outside the road's smooth curve is the known
+ *   consequence; closing it needs the covered face's own boundary
+ *   regenerated pinned to the road's contour, which `resolveCutRepair`
+ *   already declares terrain capable of (`"regenerate"`) but nothing
+ *   executes yet -- this stage only deletes.
  * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
  *   span by its chord (`spine.controlPoints` no longer carries intermediate
  *   samples along one -- see `groundTrack`), the same way every other span
@@ -600,6 +606,18 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       return { kind: "refused", reason: refusal };
     }
 
+    // `CUT`'s meaning is universal -- consume what is covered -- but only a
+    // face the covered type can actually survive losing gets consumed. A
+    // face the footprint merely clips is left standing regardless (the same
+    // "whole faces only" fidelity `terrain-restack.ts` already accepts), and
+    // a covered type that answers `resolveCutRepair` with `"unsupported"` is
+    // left standing too: deleting it with no way to repair the leftover
+    // would trade a visible overlap for an unrepairable hole, which is worse.
+    const cutSurfaceKeys = resolved
+      .filter((entry) => entry.interaction.kind === "cut" && entry.covered.coverage === "centroid")
+      .filter((entry) => resolveCutRepair(entry.covered.surfaceType).kind === "regenerate")
+      .map((entry) => entry.covered.surfaceKey);
+
     const topologies = input.regionTopologies;
     const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
     const existingEdgeUses = new Map<string, boolean[]>();
@@ -627,7 +645,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       kind: "ready",
       request: {
         operationId,
-        sourceSurfaceKeys: planned.consumedSurfaceKeys,
+        sourceSurfaceKeys: [...planned.consumedSurfaceKeys, ...cutSurfaceKeys],
         patch: planned.patch,
         graphPatch,
       },
