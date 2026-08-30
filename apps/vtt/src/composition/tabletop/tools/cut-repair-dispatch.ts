@@ -11,6 +11,7 @@ import {
 } from "../../../features/edit-construction/index.ts";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
+import { reportToolFailure } from "./core/tool-diagnostics.ts";
 
 /**
  * One covered type's own answer to being cut -- `resolveCutRepair`'s
@@ -57,6 +58,13 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
  * cuts into deletes those itself, inside its own executor -- this only
  * tells it which ones and hands it real nodes to weld onto, never deletes
  * on its behalf.
+ *
+ * A repair that throws is reported, never rethrown: by the time this runs,
+ * `request` itself already landed -- the painter's own stroke succeeded.
+ * A covered type's best-effort repair failing is that repair's own problem,
+ * not a reason to tell the person at the table their stroke did not land
+ * when it did. One covered type's failure does not stop another's repair
+ * either, for the same reason.
  */
 export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void {
   const outline = request.footprintOutline;
@@ -77,6 +85,10 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
-    executor(runtime, { paintedNodes: request.patch.nodes, consumedSurfaceKeys }, causeId);
+    try {
+      executor(runtime, { paintedNodes: request.patch.nodes, consumedSurfaceKeys }, causeId);
+    } catch (error) {
+      reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
+    }
   }
 }

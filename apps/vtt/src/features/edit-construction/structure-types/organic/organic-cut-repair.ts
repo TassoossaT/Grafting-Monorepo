@@ -168,7 +168,7 @@ export interface OrganicCutRepairRuntime {
     readonly map: { readonly nodePositions: ReadonlyMap<ConstructionNodeId, { readonly position: ConstructionPosition }> };
   };
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
-  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): unknown;
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): { readonly skippedRegionIds: readonly string[] };
 }
 
 /**
@@ -245,6 +245,18 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     "local",
     causeId,
   );
-  runtime.addPatch(plan.patch, "local", causeId);
+  // The affected survivors are already deleted by this point -- a region
+  // the engine refuses here (an edge with no room left, `boundary_has_room`)
+  // is a real hole this repair just caused, not a no-op to shrug off.
+  // Surfacing it as a thrown error is deliberate: `dispatchCutRepairs`
+  // reports and swallows it rather than failing the whole stroke, but a
+  // silently accepted partial rebuild would hide exactly the failure this
+  // repair exists to prevent.
+  const outcome = runtime.addPatch(plan.patch, "local", causeId);
+  if (outcome.skippedRegionIds.length > 0) {
+    throw new Error(
+      `terrain cut repair left ${outcome.skippedRegionIds.length} of ${plan.patch.regions.length} rebuilt face(s) unregistered: ${outcome.skippedRegionIds.join(", ")}`,
+    );
+  }
   return plan.patch.regions.length;
 }

@@ -101,6 +101,7 @@ function createFakeTerrainRuntime() {
     },
     addPatch(patch) {
       addedPatches.push(patch);
+      return { skippedRegionIds: [] };
     },
   };
 
@@ -162,4 +163,18 @@ test("consuming nothing is a no-op", () => {
   assert.equal(rebuilt, 0);
   assert.equal(deleted.length, 0);
   assert.equal(addedPatches.length, 0);
+});
+
+test("a rebuilt face the engine refuses is a thrown error, not a silently accepted hole", () => {
+  const { runtime } = createFakeTerrainRuntime();
+  runtime.addPatch = (patch) => ({ skippedRegionIds: patch.regions.map((region) => region.regionId) });
+  const fallout = {
+    consumedSurfaceKeys: [["@region", "T1"]],
+    paintedNodes: [
+      { id: "p-a", position: { x: 2, y: 0, z: 0 } },
+      { id: "p-b", position: { x: 2, y: 0, z: 2 } },
+    ],
+  };
+
+  assert.throws(() => repairOrganicCut(runtime, fallout, "cause-1"), /unregistered/);
 });
