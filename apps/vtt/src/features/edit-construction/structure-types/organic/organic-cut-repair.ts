@@ -9,7 +9,16 @@ import type {
 
 import type { AtomicEditOp } from "../../orchestration/atomic-edit.ts";
 import { createBoundaryEdges } from "../../topology/boundary-edges.ts";
-import { buildIrregularQuadGrid, type QuadMesh } from "../../topology/irregular-grid.ts";
+import {
+  createRandom,
+  ortho,
+  pairTriangles,
+  buildTriangleHex,
+  relax,
+  weld as weldQuadGrid,
+  type QuadMesh,
+  type Vec2,
+} from "../../topology/irregular-grid.ts";
 import type { CutFallout } from "../structure-type.ts";
 
 /**
@@ -21,19 +30,48 @@ import type { CutFallout } from "../structure-type.ts";
 const LATTICE_TRIANGLE_SIDE = 2;
 
 /**
- * How close (world units, XZ) a freshly generated lattice vertex must land to
- * a real node already on the table -- the hole's own exposed rim, or the
- * painter's own registered nodes -- before it is welded onto that id instead
- * of minting its own.
+ * How close (world units, XZ) one of the lattice's own *outer boundary*
+ * vertices must land to a real candidate point -- the hole's own rim, or the
+ * painter's own registered nodes -- before {@link buildCutRepairLattice}
+ * pins it there for `relax` to hold exactly, rather than letting it settle
+ * wherever the lattice's own square-fitting would otherwise put it.
  *
- * Deliberately a fraction of {@link LATTICE_TRIANGLE_SIDE}, the same ratio
- * `terrain-sculpt-tool.ts`'s own `CROSS_SESSION_WELD_EPSILON` uses and for
- * the same reason: generous enough to catch a genuine correspondence across
- * two independently generated meshes, narrow enough that a lattice vertex
- * never mistakes one of *its own* nearby vertices for the external node it is
- * actually looking for.
+ * Generous relative to a lattice cell (measured ~0.6-1.3 world units at this
+ * `triangleSide`): the *un-relaxed* boundary is still coarse, and a pin that
+ * lands slightly off its true counterpart only nudges local shape a little
+ * -- {@link MAX_EDGE_LENGTH} is the actual backstop against a bad match, not
+ * this radius.
  */
-const WELD_RADIUS = LATTICE_TRIANGLE_SIDE * 0.3;
+const PIN_RADIUS = LATTICE_TRIANGLE_SIDE * 0.75;
+
+/**
+ * How close (world units, XZ) a lattice vertex's own *final*, post-relax
+ * position must land to a real node before {@link planOrganicCutRepair}
+ * reuses that node's id instead of minting one.
+ *
+ * Tight on purpose -- the same tolerance `contour-patch.ts`'s own
+ * `WELD_TOLERANCE` uses for the same reason: once {@link buildCutRepairLattice}
+ * has pinned a boundary vertex, its final position *is* the candidate's own
+ * position, exactly, not merely nearby. A generous radius here is what used
+ * to let an unrelated vertex from the *surrounding* standing terrain --
+ * never pinned, just incidentally close -- get pulled into a quad it does
+ * not actually border, producing a face that bridges across ground (a road
+ * it should have stopped at) instead of filling the hole next to it.
+ */
+const WELD_RADIUS = 1e-3;
+
+/**
+ * The longest a fresh quad's own edge may be, measured from its *resolved*
+ * (post-weld) corners, before the quad is dropped as malformed rather than
+ * submitted.
+ *
+ * A backstop, not the primary defence ({@link PIN_RADIUS} guiding relax and
+ * {@link WELD_RADIUS} being tight are that): even a well-pinned lattice can
+ * mismatch on an oddly-shaped or very thin hole, and a quad whose corners
+ * end up this far apart is not filling the hole any more, it is bridging
+ * across it -- dropped rather than committed as a corrupt face.
+ */
+const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 1.5;
 
 /** One real, already-live node this repair may weld a fresh lattice vertex onto. */
 export interface CutRepairWeldCandidate {
@@ -132,17 +170,69 @@ export interface OrganicCutRepairLattice {
 }
 
 /**
- * Sizes and generates the lattice a cut repair fills its hole from.
+ * Sizes and generates the lattice a cut repair fills its hole from, its own
+ * outer boundary pinned onto real geometry wherever one lands close enough --
+ * the hole's own rim, or the painter's own contour.
+ *
+ * **Why pin instead of welding after the fact.** A plain `buildIrregularQuadGrid`
+ * call relaxes its boundary toward *itself* (`pinBoundary`'s default) --
+ * nothing pulls it toward the real rim it is meant to close, so its final
+ * shape is wherever that independent lattice's own square-fitting happened
+ * to land. Welding by proximity afterward against a hole tightly surrounded
+ * by standing terrain on every side then has nothing reliable to go on: an
+ * *interior* vertex, not just a boundary one, can land within the weld
+ * radius of some unrelated real node from the surrounding mesh, producing a
+ * quad that bridges across ground it was never meant to touch (this is what
+ * `unknown analytic region` traced back to -- a submitted face naming four
+ * real nodes that do not actually border each other). Pinning fixes the
+ * *generation* itself: every boundary vertex that finds a real counterpart
+ * is held exactly there through every relax pass (`RelaxOptions.pinnedTargets`),
+ * so the lattice's own shape bends to close the hole, and the id-weld this
+ * feeds into ({@link planOrganicCutRepair}) can then use a near-zero
+ * tolerance ({@link WELD_RADIUS}) instead of gambling on proximity.
+ *
+ * **Every vertex is a pin candidate, not only the lattice's own topological
+ * boundary.** A hole this fills is rarely round: a road cut is long and
+ * narrow, and the lattice this generates is sized from its bounding circle
+ * -- a hexagon wide enough to cover the whole span. For a thin hole, the
+ * true seam (the hole's own rim, and the painter's own contour running down
+ * the middle) cuts *through* that hexagon's interior, not along its outer
+ * rim; restricting pins to `boundaryVertices` left every one of those seam
+ * vertices unpinned and this repair fell back to a near-zero-tolerance
+ * proximity match that essentially never fired. Checking every vertex costs
+ * one more nearest-neighbour scan and is a no-op for a vertex genuinely deep
+ * inside a large hole, where nothing real is ever close enough to matter.
  *
  * `holeLoops`' own bounding circle decides the radius -- generous by one
  * whole ring (`+ 1`) so the lattice's own boundary clears every rim point
- * with room to spare, rather than landing exactly on it and leaving a sliver
- * of hole outside the generated mesh's own reach.
+ * with room to spare. Deliberately *not* sized from `paintedNodes` too: that
+ * list is the painter's *whole* patch (a long road's every node, not only
+ * the stretch next to this one hole), and sizing the lattice from it would
+ * make one small cut generate an enormous lattice for a stroke that merely
+ * happens to run nearby. `paintedNodes` still narrows which pins actually
+ * find a real counterpart -- it only does not decide how big to build.
  */
-export function buildCutRepairLattice(holeLoops: readonly (readonly CutRepairWeldCandidate[])[], causeId: string): OrganicCutRepairLattice {
+export function buildCutRepairLattice(
+  holeLoops: readonly (readonly CutRepairWeldCandidate[])[],
+  paintedNodes: readonly CutRepairWeldCandidate[],
+  causeId: string,
+): OrganicCutRepairLattice {
   const { centerX, centerZ, radius } = boundsOf(holeLoops.flat().map((point) => point.position));
   const trianglesPerSide = Math.max(1, Math.ceil(radius / LATTICE_TRIANGLE_SIDE) + 1);
-  const mesh = buildIrregularQuadGrid({ seed: seedFromCauseId(causeId), trianglesPerSide, triangleSide: LATTICE_TRIANGLE_SIDE });
+
+  const random = createRandom(seedFromCauseId(causeId));
+  const triangles = buildTriangleHex({ trianglesPerSide, triangleSide: LATTICE_TRIANGLE_SIDE });
+  const preRelax = weldQuadGrid(ortho(pairTriangles(triangles, random)));
+
+  const pinCandidates: CutRepairWeldCandidate[] = [...holeLoops.flat(), ...paintedNodes];
+  const noExclusions: ReadonlySet<ConstructionNodeId> = new Set();
+  const pins = new Map<number, Vec2>();
+  preRelax.vertices.forEach((local, vertexIndex) => {
+    const nearest = nearestWithin(centerX + local.x, centerZ + local.y, pinCandidates, noExclusions, PIN_RADIUS);
+    if (nearest !== undefined) pins.set(vertexIndex, { x: nearest.position.x - centerX, y: nearest.position.z - centerZ });
+  });
+
+  const mesh = relax(preRelax, { pinnedTargets: pins });
   return { mesh, originX: centerX, originZ: centerZ };
 }
 
@@ -253,6 +343,20 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
 
     const cycle = quad.map((vertexIndex) => resolveVertex(vertexIndex)).filter((id): id is ConstructionNodeId => id !== undefined);
     if (cycle.length !== quad.length || new Set(cycle).size !== cycle.length) return;
+
+    // A corner that welded onto real geometry moved from wherever the
+    // lattice generated it to that real node's own position -- see
+    // MAX_EDGE_LENGTH's own doc for why a quad whose welded corners ended up
+    // implausibly far apart is bridging across ground, not filling the hole,
+    // and gets dropped rather than submitted.
+    for (let position = 0; position < quad.length; position += 1) {
+      const a = resolvedPosition[quad[position]!];
+      const b = resolvedPosition[quad[(position + 1) % quad.length]!];
+      if (a === undefined || b === undefined) return;
+      const dx = a.x - b.x;
+      const dz = a.z - b.z;
+      if (dx * dx + dz * dz > MAX_EDGE_LENGTH * MAX_EDGE_LENGTH) return;
+    }
 
     const boundary = cycle.map((id, position) => edges.use(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
@@ -393,7 +497,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   }
   if (holeLoops.length === 0) return 0;
 
-  const lattice = buildCutRepairLattice(holeLoops, causeId);
+  const lattice = buildCutRepairLattice(holeLoops, fallout.paintedNodes, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
   const occupiedQuads = new Set(runtime.classifyPoints(centroids).map((hit) => hit.index));
 

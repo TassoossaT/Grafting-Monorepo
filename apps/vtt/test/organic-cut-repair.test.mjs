@@ -29,7 +29,7 @@ const SQUARE_HOLE = [
 ];
 
 test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's own rim ids", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [], "cause-square");
   const patch = planOrganicCutRepair({
     tableId: "table-1",
     causeId: "cause-square",
@@ -57,7 +57,7 @@ test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's 
 });
 
 test("planOrganicCutRepair welds a lattice vertex onto a real painted node, not merely near it", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [], "cause-square");
   // A vertex the lattice itself already generated -- placing a painted node
   // exactly there is what a real weld looks like: the same id must appear in
   // the patch, not a second node coincident with it.
@@ -81,7 +81,7 @@ test("planOrganicCutRepair welds a lattice vertex onto a real painted node, not 
 });
 
 test("planOrganicCutRepair drops every quad already claimed by something else", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [], "cause-square");
   const everyQuad = new Set(lattice.mesh.quads.map((_, index) => index));
 
   const patch = planOrganicCutRepair({
@@ -99,7 +99,7 @@ test("planOrganicCutRepair drops every quad already claimed by something else", 
 });
 
 test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the lattice", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE, [], "cause-square");
   const farHole = [
     [
       { id: "f0", position: { x: 1000, y: 0, z: 1000 } },
