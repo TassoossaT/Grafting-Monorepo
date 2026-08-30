@@ -435,23 +435,30 @@ export interface OrganicCutRepairRuntime {
   classifyPoints(points: readonly (readonly [number, number])[]): readonly { readonly index: number }[];
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   /**
-   * Deliberately not `addPatch`: `addPatch` mutates the live graph directly
-   * with no clone and no rollback (`apply_add_patch`, `region_editing.rs`) --
-   * a refused region among several would leave the rest committed and that
-   * one simply missing, a real hole. `applyPatchReplacement`
-   * (`apply_patch_replacement`, `patch_replacement.rs`) runs on a clone and
-   * only publishes when every target region registers, so a refused
-   * regeneration commits nothing at all rather than half a mesh.
+   * `addPatch`, not `applyPatchReplacement`, and deliberately so now.
+   *
+   * An earlier version of this fill used `applyPatchReplacement` for its
+   * all-or-nothing guarantee -- load-bearing back when the fill was still
+   * swapping *existing* survivors for rebuilt ones (a real "replacement"),
+   * where a refused region partway through really could have left a
+   * survivor half gone. This fill replaces nothing (`sourceSurfaceKeys` is
+   * always empty -- the consumed regions were already deleted, separately,
+   * above) -- it only *adds* brand new quads to a hole, the exact shape of
+   * operation `terrain-sculpt-tool.ts`'s own `addPatch` call already
+   * exists for. Two independently-generated boundary vertices of this
+   * lattice can weld onto two real nodes that happen to already share an
+   * edge somewhere else in the standing mesh (unrelated to this hole, and
+   * already full there) -- {@link planOrganicCutRepair}'s own crossing and
+   * edge-length guards do not catch this, since neither corner is
+   * individually wrong and the two are not necessarily near each other on
+   * screen. `applyPatchReplacement` would have thrown that one region's
+   * refusal away as a reason to commit *nothing at all* from a batch that
+   * can easily be ten-plus regions; `addPatch` keeps every region that
+   * *did* find room and reports the rest in `skippedRegionIds`, which is
+   * strictly the better outcome for a hole that only needs filling, not
+   * replacing.
    */
-  applyPatchReplacement(
-    request: {
-      readonly operationId: string;
-      readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
-      readonly patch: ConstructionPatch;
-    },
-    origin: "local",
-    causeId: string,
-  ): unknown;
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): { readonly createdSurfaceKeys: readonly unknown[]; readonly skippedRegionIds: readonly string[] };
 }
 
 /**
@@ -495,8 +502,9 @@ export interface OrganicCutRepairRuntime {
  *    terrain, or the painter's own new patch) -- terrain's fill has to stop
  *    exactly there, for any type that cuts it, not only a road.
  * 6. {@link planOrganicCutRepair} decides which quads survive and welds them.
- * 7. Register the surviving quads as one atomic `applyPatchReplacement` --
- *    every one of them or none, never some.
+ * 7. Register the surviving quads via `addPatch` -- a region the engine
+ *    still finds no room for (see {@link OrganicCutRepairRuntime.addPatch}'s
+ *    own doc) costs only itself, not the rest of the batch.
  */
 export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string): number {
   if (fallout.consumedSurfaceKeys.length === 0) return 0;
@@ -569,21 +577,24 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   });
   if (patch === undefined) return 0;
 
-  // One atomic add, not a manual delete-then-add: see
-  // OrganicCutRepairRuntime.applyPatchReplacement's own doc for why
-  // addPatch is wrong here. `sourceSurfaceKeys` is empty -- the consumed
-  // regions were already deleted above -- so a refusal here commits nothing
-  // new rather than leaving a half-built mesh.
+  // See OrganicCutRepairRuntime.addPatch's own doc for why this is a plain
+  // add, not applyPatchReplacement: this fill replaces nothing, and a
+  // region the engine skips (see its own doc for how two of this fill's
+  // own corners can each weld correctly on their own yet still name an edge
+  // that is already full elsewhere in the standing mesh) must cost only
+  // that one region, never the rest of a batch that can be ten quads deep.
+  // A thrown error here is a real failure, not a partial refusal -- addPatch
+  // itself only throws for something outside "this face had no room."
   try {
-    runtime.applyPatchReplacement({ operationId: causeId, sourceSurfaceKeys: [], patch }, "local", causeId);
+    const outcome = runtime.addPatch(patch, "local", causeId);
+    return outcome.createdSurfaceKeys.length;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `terrain cut repair's regenerated fill was refused, nothing new was committed -- ${message}. Submitted regions: ${JSON.stringify(
+      `terrain cut repair's regenerated fill failed -- ${message}. Submitted regions: ${JSON.stringify(
         patch.regions.map((region) => ({ regionId: region.regionId, edges: region.boundary.length })),
       )}`,
       { cause: error },
     );
   }
-  return patch.regions.length;
 }

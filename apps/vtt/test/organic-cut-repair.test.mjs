@@ -164,7 +164,8 @@ function createFakeTerrainRuntime() {
 
   const deleted = [];
   const addedPatches = [];
-  let refuseReplacement = false;
+  let refuseFirstRegion = false;
+  let throwOnAdd = false;
 
   function deleteBySurfaceKey(surfaceKey) {
     const key = surfaceKey.join("|");
@@ -206,19 +207,36 @@ function createFakeTerrainRuntime() {
       });
       return hits;
     },
-    applyPatchReplacement(request) {
-      if (refuseReplacement) {
-        throw new Error(`patch replacement target patch was refused: ${request.patch.regions.map((r) => r.regionId).join(", ")}`);
-      }
-      for (const surfaceKey of request.sourceSurfaceKeys) deleteBySurfaceKey(surfaceKey);
-      addedPatches.push(request.patch);
-      for (const region of request.patch.regions) {
+    // Real addPatch semantics (region_editing.rs's apply_add_patch, and its
+    // own outcome shape): a region with no room is skipped, reported, and
+    // costs nothing else in the same batch. `throwOnAdd` stands in for the
+    // genuinely fatal case -- something other than "this one face had no
+    // room" -- which is the only case repairOrganicCut still treats as an
+    // error.
+    addPatch(patch) {
+      if (throwOnAdd) throw new Error("add patch failed: something other than a refused face");
+      addedPatches.push(patch);
+      const createdSurfaceKeys = [];
+      const skippedRegionIds = [];
+      patch.regions.forEach((region, index) => {
+        if (refuseFirstRegion && index === 0) {
+          skippedRegionIds.push(region.regionId);
+          return;
+        }
         regions.set(region.regionId, { surfaceKey: ["@region", region.regionId], surfaceType: region.surfaceType, physical: region.physical, nodes: [] });
-      }
+        createdSurfaceKeys.push(["@region", region.regionId]);
+      });
+      return { createdSurfaceKeys, skippedRegionIds };
     },
   };
 
-  return { runtime, deleted, addedPatches, refuseNextReplacement: () => { refuseReplacement = true; } };
+  return {
+    runtime,
+    deleted,
+    addedPatches,
+    refuseFirstSubmittedRegion: () => { refuseFirstRegion = true; },
+    throwOnNextAdd: () => { throwOnAdd = true; },
+  };
 }
 
 test("repairOrganicCut deletes exactly the consumed face, leaves the survivor untouched, and fills the hole with a real lattice", () => {
@@ -231,7 +249,7 @@ test("repairOrganicCut deletes exactly the consumed face, leaves the survivor un
   assert.equal(addedPatches.length, 1);
 
   const [patch] = addedPatches;
-  assert.equal(patch.regions.length, rebuilt);
+  assert.equal(patch.regions.length, rebuilt, "nothing was refused in this fixture, so every submitted region landed");
   for (const region of patch.regions) {
     for (const use of region.boundary) {
       assert.notEqual(use.edgeId.includes("n5"), true, "n5 belongs only to T2's own untouched corner");
@@ -254,13 +272,24 @@ test("consuming nothing is a no-op", () => {
   assert.equal(addedPatches.length, 0);
 });
 
-test("a fill the engine refuses is a thrown error, and nothing new is left half-committed", () => {
-  const { runtime, deleted, addedPatches, refuseNextReplacement } = createFakeTerrainRuntime();
-  refuseNextReplacement();
+test("a region the engine finds no room for is skipped, not fatal to the rest of the fill", () => {
+  const { runtime, addedPatches, refuseFirstSubmittedRegion } = createFakeTerrainRuntime();
+  refuseFirstSubmittedRegion();
 
-  assert.throws(() => repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1"), /refused/);
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
+
+  const [patch] = addedPatches;
+  assert.ok(patch.regions.length > 1, "the fixture needs more than one region for this to test anything");
+  assert.equal(rebuilt, patch.regions.length - 1, "every region except the refused one still landed");
+});
+
+test("an add the engine flatly rejects (not merely a refused face) is a thrown error, and nothing new is left half-committed", () => {
+  const { runtime, deleted, addedPatches, throwOnNextAdd } = createFakeTerrainRuntime();
+  throwOnNextAdd();
+
+  assert.throws(() => repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1"), /fill failed/);
   // Only T1 (deleted via applyRegionEdit before the fill was even attempted)
-  // is gone. The refused applyPatchReplacement call commits nothing.
+  // is gone. addPatch itself threw before registering anything.
   assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"]);
   assert.equal(addedPatches.length, 0);
 });
