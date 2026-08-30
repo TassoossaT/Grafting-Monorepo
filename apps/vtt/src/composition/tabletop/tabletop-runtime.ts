@@ -663,7 +663,25 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    const meshes = surfaceKeys.flatMap((surfaceKey) => this.#construction.getSurfaceMesh(surfaceKey));
+    // Fetched one surface at a time, not `surfaceKeys.flatMap`, and a
+    // fetch that throws is skipped rather than aborting the whole sync: a
+    // single mutation can name several affected surfaces that also border
+    // *each other*, and one of them can legitimately have already been
+    // removed by this same call (a batch deleting several adjacent
+    // consumed regions together, say) -- its own removal is already
+    // handled through `removedSurfaceRefs`/`#foldRegionEditOutcome`'s own
+    // removed-keys loop, so a stale mesh fetch for it here is redundant,
+    // not load-bearing. Letting one such fetch abort the whole sync used
+    // to skip the render update for *every* surface in the batch, not just
+    // the stale one -- the mutation itself had already committed, so the
+    // screen simply never caught up.
+    const meshes = surfaceKeys.flatMap((surfaceKey) => {
+      try {
+        return this.#construction.getSurfaceMesh(surfaceKey);
+      } catch {
+        return [];
+      }
+    });
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
