@@ -63,6 +63,18 @@ function createFakeTerrainRuntime() {
 
   const deleted = [];
   const addedPatches = [];
+  /** Test seam: when set, applyPatchReplacement refuses instead of registering -- exactly what apply_patch_replacement does atomically in Rust when a target region has no room. */
+  let refuseReplacement = false;
+
+  function deleteBySurfaceKey(surfaceKey) {
+    const key = surfaceKey.join("|");
+    for (const [id, region] of regions) {
+      if (region.surfaceKey.join("|") === key) {
+        regions.delete(id);
+        deleted.push(surfaceKey);
+      }
+    }
+  }
 
   const runtime = {
     getRegionTopology(surfaceKey) {
@@ -75,13 +87,7 @@ function createFakeTerrainRuntime() {
     applyRegionEdit(ops) {
       for (const op of ops) {
         if (op.kind !== "delete-region") continue;
-        const key = op.surfaceKey.join("|");
-        for (const [id, region] of regions) {
-          if (region.surfaceKey.join("|") === key) {
-            regions.delete(id);
-            deleted.push(op.surfaceKey);
-          }
-        }
+        deleteBySurfaceKey(op.surfaceKey);
       }
     },
     getUnfilledLoops(scope) {
@@ -99,13 +105,36 @@ function createFakeTerrainRuntime() {
     getAllRegionTopologies() {
       return [...regions.values()];
     },
-    addPatch(patch) {
-      addedPatches.push(patch);
-      return { skippedRegionIds: [] };
+    // Atomic, the way apply_patch_replacement actually is: either every
+    // sourceSurfaceKey is removed and every patch region registered, or --
+    // when refuseReplacement is set -- neither happens at all.
+    applyPatchReplacement(request) {
+      if (refuseReplacement) {
+        throw new Error(`patch replacement target patch was refused: ${request.patch.regions.map((r) => r.regionId).join(", ")}`);
+      }
+      for (const surfaceKey of request.sourceSurfaceKeys) deleteBySurfaceKey(surfaceKey);
+      addedPatches.push(request.patch);
+      for (const region of request.patch.regions) {
+        regions.set(region.regionId, {
+          surfaceKey: ["@region", region.regionId],
+          surfaceType: region.surfaceType,
+          physical: region.physical,
+          outerLoops: [],
+          holes: [],
+          nodes: [],
+        });
+      }
     },
   };
 
-  return { runtime, deleted, addedPatches };
+  return {
+    runtime,
+    deleted,
+    addedPatches,
+    refuseNextReplacement: () => {
+      refuseReplacement = true;
+    },
+  };
 }
 
 test("repairOrganicCut deletes the consumed face itself, then rebuilds the surviving neighbour welded onto the painter's own nodes", () => {
@@ -165,9 +194,9 @@ test("consuming nothing is a no-op", () => {
   assert.equal(addedPatches.length, 0);
 });
 
-test("a rebuilt face the engine refuses is a thrown error, not a silently accepted hole", () => {
-  const { runtime } = createFakeTerrainRuntime();
-  runtime.addPatch = (patch) => ({ skippedRegionIds: patch.regions.map((region) => region.regionId) });
+test("a rebuild the engine refuses is a thrown error, and the survivor is left exactly as it was -- not half-deleted", () => {
+  const { runtime, deleted, addedPatches, refuseNextReplacement } = createFakeTerrainRuntime();
+  refuseNextReplacement();
   const fallout = {
     consumedSurfaceKeys: [["@region", "T1"]],
     paintedNodes: [
@@ -176,5 +205,11 @@ test("a rebuilt face the engine refuses is a thrown error, not a silently accept
     ],
   };
 
-  assert.throws(() => repairOrganicCut(runtime, fallout, "cause-1"), /unregistered/);
+  assert.throws(() => repairOrganicCut(runtime, fallout, "cause-1"), /refused/);
+  // Only T1 (the actually-consumed face, deleted via applyRegionEdit before
+  // the rebuild was even attempted) is gone. T2 was never touched: the
+  // refused applyPatchReplacement call is atomic, so it neither deleted nor
+  // added anything.
+  assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"]);
+  assert.equal(addedPatches.length, 0);
 });

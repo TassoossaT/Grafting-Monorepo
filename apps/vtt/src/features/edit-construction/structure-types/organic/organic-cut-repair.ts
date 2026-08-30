@@ -168,7 +168,26 @@ export interface OrganicCutRepairRuntime {
     readonly map: { readonly nodePositions: ReadonlyMap<ConstructionNodeId, { readonly position: ConstructionPosition }> };
   };
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
-  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): { readonly skippedRegionIds: readonly string[] };
+  /**
+   * Deliberately not `addPatch` for the rebuild step: `addPatch` mutates the
+   * live graph directly with no clone and no rollback (`apply_add_patch`,
+   * `region_editing.rs`) -- a batch of several regions where one gets
+   * refused partway through leaves whichever came before it committed and
+   * the rest simply missing, a real hole. `applyPatchReplacement`
+   * (`apply_patch_replacement`, `patch_replacement.rs`) runs on a clone and
+   * only publishes when every target region registers, so a refused rebuild
+   * leaves the originals -- named in `sourceSurfaceKeys` -- exactly as they
+   * were instead of half-deleted.
+   */
+  applyPatchReplacement(
+    request: {
+      readonly operationId: string;
+      readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
+      readonly patch: ConstructionPatch;
+    },
+    origin: "local",
+    causeId: string,
+  ): unknown;
 }
 
 /**
@@ -196,7 +215,8 @@ export interface OrganicCutRepairRuntime {
  *    candidate the plan might need to rebuild -- resolved to a plain id
  *    cycle here, so `planOrganicCutRepair` never has to call the engine.
  * 5. `planOrganicCutRepair` decides the weld and the rebuild.
- * 6. Delete every affected survivor, then register the replacement patch.
+ * 6. Swap every affected survivor for its rebuilt version in one atomic
+ *    `applyPatchReplacement` call -- all of them or none, never some.
  */
 export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string): number {
   if (fallout.consumedSurfaceKeys.length === 0) return 0;
@@ -240,39 +260,25 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   });
   if (plan === undefined) return 0;
 
-  runtime.applyRegionEdit(
-    plan.affectedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
-    "local",
-    causeId,
-  );
-  // The affected survivors are already deleted by this point -- a region
-  // the engine refuses here (an edge with no room left, `boundary_has_room`)
-  // is a real hole this repair just caused, not a no-op to shrug off.
-  // Surfacing it as a thrown error is deliberate: `dispatchCutRepairs`
-  // reports and swallows it rather than failing the whole stroke, but a
-  // silently accepted partial rebuild would hide exactly the failure this
-  // repair exists to prevent.
-  //
-  // The try/catch below is diagnostic, not corrective: an engine-side throw
-  // here (not just a silent skip) means Rust itself rejected the submitted
-  // patch, and the raw error names only the one regionId, not why. Every
-  // rebuilt region's own cycle is dumped alongside it so a real occurrence
-  // is diagnosable from the console alone, without a live debugger.
-  let outcome: { readonly skippedRegionIds: readonly string[] };
+  // One atomic swap, not a manual delete-then-add: see
+  // OrganicCutRepairRuntime.applyPatchReplacement's own doc for why
+  // addPatch is wrong here. A region the engine refuses (an edge with no
+  // room left, `boundary_has_room`) now fails the whole rebuild without
+  // touching the graph at all -- the affected survivors stay exactly as
+  // they were, not half-deleted.
   try {
-    outcome = runtime.addPatch(plan.patch, "local", causeId);
+    runtime.applyPatchReplacement(
+      { operationId: causeId, sourceSurfaceKeys: plan.affectedSurfaceKeys, patch: plan.patch },
+      "local",
+      causeId,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `terrain cut repair's own addPatch rejected the whole batch -- ${message}. Submitted regions: ${JSON.stringify(
+      `terrain cut repair's rebuild was refused, left exactly as it was -- ${message}. Submitted regions: ${JSON.stringify(
         plan.patch.regions.map((region) => ({ regionId: region.regionId, edges: region.boundary.length })),
       )}`,
       { cause: error },
-    );
-  }
-  if (outcome.skippedRegionIds.length > 0) {
-    throw new Error(
-      `terrain cut repair left ${outcome.skippedRegionIds.length} of ${plan.patch.regions.length} rebuilt face(s) unregistered: ${outcome.skippedRegionIds.join(", ")}`,
     );
   }
   return plan.patch.regions.length;
