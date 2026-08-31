@@ -43,6 +43,16 @@ const WELD_TOLERANCE = 1e-3;
  */
 const MIN_SHAPE_AREA = 1e-4;
 
+/**
+ * Below this area (world units squared) a *triangle* carries no ground at
+ * all -- three points on one line. Far below {@link MIN_SHAPE_AREA} on
+ * purpose: reinstating the vertices `polygon-clipping` simplified away
+ * leaves legitimately thin triangles along a straight seam, and dropping
+ * those would leave the neighbour's own edges walked by nothing, which is
+ * the very gap this repair exists to close.
+ */
+const MIN_FACE_AREA = 1e-9;
+
 /** One real, already-live node this repair may weld a fill vertex onto. */
 export interface CutRepairWeldCandidate {
   readonly id: ConstructionNodeId;
@@ -195,11 +205,62 @@ function buildFillPatch(
     };
   })();
 
+  /**
+   * Puts back every real node that lies *along* a ring's own segments.
+   *
+   * `polygon-clipping` drops collinear vertices: where the neighbour's own
+   * boundary runs A-B-C in a straight line, the difference comes back as the
+   * single segment A-C, and B is gone. That reads as harmless -- the shape is
+   * identical -- and is not: the fill then declares one edge A~C where the
+   * neighbour has two, A~B and B~C. Two coincident geometries, no edge in
+   * common, and a T-junction standing at B. That is the gap along the seam,
+   * and the reason a fill could weld every one of its corners onto a real id
+   * and still not join anything: sharing a *vertex* is not sharing an *edge*.
+   *
+   * So the vertices the clipper simplified away are put back, from the real
+   * nodes themselves -- nothing is minted here, and nothing moves; a node is
+   * reinstated only where it already sat on the segment. What comes out walks
+   * the neighbour's own edges, one for one.
+   */
+  const densify = (ids: readonly ConstructionNodeId[]): readonly ConstructionNodeId[] => {
+    const present = new Set(ids);
+    const walked: ConstructionNodeId[] = [];
+    for (let index = 0; index < ids.length; index += 1) {
+      const from = nodePositions.get(ids[index]!)!;
+      const to = nodePositions.get(ids[(index + 1) % ids.length]!)!;
+      walked.push(ids[index]!);
+
+      const dx = to.x - from.x;
+      const dz = to.z - from.z;
+      const lengthSq = dx * dx + dz * dz;
+      if (lengthSq < 1e-12) continue;
+
+      const between: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition; readonly t: number }[] = [];
+      for (const candidate of candidates) {
+        if (present.has(candidate.id)) continue;
+        const t = ((candidate.position.x - from.x) * dx + (candidate.position.z - from.z) * dz) / lengthSq;
+        if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+        const offX = candidate.position.x - (from.x + dx * t);
+        const offZ = candidate.position.z - (from.z + dz * t);
+        if (Math.hypot(offX, offZ) > WELD_TOLERANCE) continue;
+        between.push({ id: candidate.id, position: candidate.position, t });
+      }
+
+      between.sort((left, right) => left.t - right.t);
+      for (const node of between) {
+        nodePositions.set(node.id, node.position);
+        present.add(node.id);
+        walked.push(node.id);
+      }
+    }
+    return walked;
+  };
+
   const idsFor = (ring: Ring, isHole: boolean): readonly ConstructionNodeId[] => {
     const ids = openRing(ensureUpwardWinding(ring, isHole)).map(([x, z]) => weldOrMint(x, z));
     // A ring that folded back onto the same node twice is not a face --
     // `polygon-clipping` can leave one at a self-touching pinch point.
-    return new Set(ids).size === ids.length ? ids : [];
+    return new Set(ids).size === ids.length ? densify(ids) : [];
   };
 
   // Welded first, wound second: the weld is what makes a ring's edges
@@ -276,7 +337,12 @@ function buildFillPatch(
         return [position.x, position.z];
       });
       const area = signedRingArea(ring);
-      if (Math.abs(area) < MIN_SHAPE_AREA) continue;
+      // Not `MIN_SHAPE_AREA`: that filter is for shapes the clipper produced,
+      // where a sliver means a degenerate artifact. A triangle is only ever
+      // dropped here for being truly flat -- a reinstated collinear vertex
+      // leaves genuinely thin triangles along the seam, and those are real
+      // ground whose edges the neighbour is waiting to share.
+      if (Math.abs(area) < MIN_FACE_AREA) continue;
       // Each triangle is wound the way the whole fill is -- `earcut`'s own
       // output orientation is not part of this decision, and normalising per
       // triangle rather than trusting it keeps the seam's direction the one

@@ -470,3 +470,52 @@ for (const [name, rimWalk] of [
     }
   });
 }
+
+test("a node the clipper simplified away is put back, so the seam walks the neighbour's own edges", () => {
+  const { runtime, addedPatches } = createFakeTerrainRuntime();
+
+  // The road's own left side runs 1,0 -> 1,2 -> 1,4: three nodes on one
+  // straight line, which is what a real contour looks like wherever it was
+  // densified. `polygon-clipping` returns the difference with the middle one
+  // simplified away -- same shape, and structurally fatal: the fill would
+  // declare one edge band-a~band-d where the road has band-a~band-mid and
+  // band-mid~band-d, sharing vertices with the road but no edge at all, with
+  // a T-junction standing at band-mid. That is the gap along the seam.
+  const paintedNodes = [
+    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
+    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
+    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
+    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
+    { id: "band-mid", position: { x: 1, y: 0, z: 2 } },
+  ];
+  const paintedLoops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+      { x: 1, y: 0, z: 2 },
+    ],
+  ];
+
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
+  const [patch] = addedPatches;
+
+  const used = boundaryNodeIds(patch);
+  assert.ok(used.has("band-mid"), "the fill walks the node the clipper dropped, not straight past it");
+
+  // And it walks it as the road does: both of the road's own edges there are
+  // declared by the fill, so each is one edge used twice, not two coincident
+  // ones. This is the difference between touching the road and joining it.
+  const declared = new Set(patch.edges.map((edge) => edge.edgeId));
+  for (const [from, to] of [["band-a", "band-mid"], ["band-mid", "band-d"]]) {
+    assert.ok(
+      declared.has(sharedEdgeId("table-1", from, to)),
+      `the fill declares the road's own edge ${from}~${to}`,
+    );
+  }
+  assert.ok(
+    !declared.has(sharedEdgeId("table-1", "band-a", "band-d")),
+    "and never the shortcut across it, which is an edge the road does not have",
+  );
+});
