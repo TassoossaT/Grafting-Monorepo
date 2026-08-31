@@ -53,6 +53,13 @@ function createFakeRuntime(loops) {
     ["d", { x: 4, y: 0, z: 4 }],
     ["e", { x: 2, y: 0, z: 4 }],
     ["f", { x: 0, y: 0, z: 4 }],
+    // A square road standing in the middle of the gap, touching none of its
+    // borders -- the shape the engine reports as an outline and never as
+    // something to fill.
+    ["r1", { x: 1, y: 0, z: 1 }],
+    ["r2", { x: 3, y: 0, z: 1 }],
+    ["r3", { x: 3, y: 0, z: 3 }],
+    ["r4", { x: 1, y: 0, z: 3 }],
   ]);
   const addedPatches = [];
   return {
@@ -155,4 +162,76 @@ test("a rim too small to cut is filled whole rather than dropped", () => {
 
   assert.equal(filled, 1);
   assert.deepEqual(context.addedPatches[0].regions[0].boundary, loop.boundary, "a triangle is already its own mesh");
+});
+
+/** The road's own boundary loop, in the road's own walk order. */
+function roadIsland() {
+  const ids = ["r1", "r2", "r3", "r4"];
+  return ids.map((id, index) => ({
+    edgeId: `road:${index}`,
+    reversed: index % 2 === 0,
+    startNodeId: id,
+    endNodeId: ids[(index + 1) % ids.length],
+  }));
+}
+
+test("a mesh opens around a face standing inside the gap instead of covering it", () => {
+  const context = createFakeRuntime([rimLoop()]);
+  const island = roadIsland();
+
+  fillUnfilledLoops(context.runtime, ["a"], "terrain", "cause-1", { mesh: true, islands: [island] });
+  const [patch] = context.addedPatches;
+
+  // Every one of the road's own edges is walked by the mesh, and walked the
+  // *opposite* way to the road: the road holds one side of each, the mended
+  // ground takes the other. Without this the two banks are joined straight
+  // over the top of the road.
+  const uses = patch.regions.flatMap((region) => region.boundary);
+  for (const edge of island) {
+    const matching = uses.filter((use) => use.edgeId === edge.edgeId);
+    assert.equal(matching.length, 1, `${edge.edgeId} bounds the opening exactly once`);
+    assert.equal(matching[0].reversed, !edge.reversed, `${edge.edgeId} is taken from the side the road left free`);
+  }
+
+  const declared = new Set(patch.edges.map((edge) => edge.edgeId));
+  for (const edge of island) {
+    assert.ok(!declared.has(edge.edgeId), `${edge.edgeId} is the road's own edge; redeclaring it would mint a duplicate`);
+  }
+
+  // And no face spans the road: nothing walks a pair of opposite corners of
+  // the opening, which is exactly what bridging across it would need.
+  for (const region of patch.regions) {
+    const corners = new Set(region.regionId.split("|"));
+    assert.ok(!(corners.has("r1") && corners.has("r3")), "no face bridges the road corner to corner");
+    assert.ok(!(corners.has("r2") && corners.has("r4")), "no face bridges the road corner to corner");
+  }
+});
+
+test("an island belonging to some other gap is left out of this one", () => {
+  const context = createFakeRuntime([rimLoop()]);
+  // The same road, moved well outside the rim.
+  const elsewhere = roadIsland().map((edge) => ({ ...edge, edgeId: `far:${edge.edgeId}` }));
+  context.runtime.getSnapshot = () => ({
+    tableId: "table-1",
+    map: {
+      nodePositions: new Map([
+        ["a", { position: { x: 0, y: 0, z: 0 } }],
+        ["b", { position: { x: 2, y: 0, z: 0 } }],
+        ["c", { position: { x: 4, y: 0, z: 0 } }],
+        ["d", { position: { x: 4, y: 0, z: 4 } }],
+        ["e", { position: { x: 2, y: 0, z: 4 } }],
+        ["f", { position: { x: 0, y: 0, z: 4 } }],
+        ["r1", { position: { x: 51, y: 0, z: 51 } }],
+        ["r2", { position: { x: 53, y: 0, z: 51 } }],
+        ["r3", { position: { x: 53, y: 0, z: 53 } }],
+        ["r4", { position: { x: 51, y: 0, z: 53 } }],
+      ]),
+    },
+  });
+
+  fillUnfilledLoops(context.runtime, ["a"], "terrain", "cause-1", { mesh: true, islands: [elsewhere] });
+  const [patch] = context.addedPatches;
+
+  const uses = patch.regions.flatMap((region) => region.boundary);
+  assert.ok(!uses.some((use) => use.edgeId.startsWith("far:")), "a face outside this gap is none of its business");
 });

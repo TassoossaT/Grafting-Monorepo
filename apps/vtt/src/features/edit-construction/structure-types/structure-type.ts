@@ -1,5 +1,6 @@
 import type {
   ConstructionNodeId,
+  ConstructionRegionEdge,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
@@ -160,6 +161,23 @@ export interface CutFallout {
    * the hole's far side unnamed, which is the same failure by a slower route.
    */
   readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /**
+   * The painter's own faces, each as its own boundary loop of real oriented
+   * edges, in that face's own walk order.
+   *
+   * A cut can leave the painter standing *inside* the ground it removed --
+   * a road drawn across the middle of a field, reaching none of its borders.
+   * The engine reports the hole's outer rim and stops there, correctly: it
+   * tells a gap from an outline by which side the neighbouring faces lie on,
+   * and a face alone in the middle of a hole reads as an outline, not as
+   * something to fill. A repair mending the outer rim alone therefore lays
+   * ground straight across the painter -- the two banks joined over the top
+   * of the road instead of stopping at its contour. These are what let it
+   * open around the painter instead, and they are edges rather than
+   * positions because the mend has to *reuse* them: the painter already holds
+   * one side of each, and the repair takes the other.
+   */
+  readonly paintedLoops: readonly (readonly ConstructionRegionEdge[])[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }

@@ -5,6 +5,7 @@ import type {
   ApplyPatchReplacementRequest,
   ConstructionNodeId,
   ConstructionPosition,
+  ConstructionRegionEdge,
   ConstructionSurfaceKey,
 } from "@/ports";
 import {
@@ -72,13 +73,20 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
 export function paintedNodesOf(
   runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
   paintedType: string,
-): CutFallout["paintedNodes"] {
+): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
   const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
+  const paintedLoops: (readonly ConstructionRegionEdge[])[] = [];
   for (const topology of runtime.getAllRegionTopologies()) {
     if (topology.surfaceType !== paintedType) continue;
     for (const node of topology.nodes) nodesById.set(node.id, node.position);
+    // Outer loops only: a hole the painter itself declared is the painter's
+    // own opening, and a repair has no business filling it in.
+    for (const loop of topology.outerLoops) if (loop.length >= 3) paintedLoops.push(loop);
   }
-  return [...nodesById].map(([id, position]) => ({ id, position }));
+  return {
+    paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
+    paintedLoops,
+  };
 }
 
 /**
@@ -150,13 +158,13 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   // its own node ids, for free -- filtered here to the painter's own type
   // instead of thrown away, which is what starved a repair's own weld
   // candidates down to only the newest few nodes.
-  const paintedNodes = paintedNodesOf(runtime, paintedType);
+  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType);
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }

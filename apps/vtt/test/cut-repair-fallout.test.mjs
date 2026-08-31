@@ -61,19 +61,20 @@ function createRoadGraph() {
 }
 
 test("the painter's whole cloud is handed over, not only the increment a footprint would report", () => {
-  const painted = paintedNodesOf(createRoadGraph(), "path");
+  const { paintedNodes: painted, paintedLoops } = paintedNodesOf(createRoadGraph(), "path");
 
+  assert.equal(paintedLoops.length, 3, "one boundary loop per face, so a mend can open around each");
   assert.equal(painted.length, 12, "all three bands' nodes, not the four a brush tick would have named");
   const zs = painted.map((node) => node.position.z);
   assert.equal(Math.max(...zs), 12, "the newest band alone would have stopped at z = 4");
 });
 
 test("only the painter's own type is handed over", () => {
-  const painted = paintedNodesOf(createRoadGraph(), "path");
+  const { paintedNodes: painted } = paintedNodesOf(createRoadGraph(), "path");
 
   assert.ok(!painted.some((node) => node.id.startsWith("t")), "terrain nodes are not the painter's own");
 });
 
 test("a type with no faces on the table hands over nothing, rather than failing", () => {
-  assert.deepEqual(paintedNodesOf(createRoadGraph(), "wall"), []);
+  assert.deepEqual(paintedNodesOf(createRoadGraph(), "wall"), { paintedNodes: [], paintedLoops: [] });
 });

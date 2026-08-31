@@ -84,7 +84,11 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   }
   if (failedDeletes.length === fallout.consumedSurfaceKeys.length) return 0;
 
-  // `mesh`, because the gap a cut leaves is not the gap a stroke leaves. A
+  // `islands`, because a cut can leave the painter standing in the middle of
+  // the ground it removed: the engine reports the hole's outer rim and never
+  // the road inside it, so mending the rim alone joins the two banks straight
+  // over the top of the road. `mesh`, because the gap a cut leaves is not the
+  // gap a stroke leaves. A
   // stroke's own gap is one cell wide and one face covers it exactly; a cut's
   // spans everything the painter crossed, and one face over that is a single
   // enormous sheet where there should be terrain. Same mend, cut finer.
@@ -92,5 +96,5 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // The consumed type is a fallback, not the answer: each gap is made of
   // whatever the faces around it are made of, so a cut through slate comes
   // back slate without this side having to know that.
-  return fillUnfilledLoops(runtime, [...scope], surfaceType, causeId, { mesh: true });
+  return fillUnfilledLoops(runtime, [...scope], surfaceType, causeId, { mesh: true, islands: fallout.paintedLoops });
 }
