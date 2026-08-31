@@ -981,6 +981,19 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     return outcome.createdSurfaceKeys.length;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // TEMP DIAGNOSTIC -- remove once the live OpenLoop mismatch is found.
+    // The full boundary of every submitted region (edgeId + reversed, not
+    // just the regionId string), plus the known-edge table this call built
+    // -- OpenLoop names two node ids with no reliable way to trace which
+    // region or which edge they came from just from the regionId strings.
+    console.warn(
+      `[terrain-cut-repair] addPatch failed, full boundary dump ${JSON.stringify({
+        causeId,
+        message,
+        knownEdges: densified.edges,
+        regions: patch.regions.map((region) => ({ regionId: region.regionId, boundary: region.boundary })),
+      })}`,
+    );
     throw new Error(
       `terrain cut repair's regenerated fill failed -- ${message}. Submitted regions: ${JSON.stringify(
         patch.regions.map((region) => ({ regionId: region.regionId, edges: region.boundary.length })),
