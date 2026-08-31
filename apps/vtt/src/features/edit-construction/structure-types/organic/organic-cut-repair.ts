@@ -80,6 +80,24 @@ const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 0.7 + 2 * WELD_RADIUS;
  */
 const EDGE_PIN_ENDPOINT_SLACK = 1e-3;
 
+/**
+ * How far outside the hole's own exact boundary a *freshly minted* quad
+ * corner may still land before {@link planOrganicCutRepair} drops the whole
+ * quad as having wandered off, rather than merely finished the hole.
+ *
+ * Not zero, on purpose: a welded corner sits at real geometry and is never
+ * wrong for extending past a hand-drawn boundary the rim itself defines, but
+ * a lattice cell is a finite size, and the self-relaxed lattice's own square-
+ * fitting can legitimately put an *unwelded* corner a little past the exact
+ * polygon while the quad it belongs to is still, visibly, closing the hole
+ * correctly -- rejecting every one of those on a hole small relative to one
+ * cell (this generator's own unit tests included) left nothing able to fill
+ * at all. Sized the same way {@link MAX_EDGE_LENGTH} is: half a cell is
+ * roughly how far a quad's own corner can legitimately reach past where its
+ * centroid already tested as safely inside.
+ */
+const MINTED_CORNER_HOLE_MARGIN = LATTICE_TRIANGLE_SIDE * 0.5;
+
 /** One real, already-live node this repair may weld a fresh lattice vertex onto. */
 export interface CutRepairWeldCandidate {
   readonly id: ConstructionNodeId;
@@ -129,6 +147,27 @@ function insideRing(x: number, z: number, ring: readonly ConstructionPosition[])
 
 function insideHole(x: number, z: number, holeLoops: readonly (readonly ConstructionPosition[])[]): boolean {
   return holeLoops.some((ring) => insideRing(x, z, ring));
+}
+
+/** `(x, z)`'s own distance to the nearest point on `ring`'s boundary itself -- not whether it is inside, how far outside (or in) it sits. */
+function distanceToRing(x: number, z: number, ring: readonly ConstructionPosition[]): number {
+  let best = Infinity;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const projected = nearestPointOnSegment(x, z, ring[j]!, ring[i]!);
+    const dx = projected.x - x;
+    const dz = projected.z - z;
+    best = Math.min(best, dx * dx + dz * dz);
+  }
+  return Math.sqrt(best);
+}
+
+/**
+ * Whether `(x, z)` is inside `holeLoops`, or close enough to its boundary
+ * that a finite-sized quad corner legitimately landing there is not the
+ * "wandered off" case {@link MINTED_CORNER_HOLE_MARGIN}'s own doc describes.
+ */
+function insideOrNearHole(x: number, z: number, holeLoops: readonly (readonly ConstructionPosition[])[], margin: number): boolean {
+  return insideHole(x, z, holeLoops) || holeLoops.some((ring) => distanceToRing(x, z, ring) <= margin);
 }
 
 /** Signed twice-the-area cross product of `o->a` and `o->b`, XZ plane. */
@@ -687,7 +726,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // Tallies *why* an otherwise-inside-hole quad never made it into
   // `regions`, so a real session's own numbers say which check is actually
   // responsible instead of another guess.
-  const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0, unrelatedRealPair: 0 };
+  const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, mintedOutsideHole: 0, crossingOrTooLong: 0, unrelatedRealPair: 0 };
 
   // Pass 1 -- read-only w.r.t. which lattice vertex resolves onto which real
   // id (only `resolveVertex`'s own weld-vs-mint memoization runs). Every
@@ -735,6 +774,24 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
     const sane = corners as ConstructionPosition[];
+
+    // A welded corner is real geometry -- the hole's own rim, or the
+    // painter's own contour -- so it is never wrong for it to sit at or
+    // past the hole's own boundary; that boundary is drawn *from* rim and
+    // painted positions in the first place. A *freshly minted* corner is
+    // different: nothing constrains where the self-relaxed lattice's own
+    // square-fitting put it, only this quad's own centroid was checked
+    // against the hole (`outsideHole`, above) before any corner was even
+    // resolved. Without pinning bending the mesh toward the hole any more
+    // (see `buildCutRepairLattice`'s own doc), a quad whose centroid is
+    // comfortably inside can still have one unwelded corner poke past the
+    // true boundary -- generated *near* the painter's own edge but visibly
+    // outside it, a real face rather than the graph mismatch the other
+    // guards here exist for.
+    if (cycle.some((id, position) => !realIds.has(id) && !insideOrNearHole(sane[position]!.x, sane[position]!.z, holeRings, MINTED_CORNER_HOLE_MARGIN))) {
+      rejected.mintedOutsideHole += 1;
+      return;
+    }
 
     // Each corner pinned/welded independently onto its own *nearest* real
     // candidate -- correct for that one corner in isolation, but nothing

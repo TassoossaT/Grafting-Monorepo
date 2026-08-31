@@ -153,6 +153,103 @@ test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the
   assert.equal(patch, undefined);
 });
 
+test("planOrganicCutRepair drops a quad whose freshly minted corner wandered far outside the hole", () => {
+  // Three corners weld correctly onto the hole's own real rim; the fourth
+  // is nowhere near any candidate (mints fresh) and sits nowhere near the
+  // hole either -- exactly what an unpinned, self-relaxed lattice can
+  // produce for an oddly-placed quad, and exactly the "generated on top but
+  // outside the contour" a live session reported.
+  const holeShapeRings = [
+    [
+      { x: 0, y: 0, z: 0 },
+      { x: 4, y: 0, z: 0 },
+      { x: 4, y: 0, z: 4 },
+      { x: 0, y: 0, z: 4 },
+    ],
+  ];
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 4, y: 0 },
+        { x: 30, y: 30 },
+        { x: 0, y: 4 },
+      ],
+      quads: [[0, 1, 2, 3]],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "p0", position: { x: 0, y: 0, z: 0 } },
+    { id: "p1", position: { x: 4, y: 0, z: 0 } },
+    { id: "p3", position: { x: 0, y: 0, z: 4 } },
+  ];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-outside",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    knownEdges: [],
+    occupiedQuads: new Set(),
+  });
+
+  assert.equal(patch, undefined, "the only quad's fresh corner wandered far outside the hole, nothing survives");
+});
+
+test("planOrganicCutRepair keeps a freshly minted corner that lands just past the hole's own exact edge", () => {
+  // A small quad tucked into the hole's own top-right corner (4, 4) --
+  // realistic lattice-cell-scale edges throughout, so nothing here trips
+  // MAX_EDGE_LENGTH. Three corners weld onto real candidates; the fourth,
+  // unwelded, lands only a little past the hole's own boundary -- exactly
+  // the kind of finite-quad overshoot MINTED_CORNER_HOLE_MARGIN exists to
+  // tolerate, not reject.
+  const holeShapeRings = [
+    [
+      { x: 0, y: 0, z: 0 },
+      { x: 4, y: 0, z: 0 },
+      { x: 4, y: 0, z: 4 },
+      { x: 0, y: 0, z: 4 },
+    ],
+  ];
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 3, y: 3 },
+        { x: 4, y: 3 },
+        { x: 4.3, y: 4.3 },
+        { x: 3, y: 4 },
+      ],
+      quads: [[0, 1, 2, 3]],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "pA", position: { x: 3, y: 0, z: 3 } },
+    { id: "pB", position: { x: 4, y: 0, z: 3 } },
+    { id: "pD", position: { x: 3, y: 0, z: 4 } },
+  ];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-just-past",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    knownEdges: [],
+    occupiedQuads: new Set(),
+  });
+
+  assert.notEqual(patch, undefined, "a corner just past the hole's own edge is still a legitimate fill, not a wandered-off one");
+});
+
 test("planOrganicCutRepair trusts a known edge's own true direction over sharedEdgeId's lexicographic guess", () => {
   // A single hand-built quad, corners already sitting exactly on four real
   // candidates -- deterministic weld, no relax noise, so exactly which
