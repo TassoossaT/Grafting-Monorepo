@@ -1155,6 +1155,34 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   }
   if (patch === undefined) return 0;
 
+  // TEMP DIAGNOSTIC -- remove once the live "no room" skip source is
+  // confirmed. Distinguishes a bug in this batch's *own* boundary (two of
+  // its own quads independently declaring the same edge in the same
+  // direction, or three-plus quads sharing what can only ever be a two-sided
+  // edge) from a genuine collision with something already full in the
+  // standing mesh, which addPatch's own skip already handles correctly and
+  // is not itself a bug. Nothing here can see the standing mesh's own usage
+  // counts -- only what this one submission itself declares.
+  const edgeUsesWithinBatch = new Map<ConstructionEdgeId, boolean[]>();
+  for (const region of patch.regions) {
+    for (const use of region.boundary) {
+      const list = edgeUsesWithinBatch.get(use.edgeId) ?? [];
+      list.push(use.reversed);
+      edgeUsesWithinBatch.set(use.edgeId, list);
+    }
+  }
+  const selfConflicts = [...edgeUsesWithinBatch.entries()].filter(
+    ([, uses]) => uses.length > 2 || (uses.length === 2 && uses[0] === uses[1]),
+  );
+  if (selfConflicts.length > 0) {
+    console.warn(
+      `[terrain-cut-repair] self-conflicting edges within this same batch ${JSON.stringify({
+        causeId,
+        selfConflicts: selfConflicts.map(([edgeId, uses]) => ({ edgeId, uses })),
+      })}`,
+    );
+  }
+
   // See OrganicCutRepairRuntime.addPatch's own doc for why this is a plain
   // add, not applyPatchReplacement: this fill replaces nothing, and a
   // region the engine skips (see its own doc for how two of this fill's
