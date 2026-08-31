@@ -48,13 +48,6 @@ export interface CutRepairWeldCandidate {
   readonly position: ConstructionPosition;
 }
 
-/** One real, already-live edge of the painter's own contour -- see `CutFallout.paintedEdges`'s own doc. */
-export interface CutRepairPaintedEdge {
-  readonly edgeId: ConstructionEdgeId;
-  readonly startNodeId: ConstructionNodeId;
-  readonly endNodeId: ConstructionNodeId;
-}
-
 function boundsOf(points: readonly ConstructionPosition[]): { readonly centerX: number; readonly centerZ: number; readonly radius: number } {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -111,57 +104,18 @@ function nearestHeight(x: number, z: number, candidates: readonly CutRepairWeldC
 }
 
 /**
- * Walks `paintedEdges` into closed rings of the painter's own real contour.
+ * One face-boundary ring per entry, unioned into the true area they cover
+ * between them -- the one conversion both sides of this repair need.
  *
- * The painter's own area has to be subtracted from the deleted area to leave
- * the ground this repair is actually responsible for, and it has to be
- * subtracted *as the painter's own real nodes describe it* -- not as the
- * sampled outline its footprint query used. A ring built from the real nodes
- * puts every vertex of the resulting difference exactly on a real node's own
- * position wherever it follows the painter's side, which is what lets the
- * weld below be exact instead of approximate, and what makes the seam a
- * genuinely shared edge rather than two coincident ones.
+ * Both the ground the cut removed and the ground the painter now occupies
+ * arrive the same way: as each face's own boundary loop, in the engine's own
+ * order, of real node positions. Neither side is ever re-derived by walking
+ * loose edges: adjoining faces share interior edges, so such a walk picks an
+ * arbitrary path rather than an outline, and a different one each run. The
+ * union collapses adjoining faces into the single area they really form.
  */
-function paintedRings(
-  paintedNodes: readonly CutRepairWeldCandidate[],
-  paintedEdges: readonly CutRepairPaintedEdge[],
-): readonly Ring[] {
-  const positionOf = new Map(paintedNodes.map((node) => [node.id, node.position]));
-  const neighbours = new Map<ConstructionNodeId, ConstructionNodeId[]>();
-  for (const edge of paintedEdges) {
-    if (!positionOf.has(edge.startNodeId) || !positionOf.has(edge.endNodeId)) continue;
-    (neighbours.get(edge.startNodeId) ?? neighbours.set(edge.startNodeId, []).get(edge.startNodeId)!).push(edge.endNodeId);
-    (neighbours.get(edge.endNodeId) ?? neighbours.set(edge.endNodeId, []).get(edge.endNodeId)!).push(edge.startNodeId);
-  }
-
-  const rings: Ring[] = [];
-  const visited = new Set<ConstructionNodeId>();
-  for (const start of neighbours.keys()) {
-    if (visited.has(start)) continue;
-    const walk: ConstructionNodeId[] = [];
-    let current: ConstructionNodeId | undefined = start;
-    let previous: ConstructionNodeId | undefined;
-    while (current !== undefined && !visited.has(current)) {
-      visited.add(current);
-      walk.push(current);
-      const next: ConstructionNodeId | undefined = (neighbours.get(current) ?? []).find(
-        (candidate) => candidate !== previous && !visited.has(candidate),
-      );
-      previous = current;
-      current = next;
-    }
-    if (walk.length < 3) continue;
-    rings.push(walk.map((id) => {
-      const position = positionOf.get(id)!;
-      return [position.x, position.z] as [number, number];
-    }));
-  }
-  return rings;
-}
-
-/** Every consumed region's own outer loop, as one polygon each -- unioned into the true outer boundary of everything this cut removed. */
-function deletedAreaShapes(consumedRings: readonly (readonly ConstructionPosition[])[]): MultiPolygon {
-  const polygons: Polygon[] = consumedRings
+function areaOfRings(rings: readonly (readonly ConstructionPosition[])[]): MultiPolygon {
+  const polygons: Polygon[] = rings
     .filter((ring) => ring.length >= 3)
     .map((ring) => [ring.map((point) => [point.x, point.z] as [number, number])]);
   if (polygons.length === 0) return [];
@@ -316,8 +270,8 @@ export interface OrganicCutRepairRuntime {
  * 3. `getUnfilledLoops`, scoped to what those regions stood on, reports
  *    whichever part of the rim survives as real, live nodes -- weld targets,
  *    together with the painter's own registered nodes.
- * 4. Subtract the painter's own real contour rings from the union of the
- *    consumed regions' own rings. What remains is the ground to give back.
+ * 4. Subtract the area of the painter's own faces from the area of the
+ *    consumed ones. What remains is the ground to give back.
  * 5. Register it, welding every vertex that sits on a real node onto it.
  */
 export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string): number {
@@ -373,12 +327,9 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     }
   }
 
-  const deleted = deletedAreaShapes(consumedRings);
-  const painted = paintedRings(fallout.paintedNodes, fallout.paintedEdges);
-  const fill: MultiPolygon =
-    painted.length === 0
-      ? deleted
-      : polygonClipping.difference(deleted, ...painted.map((ring): Polygon => [ring]));
+  const deleted = areaOfRings(consumedRings);
+  const painted = areaOfRings(fallout.paintedLoops);
+  const fill: MultiPolygon = painted.length === 0 ? deleted : polygonClipping.difference(deleted, painted);
 
   const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes];
   const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates);
@@ -393,7 +344,8 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       failedDeletes: failedDeletes.length,
       rimCandidates: liveRimCandidates.length,
       paintedNodes: fallout.paintedNodes.length,
-      paintedRings: painted.length,
+      paintedLoops: fallout.paintedLoops.length,
+      paintedShapes: painted.length,
       deletedShapes: deleted.length,
       fillShapes: fill.length,
       regions: patch?.regions.length ?? 0,

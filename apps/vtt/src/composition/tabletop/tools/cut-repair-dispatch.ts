@@ -3,7 +3,6 @@
 // `@/` import is fine -- those are erased.
 import type {
   ApplyPatchReplacementRequest,
-  ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionSurfaceKey,
@@ -127,21 +126,29 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     })
     .filter((node): node is { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } => node !== undefined);
 
-  // The pairs those nodes are actually connected by, not just the point
-  // cloud -- see `CutFallout.paintedEdges`'s own doc for why a repair needs
-  // the edge itself (to subdivide) rather than only the sparse nodes at its
-  // ends. Read straight from each painter-type region's own live topology,
-  // deduplicated by edge id since neighbouring band regions share edges.
-  const paintedEdges = new Map<ConstructionEdgeId, { readonly edgeId: ConstructionEdgeId; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }>();
+  // The area those nodes actually enclose -- one closed ring per painter-type
+  // face, in that face's own boundary order, read straight from its live
+  // topology. Deliberately whole loops rather than the loose edge set the
+  // repair used to walk into rings itself: neighbouring band regions share
+  // interior edges, so that graph is no simple cycle and a walk over it
+  // returns an arbitrary path (a different one per run, following whatever
+  // order the regions were visited in). Subtracting an arbitrary path is what
+  // left terrain standing on the road, and left it there only sometimes.
+  // See `CutFallout.paintedLoops`.
+  const paintedLoops: ConstructionPosition[][] = [];
+  const seenRegionKeys = new Set<string>();
   for (const entry of coverage) {
     if (entry.surfaceType !== paintedType) continue;
+    const regionKey = entry.surfaceKey.join("|");
+    if (seenRegionKeys.has(regionKey)) continue;
+    seenRegionKeys.add(regionKey);
     const topology = runtime.getRegionTopology(entry.surfaceKey);
     if (topology === undefined) continue;
-    for (const loop of [...topology.outerLoops, ...topology.holes]) {
-      for (const edge of loop) {
-        if (paintedEdges.has(edge.edgeId)) continue;
-        paintedEdges.set(edge.edgeId, { edgeId: edge.edgeId, startNodeId: edge.startNodeId, endNodeId: edge.endNodeId });
-      }
+    for (const loop of topology.outerLoops) {
+      const ring = loop
+        .map((edge) => nodePositions.get(edge.startNodeId)?.position)
+        .filter((position): position is ConstructionPosition => position !== undefined);
+      if (ring.length >= 3) paintedLoops.push(ring);
     }
   }
 
@@ -149,7 +156,7 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, paintedEdges: [...paintedEdges.values()], consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }

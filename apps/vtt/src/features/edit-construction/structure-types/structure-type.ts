@@ -1,5 +1,4 @@
 import type {
-  ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionRegionTopology,
@@ -161,24 +160,25 @@ export interface CutFallout {
    */
   readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
   /**
-   * Every boundary edge of the painter's own type wherever this stroke's
-   * footprint reaches -- the pairs `paintedNodes` are actually connected by,
-   * not just the point cloud. A covered type's own weld only ever matches a
-   * *node*; a straight run far longer than one of its own cells has almost
-   * no nodes to match at all (a road is flattened to a handful of points
-   * along a straight or gently curved stretch, by design -- redundant
-   * collinear points would serve no purpose of the road's own). A repair
-   * that wants a real anchor *along* such a run, not only at its sparse
-   * ends, needs the edge itself: real graph edges can be subdivided
-   * (`insertVertex`/the `"insert-vertex"` op) into a fresh real node exactly
-   * where it is needed, which is what turns "close to the painter's edge"
-   * into an actual shared vertex instead of a second, merely nearby one.
+   * The area the painter's own type actually occupies wherever this stroke's
+   * footprint reaches: one closed ring of real node positions per face it
+   * owns, each in that face's own boundary order, straight from the engine.
+   *
+   * A repair subtracts this from what the cut removed to know what ground it
+   * still owes back, so this has to describe the painter's *faces*. It
+   * deliberately is not a set of loose edges for the repair to walk into
+   * rings itself: the painter's edge set spans many adjoining band regions
+   * that share interior edges, so its nodes have degree three and up, and any
+   * walk over that graph picks an arbitrary path rather than an outline -- a
+   * different one from run to run, since it follows whatever order the
+   * regions happened to be visited in. Subtracting an arbitrary path leaves
+   * covered ground standing exactly where the painter really is (a face
+   * floating on the road) and leaves it differently each time, which is
+   * precisely the instability this shape exists to remove. A face's own
+   * boundary loop is already an ordered cycle the engine maintains; there is
+   * nothing here to reconstruct.
    */
-  readonly paintedEdges: readonly {
-    readonly edgeId: ConstructionEdgeId;
-    readonly startNodeId: ConstructionNodeId;
-    readonly endNodeId: ConstructionNodeId;
-  }[];
+  readonly paintedLoops: readonly (readonly ConstructionPosition[])[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }

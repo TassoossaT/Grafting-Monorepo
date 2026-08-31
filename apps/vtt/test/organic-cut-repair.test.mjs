@@ -139,7 +139,7 @@ function boundaryNodeIds(patch) {
 test("a cut with no painter geometry gives the whole consumed area back, welded onto its own rim", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedEdges: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
 
   assert.ok(rebuilt > 0, "the consumed area came back as at least one face");
   assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"], "T2 is never deleted -- this repair never touches a survivor");
@@ -164,14 +164,16 @@ test("the painter's own area is subtracted, and the seam runs along the painter'
     { id: "band-c", position: { x: 3, y: 0, z: 4 } },
     { id: "band-d", position: { x: 1, y: 0, z: 4 } },
   ];
-  const paintedEdges = [
-    { edgeId: "table-1:seg:band-a~band-b", startNodeId: "band-a", endNodeId: "band-b" },
-    { edgeId: "table-1:seg:band-b~band-c", startNodeId: "band-b", endNodeId: "band-c" },
-    { edgeId: "table-1:seg:band-c~band-d", startNodeId: "band-c", endNodeId: "band-d" },
-    { edgeId: "table-1:seg:band-a~band-d", startNodeId: "band-d", endNodeId: "band-a" },
+  const paintedLoops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+    ],
   ];
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedEdges }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
 
   assert.ok(rebuilt > 0);
   const [patch] = addedPatches;
@@ -203,14 +205,16 @@ test("a shared edge is declared once and walked from both sides, never minted tw
     { id: "band-c", position: { x: 3, y: 0, z: 4 } },
     { id: "band-d", position: { x: 1, y: 0, z: 4 } },
   ];
-  const paintedEdges = [
-    { edgeId: "table-1:seg:band-a~band-b", startNodeId: "band-a", endNodeId: "band-b" },
-    { edgeId: "table-1:seg:band-b~band-c", startNodeId: "band-b", endNodeId: "band-c" },
-    { edgeId: "table-1:seg:band-c~band-d", startNodeId: "band-c", endNodeId: "band-d" },
-    { edgeId: "table-1:seg:band-a~band-d", startNodeId: "band-d", endNodeId: "band-a" },
+  const paintedLoops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+    ],
   ];
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedEdges }, "cause-1");
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
   const [patch] = addedPatches;
 
   // Every edge the patch declares is named after its own node pair, so two
@@ -239,14 +243,16 @@ test("a fill vertex the difference itself minted borrows its height from the nea
     { id: "band-c", position: { x: 3, y: 2.5, z: 2 } },
     { id: "band-d", position: { x: 1, y: 2.5, z: 2 } },
   ];
-  const paintedEdges = [
-    { edgeId: "table-1:seg:band-a~band-b", startNodeId: "band-a", endNodeId: "band-b" },
-    { edgeId: "table-1:seg:band-b~band-c", startNodeId: "band-b", endNodeId: "band-c" },
-    { edgeId: "table-1:seg:band-c~band-d", startNodeId: "band-c", endNodeId: "band-d" },
-    { edgeId: "table-1:seg:band-a~band-d", startNodeId: "band-d", endNodeId: "band-a" },
+  const paintedLoops = [
+    [
+      { x: 1, y: 2.5, z: -1 },
+      { x: 3, y: 2.5, z: -1 },
+      { x: 3, y: 2.5, z: 2 },
+      { x: 1, y: 2.5, z: 2 },
+    ],
   ];
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedEdges }, "cause-1");
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
   const [patch] = addedPatches;
 
   const minted = patch.nodes.filter((node) => node.id.startsWith("terrain-cut:"));
@@ -261,7 +267,7 @@ test("a fill vertex the difference itself minted borrows its height from the nea
 
 test("consuming nothing is a no-op", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [], paintedEdges: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [], paintedLoops: [] }, "cause-1");
 
   assert.equal(rebuilt, 0);
   assert.equal(deleted.length, 0);
@@ -278,14 +284,16 @@ test("a region the engine finds no room for is skipped, not fatal to the rest of
     { id: "band-c", position: { x: 3, y: 0, z: 4 } },
     { id: "band-d", position: { x: 1, y: 0, z: 4 } },
   ];
-  const paintedEdges = [
-    { edgeId: "table-1:seg:band-a~band-b", startNodeId: "band-a", endNodeId: "band-b" },
-    { edgeId: "table-1:seg:band-b~band-c", startNodeId: "band-b", endNodeId: "band-c" },
-    { edgeId: "table-1:seg:band-c~band-d", startNodeId: "band-c", endNodeId: "band-d" },
-    { edgeId: "table-1:seg:band-a~band-d", startNodeId: "band-d", endNodeId: "band-a" },
+  const paintedLoops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+    ],
   ];
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedEdges }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
 
   const [patch] = addedPatches;
   assert.equal(patch.regions.length, 2, "the fixture needs both halves for this to test anything");
@@ -295,7 +303,7 @@ test("a region the engine finds no room for is skipped, not fatal to the rest of
 test("the fill never reaches past the consumed area onto a surviving neighbour", () => {
   const { runtime, addedPatches } = createFakeTerrainRuntime();
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedEdges: [] }, "cause-1");
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
   const [patch] = addedPatches;
 
   // T2 stands over x in [4, 8]; nothing this fill declares may sit past
@@ -306,4 +314,98 @@ test("the fill never reaches past the consumed area onto a surviving neighbour",
   for (const node of patch.nodes) {
     assert.ok(node.position.x <= 4 + 1e-9, `a fill vertex reached past the consumed area at x=${node.position.x}`);
   }
+});
+
+test("two adjoining painter faces are subtracted as the one area they really cover", () => {
+  const { runtime, addedPatches } = createFakeTerrainRuntime();
+
+  // The shape a real stroke actually leaves: not one face, but a run of bands
+  // sharing an interior edge -- here at x = 2, where band-e~band-f is walked
+  // by both. Their union is the single band from x = 1 to x = 3; nothing of
+  // the road may survive as terrain, and the result may not depend on the
+  // order the two faces happen to be read in.
+  const paintedNodes = [
+    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
+    { id: "band-e", position: { x: 2, y: 0, z: 0 } },
+    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
+    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
+    { id: "band-f", position: { x: 2, y: 0, z: 4 } },
+    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
+  ];
+  const paintedLoops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 },
+      { x: 2, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+    ],
+    [
+      { x: 2, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 2, y: 0, z: 4 },
+    ],
+  ];
+
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
+  const [patch] = addedPatches;
+
+  assert.equal(patch.regions.length, 2, "the road's whole width is subtracted, leaving one face either side of it");
+  for (const node of patch.nodes) {
+    assert.ok(
+      node.position.x <= 1 + 1e-9 || node.position.x >= 3 - 1e-9,
+      `a fill vertex landed inside the road at x=${node.position.x} -- terrain floating on the painter`,
+    );
+  }
+  // The seam welds onto the painter's own outer nodes, and never onto the
+  // interior pair the union dissolved: no fill face ends at x = 2.
+  const used = boundaryNodeIds(patch);
+  for (const id of ["band-a", "band-b", "band-c", "band-d"]) {
+    assert.ok(used.has(id), `the fill's boundary walks the painter's own node ${id}`);
+  }
+  for (const id of ["band-e", "band-f"]) {
+    assert.ok(!used.has(id), `${id} is interior to the road; no fill face may reach it`);
+  }
+});
+
+test("the same cut repaired twice lands the same fill, node for node", () => {
+  const paintedNodes = [
+    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
+    { id: "band-e", position: { x: 2, y: 0, z: 0 } },
+    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
+    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
+    { id: "band-f", position: { x: 2, y: 0, z: 4 } },
+    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
+  ];
+  const loops = [
+    [
+      { x: 1, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 },
+      { x: 2, y: 0, z: 4 },
+      { x: 1, y: 0, z: 4 },
+    ],
+    [
+      { x: 2, y: 0, z: 0 },
+      { x: 3, y: 0, z: 0 },
+      { x: 3, y: 0, z: 4 },
+      { x: 2, y: 0, z: 4 },
+    ],
+  ];
+
+  // Same cut, same painter, only the order the painter's own faces were read
+  // in differs -- which is exactly what varies between runs at the table.
+  const run = (paintedLoops) => {
+    const { runtime, addedPatches } = createFakeTerrainRuntime();
+    repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
+    return addedPatches[0];
+  };
+
+  const forwards = run(loops);
+  const backwards = run([...loops].reverse());
+  assert.equal(forwards.regions.length, backwards.regions.length, "the fill does not depend on face order");
+  assert.deepEqual(
+    [...boundaryNodeIds(forwards)].sort(),
+    [...boundaryNodeIds(backwards)].sort(),
+    "the same seam either way",
+  );
 });
