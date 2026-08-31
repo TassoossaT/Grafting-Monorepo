@@ -45,6 +45,56 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
 });
 
 /**
+ * The painter's own ground, as the repair needs it: its real nodes to weld
+ * onto, and one closed ring per face it owns so the area it occupies can be
+ * taken out of the hole.
+ *
+ * Read from **every live face of the painter's type**, not from the stroke's
+ * own footprint coverage. `getFootprintCoverage` answers "what does this
+ * outline touch", which is a different question: a brush resubmits only its
+ * latest increment each tick, and coverage of that increment named as little
+ * as one face and four nodes of a road that really had dozens. The area
+ * subtracted from the hole was then a fraction of the road, so the fill was
+ * computed over ground the road genuinely occupies -- and the engine refused
+ * the whole face for trying to take a side of an edge the road already
+ * holds, which is the "cut happens but nothing regenerates" the table saw. A
+ * face of the same type nowhere near the hole costs nothing here: it cannot
+ * intersect what the cut removed, so it cannot change the difference.
+ *
+ * Loops are whole face boundaries in the engine's own order, never a walk
+ * over the painter's loose edge set -- neighbouring band regions share
+ * interior edges, so that graph is no simple cycle and a walk returns an
+ * arbitrary path, a different one per run. See `CutFallout.paintedLoops`.
+ *
+ * Exported for its own test: every cut-repair failure so far has come from
+ * what this function hands over, never from the repair's own arithmetic.
+ */
+export function paintedGeometryOf(
+  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
+  paintedType: string,
+): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
+  const nodePositions = runtime.getSnapshot().map.nodePositions;
+  const topologies = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
+
+  const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
+  const paintedLoops: ConstructionPosition[][] = [];
+  for (const topology of topologies) {
+    for (const node of topology.nodes) nodesById.set(node.id, node.position);
+    for (const loop of topology.outerLoops) {
+      const ring = loop
+        .map((edge) => nodePositions.get(edge.startNodeId)?.position)
+        .filter((position): position is ConstructionPosition => position !== undefined);
+      if (ring.length >= 3) paintedLoops.push(ring);
+    }
+  }
+
+  return {
+    paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
+    paintedLoops,
+  };
+}
+
+/**
  * Resolves what `request`'s own footprint cuts into, and dispatches each
  * covered type's own repair -- called once `TabletopRuntime.applyPatchReplacement`
  * has already landed `request`, so a painted node a repair wants to weld
@@ -113,44 +163,7 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   // its own node ids, for free -- filtered here to the painter's own type
   // instead of thrown away, which is what starved a repair's own weld
   // candidates down to only the newest few nodes.
-  const nodePositions = runtime.getSnapshot().map.nodePositions;
-  const paintedNodeIds = new Set<ConstructionNodeId>();
-  for (const entry of coverage) {
-    if (entry.surfaceType !== paintedType) continue;
-    for (const nodeId of entry.nodeIds) paintedNodeIds.add(nodeId);
-  }
-  const paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [...paintedNodeIds]
-    .map((id) => {
-      const position = nodePositions.get(id)?.position;
-      return position === undefined ? undefined : { id, position };
-    })
-    .filter((node): node is { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } => node !== undefined);
-
-  // The area those nodes actually enclose -- one closed ring per painter-type
-  // face, in that face's own boundary order, read straight from its live
-  // topology. Deliberately whole loops rather than the loose edge set the
-  // repair used to walk into rings itself: neighbouring band regions share
-  // interior edges, so that graph is no simple cycle and a walk over it
-  // returns an arbitrary path (a different one per run, following whatever
-  // order the regions were visited in). Subtracting an arbitrary path is what
-  // left terrain standing on the road, and left it there only sometimes.
-  // See `CutFallout.paintedLoops`.
-  const paintedLoops: ConstructionPosition[][] = [];
-  const seenRegionKeys = new Set<string>();
-  for (const entry of coverage) {
-    if (entry.surfaceType !== paintedType) continue;
-    const regionKey = entry.surfaceKey.join("|");
-    if (seenRegionKeys.has(regionKey)) continue;
-    seenRegionKeys.add(regionKey);
-    const topology = runtime.getRegionTopology(entry.surfaceKey);
-    if (topology === undefined) continue;
-    for (const loop of topology.outerLoops) {
-      const ring = loop
-        .map((edge) => nodePositions.get(edge.startNodeId)?.position)
-        .filter((position): position is ConstructionPosition => position !== undefined);
-      if (ring.length >= 3) paintedLoops.push(ring);
-    }
-  }
+  const { paintedNodes, paintedLoops } = paintedGeometryOf(runtime, paintedType);
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];

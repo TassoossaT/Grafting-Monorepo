@@ -103,6 +103,17 @@ function nearestHeight(x: number, z: number, candidates: readonly CutRepairWeldC
   return bestY;
 }
 
+/** A whole multipolygon's area, openings taken out -- how much ground a shape really is. */
+function areaOf(shapes: MultiPolygon): number {
+  let total = 0;
+  for (const [outer, ...holes] of shapes) {
+    if (outer === undefined) continue;
+    total += Math.abs(signedRingArea(outer));
+    for (const hole of holes) total -= Math.abs(signedRingArea(hole));
+  }
+  return Math.round(total * 100) / 100;
+}
+
 /**
  * One face-boundary ring per entry, unioned into the true area they cover
  * between them -- the one conversion both sides of this repair need.
@@ -408,6 +419,9 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       prescribedEdges: prescribed.size,
       paintedShapes: painted.length,
       deletedShapes: deleted.length,
+      deletedArea: areaOf(deleted),
+      paintedArea: areaOf(painted),
+      fillArea: areaOf(fill),
       fillShapes: fill.length,
       regions: patch?.regions.length ?? 0,
       nodes: patch?.nodes.length ?? 0,
