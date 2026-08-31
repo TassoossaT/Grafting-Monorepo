@@ -1,3 +1,4 @@
+import earcut from "earcut";
 import polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 
@@ -144,14 +145,13 @@ function areaOfRings(rings: readonly (readonly ConstructionPosition[])[]): Multi
  * ground, and terrain is never created above anything) instead of the
  * painter's `"private-when-full"`.
  *
- * **Which way round the face is wound is not this side's to choose.** An
- * edge that already has a face on one side has exactly one free side left,
- * facing one way, and a face that walks it the other way is refused outright
- * -- the whole fill with it, since it lands as one face. Picking a winding
- * from the ring's own signed area (which is all a polygon has to offer) is a
- * coin flip against whatever convention the neighbouring faces were built
- * with, and it landed on the wrong side: every fill was refused, on a real
- * shared edge, with correct geometry.
+ * **Which way round a face is wound is not this side's to choose.** An edge
+ * that already has a face on one side has exactly one free side left, facing
+ * one way, and a face that walks it the other way is refused outright.
+ * Picking a winding from the ring's own signed area (which is all a polygon
+ * has to offer) is a coin flip against whatever convention the neighbouring
+ * faces were built with, and it landed on the wrong side: every fill was
+ * refused, on a real shared edge, with correct geometry.
  *
  * So the direction is read rather than chosen. `prescribed` is the engine's
  * own answer -- `getUnfilledLoops` reports each free edge already oriented
@@ -237,24 +237,59 @@ function buildFillPatch(
       }
     }
   }
-  // Reversing every ring reverses the face's whole traversal, outer and
-  // openings alike -- a face is wound one way or the other, never in halves.
-  const walk = (ids: readonly ConstructionNodeId[]): readonly ConstructionNodeId[] => (net < 0 ? [...ids].reverse() : ids);
+  // The fill lands as a mesh of faces, never as one face per shape.
+  //
+  // Two reasons, and the second is why every repair so far was lost whole.
+  // A face is refused outright when any single edge of its boundary has no
+  // room -- so a fill submitted as one face stakes the entire regeneration
+  // on its worst edge, and every log of this repair read `created: 0,
+  // skipped: 1`: one conflicting edge somewhere along a boundary of fifty,
+  // and all the ground came back as nothing. Split, that same edge costs the
+  // two triangles that touch it and the rest of the hole still fills.
+  //
+  // The triangulation adds no vertices: `earcut` only ever connects vertices
+  // the rings already have, so every corner is still a real welded node and
+  // every interior edge it introduces is new (free on both sides, refused by
+  // nothing). It is also what the ground on either side already is -- terrain
+  // is a mesh of small faces, not one continuous sheet -- and it is the same
+  // library the painter's own preview already triangulates with.
+  const regions: ConstructionPatchRegion[] = [];
+  for (const { shapeIndex, outer, holes } of prepared) {
+    const coordinates: number[] = [];
+    const ordered: ConstructionNodeId[] = [];
+    const holeStarts: number[] = [];
+    for (const ids of [outer, ...holes]) {
+      if (ids !== outer) holeStarts.push(ordered.length);
+      for (const id of ids) {
+        const position = nodePositions.get(id)!;
+        coordinates.push(position.x, position.z);
+        ordered.push(id);
+      }
+    }
 
-  const regions: ConstructionPatchRegion[] = prepared.map(({ shapeIndex, outer, holes }) => {
-    const asLoop = (ids: readonly ConstructionNodeId[]) => {
-      const walked = walk(ids);
-      return walked.map((id, index) => edges.use(id, walked[(index + 1) % walked.length]!));
-    };
-    const holeLoops = holes.map(asLoop);
-    return {
-      regionId: `terrain-cut:${causeId}:fill-${shapeIndex}`,
-      boundary: asLoop(outer),
-      ...(holeLoops.length > 0 ? { holes: holeLoops } : {}),
-      surfaceType,
-      physical,
-    };
-  });
+    const indices = earcut(coordinates, holeStarts);
+    for (let cursor = 0; cursor + 2 < indices.length; cursor += 3) {
+      const corners = [indices[cursor]!, indices[cursor + 1]!, indices[cursor + 2]!].map((index) => ordered[index]!);
+      if (new Set(corners).size !== 3) continue;
+      const ring: Ring = corners.map((id) => {
+        const position = nodePositions.get(id)!;
+        return [position.x, position.z];
+      });
+      const area = signedRingArea(ring);
+      if (Math.abs(area) < MIN_SHAPE_AREA) continue;
+      // Each triangle is wound the way the whole fill is -- `earcut`'s own
+      // output orientation is not part of this decision, and normalising per
+      // triangle rather than trusting it keeps the seam's direction the one
+      // the engine prescribed.
+      const walked = (area > 0) === (net >= 0) ? corners : [...corners].reverse();
+      regions.push({
+        regionId: `terrain-cut:${causeId}:fill-${shapeIndex}-${regions.length}`,
+        boundary: walked.map((id, index) => edges.use(id, walked[(index + 1) % walked.length]!)),
+        surfaceType,
+        physical,
+      });
+    }
+  }
 
   if (regions.length === 0) return undefined;
   const declared = edges.all();

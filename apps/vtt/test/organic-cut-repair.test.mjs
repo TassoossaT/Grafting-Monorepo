@@ -177,10 +177,16 @@ test("the painter's own area is subtracted, and the seam runs along the painter'
 
   assert.ok(rebuilt > 0);
   const [patch] = addedPatches;
-  // The band splits the square in two, so the ground given back is two
-  // separate faces -- one either side of the road, never one face bridging
-  // across it.
-  assert.equal(patch.regions.length, 2, "the painter's own area split the fill in two");
+  // The band splits the square in two, so the ground comes back either side
+  // of the road and nowhere on it. The fill lands as a mesh, so what matters
+  // is the ground covered, never how many faces it took.
+  assert.ok(patch.regions.length > 1, "the fill is a mesh of faces, not one sheet");
+  assert.ok(patch.nodes.some((node) => node.position.x <= 1 + 1e-9), "ground came back left of the road");
+  assert.ok(patch.nodes.some((node) => node.position.x >= 3 - 1e-9), "ground came back right of the road");
+  assert.ok(
+    !patch.nodes.some((node) => node.position.x > 1 + 1e-9 && node.position.x < 3 - 1e-9),
+    "and none of it landed on the road itself",
+  );
 
   const used = boundaryNodeIds(patch);
   // The seam: every one of the painter's own four contour nodes is walked by
@@ -296,8 +302,10 @@ test("a region the engine finds no room for is skipped, not fatal to the rest of
   const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
 
   const [patch] = addedPatches;
-  assert.equal(patch.regions.length, 2, "the fixture needs both halves for this to test anything");
-  assert.equal(rebuilt, 1, "the refused half costs only itself; the other still landed");
+  assert.ok(patch.regions.length > 1, "the fixture needs more than one face for this to test anything");
+  // The whole point of submitting a mesh rather than one sheet: an edge the
+  // engine refuses costs the faces that touch it, never the regeneration.
+  assert.equal(rebuilt, patch.regions.length - 1, "the refused face costs only itself; every other one still landed");
 });
 
 test("the fill never reaches past the consumed area onto a surviving neighbour", () => {
@@ -350,7 +358,7 @@ test("two adjoining painter faces are subtracted as the one area they really cov
   repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
   const [patch] = addedPatches;
 
-  assert.equal(patch.regions.length, 2, "the road's whole width is subtracted, leaving one face either side of it");
+  assert.ok(patch.regions.length > 1, "the road's whole width is subtracted, leaving ground either side of it");
   for (const node of patch.nodes) {
     assert.ok(
       node.position.x <= 1 + 1e-9 || node.position.x >= 3 - 1e-9,
