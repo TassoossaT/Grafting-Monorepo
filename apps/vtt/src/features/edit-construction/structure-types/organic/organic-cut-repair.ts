@@ -12,7 +12,7 @@ import type {
 } from "@/ports";
 
 import type { AtomicEditOp } from "../../orchestration/atomic-edit.ts";
-import { createBoundaryEdges } from "../../topology/boundary-edges.ts";
+import { createBoundaryEdges, sharedEdgeId } from "../../topology/boundary-edges.ts";
 import type { CutFallout } from "../structure-type.ts";
 
 /**
@@ -41,6 +41,32 @@ const WELD_TOLERANCE = 1e-3;
  * still a structurally valid ring nothing downstream would catch.
  */
 const MIN_SHAPE_AREA = 1e-4;
+
+/**
+ * Edge length of one cell the fill is cut into -- the same scale
+ * `terrain-sculpt-tool.ts` builds fresh terrain at (`HEX_TRIANGLE_SIDE`).
+ *
+ * The difference itself is one polygon per piece of leftover ground, and
+ * registering that verbatim gives one enormous face where the terrain around
+ * it is a mesh of cells -- structurally valid, visibly not terrain. Clipping
+ * that polygon against a grid at terrain's own scale gives cells back
+ * without inventing any geometry: `polygon-clipping` keeps the fill's own
+ * boundary vertices exactly where they were along the seam, and every
+ * interior cut runs along a grid line two neighbouring cells both name, so
+ * they share it rather than each minting their own.
+ */
+const FILL_CELL_SIZE = 2;
+
+/**
+ * How far apart two fill vertices may sit and still be the same node.
+ *
+ * Two cells clipped out of the same fill meet exactly on a grid line, so
+ * their shared corners are the *same* coordinates -- but only to within what
+ * `polygon-clipping`'s own arithmetic leaves behind. Quantising to this grid
+ * before minting is what makes those two corners resolve to one id, which is
+ * what makes the cells a mesh rather than a pile of separate faces.
+ */
+const POSITION_KEY_PRECISION = 1e6;
 
 /** One real, already-live node this repair may weld a fill vertex onto. */
 export interface CutRepairWeldCandidate {
@@ -159,6 +185,140 @@ function paintedRings(
   return rings;
 }
 
+/**
+ * Cuts `shapes` into cells at terrain's own scale -- see
+ * {@link FILL_CELL_SIZE}'s own doc for why the fill is not registered as the
+ * one big polygon the difference produces.
+ *
+ * Every cut runs along a grid line, so two neighbouring cells derive the
+ * same coordinates for the corners they share; nothing here has to weld
+ * them, they are already identical. The fill's own boundary is untouched by
+ * this: a cell straddling it is clipped *to* it, keeping its vertices.
+ */
+function cellsOf(shapes: MultiPolygon): MultiPolygon {
+  if (shapes.length === 0) return shapes;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const shape of shapes) {
+    for (const ring of shape) {
+      for (const [x, z] of ring) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+      }
+    }
+  }
+  if (!Number.isFinite(minX)) return shapes;
+
+  const firstX = Math.floor(minX / FILL_CELL_SIZE) * FILL_CELL_SIZE;
+  const firstZ = Math.floor(minZ / FILL_CELL_SIZE) * FILL_CELL_SIZE;
+  const cells: MultiPolygon = [];
+  for (let x = firstX; x < maxX; x += FILL_CELL_SIZE) {
+    for (let z = firstZ; z < maxZ; z += FILL_CELL_SIZE) {
+      const cell: Polygon = [[
+        [x, z],
+        [x + FILL_CELL_SIZE, z],
+        [x + FILL_CELL_SIZE, z + FILL_CELL_SIZE],
+        [x, z + FILL_CELL_SIZE],
+      ]];
+      for (const piece of polygonClipping.intersection(shapes, cell)) cells.push(piece);
+    }
+  }
+  return cells;
+}
+
+/**
+ * Splits the painter's own edges wherever the fill's boundary lands on one
+ * but no node stands there, and returns the real nodes that created.
+ *
+ * The grid cut above puts a vertex wherever a grid line crosses the fill's
+ * boundary, and where that boundary follows the painter's own contour, the
+ * crossing generally lands *along* one of its edges rather than on either
+ * end of it. Registering that vertex as a fresh node would leave the fill
+ * touching the painter's edge at a point the painter's own edge does not
+ * have -- coincident, never connected, the exact thing this repair exists to
+ * avoid. Splitting the edge there instead (`"insert-vertex"`, the same
+ * primitive a wall crossing already uses) gives both sides one real node to
+ * share.
+ *
+ * Sequenced per edge, nearest-to-start first: `insert-vertex` splits the one
+ * edge it is given into two, so three or more splits along the same original
+ * run consume the remainder each previous split left.
+ */
+function splitSeamEdgesAt(
+  runtime: OrganicCutRepairRuntime,
+  tableId: string,
+  causeId: string,
+  shapes: MultiPolygon,
+  seamNodes: readonly CutRepairWeldCandidate[],
+  seamEdges: readonly CutRepairPaintedEdge[],
+): readonly CutRepairWeldCandidate[] {
+  const positionOf = new Map(seamNodes.map((node) => [node.id, node.position]));
+  const runs = seamEdges
+    .map((edge) => {
+      const start = positionOf.get(edge.startNodeId);
+      const end = positionOf.get(edge.endNodeId);
+      return start !== undefined && end !== undefined ? { edge, start, end } : undefined;
+    })
+    .filter((run): run is { edge: CutRepairPaintedEdge; start: ConstructionPosition; end: ConstructionPosition } => run !== undefined);
+  if (runs.length === 0) return [];
+
+  const onNode = (x: number, z: number): boolean =>
+    seamNodes.some((node) => Math.hypot(node.position.x - x, node.position.z - z) <= WELD_TOLERANCE);
+
+  // Every distinct point the fill puts on a painted run, keyed per run.
+  const wanted = new Map<ConstructionEdgeId, { readonly run: (typeof runs)[number]; readonly points: Map<string, { readonly t: number; readonly x: number; readonly z: number }> }>();
+  for (const shape of shapes) {
+    for (const ring of shape) {
+      for (const [x, z] of ring) {
+        if (onNode(x, z)) continue;
+        for (const run of runs) {
+          const dx = run.end.x - run.start.x;
+          const dz = run.end.z - run.start.z;
+          const lengthSq = dx * dx + dz * dz;
+          if (lengthSq <= 1e-12) continue;
+          const t = ((x - run.start.x) * dx + (z - run.start.z) * dz) / lengthSq;
+          if (t <= 0 || t >= 1) continue;
+          if (Math.hypot(run.start.x + dx * t - x, run.start.z + dz * t - z) > WELD_TOLERANCE) continue;
+          const entry = wanted.get(run.edge.edgeId) ?? { run, points: new Map() };
+          entry.points.set(`${Math.round(x * POSITION_KEY_PRECISION)}:${Math.round(z * POSITION_KEY_PRECISION)}`, { t, x, z });
+          wanted.set(run.edge.edgeId, entry);
+          break;
+        }
+      }
+    }
+  }
+
+  const created: CutRepairWeldCandidate[] = [];
+  for (const { run, points } of wanted.values()) {
+    const ordered = [...points.values()].sort((left, right) => left.t - right.t);
+    let currentEdgeId = run.edge.edgeId;
+    let fromId = run.edge.startNodeId;
+    for (const point of ordered) {
+      const nodeId: ConstructionNodeId = `terrain-cut:${causeId}:seam-${created.length}`;
+      const position: ConstructionPosition = {
+        x: point.x,
+        y: run.start.y + (run.end.y - run.start.y) * point.t,
+        z: point.z,
+      };
+      const firstEdgeId = sharedEdgeId(tableId, fromId, nodeId);
+      const secondEdgeId = sharedEdgeId(tableId, nodeId, run.edge.endNodeId);
+      runtime.applyRegionEdit(
+        [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position, firstEdgeId, secondEdgeId }],
+        "local",
+        causeId,
+      );
+      created.push({ id: nodeId, position });
+      currentEdgeId = secondEdgeId;
+      fromId = nodeId;
+    }
+  }
+  return created;
+}
+
 /** Every consumed region's own outer loop, as one polygon each -- unioned into the true outer boundary of everything this cut removed. */
 function deletedAreaShapes(consumedRings: readonly (readonly ConstructionPosition[])[]): MultiPolygon {
   const polygons: Polygon[] = consumedRings
@@ -193,6 +353,13 @@ function buildFillPatch(
 
   const weldOrMint = (() => {
     let mintedCounter = 0;
+    // Keyed by quantised position, not by call: two cells clipped out of the
+    // same fill meet on a grid line, and the corner each of them derives
+    // there is the same point. Minting per call would give that one point two
+    // ids, and the two cells would sit against each other without sharing a
+    // node -- the very "coincident, never connected" this repair exists to
+    // avoid, reintroduced between its own faces. See POSITION_KEY_PRECISION.
+    const mintedByPosition = new Map<string, ConstructionNodeId>();
     return (x: number, z: number): ConstructionNodeId => {
       let best: { readonly candidate: CutRepairWeldCandidate; readonly distance: number } | undefined;
       for (const candidate of candidates) {
@@ -205,12 +372,44 @@ function buildFillPatch(
         claimed.add(best.candidate.id);
         return best.candidate.id;
       }
+      const key = `${Math.round(x * POSITION_KEY_PRECISION)}:${Math.round(z * POSITION_KEY_PRECISION)}`;
+      const already = mintedByPosition.get(key);
+      if (already !== undefined) return already;
       const id: ConstructionNodeId = `terrain-cut:${causeId}:v${mintedCounter}`;
       mintedCounter += 1;
+      mintedByPosition.set(key, id);
       nodePositions.set(id, { x, y: nearestHeight(x, z, candidates), z });
       return id;
     };
   })();
+
+  // Every real node sitting *on* the segment `a`-`b`, in order along it.
+  //
+  // `polygon-clipping` drops a vertex that is collinear with its own
+  // neighbours, which is exactly what a straight run of the seam is: where
+  // the consumed area's own perimeter crossed several terrain cells in a
+  // line, the difference comes back with one long segment where the
+  // surviving neighbour still has a node (and a face) at every cell corner
+  // along it. Registering that long segment declares an edge from end to end
+  // -- a different edge from the ones the neighbour walks, so the two meet
+  // visually and share nothing, which is the fill coming out detached from
+  // the terrain it was supposed to close onto. Putting those nodes back is
+  // what makes the seam the neighbour's own edges again.
+  const realNodesOnSegment = (a: readonly [number, number], b: readonly [number, number]): readonly CutRepairWeldCandidate[] => {
+    const dx = b[0] - a[0];
+    const dz = b[1] - a[1];
+    const lengthSq = dx * dx + dz * dz;
+    if (lengthSq <= 1e-12) return [];
+    const found: { readonly candidate: CutRepairWeldCandidate; readonly t: number }[] = [];
+    for (const candidate of candidates) {
+      const t = ((candidate.position.x - a[0]) * dx + (candidate.position.z - a[1]) * dz) / lengthSq;
+      if (t <= 0 || t >= 1) continue;
+      const distance = Math.hypot(a[0] + dx * t - candidate.position.x, a[1] + dz * t - candidate.position.z);
+      if (distance > WELD_TOLERANCE) continue;
+      found.push({ candidate, t });
+    }
+    return found.sort((left, right) => left.t - right.t).map((entry) => entry.candidate);
+  };
 
   const regions: ConstructionPatchRegion[] = [];
   shapes.forEach((shape, shapeIndex) => {
@@ -218,7 +417,20 @@ function buildFillPatch(
     if (outerRing === undefined || Math.abs(signedRingArea(outerRing)) < MIN_SHAPE_AREA) return;
 
     const idsFor = (ring: Ring, isHole: boolean): readonly ConstructionNodeId[] => {
-      const ids = openRing(ensureUpwardWinding(ring, isHole)).map(([x, z]) => weldOrMint(x, z));
+      const walked = openRing(ensureUpwardWinding(ring, isHole));
+      const ids = walked.flatMap((point, index) => {
+        const next = walked[(index + 1) % walked.length]!;
+        return [
+          weldOrMint(point[0], point[1]),
+          // Anything real the clipper collapsed out of this segment, put back
+          // -- see `realNodesOnSegment`'s own doc.
+          ...realNodesOnSegment(point, next).map((candidate) => {
+            nodePositions.set(candidate.id, candidate.position);
+            claimed.add(candidate.id);
+            return candidate.id;
+          }),
+        ];
+      });
       // A ring that folded back onto the same node twice is not a face --
       // `polygon-clipping` can leave one at a self-touching pinch point.
       return new Set(ids).size === ids.length ? ids : [];
@@ -366,8 +578,24 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const loops = runtime.getUnfilledLoops([...preScope]);
   const snapshot = runtime.getSnapshot();
   const liveRimCandidates: CutRepairWeldCandidate[] = [];
+  // The rim's own edges, in their true stored direction -- `boundary` walks
+  // each one already oriented for the face that would fill it, so the walk
+  // order and `reversed` together name its real start and end. Needed for
+  // the same reason the painter's edges are: a fill vertex can land along
+  // one of them where no node stands, and that edge has to be split there
+  // rather than met by a fresh node sitting on top of it.
+  const rimEdges: CutRepairPaintedEdge[] = [];
   for (const loop of loops) {
-    for (const nodeId of loop.nodeIds) {
+    const ids = loop.nodeIds;
+    for (let index = 0; index < ids.length; index += 1) {
+      const from = ids[index]!;
+      const to = ids[(index + 1) % ids.length]!;
+      const use = loop.boundary[index];
+      if (use === undefined || from === to) continue;
+      const [startNodeId, endNodeId] = use.reversed ? [to, from] : [from, to];
+      rimEdges.push({ edgeId: use.edgeId, startNodeId, endNodeId });
+    }
+    for (const nodeId of ids) {
       const position = snapshot.map.nodePositions.get(nodeId)?.position;
       if (position !== undefined) liveRimCandidates.push({ id: nodeId, position });
     }
@@ -375,12 +603,27 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
 
   const deleted = deletedAreaShapes(consumedRings);
   const painted = paintedRings(fallout.paintedNodes, fallout.paintedEdges);
-  const fill: MultiPolygon =
+  const leftover: MultiPolygon =
     painted.length === 0
       ? deleted
       : polygonClipping.difference(deleted, ...painted.map((ring): Polygon => [ring]));
+  // Registered as cells at terrain's own scale, not as the one big polygon
+  // the difference produces -- see FILL_CELL_SIZE's own doc.
+  const fill = cellsOf(leftover);
 
-  const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes];
+  // Wherever the fill's own boundary lands along one of the painter's edges
+  // rather than on one of its nodes, that edge is split there first, so the
+  // seam has a real node for both sides to share -- see
+  // `splitPaintedEdgesAt`'s own doc.
+  const seamNodes = splitSeamEdgesAt(
+    runtime,
+    snapshot.tableId,
+    causeId,
+    fill,
+    [...liveRimCandidates, ...fallout.paintedNodes],
+    [...rimEdges, ...fallout.paintedEdges],
+  );
+  const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes, ...seamNodes];
   const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates);
 
   // TEMP DIAGNOSTIC -- remove once the live fill is confirmed. A single
@@ -394,8 +637,10 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       rimCandidates: liveRimCandidates.length,
       paintedNodes: fallout.paintedNodes.length,
       paintedRings: painted.length,
+      seamNodes: seamNodes.length,
       deletedShapes: deleted.length,
-      fillShapes: fill.length,
+      leftoverShapes: leftover.length,
+      fillCells: fill.length,
       regions: patch?.regions.length ?? 0,
       nodes: patch?.nodes.length ?? 0,
       welded: patch?.nodes.filter((node) => !node.id.startsWith(`terrain-cut:${causeId}:`)).length ?? 0,

@@ -61,6 +61,7 @@ function createFakeTerrainRuntime() {
 
   const deleted = [];
   const addedPatches = [];
+  const inserts = [];
   let refuseFirstRegion = false;
 
   function deleteBySurfaceKey(surfaceKey) {
@@ -80,7 +81,10 @@ function createFakeTerrainRuntime() {
       return undefined;
     },
     applyRegionEdit(ops) {
-      for (const op of ops) if (op.kind === "delete-region") deleteBySurfaceKey(op.surfaceKey);
+      for (const op of ops) {
+        if (op.kind === "delete-region") deleteBySurfaceKey(op.surfaceKey);
+        if (op.kind === "insert-vertex") inserts.push(op);
+      }
     },
     getUnfilledLoops(scope) {
       // T1's own rim, exposed by its deletion. `boundary` carries each edge's
@@ -117,6 +121,7 @@ function createFakeTerrainRuntime() {
     positions,
     deleted,
     addedPatches,
+    inserts,
     refuseFirstSubmittedRegion: () => { refuseFirstRegion = true; },
   };
 }
@@ -146,15 +151,20 @@ test("a cut with no painter geometry gives the whole consumed area back, welded 
   assert.equal(addedPatches.length, 1);
 
   const [patch] = addedPatches;
-  // Nothing was subtracted, so the fill is exactly T1's own square -- and
-  // every one of its corners is T1's own real, still-live rim node, welded
-  // by id, not a fresh node sitting on top of one.
+  // The fill comes back as a mesh of cells at terrain's own scale, not as
+  // one big face over the whole consumed area.
+  assert.ok(patch.regions.length > 1, `the fill is a mesh of cells, got ${patch.regions.length} face(s)`);
+
+  // And every one of T1's own corners is still welded by id -- a real,
+  // still-live rim node, not a fresh one sitting on top of it.
   const used = boundaryNodeIds(patch);
-  assert.deepEqual([...used].sort(), ["n1", "n2", "n3", "n4"], "every corner welded onto the rim's own real id");
+  for (const id of ["n1", "n2", "n3", "n4"]) {
+    assert.ok(used.has(id), `the fill's boundary walks the rim's own node ${id}`);
+  }
 });
 
 test("the painter's own area is subtracted, and the seam runs along the painter's own real nodes", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
+  const { runtime, addedPatches, inserts } = createFakeTerrainRuntime();
 
   // A band straight down the middle of T1, from x = 1 to x = 3, described by
   // the painter's own four real contour nodes and the edges between them.
@@ -175,10 +185,21 @@ test("the painter's own area is subtracted, and the seam runs along the painter'
 
   assert.ok(rebuilt > 0);
   const [patch] = addedPatches;
-  // The band splits the square in two, so the ground given back is two
-  // separate faces -- one either side of the road, never one face bridging
-  // across it.
-  assert.equal(patch.regions.length, 2, "the painter's own area split the fill in two");
+  // The band splits the square in two, and each side comes back as cells --
+  // but no single face may ever bridge across the road.
+  assert.ok(patch.regions.length >= 2, "the painter's own area split the fill");
+  const positionOf = new Map(patch.nodes.map((node) => [node.id, node.position]));
+  const byEdgeId = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  for (const region of patch.regions) {
+    const xs = region.boundary.flatMap((use) => {
+      const edge = byEdgeId.get(use.edgeId);
+      if (edge === undefined) return [];
+      return [positionOf.get(edge.startNodeId)?.x, positionOf.get(edge.endNodeId)?.x].filter((x) => x !== undefined);
+    });
+    const touchesLeft = xs.some((x) => x < 1 - 1e-9);
+    const touchesRight = xs.some((x) => x > 3 + 1e-9);
+    assert.ok(!(touchesLeft && touchesRight), "no face bridges across the painter's own area");
+  }
 
   const used = boundaryNodeIds(patch);
   // The seam: every one of the painter's own four contour nodes is walked by
@@ -191,7 +212,16 @@ test("the painter's own area is subtracted, and the seam runs along the painter'
   for (const id of ["n1", "n2", "n3", "n4"]) {
     assert.ok(used.has(id), `the fill's boundary still walks the rim's own node ${id}`);
   }
-  assert.ok(!patch.nodes.some((node) => node.id.startsWith("terrain-cut:")), "nothing needed minting: every vertex sat on a real node already");
+  // Nothing is left sitting coincident-but-unconnected: every vertex that
+  // was not already a real node is one this repair *inserted into* a real
+  // edge (rim or road), so both sides share it.
+  const insertedIds = new Set(inserts.map((op) => op.nodeId));
+  for (const node of patch.nodes) {
+    if (node.id.startsWith("terrain-cut:")) {
+      assert.ok(insertedIds.has(node.id), `${node.id} was minted free-floating instead of split into a real edge`);
+    }
+  }
+  assert.ok(inserts.length > 0, "the seam needed real splits, and got them");
 });
 
 test("a shared edge is declared once and walked from both sides, never minted twice", () => {
@@ -288,8 +318,8 @@ test("a region the engine finds no room for is skipped, not fatal to the rest of
   const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedEdges }, "cause-1");
 
   const [patch] = addedPatches;
-  assert.equal(patch.regions.length, 2, "the fixture needs both halves for this to test anything");
-  assert.equal(rebuilt, 1, "the refused half costs only itself; the other still landed");
+  assert.ok(patch.regions.length > 1, "the fixture needs more than one face for this to test anything");
+  assert.equal(rebuilt, patch.regions.length - 1, "the refused face costs only itself; every other one still landed");
 });
 
 test("the fill never reaches past the consumed area onto a surviving neighbour", () => {
