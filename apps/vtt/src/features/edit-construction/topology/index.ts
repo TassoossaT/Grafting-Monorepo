@@ -5,7 +5,7 @@ export {
   resolveCloudTopology,
 } from "./construction-cloud.ts";
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
-export { edgeUseCounts, perimeterOf } from "./surface-perimeter.ts";
+export { edgeUseCounts, outwardPerimeterRings, perimeterOf } from "./surface-perimeter.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export { fitPath } from "./stroke-fitting.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";

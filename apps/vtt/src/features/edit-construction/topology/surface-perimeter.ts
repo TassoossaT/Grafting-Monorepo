@@ -1,4 +1,4 @@
-import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 
 /**
  * The perimeter of a set of faces: what is left when everything interior is
@@ -119,4 +119,72 @@ export function perimeterOf(
     });
   }
   return loops;
+}
+
+/**
+ * The same perimeter, as closed rings of edges **already oriented for
+ * whatever stands on the other side** -- the outside.
+ *
+ * {@link perimeterOf} answers "where is the rim, and where does it run", for
+ * drawing it. This answers "how would a face meeting this rim have to walk
+ * it", which is a different question with a strict answer: a perimeter edge
+ * has one face on it already, so its one free side is the other one, and a
+ * face walking it the same way as the face already there is refused.
+ *
+ * Derived per edge from the use the set itself makes of it, never from the
+ * ring's own walk direction -- which is arbitrary, since a walk may be
+ * assembled either way round. Each step is therefore reversed relative to the
+ * set's own use, and the ring is chained by those directions rather than
+ * re-walked.
+ *
+ * Taking the whole set at once is the point: the perimeter of a cloud of
+ * touching faces is one ring around all of them, and the individual faces'
+ * own boundaries are not it. Handing those over one by one instead describes
+ * a shape that overlaps itself along every edge two of them share.
+ */
+export function outwardPerimeterRings(
+  topologies: readonly ConstructionRegionTopology[],
+): readonly (readonly ConstructionRegionEdge[])[] {
+  const counts = edgeUseCounts(topologies);
+  const outward = new Map<string, ConstructionRegionEdge>();
+  for (const topology of topologies) {
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) {
+        if ((counts.get(use.edgeId) ?? 0) !== 1 || outward.has(use.edgeId)) continue;
+        // `startNodeId`/`endNodeId` are already this face's own walk
+        // direction, so the free side runs the other way.
+        outward.set(use.edgeId, {
+          edgeId: use.edgeId,
+          reversed: !use.reversed,
+          startNodeId: use.endNodeId,
+          endNodeId: use.startNodeId,
+          geometry: use.geometry,
+        });
+      }
+    }
+  }
+
+  const startingAt = new Map<string, ConstructionRegionEdge[]>();
+  for (const edge of outward.values()) {
+    const at = startingAt.get(edge.startNodeId) ?? [];
+    startingAt.set(edge.startNodeId, at);
+    at.push(edge);
+  }
+
+  const walked = new Set<string>();
+  const rings: (readonly ConstructionRegionEdge[])[] = [];
+  for (const seed of outward.values()) {
+    if (walked.has(seed.edgeId)) continue;
+    const ring: ConstructionRegionEdge[] = [];
+    let step: ConstructionRegionEdge | undefined = seed;
+    while (step !== undefined && !walked.has(step.edgeId)) {
+      walked.add(step.edgeId);
+      ring.push(step);
+      step = (startingAt.get(step.endNodeId) ?? []).find((candidate) => !walked.has(candidate.edgeId));
+    }
+    // Only a ring that closed on itself bounds anything. An open chain is a
+    // perimeter running off the edge of the set it was derived from.
+    if (ring.length >= 3 && ring[ring.length - 1]!.endNodeId === ring[0]!.startNodeId) rings.push(ring);
+  }
+  return rings;
 }

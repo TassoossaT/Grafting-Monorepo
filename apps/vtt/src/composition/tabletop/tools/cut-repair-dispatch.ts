@@ -9,6 +9,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 import {
+  outwardPerimeterRings,
   resolveCoverage,
   resolveCutRepair,
   repairOrganicCut,
@@ -74,18 +75,18 @@ export function paintedNodesOf(
   runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
   paintedType: string,
 ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
+  const painted = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
   const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
-  const paintedLoops: (readonly ConstructionRegionEdge[])[] = [];
-  for (const topology of runtime.getAllRegionTopologies()) {
-    if (topology.surfaceType !== paintedType) continue;
+  for (const topology of painted) {
     for (const node of topology.nodes) nodesById.set(node.id, node.position);
-    // Outer loops only: a hole the painter itself declared is the painter's
-    // own opening, and a repair has no business filling it in.
-    for (const loop of topology.outerLoops) if (loop.length >= 3) paintedLoops.push(loop);
   }
   return {
     paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
-    paintedLoops,
+    // The perimeter of the painter's whole cloud, not each face's own
+    // boundary: a road is many faces that touch, and its outline is the one
+    // ring around all of them. Face-by-face describes a shape overlapping
+    // itself along every shared edge.
+    paintedLoops: outwardPerimeterRings(painted),
   };
 }
 

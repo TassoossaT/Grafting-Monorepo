@@ -164,14 +164,22 @@ test("a rim too small to cut is filled whole rather than dropped", () => {
   assert.deepEqual(context.addedPatches[0].regions[0].boundary, loop.boundary, "a triangle is already its own mesh");
 });
 
-/** The road's own boundary loop, in the road's own walk order. */
+/**
+ * The road's rim as `outwardPerimeterRings` hands it over: already oriented
+ * for whoever mends around it, which is the opposite of the road's own use.
+ */
 function roadIsland() {
-  const ids = ["r1", "r2", "r3", "r4"];
+  // Wound against the rim enclosing it: the gap's own rim runs one way round,
+  // so the opening inside it runs the other. That is not a choice made here
+  // -- it is what "the road holds one side, the mend takes the other" means
+  // once it reaches winding.
+  const ids = ["r1", "r4", "r3", "r2"];
   return ids.map((id, index) => ({
     edgeId: `road:${index}`,
     reversed: index % 2 === 0,
     startNodeId: id,
     endNodeId: ids[(index + 1) % ids.length],
+    geometry: { kind: "line" },
   }));
 }
 
@@ -190,7 +198,7 @@ test("a mesh opens around a face standing inside the gap instead of covering it"
   for (const edge of island) {
     const matching = uses.filter((use) => use.edgeId === edge.edgeId);
     assert.equal(matching.length, 1, `${edge.edgeId} bounds the opening exactly once`);
-    assert.equal(matching[0].reversed, !edge.reversed, `${edge.edgeId} is taken from the side the road left free`);
+    assert.equal(matching[0].reversed, edge.reversed, `${edge.edgeId} is walked the way the rim was handed over -- the side the road left free`);
   }
 
   const declared = new Set(patch.edges.map((edge) => edge.edgeId));
@@ -234,4 +242,26 @@ test("an island belonging to some other gap is left out of this one", () => {
 
   const uses = patch.regions.flatMap((region) => region.boundary);
   assert.ok(!uses.some((use) => use.edgeId.startsWith("far:")), "a face outside this gap is none of its business");
+});
+
+test("an opening wound the same way as the rim around it is left out rather than triangulated into nonsense", () => {
+  const context = createFakeRuntime([rimLoop()]);
+  // The same road, handed over the wrong way round -- a graph that disagrees
+  // with itself about which side of the road is free. Triangulating anyway is
+  // what puts edges over and under it.
+  const backwards = [...roadIsland()].reverse().map((edge) => ({
+    ...edge,
+    startNodeId: edge.endNodeId,
+    endNodeId: edge.startNodeId,
+  }));
+
+  fillUnfilledLoops(context.runtime, ["a"], "terrain", "cause-1", { mesh: true, islands: [backwards] });
+  const [patch] = context.addedPatches;
+
+  const uses = patch.regions.flatMap((region) => region.boundary);
+  assert.ok(!uses.some((use) => use.edgeId.startsWith("road:")), "no face claims a side of the road it cannot have");
+  for (const region of patch.regions) {
+    const corners = new Set(region.regionId.split("|"));
+    assert.ok(!corners.has("r1") && !corners.has("r3"), "and the mend does not reach into the road at all");
+  }
 });

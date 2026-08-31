@@ -73,9 +73,16 @@ export interface FillUnfilledLoopsOptions {
    */
   readonly mesh?: boolean;
   /**
-   * Boundary loops of faces that may be standing *inside* a gap, each in its
-   * own face's walk order. Whichever of them a gap actually encloses become
-   * openings in that gap's mesh; the rest are ignored.
+   * Closed rims of whatever may be standing *inside* a gap, each already
+   * oriented for the mend rather than for the face that owns it (see
+   * `outwardPerimeterRings`). Whichever of them a gap actually encloses
+   * become openings in its mesh; the rest are ignored.
+   *
+   * One ring per *cloud*, never one per face: the faces of a road touch, so
+   * handing over each face's own boundary describes a shape that overlaps
+   * itself along every edge two of them share, and a triangulation of that is
+   * meaningless -- edges running over and under the road instead of stopping
+   * at it.
    *
    * Needed because the engine reports a gap's outer rim and stops there. It
    * tells a gap from an outline by which side the neighbouring faces lie on,
@@ -119,6 +126,17 @@ export function matchTheGroundAround(
   // Physical wins a tie: a gap left walk-through in the middle of solid
   // ground is a worse wrong answer than a solid tile in a decorative patch.
   return { surfaceType: best.surfaceType, physical: best.physical * 2 >= best.count };
+}
+
+/** Twice a ring's signed area in XZ -- only its sign is ever read here, to compare one ring's winding with another's. */
+function signedArea(ring: readonly ConstructionPosition[]): number {
+  let total = 0;
+  for (let index = 0; index < ring.length; index += 1) {
+    const from = ring[index]!;
+    const to = ring[(index + 1) % ring.length]!;
+    total += from.x * to.z - to.x * from.z;
+  }
+  return total;
 }
 
 /** Whether `point` lies inside `ring`, by the even-odd rule -- what keeps an island belonging to some other gap out of this one. */
@@ -189,14 +207,24 @@ function tessellate(
     const ring = island.map((edge) => positionOf(edge.startNodeId));
     if (ring.some((point) => point === undefined)) continue;
     if (!containsPoint(outerRing, ring[0]!)) continue;
+    // An opening is walked the opposite way round to the rim enclosing it --
+    // that is what "opposite sides of the same ground" means once it reaches
+    // winding. An island whose own required direction runs the same way as
+    // the rim cannot be opened around with any single winding: the graph
+    // disagrees with itself about which side of it is free, and quietly
+    // triangulating anyway is what puts edges over and under it. Left out
+    // instead, so the gap falls back to a whole-rim mend that at least joins.
+    if (signedArea(ring as readonly ConstructionPosition[]) > 0 === signedArea(outerRing) > 0) continue;
 
     holeStarts.push(ids.length);
     for (let index = 0; index < island.length; index += 1) {
       ids.push(island[index]!.startNodeId);
       points.push(ring[index]!);
     }
+    // Already oriented for this mend, exactly like `loop.boundary` -- the
+    // island holds one side of each of its edges and hands over the other.
     for (const edge of island) {
-      walked.set(walkKey(edge.endNodeId, edge.startNodeId), { edgeId: edge.edgeId, reversed: !edge.reversed });
+      walked.set(walkKey(edge.startNodeId, edge.endNodeId), { edgeId: edge.edgeId, reversed: edge.reversed });
     }
   }
 
@@ -208,13 +236,8 @@ function tessellate(
 
   // The outer ring's own signed area fixes which way a face here is wound;
   // every triangle is normalised to it, so a rim segment is always walked the
-  // way the engine said and an island's the exact opposite of its own.
-  let ringArea = 0;
-  for (let index = 0; index < outerRing.length; index += 1) {
-    const from = outerRing[index]!;
-    const to = outerRing[(index + 1) % outerRing.length]!;
-    ringArea += from.x * to.z - to.x * from.z;
-  }
+  // way the engine said and an opening the way its owner left free.
+  const ringArea = signedArea(outerRing);
 
   const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
   const regions: ConstructionPatchRegion[] = [];
