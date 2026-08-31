@@ -9,10 +9,12 @@ export {
 export {
   buildCutRepairLattice,
   cutRepairQuadCentroids,
+  densifyPaintedEdges,
   planOrganicCutRepair,
   repairOrganicCut,
 } from "./organic-cut-repair.ts";
 export type {
+  CutRepairPaintedEdge,
   CutRepairWeldCandidate,
   OrganicCutRepairLattice,
   OrganicCutRepairPlanInput,

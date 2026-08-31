@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildCutRepairLattice,
+  densifyPaintedEdges,
   planOrganicCutRepair,
   repairOrganicCut,
 } from "../src/features/edit-construction/structure-types/organic/organic-cut-repair.ts";
@@ -136,6 +137,97 @@ test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the
 });
 
 // ---------------------------------------------------------------------------
+// densifyPaintedEdges -- subdividing a sparse painted edge into real anchors
+// ---------------------------------------------------------------------------
+
+function createInsertTrackingRuntime() {
+  const inserts = [];
+  return {
+    inserts,
+    runtime: {
+      applyRegionEdit(ops) {
+        for (const op of ops) if (op.kind === "insert-vertex") inserts.push(op);
+      },
+    },
+  };
+}
+
+test("densifyPaintedEdges subdivides a long painted edge near the hole into real interior anchors", () => {
+  const { runtime, inserts } = createInsertTrackingRuntime();
+  const holeLoops = [
+    [
+      { id: "h0", position: { x: 0, y: 0, z: 0 } },
+      { id: "h1", position: { x: 10, y: 0, z: 0 } },
+      { id: "h2", position: { x: 10, y: 0, z: 2 } },
+      { id: "h3", position: { x: 0, y: 0, z: 2 } },
+    ],
+  ];
+  const paintedNodes = [
+    { id: "p-start", position: { x: 0, y: 0.2, z: 0 } },
+    { id: "p-end", position: { x: 10, y: 0.2, z: 0 } },
+  ];
+  const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
+
+  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeLoops, paintedNodes, paintedEdges);
+
+  // A 10-unit run at this generator's 2-unit cell size splits into 5
+  // segments -- 4 real interior anchors, each an actual insert-vertex op,
+  // not merely computed and discarded.
+  assert.equal(created.length, 4);
+  assert.equal(inserts.length, 4);
+  const xs = created.map((node) => node.position.x).sort((a, b) => a - b);
+  assert.deepEqual(xs, [2, 4, 6, 8], "anchors land evenly along the run, one cell apart");
+  for (const node of created) {
+    assert.equal(node.position.y, 0.2, "interpolated from the edge's own endpoints, not an arbitrary height");
+    assert.equal(node.position.z, 0);
+  }
+});
+
+test("densifyPaintedEdges leaves a short painted edge alone", () => {
+  const { runtime, inserts } = createInsertTrackingRuntime();
+  const holeLoops = [
+    [
+      { id: "h0", position: { x: 0, y: 0, z: 0 } },
+      { id: "h1", position: { x: 2, y: 0, z: 0 } },
+      { id: "h2", position: { x: 2, y: 0, z: 2 } },
+      { id: "h3", position: { x: 0, y: 0, z: 2 } },
+    ],
+  ];
+  const paintedNodes = [
+    { id: "p-start", position: { x: 0, y: 0, z: 0 } },
+    { id: "p-end", position: { x: 2, y: 0, z: 0 } },
+  ];
+  const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
+
+  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeLoops, paintedNodes, paintedEdges);
+
+  assert.equal(created.length, 0, "already short enough to weld onto its own two endpoints");
+  assert.equal(inserts.length, 0);
+});
+
+test("densifyPaintedEdges ignores a painted edge nowhere near the hole", () => {
+  const { runtime, inserts } = createInsertTrackingRuntime();
+  const holeLoops = [
+    [
+      { id: "h0", position: { x: 0, y: 0, z: 0 } },
+      { id: "h1", position: { x: 2, y: 0, z: 0 } },
+      { id: "h2", position: { x: 2, y: 0, z: 2 } },
+      { id: "h3", position: { x: 0, y: 0, z: 2 } },
+    ],
+  ];
+  const paintedNodes = [
+    { id: "p-start", position: { x: 1000, y: 0, z: 1000 } },
+    { id: "p-end", position: { x: 1010, y: 0, z: 1000 } },
+  ];
+  const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
+
+  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeLoops, paintedNodes, paintedEdges);
+
+  assert.equal(created.length, 0);
+  assert.equal(inserts.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // repairOrganicCut -- fetch, delete, generate, weld, commit
 // ---------------------------------------------------------------------------
 
@@ -242,7 +334,7 @@ function createFakeTerrainRuntime() {
 test("repairOrganicCut deletes exactly the consumed face, leaves the survivor untouched, and fills the hole with a real lattice", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedEdges: [] }, "cause-1");
 
   assert.ok(rebuilt > 0, "at least one lattice quad filled T1's own hole");
   assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"], "T2 is never deleted -- this repair never touches a survivor");
@@ -265,7 +357,7 @@ test("repairOrganicCut deletes exactly the consumed face, leaves the survivor un
 
 test("consuming nothing is a no-op", () => {
   const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [], paintedEdges: [] }, "cause-1");
 
   assert.equal(rebuilt, 0);
   assert.equal(deleted.length, 0);
@@ -276,7 +368,7 @@ test("a region the engine finds no room for is skipped, not fatal to the rest of
   const { runtime, addedPatches, refuseFirstSubmittedRegion } = createFakeTerrainRuntime();
   refuseFirstSubmittedRegion();
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedEdges: [] }, "cause-1");
 
   const [patch] = addedPatches;
   assert.ok(patch.regions.length > 1, "the fixture needs more than one region for this to test anything");
@@ -287,7 +379,7 @@ test("an add the engine flatly rejects (not merely a refused face) is a thrown e
   const { runtime, deleted, addedPatches, throwOnNextAdd } = createFakeTerrainRuntime();
   throwOnNextAdd();
 
-  assert.throws(() => repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1"), /fill failed/);
+  assert.throws(() => repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedEdges: [] }, "cause-1"), /fill failed/);
   // Only T1 (deleted via applyRegionEdit before the fill was even attempted)
   // is gone. addPatch itself threw before registering anything.
   assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"]);

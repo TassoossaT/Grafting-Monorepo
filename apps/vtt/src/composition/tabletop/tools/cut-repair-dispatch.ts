@@ -1,7 +1,13 @@
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
-import type { ApplyPatchReplacementRequest, ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ApplyPatchReplacementRequest,
+  ConstructionEdgeId,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionSurfaceKey,
+} from "@/ports";
 import {
   resolveCoverage,
   resolveCutRepair,
@@ -109,11 +115,29 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     })
     .filter((node): node is { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } => node !== undefined);
 
+  // The pairs those nodes are actually connected by, not just the point
+  // cloud -- see `CutFallout.paintedEdges`'s own doc for why a repair needs
+  // the edge itself (to subdivide) rather than only the sparse nodes at its
+  // ends. Read straight from each painter-type region's own live topology,
+  // deduplicated by edge id since neighbouring band regions share edges.
+  const paintedEdges = new Map<ConstructionEdgeId, { readonly edgeId: ConstructionEdgeId; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }>();
+  for (const entry of coverage) {
+    if (entry.surfaceType !== paintedType) continue;
+    const topology = runtime.getRegionTopology(entry.surfaceKey);
+    if (topology === undefined) continue;
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const edge of loop) {
+        if (paintedEdges.has(edge.edgeId)) continue;
+        paintedEdges.set(edge.edgeId, { edgeId: edge.edgeId, startNodeId: edge.startNodeId, endNodeId: edge.endNodeId });
+      }
+    }
+  }
+
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, paintedEdges: [...paintedEdges.values()], consumedSurfaceKeys }, causeId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }

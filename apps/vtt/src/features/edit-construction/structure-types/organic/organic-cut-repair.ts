@@ -1,4 +1,5 @@
 import type {
+  ConstructionEdgeId,
   ConstructionNodeId,
   ConstructionPatch,
   ConstructionPatchRegion,
@@ -8,7 +9,7 @@ import type {
 } from "@/ports";
 
 import type { AtomicEditOp } from "../../orchestration/atomic-edit.ts";
-import { createBoundaryEdges } from "../../topology/boundary-edges.ts";
+import { createBoundaryEdges, sharedEdgeId } from "../../topology/boundary-edges.ts";
 import {
   createRandom,
   ortho,
@@ -196,6 +197,90 @@ function nearestHeight(x: number, z: number, candidates: readonly CutRepairWeldC
     }
   }
   return bestY;
+}
+
+/** One real, already-live edge of the painter's own contour -- see `CutFallout.paintedEdges`'s own doc. */
+export interface CutRepairPaintedEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+}
+
+/**
+ * Splits every one of the painter's own edges that is both near this hole
+ * and long enough to matter into real interior anchor nodes, spaced roughly
+ * one lattice cell apart, via the generic `"insert-vertex"` op
+ * (`ConstructionSessionPort.insertVertex`'s own doc: "subdivides one
+ * boundary edge, minting a new node on it" -- the same primitive a wall
+ * crossing already uses, applied here to a straight or gently-curved run
+ * rather than an intersection).
+ *
+ * **Why this exists at all.** A road is flattened to a handful of points
+ * along a straight or gently curved stretch -- by design; redundant
+ * collinear points would serve no purpose of the road's own. A hole
+ * bordering ten or more meters of that stretch may see only two or three of
+ * the painter's own nodes anywhere nearby, which starves
+ * {@link buildCutRepairLattice}'s own pinning of anything to find along most
+ * of that run: "close to the painter's edge" stayed merely close, never an
+ * actual shared vertex. Subdividing the edge itself, not just reading its
+ * existing nodes, is what turns the whole run into real anchor points.
+ *
+ * Mutates the live graph (through `runtime.applyRegionEdit`); returns the
+ * freshly created nodes so the caller can fold them into its own weld
+ * candidates immediately, in the same call.
+ */
+export function densifyPaintedEdges(
+  runtime: OrganicCutRepairRuntime,
+  tableId: string,
+  causeId: string,
+  holeLoops: readonly (readonly CutRepairWeldCandidate[])[],
+  paintedNodes: readonly CutRepairWeldCandidate[],
+  paintedEdges: readonly CutRepairPaintedEdge[],
+): readonly CutRepairWeldCandidate[] {
+  if (paintedEdges.length === 0) return [];
+  const positionOf = new Map(paintedNodes.map((node) => [node.id, node.position]));
+  const { centerX, centerZ, radius } = boundsOf(holeLoops.flat().map((point) => point.position));
+  const reach = radius + PIN_RADIUS;
+  const nearHole = (position: ConstructionPosition): boolean =>
+    Math.abs(position.x - centerX) <= reach && Math.abs(position.z - centerZ) <= reach;
+
+  const created: CutRepairWeldCandidate[] = [];
+  let mintedCounter = 0;
+
+  for (const edge of paintedEdges) {
+    const start = positionOf.get(edge.startNodeId);
+    const end = positionOf.get(edge.endNodeId);
+    if (start === undefined || end === undefined) continue;
+    if (!nearHole(start) && !nearHole(end)) continue;
+
+    const length = Math.hypot(end.x - start.x, end.z - start.z);
+    const segments = Math.round(length / LATTICE_TRIANGLE_SIDE);
+    if (segments < 2) continue; // already short enough to weld onto its own endpoints
+
+    let currentEdgeId = edge.edgeId;
+    let fromId = edge.startNodeId;
+    for (let index = 1; index < segments; index += 1) {
+      const t = index / segments;
+      const position: ConstructionPosition = {
+        x: start.x + (end.x - start.x) * t,
+        y: start.y + (end.y - start.y) * t,
+        z: start.z + (end.z - start.z) * t,
+      };
+      const nodeId: ConstructionNodeId = `terrain-cut:${causeId}:path-anchor:${mintedCounter}`;
+      mintedCounter += 1;
+      const firstEdgeId = sharedEdgeId(tableId, fromId, nodeId);
+      const secondEdgeId = sharedEdgeId(tableId, nodeId, edge.endNodeId);
+      runtime.applyRegionEdit(
+        [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position, firstEdgeId, secondEdgeId }],
+        "local",
+        causeId,
+      );
+      created.push({ id: nodeId, position });
+      currentEdgeId = secondEdgeId;
+      fromId = nodeId;
+    }
+  }
+  return created;
 }
 
 /** A fresh lattice sized and placed to cover every point `holeLoops` names -- terrain's own generator, seeded deterministically from the cause that needs it. */
@@ -535,13 +620,16 @@ export interface OrganicCutRepairRuntime {
  * 2. Delete the consumed regions. Terrain's own call, not the painter's.
  * 3. `getUnfilledLoops`, scoped to what those regions stood on, reports
  *    exactly the rim the deletion exposed -- the hole's own boundary.
- * 4. Build a fresh lattice sized to cover that hole ({@link buildCutRepairLattice}).
- * 5. One batched `classifyPoints` call over every lattice quad's centroid
+ * 4. {@link densifyPaintedEdges} subdivides the painter's own edges near
+ *    this hole into real anchor nodes -- a long straight or gently curved
+ *    run has almost no nodes of its own to weld onto otherwise.
+ * 5. Build a fresh lattice sized to cover that hole ({@link buildCutRepairLattice}).
+ * 6. One batched `classifyPoints` call over every lattice quad's centroid
  *    reports which already sit on ground something else claims (surviving
  *    terrain, or the painter's own new patch) -- terrain's fill has to stop
  *    exactly there, for any type that cuts it, not only a road.
- * 6. {@link planOrganicCutRepair} decides which quads survive and welds them.
- * 7. Register the surviving quads via `addPatch` -- a region the engine
+ * 7. {@link planOrganicCutRepair} decides which quads survive and welds them.
+ * 8. Register the surviving quads via `addPatch` -- a region the engine
  *    still finds no room for (see {@link OrganicCutRepairRuntime.addPatch}'s
  *    own doc) costs only itself, not the rest of the batch.
  */
@@ -620,7 +708,17 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   }
   if (holeLoops.length === 0) return 0;
 
-  const lattice = buildCutRepairLattice(holeLoops, fallout.paintedNodes, causeId);
+  const anchorNodes = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeLoops, fallout.paintedNodes, fallout.paintedEdges);
+  const paintedNodes = anchorNodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...anchorNodes];
+  console.warn(
+    `[terrain-cut-repair] densifyPaintedEdges ${JSON.stringify({
+      causeId,
+      paintedEdgeCount: fallout.paintedEdges.length,
+      anchorsCreated: anchorNodes.length,
+    })}`,
+  );
+
+  const lattice = buildCutRepairLattice(holeLoops, paintedNodes, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
   const occupiedQuads = new Set(runtime.classifyPoints(centroids).map((hit) => hit.index));
   console.warn(
@@ -641,13 +739,13 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     physical,
     lattice,
     holeLoops,
-    paintedNodes: fallout.paintedNodes,
+    paintedNodes,
     occupiedQuads,
   });
 
   if (patch !== undefined) {
     const rimIds = new Set(holeLoops.flat().map((p) => p.id));
-    const paintedIds = new Set(fallout.paintedNodes.map((p) => p.id));
+    const paintedIds = new Set(paintedNodes.map((p) => p.id));
     let weldedRim = 0;
     let weldedPainted = 0;
     let minted = 0;

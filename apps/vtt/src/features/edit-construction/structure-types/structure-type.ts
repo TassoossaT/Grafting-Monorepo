@@ -1,4 +1,10 @@
-import type { ConstructionNodeId, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
+import type {
+  ConstructionEdgeId,
+  ConstructionNodeId,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
@@ -154,6 +160,25 @@ export interface CutFallout {
    * avoid.
    */
   readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /**
+   * Every boundary edge of the painter's own type wherever this stroke's
+   * footprint reaches -- the pairs `paintedNodes` are actually connected by,
+   * not just the point cloud. A covered type's own weld only ever matches a
+   * *node*; a straight run far longer than one of its own cells has almost
+   * no nodes to match at all (a road is flattened to a handful of points
+   * along a straight or gently curved stretch, by design -- redundant
+   * collinear points would serve no purpose of the road's own). A repair
+   * that wants a real anchor *along* such a run, not only at its sparse
+   * ends, needs the edge itself: real graph edges can be subdivided
+   * (`insertVertex`/the `"insert-vertex"` op) into a fresh real node exactly
+   * where it is needed, which is what turns "close to the painter's edge"
+   * into an actual shared vertex instead of a second, merely nearby one.
+   */
+  readonly paintedEdges: readonly {
+    readonly edgeId: ConstructionEdgeId;
+    readonly startNodeId: ConstructionNodeId;
+    readonly endNodeId: ConstructionNodeId;
+  }[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
