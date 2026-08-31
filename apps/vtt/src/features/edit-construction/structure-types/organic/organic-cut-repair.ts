@@ -293,6 +293,7 @@ function splitSeamEdgesAt(
   }
 
   const created: CutRepairWeldCandidate[] = [];
+  let failed = 0;
   for (const { run, points } of wanted.values()) {
     const ordered = [...points.values()].sort((left, right) => left.t - right.t);
     let currentEdgeId = run.edge.edgeId;
@@ -306,15 +307,31 @@ function splitSeamEdgesAt(
       };
       const firstEdgeId = sharedEdgeId(tableId, fromId, nodeId);
       const secondEdgeId = sharedEdgeId(tableId, nodeId, run.edge.endNodeId);
-      runtime.applyRegionEdit(
-        [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position, firstEdgeId, secondEdgeId }],
-        "local",
-        causeId,
-      );
+      // Best-effort, never fatal. A seam edge named here can legitimately be
+      // gone by now -- the cut deleted the regions that stood on it moments
+      // ago, and the engine's own zero-orphan cleanup reclaims an edge
+      // nothing references any more -- and `insert-vertex` on an id that no
+      // longer resolves throws. That is one split not happening, which costs
+      // this one vertex its shared node (it mints instead, exactly as it did
+      // before splitting existed); it is never a reason to abandon the whole
+      // repair and leave the hole empty.
+      try {
+        runtime.applyRegionEdit(
+          [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position, firstEdgeId, secondEdgeId }],
+          "local",
+          causeId,
+        );
+      } catch {
+        failed += 1;
+        continue;
+      }
       created.push({ id: nodeId, position });
       currentEdgeId = secondEdgeId;
       fromId = nodeId;
     }
+  }
+  if (failed > 0) {
+    console.warn(`[terrain-cut-repair] seam splits refused ${JSON.stringify({ causeId, failed, created: created.length })}`);
   }
   return created;
 }
@@ -432,8 +449,13 @@ function buildFillPatch(
         ];
       });
       // A ring that folded back onto the same node twice is not a face --
-      // `polygon-clipping` can leave one at a self-touching pinch point.
-      return new Set(ids).size === ids.length ? ids : [];
+      // `polygon-clipping` can leave a ring that touches the same point
+      // twice (a pinch), and putting real nodes back can land one on a
+      // vertex the ring already walks. Dropping the repeat keeps the face --
+      // discarding the whole ring over it would leave a hole in the fill for
+      // what is, geometrically, one point mentioned twice.
+      const deduped = ids.filter((id, index) => ids.indexOf(id) === index);
+      return deduped;
     };
 
     const outerIds = idsFor(outerRing, false);
@@ -603,13 +625,28 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
 
   const deleted = deletedAreaShapes(consumedRings);
   const painted = paintedRings(fallout.paintedNodes, fallout.paintedEdges);
-  const leftover: MultiPolygon =
-    painted.length === 0
-      ? deleted
-      : polygonClipping.difference(deleted, ...painted.map((ring): Polygon => [ring]));
+  // Every geometry stage below is best-effort in the same way: a refusal
+  // costs that stage its refinement and falls back to the coarser shape it
+  // was given, never the whole repair. `polygon-clipping` is robust for
+  // ordinary input but does throw on some degenerate rings, and a stroke
+  // that produced one is not a reason to leave the hole empty -- filling it
+  // as one face beats filling it not at all.
+  let leftover: MultiPolygon = deleted;
+  if (painted.length > 0) {
+    try {
+      leftover = polygonClipping.difference(deleted, ...painted.map((ring): Polygon => [ring]));
+    } catch {
+      console.warn(`[terrain-cut-repair] difference refused, filling the whole consumed area ${JSON.stringify({ causeId })}`);
+    }
+  }
   // Registered as cells at terrain's own scale, not as the one big polygon
   // the difference produces -- see FILL_CELL_SIZE's own doc.
-  const fill = cellsOf(leftover);
+  let fill: MultiPolygon = leftover;
+  try {
+    fill = cellsOf(leftover);
+  } catch {
+    console.warn(`[terrain-cut-repair] cell cut refused, filling as whole shapes ${JSON.stringify({ causeId })}`);
+  }
 
   // Wherever the fill's own boundary lands along one of the painter's edges
   // rather than on one of its nodes, that edge is split there first, so the
