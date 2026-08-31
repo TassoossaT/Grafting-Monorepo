@@ -620,10 +620,21 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // engine's own `OpenLoop` refusal. Two real ids may only share a boundary
   // edge here when a known fragment (or rim-adjacency) entry says so.
   const realIds = new Set(candidates.map((candidate) => candidate.id));
-  const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId): { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean } | undefined => {
+  // Pure -- no `edges.use()` call, so no side effect on `edges`'s own
+  // closure state. Must run over a quad's *entire* cycle before any of that
+  // quad's sides are committed via `boundaryUse` below: `edges.use()`
+  // unconditionally registers whatever it is given, so checking pair-by-pair
+  // *while* committing let an earlier, permitted side of an eventually-
+  // rejected quad register a real edge referencing that quad's own freshly
+  // minted corner -- a corner that then never made it into `nodePositions`
+  // because the quad itself was dropped, leaving a dangling edge in
+  // `edges.all()` that named a node `patch.nodes` never declared (the
+  // engine's own "edge references unknown node" refusal).
+  const boundaryPermitted = (a: ConstructionNodeId, b: ConstructionNodeId): boolean =>
+    knownEdgesById.has(sharedEdgeId(input.tableId, a, b)) || !realIds.has(a) || !realIds.has(b);
+  const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId): { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean } => {
     const known = knownEdgesById.get(sharedEdgeId(input.tableId, a, b));
     if (known !== undefined) return { edgeId: known.edgeId, reversed: a !== known.startNodeId };
-    if (realIds.has(a) && realIds.has(b)) return undefined;
     return edges.use(a, b);
   };
 
@@ -674,20 +685,13 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
 
-    const boundary: { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean }[] = [];
-    let hasUnrelatedRealPair = false;
-    for (let position = 0; position < cycle.length; position += 1) {
-      const use = boundaryUse(cycle[position]!, cycle[(position + 1) % cycle.length]!);
-      if (use === undefined) {
-        hasUnrelatedRealPair = true;
-        break;
-      }
-      boundary.push(use);
-    }
+    const hasUnrelatedRealPair = cycle.some((id, position) => !boundaryPermitted(id, cycle[(position + 1) % cycle.length]!));
     if (hasUnrelatedRealPair) {
       rejected.unrelatedRealPair += 1;
       return;
     }
+
+    const boundary = cycle.map((id, position) => boundaryUse(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
       const id = cycle[position];
       const resolved = resolvedPosition[vertexIndex];
