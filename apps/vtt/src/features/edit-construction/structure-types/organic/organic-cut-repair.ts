@@ -597,7 +597,7 @@ export interface OrganicCutRepairRuntime {
    * "which of these does *something else* already claim," a question the
    * engine answers once for the whole set exactly as cheaply as for one.
    */
-  classifyPoints(points: readonly (readonly [number, number])[]): readonly { readonly index: number }[];
+  classifyPoints(points: readonly (readonly [number, number])[]): readonly { readonly index: number; readonly surfaceType: string }[];
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   /**
    * `addPatch`, not `applyPatchReplacement`, and deliberately so now.
@@ -770,7 +770,23 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
 
   const lattice = buildCutRepairLattice(holeLoops, paintedNodes, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
-  const occupiedQuads = new Set(runtime.classifyPoints(centroids).map((hit) => hit.index));
+  const hits = runtime.classifyPoints(centroids);
+  const occupiedQuads = new Set(hits.map((hit) => hit.index));
+  // TEMP DIAGNOSTIC -- remove once the live "occupied inside the hole" source is confirmed.
+  // Not just *how many* occupied quads land inside the hole, but *what*
+  // classifyPoints says is already there -- the painter's own type
+  // (legitimate, the fill correctly stops at it) versus something else
+  // (terrain that should have been part of this same hole, or a stray
+  // overlap left by an earlier, unrelated stroke).
+  const holeRingsForDiagnostic = holeLoops.map((loop) => loop.map((p) => p.position));
+  const occupiedInsideHoleBySurfaceType = new Map<string, number>();
+  for (const hit of hits) {
+    const centroid = centroids[hit.index];
+    if (centroid === undefined) continue;
+    const [cx, cz] = centroid;
+    if (!insideHole(cx, cz, holeRingsForDiagnostic)) continue;
+    occupiedInsideHoleBySurfaceType.set(hit.surfaceType, (occupiedInsideHoleBySurfaceType.get(hit.surfaceType) ?? 0) + 1);
+  }
   console.warn(
     `[terrain-cut-repair] lattice ${JSON.stringify({
       causeId,
@@ -778,7 +794,8 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       quadCount: lattice.mesh.quads.length,
       vertexCount: lattice.mesh.vertices.length,
       occupiedQuadCount: occupiedQuads.size,
-      insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeLoops.map((loop) => loop.map((p) => p.position)))).length,
+      insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeRingsForDiagnostic)).length,
+      occupiedInsideHoleBySurfaceType: Object.fromEntries(occupiedInsideHoleBySurfaceType),
     })}`,
   );
 
