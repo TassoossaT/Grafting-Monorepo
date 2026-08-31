@@ -2,111 +2,86 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { repairOrganicCut } from "../src/features/edit-construction/structure-types/organic/organic-cut-repair.ts";
-import { sharedEdgeId } from "../src/features/edit-construction/topology/boundary-edges.ts";
 
 /**
- * The repair computes the ground it owes back rather than generating it:
- * the fill is *what the cut removed, minus what the painter now occupies*,
- * a polygon difference, registered as faces whose vertices weld onto the
- * real nodes they already sit on.
+ * The repair deletes what the cut consumed and closes the hole that leaves
+ * with the rim the engine reports -- it generates nothing.
  *
- * Every test here asserts against that contract -- what lands, where it
- * lands, and (the whole point of this repair) that the seam it leaves is
- * made of the painter's and the rim's own real node ids, not fresh ones
- * sitting coincidentally on top of them.
+ * That is the whole contract, and these tests are written against it rather
+ * than against any shape: what gets deleted, what scope the hole is looked
+ * for in, and that the face registered over it adds no node and no edge. The
+ * last one is the point -- ground that introduces no vertex cannot float, and
+ * ground that walks the neighbour's own edges cannot leave a seam.
  */
-
-/** A region's own outer loop, as the plain `{startNodeId}` cycle `repairOrganicCut` actually reads. */
-function outerLoopOf(nodeIds) {
-  return [nodeIds.map((id) => ({ startNodeId: id }))];
-}
 
 /**
- * One 4x4 terrain quad (T1) over (0,0)-(4,4), with a second, untouched one
- * (T2) beside it sharing the n2~n3 edge. T1 is what a cut consumes; T2 must
- * never be touched, and its rim is what the fill welds onto.
+ * A terrain quad (T1) the cut consumes, a surviving neighbour (T2), and a
+ * road (R1) laid across T1's ground. Once T1 is gone, the rim standing around
+ * that hole is T2's edge on one side and R1's contour on the other -- which
+ * is exactly why the repair has to name both sides.
  */
-function createFakeTerrainRuntime() {
+function createFakeRuntime() {
   const positions = new Map([
     ["n1", { x: 0, y: 0, z: 0 }],
     ["n2", { x: 4, y: 0, z: 0 }],
     ["n3", { x: 4, y: 0, z: 4 }],
     ["n4", { x: 0, y: 0, z: 4 }],
-    ["n5", { x: 8, y: 0, z: 0 }],
-    ["n6", { x: 8, y: 0, z: 4 }],
+    ["road-a", { x: 1, y: 0, z: 0 }],
+    ["road-b", { x: 3, y: 0, z: 0 }],
   ]);
 
   const regions = new Map([
-    [
-      "T1",
-      {
-        surfaceKey: ["@region", "T1"],
-        surfaceType: "terrain",
-        physical: true,
-        outerLoops: outerLoopOf(["n1", "n2", "n3", "n4"]),
-        nodes: ["n1", "n2", "n3", "n4"].map((id) => ({ id, position: positions.get(id) })),
-      },
-    ],
-    [
-      "T2",
-      {
-        surfaceKey: ["@region", "T2"],
-        surfaceType: "terrain",
-        physical: true,
-        outerLoops: outerLoopOf(["n2", "n5", "n6", "n3"]),
-        nodes: ["n2", "n5", "n6", "n3"].map((id) => ({ id, position: positions.get(id) })),
-      },
-    ],
+    ["T1", { surfaceKey: ["@region", "T1"], surfaceType: "terrain", physical: true, nodes: ["n1", "n2", "n3", "n4"] }],
+    ["T2", { surfaceKey: ["@region", "T2"], surfaceType: "terrain", physical: true, nodes: ["n2", "n3"] }],
+    ["R1", { surfaceKey: ["@region", "R1"], surfaceType: "path", physical: true, nodes: ["road-a", "road-b"] }],
   ]);
 
   const deleted = [];
   const addedPatches = [];
+  let scopeSeen;
+  let loopsFor = () => [];
   let refuseFirstRegion = false;
-
-  function deleteBySurfaceKey(surfaceKey) {
-    const key = surfaceKey.join("|");
-    for (const [id, region] of regions) {
-      if (region.surfaceKey.join("|") === key) {
-        regions.delete(id);
-        deleted.push(surfaceKey);
-      }
-    }
-  }
 
   const runtime = {
     getRegionTopology(surfaceKey) {
       const key = surfaceKey.join("|");
-      for (const region of regions.values()) if (region.surfaceKey.join("|") === key) return region;
+      for (const region of regions.values()) {
+        if (region.surfaceKey.join("|") !== key) continue;
+        return {
+          ...region,
+          outerLoops: [region.nodes.map((id) => ({ startNodeId: id }))],
+          holes: [],
+          nodes: region.nodes.map((id) => ({ id, position: positions.get(id) })),
+        };
+      }
       return undefined;
     },
     applyRegionEdit(ops) {
-      for (const op of ops) if (op.kind === "delete-region") deleteBySurfaceKey(op.surfaceKey);
+      for (const op of ops) {
+        if (op.kind !== "delete-region") continue;
+        const key = op.surfaceKey.join("|");
+        let found = false;
+        for (const [id, region] of regions) {
+          if (region.surfaceKey.join("|") !== key) continue;
+          regions.delete(id);
+          deleted.push(key);
+          found = true;
+        }
+        // The real session throws on a key it never stored.
+        if (!found) throw new Error(`unknown region ${key}`);
+      }
     },
     getUnfilledLoops(scope) {
-      // T1's own rim, exposed by its deletion. `boundary` carries each edge's
-      // own true direction, the shape the real engine returns.
-      const rim = ["n1", "n2", "n3", "n4"];
-      if (!rim.every((id) => scope.includes(id))) return [];
-      const boundary = rim.map((id, index) => {
-        const next = rim[(index + 1) % rim.length];
-        const [start] = id < next ? [id, next] : [next, id];
-        return { edgeId: sharedEdgeId("table-1", id, next), reversed: id !== start };
-      });
-      return [{ nodeIds: rim, boundary }];
-    },
-    getSnapshot() {
-      return { tableId: "table-1", map: { nodePositions: new Map([...positions].map(([id, position]) => [id, { position }])) } };
+      scopeSeen = [...scope];
+      return loopsFor(scope);
     },
     addPatch(patch) {
       addedPatches.push(patch);
       const createdSurfaceKeys = [];
       const skippedRegionIds = [];
       patch.regions.forEach((region, index) => {
-        if (refuseFirstRegion && index === 0) {
-          skippedRegionIds.push(region.regionId);
-          return;
-        }
-        createdSurfaceKeys.push(["@region", region.regionId]);
+        if (refuseFirstRegion && index === 0) skippedRegionIds.push(region.regionId);
+        else createdSurfaceKeys.push(["@region", region.regionId]);
       });
       return { createdSurfaceKeys, skippedRegionIds };
     },
@@ -114,431 +89,149 @@ function createFakeTerrainRuntime() {
 
   return {
     runtime,
-    positions,
     deleted,
     addedPatches,
+    scope: () => scopeSeen,
+    reportLoops: (loops) => { loopsFor = () => loops; },
     refuseFirstSubmittedRegion: () => { refuseFirstRegion = true; },
   };
 }
 
-/** Every node id the patch's own regions actually walk, in no particular order. */
-function boundaryNodeIds(patch) {
-  const byEdgeId = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
-  const ids = new Set();
-  for (const region of patch.regions) {
-    for (const use of region.boundary) {
-      const edge = byEdgeId.get(use.edgeId);
-      if (edge === undefined) continue;
-      ids.add(edge.startNodeId);
-      ids.add(edge.endNodeId);
-    }
-  }
-  return ids;
+/** The hole T1's removal leaves: T2's edge on one side, the road's contour on the other. */
+function holeAroundT1(neighbours, suffix = "") {
+  return {
+    nodeIds: ["n2", "n3", "road-b", `road-a${suffix}`],
+    centroid: { x: 2, y: 0, z: 2 },
+    boundary: [
+      { edgeId: "e:n2~n3", reversed: false },
+      { edgeId: "e:n3~road-b", reversed: true },
+      { edgeId: "e:road-b~road-a", reversed: false },
+      { edgeId: "e:road-a~n2", reversed: true },
+    ],
+    neighbours,
+  };
 }
 
-test("a cut with no painter geometry gives the whole consumed area back, welded onto its own rim", () => {
-  const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
+const TERRAIN_AROUND = [
+  { surfaceType: "terrain", physical: true },
+  { surfaceType: "terrain", physical: true },
+  { surfaceType: "path", physical: true },
+];
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
+test("the hole is closed with the rim the engine reports, adding no node and no edge", () => {
+  const context = createFakeRuntime();
+  const hole = holeAroundT1(TERRAIN_AROUND);
+  context.reportLoops([hole]);
 
-  assert.ok(rebuilt > 0, "the consumed area came back as at least one face");
-  assert.deepEqual(deleted.map((key) => key.join("|")), ["@region|T1"], "T2 is never deleted -- this repair never touches a survivor");
-  assert.equal(addedPatches.length, 1);
-
-  const [patch] = addedPatches;
-  // Nothing was subtracted, so the fill is exactly T1's own square -- and
-  // every one of its corners is T1's own real, still-live rim node, welded
-  // by id, not a fresh node sitting on top of one.
-  const used = boundaryNodeIds(patch);
-  assert.deepEqual([...used].sort(), ["n1", "n2", "n3", "n4"], "every corner welded onto the rim's own real id");
-});
-
-test("the painter's own area is subtracted, and the seam runs along the painter's own real nodes", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
-
-  // A band straight down the middle of T1, from x = 1 to x = 3, described by
-  // the painter's own four real contour nodes and the edges between them.
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-    ],
-  ];
-
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-
-  assert.ok(rebuilt > 0);
-  const [patch] = addedPatches;
-  // The band splits the square in two, so the ground comes back either side
-  // of the road and nowhere on it. The fill lands as a mesh, so what matters
-  // is the ground covered, never how many faces it took.
-  assert.ok(patch.regions.length > 1, "the fill is a mesh of faces, not one sheet");
-  assert.ok(patch.nodes.some((node) => node.position.x <= 1 + 1e-9), "ground came back left of the road");
-  assert.ok(patch.nodes.some((node) => node.position.x >= 3 - 1e-9), "ground came back right of the road");
-  assert.ok(
-    !patch.nodes.some((node) => node.position.x > 1 + 1e-9 && node.position.x < 3 - 1e-9),
-    "and none of it landed on the road itself",
+  const rebuilt = repairOrganicCut(
+    context.runtime,
+    { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [{ id: "road-a", position: { x: 1, y: 0, z: 0 } }] },
+    "cause-1",
   );
 
-  const used = boundaryNodeIds(patch);
-  // The seam: every one of the painter's own four contour nodes is walked by
-  // the fill's own boundary, by id. This is the whole point of the repair --
-  // a shared edge with the road, not a second node coincident with one.
-  for (const id of ["band-a", "band-b", "band-c", "band-d"]) {
-    assert.ok(used.has(id), `the fill's boundary walks the painter's own node ${id}`);
-  }
-  // And the rim is still welded on the far side of each piece.
-  for (const id of ["n1", "n2", "n3", "n4"]) {
-    assert.ok(used.has(id), `the fill's boundary still walks the rim's own node ${id}`);
-  }
-  assert.ok(!patch.nodes.some((node) => node.id.startsWith("terrain-cut:")), "nothing needed minting: every vertex sat on a real node already");
+  assert.equal(rebuilt, 1);
+  assert.deepEqual(context.deleted, ["@region|T1"], "only what the cut consumed; T2 and the road are untouched");
+
+  const [patch] = context.addedPatches;
+  // The whole point: nothing is generated. No vertex to float, no edge to
+  // sit coincident with one already there.
+  assert.deepEqual(patch.nodes, [], "the fill introduces no node");
+  assert.deepEqual(patch.edges, [], "the fill introduces no edge");
+  assert.equal(patch.regions.length, 1);
+  assert.deepEqual(
+    patch.regions[0].boundary,
+    hole.boundary,
+    "the face walks the engine's own oriented rim, verbatim -- direction included",
+  );
 });
 
-test("a shared edge is declared once and walked from both sides, never minted twice", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
+test("the hole is looked for in the consumed nodes and the painter's together", () => {
+  const context = createFakeRuntime();
+  context.reportLoops([holeAroundT1(TERRAIN_AROUND)]);
 
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-    ],
-  ];
+  repairOrganicCut(
+    context.runtime,
+    {
+      consumedSurfaceKeys: [["@region", "T1"]],
+      paintedNodes: [
+        { id: "road-a", position: { x: 1, y: 0, z: 0 } },
+        { id: "road-b", position: { x: 3, y: 0, z: 0 } },
+      ],
+    },
+    "cause-1",
+  );
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-  const [patch] = addedPatches;
-
-  // Every edge the patch declares is named after its own node pair, so two
-  // faces meeting on one line reference one edge rather than two coincident
-  // ones -- the free-versus-shared distinction the engine reads.
-  const declared = new Set(patch.edges.map((edge) => edge.edgeId));
-  assert.equal(declared.size, patch.edges.length, "no edge id is declared twice");
-  for (const edge of patch.edges) {
-    assert.equal(
-      edge.edgeId,
-      sharedEdgeId("table-1", edge.startNodeId, edge.endNodeId),
-      "every edge is named after the pair it runs between, so both sides derive the same name",
-    );
+  // An edge counts as free boundary only when *both* its nodes are named, and
+  // the hole's far side is the painter's own contour. Naming only the
+  // consumed terrain finds no closed loop -- the cut happens and nothing
+  // regenerates, which is exactly what the table saw.
+  const scope = context.scope();
+  for (const id of ["n1", "n2", "n3", "n4", "road-a", "road-b"]) {
+    assert.ok(scope.includes(id), `${id} bounds the hole and has to be in scope`);
   }
 });
 
-test("a fill vertex the difference itself minted borrows its height from the nearest real node", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
+test("the mended ground is made of whatever the faces around it are, not of the consumed type", () => {
+  const context = createFakeRuntime();
+  context.reportLoops([
+    holeAroundT1([
+      { surfaceType: "terrain-grass", physical: true },
+      { surfaceType: "terrain-grass", physical: true },
+      { surfaceType: "terrain", physical: true },
+    ]),
+  ]);
 
-  // A band crossing only part of T1, so the difference has to cut the
-  // painter's own edge somewhere no node stands -- those crossing points are
-  // the only vertices this fill ever mints.
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 2.5, z: -1 } },
-    { id: "band-b", position: { x: 3, y: 2.5, z: -1 } },
-    { id: "band-c", position: { x: 3, y: 2.5, z: 2 } },
-    { id: "band-d", position: { x: 1, y: 2.5, z: 2 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 2.5, z: -1 },
-      { x: 3, y: 2.5, z: -1 },
-      { x: 3, y: 2.5, z: 2 },
-      { x: 1, y: 2.5, z: 2 },
-    ],
-  ];
+  repairOrganicCut(context.runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-  const [patch] = addedPatches;
+  const [patch] = context.addedPatches;
+  assert.equal(
+    patch.regions[0].surfaceType,
+    "terrain-grass",
+    "a gap surrounded by grass comes back grass, whatever the consumed face happened to be",
+  );
+});
 
-  const minted = patch.nodes.filter((node) => node.id.startsWith("terrain-cut:"));
-  assert.ok(minted.length > 0, "the band's own ends cross T1's boundary where no node stands");
-  for (const node of minted) {
-    assert.ok(
-      node.position.y === 0 || node.position.y === 2.5,
-      `a minted vertex borrows a real neighbour's own height, got ${node.position.y}`,
-    );
-  }
+test("a hole the engine does not report is left alone", () => {
+  const context = createFakeRuntime();
+  context.reportLoops([]);
+
+  const rebuilt = repairOrganicCut(context.runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
+
+  assert.equal(rebuilt, 0);
+  assert.deepEqual(context.deleted, ["@region|T1"], "the cut still happened; only the mend found nothing to do");
+  assert.deepEqual(context.addedPatches, [], "and nothing was submitted rather than an empty patch");
 });
 
 test("consuming nothing is a no-op", () => {
-  const { runtime, deleted, addedPatches } = createFakeTerrainRuntime();
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [], paintedNodes: [], paintedLoops: [] }, "cause-1");
+  const context = createFakeRuntime();
+
+  const rebuilt = repairOrganicCut(context.runtime, { consumedSurfaceKeys: [], paintedNodes: [] }, "cause-1");
 
   assert.equal(rebuilt, 0);
-  assert.equal(deleted.length, 0);
-  assert.equal(addedPatches.length, 0);
+  assert.deepEqual(context.deleted, []);
+  assert.deepEqual(context.addedPatches, []);
 });
 
-test("a region the engine finds no room for is skipped, not fatal to the rest of the fill", () => {
-  const { runtime, addedPatches, refuseFirstSubmittedRegion } = createFakeTerrainRuntime();
-  refuseFirstSubmittedRegion();
+test("a face the engine refuses costs itself, never the rest of the mend", () => {
+  const context = createFakeRuntime();
+  context.reportLoops([holeAroundT1(TERRAIN_AROUND), holeAroundT1(TERRAIN_AROUND, "-second")]);
+  context.refuseFirstSubmittedRegion();
 
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-    ],
-  ];
+  const rebuilt = repairOrganicCut(context.runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [] }, "cause-1");
 
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-
-  const [patch] = addedPatches;
-  assert.ok(patch.regions.length > 1, "the fixture needs more than one face for this to test anything");
-  // The whole point of submitting a mesh rather than one sheet: an edge the
-  // engine refuses costs the faces that touch it, never the regeneration.
-  assert.equal(rebuilt, patch.regions.length - 1, "the refused face costs only itself; every other one still landed");
+  assert.equal(rebuilt, 1, "the refused face costs only itself; the other still landed");
 });
 
-test("the fill never reaches past the consumed area onto a surviving neighbour", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
+test("a region the engine no longer knows does not stop the others from being cut", () => {
+  const context = createFakeRuntime();
+  context.reportLoops([holeAroundT1(TERRAIN_AROUND)]);
 
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
-  const [patch] = addedPatches;
-
-  // T2 stands over x in [4, 8]; nothing this fill declares may sit past
-  // T1's own edge at x = 4, and neither of T2's own far corners may appear.
-  const used = boundaryNodeIds(patch);
-  assert.ok(!used.has("n5"), "n5 belongs only to T2's own untouched corner");
-  assert.ok(!used.has("n6"), "n6 belongs only to T2's own untouched corner");
-  for (const node of patch.nodes) {
-    assert.ok(node.position.x <= 4 + 1e-9, `a fill vertex reached past the consumed area at x=${node.position.x}`);
-  }
-});
-
-test("two adjoining painter faces are subtracted as the one area they really cover", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
-
-  // The shape a real stroke actually leaves: not one face, but a run of bands
-  // sharing an interior edge -- here at x = 2, where band-e~band-f is walked
-  // by both. Their union is the single band from x = 1 to x = 3; nothing of
-  // the road may survive as terrain, and the result may not depend on the
-  // order the two faces happen to be read in.
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-e", position: { x: 2, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-f", position: { x: 2, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 2, y: 0, z: 0 },
-      { x: 2, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-    ],
-    [
-      { x: 2, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 2, y: 0, z: 4 },
-    ],
-  ];
-
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-  const [patch] = addedPatches;
-
-  assert.ok(patch.regions.length > 1, "the road's whole width is subtracted, leaving ground either side of it");
-  for (const node of patch.nodes) {
-    assert.ok(
-      node.position.x <= 1 + 1e-9 || node.position.x >= 3 - 1e-9,
-      `a fill vertex landed inside the road at x=${node.position.x} -- terrain floating on the painter`,
-    );
-  }
-  // The seam welds onto the painter's own outer nodes, and never onto the
-  // interior pair the union dissolved: no fill face ends at x = 2.
-  const used = boundaryNodeIds(patch);
-  for (const id of ["band-a", "band-b", "band-c", "band-d"]) {
-    assert.ok(used.has(id), `the fill's boundary walks the painter's own node ${id}`);
-  }
-  for (const id of ["band-e", "band-f"]) {
-    assert.ok(!used.has(id), `${id} is interior to the road; no fill face may reach it`);
-  }
-});
-
-test("the same cut repaired twice lands the same fill, node for node", () => {
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-e", position: { x: 2, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-f", position: { x: 2, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-  ];
-  const loops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 2, y: 0, z: 0 },
-      { x: 2, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-    ],
-    [
-      { x: 2, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 2, y: 0, z: 4 },
-    ],
-  ];
-
-  // Same cut, same painter, only the order the painter's own faces were read
-  // in differs -- which is exactly what varies between runs at the table.
-  const run = (paintedLoops) => {
-    const { runtime, addedPatches } = createFakeTerrainRuntime();
-    repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-    return addedPatches[0];
-  };
-
-  const forwards = run(loops);
-  const backwards = run([...loops].reverse());
-  assert.equal(forwards.regions.length, backwards.regions.length, "the fill does not depend on face order");
-  assert.deepEqual(
-    [...boundaryNodeIds(forwards)].sort(),
-    [...boundaryNodeIds(backwards)].sort(),
-    "the same seam either way",
+  const rebuilt = repairOrganicCut(
+    context.runtime,
+    { consumedSurfaceKeys: [["@region", "T1"], ["@region", "gone"]], paintedNodes: [] },
+    "cause-1",
   );
-});
 
-/**
- * The rim as the engine reports it for a hole, walked in a chosen direction.
- *
- * `getUnfilledLoops` hands back each free edge already oriented for the face
- * that would fill the hole -- an edge with a face on one side has exactly one
- * free side, and a face walking it the other way is refused outright. Which
- * direction that is depends on how the neighbouring faces were wound, which
- * this repair neither controls nor may assume, so the fixture drives both.
- */
-function rimPrescription(rimWalk) {
-  return rimWalk.map((id, index) => {
-    const next = rimWalk[(index + 1) % rimWalk.length];
-    return { edgeId: sharedEdgeId("table-1", id, next), reversed: !(id < next) };
-  });
-}
-
-/** How the patch actually walks each edge it declares, by edge id. */
-function walkedDirections(patch) {
-  const walked = new Map();
-  for (const region of patch.regions) {
-    for (const use of region.boundary) walked.set(use.edgeId, use.reversed);
-  }
-  return walked;
-}
-
-for (const [name, rimWalk] of [
-  ["the direction the neighbours were wound in", ["n1", "n2", "n3", "n4"]],
-  ["the opposite direction, neighbours wound the other way", ["n4", "n3", "n2", "n1"]],
-]) {
-  test(`the fill is wound to meet its neighbours -- ${name}`, () => {
-    const { runtime, addedPatches } = createFakeTerrainRuntime();
-    runtime.getUnfilledLoops = (scope) => {
-      if (!rimWalk.every((id) => scope.includes(id))) return [];
-      return [{ nodeIds: rimWalk, boundary: rimPrescription(rimWalk) }];
-    };
-
-    repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
-    const [patch] = addedPatches;
-
-    // Every rim edge the fill touches has one free side, facing one way. The
-    // fill has to walk it that way or the engine refuses the face -- which is
-    // what silently dropped every repair: correct geometry, wrong winding.
-    const walked = walkedDirections(patch);
-    for (const use of rimPrescription(rimWalk)) {
-      assert.equal(
-        walked.get(use.edgeId),
-        use.reversed,
-        `the fill must walk ${use.edgeId} the way the engine says the hole's own filling face does`,
-      );
-    }
-  });
-}
-
-test("a node the clipper simplified away is put back, so the seam walks the neighbour's own edges", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
-
-  // The road's own left side runs 1,0 -> 1,2 -> 1,4: three nodes on one
-  // straight line, which is what a real contour looks like wherever it was
-  // densified. `polygon-clipping` returns the difference with the middle one
-  // simplified away -- same shape, and structurally fatal: the fill would
-  // declare one edge band-a~band-d where the road has band-a~band-mid and
-  // band-mid~band-d, sharing vertices with the road but no edge at all, with
-  // a T-junction standing at band-mid. That is the gap along the seam.
-  const paintedNodes = [
-    { id: "band-a", position: { x: 1, y: 0, z: 0 } },
-    { id: "band-b", position: { x: 3, y: 0, z: 0 } },
-    { id: "band-c", position: { x: 3, y: 0, z: 4 } },
-    { id: "band-d", position: { x: 1, y: 0, z: 4 } },
-    { id: "band-mid", position: { x: 1, y: 0, z: 2 } },
-  ];
-  const paintedLoops = [
-    [
-      { x: 1, y: 0, z: 0 },
-      { x: 3, y: 0, z: 0 },
-      { x: 3, y: 0, z: 4 },
-      { x: 1, y: 0, z: 4 },
-      { x: 1, y: 0, z: 2 },
-    ],
-  ];
-
-  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes, paintedLoops }, "cause-1");
-  const [patch] = addedPatches;
-
-  const used = boundaryNodeIds(patch);
-  assert.ok(used.has("band-mid"), "the fill walks the node the clipper dropped, not straight past it");
-
-  // And it walks it as the road does: both of the road's own edges there are
-  // declared by the fill, so each is one edge used twice, not two coincident
-  // ones. This is the difference between touching the road and joining it.
-  const declared = new Set(patch.edges.map((edge) => edge.edgeId));
-  for (const [from, to] of [["band-a", "band-mid"], ["band-mid", "band-d"]]) {
-    assert.ok(
-      declared.has(sharedEdgeId("table-1", from, to)),
-      `the fill declares the road's own edge ${from}~${to}`,
-    );
-  }
-  assert.ok(
-    !declared.has(sharedEdgeId("table-1", "band-a", "band-d")),
-    "and never the shortcut across it, which is an edge the road does not have",
-  );
-});
-
-test("a live node the loop query never reported is still welded onto, never minted over", () => {
-  const { runtime, addedPatches } = createFakeTerrainRuntime();
-  // The hole's rim is real and live either way; here the scoped loop query
-  // reports nothing about it. Deciding to mint a fresh node because a query
-  // stayed quiet is what leaves a fill sitting on top of the graph instead of
-  // in it: a second node at the exact position of one already there,
-  // coincident and connected to nothing.
-  runtime.getUnfilledLoops = () => [];
-
-  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
-
-  assert.ok(rebuilt > 0);
-  const [patch] = addedPatches;
-  assert.ok(
-    !patch.nodes.some((node) => node.id.startsWith("terrain-cut:")),
-    "every corner sat on a live node, so nothing was minted over one",
-  );
-  const used = boundaryNodeIds(patch);
-  for (const id of ["n1", "n2", "n3", "n4"]) {
-    assert.ok(used.has(id), `the fill walks the rim's own live node ${id}`);
-  }
+  assert.deepEqual(context.deleted, ["@region|T1"], "T1 still went, though the stale key threw");
+  assert.equal(rebuilt, 1, "and the hole it left was still mended");
 });

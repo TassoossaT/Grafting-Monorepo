@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { paintedGeometryOf } from "../src/composition/tabletop/tools/cut-repair-dispatch.ts";
+import { paintedNodesOf } from "../src/composition/tabletop/tools/cut-repair-dispatch.ts";
 
 /**
  * What the repair is *handed* has been the cause of every cut-repair failure
- * so far -- never its own arithmetic. This is that hand-off, on its own.
+ * so far, never its own arithmetic. This is that hand-off, on its own.
  *
- * The shape that broke it: a brush resubmits only its latest increment each
- * tick, so the stroke's own footprint coverage names a fraction of the road
- * it has drawn. Anything built from coverage alone subtracts a fraction of
- * the road from the hole, computes the fill over ground the road really
- * occupies, and gets the whole face refused by the engine for trying to take
- * a side of an edge the road already holds.
+ * The painter's nodes are the far side of the hole's scope: the engine treats
+ * an edge as free boundary only when both of its nodes are named, so a repair
+ * that names only its own consumed ground finds no closed loop at all and
+ * regenerates nothing. A brush resubmits only its latest increment each tick,
+ * so anything derived from the stroke's own footprint names a fraction of the
+ * road it has drawn -- which is why this reads every live face of the type.
  */
 
 /** A road of three bands laid end to end, of which a stroke's footprint would report only the last. */
@@ -40,9 +40,9 @@ function createRoadGraph() {
   }
 
   // One terrain face, so the filter has something of another type to reject.
-  positions.set("t1", { x: 20, y: 0, z: 20 });
-  positions.set("t2", { x: 24, y: 0, z: 20 });
-  positions.set("t3", { x: 24, y: 0, z: 24 });
+  for (const [id, position] of [["t1", { x: 20, y: 0, z: 20 }], ["t2", { x: 24, y: 0, z: 20 }], ["t3", { x: 24, y: 0, z: 24 }]]) {
+    positions.set(id, position);
+  }
   topologies.push({
     surfaceKey: ["@region", "T1"],
     surfaceType: "terrain",
@@ -61,38 +61,19 @@ function createRoadGraph() {
 }
 
 test("the painter's whole cloud is handed over, not only the increment a footprint would report", () => {
-  const runtime = createRoadGraph();
+  const painted = paintedNodesOf(createRoadGraph(), "path");
 
-  const { paintedNodes, paintedLoops } = paintedGeometryOf(runtime, "path");
-
-  // All three bands, not the one a brush tick would have named.
-  assert.equal(paintedLoops.length, 3, "every live face of the painter's type contributes its own ring");
-  assert.equal(paintedNodes.length, 12, "and every one of their nodes is a weld candidate");
-
-  // The rings reach the road's whole length: a fill computed against these
-  // cannot land on the far bands, which is exactly what it was doing.
-  const zs = paintedLoops.flat().map((point) => point.z);
-  assert.equal(Math.min(...zs), 0);
-  assert.equal(Math.max(...zs), 12, "the first band's ring alone would have stopped at z = 4");
+  assert.equal(painted.length, 12, "all three bands' nodes, not the four a brush tick would have named");
+  const zs = painted.map((node) => node.position.z);
+  assert.equal(Math.max(...zs), 12, "the newest band alone would have stopped at z = 4");
 });
 
 test("only the painter's own type is handed over", () => {
-  const runtime = createRoadGraph();
+  const painted = paintedNodesOf(createRoadGraph(), "path");
 
-  const { paintedNodes, paintedLoops } = paintedGeometryOf(runtime, "path");
-
-  assert.ok(!paintedNodes.some((node) => node.id.startsWith("t")), "terrain nodes are not the painter's own");
-  assert.ok(
-    !paintedLoops.some((ring) => ring.some((point) => point.x > 4)),
-    "the terrain face at x = 20 contributed nothing",
-  );
+  assert.ok(!painted.some((node) => node.id.startsWith("t")), "terrain nodes are not the painter's own");
 });
 
 test("a type with no faces on the table hands over nothing, rather than failing", () => {
-  const runtime = createRoadGraph();
-
-  const { paintedNodes, paintedLoops } = paintedGeometryOf(runtime, "wall");
-
-  assert.deepEqual(paintedNodes, []);
-  assert.deepEqual(paintedLoops, []);
+  assert.deepEqual(paintedNodesOf(createRoadGraph(), "wall"), []);
 });

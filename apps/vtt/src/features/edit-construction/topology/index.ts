@@ -16,3 +16,5 @@ export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
 export { simplifyClosedRing } from "./ring-simplify.ts";
 export { buildIrregularQuadGrid, buildTriangleHex, createRandom, ortho, pairTriangles, relax, weld as weldQuadGrid } from "./irregular-grid.ts";
 export type { Face, FaceMesh, Quad, QuadMesh, Random, Vec2 } from "./irregular-grid.ts";
+export { fillUnfilledLoops, matchTheGroundAround } from "./fill-unfilled-loops.ts";
+export type { UnfilledLoopFillRuntime } from "./fill-unfilled-loops.ts";

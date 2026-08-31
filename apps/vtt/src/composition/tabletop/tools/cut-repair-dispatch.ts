@@ -69,29 +69,16 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
  * Exported for its own test: every cut-repair failure so far has come from
  * what this function hands over, never from the repair's own arithmetic.
  */
-export function paintedGeometryOf(
+export function paintedNodesOf(
   runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
   paintedType: string,
-): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
-  const nodePositions = runtime.getSnapshot().map.nodePositions;
-  const topologies = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
-
+): CutFallout["paintedNodes"] {
   const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
-  const paintedLoops: ConstructionPosition[][] = [];
-  for (const topology of topologies) {
+  for (const topology of runtime.getAllRegionTopologies()) {
+    if (topology.surfaceType !== paintedType) continue;
     for (const node of topology.nodes) nodesById.set(node.id, node.position);
-    for (const loop of topology.outerLoops) {
-      const ring = loop
-        .map((edge) => nodePositions.get(edge.startNodeId)?.position)
-        .filter((position): position is ConstructionPosition => position !== undefined);
-      if (ring.length >= 3) paintedLoops.push(ring);
-    }
   }
-
-  return {
-    paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
-    paintedLoops,
-  };
+  return [...nodesById].map(([id, position]) => ({ id, position }));
 }
 
 /**
@@ -163,13 +150,13 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   // its own node ids, for free -- filtered here to the painter's own type
   // instead of thrown away, which is what starved a repair's own weld
   // candidates down to only the newest few nodes.
-  const { paintedNodes, paintedLoops } = paintedGeometryOf(runtime, paintedType);
+  const paintedNodes = paintedNodesOf(runtime, paintedType);
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, consumedSurfaceKeys }, causeId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }

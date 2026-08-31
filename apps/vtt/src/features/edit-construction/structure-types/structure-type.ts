@@ -142,43 +142,24 @@ export type CutRepair =
  */
 export interface CutFallout {
   /**
-   * Every node belonging to the painter's own type wherever this stroke's
-   * footprint reaches, real graph nodes with real ids -- not a bare outline
-   * of numbers, and not only the handful *this one submission* happened to
-   * (re)declare. A continuous brush stroke resubmits only its latest
-   * increment each tick; most of an established cloud's own boundary near a
-   * given hole was welded in from an earlier tick, so limiting this to the
-   * current submission's own new nodes starved a repair's weld candidates
-   * down to almost nothing. This is what lets a repair *weld*:
-   * `ConstructionSessionPort.addPatch`'s own node handling already skips
-   * minting a node whose id already exists and reuses the live one instead,
-   * so a covered type's regenerated boundary that reuses one of these ids
-   * outright becomes the same node as the painter's, sharing a real edge
-   * with it -- not a second node merely sitting at the same position, which
-   * is what "coincident, never connected" describes and this exists to
-   * avoid.
+   * Every live node of the painter's own type, real graph nodes with real
+   * ids -- not a bare outline of numbers, and not only the handful *this one
+   * submission* happened to (re)declare.
+   *
+   * A repair needs these to name the far side of the hole. The engine
+   * considers an edge free-boundary only when **both** of its nodes are in
+   * the scope it was asked about, and the hole a cut leaves is bounded by the
+   * covered type's surviving rim on one side and the painter's own contour on
+   * the other -- so a repair naming only its own nodes finds no closed loop
+   * at all, and the cut visibly happens while nothing regenerates.
+   *
+   * Every live node of the type, not the current submission's own: a brush
+   * resubmits only its latest increment each tick, and most of an
+   * established cloud's boundary near a given hole was registered several
+   * ticks ago and never named again. Scoping to the increment leaves most of
+   * the hole's far side unnamed, which is the same failure by a slower route.
    */
   readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
-  /**
-   * The area the painter's own type actually occupies wherever this stroke's
-   * footprint reaches: one closed ring of real node positions per face it
-   * owns, each in that face's own boundary order, straight from the engine.
-   *
-   * A repair subtracts this from what the cut removed to know what ground it
-   * still owes back, so this has to describe the painter's *faces*. It
-   * deliberately is not a set of loose edges for the repair to walk into
-   * rings itself: the painter's edge set spans many adjoining band regions
-   * that share interior edges, so its nodes have degree three and up, and any
-   * walk over that graph picks an arbitrary path rather than an outline -- a
-   * different one from run to run, since it follows whatever order the
-   * regions happened to be visited in. Subtracting an arbitrary path leaves
-   * covered ground standing exactly where the painter really is (a face
-   * floating on the road) and leaves it differently each time, which is
-   * precisely the instability this shape exists to remove. A face's own
-   * boundary loop is already an ordered cycle the engine maintains; there is
-   * nothing here to reconstruct.
-   */
-  readonly paintedLoops: readonly (readonly ConstructionPosition[])[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }

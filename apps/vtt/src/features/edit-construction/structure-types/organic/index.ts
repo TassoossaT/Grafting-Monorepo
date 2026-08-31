@@ -7,7 +7,4 @@ export {
   terrainInteractionOver,
 } from "./organic-structure.ts";
 export { repairOrganicCut } from "./organic-cut-repair.ts";
-export type {
-  CutRepairWeldCandidate,
-  OrganicCutRepairRuntime,
-} from "./organic-cut-repair.ts";
+export type { OrganicCutRepairRuntime } from "./organic-cut-repair.ts";
