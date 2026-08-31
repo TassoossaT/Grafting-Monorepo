@@ -12,7 +12,7 @@ import type {
 } from "@/ports";
 
 import type { AtomicEditOp } from "../../orchestration/atomic-edit.ts";
-import { createBoundaryEdges } from "../../topology/boundary-edges.ts";
+import { createBoundaryEdges, sharedEdgeId } from "../../topology/boundary-edges.ts";
 import type { CutFallout } from "../structure-type.ts";
 
 /**
@@ -132,6 +132,23 @@ function areaOfRings(rings: readonly (readonly ConstructionPosition[])[]): Multi
  * (`"refuse-when-full"`: a boundary with a face on both sides is interior
  * ground, and terrain is never created above anything) instead of the
  * painter's `"private-when-full"`.
+ *
+ * **Which way round the face is wound is not this side's to choose.** An
+ * edge that already has a face on one side has exactly one free side left,
+ * facing one way, and a face that walks it the other way is refused outright
+ * -- the whole fill with it, since it lands as one face. Picking a winding
+ * from the ring's own signed area (which is all a polygon has to offer) is a
+ * coin flip against whatever convention the neighbouring faces were built
+ * with, and it landed on the wrong side: every fill was refused, on a real
+ * shared edge, with correct geometry.
+ *
+ * So the direction is read rather than chosen. `prescribed` is the engine's
+ * own answer -- `getUnfilledLoops` reports each free edge already oriented
+ * for the face that would fill that hole -- and the fill is wound to agree
+ * with it wherever the two speak about the same edge. That holds no matter
+ * what convention the rim, the painter, or a future third type were built
+ * with, because it is never this module's convention being applied: it is
+ * the neighbour's own, reported by the graph that holds both.
  */
 function buildFillPatch(
   tableId: string,
@@ -140,6 +157,7 @@ function buildFillPatch(
   physical: boolean,
   shapes: MultiPolygon,
   candidates: readonly CutRepairWeldCandidate[],
+  prescribed: ReadonlyMap<ConstructionEdgeId, boolean>,
 ): ConstructionPatch | undefined {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const nodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
@@ -166,33 +184,65 @@ function buildFillPatch(
     };
   })();
 
-  const regions: ConstructionPatchRegion[] = [];
-  shapes.forEach((shape, shapeIndex) => {
-    const [outerRing, ...holeRings] = shape;
-    if (outerRing === undefined || Math.abs(signedRingArea(outerRing)) < MIN_SHAPE_AREA) return;
+  const idsFor = (ring: Ring, isHole: boolean): readonly ConstructionNodeId[] => {
+    const ids = openRing(ensureUpwardWinding(ring, isHole)).map(([x, z]) => weldOrMint(x, z));
+    // A ring that folded back onto the same node twice is not a face --
+    // `polygon-clipping` can leave one at a self-touching pinch point.
+    return new Set(ids).size === ids.length ? ids : [];
+  };
 
-    const idsFor = (ring: Ring, isHole: boolean): readonly ConstructionNodeId[] => {
-      const ids = openRing(ensureUpwardWinding(ring, isHole)).map(([x, z]) => weldOrMint(x, z));
-      // A ring that folded back onto the same node twice is not a face --
-      // `polygon-clipping` can leave one at a self-touching pinch point.
-      return new Set(ids).size === ids.length ? ids : [];
+  // Welded first, wound second: the weld is what makes a ring's edges
+  // nameable at all, and only a named edge can be looked up in `prescribed`.
+  interface PreparedShape {
+    readonly shapeIndex: number;
+    readonly outer: readonly ConstructionNodeId[];
+    readonly holes: readonly (readonly ConstructionNodeId[])[];
+  }
+  const prepared: readonly PreparedShape[] = shapes
+    .map((shape, shapeIndex): PreparedShape | undefined => {
+      const [outerRing, ...holeRings] = shape;
+      if (outerRing === undefined || Math.abs(signedRingArea(outerRing)) < MIN_SHAPE_AREA) return undefined;
+      const outer = idsFor(outerRing, false);
+      if (outer.length < 3) return undefined;
+      const holes = holeRings.map((holeRing) => idsFor(holeRing, true)).filter((ids) => ids.length >= 3);
+      return { shapeIndex, outer, holes };
+    })
+    .filter((entry): entry is PreparedShape => entry !== undefined);
+
+  // One vote per edge the engine has already spoken about. The tally is
+  // taken across every ring of every shape rather than per ring: a winding
+  // is one convention for the whole fill, and a single ring may touch no
+  // prescribed edge at all (an opening entirely inside the hole) while its
+  // neighbours settle the question conclusively.
+  let net = 0;
+  for (const { outer, holes } of prepared) {
+    for (const ids of [outer, ...holes]) {
+      for (let index = 0; index < ids.length; index += 1) {
+        const from = ids[index]!;
+        const to = ids[(index + 1) % ids.length]!;
+        const wanted = prescribed.get(sharedEdgeId(tableId, from, to));
+        if (wanted === undefined) continue;
+        net += wanted === !(from < to) ? 1 : -1;
+      }
+    }
+  }
+  // Reversing every ring reverses the face's whole traversal, outer and
+  // openings alike -- a face is wound one way or the other, never in halves.
+  const walk = (ids: readonly ConstructionNodeId[]): readonly ConstructionNodeId[] => (net < 0 ? [...ids].reverse() : ids);
+
+  const regions: ConstructionPatchRegion[] = prepared.map(({ shapeIndex, outer, holes }) => {
+    const asLoop = (ids: readonly ConstructionNodeId[]) => {
+      const walked = walk(ids);
+      return walked.map((id, index) => edges.use(id, walked[(index + 1) % walked.length]!));
     };
-
-    const outerIds = idsFor(outerRing, false);
-    if (outerIds.length < 3) return;
-    const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
-    const holes = holeRings
-      .map((holeRing) => idsFor(holeRing, true))
-      .filter((ids) => ids.length >= 3)
-      .map((ids) => ids.map((id, index) => edges.use(id, ids[(index + 1) % ids.length]!)));
-
-    regions.push({
+    const holeLoops = holes.map(asLoop);
+    return {
       regionId: `terrain-cut:${causeId}:fill-${shapeIndex}`,
-      boundary,
-      ...(holes.length > 0 ? { holes } : {}),
+      boundary: asLoop(outer),
+      ...(holeLoops.length > 0 ? { holes: holeLoops } : {}),
       surfaceType,
       physical,
-    });
+    };
   });
 
   if (regions.length === 0) return undefined;
@@ -324,11 +374,17 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const loops = runtime.getUnfilledLoops([...preScope]);
   const snapshot = runtime.getSnapshot();
   const liveRimCandidates: CutRepairWeldCandidate[] = [];
+  // Two different things are read off the same answer: *where* to weld, and
+  // *which way round* to wind. The nodes give the first; `boundary` -- each
+  // free edge already oriented for the face that would fill this hole -- is
+  // the engine's own answer to the second, which is not this side's to guess.
+  const prescribed = new Map<ConstructionEdgeId, boolean>();
   for (const loop of loops) {
     for (const nodeId of loop.nodeIds) {
       const position = snapshot.map.nodePositions.get(nodeId)?.position;
       if (position !== undefined) liveRimCandidates.push({ id: nodeId, position });
     }
+    for (const use of loop.boundary) prescribed.set(use.edgeId, use.reversed);
   }
 
   const deleted = areaOfRings(consumedRings);
@@ -336,7 +392,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const fill: MultiPolygon = painted.length === 0 ? deleted : polygonClipping.difference(deleted, painted);
 
   const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes];
-  const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates);
+  const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates, prescribed);
 
   // TEMP DIAGNOSTIC -- remove once the live fill is confirmed. A single
   // string, not a (tag, object) pair: copying the console as plain text
@@ -349,6 +405,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       rimCandidates: liveRimCandidates.length,
       paintedNodes: fallout.paintedNodes.length,
       paintedLoops: fallout.paintedLoops.length,
+      prescribedEdges: prescribed.size,
       paintedShapes: painted.length,
       deletedShapes: deleted.length,
       fillShapes: fill.length,

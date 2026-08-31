@@ -409,3 +409,56 @@ test("the same cut repaired twice lands the same fill, node for node", () => {
     "the same seam either way",
   );
 });
+
+/**
+ * The rim as the engine reports it for a hole, walked in a chosen direction.
+ *
+ * `getUnfilledLoops` hands back each free edge already oriented for the face
+ * that would fill the hole -- an edge with a face on one side has exactly one
+ * free side, and a face walking it the other way is refused outright. Which
+ * direction that is depends on how the neighbouring faces were wound, which
+ * this repair neither controls nor may assume, so the fixture drives both.
+ */
+function rimPrescription(rimWalk) {
+  return rimWalk.map((id, index) => {
+    const next = rimWalk[(index + 1) % rimWalk.length];
+    return { edgeId: sharedEdgeId("table-1", id, next), reversed: !(id < next) };
+  });
+}
+
+/** How the patch actually walks each edge it declares, by edge id. */
+function walkedDirections(patch) {
+  const walked = new Map();
+  for (const region of patch.regions) {
+    for (const use of region.boundary) walked.set(use.edgeId, use.reversed);
+  }
+  return walked;
+}
+
+for (const [name, rimWalk] of [
+  ["the direction the neighbours were wound in", ["n1", "n2", "n3", "n4"]],
+  ["the opposite direction, neighbours wound the other way", ["n4", "n3", "n2", "n1"]],
+]) {
+  test(`the fill is wound to meet its neighbours -- ${name}`, () => {
+    const { runtime, addedPatches } = createFakeTerrainRuntime();
+    runtime.getUnfilledLoops = (scope) => {
+      if (!rimWalk.every((id) => scope.includes(id))) return [];
+      return [{ nodeIds: rimWalk, boundary: rimPrescription(rimWalk) }];
+    };
+
+    repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
+    const [patch] = addedPatches;
+
+    // Every rim edge the fill touches has one free side, facing one way. The
+    // fill has to walk it that way or the engine refuses the face -- which is
+    // what silently dropped every repair: correct geometry, wrong winding.
+    const walked = walkedDirections(patch);
+    for (const use of rimPrescription(rimWalk)) {
+      assert.equal(
+        walked.get(use.edgeId),
+        use.reversed,
+        `the fill must walk ${use.edgeId} the way the engine says the hole's own filling face does`,
+      );
+    }
+  });
+}
