@@ -758,7 +758,22 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
  */
 export interface OrganicCutRepairRuntime {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
-  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly { readonly nodeIds: readonly ConstructionNodeId[] }[];
+  /**
+   * `boundary` is each edge's *true* stored direction, already resolved
+   * opposite the sole existing user -- "registrable verbatim" per its own
+   * doc (`ConstructionUnfilledLoop`). `repairOrganicCut` trusts it verbatim
+   * for the same reason {@link densifyPaintedEdges} trusts its own fragments'
+   * true direction instead of `sharedEdgeId`'s lexicographic guess: a rim
+   * edge is exactly as likely to have been created start-after-end (a prior
+   * `insert-vertex` split, or any edge whose two node ids simply don't sort
+   * the way they were declared) as a painted one, and guessing wrong here
+   * hands the engine the *same* direction its one existing neighbour already
+   * holds -- which reads as "no room," not as the missing weld it actually is.
+   */
+  getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly {
+    readonly nodeIds: readonly ConstructionNodeId[];
+    readonly boundary: readonly { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean }[];
+  }[];
   getSnapshot(): {
     readonly tableId: string;
     readonly map: { readonly nodePositions: ReadonlyMap<ConstructionNodeId, { readonly position: ConstructionPosition }> };
@@ -962,19 +977,30 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // from non-adjacent stretches of the same (or a different) unfilled loop
   // could still land on adjacent lattice corners purely by proximity, the
   // same failure mode this whole `knownEdges` mechanism exists to close for
-  // the painter's own densified edges. Direction here is always the plain
-  // canonical one (`a < b`): a rim edge is never split by this repair, so it
-  // is exactly what `edges.use()` would have computed anyway -- this only
-  // ever adds a permission, never a direction override.
+  // the painter's own densified edges.
+  //
+  // Direction is `loop.boundary`'s own -- never recomputed from
+  // `sharedEdgeId`'s lexicographic guess. The engine already resolved each
+  // edge's true stored direction, opposite whichever single neighbour still
+  // holds it (`ConstructionUnfilledLoop.boundary`'s own doc: "registrable
+  // verbatim"). A rim edge is no less likely than a painted one to have been
+  // created start-after-end -- an earlier `insert-vertex` split, or simply
+  // two node ids that do not happen to sort the way they were declared -- and
+  // guessing wrong here hands the fill's own new quad the *same* direction
+  // its one existing neighbour already holds, which the engine reads as "no
+  // room" (`boundary_has_room`, `region_editing.rs`) instead of the missing
+  // weld it actually is.
   const rimEdgeKnowledge: CutRepairKnownEdge[] = [];
   for (const loop of loops) {
     const ids = loop.nodeIds;
     for (let i = 0; i < ids.length; i += 1) {
-      const a = ids[i]!;
-      const b = ids[(i + 1) % ids.length]!;
-      if (a === b) continue;
-      const [start, end] = a < b ? [a, b] : [b, a];
-      rimEdgeKnowledge.push({ edgeId: sharedEdgeId(snapshot.tableId, start, end), startNodeId: start, endNodeId: end });
+      const from = ids[i]!;
+      const to = ids[(i + 1) % ids.length]!;
+      if (from === to) continue;
+      const use = loop.boundary[i];
+      if (use === undefined) continue;
+      const [startNodeId, endNodeId] = use.reversed ? [to, from] : [from, to];
+      rimEdgeKnowledge.push({ edgeId: use.edgeId, startNodeId, endNodeId });
     }
     for (const nodeId of ids) {
       const position = positionOf(nodeId);

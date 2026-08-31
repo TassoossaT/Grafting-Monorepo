@@ -416,10 +416,18 @@ function createFakeTerrainRuntime() {
     getUnfilledLoops(scope) {
       // T1's own full rim -- the real closed loop its deletion exposes on
       // its own side, even where T2 still stands on the other side of the
-      // shared n2~n3 edge.
+      // shared n2~n3 edge. `boundary` is each edge's own true direction, the
+      // same shape the real engine returns ("registrable verbatim") -- here
+      // it happens to agree with plain canonical order, but repairOrganicCut
+      // must read it from `boundary`, never recompute it.
       const rim = ["n1", "n2", "n3", "n4"];
       if (!rim.every((id) => scope.includes(id))) return [];
-      return [{ nodeIds: rim }];
+      const boundary = rim.map((id, index) => {
+        const next = rim[(index + 1) % rim.length];
+        const [start] = id < next ? [id, next] : [next, id];
+        return { edgeId: sharedEdgeId("table-1", id, next), reversed: id !== start };
+      });
+      return [{ nodeIds: rim, boundary }];
     },
     getSnapshot() {
       return { tableId: "table-1", map: { nodePositions: new Map([...positions].map(([id, position]) => [id, { position }])) } };
