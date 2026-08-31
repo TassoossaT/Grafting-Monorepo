@@ -552,13 +552,17 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
     .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
   // TEMP DIAGNOSTIC -- remove once the live weld/occupancy bug is found.
-  console.warn("[terrain-cut-repair] entry", {
-    causeId,
-    consumedRequested: fallout.consumedSurfaceKeys.length,
-    consumedResolved: consumedTopologies.length,
-    paintedNodeCount: fallout.paintedNodes.length,
-    paintedBounds: boundsOf(fallout.paintedNodes.map((n) => n.position)),
-  });
+  // A single string, not a (tag, object) pair: copying the console as plain
+  // text collapses an object argument to the literal word "Object".
+  console.warn(
+    `[terrain-cut-repair] entry ${JSON.stringify({
+      causeId,
+      consumedRequested: fallout.consumedSurfaceKeys.length,
+      consumedResolved: consumedTopologies.length,
+      paintedNodeCount: fallout.paintedNodes.length,
+      paintedBounds: boundsOf(fallout.paintedNodes.map((n) => n.position)),
+    })}`,
+  );
   if (consumedTopologies.length === 0) return 0;
   const surfaceType = consumedTopologies[0]!.surfaceType;
   const physical = consumedTopologies[0]!.physical;
@@ -591,12 +595,14 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   }
 
   const loops = runtime.getUnfilledLoops([...preScope]);
-  console.warn("[terrain-cut-repair] getUnfilledLoops", {
-    causeId,
-    preScopeSize: preScope.size,
-    loopCount: loops.length,
-    loopSizes: loops.map((loop) => loop.nodeIds.length),
-  });
+  console.warn(
+    `[terrain-cut-repair] getUnfilledLoops ${JSON.stringify({
+      causeId,
+      preScopeSize: preScope.size,
+      loopCount: loops.length,
+      loopSizes: loops.map((loop) => loop.nodeIds.length),
+    })}`,
+  );
   if (loops.length === 0) return 0;
 
   const snapshot = runtime.getSnapshot();
@@ -617,14 +623,16 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const lattice = buildCutRepairLattice(holeLoops, fallout.paintedNodes, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
   const occupiedQuads = new Set(runtime.classifyPoints(centroids).map((hit) => hit.index));
-  console.warn("[terrain-cut-repair] lattice", {
-    causeId,
-    holeBounds: boundsOf(holeLoops.flat().map((p) => p.position)),
-    quadCount: lattice.mesh.quads.length,
-    vertexCount: lattice.mesh.vertices.length,
-    occupiedQuadCount: occupiedQuads.size,
-    insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeLoops.map((loop) => loop.map((p) => p.position)))).length,
-  });
+  console.warn(
+    `[terrain-cut-repair] lattice ${JSON.stringify({
+      causeId,
+      holeBounds: boundsOf(holeLoops.flat().map((p) => p.position)),
+      quadCount: lattice.mesh.quads.length,
+      vertexCount: lattice.mesh.vertices.length,
+      occupiedQuadCount: occupiedQuads.size,
+      insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeLoops.map((loop) => loop.map((p) => p.position)))).length,
+    })}`,
+  );
 
   const patch = planOrganicCutRepair({
     tableId: snapshot.tableId,
@@ -648,17 +656,19 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       else if (paintedIds.has(node.id)) weldedPainted += 1;
       else minted += 1;
     }
-    console.warn("[terrain-cut-repair] plan", {
-      causeId,
-      regionCount: patch.regions.length,
-      nodeCount: patch.nodes.length,
-      weldedRim,
-      weldedPainted,
-      minted,
-      patchBounds: boundsOf(patch.nodes.map((n) => n.position)),
-    });
+    console.warn(
+      `[terrain-cut-repair] plan ${JSON.stringify({
+        causeId,
+        regionCount: patch.regions.length,
+        nodeCount: patch.nodes.length,
+        weldedRim,
+        weldedPainted,
+        minted,
+        patchBounds: boundsOf(patch.nodes.map((n) => n.position)),
+      })}`,
+    );
   } else {
-    console.warn("[terrain-cut-repair] plan produced nothing", { causeId });
+    console.warn(`[terrain-cut-repair] plan produced nothing ${JSON.stringify({ causeId })}`);
   }
   if (patch === undefined) return 0;
 
@@ -672,12 +682,14 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // itself only throws for something outside "this face had no room."
   try {
     const outcome = runtime.addPatch(patch, "local", causeId);
-    console.warn("[terrain-cut-repair] addPatch outcome", {
-      causeId,
-      created: outcome.createdSurfaceKeys.length,
-      skipped: outcome.skippedRegionIds.length,
-      skippedIds: outcome.skippedRegionIds,
-    });
+    console.warn(
+      `[terrain-cut-repair] addPatch outcome ${JSON.stringify({
+        causeId,
+        created: outcome.createdSurfaceKeys.length,
+        skipped: outcome.skippedRegionIds.length,
+        skippedIds: outcome.skippedRegionIds,
+      })}`,
+    );
     return outcome.createdSurfaceKeys.length;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
