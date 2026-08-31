@@ -700,28 +700,37 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   for (const topology of consumedTopologies) for (const node of topology.nodes) preScope.add(node.id);
   if (preScope.size === 0) return 0;
 
-  // Not wrapped for the delete itself -- the WASM mutation this performs
-  // either lands or throws before anything below runs. It *is* wrapped here
-  // because the runtime's own post-mutation step re-fetches a mesh for
-  // every affected region to keep rendering in sync, and one batch commonly
-  // deletes several consumed regions that border each other -- a region
-  // this same call is also deleting can legitimately be reported as
-  // "affected" by its sibling's removal, and by the time that mesh refetch
-  // runs, it is *also* already gone, throwing `unknown analytic region` for
-  // a region that was never meant to survive this call anyway. The graph
-  // mutation itself already committed by then; only that redundant refetch
-  // failed, so the repair continues into the fill below rather than
-  // aborting before it ever attempted one -- exactly the "terrain deletes
-  // but nothing reconnects" symptom this was traced from.
-  try {
-    runtime.applyRegionEdit(
-      fallout.consumedSurfaceKeys.map((surfaceKey): AtomicEditOp => ({ kind: "delete-region", surfaceKey })),
-      "local",
-      causeId,
-    );
-  } catch {
-    // Deliberately swallowed -- see the comment above.
+  // One `applyRegionEdit` call *per region*, not one batched call naming
+  // every consumed region at once. Each call is wrapped for the same reason
+  // as before -- the runtime's own post-mutation step re-fetches a mesh for
+  // every affected region to keep rendering in sync, and a region can
+  // legitimately be reported "affected" by its own sibling's removal in the
+  // same batch, throwing `unknown analytic region` for a region that was
+  // never meant to survive this call anyway. What changed: a *batched* call
+  // that threw for that reason silently left every region *after* the
+  // throwing one still standing -- undeleted, not just unrendered -- which
+  // then showed up later as "occupied" ground `classifyPoints` correctly
+  // reported, starving the fill of most of its own hole. One call per
+  // region means a throw only ever costs that one region's own delete, and
+  // the loop below still tries every one of the rest.
+  const failedDeletes: ConstructionSurfaceKey[] = [];
+  for (const surfaceKey of fallout.consumedSurfaceKeys) {
+    try {
+      runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey }], "local", causeId);
+    } catch {
+      failedDeletes.push(surfaceKey);
+    }
   }
+  // TEMP DIAGNOSTIC -- remove once the live occupied-quad dropout is confirmed fixed.
+  const stillStanding = fallout.consumedSurfaceKeys.filter((surfaceKey) => runtime.getRegionTopology(surfaceKey) !== undefined);
+  console.warn(
+    `[terrain-cut-repair] delete ${JSON.stringify({
+      causeId,
+      requested: fallout.consumedSurfaceKeys.length,
+      threw: failedDeletes.length,
+      stillStanding: stillStanding.length,
+    })}`,
+  );
 
   const loops = runtime.getUnfilledLoops([...preScope]);
   console.warn(
