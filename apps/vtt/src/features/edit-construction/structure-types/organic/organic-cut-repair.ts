@@ -1138,16 +1138,34 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     // TEMP DIAGNOSTIC -- remove once the live OpenLoop mismatch is found.
-    // The full boundary of every submitted region (edgeId + reversed, not
-    // just the regionId string), plus the known-edge table this call built
-    // -- OpenLoop names two node ids with no reliable way to trace which
-    // region or which edge they came from just from the regionId strings.
+    // A full dump of every region's boundary (up to 20+ quads deep) is what
+    // got truncated mid-object the last time this fired -- OpenLoop's own
+    // message already names the exact two node ids involved
+    // (`ContourError::OpenLoop`, `contour.rs`), so this pulls those two out
+    // of the message itself and dumps only what actually touches them: the
+    // one or two regions whose own corner cycle names either one, and every
+    // known-edge entry (rim *and* painted -- the earlier dump only ever
+    // included the painted half) with either as an endpoint. Small enough to
+    // never get cut off, and points straight at the mismatch instead of
+    // requiring a search through everything submitted.
+    const openLoopNodes = /expected next edge to start at (.+), found (.+)$/.exec(message);
+    const named = openLoopNodes !== null ? [openLoopNodes[1]!, openLoopNodes[2]!] : [];
+    const touchedRegions =
+      named.length === 0
+        ? patch.regions.map((region) => ({ regionId: region.regionId }))
+        : patch.regions
+            .filter((region) => region.regionId.split("|").some((id) => named.includes(id)))
+            .map((region) => ({ regionId: region.regionId, boundary: region.boundary }));
+    const touchedKnownEdges = [...rimEdgeKnowledge, ...densified.edges].filter(
+      (known) => named.length === 0 || named.includes(known.startNodeId) || named.includes(known.endNodeId),
+    );
     console.warn(
-      `[terrain-cut-repair] addPatch failed, full boundary dump ${JSON.stringify({
+      `[terrain-cut-repair] addPatch failed, targeted boundary dump ${JSON.stringify({
         causeId,
         message,
-        knownEdges: densified.edges,
-        regions: patch.regions.map((region) => ({ regionId: region.regionId, boundary: region.boundary })),
+        named,
+        touchedKnownEdges,
+        touchedRegions,
       })}`,
     );
     throw new Error(
