@@ -620,6 +620,38 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // engine's own `OpenLoop` refusal. Two real ids may only share a boundary
   // edge here when a known fragment (or rim-adjacency) entry says so.
   const realIds = new Set(candidates.map((candidate) => candidate.id));
+  // A weld between a rim id and a painted id is the *entire point* of this
+  // repair -- that edge has never existed before and never appears in
+  // `knownEdges`, on purpose. Requiring every real-to-real pair to already be
+  // a known edge (an earlier version of this guard did exactly that)
+  // rejected every one of those genuinely new welds along with the bug it
+  // was meant to catch, and could empty a plan entirely. What actually needs
+  // catching is narrower: two real ids that already belong to the *same*
+  // known chain (one densified painted run, or one rim loop) landing
+  // adjacent in a quad without being the chain's own neighbours -- the
+  // original edge that used to run directly between them was the one
+  // `densifyPaintedEdges` (or a rim loop) split up, so no known edge names
+  // this specific pair, yet a real one, once, genuinely did. A pair from two
+  // *different* chains (or two ids with no known chain at all) has no such
+  // history to contradict -- there is nothing they could be skipping over --
+  // so it is always a legitimate new connection.
+  //
+  // `componentOf` answers this with union-find over `input.knownEdges`:
+  // reject only when both ids are real, no direct known edge names this
+  // pair, and they already sit in the same connected component of that
+  // known-edge graph.
+  const parent = new Map<ConstructionNodeId, ConstructionNodeId>();
+  const componentOf = (id: ConstructionNodeId): ConstructionNodeId => {
+    let root = parent.get(id) ?? id;
+    while (root !== (parent.get(root) ?? root)) root = parent.get(root)!;
+    parent.set(id, root);
+    return root;
+  };
+  for (const known of input.knownEdges) {
+    const rootA = componentOf(known.startNodeId);
+    const rootB = componentOf(known.endNodeId);
+    if (rootA !== rootB) parent.set(rootA, rootB);
+  }
   // Pure -- no `edges.use()` call, so no side effect on `edges`'s own
   // closure state. Must run over a quad's *entire* cycle before any of that
   // quad's sides are committed via `boundaryUse` below: `edges.use()`
@@ -631,7 +663,10 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // `edges.all()` that named a node `patch.nodes` never declared (the
   // engine's own "edge references unknown node" refusal).
   const boundaryPermitted = (a: ConstructionNodeId, b: ConstructionNodeId): boolean =>
-    knownEdgesById.has(sharedEdgeId(input.tableId, a, b)) || !realIds.has(a) || !realIds.has(b);
+    knownEdgesById.has(sharedEdgeId(input.tableId, a, b)) ||
+    !realIds.has(a) ||
+    !realIds.has(b) ||
+    componentOf(a) !== componentOf(b);
   const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId): { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean } => {
     const known = knownEdgesById.get(sharedEdgeId(input.tableId, a, b));
     if (known !== undefined) return { edgeId: known.edgeId, reversed: a !== known.startNodeId };
