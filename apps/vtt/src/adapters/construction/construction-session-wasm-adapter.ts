@@ -225,8 +225,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
           regions: patch.regions,
         }),
       ),
-    ) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    ) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
@@ -334,8 +334,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       outline: request.outline,
       boundary: request.boundary,
       patch,
-    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome {
@@ -356,8 +356,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
         edges: request.graphPatch.edges,
       },
       patch,
-    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   undoRegionOverlay(operationId: string): void {

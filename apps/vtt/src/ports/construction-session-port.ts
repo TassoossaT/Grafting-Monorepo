@@ -152,6 +152,14 @@ export interface ConstructionPatchOutcome extends RegionEditOutcome {
    * stroke.
    */
   readonly skippedRegionIds: readonly string[];
+  /**
+   * Why each of `skippedRegionIds` was refused, in the same order and naming
+   * the edge that decided it. A refusal is not one thing -- an edge already
+   * interior, an edge whose one free side faces the other way, a loop that
+   * never closes -- and those want opposite fixes, so a caller reading only
+   * the ids is left to guess.
+   */
+  readonly skippedRegionReasons: readonly string[];
 }
 
 /** A closed loop of boundary with no face on it -- a hole in the surface. */

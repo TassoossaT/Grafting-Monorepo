@@ -1153,6 +1153,18 @@ pub struct AddPatchResponse {
     /// refusing the whole stroke over one such face is what used to make
     /// painting near existing terrain do nothing at all.
     pub skipped_region_ids: Vec<String>,
+    /// Why each of `skipped_region_ids` was refused, in the same order and
+    /// naming the edge that decided it.
+    ///
+    /// A refusal is not one thing: a boundary can be turned away because an
+    /// edge it wants is already interior, because the one free side of an
+    /// edge faces the other way (the caller wound its loop against a
+    /// neighbour it meant to meet), or because the loop is malformed and
+    /// never closes. Those want opposite fixes, and a bare list of ids
+    /// cannot tell them apart -- a caller reading one was left to guess,
+    /// which is exactly how a repair that regenerated correct geometry could
+    /// be refused wholesale with nothing to say why.
+    pub skipped_region_reasons: Vec<String>,
 }
 
 /// Registers a whole generated patch -- nodes, **shared** boundary edges,
@@ -1214,6 +1226,7 @@ pub fn apply_add_patch(
 
     let mut created_surface_keys = Vec::new();
     let mut skipped_region_ids = Vec::new();
+    let mut skipped_region_reasons = Vec::new();
     let mut orphaned: Vec<ContourEdgeId> = Vec::new();
     for region in request.regions {
         let id = parse_region_id(&region.region_id)?;
@@ -1237,8 +1250,8 @@ pub fn apply_add_patch(
         // Every loop the face declares has to fit, inner ones included: an
         // opening consumes a use on its rim exactly the way an outer
         // boundary does.
-        let has_room = boundary_has_room(topology, &boundary)
-            && holes.iter().all(|hole| boundary_has_room(topology, hole));
+        let no_room = boundary_refusal(topology, &boundary)
+            .or_else(|| holes.iter().find_map(|hole| boundary_refusal(topology, hole)));
         // A malformed loop (`add_region`'s own `validate_loop`, e.g. a caller
         // whose declared boundary does not actually close) is *also* just
         // this one region's problem, never the rest of the batch's --
@@ -1253,12 +1266,16 @@ pub fn apply_add_patch(
         // reading that as "nothing landed" (this file's own `addPatch`
         // contract) was then wrong, and the next call built on graph state
         // this one had already partially, silently mutated.
-        let added = has_room
-            && topology
+        let refusal = match no_room {
+            Some(reason) => Some(reason),
+            None => topology
                 .add_region(id.clone(), vec![boundary], holes)
-                .is_ok();
-        if !added {
+                .err()
+                .map(|error| format!("malformed loop: {error}")),
+        };
+        if let Some(reason) = refusal {
             skipped_region_ids.push(id.as_str().to_owned());
+            skipped_region_reasons.push(format!("{}: {reason}", id.as_str()));
             orphaned.extend(region_edges);
             continue;
         }
@@ -1291,11 +1308,12 @@ pub fn apply_add_patch(
             ..RegionEditOutcomeDto::default()
         },
         skipped_region_ids,
+        skipped_region_reasons,
     })
 }
 
-/// Whether every edge of `boundary` can still take one more use in the
-/// direction this loop walks it.
+/// Why `boundary` cannot take one more use in the direction it walks --
+/// `None` when it can, so a face may be registered on it.
 ///
 /// An edge already used twice is interior -- it has a face on both sides --
 /// and an edge used once in the same direction this loop wants is one whose
@@ -1304,12 +1322,27 @@ pub fn apply_add_patch(
 /// "terrain is never created above anything" rule arriving at the level
 /// where it is precise. Checked against the live topology, so faces earlier
 /// in this same batch count.
-fn boundary_has_room(topology: &ContourTopology, boundary: &ContourLoop) -> bool {
-    boundary
-        .iter()
-        .all(|use_| match topology.usage_count(use_.edge()) {
-            0 => true,
-            1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
-            _ => false,
-        })
+fn boundary_refusal(topology: &ContourTopology, boundary: &ContourLoop) -> Option<String> {
+    for use_ in boundary.iter() {
+        let count = topology.usage_count(use_.edge());
+        let edge = use_.edge().as_str();
+        match count {
+            0 => continue,
+            1 => {
+                if topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()) {
+                    continue;
+                }
+                return Some(format!(
+                    "no room on edge {edge} -- its one free side faces the other way; this loop walks it reversed={}, and so does the face already on it",
+                    use_.is_reversed()
+                ));
+            }
+            _ => {
+                return Some(format!(
+                    "no room on edge {edge} -- already used {count} times, so it is interior ground"
+                ))
+            }
+        }
+    }
+    None
 }

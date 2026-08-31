@@ -233,7 +233,11 @@ export interface OrganicCutRepairRuntime {
    * out of what the cut removed. A region the engine still finds no room for
    * costs only itself, never the rest of the batch.
    */
-  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): { readonly createdSurfaceKeys: readonly unknown[]; readonly skippedRegionIds: readonly string[] };
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): {
+    readonly createdSurfaceKeys: readonly unknown[];
+    readonly skippedRegionIds: readonly string[];
+    readonly skippedRegionReasons?: readonly string[];
+  };
 }
 
 /**
@@ -364,6 +368,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       created: outcome.createdSurfaceKeys.length,
       skipped: outcome.skippedRegionIds.length,
       skippedIds: outcome.skippedRegionIds,
+      why: outcome.skippedRegionReasons ?? [],
     })}`,
   );
   return outcome.createdSurfaceKeys.length;
