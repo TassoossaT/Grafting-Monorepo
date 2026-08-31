@@ -678,7 +678,28 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // `regions`, so a real session's own numbers say which check is actually
   // responsible instead of another guess.
   const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0, unrelatedRealPair: 0 };
-  let salvagedCorners = 0;
+
+  // Pass 1 -- read-only w.r.t. which lattice vertex resolves onto which real
+  // id (only `resolveVertex`'s own weld-vs-mint memoization runs). Every
+  // quad that survives occupancy/hole-membership/geometry gets recorded, and
+  // every cyclic pair of *this* quad's corners that fails `boundaryPermitted`
+  // marks its own *lattice vertex index* (not the quad) for demotion.
+  //
+  // Demoting per vertex index, once, globally, rather than substituting a
+  // fresh id locally within whichever one quad happened to trip the check
+  // first: a lattice vertex is shared by every quad around it, and a
+  // *local* substitute (an earlier version of this function used exactly
+  // that) left the other, untouched quads at that same corner still
+  // resolving the original real id -- correct for each quad in isolation,
+  // but the fill's own interior quads then no longer shared a node with
+  // their own immediate neighbours at that point. Every quad in the fill
+  // still looked individually valid, yet the *fill* rendered as a field of
+  // disconnected mini-quads rather than one continuous patch -- exactly the
+  // "miniquadrados" a live session reported. Demoting the vertex itself,
+  // before any region is built, keeps every quad that touches it consistent
+  // with every other.
+  const survivors: { readonly quad: readonly number[]; readonly cycle: readonly ConstructionNodeId[] }[] = [];
+  const demote = new Set<number>();
 
   input.lattice.mesh.quads.forEach((quad, quadIndex) => {
     if (input.occupiedQuads.has(quadIndex)) {
@@ -721,50 +742,48 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
 
-    // A corner welded onto a real id with no known connection to its cyclic
-    // neighbour cannot share that boundary edge with it -- but it is the
-    // *id*, not the position, that makes the pair illegal. Dropping the
-    // whole quad over one bad corner turns a graph-level nuance into a
-    // visible hole in the mesh, when the position that corner already
-    // resolved to (the hole's own rim or the painter's own contour, exactly
-    // where it belongs) is not itself wrong at all. Substituting a freshly
-    // minted id at that *same* resolved position -- never a new position --
-    // makes the pair legal (a minted id is never in `realIds`) with nothing
-    // visibly moving; the only cost is that this one quad's corner may no
-    // longer be the *same* node id a neighbouring quad resolved for the same
-    // lattice vertex, a coincident-but-separate pair of nodes at one point
-    // instead of one shared node -- invisible, and far better than a hole.
-    // Bounded by `cycle.length`: each pass fixes at least the one offending
-    // pair `findIndex` just found, so at most one substitution per corner.
-    let salvaged = cycle;
-    for (let pass = 0; pass < salvaged.length; pass += 1) {
-      const badIndex = salvaged.findIndex((id, position) => !boundaryPermitted(id, salvaged[(position + 1) % salvaged.length]!));
-      if (badIndex === -1) break;
-      const freshId: ConstructionNodeId = `terrain-cut:${input.causeId}:v${mintedCounter}`;
-      mintedCounter += 1;
-      salvaged = salvaged.map((id, position) => (position === badIndex ? freshId : id));
+    for (let position = 0; position < cycle.length; position += 1) {
+      const a = cycle[position]!;
+      const b = cycle[(position + 1) % cycle.length]!;
+      if (!boundaryPermitted(a, b)) demote.add(quad[position]!);
     }
-    if (salvaged.some((id, position) => !boundaryPermitted(id, salvaged[(position + 1) % salvaged.length]!))) {
-      rejected.unrelatedRealPair += 1;
-      return;
-    }
-    if (salvaged !== cycle) salvagedCorners += 1;
+    survivors.push({ quad, cycle });
+  });
 
-    const boundary = salvaged.map((id, position) => boundaryUse(id, salvaged[(position + 1) % salvaged.length]!));
+  // Applied once, globally: every demoted vertex index gets exactly one
+  // fresh id, at the position it already resolved to (never a new
+  // position), reused by every surviving quad that touches it.
+  for (const vertexIndex of demote) {
+    const freshId: ConstructionNodeId = `terrain-cut:${input.causeId}:v${mintedCounter}`;
+    mintedCounter += 1;
+    resolvedId[vertexIndex] = freshId;
+  }
+
+  // Pass 2 -- rebuild each surviving quad's cycle from the now-demotion-
+  // corrected cache and commit. `boundaryPermitted` is re-checked as a
+  // backstop, not because demotion is expected to leave anything unresolved.
+  for (const { quad, cycle: originalCycle } of survivors) {
+    const cycle = demote.size === 0 ? originalCycle : quad.map((vertexIndex) => resolvedId[vertexIndex]!);
+    if (cycle.some((id, position) => !boundaryPermitted(id, cycle[(position + 1) % cycle.length]!))) {
+      rejected.unrelatedRealPair += 1;
+      continue;
+    }
+
+    const boundary = cycle.map((id, position) => boundaryUse(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
-      const id = salvaged[position];
+      const id = cycle[position];
       const resolved = resolvedPosition[vertexIndex];
       if (id !== undefined && resolved !== undefined) nodePositions.set(id, resolved);
     });
-    regions.push({ regionId: salvaged.join("|"), boundary, surfaceType: input.surfaceType, physical: input.physical });
-  });
+    regions.push({ regionId: cycle.join("|"), boundary, surfaceType: input.surfaceType, physical: input.physical });
+  }
 
   console.warn(
     `[terrain-cut-repair] planOrganicCutRepair rejections ${JSON.stringify({
       causeId: input.causeId,
       totalQuads: input.lattice.mesh.quads.length,
       kept: regions.length,
-      salvagedCorners,
+      demotedVertices: demote.size,
       ...rejected,
     })}`,
   );

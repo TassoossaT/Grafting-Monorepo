@@ -288,6 +288,86 @@ test("planOrganicCutRepair salvages a quad with one unvouched real pair instead 
   assert.deepEqual(substitute.position, { x: 0, y: 0, z: 1 }, "the substitute sits exactly where corner-d resolved, not a new position");
 });
 
+test("planOrganicCutRepair demotes a shared corner globally, so two quads meeting at it still share a node", () => {
+  // Two quads sharing one lattice edge (vertex 1 <-> vertex 2). Both real
+  // candidates welded there ("shared-a", "shared-b") sit in one connected
+  // component with no direct known edge between them -- an unvouched pair,
+  // same as the single-quad test above, but this time BOTH quads touch it.
+  // A per-quad-local substitute (an earlier version of this function used
+  // one) would let quad A mint its own fresh id for vertex 1 while quad B,
+  // built from the same untouched cache, still resolved vertex 1 to the
+  // original real id -- the two quads then disagreeing about what vertex 1
+  // even is, exactly the "field of disconnected mini-quads" a live session
+  // reported. A global demotion must leave both quads agreeing.
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 0, y: 0 }, // 0 -> p0
+        { x: 1, y: 0 }, // 1 -> shared-a
+        { x: 1, y: 1 }, // 2 -> shared-b
+        { x: 0, y: 1 }, // 3 -> p3
+        { x: 2, y: 0 }, // 4 -> p4
+        { x: 2, y: 1 }, // 5 -> p5
+      ],
+      quads: [
+        [0, 1, 2, 3],
+        [1, 4, 5, 2],
+      ],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "p0", position: { x: 0, y: 0, z: 0 } },
+    { id: "shared-a", position: { x: 1, y: 0, z: 0 } },
+    { id: "shared-b", position: { x: 1, y: 0, z: 1 } },
+    { id: "p3", position: { x: 0, y: 0, z: 1 } },
+    { id: "p4", position: { x: 2, y: 0, z: 0 } },
+    { id: "p5", position: { x: 2, y: 0, z: 1 } },
+  ];
+  const holeShapeRings = [
+    [
+      { x: 0, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 },
+      { x: 2, y: 0, z: 1 },
+      { x: 0, y: 0, z: 1 },
+    ],
+  ];
+  const canonical = (a, b) => {
+    const [start, end] = a < b ? [a, b] : [b, a];
+    return { edgeId: sharedEdgeId("table-1", a, b), startNodeId: start, endNodeId: end };
+  };
+  // p0, shared-a, shared-b and p3 all end up in one connected component
+  // (p0~shared-a, shared-b~p3, p0~p3) -- but nothing ever vouches for
+  // shared-a~shared-b directly.
+  const knownEdges = [canonical("p0", "shared-a"), canonical("shared-b", "p3"), canonical("p0", "p3")];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-shared",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    knownEdges,
+    occupiedQuads: new Set(),
+  });
+
+  assert.notEqual(patch, undefined);
+  assert.equal(patch.regions.length, 2, "both quads survive");
+
+  const [regionA, regionB] = patch.regions;
+  // Quad A's own corner for vertex 1 (position 1 in its cycle) and quad B's
+  // own corner for vertex 1 (position 0 in its cycle) must be the identical
+  // substitute id -- not each quad minting its own.
+  const cornerAt = (region, index) => region.regionId.split("|")[index];
+  assert.equal(cornerAt(regionA, 1), cornerAt(regionB, 0), "both quads agree on the same substitute id for the shared corner");
+  assert.equal(cornerAt(regionA, 2), cornerAt(regionB, 3), "and likewise for the other shared corner");
+  assert.ok(!patch.nodes.some((node) => node.id === "shared-a"), "the unvouched real id was demoted, not kept, in every quad that touched it");
+  assert.ok(!patch.nodes.some((node) => node.id === "shared-b"));
+});
+
 // ---------------------------------------------------------------------------
 // densifyPaintedEdges -- subdividing a sparse painted edge into real anchors
 // ---------------------------------------------------------------------------
