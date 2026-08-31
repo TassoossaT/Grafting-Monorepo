@@ -260,13 +260,52 @@ export function buildCutRepairLattice(
   const triangles = buildTriangleHex({ trianglesPerSide, triangleSide: LATTICE_TRIANGLE_SIDE });
   const preRelax = weldQuadGrid(ortho(pairTriangles(triangles, random)));
 
-  const pinCandidates: CutRepairWeldCandidate[] = [...holeLoops.flat(), ...paintedNodes];
-  const noExclusions: ReadonlySet<ConstructionNodeId> = new Set();
-  const pins = new Map<number, Vec2>();
+  // `paintedNodes` is the painter's *whole* patch (a long road's every
+  // node), so it is filtered to this hole's own neighbourhood before
+  // pairing -- otherwise every one of a long road's thousand-odd contour
+  // samples would be tested against every lattice vertex.
+  const reach = radius + PIN_RADIUS;
+  const nearby = (point: ConstructionPosition): boolean =>
+    Math.abs(point.x - centerX) <= reach && Math.abs(point.z - centerZ) <= reach;
+  const pinCandidates: CutRepairWeldCandidate[] = [...holeLoops.flat(), ...paintedNodes.filter((node) => nearby(node.position))];
+
+  // A stable, distance-sorted greedy match, not "whichever vertex happens
+  // to be resolved first claims the nearest candidate": two *different*
+  // lattice vertices can both be nearest the very same real candidate
+  // whenever the lattice is finer than that candidate's own spacing (a
+  // sparse rim, or a coarsely-sampled contour), and index-order pinning let
+  // the truly-closest vertex lose that candidate to a merely-nearby one
+  // that happened to come first. Sorting every (vertex, candidate) pair
+  // within reach by distance and assigning greedily gives each candidate to
+  // its actual nearest vertex, and each vertex at most one candidate, before
+  // any weaker pairing gets a chance to claim either. Without this, a
+  // vertex that lost its candidate to a same-position duplicate had nothing
+  // else within a near-zero final-weld tolerance to match and minted its
+  // own id right where a real one already stood -- coincident, never
+  // connected, the very failure mode real graph welding exists to avoid,
+  // reintroduced one layer up.
+  const pairs: { readonly vertexIndex: number; readonly candidate: CutRepairWeldCandidate; readonly distanceSq: number }[] = [];
   preRelax.vertices.forEach((local, vertexIndex) => {
-    const nearest = nearestWithin(centerX + local.x, centerZ + local.y, pinCandidates, noExclusions, PIN_RADIUS);
-    if (nearest !== undefined) pins.set(vertexIndex, { x: nearest.position.x - centerX, y: nearest.position.z - centerZ });
+    const x = centerX + local.x;
+    const z = centerZ + local.y;
+    for (const candidate of pinCandidates) {
+      const dx = candidate.position.x - x;
+      const dz = candidate.position.z - z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq <= PIN_RADIUS * PIN_RADIUS) pairs.push({ vertexIndex, candidate, distanceSq });
+    }
   });
+  pairs.sort((a, b) => a.distanceSq - b.distanceSq);
+
+  const claimedVertices = new Set<number>();
+  const claimedCandidates = new Set<ConstructionNodeId>();
+  const pins = new Map<number, Vec2>();
+  for (const pair of pairs) {
+    if (claimedVertices.has(pair.vertexIndex) || claimedCandidates.has(pair.candidate.id)) continue;
+    claimedVertices.add(pair.vertexIndex);
+    claimedCandidates.add(pair.candidate.id);
+    pins.set(pair.vertexIndex, { x: pair.candidate.position.x - centerX, y: pair.candidate.position.z - centerZ });
+  }
 
   const mesh = relax(preRelax, { pinnedTargets: pins });
   return { mesh, originX: centerX, originZ: centerZ };
