@@ -137,15 +137,21 @@ export type CutRepair =
  */
 export interface CutFallout {
   /**
-   * Every node the painter's own patch actually registered, real graph
-   * nodes with real ids -- not a bare outline of numbers. This is what lets
-   * a repair *weld*: `ConstructionSessionPort.addPatch`'s own node handling
-   * already skips minting a node whose id already exists and reuses the
-   * live one instead, so a covered type's regenerated boundary that reuses
-   * one of these ids outright becomes the same node as the painter's,
-   * sharing a real edge with it -- not a second node merely sitting at the
-   * same position, which is what "coincident, never connected" describes
-   * and this exists to avoid.
+   * Every node belonging to the painter's own type wherever this stroke's
+   * footprint reaches, real graph nodes with real ids -- not a bare outline
+   * of numbers, and not only the handful *this one submission* happened to
+   * (re)declare. A continuous brush stroke resubmits only its latest
+   * increment each tick; most of an established cloud's own boundary near a
+   * given hole was welded in from an earlier tick, so limiting this to the
+   * current submission's own new nodes starved a repair's weld candidates
+   * down to almost nothing. This is what lets a repair *weld*:
+   * `ConstructionSessionPort.addPatch`'s own node handling already skips
+   * minting a node whose id already exists and reuses the live one instead,
+   * so a covered type's regenerated boundary that reuses one of these ids
+   * outright becomes the same node as the painter's, sharing a real edge
+   * with it -- not a second node merely sitting at the same position, which
+   * is what "coincident, never connected" describes and this exists to
+   * avoid.
    */
   readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */

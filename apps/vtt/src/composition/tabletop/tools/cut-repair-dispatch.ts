@@ -1,7 +1,7 @@
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
-import type { ApplyPatchReplacementRequest, ConstructionSurfaceKey } from "@/ports";
+import type { ApplyPatchReplacementRequest, ConstructionNodeId, ConstructionPosition, ConstructionSurfaceKey } from "@/ports";
 import {
   resolveCoverage,
   resolveCutRepair,
@@ -72,8 +72,10 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   const paintedType = request.patch.regions[0]?.surfaceType;
   if (paintedType === undefined) return;
 
+  const coverage = runtime.getFootprintCoverage(outline);
+
   const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
-  for (const entry of resolveCoverage(paintedType, runtime.getFootprintCoverage(outline))) {
+  for (const entry of resolveCoverage(paintedType, coverage)) {
     if (entry.interaction.kind !== "cut" || entry.covered.coverage !== "centroid") continue;
     if (resolveCutRepair(entry.covered.surfaceType).kind !== "regenerate") continue;
     const keys = consumedByType.get(entry.covered.surfaceType) ?? [];
@@ -82,11 +84,36 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   }
   if (consumedByType.size === 0) return;
 
+  // Every node belonging to the painter's *own* type wherever this
+  // footprint reaches -- not `request.patch.nodes`, which is only what
+  // *this one submission* happened to (re)declare. A continuous brush
+  // stroke resubmits only its latest increment each tick (a handful of
+  // nodes), while `outline` -- the same footprint `getFootprintCoverage`
+  // above already resolved -- reaches the stroke's whole accumulated area;
+  // most of an established path's own boundary near a hole was welded in
+  // from an earlier tick and never named again. `getFootprintCoverage`
+  // already reports every region of *any* type the footprint touches, with
+  // its own node ids, for free -- filtered here to the painter's own type
+  // instead of thrown away, which is what starved a repair's own weld
+  // candidates down to only the newest few nodes.
+  const nodePositions = runtime.getSnapshot().map.nodePositions;
+  const paintedNodeIds = new Set<ConstructionNodeId>();
+  for (const entry of coverage) {
+    if (entry.surfaceType !== paintedType) continue;
+    for (const nodeId of entry.nodeIds) paintedNodeIds.add(nodeId);
+  }
+  const paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [...paintedNodeIds]
+    .map((id) => {
+      const position = nodePositions.get(id)?.position;
+      return position === undefined ? undefined : { id, position };
+    })
+    .filter((node): node is { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } => node !== undefined);
+
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes: request.patch.nodes, consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, consumedSurfaceKeys }, causeId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }
