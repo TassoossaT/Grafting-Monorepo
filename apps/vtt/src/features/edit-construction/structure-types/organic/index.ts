@@ -6,20 +6,9 @@ export {
   pathInteractionOver,
   terrainInteractionOver,
 } from "./organic-structure.ts";
-export {
-  buildCutRepairLattice,
-  cutRepairQuadCentroids,
-  insertLatticeEdgePins,
-  planOrganicCutRepair,
-  repairOrganicCut,
-} from "./organic-cut-repair.ts";
+export { repairOrganicCut } from "./organic-cut-repair.ts";
 export type {
-  CutRepairKnownEdge,
   CutRepairPaintedEdge,
   CutRepairWeldCandidate,
-  InsertedLatticeEdgePins,
-  OrganicCutRepairLattice,
-  OrganicCutRepairLatticeEdgePin,
-  OrganicCutRepairPlanInput,
   OrganicCutRepairRuntime,
 } from "./organic-cut-repair.ts";
