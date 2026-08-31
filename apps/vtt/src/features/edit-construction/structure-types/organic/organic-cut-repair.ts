@@ -237,6 +237,30 @@ export interface CutRepairPaintedEdge {
 }
 
 /**
+ * One real, already-live edge whose *true* direction (as the engine
+ * actually stored it) is known and must be trusted verbatim -- never
+ * recomputed from `sharedEdgeId`'s own lexicographic convention. See
+ * {@link densifyPaintedEdges}'s own doc for why: `insertVertex` preserves
+ * the *original* edge's own direction for both fragments it creates, which
+ * has nothing to do with where the freshly minted node's own id happens to
+ * sort as a string, so a fragment's true `startNodeId`/`endNodeId` can
+ * disagree with what fresh lexicographic comparison would assume.
+ */
+export interface CutRepairKnownEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+}
+
+/** What {@link densifyPaintedEdges} both created and learned. */
+export interface DensifiedPaintedEdges {
+  /** The freshly minted anchor nodes -- new weld candidates. */
+  readonly nodes: readonly CutRepairWeldCandidate[];
+  /** Every fragment edge actually created, with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc. */
+  readonly edges: readonly CutRepairKnownEdge[];
+}
+
+/**
  * Splits every one of the painter's own edges that is both near this hole
  * and long enough to matter into real interior anchor nodes, spaced
  * {@link ANCHOR_SPACING} apart -- deliberately *tighter* than one lattice
@@ -256,6 +280,21 @@ export interface CutRepairPaintedEdge {
  * actual shared vertex. Subdividing the edge itself, not just reading its
  * existing nodes, is what turns the whole run into real anchor points.
  *
+ * **Every fragment's own true direction is tracked, not assumed.**
+ * `insert_vertex` (`region_edit.rs`) splits by calling the *original* edge's
+ * own `.split()`, which keeps that original's own direction for both
+ * fragments (`first: original.start -> newNode`, `second: newNode ->
+ * original.end`) -- nothing to do with where the freshly minted node's own
+ * id happens to sort as a string. `sharedEdgeId`'s canonical (lexicographic)
+ * naming convention only agrees with an edge's *actual* stored direction
+ * for an edge created the normal way, through `createBoundaryEdges.use()`
+ * itself; a split fragment can easily disagree, and `planOrganicCutRepair`'s
+ * own fresh `edges.use()` call for reusing it would then submit the wrong
+ * `reversed` flag, which is exactly what an engine-side `loop is not
+ * closed` refusal traced back to. Every fragment's *true* start/end is
+ * returned in {@link DensifiedPaintedEdges.edges} so the caller can bypass
+ * that fresh recomputation for these specific ids.
+ *
  * Mutates the live graph (through `runtime.applyRegionEdit`); returns the
  * freshly created nodes so the caller can fold them into its own weld
  * candidates immediately, in the same call.
@@ -267,8 +306,8 @@ export function densifyPaintedEdges(
   holeShapeRings: readonly (readonly ConstructionPosition[])[],
   paintedNodes: readonly CutRepairWeldCandidate[],
   paintedEdges: readonly CutRepairPaintedEdge[],
-): readonly CutRepairWeldCandidate[] {
-  if (paintedEdges.length === 0) return [];
+): DensifiedPaintedEdges {
+  if (paintedEdges.length === 0) return { nodes: [], edges: [] };
   const positionOf = new Map(paintedNodes.map((node) => [node.id, node.position]));
   const { centerX, centerZ, radius } = boundsOf(holeShapeRings.flat());
   const reach = radius + PIN_RADIUS;
@@ -276,6 +315,7 @@ export function densifyPaintedEdges(
     Math.abs(position.x - centerX) <= reach && Math.abs(position.z - centerZ) <= reach;
 
   const created: CutRepairWeldCandidate[] = [];
+  const knownEdges: CutRepairKnownEdge[] = [];
   let mintedCounter = 0;
 
   for (const edge of paintedEdges) {
@@ -307,11 +347,19 @@ export function densifyPaintedEdges(
         causeId,
       );
       created.push({ id: nodeId, position });
+      // `first` (fromId -> nodeId) is now a permanent fragment -- only the
+      // remainder (`second`) gets split further, next iteration or as the
+      // loop's own final segment below.
+      knownEdges.push({ edgeId: firstEdgeId, startNodeId: fromId, endNodeId: nodeId });
       currentEdgeId = secondEdgeId;
       fromId = nodeId;
     }
+    // The final remainder, from the last anchor to the edge's own original
+    // end, is never split again -- its own true direction is exactly what
+    // it was assigned on the last iteration above.
+    knownEdges.push({ edgeId: currentEdgeId, startNodeId: fromId, endNodeId: edge.endNodeId });
   }
-  return created;
+  return { nodes: created, edges: knownEdges };
 }
 
 /** A fresh lattice sized and placed to cover every point `holeLoops` names -- terrain's own generator, seeded deterministically from the cause that needs it. */
@@ -464,6 +512,8 @@ export interface OrganicCutRepairPlanInput {
   readonly holeShapeRings: readonly (readonly ConstructionPosition[])[];
   /** Every real, live node this repair may weld a lattice vertex onto -- the hole's own surviving rim (only where a neighbour still stands) together with the painter's own real registered nodes. See `CutFallout`. */
   readonly candidates: readonly CutRepairWeldCandidate[];
+  /** Every fragment {@link densifyPaintedEdges} created, with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc for why this must be trusted instead of recomputed. */
+  readonly knownEdges: readonly CutRepairKnownEdge[];
   /** Lattice quad indices (into `lattice.mesh.quads`) whose centroid already lands on ground something else claims -- one batched `classifyPoints` call, resolved by the caller before this runs. */
   readonly occupiedQuads: ReadonlySet<number>;
 }
@@ -534,6 +584,17 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   const nodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
   const regions: ConstructionPatchRegion[] = [];
 
+  // Every known fragment's own *true* direction, keyed by the same
+  // `sharedEdgeId` its id already is -- see `CutRepairKnownEdge`'s own doc
+  // for why this must override `edges.use()`'s fresh (and, for a split
+  // fragment, potentially wrong) lexicographic guess.
+  const knownEdgesById = new Map(input.knownEdges.map((known) => [known.edgeId, known]));
+  const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId) => {
+    const known = knownEdgesById.get(sharedEdgeId(input.tableId, a, b));
+    if (known !== undefined) return { edgeId: known.edgeId, reversed: a !== known.startNodeId };
+    return edges.use(a, b);
+  };
+
   // TEMP DIAGNOSTIC -- remove once the live fill dropout is understood.
   // Tallies *why* an otherwise-inside-hole quad never made it into
   // `regions`, so a real session's own numbers say which check is actually
@@ -581,7 +642,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
 
-    const boundary = cycle.map((id, position) => edges.use(id, cycle[(position + 1) % cycle.length]!));
+    const boundary = cycle.map((id, position) => boundaryUse(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
       const id = cycle[position];
       const resolved = resolvedPosition[vertexIndex];
@@ -816,13 +877,14 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     }
   }
 
-  const anchorNodes = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeShapeRings, fallout.paintedNodes, fallout.paintedEdges);
-  const paintedNodes = anchorNodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...anchorNodes];
+  const densified = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeShapeRings, fallout.paintedNodes, fallout.paintedEdges);
+  const paintedNodes = densified.nodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...densified.nodes];
   console.warn(
     `[terrain-cut-repair] densifyPaintedEdges ${JSON.stringify({
       causeId,
       paintedEdgeCount: fallout.paintedEdges.length,
-      anchorsCreated: anchorNodes.length,
+      anchorsCreated: densified.nodes.length,
+      knownEdgeCount: densified.edges.length,
     })}`,
   );
 
@@ -867,6 +929,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     lattice,
     holeShapeRings,
     candidates,
+    knownEdges: densified.edges,
     occupiedQuads,
   });
 

@@ -14,8 +14,10 @@ export {
   repairOrganicCut,
 } from "./organic-cut-repair.ts";
 export type {
+  CutRepairKnownEdge,
   CutRepairPaintedEdge,
   CutRepairWeldCandidate,
+  DensifiedPaintedEdges,
   OrganicCutRepairLattice,
   OrganicCutRepairPlanInput,
   OrganicCutRepairRuntime,

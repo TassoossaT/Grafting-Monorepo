@@ -52,6 +52,7 @@ test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's 
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: SQUARE_HOLE_CANDIDATES,
+    knownEdges: [],
     occupiedQuads: new Set(),
   });
 
@@ -98,6 +99,7 @@ test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted nod
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: [painted],
+    knownEdges: [],
     occupiedQuads: new Set(),
   });
 
@@ -118,6 +120,7 @@ test("planOrganicCutRepair drops every quad already claimed by something else", 
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: SQUARE_HOLE_CANDIDATES,
+    knownEdges: [],
     occupiedQuads: everyQuad,
   });
 
@@ -143,10 +146,70 @@ test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the
     lattice,
     holeShapeRings: farHoleShape,
     candidates: [],
+    knownEdges: [],
     occupiedQuads: new Set(),
   });
 
   assert.equal(patch, undefined);
+});
+
+test("planOrganicCutRepair trusts a known edge's own true direction over sharedEdgeId's lexicographic guess", () => {
+  // A single hand-built quad, corners already sitting exactly on four real
+  // candidates -- deterministic weld, no relax noise, so exactly which
+  // corners end up cyclically adjacent is known: corner 0 ("aaa-first") to
+  // corner 1 ("zzz-second").
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 },
+      ],
+      quads: [[0, 1, 2, 3]],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "aaa-first", position: { x: 0, y: 0, z: 0 } },
+    { id: "zzz-second", position: { x: 1, y: 0, z: 0 } },
+    { id: "corner-c", position: { x: 1, y: 0, z: 1 } },
+    { id: "corner-d", position: { x: 0, y: 0, z: 1 } },
+  ];
+  const holeShapeRings = [candidates.map((c) => c.position)];
+
+  // "aaa-first" sorts before "zzz-second" as a plain string, so
+  // sharedEdgeId's own lexicographic convention would assume this edge runs
+  // aaa-first -> zzz-second (reversed: false for a corner-0 -> corner-1
+  // walk). Declaring the *opposite* as this edge's own true, engine-side
+  // direction is exactly the shape of mismatch `insert_vertex` produces --
+  // see CutRepairKnownEdge's own doc.
+  const knownEdges = [
+    {
+      edgeId: "table-1:seg:aaa-first~zzz-second",
+      startNodeId: "zzz-second",
+      endNodeId: "aaa-first",
+    },
+  ];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-known-edge",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    knownEdges,
+    occupiedQuads: new Set(),
+  });
+
+  assert.notEqual(patch, undefined);
+  const [region] = patch.regions;
+  const use = region.boundary.find((u) => u.edgeId === "table-1:seg:aaa-first~zzz-second");
+  assert.notEqual(use, undefined, "the known edge id was reused, not recomputed under a different name");
+  assert.equal(use.reversed, true, "walking aaa-first -> zzz-second against a true start of zzz-second must be reversed, not the lexicographic guess of false");
 });
 
 // ---------------------------------------------------------------------------
@@ -181,19 +244,33 @@ test("densifyPaintedEdges subdivides a long painted edge near the hole into real
   ];
   const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
 
-  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
+  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
 
   // A 10-unit run at this generator's 1-unit anchor spacing (half a 2-unit
   // lattice cell, deliberately tighter -- see ANCHOR_SPACING's own doc)
   // splits into 10 segments -- 9 real interior anchors, each an actual
   // insert-vertex op, not merely computed and discarded.
-  assert.equal(created.length, 9);
+  assert.equal(densified.nodes.length, 9);
   assert.equal(inserts.length, 9);
-  const xs = created.map((node) => node.position.x).sort((a, b) => a - b);
+  const xs = densified.nodes.map((node) => node.position.x).sort((a, b) => a - b);
   assert.deepEqual(xs, [1, 2, 3, 4, 5, 6, 7, 8, 9], "anchors land evenly along the run, one anchor-spacing apart");
-  for (const node of created) {
+  for (const node of densified.nodes) {
     assert.equal(node.position.y, 0.2, "interpolated from the edge's own endpoints, not an arbitrary height");
     assert.equal(node.position.z, 0);
+  }
+
+  // Every fragment's own *true* direction is reported too, forming one
+  // unbroken walk from the original edge's own start to its own end -- not
+  // just 9 isolated anchor nodes with no known connectivity between them.
+  assert.equal(densified.edges.length, 10, "9 interior anchors split a run into 10 fragment edges");
+  assert.equal(densified.edges[0].startNodeId, "p-start");
+  assert.equal(densified.edges.at(-1).endNodeId, "p-end");
+  for (let i = 0; i < densified.edges.length - 1; i += 1) {
+    assert.equal(
+      densified.edges[i].endNodeId,
+      densified.edges[i + 1].startNodeId,
+      "each fragment's own true end is the next fragment's own true start -- an unbroken chain",
+    );
   }
 });
 
@@ -213,9 +290,10 @@ test("densifyPaintedEdges leaves a short painted edge alone", () => {
   ];
   const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
 
-  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
+  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
 
-  assert.equal(created.length, 0, "already short enough to weld onto its own two endpoints");
+  assert.equal(densified.nodes.length, 0, "already short enough to weld onto its own two endpoints");
+  assert.equal(densified.edges.length, 0);
   assert.equal(inserts.length, 0);
 });
 
@@ -235,9 +313,10 @@ test("densifyPaintedEdges ignores a painted edge nowhere near the hole", () => {
   ];
   const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
 
-  const created = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
+  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
 
-  assert.equal(created.length, 0);
+  assert.equal(densified.nodes.length, 0);
+  assert.equal(densified.edges.length, 0);
   assert.equal(inserts.length, 0);
 });
 
