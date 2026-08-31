@@ -7,6 +7,7 @@ import {
   planOrganicCutRepair,
   repairOrganicCut,
 } from "../src/features/edit-construction/structure-types/organic/organic-cut-repair.ts";
+import { sharedEdgeId } from "../src/features/edit-construction/topology/boundary-edges.ts";
 
 /**
  * Every test here targets the redesigned repair: a cut's hole is *filled*
@@ -185,12 +186,25 @@ test("planOrganicCutRepair trusts a known edge's own true direction over sharedE
   // walk). Declaring the *opposite* as this edge's own true, engine-side
   // direction is exactly the shape of mismatch `insert_vertex` produces --
   // see CutRepairKnownEdge's own doc.
+  // planOrganicCutRepair now refuses to declare a boundary edge between two
+  // *real* ids unless a known edge vouches for them (see its own doc) -- the
+  // quad's other three sides are all real-to-real too, so they need known
+  // entries here as well, in their plain canonical direction, purely to
+  // authorize them. Only the first entry's direction is deliberately wrong,
+  // to exercise the override this test is actually about.
+  const canonical = (a, b) => {
+    const [start, end] = a < b ? [a, b] : [b, a];
+    return { edgeId: sharedEdgeId("table-1", a, b), startNodeId: start, endNodeId: end };
+  };
   const knownEdges = [
     {
       edgeId: "table-1:seg:aaa-first~zzz-second",
       startNodeId: "zzz-second",
       endNodeId: "aaa-first",
     },
+    canonical("zzz-second", "corner-c"),
+    canonical("corner-c", "corner-d"),
+    canonical("corner-d", "aaa-first"),
   ];
 
   const patch = planOrganicCutRepair({
@@ -293,8 +307,13 @@ test("densifyPaintedEdges leaves a short painted edge alone", () => {
   const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
 
   assert.equal(densified.nodes.length, 0, "already short enough to weld onto its own two endpoints");
-  assert.equal(densified.edges.length, 0);
   assert.equal(inserts.length, 0);
+  // The original, unsplit edge is still reported as known -- both ends are
+  // real, near-hole nodes, and a lattice quad that welds two adjacent
+  // corners onto exactly them must be able to reuse this exact edge; see
+  // planOrganicCutRepair's own real-to-real guard.
+  assert.equal(densified.edges.length, 1);
+  assert.deepEqual(densified.edges[0], { edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" });
 });
 
 test("densifyPaintedEdges ignores a painted edge nowhere near the hole", () => {

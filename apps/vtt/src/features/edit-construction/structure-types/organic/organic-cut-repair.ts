@@ -326,7 +326,18 @@ export function densifyPaintedEdges(
 
     const length = Math.hypot(end.x - start.x, end.z - start.z);
     const segments = Math.round(length / ANCHOR_SPACING);
-    if (segments < 2) continue; // already short enough to weld onto its own endpoints
+    if (segments < 2) {
+      // Already short enough to weld onto its own endpoints as-is -- still
+      // recorded as known, unsplit, in its own original direction. Both
+      // ends are real, live nodes near this hole; without this entry, a
+      // lattice quad that legitimately welds two adjacent corners onto
+      // exactly these two endpoints would find no known edge between two
+      // real ids and get rejected by `planOrganicCutRepair`'s own
+      // real-to-real guard, even though this exact edge already connects
+      // them.
+      knownEdges.push({ edgeId: edge.edgeId, startNodeId: edge.startNodeId, endNodeId: edge.endNodeId });
+      continue;
+    }
 
     let currentEdgeId = edge.edgeId;
     let fromId = edge.startNodeId;
@@ -589,9 +600,30 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // for why this must override `edges.use()`'s fresh (and, for a split
   // fragment, potentially wrong) lexicographic guess.
   const knownEdgesById = new Map(input.knownEdges.map((known) => [known.edgeId, known]));
-  const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId) => {
+
+  // Every id `candidates` names -- a *real*, live node, as opposed to one
+  // `resolveVertex` had to mint fresh for this hole. Two adjacent lattice
+  // corners can each independently weld onto a real node that is close by
+  // *in space* without there being any real edge between the two of them at
+  // all: the original edge that used to run directly between them may have
+  // been the very one `densifyPaintedEdges` split into a whole chain of
+  // anchors, which leaves `sharedEdgeId(tableId, a, b)` for the pre-split
+  // pair naming nothing this patch actually knows about. `quadCrossesItself`
+  // / `quadEdgeTooLong` catch this when the mismatch also happens to bend or
+  // stretch the quad; neither does when the two real nodes simply sit near
+  // each other despite being far apart along the graph. Falling through to
+  // `edges.use()` in that case does not fail loudly -- it mints a brand new
+  // edge id that either collides with a stale, already-pruned original (a
+  // dangling reuse) or bridges two real nodes with a chord that was never
+  // actually there, and either way the region's own boundary no longer walks
+  // a real closed loop, which is what has been surfacing downstream as the
+  // engine's own `OpenLoop` refusal. Two real ids may only share a boundary
+  // edge here when a known fragment (or rim-adjacency) entry says so.
+  const realIds = new Set(candidates.map((candidate) => candidate.id));
+  const boundaryUse = (a: ConstructionNodeId, b: ConstructionNodeId): { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean } | undefined => {
     const known = knownEdgesById.get(sharedEdgeId(input.tableId, a, b));
     if (known !== undefined) return { edgeId: known.edgeId, reversed: a !== known.startNodeId };
+    if (realIds.has(a) && realIds.has(b)) return undefined;
     return edges.use(a, b);
   };
 
@@ -599,7 +631,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // Tallies *why* an otherwise-inside-hole quad never made it into
   // `regions`, so a real session's own numbers say which check is actually
   // responsible instead of another guess.
-  const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0 };
+  const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0, unrelatedRealPair: 0 };
 
   input.lattice.mesh.quads.forEach((quad, quadIndex) => {
     if (input.occupiedQuads.has(quadIndex)) {
@@ -642,7 +674,20 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
 
-    const boundary = cycle.map((id, position) => boundaryUse(id, cycle[(position + 1) % cycle.length]!));
+    const boundary: { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean }[] = [];
+    let hasUnrelatedRealPair = false;
+    for (let position = 0; position < cycle.length; position += 1) {
+      const use = boundaryUse(cycle[position]!, cycle[(position + 1) % cycle.length]!);
+      if (use === undefined) {
+        hasUnrelatedRealPair = true;
+        break;
+      }
+      boundary.push(use);
+    }
+    if (hasUnrelatedRealPair) {
+      rejected.unrelatedRealPair += 1;
+      return;
+    }
     quad.forEach((vertexIndex, position) => {
       const id = cycle[position];
       const resolved = resolvedPosition[vertexIndex];
@@ -870,8 +915,29 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const positionOf = (id: ConstructionNodeId): ConstructionPosition | undefined => snapshot.map.nodePositions.get(id)?.position;
 
   const liveRimCandidates: CutRepairWeldCandidate[] = [];
+  // Every pair `loop.nodeIds` actually walks consecutively (wrap included)
+  // -- the rim's own real, pre-existing adjacency, untouched by
+  // `densifyPaintedEdges`. `planOrganicCutRepair` refuses to declare a
+  // boundary edge between two real ids unless something here already
+  // vouches for them being genuinely connected; without this, two rim ids
+  // from non-adjacent stretches of the same (or a different) unfilled loop
+  // could still land on adjacent lattice corners purely by proximity, the
+  // same failure mode this whole `knownEdges` mechanism exists to close for
+  // the painter's own densified edges. Direction here is always the plain
+  // canonical one (`a < b`): a rim edge is never split by this repair, so it
+  // is exactly what `edges.use()` would have computed anyway -- this only
+  // ever adds a permission, never a direction override.
+  const rimEdgeKnowledge: CutRepairKnownEdge[] = [];
   for (const loop of loops) {
-    for (const nodeId of loop.nodeIds) {
+    const ids = loop.nodeIds;
+    for (let i = 0; i < ids.length; i += 1) {
+      const a = ids[i]!;
+      const b = ids[(i + 1) % ids.length]!;
+      if (a === b) continue;
+      const [start, end] = a < b ? [a, b] : [b, a];
+      rimEdgeKnowledge.push({ edgeId: sharedEdgeId(snapshot.tableId, start, end), startNodeId: start, endNodeId: end });
+    }
+    for (const nodeId of ids) {
       const position = positionOf(nodeId);
       if (position !== undefined) liveRimCandidates.push({ id: nodeId, position });
     }
@@ -929,7 +995,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     lattice,
     holeShapeRings,
     candidates,
-    knownEdges: densified.edges,
+    knownEdges: [...rimEdgeKnowledge, ...densified.edges],
     occupiedQuads,
   });
 
