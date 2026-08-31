@@ -572,6 +572,15 @@ export interface OrganicCutRepairPlanInput {
   readonly holeShapeRings: readonly (readonly ConstructionPosition[])[];
   /** Every real, live node this repair may weld a lattice vertex onto -- the hole's own surviving rim (only where a neighbour still stands) together with the painter's own real registered nodes. See `CutFallout`. */
   readonly candidates: readonly CutRepairWeldCandidate[];
+  /**
+   * Every id in `candidates` that came from the hole's own surviving rim,
+   * as opposed to the painter's own contour -- every one of them already
+   * belongs to the *same* standing neighbour, dense and real, whether or
+   * not `knownEdges` happens to record a direct edge between any given
+   * pair. See `boundaryPermitted`'s own doc for why this widens the
+   * unrelated-real-pair guard specifically for this one set.
+   */
+  readonly rimIds: ReadonlySet<ConstructionNodeId>;
   /** Every fragment {@link insertLatticeEdgePins} created, plus the rim's own known adjacency, each with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc for why this must be trusted instead of recomputed. */
   readonly knownEdges: readonly CutRepairKnownEdge[];
   /** Lattice quad indices (into `lattice.mesh.quads`) whose centroid already lands on ground something else claims -- one batched `classifyPoints` call, resolved by the caller before this runs. */
@@ -699,6 +708,30 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   for (const known of input.knownEdges) {
     const rootA = componentOf(known.startNodeId);
     const rootB = componentOf(known.endNodeId);
+    if (rootA !== rootB) parent.set(rootA, rootB);
+  }
+  // Every rim id is unioned into one shared component outright, regardless
+  // of loop adjacency -- `input.rimIds` own doc explains why: they all
+  // belong to the *same* dense, standing neighbour, whether or not this
+  // repair's own (necessarily partial) `knownEdges` happens to record a
+  // direct connection between any two of them. Two rim ids that are not
+  // loop-adjacent can still already share a real edge somewhere else in
+  // that neighbour's own interior mesh -- one this repair never asked
+  // about -- and `edges.use()` naming a "new" edge for that same pair is
+  // then not new at all: it collides with whatever that edge already has,
+  // which the engine correctly (and silently, since `addPatch` degrades
+  // gracefully) refuses as no room. Treating every rim id as one component
+  // means such a pair is caught by the exact same demotion this guard
+  // already performs for a same-chain painted skip, instead of slipping
+  // through as "different component, therefore new."
+  let rimRoot: ConstructionNodeId | undefined;
+  for (const id of input.rimIds) {
+    if (rimRoot === undefined) {
+      rimRoot = id;
+      continue;
+    }
+    const rootA = componentOf(rimRoot);
+    const rootB = componentOf(id);
     if (rootA !== rootB) parent.set(rootA, rootB);
   }
   // Pure -- no `edges.use()` call, so no side effect on `edges`'s own
@@ -1181,6 +1214,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(liveRimCandidates.map((candidate) => candidate.id)),
     knownEdges: [...rimEdgeKnowledge, ...inserted.edges],
     occupiedQuads,
   });

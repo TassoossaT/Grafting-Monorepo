@@ -53,6 +53,7 @@ test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's 
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: SQUARE_HOLE_CANDIDATES,
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: new Set(),
   });
@@ -99,6 +100,7 @@ test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted nod
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: [painted],
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: new Set(),
   });
@@ -120,6 +122,7 @@ test("planOrganicCutRepair drops every quad already claimed by something else", 
     lattice,
     holeShapeRings: SQUARE_HOLE_SHAPE,
     candidates: SQUARE_HOLE_CANDIDATES,
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: everyQuad,
   });
@@ -146,6 +149,7 @@ test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the
     lattice,
     holeShapeRings: farHoleShape,
     candidates: [],
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: new Set(),
   });
@@ -194,6 +198,7 @@ test("planOrganicCutRepair drops a quad whose freshly minted corner wandered far
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: new Set(),
   });
@@ -243,6 +248,7 @@ test("planOrganicCutRepair keeps a freshly minted corner that lands just past th
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(),
     knownEdges: [],
     occupiedQuads: new Set(),
   });
@@ -311,6 +317,7 @@ test("planOrganicCutRepair trusts a known edge's own true direction over sharedE
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(),
     knownEdges,
     occupiedQuads: new Set(),
   });
@@ -362,6 +369,7 @@ test("planOrganicCutRepair salvages a quad with one unvouched real pair instead 
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(),
     knownEdges,
     occupiedQuads: new Set(),
   });
@@ -446,6 +454,7 @@ test("planOrganicCutRepair demotes a shared corner globally, so two quads meetin
     lattice,
     holeShapeRings,
     candidates,
+    rimIds: new Set(),
     knownEdges,
     occupiedQuads: new Set(),
   });
@@ -462,6 +471,68 @@ test("planOrganicCutRepair demotes a shared corner globally, so two quads meetin
   assert.equal(cornerAt(regionA, 2), cornerAt(regionB, 3), "and likewise for the other shared corner");
   assert.ok(!patch.nodes.some((node) => node.id === "shared-a"), "the unvouched real id was demoted, not kept, in every quad that touched it");
   assert.ok(!patch.nodes.some((node) => node.id === "shared-b"));
+});
+
+test("planOrganicCutRepair treats two rim ids as one component even with no knownEdges at all -- a live neighbour's own interior mesh is never fully known", () => {
+  // No knownEdges declared whatsoever -- under the plain componentOf logic
+  // alone, every id would be its own singleton component, so rim-a and
+  // rim-b would read as "different component" and be freely permitted as a
+  // brand new edge. But both are marked as rim: a live session traced
+  // exactly this shape of bug back to a fill quad naming a "new" edge
+  // between two rim nodes that, unknown to this repair, already shared a
+  // real edge elsewhere in the standing neighbour's own interior -- the
+  // engine silently refused it as no room. rimIds must catch this even
+  // without a single known edge on record.
+  const holeShapeRings = [
+    [
+      { x: 0, y: 0, z: 0 },
+      { x: 1, y: 0, z: 0 },
+      { x: 1, y: 0, z: 1 },
+      { x: 0, y: 0, z: 1 },
+    ],
+  ];
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 },
+      ],
+      quads: [[0, 1, 2, 3]],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "p0", position: { x: 0, y: 0, z: 0 } },
+    { id: "rim-a", position: { x: 1, y: 0, z: 0 } },
+    { id: "rim-b", position: { x: 1, y: 0, z: 1 } },
+    { id: "p3", position: { x: 0, y: 0, z: 1 } },
+  ];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-rim-cloud",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    rimIds: new Set(["rim-a", "rim-b"]),
+    knownEdges: [],
+    occupiedQuads: new Set(),
+  });
+
+  assert.notEqual(patch, undefined, "the quad survives by substituting the unvouched rim corner, not by being dropped");
+  assert.equal(patch.regions.length, 1);
+  const usedIds = new Set(patch.nodes.map((node) => node.id));
+  assert.ok(usedIds.has("p0"));
+  assert.ok(usedIds.has("p3"));
+  // Exactly one of the two rim ids keeps its real identity -- the other is
+  // the one substituted, since only their shared edge is in question, not
+  // either corner's own connection to its non-rim neighbour.
+  assert.equal(["rim-a", "rim-b"].filter((id) => usedIds.has(id)).length, 1, "one rim id survives real, the other was demoted to break the unvouched pair");
 });
 
 // ---------------------------------------------------------------------------
