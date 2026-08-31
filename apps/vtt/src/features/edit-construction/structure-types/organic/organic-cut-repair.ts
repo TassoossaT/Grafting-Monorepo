@@ -71,8 +71,20 @@ const WELD_RADIUS = 1e-3;
  * mismatch on an oddly-shaped or very thin hole, and a quad whose corners
  * end up this far apart is not filling the hole any more, it is bridging
  * across it -- dropped rather than committed as a corrupt face.
+ *
+ * Sized from what a *legitimately* welded edge can actually reach, not a
+ * round guess: an unwelded edge runs up to roughly `0.7 * LATTICE_TRIANGLE_SIDE`
+ * (measured on this generator), and each of its two corners can
+ * independently move up to {@link PIN_RADIUS} away from that -- in opposite
+ * directions, in the worst real case. A flat `LATTICE_TRIANGLE_SIDE * 1.5`
+ * cap here undercut that by nearly a full `PIN_RADIUS` and was rejecting
+ * the very quads pinning had just welded *correctly*: once most of a hole's
+ * boundary actually starts finding real candidates, most of its edges land
+ * somewhere in that legitimately-stretched range, and a cap this tight threw
+ * almost all of them away, leaving real holes in the ground instead of the
+ * fill they should have been.
  */
-const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 1.5;
+const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 0.7 + 2 * PIN_RADIUS;
 
 /** One real, already-live node this repair may weld a fresh lattice vertex onto. */
 export interface CutRepairWeldCandidate {
@@ -494,18 +506,35 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   const nodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
   const regions: ConstructionPatchRegion[] = [];
 
+  // TEMP DIAGNOSTIC -- remove once the live fill dropout is understood.
+  // Tallies *why* an otherwise-inside-hole quad never made it into
+  // `regions`, so a real session's own numbers say which check is actually
+  // responsible instead of another guess.
+  const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0 };
+
   input.lattice.mesh.quads.forEach((quad, quadIndex) => {
-    if (input.occupiedQuads.has(quadIndex)) return;
+    if (input.occupiedQuads.has(quadIndex)) {
+      rejected.occupied += 1;
+      return;
+    }
     const centroid = centroids[quadIndex];
-    if (centroid === undefined) return;
-    const [cx, cz] = centroid;
-    if (!Number.isFinite(cx) || !insideHole(cx, cz, holeRings)) return;
+    const [cx, cz] = centroid ?? [Number.NaN, Number.NaN];
+    if (!Number.isFinite(cx) || !insideHole(cx, cz, holeRings)) {
+      rejected.outsideHole += 1;
+      return;
+    }
 
     const cycle = quad.map((vertexIndex) => resolveVertex(vertexIndex)).filter((id): id is ConstructionNodeId => id !== undefined);
-    if (cycle.length !== quad.length || new Set(cycle).size !== cycle.length) return;
+    if (cycle.length !== quad.length || new Set(cycle).size !== cycle.length) {
+      rejected.unresolvedOrDuplicate += 1;
+      return;
+    }
 
     const corners = quad.map((vertexIndex) => resolvedPosition[vertexIndex]);
-    if (corners.some((corner) => corner === undefined)) return;
+    if (corners.some((corner) => corner === undefined)) {
+      rejected.unresolvedOrDuplicate += 1;
+      return;
+    }
     const sane = corners as ConstructionPosition[];
 
     // Each corner pinned/welded independently onto its own *nearest* real
@@ -519,7 +548,10 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
     // regardless of *why* the mismatch happened; MAX_EDGE_LENGTH is the
     // cheaper, coarser backstop for a quad that stayed simple but still
     // ended up implausibly stretched.
-    if (quadCrossesItself(sane) || quadEdgeTooLong(sane)) return;
+    if (quadCrossesItself(sane) || quadEdgeTooLong(sane)) {
+      rejected.crossingOrTooLong += 1;
+      return;
+    }
 
     const boundary = cycle.map((id, position) => edges.use(id, cycle[(position + 1) % cycle.length]!));
     quad.forEach((vertexIndex, position) => {
@@ -529,6 +561,15 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
     });
     regions.push({ regionId: cycle.join("|"), boundary, surfaceType: input.surfaceType, physical: input.physical });
   });
+
+  console.warn(
+    `[terrain-cut-repair] planOrganicCutRepair rejections ${JSON.stringify({
+      causeId: input.causeId,
+      totalQuads: input.lattice.mesh.quads.length,
+      kept: regions.length,
+      ...rejected,
+    })}`,
+  );
 
   if (regions.length === 0) return undefined;
   return { nodes: [...nodePositions].map(([id, position]) => ({ id, position })), edges: edges.all(), regions };
