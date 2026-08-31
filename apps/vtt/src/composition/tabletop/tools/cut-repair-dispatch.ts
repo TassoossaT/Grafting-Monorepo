@@ -80,9 +80,21 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
 
   const coverage = runtime.getFootprintCoverage(outline);
 
+  // Both `"centroid"` and `"overlap"` are consumed for a `"cut"` -- not
+  // `"centroid"` alone. A cell the road only clips (its own centroid still
+  // outside the footprint) used to survive untouched, whole, sitting under
+  // or beside the road's real rendered edge: real terrain, in real 3D
+  // space, occupying ground the road now also occupies -- the "faces still
+  // under the road" a cut is supposed to prevent in the first place. This
+  // repair's own regeneration already treats "what got consumed" as one
+  // hole to fill around, regardless of how ragged its original boundary
+  // was; consuming the clipped cells too just hands it the *whole* true
+  // hole instead of only the fully-covered middle of it, which is also why
+  // a margin that used to be a handful of quads now regenerates as the many
+  // more it always should have been.
   const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
   for (const entry of resolveCoverage(paintedType, coverage)) {
-    if (entry.interaction.kind !== "cut" || entry.covered.coverage !== "centroid") continue;
+    if (entry.interaction.kind !== "cut") continue;
     if (resolveCutRepair(entry.covered.surfaceType).kind !== "regenerate") continue;
     const keys = consumedByType.get(entry.covered.surfaceType) ?? [];
     keys.push(entry.covered.surfaceKey);
