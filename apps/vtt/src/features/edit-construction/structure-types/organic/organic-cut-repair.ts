@@ -86,6 +86,24 @@ const WELD_RADIUS = 1e-3;
  */
 const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 0.7 + 2 * PIN_RADIUS;
 
+/**
+ * How far apart {@link densifyPaintedEdges} spaces the real anchor nodes it
+ * mints along one of the painter's own edges.
+ *
+ * Tighter than {@link LATTICE_TRIANGLE_SIDE} on purpose, not equal to it. A
+ * lattice cell's own edge measures roughly `0.6`-`1.3` at this triangle
+ * side; anchors spaced a full cell apart are *farther apart than a single
+ * quad edge can span*, so two adjacent corners of the same lattice quad
+ * essentially never land on two consecutive anchors at once -- each welds
+ * to its own anchor independently, with a minted, unconnected corner
+ * between them, and the two faces touch at isolated points without ever
+ * sharing a real edge. Halving the spacing puts multiple anchors within one
+ * quad edge's own reach, which is what actually lets a shared node-id pair
+ * (`sharedEdgeId` names an edge by its node pair alone) land on the *same*
+ * edge the painter's own contour already declared there.
+ */
+const ANCHOR_SPACING = LATTICE_TRIANGLE_SIDE * 0.5;
+
 /** One real, already-live node this repair may weld a fresh lattice vertex onto. */
 export interface CutRepairWeldCandidate {
   readonly id: ConstructionNodeId;
@@ -220,12 +238,13 @@ export interface CutRepairPaintedEdge {
 
 /**
  * Splits every one of the painter's own edges that is both near this hole
- * and long enough to matter into real interior anchor nodes, spaced roughly
- * one lattice cell apart, via the generic `"insert-vertex"` op
- * (`ConstructionSessionPort.insertVertex`'s own doc: "subdivides one
- * boundary edge, minting a new node on it" -- the same primitive a wall
- * crossing already uses, applied here to a straight or gently-curved run
- * rather than an intersection).
+ * and long enough to matter into real interior anchor nodes, spaced
+ * {@link ANCHOR_SPACING} apart -- deliberately *tighter* than one lattice
+ * cell, see that constant's own doc for why -- via the generic
+ * `"insert-vertex"` op (`ConstructionSessionPort.insertVertex`'s own doc:
+ * "subdivides one boundary edge, minting a new node on it" -- the same
+ * primitive a wall crossing already uses, applied here to a straight or
+ * gently-curved run rather than an intersection).
  *
  * **Why this exists at all.** A road is flattened to a handful of points
  * along a straight or gently curved stretch -- by design; redundant
@@ -245,13 +264,13 @@ export function densifyPaintedEdges(
   runtime: OrganicCutRepairRuntime,
   tableId: string,
   causeId: string,
-  holeLoops: readonly (readonly CutRepairWeldCandidate[])[],
+  holeShapeRings: readonly (readonly ConstructionPosition[])[],
   paintedNodes: readonly CutRepairWeldCandidate[],
   paintedEdges: readonly CutRepairPaintedEdge[],
 ): readonly CutRepairWeldCandidate[] {
   if (paintedEdges.length === 0) return [];
   const positionOf = new Map(paintedNodes.map((node) => [node.id, node.position]));
-  const { centerX, centerZ, radius } = boundsOf(holeLoops.flat().map((point) => point.position));
+  const { centerX, centerZ, radius } = boundsOf(holeShapeRings.flat());
   const reach = radius + PIN_RADIUS;
   const nearHole = (position: ConstructionPosition): boolean =>
     Math.abs(position.x - centerX) <= reach && Math.abs(position.z - centerZ) <= reach;
@@ -266,7 +285,7 @@ export function densifyPaintedEdges(
     if (!nearHole(start) && !nearHole(end)) continue;
 
     const length = Math.hypot(end.x - start.x, end.z - start.z);
-    const segments = Math.round(length / LATTICE_TRIANGLE_SIDE);
+    const segments = Math.round(length / ANCHOR_SPACING);
     if (segments < 2) continue; // already short enough to weld onto its own endpoints
 
     let currentEdgeId = edge.edgeId;
@@ -336,35 +355,36 @@ export interface OrganicCutRepairLattice {
  * one more nearest-neighbour scan and is a no-op for a vertex genuinely deep
  * inside a large hole, where nothing real is ever close enough to matter.
  *
- * `holeLoops`' own bounding circle decides the radius -- generous by one
- * whole ring (`+ 1`) so the lattice's own boundary clears every rim point
- * with room to spare. Deliberately *not* sized from `paintedNodes` too: that
- * list is the painter's *whole* patch (a long road's every node, not only
- * the stretch next to this one hole), and sizing the lattice from it would
- * make one small cut generate an enormous lattice for a stroke that merely
- * happens to run nearby. `paintedNodes` still narrows which pins actually
- * find a real counterpart -- it only does not decide how big to build.
+ * `holeShapeRings`' own bounding circle decides the radius -- generous by
+ * one whole ring (`+ 1`) so the lattice's own boundary clears every point of
+ * it with room to spare. Deliberately *not* sized from `candidates` too:
+ * that list can include the painter's *whole* patch (a long road's every
+ * node, not only the stretch next to this one hole), and sizing the lattice
+ * from it would make one small cut generate an enormous lattice for a
+ * stroke that merely happens to run nearby. `candidates` still narrows
+ * which pins actually find a real counterpart -- it only does not decide
+ * how big to build.
  */
 export function buildCutRepairLattice(
-  holeLoops: readonly (readonly CutRepairWeldCandidate[])[],
-  paintedNodes: readonly CutRepairWeldCandidate[],
+  holeShapeRings: readonly (readonly ConstructionPosition[])[],
+  candidates: readonly CutRepairWeldCandidate[],
   causeId: string,
 ): OrganicCutRepairLattice {
-  const { centerX, centerZ, radius } = boundsOf(holeLoops.flat().map((point) => point.position));
+  const { centerX, centerZ, radius } = boundsOf(holeShapeRings.flat());
   const trianglesPerSide = Math.max(1, Math.ceil(radius / LATTICE_TRIANGLE_SIDE) + 1);
 
   const random = createRandom(seedFromCauseId(causeId));
   const triangles = buildTriangleHex({ trianglesPerSide, triangleSide: LATTICE_TRIANGLE_SIDE });
   const preRelax = weldQuadGrid(ortho(pairTriangles(triangles, random)));
 
-  // `paintedNodes` is the painter's *whole* patch (a long road's every
-  // node), so it is filtered to this hole's own neighbourhood before
+  // `candidates` can include the painter's *whole* patch (a long road's
+  // every node), so it is filtered to this hole's own neighbourhood before
   // pairing -- otherwise every one of a long road's thousand-odd contour
   // samples would be tested against every lattice vertex.
   const reach = radius + PIN_RADIUS;
   const nearby = (point: ConstructionPosition): boolean =>
     Math.abs(point.x - centerX) <= reach && Math.abs(point.z - centerZ) <= reach;
-  const pinCandidates: CutRepairWeldCandidate[] = [...holeLoops.flat(), ...paintedNodes.filter((node) => nearby(node.position))];
+  const pinCandidates: CutRepairWeldCandidate[] = candidates.filter((candidate) => nearby(candidate.position));
 
   // A stable, distance-sorted greedy match, not "whichever vertex happens
   // to be resolved first claims the nearest candidate": two *different*
@@ -431,10 +451,19 @@ export interface OrganicCutRepairPlanInput {
   readonly surfaceType: string;
   readonly physical: boolean;
   readonly lattice: OrganicCutRepairLattice;
-  /** The hole's own exposed rim, one ring per disjoint loop the deletion left -- real, live node ids, already fetched via `getUnfilledLoops`. */
-  readonly holeLoops: readonly (readonly CutRepairWeldCandidate[])[];
-  /** The painter's own real registered nodes -- see `CutFallout`. */
-  readonly paintedNodes: readonly CutRepairWeldCandidate[];
+  /**
+   * The hole's own true shape, one ring per consumed region -- from what
+   * the cut consumed, known before any deletion happened, not from
+   * whatever boundary the deletion happens to leave exposed. Positions
+   * only, deliberately: these ids belong to whichever regions were just
+   * deleted and may no longer be live nodes at all (the engine's own
+   * zero-orphan cleanup can reclaim one nothing else still references), so
+   * this shape is never itself a weld source -- see `input.candidates` for
+   * that.
+   */
+  readonly holeShapeRings: readonly (readonly ConstructionPosition[])[];
+  /** Every real, live node this repair may weld a lattice vertex onto -- the hole's own surviving rim (only where a neighbour still stands) together with the painter's own real registered nodes. See `CutFallout`. */
+  readonly candidates: readonly CutRepairWeldCandidate[];
   /** Lattice quad indices (into `lattice.mesh.quads`) whose centroid already lands on ground something else claims -- one batched `classifyPoints` call, resolved by the caller before this runs. */
   readonly occupiedQuads: ReadonlySet<number>;
 }
@@ -453,7 +482,7 @@ export interface OrganicCutRepairPlanInput {
  *    already claims. This is what makes the repair stop exactly at the
  *    painter's own edge, generically: nothing here names a path, only
  *    "already occupied."
- * 2. Drop it if its centroid falls outside every ring in `input.holeLoops` --
+ * 2. Drop it if its centroid falls outside every ring in `input.holeShapeRings` --
  *    the lattice is sized generously and would otherwise spill new terrain
  *    onto open ground the cut never touched.
  * 3. Resolve each of its four corners to a real node id: the nearest
@@ -470,9 +499,8 @@ export interface OrganicCutRepairPlanInput {
  * `physical`) the cut consumed. Returns `undefined` when nothing survives.
  */
 export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): ConstructionPatch | undefined {
-  const rimCandidates = input.holeLoops.flat();
-  const candidates: CutRepairWeldCandidate[] = [...rimCandidates, ...input.paintedNodes];
-  const holeRings = input.holeLoops.map((loop) => loop.map((point) => point.position));
+  const candidates = input.candidates;
+  const holeRings = input.holeShapeRings;
   const centroids = cutRepairQuadCentroids(input.lattice);
 
   const resolvedId: (ConstructionNodeId | undefined)[] = new Array(input.lattice.mesh.vertices.length).fill(undefined);
@@ -656,11 +684,15 @@ export interface OrganicCutRepairRuntime {
  * stopping wherever it meets ground the painter's own patch already covers.
  *
  * **The steps:**
- * 1. Read every consumed region's own topology before deleting it -- once
- *    gone, there is nothing left to ask.
+ * 1. Read every consumed region's own topology before deleting it -- this
+ *    is also where the hole's own true shape comes from (its outer loops'
+ *    positions), a fact of the cut itself, not of whatever the deletion
+ *    happens to leave exposed. Once gone, there is nothing left to ask.
  * 2. Delete the consumed regions. Terrain's own call, not the painter's.
  * 3. `getUnfilledLoops`, scoped to what those regions stood on, reports
- *    exactly the rim the deletion exposed -- the hole's own boundary.
+ *    whichever part of the hole's rim survives as real, live nodes --
+ *    optional, not required: empty means every side of this hole borders
+ *    the painter's own contour instead of surviving terrain.
  * 4. {@link densifyPaintedEdges} subdivides the painter's own edges near
  *    this hole into real anchor nodes -- a long straight or gently curved
  *    run has almost no nodes of its own to weld onto otherwise.
@@ -700,6 +732,30 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   for (const topology of consumedTopologies) for (const node of topology.nodes) preScope.add(node.id);
   if (preScope.size === 0) return 0;
 
+  // The hole's own true shape -- from what the cut consumed, known before
+  // any deletion happens, never from whatever `getUnfilledLoops` finds
+  // exposed afterward. That query only ever reveals a boundary against
+  // *surviving terrain*, because it walks this same type's own edges: a cut
+  // that consumes every last cell in an area, leaving nothing but the
+  // painter's own geometry (a different, unconnected node set) bordering it
+  // on every side, exposes nothing there at all, and this repair used to
+  // silently do nothing -- the cut itself, and the shape it leaves, is a
+  // fact of the type interaction that already happened; it was never the
+  // tool's, and it must not depend on a survivor happening to still stand
+  // nearby.
+  const consumedPositions = new Map<ConstructionNodeId, ConstructionPosition>();
+  for (const topology of consumedTopologies) for (const node of topology.nodes) consumedPositions.set(node.id, node.position);
+  const holeShapeRings: ConstructionPosition[][] = [];
+  for (const topology of consumedTopologies) {
+    for (const loop of topology.outerLoops) {
+      const ring = loop
+        .map((edge) => consumedPositions.get(edge.startNodeId))
+        .filter((position): position is ConstructionPosition => position !== undefined);
+      if (ring.length >= 3) holeShapeRings.push(ring);
+    }
+  }
+  if (holeShapeRings.length === 0) return 0;
+
   // One `applyRegionEdit` call *per region*, not one batched call naming
   // every consumed region at once. Each call is wrapped for the same reason
   // as before -- the runtime's own post-mutation step re-fetches a mesh for
@@ -732,6 +788,13 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     })}`,
   );
 
+  // The hole's own surviving rim -- optional now, not required: real, live
+  // node ids only where a neighbour still stands, exactly as before, but no
+  // longer the thing that decides the hole's own shape or whether this
+  // repair runs at all (see `holeShapeRings`'s own doc above). An empty
+  // result here just means every side of this particular hole borders the
+  // painter's own contour instead of surviving terrain, and the fill below
+  // welds entirely to that.
   const loops = runtime.getUnfilledLoops([...preScope]);
   console.warn(
     `[terrain-cut-repair] getUnfilledLoops ${JSON.stringify({
@@ -741,24 +804,19 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       loopSizes: loops.map((loop) => loop.nodeIds.length),
     })}`,
   );
-  if (loops.length === 0) return 0;
 
   const snapshot = runtime.getSnapshot();
   const positionOf = (id: ConstructionNodeId): ConstructionPosition | undefined => snapshot.map.nodePositions.get(id)?.position;
 
-  const holeLoops: CutRepairWeldCandidate[][] = [];
+  const liveRimCandidates: CutRepairWeldCandidate[] = [];
   for (const loop of loops) {
-    const ring: CutRepairWeldCandidate[] = [];
     for (const nodeId of loop.nodeIds) {
       const position = positionOf(nodeId);
-      if (position === undefined) continue;
-      ring.push({ id: nodeId, position });
+      if (position !== undefined) liveRimCandidates.push({ id: nodeId, position });
     }
-    if (ring.length >= 3) holeLoops.push(ring);
   }
-  if (holeLoops.length === 0) return 0;
 
-  const anchorNodes = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeLoops, fallout.paintedNodes, fallout.paintedEdges);
+  const anchorNodes = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeShapeRings, fallout.paintedNodes, fallout.paintedEdges);
   const paintedNodes = anchorNodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...anchorNodes];
   console.warn(
     `[terrain-cut-repair] densifyPaintedEdges ${JSON.stringify({
@@ -768,7 +826,9 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     })}`,
   );
 
-  const lattice = buildCutRepairLattice(holeLoops, paintedNodes, causeId);
+  const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...paintedNodes];
+
+  const lattice = buildCutRepairLattice(holeShapeRings, candidates, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
   const hits = runtime.classifyPoints(centroids);
   const occupiedQuads = new Set(hits.map((hit) => hit.index));
@@ -778,24 +838,24 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // (legitimate, the fill correctly stops at it) versus something else
   // (terrain that should have been part of this same hole, or a stray
   // overlap left by an earlier, unrelated stroke).
-  const holeRingsForDiagnostic = holeLoops.map((loop) => loop.map((p) => p.position));
   const occupiedInsideHoleBySurfaceType = new Map<string, number>();
   for (const hit of hits) {
     const centroid = centroids[hit.index];
     if (centroid === undefined) continue;
     const [cx, cz] = centroid;
-    if (!insideHole(cx, cz, holeRingsForDiagnostic)) continue;
+    if (!insideHole(cx, cz, holeShapeRings)) continue;
     occupiedInsideHoleBySurfaceType.set(hit.surfaceType, (occupiedInsideHoleBySurfaceType.get(hit.surfaceType) ?? 0) + 1);
   }
   console.warn(
     `[terrain-cut-repair] lattice ${JSON.stringify({
       causeId,
-      holeBounds: boundsOf(holeLoops.flat().map((p) => p.position)),
+      holeBounds: boundsOf(holeShapeRings.flat()),
       quadCount: lattice.mesh.quads.length,
       vertexCount: lattice.mesh.vertices.length,
       occupiedQuadCount: occupiedQuads.size,
-      insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeRingsForDiagnostic)).length,
+      insideHoleQuadCount: centroids.filter(([x, z]) => insideHole(x, z, holeShapeRings)).length,
       occupiedInsideHoleBySurfaceType: Object.fromEntries(occupiedInsideHoleBySurfaceType),
+      liveRimCandidateCount: liveRimCandidates.length,
     })}`,
   );
 
@@ -805,13 +865,13 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     surfaceType,
     physical,
     lattice,
-    holeLoops,
-    paintedNodes,
+    holeShapeRings,
+    candidates,
     occupiedQuads,
   });
 
   if (patch !== undefined) {
-    const rimIds = new Set(holeLoops.flat().map((p) => p.id));
+    const rimIds = new Set(liveRimCandidates.map((p) => p.id));
     const paintedIds = new Set(paintedNodes.map((p) => p.id));
     let weldedRim = 0;
     let weldedPainted = 0;
