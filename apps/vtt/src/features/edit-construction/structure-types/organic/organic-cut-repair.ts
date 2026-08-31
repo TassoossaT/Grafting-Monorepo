@@ -255,7 +255,7 @@ function splitSeamEdgesAt(
   shapes: MultiPolygon,
   seamNodes: readonly CutRepairWeldCandidate[],
   seamEdges: readonly CutRepairPaintedEdge[],
-): readonly CutRepairWeldCandidate[] {
+): { readonly nodes: readonly CutRepairWeldCandidate[]; readonly fragments: readonly CutRepairPaintedEdge[]; readonly consumed: ReadonlySet<ConstructionEdgeId> } {
   const positionOf = new Map(seamNodes.map((node) => [node.id, node.position]));
   const runs = seamEdges
     .map((edge) => {
@@ -264,7 +264,7 @@ function splitSeamEdgesAt(
       return start !== undefined && end !== undefined ? { edge, start, end } : undefined;
     })
     .filter((run): run is { edge: CutRepairPaintedEdge; start: ConstructionPosition; end: ConstructionPosition } => run !== undefined);
-  if (runs.length === 0) return [];
+  if (runs.length === 0) return { nodes: [], fragments: [], consumed: new Set() };
 
   const onNode = (x: number, z: number): boolean =>
     seamNodes.some((node) => Math.hypot(node.position.x - x, node.position.z - z) <= WELD_TOLERANCE);
@@ -293,6 +293,12 @@ function splitSeamEdgesAt(
   }
 
   const created: CutRepairWeldCandidate[] = [];
+  // Each split replaces the edge it cut with two fragments, in that
+  // original's own stored direction (`insert_vertex` keeps it for both).
+  // The original id is gone once that happens, so the caller has to stop
+  // prescribing it and prescribe these instead.
+  const fragments: CutRepairPaintedEdge[] = [];
+  const consumed = new Set<ConstructionEdgeId>();
   let failed = 0;
   for (const { run, points } of wanted.values()) {
     const ordered = [...points.values()].sort((left, right) => left.t - right.t);
@@ -326,14 +332,22 @@ function splitSeamEdgesAt(
         continue;
       }
       created.push({ id: nodeId, position });
+      consumed.add(run.edge.edgeId);
+      fragments.push({ edgeId: firstEdgeId, startNodeId: fromId, endNodeId: nodeId });
       currentEdgeId = secondEdgeId;
       fromId = nodeId;
+    }
+    // Whatever remains of this run, from its last new node to the original's
+    // own end, is a fragment too -- never split again, and carrying the
+    // original's own direction exactly as the earlier ones do.
+    if (consumed.has(run.edge.edgeId)) {
+      fragments.push({ edgeId: currentEdgeId, startNodeId: fromId, endNodeId: run.edge.endNodeId });
     }
   }
   if (failed > 0) {
     console.warn(`[terrain-cut-repair] seam splits refused ${JSON.stringify({ causeId, failed, created: created.length })}`);
   }
-  return created;
+  return { nodes: created, fragments, consumed };
 }
 
 /** Every consumed region's own outer loop, as one polygon each -- unioned into the true outer boundary of everything this cut removed. */
@@ -344,6 +358,12 @@ function deletedAreaShapes(consumedRings: readonly (readonly ConstructionPositio
   if (polygons.length === 0) return [];
   const [first, ...rest] = polygons;
   return polygonClipping.union(first!, ...rest);
+}
+
+/** A point's own identity as a map key, quantised so two derivations of the same corner agree -- see {@link POSITION_KEY_PRECISION}. */
+function positionKey(point: readonly [number, number] | ConstructionPosition): string {
+  const [x, z] = Array.isArray(point) ? [point[0] as number, point[1] as number] : [(point as ConstructionPosition).x, (point as ConstructionPosition).z];
+  return `${Math.round(x * POSITION_KEY_PRECISION)}:${Math.round(z * POSITION_KEY_PRECISION)}`;
 }
 
 /**
@@ -363,8 +383,20 @@ function buildFillPatch(
   physical: boolean,
   shapes: MultiPolygon,
   candidates: readonly CutRepairWeldCandidate[],
+  seamOrientation: readonly CutRepairPaintedEdge[],
+  fillDirection: readonly { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[],
 ): ConstructionPatch | undefined {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
+  // Both walk directions of every seam edge, named by its own true stored
+  // direction. Whichever way a ring ends up walking one, the id and the
+  // `reversed` that go with it are already decided here -- never re-derived
+  // from the ids' own lexicographic order, which a split fragment's real
+  // storage has no reason to match.
+  const prescribedUse = new Map<string, { readonly edgeId: ConstructionEdgeId; readonly reversed: boolean }>();
+  for (const seam of seamOrientation) {
+    prescribedUse.set(`${seam.startNodeId}>${seam.endNodeId}`, { edgeId: seam.edgeId, reversed: false });
+    prescribedUse.set(`${seam.endNodeId}>${seam.startNodeId}`, { edgeId: seam.edgeId, reversed: true });
+  }
   const nodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
   const claimed = new Set<ConstructionNodeId>();
 
@@ -428,13 +460,57 @@ function buildFillPatch(
     return found.sort((left, right) => left.t - right.t).map((entry) => entry.candidate);
   };
 
+  // Which way round the fill has to walk, decided by the rim rather than by
+  // this fill's own idea of a normal.
+  //
+  // A shared edge is only registrable if the two faces on it walk it in
+  // *opposite* directions; walking it the same way its existing neighbour
+  // already does is what the engine refuses as no room. `getUnfilledLoops`
+  // already hands back every free rim edge oriented for the face that would
+  // fill it -- "registrable verbatim" -- so the rim states the answer and
+  // this only has to agree with it. Normalising every ring to a fixed
+  // winding instead (which an earlier version of this function did) is right
+  // exactly half the time: where it disagreed, every cell touching the rim
+  // was refused and only the interior landed, leaving the fill an island
+  // with its whole seam missing.
+  //
+  // The vote is global, not per ring: neighbouring cells share edges with
+  // each other too, and flipping one alone would put it at odds with its own
+  // neighbours. Every ring here comes from one source shape with one
+  // winding, so they flip together or not at all.
+  const prescribedFrom = new Map<string, string>();
+  for (const walk of fillDirection) {
+    prescribedFrom.set(`${positionKey(walk.from)}>${positionKey(walk.to)}`, "agree");
+    prescribedFrom.set(`${positionKey(walk.to)}>${positionKey(walk.from)}`, "disagree");
+  }
+  let agree = 0;
+  let disagree = 0;
+  for (const shape of shapes) {
+    for (const [ringIndex, ring] of shape.entries()) {
+      const walked = openRing(ensureUpwardWinding(ring, ringIndex > 0));
+      for (const [index, point] of walked.entries()) {
+        const next = walked[(index + 1) % walked.length]!;
+        const verdict = prescribedFrom.get(`${positionKey(point)}>${positionKey(next)}`);
+        if (verdict === "agree") agree += 1;
+        if (verdict === "disagree") disagree += 1;
+      }
+    }
+  }
+  const flip = disagree > agree;
+
   const regions: ConstructionPatchRegion[] = [];
+  // Collected from the rings themselves, not from `edges.all()`: a seam edge
+  // is emitted verbatim from the prescription and never goes through
+  // `edges`, so deriving the node list from declared edges alone would drop
+  // exactly the rim and painter nodes this fill welded onto -- the ones that
+  // make it one cloud with them.
+  const walkedIds = new Set<ConstructionNodeId>();
   shapes.forEach((shape, shapeIndex) => {
     const [outerRing, ...holeRings] = shape;
     if (outerRing === undefined || Math.abs(signedRingArea(outerRing)) < MIN_SHAPE_AREA) return;
 
     const idsFor = (ring: Ring, isHole: boolean): readonly ConstructionNodeId[] => {
-      const walked = openRing(ensureUpwardWinding(ring, isHole));
+      const walked = openRing(ensureUpwardWinding(ring, isHole !== flip));
       const ids = walked.flatMap((point, index) => {
         const next = walked[(index + 1) % walked.length]!;
         return [
@@ -458,13 +534,25 @@ function buildFillPatch(
       return deduped;
     };
 
+    // A seam edge is emitted exactly as the rim handed it over -- same edge
+    // id, same `reversed` -- rather than derived again here. Deriving it
+    // means guessing which way the neighbour is already walking it; the rim
+    // already knows, and reusing its answer is what makes the two faces
+    // share the edge instead of colliding on it.
+    const useEdge = (from: ConstructionNodeId, to: ConstructionNodeId) =>
+      prescribedUse.get(`${from}>${to}`) ?? edges.use(from, to);
+
     const outerIds = idsFor(outerRing, false);
     if (outerIds.length < 3) return;
-    const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
+    for (const id of outerIds) walkedIds.add(id);
+    const boundary = outerIds.map((id, index) => useEdge(id, outerIds[(index + 1) % outerIds.length]!));
     const holes = holeRings
       .map((holeRing) => idsFor(holeRing, true))
       .filter((ids) => ids.length >= 3)
-      .map((ids) => ids.map((id, index) => edges.use(id, ids[(index + 1) % ids.length]!)));
+      .map((ids) => {
+        for (const id of ids) walkedIds.add(id);
+        return ids.map((id, index) => useEdge(id, ids[(index + 1) % ids.length]!));
+      });
 
     regions.push({
       regionId: `terrain-cut:${causeId}:fill-${shapeIndex}`,
@@ -476,15 +564,9 @@ function buildFillPatch(
   });
 
   if (regions.length === 0) return undefined;
-  const declared = edges.all();
-  const referenced = new Set<ConstructionNodeId>();
-  for (const edge of declared) {
-    referenced.add(edge.startNodeId);
-    referenced.add(edge.endNodeId);
-  }
   return {
-    nodes: [...nodePositions].filter(([id]) => referenced.has(id)).map(([id, position]) => ({ id, position })),
-    edges: declared,
+    nodes: [...nodePositions].filter(([id]) => walkedIds.has(id)).map(([id, position]) => ({ id, position })),
+    edges: edges.all(),
     regions,
   };
 }
@@ -607,6 +689,11 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // one of them where no node stands, and that edge has to be split there
   // rather than met by a fresh node sitting on top of it.
   const rimEdges: CutRepairPaintedEdge[] = [];
+  // The same walk, kept as the orientation the fill must use -- `boundary`
+  // is already turned for the face that closes the gap, so walking
+  // `nodeIds` in order *is* the direction this fill has to take. See
+  // `buildFillPatch`'s own winding note for what goes wrong without it.
+  const fillDirection: { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[] = [];
   for (const loop of loops) {
     const ids = loop.nodeIds;
     for (let index = 0; index < ids.length; index += 1) {
@@ -616,6 +703,11 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       if (use === undefined || from === to) continue;
       const [startNodeId, endNodeId] = use.reversed ? [to, from] : [from, to];
       rimEdges.push({ edgeId: use.edgeId, startNodeId, endNodeId });
+      const fromPosition = snapshot.map.nodePositions.get(from)?.position;
+      const toPosition = snapshot.map.nodePositions.get(to)?.position;
+      if (fromPosition !== undefined && toPosition !== undefined) {
+        fillDirection.push({ from: fromPosition, to: toPosition });
+      }
     }
     for (const nodeId of ids) {
       const position = snapshot.map.nodePositions.get(nodeId)?.position;
@@ -652,7 +744,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   // rather than on one of its nodes, that edge is split there first, so the
   // seam has a real node for both sides to share -- see
   // `splitPaintedEdgesAt`'s own doc.
-  const seamNodes = splitSeamEdgesAt(
+  const split = splitSeamEdgesAt(
     runtime,
     snapshot.tableId,
     causeId,
@@ -660,8 +752,16 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     [...liveRimCandidates, ...fallout.paintedNodes],
     [...rimEdges, ...fallout.paintedEdges],
   );
+  const seamNodes = split.nodes;
   const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes, ...seamNodes];
-  const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates);
+  // Every seam edge still standing, in its own true stored direction: the
+  // rim's and the painter's originals, minus the ones the split above
+  // replaced, plus the fragments it put in their place.
+  const seamEdges = [
+    ...[...rimEdges, ...fallout.paintedEdges].filter((edge) => !split.consumed.has(edge.edgeId)),
+    ...split.fragments,
+  ];
+  const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates, seamEdges, fillDirection);
 
   // TEMP DIAGNOSTIC -- remove once the live fill is confirmed. A single
   // string, not a (tag, object) pair: copying the console as plain text
@@ -675,6 +775,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       paintedNodes: fallout.paintedNodes.length,
       paintedRings: painted.length,
       seamNodes: seamNodes.length,
+      seamOriented: fillDirection.length,
       deletedShapes: deleted.length,
       leftoverShapes: leftover.length,
       fillCells: fill.length,

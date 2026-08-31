@@ -126,19 +126,16 @@ function createFakeTerrainRuntime() {
   };
 }
 
-/** Every node id the patch's own regions actually walk, in no particular order. */
+/**
+ * Every node id the patch declares.
+ *
+ * Read from `nodes` rather than resolved through `edges`: a seam edge is
+ * reused verbatim from the rim's own prescription and is never re-declared
+ * in this patch (the engine already has it), so walking `edges` alone would
+ * miss exactly the welded rim and painter nodes.
+ */
 function boundaryNodeIds(patch) {
-  const byEdgeId = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
-  const ids = new Set();
-  for (const region of patch.regions) {
-    for (const use of region.boundary) {
-      const edge = byEdgeId.get(use.edgeId);
-      if (edge === undefined) continue;
-      ids.add(edge.startNodeId);
-      ids.add(edge.endNodeId);
-    }
-  }
-  return ids;
+  return new Set(patch.nodes.map((node) => node.id));
 }
 
 test("a cut with no painter geometry gives the whole consumed area back, welded onto its own rim", () => {
@@ -336,4 +333,68 @@ test("the fill never reaches past the consumed area onto a surviving neighbour",
   for (const node of patch.nodes) {
     assert.ok(node.position.x <= 4 + 1e-9, `a fill vertex reached past the consumed area at x=${node.position.x}`);
   }
+});
+
+test("the seam is walked the way the rim prescribes, not the way this fill's own winding would pick", () => {
+  // `getUnfilledLoops` hands back every free rim edge already oriented for
+  // the face that closes it. A shared edge is only registrable when the two
+  // faces walk it in opposite directions, so the rim's answer -- not this
+  // fill's own idea of a normal -- is what decides which way round to go.
+  //
+  // A 2x2 region on the grid, so no cell line cuts a rim edge and the seam
+  // is walked as those very edges rather than as fragments of them; and the
+  // rim is reported walked the opposite way round from the winding this fill
+  // would otherwise normalise to.
+  const positions = new Map([
+    ["q1", { x: 0, y: 0, z: 0 }],
+    ["q2", { x: 2, y: 0, z: 0 }],
+    ["q3", { x: 2, y: 0, z: 2 }],
+    ["q4", { x: 0, y: 0, z: 2 }],
+  ]);
+  const rim = ["q1", "q4", "q3", "q2"];
+  const prescribed = new Map();
+  const boundary = rim.map((id, index) => {
+    const next = rim[(index + 1) % rim.length];
+    const [start] = id < next ? [id, next] : [next, id];
+    const use = { edgeId: sharedEdgeId("table-1", id, next), reversed: id !== start };
+    prescribed.set(use.edgeId, use.reversed);
+    return use;
+  });
+
+  const added = [];
+  let region = {
+    surfaceKey: ["@region", "Q"],
+    surfaceType: "terrain",
+    physical: true,
+    outerLoops: outerLoopOf(["q1", "q2", "q3", "q4"]),
+    nodes: ["q1", "q2", "q3", "q4"].map((id) => ({ id, position: positions.get(id) })),
+  };
+  const runtime = {
+    getRegionTopology: (key) => (region !== undefined && key.join("|") === "@region|Q" ? region : undefined),
+    applyRegionEdit(ops) {
+      for (const op of ops) if (op.kind === "delete-region") region = undefined;
+    },
+    getUnfilledLoops: () => [{ nodeIds: rim, boundary }],
+    getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map([...positions].map(([id, position]) => [id, { position }])) } }),
+    addPatch(patch) {
+      added.push(patch);
+      return { createdSurfaceKeys: patch.regions.map((r) => ["@region", r.regionId]), skippedRegionIds: [] };
+    },
+  };
+
+  repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "Q"]], paintedNodes: [], paintedEdges: [] }, "cause-1");
+  const [patch] = added;
+
+  // Every use of a rim edge must carry the `reversed` the rim itself
+  // reported. Picking its own direction is what got the seam faces refused
+  // and left the fill an island.
+  let checked = 0;
+  for (const face of patch.regions) {
+    for (const use of face.boundary) {
+      if (!prescribed.has(use.edgeId)) continue;
+      assert.equal(use.reversed, prescribed.get(use.edgeId), `${use.edgeId} was walked against the direction the rim prescribed`);
+      checked += 1;
+    }
+  }
+  assert.equal(checked, 4, "all four rim edges are walked, as the rim prescribed them");
 });
