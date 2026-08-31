@@ -114,6 +114,25 @@ function nearestHeight(x: number, z: number, candidates: readonly CutRepairWeldC
   return bestY;
 }
 
+/** The XZ extent a multipolygon occupies -- `undefined` when it holds no ring at all. */
+function boundsOfShapes(shapes: MultiPolygon): { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number } | undefined {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const shape of shapes) {
+    for (const ring of shape) {
+      for (const [x, z] of ring) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minZ = Math.min(minZ, z);
+        maxZ = Math.max(maxZ, z);
+      }
+    }
+  }
+  return minX === Infinity ? undefined : { minX, maxX, minZ, maxZ };
+}
+
 /** A whole multipolygon's area, openings taken out -- how much ground a shape really is. */
 function areaOf(shapes: MultiPolygon): number {
   let total = 0;
@@ -485,17 +504,12 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
 
   const loops = runtime.getUnfilledLoops([...preScope]);
   const snapshot = runtime.getSnapshot();
-  const liveRimCandidates: CutRepairWeldCandidate[] = [];
-  // Two different things are read off the same answer: *where* to weld, and
-  // *which way round* to wind. The nodes give the first; `boundary` -- each
-  // free edge already oriented for the face that would fill this hole -- is
-  // the engine's own answer to the second, which is not this side's to guess.
+  // What this answer is read for is the *winding*: `boundary` reports each
+  // free edge already oriented for the face that would fill this hole, which
+  // is not this side's to guess. It is deliberately no longer read for weld
+  // targets -- see `candidates` below.
   const prescribed = new Map<ConstructionEdgeId, boolean>();
   for (const loop of loops) {
-    for (const nodeId of loop.nodeIds) {
-      const position = snapshot.map.nodePositions.get(nodeId)?.position;
-      if (position !== undefined) liveRimCandidates.push({ id: nodeId, position });
-    }
     for (const use of loop.boundary) prescribed.set(use.edgeId, use.reversed);
   }
 
@@ -503,7 +517,39 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const painted = areaOfRings(fallout.paintedLoops);
   const fill: MultiPolygon = painted.length === 0 ? deleted : polygonClipping.difference(deleted, painted);
 
-  const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes];
+  // Every live node standing in the ground this cut removed, whoever it
+  // belongs to.
+  //
+  // The weld used to see only what `getUnfilledLoops` reported plus the
+  // painter's own nodes, and a vertex it could not match was minted fresh.
+  // That is exactly how a fill ends up floating: a node the loop query did
+  // not name is still *there*, so the fill mints a second node at the very
+  // same position -- coincident, and connected to nothing. Whether a node
+  // should be reused is a question about the graph, not about which loops a
+  // scoped query happened to return, so the graph is asked directly.
+  //
+  // Bounded by the removed area rather than the whole table, and that is
+  // exact rather than a heuristic: the fill lies inside what the cut removed,
+  // so no node outside those bounds can sit on one of its vertices. Anything
+  // still standing inside them is fair game to weld onto whatever its type,
+  // which is what keeps the regenerated ground in one cloud with both the rim
+  // it came from and the painter that cut it.
+  const reach = boundsOfShapes(deleted);
+  const byId = new Map<ConstructionNodeId, ConstructionPosition>();
+  if (reach !== undefined) {
+    for (const [id, entry] of snapshot.map.nodePositions) {
+      const { position } = entry;
+      if (position.x < reach.minX - WELD_TOLERANCE || position.x > reach.maxX + WELD_TOLERANCE) continue;
+      if (position.z < reach.minZ - WELD_TOLERANCE || position.z > reach.maxZ + WELD_TOLERANCE) continue;
+      byId.set(id, position);
+    }
+  }
+  // The painter's own nodes on top of that, by name rather than by bounds.
+  // They are live nodes and the graph scan above already reaches them, so
+  // this adds nothing in practice -- it is what `CutFallout.paintedNodes`
+  // promises, kept true independently of how the sweep above is bounded.
+  for (const node of fallout.paintedNodes) byId.set(node.id, node.position);
+  const candidates: CutRepairWeldCandidate[] = [...byId].map(([id, position]) => ({ id, position }));
   const patch = buildFillPatch(snapshot.tableId, causeId, surfaceType, physical, fill, candidates, prescribed);
 
   // TEMP DIAGNOSTIC -- remove once the live fill is confirmed. A single
@@ -514,7 +560,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
       causeId,
       consumed: consumedTopologies.length,
       failedDeletes: failedDeletes.length,
-      rimCandidates: liveRimCandidates.length,
+      weldCandidates: candidates.length,
       paintedNodes: fallout.paintedNodes.length,
       paintedLoops: fallout.paintedLoops.length,
       prescribedEdges: prescribed.size,

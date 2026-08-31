@@ -519,3 +519,26 @@ test("a node the clipper simplified away is put back, so the seam walks the neig
     "and never the shortcut across it, which is an edge the road does not have",
   );
 });
+
+test("a live node the loop query never reported is still welded onto, never minted over", () => {
+  const { runtime, addedPatches } = createFakeTerrainRuntime();
+  // The hole's rim is real and live either way; here the scoped loop query
+  // reports nothing about it. Deciding to mint a fresh node because a query
+  // stayed quiet is what leaves a fill sitting on top of the graph instead of
+  // in it: a second node at the exact position of one already there,
+  // coincident and connected to nothing.
+  runtime.getUnfilledLoops = () => [];
+
+  const rebuilt = repairOrganicCut(runtime, { consumedSurfaceKeys: [["@region", "T1"]], paintedNodes: [], paintedLoops: [] }, "cause-1");
+
+  assert.ok(rebuilt > 0);
+  const [patch] = addedPatches;
+  assert.ok(
+    !patch.nodes.some((node) => node.id.startsWith("terrain-cut:")),
+    "every corner sat on a live node, so nothing was minted over one",
+  );
+  const used = boundaryNodeIds(patch);
+  for (const id of ["n1", "n2", "n3", "n4"]) {
+    assert.ok(used.has(id), `the fill walks the rim's own live node ${id}`);
+  }
+});
