@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   buildCutRepairLattice,
-  densifyPaintedEdges,
+  insertLatticeEdgePins,
   planOrganicCutRepair,
   repairOrganicCut,
 } from "../src/features/edit-construction/structure-types/organic/organic-cut-repair.ts";
@@ -44,7 +44,7 @@ const SQUARE_HOLE_CANDIDATES = [
 ];
 
 test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's own rim ids", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, [], "cause-square");
   const patch = planOrganicCutRepair({
     tableId: "table-1",
     causeId: "cause-square",
@@ -72,17 +72,16 @@ test("planOrganicCutRepair fills the hole with a lattice welded onto the hole's 
   assert.deepEqual(["p0", "p1", "p2", "p3"].filter((id) => usedIds.has(id)).sort(), ["p0", "p1", "p2", "p3"]);
 });
 
-test("buildCutRepairLattice pins a lattice vertex exactly onto a real painted node's own position", () => {
-  // A position nowhere near any lattice vertex the *unpinned* generator
-  // would have produced on its own -- if it shows up exactly, pinning (not
-  // luck) put it there.
+test("buildCutRepairLattice's own shape never bends toward a candidate -- it self-relaxes exactly like fresh terrain, welding happens after, by id, never by moving a vertex", () => {
+  const withoutCandidates = buildCutRepairLattice(SQUARE_HOLE_SHAPE, [], [], "cause-square");
   const painted = { id: "painted-A", position: { x: 2.137, y: 1.5, z: 1.863 } };
-  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, [painted], "cause-square");
+  const withCandidate = buildCutRepairLattice(SQUARE_HOLE_SHAPE, [painted], [], "cause-square");
 
-  const landedExactly = lattice.mesh.vertices.some(
-    (local) => lattice.originX + local.x === painted.position.x && lattice.originZ + local.y === painted.position.z,
+  assert.deepEqual(
+    withCandidate.mesh.vertices,
+    withoutCandidates.mesh.vertices,
+    "the candidate never moved a single lattice vertex -- an earlier version pinned the mesh toward real geometry during relax; this one relaxes toward itself regardless of what it will later weld onto",
   );
-  assert.ok(landedExactly, "some lattice vertex was pinned exactly onto the painted node's own position");
 });
 
 test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted node, not merely near it", () => {
@@ -90,7 +89,7 @@ test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted nod
   // reach, so whichever quad ends up owning this vertex is a plain, simple
   // one, not one straddling the rim.
   const painted = { id: "painted-A", position: { x: 2, y: 1.5, z: 2 } };
-  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, [painted], "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, [painted], [], "cause-square");
 
   const patch = planOrganicCutRepair({
     tableId: "table-1",
@@ -110,7 +109,7 @@ test("planOrganicCutRepair welds a pinned lattice vertex onto a real painted nod
 });
 
 test("planOrganicCutRepair drops every quad already claimed by something else", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, [], "cause-square");
   const everyQuad = new Set(lattice.mesh.quads.map((_, index) => index));
 
   const patch = planOrganicCutRepair({
@@ -129,7 +128,7 @@ test("planOrganicCutRepair drops every quad already claimed by something else", 
 });
 
 test("planOrganicCutRepair regenerates nothing when the hole is nowhere near the lattice", () => {
-  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, "cause-square");
+  const lattice = buildCutRepairLattice(SQUARE_HOLE_SHAPE, SQUARE_HOLE_CANDIDATES, [], "cause-square");
   const farHoleShape = [
     [
       { x: 1000, y: 0, z: 1000 },
@@ -369,7 +368,11 @@ test("planOrganicCutRepair demotes a shared corner globally, so two quads meetin
 });
 
 // ---------------------------------------------------------------------------
-// densifyPaintedEdges -- subdividing a sparse painted edge into real anchors
+// buildCutRepairLattice's edge pins, and insertLatticeEdgePins turning them
+// into real splits -- replaces the old densifyPaintedEdges pre-pass: the
+// lattice itself decides where a painted edge needs a real anchor (the
+// nearest point on it to each of its own nearby vertices), and this only
+// ever mints one where the lattice actually landed.
 // ---------------------------------------------------------------------------
 
 function createInsertTrackingRuntime() {
@@ -384,8 +387,7 @@ function createInsertTrackingRuntime() {
   };
 }
 
-test("densifyPaintedEdges subdivides a long painted edge near the hole into real interior anchors", () => {
-  const { runtime, inserts } = createInsertTrackingRuntime();
+test("buildCutRepairLattice pins several vertices along a long painted edge, and insertLatticeEdgePins splits it into one unbroken chain", () => {
   const holeShape = [
     [
       { x: 0, y: 0, z: 0 },
@@ -400,66 +402,45 @@ test("densifyPaintedEdges subdivides a long painted edge near the hole into real
   ];
   const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
 
-  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
+  const lattice = buildCutRepairLattice(holeShape, paintedNodes, paintedEdges, "cause-1");
 
-  // A 10-unit run at this generator's 1-unit anchor spacing (half a 2-unit
-  // lattice cell, deliberately tighter -- see ANCHOR_SPACING's own doc)
-  // splits into 10 segments -- 9 real interior anchors, each an actual
-  // insert-vertex op, not merely computed and discarded.
-  assert.equal(densified.nodes.length, 9);
-  assert.equal(inserts.length, 9);
-  const xs = densified.nodes.map((node) => node.position.x).sort((a, b) => a - b);
-  assert.deepEqual(xs, [1, 2, 3, 4, 5, 6, 7, 8, 9], "anchors land evenly along the run, one anchor-spacing apart");
-  for (const node of densified.nodes) {
-    assert.equal(node.position.y, 0.2, "interpolated from the edge's own endpoints, not an arbitrary height");
-    assert.equal(node.position.z, 0);
+  // A 10-unit run bordering a hole this size is far longer than a single
+  // lattice cell -- several of the lattice's own vertices should have found
+  // a nearest point along it, not only its two sparse ends.
+  assert.ok(lattice.edgePins.length > 3, `expected several edge pins along a 10-unit run, got ${lattice.edgePins.length}`);
+  for (const pin of lattice.edgePins) {
+    assert.equal(pin.edgeId, "table-1:seg:p-end~p-start");
+    // Never at (or past) either end -- that is the plain node candidate's
+    // own job, see EDGE_PIN_ENDPOINT_SLACK's own doc.
+    assert.ok(pin.t > 0 && pin.t < 1, `pin landed at the very end (t=${pin.t}), should have matched the node candidate instead`);
+    // On the line itself (z = 0), and height interpolated from the edge's
+    // own endpoints (both 0.2 here) rather than an arbitrary lattice value.
+    assert.equal(pin.position.z, 0);
+    assert.equal(pin.position.y, 0.2);
   }
+
+  const { runtime, inserts } = createInsertTrackingRuntime();
+  const inserted = insertLatticeEdgePins(runtime, "table-1", "cause-1", lattice.edgePins);
+
+  assert.equal(inserted.nodes.length, lattice.edgePins.length, "one real node per pin, no more, no less");
+  assert.equal(inserts.length, lattice.edgePins.length, "one actual insert-vertex op per node, not merely computed and discarded");
 
   // Every fragment's own *true* direction is reported too, forming one
   // unbroken walk from the original edge's own start to its own end -- not
-  // just 9 isolated anchor nodes with no known connectivity between them.
-  assert.equal(densified.edges.length, 10, "9 interior anchors split a run into 10 fragment edges");
-  assert.equal(densified.edges[0].startNodeId, "p-start");
-  assert.equal(densified.edges.at(-1).endNodeId, "p-end");
-  for (let i = 0; i < densified.edges.length - 1; i += 1) {
+  // isolated anchor nodes with no known connectivity between them.
+  assert.equal(inserted.edges.length, lattice.edgePins.length + 1, "N anchors split one run into N+1 fragment edges");
+  assert.equal(inserted.edges[0].startNodeId, "p-start");
+  assert.equal(inserted.edges.at(-1).endNodeId, "p-end");
+  for (let i = 0; i < inserted.edges.length - 1; i += 1) {
     assert.equal(
-      densified.edges[i].endNodeId,
-      densified.edges[i + 1].startNodeId,
+      inserted.edges[i].endNodeId,
+      inserted.edges[i + 1].startNodeId,
       "each fragment's own true end is the next fragment's own true start -- an unbroken chain",
     );
   }
 });
 
-test("densifyPaintedEdges leaves a short painted edge alone", () => {
-  const { runtime, inserts } = createInsertTrackingRuntime();
-  const holeShape = [
-    [
-      { x: 0, y: 0, z: 0 },
-      { x: 2, y: 0, z: 0 },
-      { x: 2, y: 0, z: 2 },
-      { x: 0, y: 0, z: 2 },
-    ],
-  ];
-  const paintedNodes = [
-    { id: "p-start", position: { x: 0, y: 0, z: 0 } },
-    { id: "p-end", position: { x: 0.8, y: 0, z: 0 } },
-  ];
-  const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
-
-  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
-
-  assert.equal(densified.nodes.length, 0, "already short enough to weld onto its own two endpoints");
-  assert.equal(inserts.length, 0);
-  // The original, unsplit edge is still reported as known -- both ends are
-  // real, near-hole nodes, and a lattice quad that welds two adjacent
-  // corners onto exactly them must be able to reuse this exact edge; see
-  // planOrganicCutRepair's own real-to-real guard.
-  assert.equal(densified.edges.length, 1);
-  assert.deepEqual(densified.edges[0], { edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" });
-});
-
-test("densifyPaintedEdges ignores a painted edge nowhere near the hole", () => {
-  const { runtime, inserts } = createInsertTrackingRuntime();
+test("buildCutRepairLattice never pins onto a painted edge nowhere near the hole", () => {
   const holeShape = [
     [
       { x: 0, y: 0, z: 0 },
@@ -474,10 +455,15 @@ test("densifyPaintedEdges ignores a painted edge nowhere near the hole", () => {
   ];
   const paintedEdges = [{ edgeId: "table-1:seg:p-end~p-start", startNodeId: "p-start", endNodeId: "p-end" }];
 
-  const densified = densifyPaintedEdges(runtime, "table-1", "cause-1", holeShape, paintedNodes, paintedEdges);
+  const lattice = buildCutRepairLattice(holeShape, paintedNodes, paintedEdges, "cause-1");
 
-  assert.equal(densified.nodes.length, 0);
-  assert.equal(densified.edges.length, 0);
+  assert.equal(lattice.edgePins.length, 0);
+});
+
+test("insertLatticeEdgePins is a no-op given no pins", () => {
+  const { runtime, inserts } = createInsertTrackingRuntime();
+  const inserted = insertLatticeEdgePins(runtime, "table-1", "cause-1", []);
+  assert.deepEqual(inserted, { nodes: [], edges: [] });
   assert.equal(inserts.length, 0);
 });
 

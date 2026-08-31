@@ -18,7 +18,6 @@ import {
   relax,
   weld as weldQuadGrid,
   type QuadMesh,
-  type Vec2,
 } from "../../topology/irregular-grid.ts";
 import type { CutFallout } from "../structure-type.ts";
 
@@ -31,78 +30,55 @@ import type { CutFallout } from "../structure-type.ts";
 const LATTICE_TRIANGLE_SIDE = 2;
 
 /**
- * How close (world units, XZ) one of the lattice's own *outer boundary*
- * vertices must land to a real candidate point -- the hole's own rim, or the
- * painter's own registered nodes -- before {@link buildCutRepairLattice}
- * pins it there for `relax` to hold exactly, rather than letting it settle
- * wherever the lattice's own square-fitting would otherwise put it.
+ * How close (world units, XZ) a lattice vertex's own *final*, self-relaxed
+ * position must land to a real candidate -- an existing node, or the nearest
+ * point along one of the painter's own edges -- before it welds onto that
+ * candidate instead of minting a fresh id.
  *
- * Generous relative to a lattice cell (measured ~0.6-1.3 world units at this
- * `triangleSide`): the *un-relaxed* boundary is still coarse, and a pin that
- * lands slightly off its true counterpart only nudges local shape a little
- * -- {@link MAX_EDGE_LENGTH} is the actual backstop against a bad match, not
- * this radius.
+ * The same tolerance, and the same reasoning, as `terrain-sculpt-tool.ts`'s
+ * own `CROSS_SESSION_WELD_EPSILON`: this repair no longer bends the lattice
+ * itself toward the hole's real geometry the way an earlier version's own
+ * `PIN_RADIUS`-driven `relax(..., { pinnedTargets })` did (`buildCutRepairLattice`'s
+ * own history) -- the lattice self-relaxes exactly like a fresh piece of
+ * terrain does, and only *afterward* does each vertex look for real geometry
+ * nearby. A generous-enough radius is what makes that connection reliable
+ * without ever needing to have shaped the mesh around it; {@link MAX_EDGE_LENGTH}
+ * is the backstop against the rare case where that reach still lands wrong.
  */
-const PIN_RADIUS = LATTICE_TRIANGLE_SIDE * 0.75;
-
-/**
- * How close (world units, XZ) a lattice vertex's own *final*, post-relax
- * position must land to a real node before {@link planOrganicCutRepair}
- * reuses that node's id instead of minting one.
- *
- * Tight on purpose -- the same tolerance `contour-patch.ts`'s own
- * `WELD_TOLERANCE` uses for the same reason: once {@link buildCutRepairLattice}
- * has pinned a boundary vertex, its final position *is* the candidate's own
- * position, exactly, not merely nearby. A generous radius here is what used
- * to let an unrelated vertex from the *surrounding* standing terrain --
- * never pinned, just incidentally close -- get pulled into a quad it does
- * not actually border, producing a face that bridges across ground (a road
- * it should have stopped at) instead of filling the hole next to it.
- */
-const WELD_RADIUS = 1e-3;
+const WELD_RADIUS = LATTICE_TRIANGLE_SIDE * 0.4;
 
 /**
  * The longest a fresh quad's own edge may be, measured from its *resolved*
  * (post-weld) corners, before the quad is dropped as malformed rather than
  * submitted.
  *
- * A backstop, not the primary defence ({@link PIN_RADIUS} guiding relax and
- * {@link WELD_RADIUS} being tight are that): even a well-pinned lattice can
- * mismatch on an oddly-shaped or very thin hole, and a quad whose corners
- * end up this far apart is not filling the hole any more, it is bridging
- * across it -- dropped rather than committed as a corrupt face.
+ * A backstop, not the primary defence: even with `WELD_RADIUS` chosen well,
+ * a self-relaxed lattice's own boundary can still land oddly against a thin
+ * or sharply curved hole, and a quad whose corners end up this far apart is
+ * not filling the hole any more, it is bridging across it -- dropped rather
+ * than committed as a corrupt face.
  *
  * Sized from what a *legitimately* welded edge can actually reach, not a
  * round guess: an unwelded edge runs up to roughly `0.7 * LATTICE_TRIANGLE_SIDE`
  * (measured on this generator), and each of its two corners can
- * independently move up to {@link PIN_RADIUS} away from that -- in opposite
- * directions, in the worst real case. A flat `LATTICE_TRIANGLE_SIDE * 1.5`
- * cap here undercut that by nearly a full `PIN_RADIUS` and was rejecting
- * the very quads pinning had just welded *correctly*: once most of a hole's
- * boundary actually starts finding real candidates, most of its edges land
- * somewhere in that legitimately-stretched range, and a cap this tight threw
- * almost all of them away, leaving real holes in the ground instead of the
- * fill they should have been.
+ * independently move up to {@link WELD_RADIUS} away from that -- in opposite
+ * directions, in the worst real case.
  */
-const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 0.7 + 2 * PIN_RADIUS;
+const MAX_EDGE_LENGTH = LATTICE_TRIANGLE_SIDE * 0.7 + 2 * WELD_RADIUS;
 
 /**
- * How far apart {@link densifyPaintedEdges} spaces the real anchor nodes it
- * mints along one of the painter's own edges.
+ * How close a lattice vertex's projection onto one of the painter's own
+ * edges must land to that edge's *own* endpoint before {@link buildCutRepairLattice}
+ * treats it as that endpoint rather than a fresh split point.
  *
- * Tighter than {@link LATTICE_TRIANGLE_SIDE} on purpose, not equal to it. A
- * lattice cell's own edge measures roughly `0.6`-`1.3` at this triangle
- * side; anchors spaced a full cell apart are *farther apart than a single
- * quad edge can span*, so two adjacent corners of the same lattice quad
- * essentially never land on two consecutive anchors at once -- each welds
- * to its own anchor independently, with a minted, unconnected corner
- * between them, and the two faces touch at isolated points without ever
- * sharing a real edge. Halving the spacing puts multiple anchors within one
- * quad edge's own reach, which is what actually lets a shared node-id pair
- * (`sharedEdgeId` names an edge by its node pair alone) land on the *same*
- * edge the painter's own contour already declared there.
+ * The endpoint is already a live node -- one of `candidates` -- so a
+ * projection landing this close to it is the same match the plain
+ * node-candidate pairing already makes; without this, a vertex naturally
+ * closest to an edge's own end would get *both* an ordinary node pin and a
+ * near-coincident edge pin competing for it, and the edge pin would go on to
+ * `insert-vertex` a second, redundant node right on top of the real one.
  */
-const ANCHOR_SPACING = LATTICE_TRIANGLE_SIDE * 0.5;
+const EDGE_PIN_ENDPOINT_SLACK = 1e-3;
 
 /** One real, already-live node this repair may weld a fresh lattice vertex onto. */
 export interface CutRepairWeldCandidate {
@@ -240,7 +216,7 @@ export interface CutRepairPaintedEdge {
  * One real, already-live edge whose *true* direction (as the engine
  * actually stored it) is known and must be trusted verbatim -- never
  * recomputed from `sharedEdgeId`'s own lexicographic convention. See
- * {@link densifyPaintedEdges}'s own doc for why: `insertVertex` preserves
+ * {@link insertLatticeEdgePins}'s own doc for why: `insertVertex` preserves
  * the *original* edge's own direction for both fragments it creates, which
  * has nothing to do with where the freshly minted node's own id happens to
  * sort as a string, so a fragment's true `startNodeId`/`endNodeId` can
@@ -252,8 +228,28 @@ export interface CutRepairKnownEdge {
   readonly endNodeId: ConstructionNodeId;
 }
 
-/** What {@link densifyPaintedEdges} both created and learned. */
-export interface DensifiedPaintedEdges {
+/**
+ * One lattice vertex's own decision to land on a point *along* one of the
+ * painter's own edges, rather than on an existing node -- {@link buildCutRepairLattice}'s
+ * own output, {@link insertLatticeEdgePins}'s own input.
+ *
+ * `t` (`0`-`1`, `startNodeId` -> `endNodeId`) is carried so multiple pins
+ * landing on the *same* original edge can be split in the right order --
+ * `insert-vertex` only ever splits one edge into two, so subdividing a run
+ * three or more real anchors deep is a sequence of splits, nearest-to-`start`
+ * first.
+ */
+export interface OrganicCutRepairLatticeEdgePin {
+  readonly vertexIndex: number;
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly t: number;
+  readonly position: ConstructionPosition;
+}
+
+/** What {@link insertLatticeEdgePins} both created and learned. */
+export interface InsertedLatticeEdgePins {
   /** The freshly minted anchor nodes -- new weld candidates. */
   readonly nodes: readonly CutRepairWeldCandidate[];
   /** Every fragment edge actually created, with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc. */
@@ -261,24 +257,25 @@ export interface DensifiedPaintedEdges {
 }
 
 /**
- * Splits every one of the painter's own edges that is both near this hole
- * and long enough to matter into real interior anchor nodes, spaced
- * {@link ANCHOR_SPACING} apart -- deliberately *tighter* than one lattice
- * cell, see that constant's own doc for why -- via the generic
- * `"insert-vertex"` op (`ConstructionSessionPort.insertVertex`'s own doc:
- * "subdivides one boundary edge, minting a new node on it" -- the same
- * primitive a wall crossing already uses, applied here to a straight or
- * gently-curved run rather than an intersection).
+ * Performs the `insert-vertex` splits {@link buildCutRepairLattice}'s own
+ * edge-pin search decided the painter's edges need, one real node per
+ * {@link OrganicCutRepairLatticeEdgePin} -- the same generic op a wall
+ * crossing already uses (`ConstructionSessionPort.insertVertex`'s own doc:
+ * "subdivides one boundary edge, minting a new node on it"), applied here to
+ * a straight or gently-curved run rather than an intersection.
  *
- * **Why this exists at all.** A road is flattened to a handful of points
- * along a straight or gently curved stretch -- by design; redundant
- * collinear points would serve no purpose of the road's own. A hole
- * bordering ten or more meters of that stretch may see only two or three of
- * the painter's own nodes anywhere nearby, which starves
- * {@link buildCutRepairLattice}'s own pinning of anything to find along most
- * of that run: "close to the painter's edge" stayed merely close, never an
- * actual shared vertex. Subdividing the edge itself, not just reading its
- * existing nodes, is what turns the whole run into real anchor points.
+ * **Why this replaces a separate pre-pass.** An earlier version of this
+ * repair (`densifyPaintedEdges`) guessed where to split a long edge *before*
+ * the lattice existed, spacing anchors evenly and hoping the lattice's own
+ * boundary would later land close enough to weld onto one. It usually did,
+ * approximately -- two independent decisions (where the guessed anchors
+ * are, where the lattice's own vertices land) rarely agree exactly. There is
+ * a strictly simpler order: build the lattice first (`buildCutRepairLattice`'s
+ * own search already finds, for every one of its own vertices near a painted
+ * edge, the *exact* nearest point on it), and only then split the edge at
+ * exactly those points. The inserted node does not need to find the lattice
+ * vertex; it *is* the lattice vertex, by construction, with nothing left to
+ * weld.
  *
  * **Every fragment's own true direction is tracked, not assumed.**
  * `insert_vertex` (`region_edit.rs`) splits by calling the *original* edge's
@@ -292,75 +289,54 @@ export interface DensifiedPaintedEdges {
  * own fresh `edges.use()` call for reusing it would then submit the wrong
  * `reversed` flag, which is exactly what an engine-side `loop is not
  * closed` refusal traced back to. Every fragment's *true* start/end is
- * returned in {@link DensifiedPaintedEdges.edges} so the caller can bypass
+ * returned in {@link InsertedLatticeEdgePins.edges} so the caller can bypass
  * that fresh recomputation for these specific ids.
  *
  * Mutates the live graph (through `runtime.applyRegionEdit`); returns the
  * freshly created nodes so the caller can fold them into its own weld
  * candidates immediately, in the same call.
  */
-export function densifyPaintedEdges(
+export function insertLatticeEdgePins(
   runtime: OrganicCutRepairRuntime,
   tableId: string,
   causeId: string,
-  holeShapeRings: readonly (readonly ConstructionPosition[])[],
-  paintedNodes: readonly CutRepairWeldCandidate[],
-  paintedEdges: readonly CutRepairPaintedEdge[],
-): DensifiedPaintedEdges {
-  if (paintedEdges.length === 0) return { nodes: [], edges: [] };
-  const positionOf = new Map(paintedNodes.map((node) => [node.id, node.position]));
-  const { centerX, centerZ, radius } = boundsOf(holeShapeRings.flat());
-  const reach = radius + PIN_RADIUS;
-  const nearHole = (position: ConstructionPosition): boolean =>
-    Math.abs(position.x - centerX) <= reach && Math.abs(position.z - centerZ) <= reach;
+  edgePins: readonly OrganicCutRepairLatticeEdgePin[],
+): InsertedLatticeEdgePins {
+  if (edgePins.length === 0) return { nodes: [], edges: [] };
 
-  const created: CutRepairWeldCandidate[] = [];
+  const byEdge = new Map<ConstructionEdgeId, OrganicCutRepairLatticeEdgePin[]>();
+  for (const pin of edgePins) {
+    const list = byEdge.get(pin.edgeId);
+    if (list === undefined) byEdge.set(pin.edgeId, [pin]);
+    else list.push(pin);
+  }
+
+  const nodes: CutRepairWeldCandidate[] = [];
   const knownEdges: CutRepairKnownEdge[] = [];
-  let mintedCounter = 0;
 
-  for (const edge of paintedEdges) {
-    const start = positionOf.get(edge.startNodeId);
-    const end = positionOf.get(edge.endNodeId);
-    if (start === undefined || end === undefined) continue;
-    if (!nearHole(start) && !nearHole(end)) continue;
-
-    const length = Math.hypot(end.x - start.x, end.z - start.z);
-    const segments = Math.round(length / ANCHOR_SPACING);
-    if (segments < 2) {
-      // Already short enough to weld onto its own endpoints as-is -- still
-      // recorded as known, unsplit, in its own original direction. Both
-      // ends are real, live nodes near this hole; without this entry, a
-      // lattice quad that legitimately welds two adjacent corners onto
-      // exactly these two endpoints would find no known edge between two
-      // real ids and get rejected by `planOrganicCutRepair`'s own
-      // real-to-real guard, even though this exact edge already connects
-      // them.
-      knownEdges.push({ edgeId: edge.edgeId, startNodeId: edge.startNodeId, endNodeId: edge.endNodeId });
-      continue;
-    }
-
-    let currentEdgeId = edge.edgeId;
-    let fromId = edge.startNodeId;
-    for (let index = 1; index < segments; index += 1) {
-      const t = index / segments;
-      const position: ConstructionPosition = {
-        x: start.x + (end.x - start.x) * t,
-        y: start.y + (end.y - start.y) * t,
-        z: start.z + (end.z - start.z) * t,
-      };
-      const nodeId: ConstructionNodeId = `terrain-cut:${causeId}:path-anchor:${mintedCounter}`;
-      mintedCounter += 1;
+  for (const pins of byEdge.values()) {
+    // Nearest-to-`start` first: `insert-vertex` only ever splits the one
+    // edge it is given into two, so three or more anchors along the same
+    // original run is a sequence of splits, each consuming the *remainder*
+    // left by the last -- the same shape `densifyPaintedEdges` used to walk,
+    // just now over pins the lattice itself placed instead of an even guess.
+    const sorted = [...pins].sort((a, b) => a.t - b.t);
+    const first = sorted[0]!;
+    let currentEdgeId = first.edgeId;
+    let fromId = first.startNodeId;
+    for (const pin of sorted) {
+      const nodeId: ConstructionNodeId = `terrain-cut:${causeId}:path-anchor:${nodes.length}`;
       const firstEdgeId = sharedEdgeId(tableId, fromId, nodeId);
-      const secondEdgeId = sharedEdgeId(tableId, nodeId, edge.endNodeId);
+      const secondEdgeId = sharedEdgeId(tableId, nodeId, pin.endNodeId);
       runtime.applyRegionEdit(
-        [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position, firstEdgeId, secondEdgeId }],
+        [{ kind: "insert-vertex", edgeId: currentEdgeId, nodeId, position: pin.position, firstEdgeId, secondEdgeId }],
         "local",
         causeId,
       );
-      created.push({ id: nodeId, position });
+      nodes.push({ id: nodeId, position: pin.position });
       // `first` (fromId -> nodeId) is now a permanent fragment -- only the
-      // remainder (`second`) gets split further, next iteration or as the
-      // loop's own final segment below.
+      // remainder (`second`) gets split further, next pin or as the loop's
+      // own final segment below.
       knownEdges.push({ edgeId: firstEdgeId, startNodeId: fromId, endNodeId: nodeId });
       currentEdgeId = secondEdgeId;
       fromId = nodeId;
@@ -368,9 +344,24 @@ export function densifyPaintedEdges(
     // The final remainder, from the last anchor to the edge's own original
     // end, is never split again -- its own true direction is exactly what
     // it was assigned on the last iteration above.
-    knownEdges.push({ edgeId: currentEdgeId, startNodeId: fromId, endNodeId: edge.endNodeId });
+    knownEdges.push({ edgeId: currentEdgeId, startNodeId: fromId, endNodeId: first.endNodeId });
   }
-  return { nodes: created, edges: knownEdges };
+  return { nodes, edges: knownEdges };
+}
+
+/** Point on segment `a`-`b` (XZ) nearest `(x, z)`, clamped to the segment itself -- never extrapolated past either end. `t` is `0` at `a`, `1` at `b`. */
+function nearestPointOnSegment(
+  x: number,
+  z: number,
+  a: ConstructionPosition,
+  b: ConstructionPosition,
+): { readonly t: number; readonly x: number; readonly z: number } {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lengthSq = dx * dx + dz * dz;
+  if (lengthSq <= 1e-12) return { t: 0, x: a.x, z: a.z };
+  const t = Math.min(Math.max(((x - a.x) * dx + (z - a.z) * dz) / lengthSq, 0), 1);
+  return { t, x: a.x + dx * t, z: a.z + dz * t };
 }
 
 /** A fresh lattice sized and placed to cover every point `holeLoops` names -- terrain's own generator, seeded deterministically from the cause that needs it. */
@@ -378,55 +369,58 @@ export interface OrganicCutRepairLattice {
   readonly mesh: QuadMesh;
   readonly originX: number;
   readonly originZ: number;
+  /** Every vertex this generation pinned onto a point *along* one of the painter's own edges, rather than onto an existing node -- {@link insertLatticeEdgePins}'s own input. */
+  readonly edgePins: readonly OrganicCutRepairLatticeEdgePin[];
 }
 
 /**
- * Sizes and generates the lattice a cut repair fills its hole from, its own
- * outer boundary pinned onto real geometry wherever one lands close enough --
- * the hole's own rim, or the painter's own contour.
+ * Sizes and generates the lattice a cut repair fills its hole from, then
+ * reports every one of its own vertices that landed close enough to a point
+ * *along* one of the painter's own edges to be worth splitting there.
  *
- * **Why pin instead of welding after the fact.** A plain `buildIrregularQuadGrid`
- * call relaxes its boundary toward *itself* (`pinBoundary`'s default) --
- * nothing pulls it toward the real rim it is meant to close, so its final
- * shape is wherever that independent lattice's own square-fitting happened
- * to land. Welding by proximity afterward against a hole tightly surrounded
- * by standing terrain on every side then has nothing reliable to go on: an
- * *interior* vertex, not just a boundary one, can land within the weld
- * radius of some unrelated real node from the surrounding mesh, producing a
- * quad that bridges across ground it was never meant to touch (this is what
- * `unknown analytic region` traced back to -- a submitted face naming four
- * real nodes that do not actually border each other). Pinning fixes the
- * *generation* itself: every boundary vertex that finds a real counterpart
- * is held exactly there through every relax pass (`RelaxOptions.pinnedTargets`),
- * so the lattice's own shape bends to close the hole, and the id-weld this
- * feeds into ({@link planOrganicCutRepair}) can then use a near-zero
- * tolerance ({@link WELD_RADIUS}) instead of gambling on proximity.
- *
- * **Every vertex is a pin candidate, not only the lattice's own topological
- * boundary.** A hole this fills is rarely round: a road cut is long and
- * narrow, and the lattice this generates is sized from its bounding circle
- * -- a hexagon wide enough to cover the whole span. For a thin hole, the
- * true seam (the hole's own rim, and the painter's own contour running down
- * the middle) cuts *through* that hexagon's interior, not along its outer
- * rim; restricting pins to `boundaryVertices` left every one of those seam
- * vertices unpinned and this repair fell back to a near-zero-tolerance
- * proximity match that essentially never fired. Checking every vertex costs
- * one more nearest-neighbour scan and is a no-op for a vertex genuinely deep
- * inside a large hole, where nothing real is ever close enough to matter.
+ * **Self-relaxed, the same way `terrain-sculpt-tool.ts` builds fresh
+ * terrain -- never bent toward the hole's own real geometry.** An earlier
+ * version of this function pinned every vertex it could match onto a real
+ * candidate *during* `relax` (`RelaxOptions.pinnedTargets`), forcing the
+ * mesh's own shape to bend toward the hole it was closing. That bought exact
+ * positions at the cost of real machinery: a distance-sorted greedy match
+ * to decide which vertex won which candidate, a whole second candidate kind
+ * for points *along* an edge competing in the same pass, and a near-zero
+ * weld tolerance downstream that only worked because pinning had already
+ * done the hard part. `terrain-sculpt-tool.ts` never faced any of this --
+ * building a `QuadMesh` once and relaxing it toward *itself* is exactly what
+ * `buildIrregularQuadGrid` already does, and welding is a plain
+ * nearest-candidate search afterward, at a tolerance generous enough
+ * (`WELD_RADIUS`) to still find real geometry nearby without needing to
+ * have shaped the mesh around it. The same defences that already existed
+ * for a bad match -- `quadCrossesItself`, `MAX_EDGE_LENGTH`, the
+ * unrelated-real-pair guard -- catch the rare case a self-relaxed lattice's
+ * boundary lands somewhere a well-pinned one would not have.
  *
  * `holeShapeRings`' own bounding circle decides the radius -- generous by
  * one whole ring (`+ 1`) so the lattice's own boundary clears every point of
- * it with room to spare. Deliberately *not* sized from `candidates` too:
- * that list can include the painter's *whole* patch (a long road's every
- * node, not only the stretch next to this one hole), and sizing the lattice
- * from it would make one small cut generate an enormous lattice for a
- * stroke that merely happens to run nearby. `candidates` still narrows
- * which pins actually find a real counterpart -- it only does not decide
- * how big to build.
+ * it with room to spare, and `planOrganicCutRepair`'s own inside-hole and
+ * occupied-quad checks are what actually stop the fill from spilling past
+ * the true hole -- this only has to be big enough to cover it, not shaped
+ * like it.
+ *
+ * **A vertex can land on a point *along* one of `paintedEdges`, not only on
+ * an existing node.** A road is flattened to a handful of points along a
+ * straight or gently curved stretch, by design -- a hole bordering ten or
+ * more metres of one may see only two or three of the painter's own nodes
+ * anywhere nearby, starving a node-only weld of anything to find along most
+ * of that run. For each vertex within `WELD_RADIUS` of a nearby edge,
+ * projecting onto its *nearest point* and comparing that against the
+ * nearest plain node candidate -- whichever is actually closer wins -- finds
+ * a counterpart along the whole run, not only at its sparse ends, without
+ * ever preferring a fresh split over a real, already-live node that was
+ * closer all along. Reported back as {@link OrganicCutRepairLattice.edgePins}
+ * for {@link insertLatticeEdgePins} to turn into a real split.
  */
 export function buildCutRepairLattice(
   holeShapeRings: readonly (readonly ConstructionPosition[])[],
   candidates: readonly CutRepairWeldCandidate[],
+  paintedEdges: readonly CutRepairPaintedEdge[],
   causeId: string,
 ): OrganicCutRepairLattice {
   const { centerX, centerZ, radius } = boundsOf(holeShapeRings.flat());
@@ -434,57 +428,73 @@ export function buildCutRepairLattice(
 
   const random = createRandom(seedFromCauseId(causeId));
   const triangles = buildTriangleHex({ trianglesPerSide, triangleSide: LATTICE_TRIANGLE_SIDE });
-  const preRelax = weldQuadGrid(ortho(pairTriangles(triangles, random)));
+  const mesh = relax(weldQuadGrid(ortho(pairTriangles(triangles, random))));
 
-  // `candidates` can include the painter's *whole* patch (a long road's
-  // every node), so it is filtered to this hole's own neighbourhood before
-  // pairing -- otherwise every one of a long road's thousand-odd contour
-  // samples would be tested against every lattice vertex.
-  const reach = radius + PIN_RADIUS;
+  // `candidates`/`paintedEdges` can include the painter's *whole* patch (a
+  // long road's every node and edge), so both are filtered to this hole's
+  // own neighbourhood before any per-vertex search -- otherwise every one of
+  // a long road's thousand-odd contour samples would be tested against
+  // every lattice vertex.
+  const reach = radius + WELD_RADIUS;
   const nearby = (point: ConstructionPosition): boolean =>
     Math.abs(point.x - centerX) <= reach && Math.abs(point.z - centerZ) <= reach;
-  const pinCandidates: CutRepairWeldCandidate[] = candidates.filter((candidate) => nearby(candidate.position));
+  const nearbyCandidates = candidates.filter((candidate) => nearby(candidate.position));
+  const positionOf = new Map(candidates.map((candidate) => [candidate.id, candidate.position]));
+  const nearbyEdges = paintedEdges
+    .map((edge) => {
+      const start = positionOf.get(edge.startNodeId);
+      const end = positionOf.get(edge.endNodeId);
+      return start !== undefined && end !== undefined ? { edge, start, end } : undefined;
+    })
+    .filter((entry): entry is { edge: CutRepairPaintedEdge; start: ConstructionPosition; end: ConstructionPosition } => entry !== undefined)
+    .filter((entry) => nearby(entry.start) || nearby(entry.end));
 
-  // A stable, distance-sorted greedy match, not "whichever vertex happens
-  // to be resolved first claims the nearest candidate": two *different*
-  // lattice vertices can both be nearest the very same real candidate
-  // whenever the lattice is finer than that candidate's own spacing (a
-  // sparse rim, or a coarsely-sampled contour), and index-order pinning let
-  // the truly-closest vertex lose that candidate to a merely-nearby one
-  // that happened to come first. Sorting every (vertex, candidate) pair
-  // within reach by distance and assigning greedily gives each candidate to
-  // its actual nearest vertex, and each vertex at most one candidate, before
-  // any weaker pairing gets a chance to claim either. Without this, a
-  // vertex that lost its candidate to a same-position duplicate had nothing
-  // else within a near-zero final-weld tolerance to match and minted its
-  // own id right where a real one already stood -- coincident, never
-  // connected, the very failure mode real graph welding exists to avoid,
-  // reintroduced one layer up.
-  const pairs: { readonly vertexIndex: number; readonly candidate: CutRepairWeldCandidate; readonly distanceSq: number }[] = [];
-  preRelax.vertices.forEach((local, vertexIndex) => {
+  const edgePins: OrganicCutRepairLatticeEdgePin[] = [];
+  mesh.vertices.forEach((local, vertexIndex) => {
     const x = centerX + local.x;
     const z = centerZ + local.y;
-    for (const candidate of pinCandidates) {
+
+    let nearestCandidateDistanceSq = Infinity;
+    for (const candidate of nearbyCandidates) {
       const dx = candidate.position.x - x;
       const dz = candidate.position.z - z;
-      const distanceSq = dx * dx + dz * dz;
-      if (distanceSq <= PIN_RADIUS * PIN_RADIUS) pairs.push({ vertexIndex, candidate, distanceSq });
+      nearestCandidateDistanceSq = Math.min(nearestCandidateDistanceSq, dx * dx + dz * dz);
     }
+
+    let best: { readonly edge: CutRepairPaintedEdge; readonly t: number; readonly x: number; readonly z: number; readonly distanceSq: number } | undefined;
+    for (const { edge, start, end } of nearbyEdges) {
+      const projected = nearestPointOnSegment(x, z, start, end);
+      // Landing at (or past) either end is the same match the node
+      // candidate for that endpoint already makes -- see EDGE_PIN_ENDPOINT_SLACK's own doc.
+      if (projected.t <= EDGE_PIN_ENDPOINT_SLACK || projected.t >= 1 - EDGE_PIN_ENDPOINT_SLACK) continue;
+      const dx = projected.x - x;
+      const dz = projected.z - z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq <= WELD_RADIUS * WELD_RADIUS && (best === undefined || distanceSq < best.distanceSq)) {
+        best = { edge, t: projected.t, x: projected.x, z: projected.z, distanceSq };
+      }
+    }
+    // A plain node candidate wins any tie -- welding onto a real, already-
+    // live node is strictly simpler than minting a fresh split of an edge
+    // that node may itself be one end of.
+    if (best === undefined || best.distanceSq >= nearestCandidateDistanceSq) return;
+
+    // Height interpolated along the edge at `t`, the same way a freshly
+    // minted (unwelded) vertex borrows the nearest real point's own `y` --
+    // there is no lattice-side height of its own to use instead.
+    const startY = positionOf.get(best.edge.startNodeId)?.y ?? 0;
+    const endY = positionOf.get(best.edge.endNodeId)?.y ?? 0;
+    edgePins.push({
+      vertexIndex,
+      edgeId: best.edge.edgeId,
+      startNodeId: best.edge.startNodeId,
+      endNodeId: best.edge.endNodeId,
+      t: best.t,
+      position: { x: best.x, y: startY + (endY - startY) * best.t, z: best.z },
+    });
   });
-  pairs.sort((a, b) => a.distanceSq - b.distanceSq);
 
-  const claimedVertices = new Set<number>();
-  const claimedCandidates = new Set<ConstructionNodeId>();
-  const pins = new Map<number, Vec2>();
-  for (const pair of pairs) {
-    if (claimedVertices.has(pair.vertexIndex) || claimedCandidates.has(pair.candidate.id)) continue;
-    claimedVertices.add(pair.vertexIndex);
-    claimedCandidates.add(pair.candidate.id);
-    pins.set(pair.vertexIndex, { x: pair.candidate.position.x - centerX, y: pair.candidate.position.z - centerZ });
-  }
-
-  const mesh = relax(preRelax, { pinnedTargets: pins });
-  return { mesh, originX: centerX, originZ: centerZ };
+  return { mesh, originX: centerX, originZ: centerZ, edgePins };
 }
 
 /** Every lattice quad's own world-space centroid, index-aligned with `lattice.mesh.quads` -- what a caller classifies in one batched `classifyPoints` call before {@link planOrganicCutRepair} decides which quads to keep. */
@@ -523,7 +533,7 @@ export interface OrganicCutRepairPlanInput {
   readonly holeShapeRings: readonly (readonly ConstructionPosition[])[];
   /** Every real, live node this repair may weld a lattice vertex onto -- the hole's own surviving rim (only where a neighbour still stands) together with the painter's own real registered nodes. See `CutFallout`. */
   readonly candidates: readonly CutRepairWeldCandidate[];
-  /** Every fragment {@link densifyPaintedEdges} created, with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc for why this must be trusted instead of recomputed. */
+  /** Every fragment {@link insertLatticeEdgePins} created, plus the rim's own known adjacency, each with its *true* stored direction -- see {@link CutRepairKnownEdge}'s own doc for why this must be trusted instead of recomputed. */
   readonly knownEdges: readonly CutRepairKnownEdge[];
   /** Lattice quad indices (into `lattice.mesh.quads`) whose centroid already lands on ground something else claims -- one batched `classifyPoints` call, resolved by the caller before this runs. */
   readonly occupiedQuads: ReadonlySet<number>;
@@ -606,7 +616,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // corners can each independently weld onto a real node that is close by
   // *in space* without there being any real edge between the two of them at
   // all: the original edge that used to run directly between them may have
-  // been the very one `densifyPaintedEdges` split into a whole chain of
+  // been the very one `insertLatticeEdgePins` split into a whole chain of
   // anchors, which leaves `sharedEdgeId(tableId, a, b)` for the pre-split
   // pair naming nothing this patch actually knows about. `quadCrossesItself`
   // / `quadEdgeTooLong` catch this when the mismatch also happens to bend or
@@ -630,7 +640,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // known chain (one densified painted run, or one rim loop) landing
   // adjacent in a quad without being the chain's own neighbours -- the
   // original edge that used to run directly between them was the one
-  // `densifyPaintedEdges` (or a rim loop) split up, so no known edge names
+  // `insertLatticeEdgePins` (or a rim loop) split up, so no known edge names
   // this specific pair, yet a real one, once, genuinely did. A pair from two
   // *different* chains (or two ids with no known chain at all) has no such
   // history to contradict -- there is nothing they could be skipping over --
@@ -806,7 +816,7 @@ export interface OrganicCutRepairRuntime {
    * `boundary` is each edge's *true* stored direction, already resolved
    * opposite the sole existing user -- "registrable verbatim" per its own
    * doc (`ConstructionUnfilledLoop`). `repairOrganicCut` trusts it verbatim
-   * for the same reason {@link densifyPaintedEdges} trusts its own fragments'
+   * for the same reason {@link insertLatticeEdgePins} trusts its own fragments'
    * true direction instead of `sharedEdgeId`'s lexicographic guess: a rim
    * edge is exactly as likely to have been created start-after-end (a prior
    * `insert-vertex` split, or any edge whose two node ids simply don't sort
@@ -897,10 +907,13 @@ export interface OrganicCutRepairRuntime {
  *    whichever part of the hole's rim survives as real, live nodes --
  *    optional, not required: empty means every side of this hole borders
  *    the painter's own contour instead of surviving terrain.
- * 4. {@link densifyPaintedEdges} subdivides the painter's own edges near
- *    this hole into real anchor nodes -- a long straight or gently curved
- *    run has almost no nodes of its own to weld onto otherwise.
- * 5. Build a fresh lattice sized to cover that hole ({@link buildCutRepairLattice}).
+ * 4. Build a fresh, self-relaxed lattice sized to cover that hole
+ *    ({@link buildCutRepairLattice}), which also reports every one of its
+ *    own vertices that landed near a point along one of the painter's own
+ *    edges rather than an existing node.
+ * 5. {@link insertLatticeEdgePins} turns every one of those edge pins into a
+ *    real `insert-vertex` split -- the lattice decided *where* a long
+ *    painted run needs a real anchor; this is what actually mints one there.
  * 6. One batched `classifyPoints` call over every lattice quad's centroid
  *    reports which already sit on ground something else claims (surviving
  *    terrain, or the painter's own new patch) -- terrain's fill has to stop
@@ -1015,7 +1028,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
   const liveRimCandidates: CutRepairWeldCandidate[] = [];
   // Every pair `loop.nodeIds` actually walks consecutively (wrap included)
   // -- the rim's own real, pre-existing adjacency, untouched by
-  // `densifyPaintedEdges`. `planOrganicCutRepair` refuses to declare a
+  // `insertLatticeEdgePins`. `planOrganicCutRepair` refuses to declare a
   // boundary edge between two real ids unless something here already
   // vouches for them being genuinely connected; without this, two rim ids
   // from non-adjacent stretches of the same (or a different) unfilled loop
@@ -1052,20 +1065,27 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     }
   }
 
-  const densified = densifyPaintedEdges(runtime, snapshot.tableId, causeId, holeShapeRings, fallout.paintedNodes, fallout.paintedEdges);
-  const paintedNodes = densified.nodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...densified.nodes];
+  // The lattice is built *before* anything is subdivided on the painter's
+  // own edges -- its own self-relaxed vertices already tell us, in
+  // `lattice.edgePins`, the exact nearest point on any nearby edge. Only
+  // real anchors the lattice actually needs get minted, exactly where it
+  // needs them; see `insertLatticeEdgePins`'s own doc for why this replaced
+  // a separate pre-guessed densify pass.
+  const candidatesBeforeInsertion: CutRepairWeldCandidate[] = [...liveRimCandidates, ...fallout.paintedNodes];
+  const lattice = buildCutRepairLattice(holeShapeRings, candidatesBeforeInsertion, fallout.paintedEdges, causeId);
+  const inserted = insertLatticeEdgePins(runtime, snapshot.tableId, causeId, lattice.edgePins);
+  const paintedNodes = inserted.nodes.length === 0 ? fallout.paintedNodes : [...fallout.paintedNodes, ...inserted.nodes];
+  const candidates: CutRepairWeldCandidate[] = inserted.nodes.length === 0 ? candidatesBeforeInsertion : [...candidatesBeforeInsertion, ...inserted.nodes];
   console.warn(
-    `[terrain-cut-repair] densifyPaintedEdges ${JSON.stringify({
+    `[terrain-cut-repair] insertLatticeEdgePins ${JSON.stringify({
       causeId,
       paintedEdgeCount: fallout.paintedEdges.length,
-      anchorsCreated: densified.nodes.length,
-      knownEdgeCount: densified.edges.length,
+      edgePinCount: lattice.edgePins.length,
+      anchorsCreated: inserted.nodes.length,
+      knownEdgeCount: inserted.edges.length,
     })}`,
   );
 
-  const candidates: CutRepairWeldCandidate[] = [...liveRimCandidates, ...paintedNodes];
-
-  const lattice = buildCutRepairLattice(holeShapeRings, candidates, causeId);
   const centroids = cutRepairQuadCentroids(lattice);
   const hits = runtime.classifyPoints(centroids);
   const occupiedQuads = new Set(hits.map((hit) => hit.index));
@@ -1104,7 +1124,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
     lattice,
     holeShapeRings,
     candidates,
-    knownEdges: [...rimEdgeKnowledge, ...densified.edges],
+    knownEdges: [...rimEdgeKnowledge, ...inserted.edges],
     occupiedQuads,
   });
 
@@ -1175,7 +1195,7 @@ export function repairOrganicCut(runtime: OrganicCutRepairRuntime, fallout: CutF
         : patch.regions
             .filter((region) => region.regionId.split("|").some((id) => named.includes(id)))
             .map((region) => ({ regionId: region.regionId, boundary: region.boundary }));
-    const touchedKnownEdges = [...rimEdgeKnowledge, ...densified.edges].filter(
+    const touchedKnownEdges = [...rimEdgeKnowledge, ...inserted.edges].filter(
       (known) => named.length === 0 || named.includes(known.startNodeId) || named.includes(known.endNodeId),
     );
     console.warn(
