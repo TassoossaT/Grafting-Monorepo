@@ -678,6 +678,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
   // `regions`, so a real session's own numbers say which check is actually
   // responsible instead of another guess.
   const rejected = { occupied: 0, outsideHole: 0, unresolvedOrDuplicate: 0, crossingOrTooLong: 0, unrelatedRealPair: 0 };
+  let salvagedCorners = 0;
 
   input.lattice.mesh.quads.forEach((quad, quadIndex) => {
     if (input.occupiedQuads.has(quadIndex)) {
@@ -720,19 +721,42 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       return;
     }
 
-    const hasUnrelatedRealPair = cycle.some((id, position) => !boundaryPermitted(id, cycle[(position + 1) % cycle.length]!));
-    if (hasUnrelatedRealPair) {
+    // A corner welded onto a real id with no known connection to its cyclic
+    // neighbour cannot share that boundary edge with it -- but it is the
+    // *id*, not the position, that makes the pair illegal. Dropping the
+    // whole quad over one bad corner turns a graph-level nuance into a
+    // visible hole in the mesh, when the position that corner already
+    // resolved to (the hole's own rim or the painter's own contour, exactly
+    // where it belongs) is not itself wrong at all. Substituting a freshly
+    // minted id at that *same* resolved position -- never a new position --
+    // makes the pair legal (a minted id is never in `realIds`) with nothing
+    // visibly moving; the only cost is that this one quad's corner may no
+    // longer be the *same* node id a neighbouring quad resolved for the same
+    // lattice vertex, a coincident-but-separate pair of nodes at one point
+    // instead of one shared node -- invisible, and far better than a hole.
+    // Bounded by `cycle.length`: each pass fixes at least the one offending
+    // pair `findIndex` just found, so at most one substitution per corner.
+    let salvaged = cycle;
+    for (let pass = 0; pass < salvaged.length; pass += 1) {
+      const badIndex = salvaged.findIndex((id, position) => !boundaryPermitted(id, salvaged[(position + 1) % salvaged.length]!));
+      if (badIndex === -1) break;
+      const freshId: ConstructionNodeId = `terrain-cut:${input.causeId}:v${mintedCounter}`;
+      mintedCounter += 1;
+      salvaged = salvaged.map((id, position) => (position === badIndex ? freshId : id));
+    }
+    if (salvaged.some((id, position) => !boundaryPermitted(id, salvaged[(position + 1) % salvaged.length]!))) {
       rejected.unrelatedRealPair += 1;
       return;
     }
+    if (salvaged !== cycle) salvagedCorners += 1;
 
-    const boundary = cycle.map((id, position) => boundaryUse(id, cycle[(position + 1) % cycle.length]!));
+    const boundary = salvaged.map((id, position) => boundaryUse(id, salvaged[(position + 1) % salvaged.length]!));
     quad.forEach((vertexIndex, position) => {
-      const id = cycle[position];
+      const id = salvaged[position];
       const resolved = resolvedPosition[vertexIndex];
       if (id !== undefined && resolved !== undefined) nodePositions.set(id, resolved);
     });
-    regions.push({ regionId: cycle.join("|"), boundary, surfaceType: input.surfaceType, physical: input.physical });
+    regions.push({ regionId: salvaged.join("|"), boundary, surfaceType: input.surfaceType, physical: input.physical });
   });
 
   console.warn(
@@ -740,6 +764,7 @@ export function planOrganicCutRepair(input: OrganicCutRepairPlanInput): Construc
       causeId: input.causeId,
       totalQuads: input.lattice.mesh.quads.length,
       kept: regions.length,
+      salvagedCorners,
       ...rejected,
     })}`,
   );

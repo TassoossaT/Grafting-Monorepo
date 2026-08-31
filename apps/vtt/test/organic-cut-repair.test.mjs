@@ -226,6 +226,68 @@ test("planOrganicCutRepair trusts a known edge's own true direction over sharedE
   assert.equal(use.reversed, true, "walking aaa-first -> zzz-second against a true start of zzz-second must be reversed, not the lexicographic guess of false");
 });
 
+test("planOrganicCutRepair salvages a quad with one unvouched real pair instead of dropping the whole thing", () => {
+  // Same hand-built single quad as the known-direction test above, but this
+  // time three of its four sides are vouched into one connected component
+  // (aaa-first ~ zzz-second ~ corner-c ~ corner-d) while the fourth,
+  // corner-d -> aaa-first, is never declared at all -- same component, no
+  // known edge, exactly what `boundaryPermitted` refuses.
+  const lattice = {
+    mesh: {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 },
+      ],
+      quads: [[0, 1, 2, 3]],
+    },
+    originX: 0,
+    originZ: 0,
+  };
+  const candidates = [
+    { id: "aaa-first", position: { x: 0, y: 0, z: 0 } },
+    { id: "zzz-second", position: { x: 1, y: 0, z: 0 } },
+    { id: "corner-c", position: { x: 1, y: 0, z: 1 } },
+    { id: "corner-d", position: { x: 0, y: 0, z: 1 } },
+  ];
+  const holeShapeRings = [candidates.map((c) => c.position)];
+  const canonical = (a, b) => {
+    const [start, end] = a < b ? [a, b] : [b, a];
+    return { edgeId: sharedEdgeId("table-1", a, b), startNodeId: start, endNodeId: end };
+  };
+  const knownEdges = [canonical("aaa-first", "zzz-second"), canonical("zzz-second", "corner-c"), canonical("corner-c", "corner-d")];
+
+  const patch = planOrganicCutRepair({
+    tableId: "table-1",
+    causeId: "cause-salvage",
+    surfaceType: "terrain",
+    physical: true,
+    lattice,
+    holeShapeRings,
+    candidates,
+    knownEdges,
+    occupiedQuads: new Set(),
+  });
+
+  assert.notEqual(patch, undefined, "the quad survives by substituting its one unvouched corner, not by being dropped whole");
+  assert.equal(patch.regions.length, 1);
+
+  // "corner-d" itself must be gone -- replaced by a freshly minted id -- but
+  // every id it and aaa-first were vouched to keep (both its own real
+  // neighbours) still stand, and the substitute sits at exactly corner-d's
+  // own original position, so nothing about the fill visibly moved.
+  const usedIds = new Set(patch.nodes.map((node) => node.id));
+  assert.ok(usedIds.has("aaa-first"));
+  assert.ok(usedIds.has("zzz-second"));
+  assert.ok(usedIds.has("corner-c"));
+  assert.ok(!usedIds.has("corner-d"), "the one corner with no vouched connection to its neighbour was substituted, not kept");
+
+  const substitute = patch.nodes.find((node) => !["aaa-first", "zzz-second", "corner-c"].includes(node.id));
+  assert.notEqual(substitute, undefined);
+  assert.deepEqual(substitute.position, { x: 0, y: 0, z: 1 }, "the substitute sits exactly where corner-d resolved, not a new position");
+});
+
 // ---------------------------------------------------------------------------
 // densifyPaintedEdges -- subdividing a sparse painted edge into real anchors
 // ---------------------------------------------------------------------------
