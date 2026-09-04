@@ -408,6 +408,70 @@ mod tests {
         assert_eq!(with.quads.len(), without.quads.len(), "no wedge here, so nothing for the floor to skip");
     }
 
+
+    /// A square ring walked in `step`-long segments -- the shape a hole cut
+    /// out of an existing quad mesh actually arrives in, one segment per face
+    /// edge, rather than as four corners.
+    fn walked_square(low: f64, high: f64, step: f64) -> Vec<(f64, f64)> {
+        let mut points = Vec::new();
+        let mut at = low;
+        while at < high { points.push((at, low)); at += step; }
+        let mut at = low;
+        while at < high { points.push((high, at)); at += step; }
+        let mut at = high;
+        while at > low { points.push((at, high)); at -= step; }
+        let mut at = high;
+        while at > low { points.push((low, at)); at -= step; }
+        points
+    }
+
+    fn mean_face_side(boundary: &[(f64, f64)], face_side: f64) -> f64 {
+        let body: Vec<String> =
+            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
+            r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]}}"#,
+            body.join(",")
+        ))
+        .expect("parses");
+        let grid = irregular_quad_grid(request).expect("a grid");
+        let (mut min_x, mut min_z, mut max_x, mut max_z) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for &(x, z) in boundary {
+            min_x = min_x.min(x); min_z = min_z.min(z);
+            max_x = max_x.max(x); max_z = max_z.max(z);
+        }
+        ((max_x - min_x) * (max_z - min_z) / grid.quads.len() as f64).sqrt()
+    }
+
+    /// **A known limitation, pinned so a fix moves it.**
+    ///
+    /// How fine the result comes back is driven by how many points the
+    /// *boundary* has, not by the area it encloses. The same 8x8 region asked
+    /// for with four corners comes back at the face size requested; asked for
+    /// with its boundary walked in 2.0-unit segments -- which is exactly how a
+    /// hole cut out of a standing quad mesh arrives -- comes back at about
+    /// half that, three times as many faces, for the same ground.
+    ///
+    /// Every boundary segment is a constraint the refinement has to satisfy an
+    /// angle bound against, and then ortho puts a midpoint on each one. So a
+    /// region filled *inside* existing terrain inherits that terrain's edge
+    /// spacing instead of the size the caller asked for, and the smaller the
+    /// region the larger the share of it that is near the boundary -- which is
+    /// why a small hole comes back visibly finer than the ground around it.
+    ///
+    /// The fix is to decimate the contour before it becomes a constraint and
+    /// to restore the skipped nodes when the patch is built, so the generator
+    /// sees a coarse boundary while the graph still gets the fine chain.
+    #[test]
+    fn a_walked_boundary_makes_a_finer_mesh_than_the_same_region_asked_for_plainly() {
+        let plain = mean_face_side(&[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)], 2.0);
+        let walked = mean_face_side(&walked_square(0.0, 8.0, 2.0), 2.0);
+        assert!((plain - 2.0).abs() < 0.2, "four corners give the size asked for; got {plain}");
+        assert!(
+            walked < plain * 0.7,
+            "the same region, walked, comes back much finer: {walked} against {plain}"
+        );
+    }
+
     #[test]
     fn bad_input_is_refused_at_the_boundary_rather_than_panicking() {
         // Panics are not catchable on wasm32, so every one of these has to
