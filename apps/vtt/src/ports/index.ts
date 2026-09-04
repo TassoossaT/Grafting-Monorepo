@@ -54,6 +54,7 @@ export type {
   ConstructionRegionEdge,
   ConstructionRegionTopology,
   ConstructionBoundsXZ,
+  ConstructionTopologyBoundsQuery,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,

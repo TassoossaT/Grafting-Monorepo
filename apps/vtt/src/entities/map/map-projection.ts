@@ -144,56 +144,68 @@ export function applyMapProjectionDelta(
   current: MapProjection,
   delta: MapProjectionDelta,
 ): MapProjection {
-  if (delta.type === "node-moved") {
-    const entry = createNodePositionEntry({
-      nodeRef: delta.nodeRef,
-      position: delta.position,
-      revision: delta.revision,
-    });
-    const previous = current.nodePositions.get(entry.nodeRef);
-    if (previous !== undefined && entry.revision <= previous.revision) {
-      throw new Error(`node "${entry.nodeRef}" move revision must increase`);
+  return applyMapProjectionDeltas(current, [delta]);
+}
+
+/** Applies one mutation's deltas while cloning each backing map at most once. */
+export function applyMapProjectionDeltas(
+  current: MapProjection,
+  deltas: readonly MapProjectionDelta[],
+): MapProjection {
+  let byId: Map<SurfaceRef, SurfaceProjection> | undefined;
+  let nodePositions: Map<NodeRef, NodePositionEntry> | undefined;
+  let revision = current.revision;
+
+  for (const delta of deltas) {
+    if (delta.type === "node-moved") {
+      const entry = createNodePositionEntry(delta);
+      const previous = (nodePositions ?? current.nodePositions).get(entry.nodeRef);
+      if (previous !== undefined && entry.revision <= previous.revision) {
+        throw new Error(`node "${entry.nodeRef}" move revision must increase`);
+      }
+      nodePositions ??= new Map(current.nodePositions);
+      nodePositions.set(entry.nodeRef, entry);
+      revision += 1;
+      continue;
     }
-    if (
-      previous !== undefined &&
-      previous.revision === entry.revision &&
-      previous.position.x === entry.position.x &&
-      previous.position.y === entry.position.y &&
-      previous.position.z === entry.position.z
-    ) {
-      return current;
+
+    if (delta.type === "node-removed") {
+      const live = nodePositions ?? current.nodePositions;
+      if (!live.has(delta.nodeRef)) continue;
+      nodePositions ??= new Map(current.nodePositions);
+      nodePositions.delete(delta.nodeRef);
+      revision += 1;
+      continue;
     }
-    const nodePositions = new Map(current.nodePositions);
-    nodePositions.set(entry.nodeRef, entry);
-    return Object.freeze({ byId: current.byId, nodePositions, revision: current.revision + 1 });
-  }
 
-  if (delta.type === "surface-removed") {
-    const previous = current.byId.get(delta.surfaceRef);
-    if (previous === undefined) return current;
-    if (!Number.isInteger(delta.revision) || delta.revision <= previous.revision) {
-      throw new Error(`surface "${delta.surfaceRef}" removal revision must increase`);
+    if (delta.type === "surface-removed") {
+      const live = byId ?? current.byId;
+      const previous = live.get(delta.surfaceRef);
+      if (previous === undefined) continue;
+      if (!Number.isInteger(delta.revision) || delta.revision <= previous.revision) {
+        throw new Error(`surface "${delta.surfaceRef}" removal revision must increase`);
+      }
+      byId ??= new Map(current.byId);
+      byId.delete(delta.surfaceRef);
+      revision += 1;
+      continue;
     }
-    const byId = new Map(current.byId);
-    byId.delete(delta.surfaceRef);
-    return Object.freeze({ byId, nodePositions: current.nodePositions, revision: current.revision + 1 });
+
+    const surface = createSurfaceProjection(delta.surface);
+    const previous = (byId ?? current.byId).get(surface.surfaceRef);
+    if (previous !== undefined && sameSurface(previous, surface)) continue;
+    if (previous !== undefined && surface.revision <= previous.revision) {
+      throw new Error(`surface "${surface.surfaceRef}" revision must increase`);
+    }
+    byId ??= new Map(current.byId);
+    byId.set(surface.surfaceRef, surface);
+    revision += 1;
   }
 
-  if (delta.type === "node-removed") {
-    if (!current.nodePositions.has(delta.nodeRef)) return current;
-    const nodePositions = new Map(current.nodePositions);
-    nodePositions.delete(delta.nodeRef);
-    return Object.freeze({ byId: current.byId, nodePositions, revision: current.revision + 1 });
-  }
-
-  const surface = createSurfaceProjection(delta.surface);
-  const previous = current.byId.get(surface.surfaceRef);
-  if (previous !== undefined && sameSurface(previous, surface)) return current;
-  if (previous !== undefined && surface.revision <= previous.revision) {
-    throw new Error(`surface "${surface.surfaceRef}" revision must increase`);
-  }
-
-  const byId = new Map(current.byId);
-  byId.set(surface.surfaceRef, surface);
-  return Object.freeze({ byId, nodePositions: current.nodePositions, revision: current.revision + 1 });
+  if (byId === undefined && nodePositions === undefined) return current;
+  return Object.freeze({
+    byId: byId ?? current.byId,
+    nodePositions: nodePositions ?? current.nodePositions,
+    revision,
+  });
 }

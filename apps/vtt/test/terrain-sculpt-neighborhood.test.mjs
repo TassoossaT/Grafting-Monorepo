@@ -8,14 +8,11 @@ function topology(id) {
 }
 
 test("terrain neighbourhood keeps only clouds actually touched by the stroke", () => {
-  const cloudCalls = [];
-  const near = [topology("touched-a"), topology("touched-b"), topology("inside-box-but-untouched")];
+  const queries = [];
+  const near = [topology("touched-a"), topology("touched-b")];
   const runtime = {
-    cloudFor(request) {
-      cloudCalls.push(request);
-      return { surfaceKeys: [["touched-a"], ["touched-b"]] };
-    },
-    getRegionTopologiesInBounds() {
+    getRegionTopologiesInBounds(query) {
+      queries.push(query);
       return near;
     },
   };
@@ -27,5 +24,9 @@ test("terrain neighbourhood keeps only clouds actually touched by the stroke", (
   const result = terrainStandingAround(runtime, covered, { minX: 0, minZ: 0, maxX: 10, maxZ: 10 }, 2);
 
   assert.deepEqual(result.map((entry) => entry.surfaceKey), [["touched-a"], ["touched-b"]]);
-  assert.equal(cloudCalls.length, 1, "one connected cloud is expanded once, not once per covered face");
+  assert.equal(queries.length, 1, "cloud resolution and local topology use one Wasm crossing");
+  assert.deepEqual(queries[0].seeds, [
+    { seed: ["touched-a"], surfaceType: "ground" },
+    { seed: ["touched-b"], surfaceType: "ground" },
+  ]);
 });

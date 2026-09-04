@@ -8,11 +8,13 @@ import {
 } from "../../entities/token/index.ts";
 import {
   applyMapProjectionDelta,
+  applyMapProjectionDeltas,
   createMapProjection,
   createSurfaceProjection,
   resolveSurfaceCovering,
   surfaceRefFromNodeSet,
   type MapProjection,
+  type MapProjectionDelta,
 } from "../../entities/map/index.ts";
 import type {
   ApplyRegionOverlayRequest,
@@ -23,7 +25,7 @@ import type {
   CloudOutcome,
   CloudRequest,
   ConfirmedTokenRenderChange,
-  ConstructionBoundsXZ,
+  ConstructionTopologyBoundsQuery,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
@@ -146,7 +148,7 @@ export interface TabletopRuntime {
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
-  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[];
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
@@ -596,13 +598,18 @@ export class AppTabletopRuntime implements TabletopRuntime {
     surfaceKeys: readonly ConstructionSurfaceKey[],
     meshes: readonly SurfaceMeshResult[],
   ): MapProjection {
-    let next = map;
+    const firstMeshBySurface = new Map<string, SurfaceMeshResult>();
+    for (const mesh of meshes) {
+      const surfaceRef = surfaceRefFromNodeSet(mesh.surfaceKey);
+      if (!firstMeshBySurface.has(surfaceRef)) firstMeshBySurface.set(surfaceRef, mesh);
+    }
+    const deltas: MapProjectionDelta[] = [];
     for (const surfaceKey of surfaceKeys) {
       const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
-      const mesh = meshes.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === surfaceRef);
+      const mesh = firstMeshBySurface.get(surfaceRef);
       if (mesh === undefined) continue;
-      const previous = next.byId.get(surfaceRef);
-      next = applyMapProjectionDelta(next, {
+      const previous = map.byId.get(surfaceRef);
+      deltas.push({
         type: "surface-upserted",
         surface: createSurfaceProjection({
           surfaceRef,
@@ -613,7 +620,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         }),
       });
     }
-    return next;
+    return applyMapProjectionDeltas(map, deltas);
   }
 
   /**
@@ -631,9 +638,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
   ): MapProjection {
-    let next = map;
+    const deltas: MapProjectionDelta[] = [];
     for (const node of this.#construction.getNodePositions()) {
-      const previous = next.nodePositions.get(node.id);
+      const previous = map.nodePositions.get(node.id);
       if (
         previous !== undefined &&
         previous.position.x === node.position.x &&
@@ -642,7 +649,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       ) {
         continue;
       }
-      next = applyMapProjectionDelta(next, {
+      deltas.push({
         type: "node-moved",
         nodeRef: node.id,
         position: node.position,
@@ -650,7 +657,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       });
       this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
     }
-    return next;
+    return applyMapProjectionDeltas(map, deltas);
   }
 
   /** Folds positions an atomic edit request already carried, without asking the engine to serialize every live node. */
@@ -661,9 +668,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
   ): MapProjection {
-    let next = map;
+    const deltas: MapProjectionDelta[] = [];
     for (const [nodeId, position] of positions) {
-      const previous = next.nodePositions.get(nodeId);
+      const previous = map.nodePositions.get(nodeId);
       if (
         previous !== undefined &&
         previous.position.x === position.x &&
@@ -672,7 +679,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       ) {
         continue;
       }
-      next = applyMapProjectionDelta(next, {
+      deltas.push({
         type: "node-moved",
         nodeRef: nodeId,
         position,
@@ -680,7 +687,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       });
       this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
     }
-    return next;
+    return applyMapProjectionDeltas(map, deltas);
   }
 
   /**
@@ -725,13 +732,18 @@ export class AppTabletopRuntime implements TabletopRuntime {
     // to skip the render update for *every* surface in the batch, not just
     // the stale one -- the mutation itself had already committed, so the
     // screen simply never caught up.
-    const meshes = surfaceKeys.flatMap((surfaceKey) => {
-      try {
-        return this.#construction.getSurfaceMesh(surfaceKey);
-      } catch {
-        return [];
-      }
-    });
+    // Older/in-memory ports used by embedders can still provide only the
+    // single-key method; the Wasm port takes the one-crossing batch path.
+    const batch = this.#construction.getSurfaceMeshes;
+    const meshes = typeof batch === "function"
+      ? batch.call(this.#construction, surfaceKeys)
+      : surfaceKeys.flatMap((surfaceKey) => {
+          try {
+            return this.#construction.getSurfaceMesh(surfaceKey);
+          } catch {
+            return [];
+          }
+        });
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
@@ -794,7 +806,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
   addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome {
     this.#requireReady("registering a generated patch");
     const outcome = this.#construction.addPatch(patch);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    this.#foldRegionEditOutcome(
+      outcome,
+      origin,
+      causeId,
+      patch.nodes.length === 0 ? undefined : new Map(patch.nodes.map((node) => [node.id, node.position])),
+    );
     return outcome;
   }
 
@@ -848,7 +865,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getAllRegionTopologies();
   }
 
-  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[] {
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading nearby region topologies");
     return this.#construction.getRegionTopologiesInBounds(bounds);
   }
@@ -873,20 +890,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const changed = [...outcome.affectedSurfaceKeys, ...outcome.createdSurfaceKeys];
     const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
     this.#applyConstructionMutation(changed, removedRefs, origin, causeId, (map) => {
-      let next = map;
+      const removals: MapProjectionDelta[] = [];
       for (const removedRef of removedRefs) {
-        const previous = next.byId.get(removedRef);
+        const previous = map.byId.get(removedRef);
         if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, {
+        removals.push({
           type: "surface-removed",
           surfaceRef: removedRef,
           revision: previous.revision + 1,
         });
       }
       for (const nodeId of outcome.removedNodeIds) {
-        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
+        removals.push({ type: "node-removed", nodeRef: nodeId });
         this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
       }
+      const next = applyMapProjectionDeltas(map, removals);
       return knownNodePositions === undefined
         ? this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation)
         : this.#foldKnownNodePositions(next, knownNodePositions, origin, causeId, this.#generation);
@@ -944,7 +962,14 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionPatchOutcome {
     this.#requireReady("applying a region overlay");
     const outcome = this.#construction.applyRegionOverlay(request);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    this.#foldRegionEditOutcome(
+      outcome,
+      origin,
+      causeId,
+      request.patch.nodes.length === 0
+        ? undefined
+        : new Map(request.patch.nodes.map((node) => [node.id, node.position])),
+    );
     return outcome;
   }
 
@@ -966,7 +991,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionPatchOutcome {
     this.#requireReady("replacing generated regions");
     const outcome = this.#construction.applyPatchReplacement(request);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    const knownNodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
+    for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
+    for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);
+    this.#foldRegionEditOutcome(outcome, origin, causeId, knownNodePositions);
     dispatchCutRepairs(this, request, causeId);
     return outcome;
   }

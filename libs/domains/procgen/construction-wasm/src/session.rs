@@ -354,6 +354,7 @@ impl ConstructionSession {
             &self.graph,
             &self.topology,
             &self.surfaces,
+            &self.known_regions,
             &request,
         )
         .map_err(to_js_error)?;
@@ -513,6 +514,17 @@ impl ConstructionSession {
         let dtos = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
             .map_err(to_js_error)?;
         serialize(&dtos)
+    }
+
+    /// A mutation's known surface meshes through one JSON/Wasm crossing.
+    pub fn surface_meshes_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: mesh::SurfaceMeshesRequest = parse(request_json)?;
+        serialize(&mesh::surface_meshes(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            request,
+        ))
     }
 
     // ---- Introspection ----

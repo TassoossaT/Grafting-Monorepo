@@ -295,10 +295,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         topology.nodes.every((node) => insideSwept(node.position, swept)),
     );
     const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
-    const perimeters = perimeterConstraints(
-      standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" "))),
-      0,
-    );
+    const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
+    const perimeters = perimeterConstraints(retained, 0);
     const contourBefore = perimeters.sources.length;
     // A stroke that curls back on itself leaves a real hole in its own swept
     // shape, and `polygon-clipping` reports it as an inner ring. Ground there
@@ -367,6 +365,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       // rollback. Let it use the direct add path instead of cloning the whole
       // construction session solely to replace an empty set.
       replaceSurfaceKeys: consumed.length === 0 ? undefined : consumed.map((topology) => topology.surfaceKey),
+      topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
       heightAt,
     });
 

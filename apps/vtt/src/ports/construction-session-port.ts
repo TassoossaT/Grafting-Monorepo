@@ -20,6 +20,11 @@ export interface ConstructionBoundsXZ {
   readonly maxZ: number;
 }
 
+/** Local topology query, optionally restricted to clouds reached from seeds. */
+export interface ConstructionTopologyBoundsQuery extends ConstructionBoundsXZ {
+  readonly seeds?: readonly CloudRequest[];
+}
+
 export interface ConstructionSurfaceSpec {
   readonly cycle: readonly ConstructionNodeId[];
   readonly surfaceType: string;
@@ -613,7 +618,7 @@ export interface ConstructionSessionPort {
   /** One region's live boundary, or `undefined` for a stale key. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** Region boundaries with at least one node inside an XZ extent, returned in one engine crossing. */
-  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[];
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
@@ -636,6 +641,8 @@ export interface ConstructionSessionPort {
    * loop), and every one of them must be rendered, not just the first.
    */
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[];
+  /** A known mutation set's meshes in one engine crossing. */
+  getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
 

@@ -1,5 +1,6 @@
 import type {
   ApplyPatchReplacementRequest,
+  CloudRequest,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionNodeId,
@@ -54,7 +55,7 @@ export interface TerrainFillRuntime {
     origin: "local",
     causeId: string,
   ): ConstructionPatchOutcome;
-  getRegionTopologiesInBounds(bounds: FillBounds): readonly ConstructionRegionTopology[];
+  getRegionTopologiesInBounds(bounds: FillBounds & { readonly seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[];
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   getSnapshot(): {
     readonly map: {
@@ -119,6 +120,8 @@ export interface TerrainFillRequest {
   readonly onGenerated?: () => { readonly deleted: number; readonly failed: readonly string[] } | void;
   /** Existing faces replaced atomically with this fill. An empty list still makes the patch all-or-nothing. */
   readonly replaceSurfaceKeys?: readonly ConstructionSurfaceKey[];
+  /** Retained clouds whose post-adoption edge directions this fill can meet. */
+  readonly topologySeeds?: readonly CloudRequest[];
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
   readonly what: string;
   /** Faces this fill replaced, for the log only. */
@@ -379,12 +382,16 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
-  for (const topology of runtime.getRegionTopologiesInBounds({
-    minX: bounds.minX - reach,
-    minZ: bounds.minZ - reach,
-    maxX: bounds.maxX + reach,
-    maxZ: bounds.maxZ + reach,
-  })) {
+  const nearbyTopologies = request.topologySeeds?.length === 0
+    ? []
+    : runtime.getRegionTopologiesInBounds({
+        minX: bounds.minX - reach,
+        minZ: bounds.minZ - reach,
+        maxX: bounds.maxX + reach,
+        maxZ: bounds.maxZ + reach,
+        seeds: request.topologySeeds,
+      });
+  for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
       for (const use of loop) {
