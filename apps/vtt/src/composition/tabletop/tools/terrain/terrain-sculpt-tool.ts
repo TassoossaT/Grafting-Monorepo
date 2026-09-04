@@ -1,6 +1,10 @@
 import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
-import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
+import type {
+  ConstructionCoveredRegion,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
@@ -117,6 +121,40 @@ function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly Const
   return [...merged.values()];
 }
 
+/**
+ * Everything already standing that the stroke reaches, as **whole clouds**.
+ *
+ * Whole clouds, not the faces the footprint happens to touch, and the
+ * difference is not a refinement -- it decides whether the result is one mesh
+ * or a scattering of them.
+ *
+ * The perimeter of a *subset* of a cloud is not that cloud's boundary. It runs
+ * partly through the cloud's own interior, over edges that already carry a
+ * face on both sides. Handing that to the generator as the outline of occupied
+ * ground says the far side of those edges is free, so cells get planned
+ * against them -- and every one of those faces is refused at registration,
+ * because an edge with two sides is exactly what `refuse-when-full` exists to
+ * protect. Faces vanish in ones and twos all along the seam, and what lands is
+ * a mesh with holes punched through it.
+ *
+ * `cloudFor` is the query that answers this properly: the connected component
+ * of same-type surfaces reachable through shared nodes. Its perimeter is a
+ * real free boundary, every edge of it with one side still open.
+ */
+function standingAround(
+  ctx: ToolContext,
+  covered: readonly ConstructionCoveredRegion[],
+): readonly ConstructionRegionTopology[] {
+  const keys = new Map<string, ConstructionSurfaceKey>();
+  for (const region of covered) {
+    const cloud = ctx.runtime.cloudFor({ seed: region.surfaceKey, surfaceType: region.surfaceType });
+    for (const surfaceKey of cloud.surfaceKeys) keys.set(surfaceKey.join(" "), surfaceKey);
+  }
+  return [...keys.values()]
+    .map((surfaceKey) => ctx.runtime.getRegionTopology(surfaceKey))
+    .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -168,10 +206,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
     }
-    const standing = covered
-      .map((region) => ctx.runtime.getRegionTopology(region.surfaceKey))
-      .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-    const perimeters = perimeterConstraints(standing, 0);
+    const perimeters = perimeterConstraints(standingAround(ctx, covered), 0);
     // A stroke that curls back on itself leaves a real hole in its own swept
     // shape, and `polygon-clipping` reports it as an inner ring. Ground there
     // was never painted, so it is subtracted like any other hole -- it simply
@@ -251,7 +286,11 @@ function report(
 ): void {
   const parts: string[] = [];
   if (built > 0) parts.push(`${built} faces novas`);
-  if (refused > 0) parts.push(`${refused} sobre terreno existente`);
+  // Named as a loss rather than as a note. A refusal means the generator
+  // planned a face over ground that was already occupied, which is a fault in
+  // what it was told, not a normal outcome -- and reading it as one is how a
+  // mesh full of holes went unnoticed.
+  if (refused > 0) parts.push(`${refused} faces perdidas (aresta sem lado livre)`);
   if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
   if (unadopted > 0) parts.push(`${unadopted} junções não costuradas`);
   if (!refinementComplete) parts.push("malha mais grossa em parte da área");
