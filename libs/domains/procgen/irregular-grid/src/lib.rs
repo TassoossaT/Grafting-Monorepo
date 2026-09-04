@@ -35,6 +35,7 @@
 //! constraint. Creation and regeneration are one code path or they drift.
 
 pub mod constrained;
+pub mod geometry;
 pub mod hex;
 pub mod mesh;
 pub mod ortho;

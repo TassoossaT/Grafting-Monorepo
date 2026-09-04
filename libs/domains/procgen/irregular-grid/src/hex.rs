@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use crate::mesh::{FaceMesh, Vec2, centroid_of};
+use crate::geometry::centroid_of;
+use crate::mesh::{FaceMesh, Vec2};
 
 const SQRT3_OVER_2: f64 = 0.866_025_403_784_438_6;
 

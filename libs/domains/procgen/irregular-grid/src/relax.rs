@@ -2,7 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::mesh::{QuadMesh, Vec2, centroid_of, edge_key, edges_of};
+use crate::geometry::centroid_of;
+use crate::mesh::{QuadMesh, Vec2, edge_key, edges_of};
 
 /// Options for [`relax`].
 #[derive(Debug, Clone, Default)]

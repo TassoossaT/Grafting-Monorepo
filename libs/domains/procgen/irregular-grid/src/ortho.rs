@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use crate::mesh::{FaceMesh, Quad, QuadMesh, Vec2, centroid_of};
+use crate::geometry::centroid_of;
+use crate::mesh::{FaceMesh, Quad, QuadMesh, Vec2};
 
 /// Step 3 -- Conway's ortho operator: every face becomes quads.
 ///

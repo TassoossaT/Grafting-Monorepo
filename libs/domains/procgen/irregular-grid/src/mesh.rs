@@ -38,17 +38,6 @@ pub struct QuadMesh {
     pub quads: Vec<Quad>,
 }
 
-pub fn centroid_of(points: &[Vec2]) -> Vec2 {
-    let mut x = 0.0;
-    let mut y = 0.0;
-    for point in points {
-        x += point.x;
-        y += point.y;
-    }
-    let count = points.len() as f64;
-    Vec2::new(x / count, y / count)
-}
-
 /// A face's edges as ordered index pairs, wrapping at the end.
 pub fn edges_of(face: &[usize]) -> Vec<(usize, usize)> {
     face.iter()

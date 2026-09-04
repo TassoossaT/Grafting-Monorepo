@@ -37,6 +37,7 @@ use spade::{
     Triangulation,
 };
 
+use crate::geometry::{centroid_of, distance_to_segment, inside_ring, signed_area};
 use crate::mesh::{FaceMesh, Vec2};
 
 /// One point of a contour handed over as a constraint.
@@ -222,12 +223,9 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         // regardless: it only ever excludes faces this rule also rejects, so
         // it costs nothing and saves the refinement from working on ground
         // nobody asked for.
-        let corner_positions = face.positions();
-        let centroid = Vec2::new(
-            corner_positions.iter().map(|point| point.x).sum::<f64>() / 3.0,
-            corner_positions.iter().map(|point| point.y).sum::<f64>() / 3.0,
-        );
-        if !is_ground(options, centroid) {
+        let corner_positions =
+            face.positions().map(|point| Vec2::new(point.x, point.y));
+        if !is_ground(options, centroid_of(&corner_positions)) {
             continue;
         }
         let corners = face.vertices().map(|vertex| {
@@ -290,10 +288,6 @@ pub fn lies_on_a_contour(options: &ConstrainedOptions, point: Vec2, tolerance: f
         .any(|(from, to)| distance_to_segment(point, from, to) <= tolerance)
 }
 
-fn signed_area(a: Vec2, b: Vec2, c: Vec2) -> f64 {
-    (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)
-}
-
 /// Ground is what the boundary encloses and no hole takes back.
 ///
 /// The one rule, applied to seeds before the triangulation and to faces
@@ -313,41 +307,10 @@ fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
 /// on its own, which is what makes a ring that describes a shape with a
 /// pinch or a figure-eight still behave.
 fn inside_rings(rings: &[Vec<ConstraintPoint>], point: Vec2) -> bool {
-    rings.iter().any(|ring| inside_ring(ring, point))
+    rings.iter().any(|ring| {
+        let positions: Vec<Vec2> = ring.iter().map(|entry| entry.position).collect();
+        inside_ring(&positions, point)
+    })
 }
 
-/// Even-odd containment against one closed ring.
-fn inside_ring(ring: &[ConstraintPoint], point: Vec2) -> bool {
-    if ring.len() < 3 {
-        return false;
-    }
-    let mut inside = false;
-    let mut previous = ring[ring.len() - 1].position;
-    for current in ring.iter().map(|entry| entry.position) {
-        let straddles = (current.y > point.y) != (previous.y > point.y);
-        if straddles {
-            let crossing =
-                (previous.x - current.x) * (point.y - current.y) / (previous.y - current.y)
-                    + current.x;
-            if point.x < crossing {
-                inside = !inside;
-            }
-        }
-        previous = current;
-    }
-    inside
-}
 
-fn distance_to_segment(point: Vec2, from: Vec2, to: Vec2) -> f64 {
-    let dx = to.x - from.x;
-    let dy = to.y - from.y;
-    let length_squared = dx * dx + dy * dy;
-    let t = if length_squared <= f64::EPSILON {
-        0.0
-    } else {
-        (((point.x - from.x) * dx + (point.y - from.y) * dy) / length_squared).clamp(0.0, 1.0)
-    };
-    let nearest_x = from.x + t * dx;
-    let nearest_y = from.y + t * dy;
-    ((point.x - nearest_x).powi(2) + (point.y - nearest_y).powi(2)).sqrt()
-}
