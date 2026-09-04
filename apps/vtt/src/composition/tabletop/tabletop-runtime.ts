@@ -23,6 +23,7 @@ import type {
   CloudOutcome,
   CloudRequest,
   ConfirmedTokenRenderChange,
+  ConstructionBoundsXZ,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
@@ -144,6 +145,8 @@ export interface TabletopRuntime {
   ): ConstructionIrregularQuadGrid | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  /** Region boundaries near a local edit, resolved in one engine call. */
+  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
@@ -650,6 +653,36 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return next;
   }
 
+  /** Folds positions an atomic edit request already carried, without asking the engine to serialize every live node. */
+  #foldKnownNodePositions(
+    map: MapProjection,
+    positions: ReadonlyMap<ConstructionNodeId, ConstructionPosition>,
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
+  ): MapProjection {
+    let next = map;
+    for (const [nodeId, position] of positions) {
+      const previous = next.nodePositions.get(nodeId);
+      if (
+        previous !== undefined &&
+        previous.position.x === position.x &&
+        previous.position.y === position.y &&
+        previous.position.z === position.z
+      ) {
+        continue;
+      }
+      next = applyMapProjectionDelta(next, {
+        type: "node-moved",
+        nodeRef: nodeId,
+        position,
+        revision: (previous?.revision ?? 0) + 1,
+      });
+      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
+    }
+    return next;
+  }
+
   /**
    * Requires a ready runtime for a construction mutation, naming the caller's
    * own action in the error so `moveNode`/`generateTerrainCell`/`generatePathExtrusion`
@@ -736,7 +769,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
       (merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)),
       EMPTY_OUTCOME,
     );
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    const positionsAreKnown = ops.every(
+      (op) => op.kind !== "move-edge" && op.kind !== "move-region" && op.kind !== "duplicate-region",
+    );
+    const knownPositions = positionsAreKnown ? new Map<ConstructionNodeId, ConstructionPosition>() : undefined;
+    if (knownPositions !== undefined) {
+      for (const op of ops) {
+        if (op.kind === "move-vertex" || op.kind === "insert-vertex") knownPositions.set(op.nodeId, op.position);
+      }
+    }
+    this.#foldRegionEditOutcome(outcome, origin, causeId, knownPositions);
     return outcome;
   }
 
@@ -806,18 +848,28 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getAllRegionTopologies();
   }
 
+  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[] {
+    this.#requireReady("reading nearby region topologies");
+    return this.#construction.getRegionTopologiesInBounds(bounds);
+  }
+
   getGraphSnapshot(): ConstructionGraphSnapshot {
     this.#requireReady("reading the construction graph");
     return this.#construction.getGraphSnapshot();
   }
 
   /**
-   * The projection/render sync every atomic edit shares. Node positions come
-   * from a full re-scan rather than a known target: an edit's cascade (and
-   * the engine's own zero-orphan cleanup) can move or delete nodes this
-   * caller never named, so there is no shortcut position to fold directly.
+   * The projection/render sync every atomic edit shares. Exact vertex moves
+   * and insertions carry their positions through `knownNodePositions`; edits
+   * that can move an unenumerated cascade fall back to the full engine scan.
+   * Removed nodes always come from the authoritative outcome.
    */
-  #foldRegionEditOutcome(outcome: RegionEditOutcome, origin: ChangeOrigin, causeId: string): void {
+  #foldRegionEditOutcome(
+    outcome: RegionEditOutcome,
+    origin: ChangeOrigin,
+    causeId: string,
+    knownNodePositions?: ReadonlyMap<ConstructionNodeId, ConstructionPosition>,
+  ): void {
     const changed = [...outcome.affectedSurfaceKeys, ...outcome.createdSurfaceKeys];
     const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
     this.#applyConstructionMutation(changed, removedRefs, origin, causeId, (map) => {
@@ -835,7 +887,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
         next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
         this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
       }
-      return this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
+      return knownNodePositions === undefined
+        ? this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation)
+        : this.#foldKnownNodePositions(next, knownNodePositions, origin, causeId, this.#generation);
     });
   }
 

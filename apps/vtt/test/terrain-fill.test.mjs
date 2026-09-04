@@ -38,7 +38,10 @@ function runtimeWith(grid, nodePositions = [], regionTopologies = []) {
       };
     },
     getSnapshot: () => ({ map: { nodePositions: new Map(nodePositions) } }),
-    getAllRegionTopologies: () => regionTopologies,
+    getAllRegionTopologies() {
+      throw new Error("a local terrain fill must not serialize the whole map");
+    },
+    getRegionTopologiesInBounds: () => regionTopologies,
   };
 }
 

@@ -14,6 +14,7 @@ import type {
   ApplyRegionOverlayRequest,
   CloudOutcome,
   CloudRequest,
+  ConstructionBoundsXZ,
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
@@ -355,6 +356,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     const wire = JSON.parse(this.#require().all_region_topologies_json()) as readonly RegionTopologyWire[];
+    return wire.map(fromWireTopology);
+  }
+
+  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[] {
+    const session = this.#require() as ConstructionSession & {
+      region_topologies_in_bounds_json(requestJson: string): string;
+    };
+    const wire = JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))) as readonly RegionTopologyWire[];
     return wire.map(fromWireTopology);
   }
 

@@ -12,6 +12,14 @@ export interface ConstructionPosition {
   readonly z: number;
 }
 
+/** Axis-aligned world-space extent in the construction plane. */
+export interface ConstructionBoundsXZ {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+}
+
 export interface ConstructionSurfaceSpec {
   readonly cycle: readonly ConstructionNodeId[];
   readonly surfaceType: string;
@@ -604,6 +612,8 @@ export interface ConstructionSessionPort {
   }): RegionEditOutcome;
   /** One region's live boundary, or `undefined` for a stale key. */
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  /** Region boundaries with at least one node inside an XZ extent, returned in one engine crossing. */
+  getRegionTopologiesInBounds(bounds: ConstructionBoundsXZ): readonly ConstructionRegionTopology[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 

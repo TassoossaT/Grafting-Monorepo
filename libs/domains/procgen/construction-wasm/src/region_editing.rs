@@ -397,6 +397,24 @@ pub struct RegionTopologyDto {
     pub nodes: Vec<RegionNodeDto>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionBoundsRequest {
+    pub min_x: f32,
+    pub min_z: f32,
+    pub max_x: f32,
+    pub max_z: f32,
+}
+
+impl RegionBoundsRequest {
+    fn contains(&self, position: [f32; 3]) -> bool {
+        position[0] >= self.min_x
+            && position[0] <= self.max_x
+            && position[2] >= self.min_z
+            && position[2] <= self.max_z
+    }
+}
+
 fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<RegionEdgeDto>, String> {
     loop_
         .iter()
@@ -474,6 +492,51 @@ pub fn all_region_topologies(
     for id in topology.region_ids() {
         if let Some(dto) = region_topology(graph, topology, surfaces, &id)? {
             result.push(dto);
+        }
+    }
+    Ok(result)
+}
+
+/// Region boundaries near a local edit.
+///
+/// The region scan stays inside Rust and only matching DTOs cross the Wasm
+/// boundary. This replaces a cloud traversal plus one JSON call per member
+/// for brush-sized operations. A persistent spatial index can replace this
+/// scan later without changing the wire contract.
+pub fn region_topologies_in_bounds(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    surfaces: &SurfaceRegistry,
+    bounds: &RegionBoundsRequest,
+) -> Result<Vec<RegionTopologyDto>, String> {
+    if !bounds.min_x.is_finite()
+        || !bounds.min_z.is_finite()
+        || !bounds.max_x.is_finite()
+        || !bounds.max_z.is_finite()
+        || bounds.min_x > bounds.max_x
+        || bounds.min_z > bounds.max_z
+    {
+        return Err("region topology bounds must be finite and ordered".into());
+    }
+
+    let mut result = Vec::new();
+    for id in topology.region_ids() {
+        let Some(region) = topology.region(&id) else {
+            continue;
+        };
+        let reaches = region
+            .outer_loops()
+            .iter()
+            .chain(region.holes().iter())
+            .flatten()
+            .filter_map(|use_| topology.edge(use_.edge()))
+            .flat_map(|edge| [edge.start_node(), edge.end_node()])
+            .filter_map(|node_id| graph.node(node_id))
+            .any(|node| bounds.contains(*node.data()));
+        if reaches {
+            if let Some(dto) = region_topology(graph, topology, surfaces, &id)? {
+                result.push(dto);
+            }
         }
     }
     Ok(result)
@@ -625,6 +688,38 @@ mod tests {
         )
         .unwrap();
         assert!(dto.is_none());
+    }
+
+    #[test]
+    fn topology_bounds_only_serializes_regions_reaching_the_local_extent() {
+        let (graph, topology, surfaces, _region) = quad();
+        let near = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &RegionBoundsRequest {
+                min_x: -0.1,
+                min_z: -0.1,
+                max_x: 0.1,
+                max_z: 0.1,
+            },
+        )
+        .unwrap();
+        assert_eq!(near.len(), 1);
+
+        let far = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &RegionBoundsRequest {
+                min_x: 5.0,
+                min_z: 5.0,
+                max_x: 6.0,
+                max_z: 6.0,
+            },
+        )
+        .unwrap();
+        assert!(far.is_empty());
     }
 
     #[test]

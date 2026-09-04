@@ -54,7 +54,7 @@ export interface TerrainFillRuntime {
     origin: "local",
     causeId: string,
   ): ConstructionPatchOutcome;
-  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  getRegionTopologiesInBounds(bounds: FillBounds): readonly ConstructionRegionTopology[];
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   getSnapshot(): {
     readonly map: {
@@ -352,13 +352,17 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
 
   const quadOf = new Map<string, readonly number[]>();
   // Read after adoption: splitting a contour replaces one edge with fragments,
-  // and only the live surface topology knows which side of each fragment is
-  // occupied. The generic graph snapshot is not authoritative here -- contour
-  // edges need not be generic graph edges at all. A retained face walks its
-  // occupied side; the generated neighbour must walk the opposite one.
+  // and only live topology knows which side of every fragment remains free.
+  // Query only the generated extent instead of serializing the entire map.
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   const occupied = new Map<string, boolean[]>();
-  for (const topology of runtime.getAllRegionTopologies()) {
+  const reach = request.faceSide;
+  for (const topology of runtime.getRegionTopologiesInBounds({
+    minX: bounds.minX - reach,
+    minZ: bounds.minZ - reach,
+    maxX: bounds.maxX + reach,
+    maxZ: bounds.maxZ + reach,
+  })) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
       for (const use of loop) {

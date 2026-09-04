@@ -53,6 +53,7 @@ export type {
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionRegionTopology,
+  ConstructionBoundsXZ,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,

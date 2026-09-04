@@ -91,13 +91,33 @@ export function dirtLoadOver(
   path: readonly ConstructionPosition[],
   radius: number,
 ): (point: ConstructionPosition) => number {
+  if (path.length === 0 || !(radius > 0)) return () => 0;
+  const segments = path.map((from, index) => ({ from, to: path[index + 1] ?? from }));
+  const buckets = new Map<string, number[]>();
+  const cell = radius;
+  const cellOf = (value: number): number => Math.floor(value / cell);
+  for (let index = 0; index < segments.length; index += 1) {
+    const { from, to } = segments[index]!;
+    const minX = cellOf(Math.min(from.x, to.x) - radius);
+    const maxX = cellOf(Math.max(from.x, to.x) + radius);
+    const minZ = cellOf(Math.min(from.z, to.z) - radius);
+    const maxZ = cellOf(Math.max(from.z, to.z) + radius);
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let z = minZ; z <= maxZ; z += 1) {
+        const key = `${x}:${z}`;
+        const entries = buckets.get(key) ?? [];
+        entries.push(index);
+        buckets.set(key, entries);
+      }
+    }
+  }
   return (point) => {
     let nearestSq = Infinity;
-    for (let index = 0; index < path.length; index += 1) {
-      const from = path[index]!;
-      const to = path[index + 1] ?? from;
+    for (const index of buckets.get(`${cellOf(point.x)}:${cellOf(point.z)}`) ?? []) {
+      const { from, to } = segments[index]!;
       nearestSq = Math.min(nearestSq, distanceSqToSegment(point, from, to));
     }
+    if (nearestSq > radius * radius) return 0;
     return dirtProfile(Math.sqrt(nearestSq) / radius);
   };
 }

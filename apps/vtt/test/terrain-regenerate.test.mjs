@@ -74,6 +74,7 @@ function field() {
     },
     getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
     getAllRegionTopologies: () => [],
+    getRegionTopologiesInBounds: () => [],
     generateIrregularQuadGrid(request) {
       requests.push(request);
       // Two cells, no contour nodes: this test is about what goes *down*, and
