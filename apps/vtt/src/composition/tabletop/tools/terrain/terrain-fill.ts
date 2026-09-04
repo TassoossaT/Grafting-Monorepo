@@ -98,7 +98,16 @@ export interface TerrainFillRequest {
    * discovers the generator will not accept its rings has destroyed ground and
    * has nothing to put back. Generating first makes a refusal cost nothing.
    */
-  readonly onGenerated?: () => void;
+  /**
+   * Run once the generator has answered and before anything is registered.
+   *
+   * Returns what it managed to clear, because the caller's own count is what
+   * it *meant* to clear. Those two silently diverging is indistinguishable
+   * from every other cause of a refused face -- ground that was supposed to
+   * be gone is excluded from the hole rings on purpose, so a face landing on
+   * it is neither inside a hole nor wound wrongly. It just collides.
+   */
+  readonly onGenerated?: () => { readonly deleted: number; readonly failed: readonly string[] } | void;
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
   readonly what: string;
   /** Faces this fill replaced, for the log only. */
@@ -226,7 +235,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     });
     return NOTHING;
   }
-  request.onGenerated?.();
+  const cleared = request.onGenerated?.() ?? undefined;
 
   let minX = Infinity;
   let minZ = Infinity;
@@ -399,6 +408,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     declaredNodes: nodes.length,
     regenerated: request.regenerated,
     selfClashes: clashes,
+    regeneratedCleared: cleared?.deleted,
+    regenerateFailures: cleared?.failed,
     refusedInHole,
     refusedClockwise,
     builtClockwise,

@@ -386,6 +386,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       // Only once the generator has answered. A refusal then costs nothing;
       // deleting first would cost the ground with nothing to lay back.
       onGenerated: () => {
+        let deleted = 0;
+        const failed: string[] = [];
         for (const topology of consumed) {
           try {
             ctx.runtime.applyRegionEdit(
@@ -393,11 +395,17 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
               "local",
               causeId,
             );
-          } catch {
+            deleted += 1;
+          } catch (error) {
             // One stale key is that key's own problem, never a reason to leave
-            // the rest of the ground standing under the stroke.
+            // the rest of the ground standing under the stroke. But it is
+            // counted and its words kept: ground that failed to go was left
+            // out of the hole rings on the promise that it would, so the next
+            // face laid over it collides with nothing anyone declared.
+            failed.push(error instanceof Error ? error.message : String(error));
           }
         }
+        return { deleted, failed };
       },
     });
 

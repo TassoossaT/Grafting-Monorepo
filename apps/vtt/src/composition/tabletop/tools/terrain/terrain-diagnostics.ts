@@ -149,6 +149,18 @@ export interface TerrainCommitReport {
    */
   readonly refusedClockwise?: number;
   readonly builtClockwise?: number;
+  /**
+   * Faces the stroke *meant* to clear against the faces it actually cleared.
+   *
+   * `regenerated` is counted before the deletions run, so the two diverging
+   * silently is a fault with no other signature. Ground promised as gone is
+   * left out of the hole rings deliberately -- so a face laid over ground the
+   * deletion missed is not inside any hole, is not wound the wrong way, and
+   * clashes with nothing this side declared. It simply collides, and every
+   * other reading says the patch is fine.
+   */
+  readonly regeneratedCleared?: number;
+  readonly regenerateFailures?: readonly string[];
 }
 
 /**
@@ -220,6 +232,8 @@ function describe(report: TerrainCommitReport): void {
     facesPerdidas: report.refusedFaces,
     colisoesNoProprioPatch: (report.selfClashes ?? []).length,
     perdidasDentroDeFuro: report.refusedInHole ?? 0,
+    regeneradasApagadas: report.regeneratedCleared ?? 0,
+    regeneracoesFalhas: [...(report.regenerateFailures ?? [])].slice(0, 3),
     perdidasHorarias: report.refusedClockwise ?? 0,
     registradasHorarias: report.builtClockwise ?? 0,
     motivos: [...(report.refusals ?? [])].slice(0, 3),
@@ -233,7 +247,7 @@ function describe(report: TerrainCommitReport): void {
   const line =
     `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} ` +
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
-    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas, ` +
+    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas (${mescla.regeneradasApagadas} apagadas de fato), ` +
     `${mescla.colisoesNoProprioPatch} colisões no próprio patch ` +
     `| perdidas: ${mescla.perdidasDentroDeFuro} dentro de furo, ` +
     `${mescla.perdidasHorarias}/${report.refusedFaces} horárias ` +
@@ -252,6 +266,9 @@ function describe(report: TerrainCommitReport): void {
   // diagnosis for terrain that will not join.
   for (const clash of (report.selfClashes ?? []).slice(0, 3)) {
     console.warn(`${TERRAIN_PREFIX} ${report.what}: colisão interna -- ${clash}`);
+  }
+  for (const why of new Set(report.regenerateFailures ?? [])) {
+    console.warn(`${TERRAIN_PREFIX} ${report.what}: NAO apagou o que ia regerar -- ${why}`);
   }
   for (const reason of new Set(report.refusals ?? [])) {
     console.warn(`${TERRAIN_PREFIX} ${report.what}: recusa -- ${reason}`);
