@@ -26,7 +26,8 @@ const workerScope = globalThis as unknown as WorkerScope;
 const wasmReady = Promise.all([initGeneration(), initDiscretize()]);
 
 const evaluators = createBenchEvaluators({
-  generateHeightmap: (width, height, seed, scale) => generate_heightmap(width, height, seed, scale),
+  generateHeightmap: (width, height, seed, scale, originX, originY) =>
+    generate_heightmap(width, height, seed, scale, originX, originY),
   discretize: (values, levels) => discretize(values, levels),
 });
 

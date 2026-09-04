@@ -64,7 +64,14 @@ export type BenchValue =
 /** The Rust entry points the laboratory elements are built on. */
 export interface BenchWasm {
   /** Generates a Perlin heightmap. */
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array;
   /** Collapses continuous values into discrete level indices. */
   discretize(values: Float32Array, levels: number): Int32Array;
 }
@@ -289,7 +296,7 @@ export function createBenchEvaluators(wasm: BenchWasm): ReadonlyMap<string, Benc
       dataType: BENCH_DATA_TYPES.heightmap,
       width,
       height,
-      values: wasm.generateHeightmap(width, height, asNumber(params.seed), asNumber(params.scale)),
+      values: wasm.generateHeightmap(width, height, asNumber(params.seed), asNumber(params.scale), 0, 0),
     } as HeightmapValue;
   });
 

@@ -3,7 +3,7 @@ import type { TerrainSculptParams } from "@/features/edit-construction";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
-import { restackTerrain } from "./terrain-restack.ts";
+import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
@@ -46,8 +46,16 @@ const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
   "terrain-grass": 0x4a7a4a,
 };
 
-/** Resolution of the sampled heightmap -- plenty for smooth variation across one stroke; does not need to match vertex count. */
-const HEIGHTMAP_RESOLUTION = 16;
+/**
+ * World units between noise samples.
+ *
+ * A fixed spacing in the *world*, never a fixed number of samples per stroke.
+ * Sampling a fixed grid stretched over each stroke's own extent gives the same
+ * world point a different height in every stroke that covers it, and two
+ * patches of ground made that way meet along a crease no agreement about cells
+ * can remove -- they disagree about height, not about layout.
+ */
+const NOISE_SPACING = 1;
 
 /**
  * The brush's own reach: how wide a band the stroke paints, and the shape the
@@ -61,23 +69,29 @@ const HEIGHTMAP_RESOLUTION = 16;
 const REVEAL_RADIUS = 3;
 
 /**
- * Bilinear sample of a flat row-major heightmap at a normalized `(u, v)`.
+ * Bilinear sample of a flat row-major heightmap at a position in *cells*.
  *
  * The grid is irregular and the noise source is not, so nothing lines a vertex
  * up with a sample; bilinear rather than nearest keeps a real step between
  * adjacent vertices' samples.
  */
-function sampleHeightmapBilinear(heightmap: Float32Array, resolution: number, u: number, v: number): number {
-  const x = Math.min(Math.max(u, 0), 1) * (resolution - 1);
-  const y = Math.min(Math.max(v, 0), 1) * (resolution - 1);
+function sampleHeightmapBilinear(
+  heightmap: Float32Array,
+  width: number,
+  height: number,
+  column: number,
+  row: number,
+): number {
+  const x = Math.min(Math.max(column, 0), width - 1);
+  const y = Math.min(Math.max(row, 0), height - 1);
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
-  const x1 = Math.min(x0 + 1, resolution - 1);
-  const y1 = Math.min(y0 + 1, resolution - 1);
+  const x1 = Math.min(x0 + 1, width - 1);
+  const y1 = Math.min(y0 + 1, height - 1);
   const fx = x - x0;
   const fy = y - y0;
 
-  const at = (column: number, row: number) => heightmap[row * resolution + column] ?? 0;
+  const at = (cx: number, cy: number) => heightmap[cy * width + cx] ?? 0;
   const top = at(x0, y0) * (1 - fx) + at(x1, y0) * fx;
   const bottom = at(x0, y1) * (1 - fx) + at(x1, y1) * fx;
   return top * (1 - fy) + bottom * fy;
@@ -136,7 +150,13 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const covered = coveredByStroke(ctx, gesture);
     const raised =
       covered.length > 0
-        ? restackTerrain(ctx, params.targetSurface, covered, causeId)
+        ? restackTerrain(
+            ctx,
+            params.targetSurface,
+            covered,
+            causeId,
+            dirtLoadOver(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS),
+          )
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
     // What the stroke asks to fill, and what is already standing in it. The
@@ -164,17 +184,10 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // Height comes from the noise field over the area the fill actually
     // covers, so it is asked for the extent the generator settled on rather
     // than the one this side guessed before generating.
-    const heightmap = ctx.runtime.generateHeightmap(
-      HEIGHTMAP_RESOLUTION,
-      HEIGHTMAP_RESOLUTION,
-      Math.floor(params.seed) || 1,
-      params.noiseScale,
-    );
-
-    // Anchored to the stroke's own extent, and sampled the same way by both
-    // passes below. Anchoring to whatever extent each generation happened to
-    // settle on would give one world point two different heights in the same
-    // stroke, which is a step in the ground exactly where the two passes meet.
+    // The noise window is anchored to the world and sized to the stroke, never
+    // the other way round: one world point has one height, whichever stroke
+    // asks for it, so ground laid now and ground laid later are the same
+    // surface where they meet.
     let minX = Infinity;
     let minZ = Infinity;
     let maxX = -Infinity;
@@ -189,12 +202,25 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         }
       }
     }
+    const originX = Math.floor(minX / NOISE_SPACING) - 1;
+    const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
+    const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
+    const rows = Math.ceil(maxZ / NOISE_SPACING) - originZ + 2;
+    const heightmap = ctx.runtime.generateHeightmap(
+      columns,
+      rows,
+      Math.floor(params.seed) || 1,
+      params.noiseScale,
+      originX,
+      originZ,
+    );
     const heightAt = (point: { readonly x: number; readonly z: number }): number =>
       sampleHeightmapBilinear(
         heightmap,
-        HEIGHTMAP_RESOLUTION,
-        (point.x - minX) / (maxX - minX || 1),
-        (point.z - minZ) / (maxZ - minZ || 1),
+        columns,
+        rows,
+        point.x / NOISE_SPACING - originX,
+        point.z / NOISE_SPACING - originZ,
       ) * params.heightScale;
 
     const filled = fillTerrain(ctx.runtime, {

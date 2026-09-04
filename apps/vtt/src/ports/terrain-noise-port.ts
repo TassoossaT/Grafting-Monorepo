@@ -16,6 +16,20 @@ export interface TerrainNoisePort {
    * distance between samples in the noise's own space -- smaller values
    * produce smoother, larger-scale features (useful range roughly `0.05`
    * to `0.2`, per the underlying Wasm binding's own doc comment).
+   *
+   * `originX` / `originY` place the grid's first cell in the noise's own
+   * coordinates. A caller that anchors them to the world gets one height per
+   * world point however large or small a window it asks for; a caller that
+   * always passes `0` and stretches the result over its own extent gets a
+   * different height for the same point every time that extent changes, and
+   * two patches of ground made that way meet along a crease.
    */
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array;
 }

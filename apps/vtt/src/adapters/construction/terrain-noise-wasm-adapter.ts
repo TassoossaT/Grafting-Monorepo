@@ -17,9 +17,16 @@ class TerrainNoiseWasmAdapter implements TerrainNoisePort {
     this.#started = true;
   }
 
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array {
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array {
     if (!this.#started) throw new Error("terrain noise adapter is not started");
-    return generate_heightmap(width, height, seed, scale);
+    return generate_heightmap(width, height, seed, scale, originX, originY);
   }
 }
 

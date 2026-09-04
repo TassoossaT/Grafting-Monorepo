@@ -190,7 +190,14 @@ export interface TabletopRuntime {
     causeId: string,
   ): RegionEditOutcome;
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
@@ -993,8 +1000,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#render.clearPreview(channel);
   }
 
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array {
-    return this.#terrainNoise.generateHeightmap(width, height, seed, scale);
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array {
+    return this.#terrainNoise.generateHeightmap(width, height, seed, scale, originX, originY);
   }
 
   attachView(target: HTMLElement): RenderViewId {
