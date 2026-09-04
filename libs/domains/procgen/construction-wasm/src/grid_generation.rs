@@ -41,11 +41,18 @@ pub struct ConstraintPointDto {
 pub struct RefinementDto {
     pub min_angle_degrees: f64,
     pub max_additional_vertices: usize,
+    /// The smallest triangle worth improving, as a fraction of the largest
+    /// one allowed. See `ConstrainedOptions::min_area` for what it buys.
+    ///
+    /// Exposed but not surfaced in any UI, deliberately: its job is to stop a
+    /// pathology, not to be an aesthetic dial. Pushed near `1.0` it would
+    /// stop the refinement from doing its work at all.
+    pub min_area_ratio: f64,
 }
 
 impl Default for RefinementDto {
     fn default() -> Self {
-        Self { min_angle_degrees: 30.0, max_additional_vertices: 50_000 }
+        Self { min_angle_degrees: 30.0, max_additional_vertices: 50_000, min_area_ratio: 0.15 }
     }
 }
 
@@ -75,9 +82,14 @@ pub struct IrregularQuadGridRequest {
     /// Closed rings of ground other clouds already hold, subtracted from it.
     #[serde(default)]
     pub holes: Vec<Vec<ConstraintPointDto>>,
-    /// The lattice side -- the one knob that sets the cell scale, matching
-    /// the unconstrained generator own `triangleSide`.
-    pub triangle_side: f64,
+    /// How wide one finished terrain face should be, in world units.
+    ///
+    /// The face, not the lattice triangle it descends from. Two subdivision
+    /// stages sit between the two -- triangles pair into rhombi, and the
+    /// Conway ortho step cuts every resulting cell into four -- so a caller
+    /// asking in lattice terms gets faces about a third of the size it meant.
+    /// This side owns that conversion so nobody has to carry it.
+    pub face_side: f64,
     #[serde(default)]
     pub refinement: RefinementDto,
     #[serde(default)]
@@ -164,12 +176,28 @@ fn bounds_of(rings: &[Vec<ConstraintPoint>]) -> Option<(Vec2, Vec2)> {
 /// the way `generate_and_apply_*` does, would mean reproducing that
 /// id-and-height decision down here where the type that makes it does not
 /// exist.
+/// How much wider the lattice triangle is than the face that descends from it.
+///
+/// Two stages sit in between. Pairing turns two triangles into one rhombus,
+/// and the Conway ortho step cuts every cell into four, so four faces come out
+/// of every two triangles: geometrically a face is `sqrt(sqrt(3) / 8)` of a
+/// triangle side, about `0.47`. The refinement then adds its own points on top
+/// of the seeded lattice, which makes the real result finer again -- measured
+/// across four scales it settles at about a third rather than a half, and
+/// stays there, which is why this is one measured constant rather than the
+/// clean derivation.
+///
+/// `tests::a_face_comes_back_the_size_it_was_asked_for` is what holds it
+/// honest; if the pipeline's stages ever change, that test moves this number.
+const FACE_SIDE_TO_LATTICE_SIDE: f64 = 3.0;
+
 pub fn irregular_quad_grid(
     request: IrregularQuadGridRequest,
 ) -> Result<IrregularQuadGridResponse, String> {
-    if !(request.triangle_side > 0.0) {
-        return Err("triangleSide must be a positive number".to_string());
+    if !(request.face_side > 0.0) {
+        return Err("faceSide must be a positive number".to_string());
     }
+    let triangle_side = request.face_side * FACE_SIDE_TO_LATTICE_SIDE;
     let boundary = rings_of(&request.boundary);
     if boundary.iter().all(|ring| ring.len() < 3) {
         return Err("boundary needs at least one ring of three or more points".to_string());
@@ -179,11 +207,12 @@ pub fn irregular_quad_grid(
     let (min, max) = bounds_of(&boundary).ok_or("boundary holds no usable point")?;
 
     let options = ConstrainedOptions {
-        seeds: lattice_covering(min, max, request.triangle_side),
+        seeds: lattice_covering(min, max, triangle_side),
         boundary,
         holes,
-        seed_clearance: request.triangle_side * 0.25,
-        max_area: lattice_triangle_area(request.triangle_side),
+        seed_clearance: triangle_side * 0.25,
+        max_area: lattice_triangle_area(triangle_side),
+        min_area: lattice_triangle_area(triangle_side) * request.refinement.min_area_ratio,
         min_angle_degrees: request.refinement.min_angle_degrees,
         max_additional_vertices: request.refinement.max_additional_vertices,
     };
@@ -239,7 +268,7 @@ mod tests {
         format!(
             r#"{{
               "seed": 7,
-              "triangleSide": 0.5,
+              "faceSide": 0.5,
               "boundary": [[
                 {{"x": 0, "z": 0, "source": 0}},
                 {{"x": 10, "z": 0, "source": 1}},
@@ -328,9 +357,9 @@ mod tests {
     }
 
     #[test]
-    fn the_cell_scale_follows_triangle_side() {
+    fn the_cell_scale_follows_face_side() {
         let coarse: IrregularQuadGridRequest =
-            serde_json::from_str(&request_json("[]").replace("\"triangleSide\": 0.5", "\"triangleSide\": 1.5"))
+            serde_json::from_str(&request_json("[]").replace("\"faceSide\": 0.5", "\"faceSide\": 1.5"))
                 .expect("parses");
         let fine: IrregularQuadGridRequest =
             serde_json::from_str(&request_json("[]")).expect("parses");
@@ -345,15 +374,49 @@ mod tests {
         );
     }
 
+    /// What `FACE_SIDE_TO_LATTICE_SIDE` is for, and the only thing holding it
+    /// honest. A caller asks in faces; if a stage of the pipeline is ever
+    /// added or removed, the faces come back the wrong size and this is what
+    /// says so.
+    #[test]
+    fn a_face_comes_back_the_size_it_was_asked_for() {
+        for asked in [0.5, 1.0, 2.0] {
+            let request: IrregularQuadGridRequest = serde_json::from_str(
+                &request_json("[]").replace("\"faceSide\": 0.5", &format!("\"faceSide\": {asked}")),
+            )
+            .expect("parses");
+            let grid = irregular_quad_grid(request).expect("a grid");
+            // The field is 10x10 and fully covered, so the mean face area is
+            // the area over the count.
+            let mean_side = (100.0 / grid.quads.len() as f64).sqrt();
+            assert!(
+                (mean_side / asked - 1.0).abs() < 0.25,
+                "asked for faces of {asked}, got a mean side of {mean_side} across {} faces",
+                grid.quads.len()
+            );
+        }
+    }
+
+    /// The floor exists for one input -- two contours running close and
+    /// near-parallel -- and has to cost nothing everywhere else.
+    #[test]
+    fn the_minimum_area_floor_leaves_an_ordinary_field_alone() {
+        let mut request: IrregularQuadGridRequest = serde_json::from_str(&request_json("[]")).expect("parses");
+        request.refinement.min_area_ratio = 0.0;
+        let without = irregular_quad_grid(request).expect("a grid");
+        let with = irregular_quad_grid(serde_json::from_str(&request_json("[]")).expect("parses")).expect("a grid");
+        assert_eq!(with.quads.len(), without.quads.len(), "no wedge here, so nothing for the floor to skip");
+    }
+
     #[test]
     fn bad_input_is_refused_at_the_boundary_rather_than_panicking() {
         // Panics are not catchable on wasm32, so every one of these has to
         // come back as an error string.
         for (name, json) in [
-            ("no boundary", r#"{"seed":1,"triangleSide":0.5,"boundary":[]}"#),
-            ("a boundary of two points", r#"{"seed":1,"triangleSide":0.5,"boundary":[[{"x":0,"z":0},{"x":1,"z":1}]]}"#),
-            ("a zero side", r#"{"seed":1,"triangleSide":0,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
-            ("a negative side", r#"{"seed":1,"triangleSide":-1,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
+            ("no boundary", r#"{"seed":1,"faceSide":0.5,"boundary":[]}"#),
+            ("a boundary of two points", r#"{"seed":1,"faceSide":0.5,"boundary":[[{"x":0,"z":0},{"x":1,"z":1}]]}"#),
+            ("a zero side", r#"{"seed":1,"faceSide":0,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
+            ("a negative side", r#"{"seed":1,"faceSide":-1,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
         ] {
             let request: IrregularQuadGridRequest =
                 serde_json::from_str(json).unwrap_or_else(|error| panic!("{name}: {error}"));

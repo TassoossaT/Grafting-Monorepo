@@ -405,8 +405,16 @@ export interface ConstructionIrregularQuadGridRequest {
    * back as ground.
    */
   readonly holes?: readonly (readonly ConstructionGridConstraintPoint[])[];
-  /** The lattice side: the one knob that sets the cell scale. */
-  readonly triangleSide: number;
+  /**
+   * How wide one finished terrain face should be, in world units.
+   *
+   * The face, not the lattice triangle behind it. Two subdivision stages sit
+   * between the two, so asking in lattice terms yields faces about a third of
+   * the size meant -- which is how a stroke asking for cells of 2 came back
+   * with roughly seven times the faces it wanted. The engine owns that
+   * conversion; this side says what it wants to see.
+   */
+  readonly faceSide: number;
   /**
    * How hard the relaxation pulls cells toward square, `0` hardest and `1`
    * leaving the raw irregular variety the rhombus pairing produced. Omitted

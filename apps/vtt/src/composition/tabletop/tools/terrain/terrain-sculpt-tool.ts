@@ -49,11 +49,16 @@ const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
 /** Resolution of the sampled heightmap -- plenty for smooth variation across one stroke; does not need to match vertex count. */
 const HEIGHTMAP_RESOLUTION = 16;
 
-/** Physical edge length of one triangle in the lattice -- world-space scale of one cell. */
-const HEX_TRIANGLE_SIDE = 2;
-
-/** The brush's own reach: how wide a band the stroke paints, and the shape the preview shows. */
-const REVEAL_RADIUS = HEX_TRIANGLE_SIDE * 1.5;
+/**
+ * The brush's own reach: how wide a band the stroke paints, and the shape the
+ * preview shows.
+ *
+ * Its own constant rather than a multiple of the cell size, which is what it
+ * used to be. Those are two unrelated things -- how much ground the stroke
+ * covers, and how finely that ground is divided -- and tying them together
+ * meant the brush silently got wider every time the cells were made coarser.
+ */
+const REVEAL_RADIUS = 3;
 
 /**
  * Bilinear sample of a flat row-major heightmap at a normalized `(u, v)`.
@@ -171,7 +176,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       tableId: ctx.tableId,
       causeId,
       seed: Math.floor(params.seed) || 1,
-      triangleSide: HEX_TRIANGLE_SIDE,
+      faceSide: params.faceSize,
       relaxStrength: params.irregularity,
       surfaceType: params.targetSurface,
       boundary: outline,

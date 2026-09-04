@@ -221,6 +221,9 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
         />
       </div>
+      {sliderRow("Tamanho da face", params.faceSize, 0.5, 6, 0.25, (faceSize) =>
+        onChange({ ...params, faceSize }),
+      )}
       {sliderRow("Irregularidade", params.irregularity, 0, 1, 0.05, (irregularity) =>
         onChange({ ...params, irregularity }),
       )}

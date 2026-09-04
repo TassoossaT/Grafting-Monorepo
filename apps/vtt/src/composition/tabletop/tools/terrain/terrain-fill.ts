@@ -67,7 +67,8 @@ export interface TerrainFillRequest {
   readonly tableId: string;
   readonly causeId: string;
   readonly seed: number;
-  readonly triangleSide: number;
+  /** How wide one finished face should be; see the port's own `faceSide`. */
+  readonly faceSide: number;
   /** Passed straight through; see the port's own `relaxStrength`. */
   readonly relaxStrength?: number;
   readonly surfaceType: string;
@@ -94,6 +95,16 @@ export interface TerrainFillOutcome {
   /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
   readonly refinementComplete: boolean;
 }
+
+/**
+ * The face size terrain is laid at when nobody says otherwise.
+ *
+ * A repair has no brush params to read -- it is regrowing ground somebody else
+ * cut -- so it takes this. Keeping it here rather than in either caller is
+ * what stops the sculpted ground and the regrown ground from drifting to
+ * different scales.
+ */
+export const DEFAULT_FACE_SIDE = 2;
 
 /** Nothing to do, reported as an outcome rather than as a failure. */
 const NOTHING: TerrainFillOutcome = { built: 0, refused: 0, unadopted: 0, refinementComplete: true };
@@ -156,7 +167,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
 
   const grid = runtime.generateIrregularQuadGrid({
     seed: request.seed,
-    triangleSide: request.triangleSide,
+    faceSide: request.faceSide,
     relaxStrength: request.relaxStrength,
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),

@@ -108,6 +108,15 @@ export interface InteriorGenerateParams {
  */
 export interface TerrainSculptParams {
   /**
+   * How wide one terrain face should be, in world units.
+   *
+   * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
+   * a way that is felt rather than measured -- halving it roughly quadruples
+   * the faces a stroke registers, and the graph, the render sync and the
+   * scene all carry every one of them.
+   */
+  readonly faceSize: number;
+  /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
    * variety the random rhombus merge produces. The generator's own relaxation
@@ -196,6 +205,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
+    faceSize: 2,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

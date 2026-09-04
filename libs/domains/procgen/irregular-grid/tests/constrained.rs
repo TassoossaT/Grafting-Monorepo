@@ -72,6 +72,7 @@ fn options(holes: Vec<Vec<ConstraintPoint>>) -> ConstrainedOptions {
         seeds: lattice(1.0),
         seed_clearance: 0.25,
         max_area: 0.75,
+        min_area: 0.0,
         min_angle_degrees: 30.0,
         max_additional_vertices: 20_000,
     }

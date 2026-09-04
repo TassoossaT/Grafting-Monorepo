@@ -88,6 +88,22 @@ pub struct ConstrainedOptions {
     pub seed_clearance: f64,
     /// Largest triangle the refinement will leave standing. The cell scale.
     pub max_area: f64,
+    /// Smallest triangle the refinement will bother to improve. `0` disables
+    /// the floor.
+    ///
+    /// This is the guard against the one input that actually costs: two
+    /// contours running close and near-parallel. The local feature size
+    /// between them collapses, and without a floor the refinement fills the
+    /// wedge with slivers -- measured at three times the whole area's worth
+    /// of cells for a gap of a fortieth of one. With a floor at 15% of
+    /// [`Self::max_area`] that case loses two thirds of its cells and half
+    /// its time, while every input *without* such a wedge comes back cell for
+    /// cell identical. It buys the pathological case and costs the ordinary
+    /// one nothing, which is why it is on by default at the bridge.
+    ///
+    /// A sharp *angle* alone is not the problem it is often assumed to be:
+    /// measured, a three degree wedge costs about five percent.
+    pub min_area: f64,
     /// Smallest angle the refinement will leave standing, in degrees.
     ///
     /// Ruppert is only proven to terminate below roughly 20.7 degrees; above
@@ -199,10 +215,14 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         cdt.insert(GridVertex { position: Point2::new(seed.x, seed.y), source: None }).ok()?;
     }
 
+    let mut parameters = RefinementParameters::<f64>::new()
+        .with_angle_limit(AngleLimit::from_deg(options.min_angle_degrees))
+        .with_max_allowed_area(options.max_area);
+    if options.min_area > 0.0 {
+        parameters = parameters.with_min_required_area(options.min_area);
+    }
     let outcome = cdt.refine(
-        RefinementParameters::<f64>::new()
-            .with_angle_limit(AngleLimit::from_deg(options.min_angle_degrees))
-            .with_max_allowed_area(options.max_area)
+        parameters
             .with_max_additional_vertices(options.max_additional_vertices)
             .exclude_outer_faces(true),
     );

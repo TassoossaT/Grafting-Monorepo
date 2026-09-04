@@ -11,7 +11,7 @@ import type { CutFallout } from "@/features/edit-construction";
 // `@/` imports above are fine -- those are erased.
 import { outwardPerimeterRings } from "../../../../features/edit-construction/index.ts";
 import { constraintsFromRings, type ConstraintRing } from "./terrain-constraints.ts";
-import { fillTerrain, type TerrainFillRuntime } from "./terrain-fill.ts";
+import { DEFAULT_FACE_SIDE, fillTerrain, type TerrainFillRuntime } from "./terrain-fill.ts";
 
 /**
  * Terrain's own answer to `resolveCutRepair`'s `"regenerate"`: grow the ground
@@ -48,9 +48,6 @@ import { fillTerrain, type TerrainFillRuntime } from "./terrain-fill.ts";
 export interface TerrainCutRepairRuntime extends TerrainFillRuntime {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
 }
-
-/** How wide a cell the regrown ground uses -- the same scale the sculpt brush lays. */
-const TRIANGLE_SIDE = 2;
 
 /**
  * Height for a corner the regeneration invents, blended from the ring nodes
@@ -181,7 +178,7 @@ export function repairTerrainCut(
     tableId,
     causeId,
     seed: Math.max(1, stamp),
-    triangleSide: TRIANGLE_SIDE,
+    faceSide: DEFAULT_FACE_SIDE,
     // The consumed type, so a cut through slate comes back slate without this
     // side having to know that.
     surfaceType,
