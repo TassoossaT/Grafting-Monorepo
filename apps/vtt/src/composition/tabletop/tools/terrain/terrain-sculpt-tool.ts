@@ -111,6 +111,24 @@ function sampleHeightmapBilinear(
  * (`brushSweptOutlinePolygons` is shared with the preview), so the stroke
  * never affects ground the user was not shown.
  */
+/**
+ * The one chord every sweep of a stroke is described at.
+ *
+ * **All three have to be the same shape, and for a while they were not.** The
+ * ghost drawn while dragging, the footprint the engine is asked to report
+ * coverage for, and the outline the fill is bounded by are three separate
+ * calls to the same sweep; when the fill's chord was widened to stop the mesh
+ * coming back finer than asked, the other two were left behind.
+ *
+ * That is not cosmetic. The fill then reaches ground the coverage query never
+ * reported, so that ground is never handed over as occupied, the generator
+ * plans cells across it, and the engine refuses every one of them -- "no room
+ * on edge". And the person at the table paints one shape and gets another.
+ */
+function strokeChord(params: TerrainSculptParams): number {
+  return params.faceSize * OUTLINE_CHORD_PER_FACE;
+}
+
 function coveredByStroke(
   ctx: ToolContext,
   gesture: ToolGesture,
@@ -120,7 +138,7 @@ function coveredByStroke(
   for (const polygon of brushSweptOutlinePolygons(
     gesture.samples.map((sample) => sample.point),
     params.brushRadius,
-    params.faceSize,
+    strokeChord(params),
   )) {
     const ring = polygon[0];
     if (ring === undefined || ring.length < 3) continue;
@@ -206,7 +224,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       0.35,
       // The same chord the commit will sweep with, so the ghost is the shape
       // the engine is actually asked about.
-      params.faceSize,
+      strokeChord(params),
     );
   },
 
@@ -248,7 +266,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const swept = brushSweptOutlinePolygons(
       gesture.samples.map((sample) => sample.point),
       params.brushRadius,
-      params.faceSize * OUTLINE_CHORD_PER_FACE,
+      strokeChord(params),
     );
     const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
     const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
