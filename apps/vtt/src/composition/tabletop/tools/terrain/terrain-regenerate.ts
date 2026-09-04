@@ -1,5 +1,4 @@
 import type {
-  ConstructionCoveredRegion,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionRegionEdge,
@@ -7,7 +6,6 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 import type { CutFallout } from "@/features/edit-construction";
-import type { MultiPolygon } from "polygon-clipping";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
@@ -20,47 +18,37 @@ import { DEFAULT_FACE_SIDE, fillTerrain, type TerrainFillRuntime } from "./terra
  * Throwing a neighbourhood of ground away and generating it again as one
  * piece.
  *
- * **Why this exists at all, rather than mending.** Every generation is a
- * *whole* generation: the Conway ortho step puts a vertex at the midpoint of
- * every edge it touches, contour edges included, so laying ground against a
- * contour somebody already holds doubles that contour's nodes. Once. Which is
- * survivable when a stroke is one batch, and is not survivable at all when the
- * stroke becomes incremental -- a doubling per tick diverges, and a circular
- * outline, being all contour and no straight run, diverges fastest.
+ * Used by one caller: repairing terrain a cut consumed. It was briefly used by
+ * a second -- a pass that relaid the neighbourhood of every stroke, to erase
+ * the seam where new ground met old and to shed the nodes that accumulate
+ * there. That was tried and reverted, and the reason is worth keeping so it is
+ * not tried again the same way.
  *
- * Relaxing the seam afterwards does not fix that: relaxation moves nodes and
- * never removes one. Against a source that doubles, a pass that only smooths
- * leaves a pretty seam and a rising node count. What is needed is a *sink*,
- * and the cheapest honest sink on a quad mesh is not decimation -- collapsing
- * a quad edge leaves a triangle, and quad remeshing is its own research
- * problem -- but this: do not subdivide into the neighbour, throw the
- * neighbourhood away and generate it again. Nothing accumulates, because the
- * seam is discarded rather than split, and the previous pass's rim falls
- * inside the next pass's neighbourhood and is regenerated away with it.
+ * **Why regenerating a neighbourhood does not shed accumulated nodes.** The
+ * rim of the regenerated patch is a hard constraint built from the *existing*
+ * mesh's edges, so whatever fineness that boundary had is imprinted on the new
+ * mesh exactly -- and then the ortho step puts a midpoint on every one of
+ * those segments, doubling it again. The seam is not removed, it is moved
+ * outward onto a longer rim and made finer. Measured against expectation, this
+ * made every symptom worse: more nodes, tighter cells clustered along the new
+ * join, and two generations of cost per stroke.
  *
- * **Two callers, one operation.** A cut through terrain and a stroke painted
- * onto it want the same thing -- this patch of ground, made again, in one
- * piece, meeting whatever else is standing. They differ only in which faces
- * they name and where the heights come from.
+ * The second failure was worse than slow. The faces are deleted before the
+ * generator is asked, so a rim it refuses -- disjoint components, degenerate
+ * segments, a self-touching perimeter -- costs the ground outright: deleted,
+ * with nothing laid back. Any future version has to generate first and delete
+ * only on success, or hold the deletion in the same transaction.
+ *
+ * Accumulation has to be attacked where it starts: the contour handed to the
+ * generator, decimated to the target face size *before* it becomes a
+ * constraint. `remove-vertex` already exists for that and dissolves a node
+ * into the edge that spans it.
  */
 
 /** What {@link regenerateNeighbourhood} needs of the runtime, structurally. */
 export interface TerrainRegenerateRuntime extends TerrainFillRuntime {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
-  getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[];
 }
-
-/**
- * How far past the painted area the neighbourhood reaches, in faces.
- *
- * One face would consume only the cells the stroke already overlaps, leaving
- * the seam exactly where it was -- on the rim of what was regenerated. Two
- * puts the rim a full cell clear of anything the stroke touched, so the ring
- * of cells that used to be the seam is interior to the new generation and is
- * shaped by it. More than that costs area for nothing: the join is already
- * invisible one cell out.
- */
-const NEIGHBOURHOOD_FACES = 2;
 
 /**
  * A neighbourhood is bounded by the brush, not by the terrain, so it should
@@ -291,75 +279,6 @@ export function repairTerrainCut(
     // ground that stood there, so the height field always has an opinion.
     // Level is the honest answer for the corner case where it does not.
     heightOfNewGround: () => 0,
-  });
-}
-
-export interface NormalizeRequest {
-  /**
-   * The area just painted, already swept out by the brush at its own radius
-   * plus the reach of the neighbourhood. The caller sweeps it, because the
-   * caller owns the stroke -- and sweeping the path again at a wider radius is
-   * an exact dilation, which offsetting a finished polygon is not.
-   */
-  readonly dilatedOutline: MultiPolygon;
-  readonly surfaceType: string;
-  readonly faceSide: number;
-  readonly causeId: string;
-  readonly tableId: string;
-  readonly heightOfNewGround: (point: { readonly x: number; readonly z: number }) => number;
-}
-
-/** How much wider than the brush the neighbourhood is swept. */
-export function neighbourhoodReach(faceSide: number): number {
-  return faceSide * NEIGHBOURHOOD_FACES;
-}
-
-/**
- * Lays the ground a stroke just touched again, as one piece, so the join
- * between what was already there and what the stroke added stops being a
- * seam.
- *
- * Run *after* the stroke has landed, on purpose. It then finds one cloud where
- * a moment ago there were two, and the ring of cells that used to be the
- * boundary between them is interior to what it regenerates -- shaped by the
- * generation rather than left as the line where two generations happened to
- * meet.
- *
- * Everything of another type inside the neighbourhood is a contour to meet,
- * never something to regenerate: this consumes only its own kind. A road
- * crossing the area keeps every node it has and the ground comes back around
- * it.
- */
-export function normalizeTerrainAround(runtime: TerrainRegenerateRuntime, request: NormalizeRequest): number {
-  const mine = new Map<string, ConstructionSurfaceKey>();
-  const foreign = new Map<string, ConstructionSurfaceKey>();
-  for (const polygon of request.dilatedOutline) {
-    const ring = polygon[0];
-    if (ring === undefined || ring.length < 3) continue;
-    for (const region of runtime.getFootprintCoverage(ring)) {
-      const key = region.surfaceKey.join(" ");
-      if (region.surfaceType === request.surfaceType) mine.set(key, region.surfaceKey);
-      else foreign.set(key, region.surfaceKey);
-    }
-  }
-  if (mine.size === 0) return 0;
-
-  const others = [...foreign.values()]
-    .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
-    .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-  const otherNodes = others.flatMap((topology) => topology.nodes);
-
-  return regenerateNeighbourhood(runtime, {
-    consumedSurfaceKeys: [...mine.values()],
-    // One ring per cloud of touching faces, never one per face: neighbouring
-    // faces of a road share edges, so face-by-face boundaries describe a shape
-    // that overlaps itself along every shared edge.
-    otherLoops: outwardPerimeterRings(others),
-    otherNodes,
-    faceSide: request.faceSide,
-    causeId: request.causeId,
-    tableId: request.tableId,
-    heightOfNewGround: request.heightOfNewGround,
   });
 }
 

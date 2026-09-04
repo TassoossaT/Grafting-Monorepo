@@ -6,7 +6,6 @@ import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/previ
 import { restackTerrain } from "./terrain-restack.ts";
 import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
-import { neighbourhoodReach, normalizeTerrainAround } from "./terrain-regenerate.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -212,42 +211,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       heightAt,
     });
 
-    // The stroke has landed, and where it met ground that was already there it
-    // met it along a contour -- one generation stopping exactly where another
-    // began. That line is the seam: cells on both sides of it were pinned
-    // during relaxation, so it reads as two meshes touching rather than as one
-    // piece of ground.
-    //
-    // So lay that whole neighbourhood again, now, as a single generation. It
-    // finds one cloud where a moment ago there were two, and the ring of cells
-    // that used to be the boundary is interior to what it regenerates. It also
-    // takes the accumulated nodes with it: laying ground against a contour
-    // doubles that contour, and this is what stops the doubling from being
-    // permanent -- the contour it would have accumulated on no longer exists.
-    // Only where there was something to join to. A stroke laying ground on
-    // empty space has no seam, and regenerating what it just made would cost a
-    // second generation and a fresh set of node ids to change nothing.
-    const met = covered.some((region) => region.surfaceType === params.targetSurface);
-    const normalized = !met ? 0 : normalizeTerrainAround(ctx.runtime, {
-      dilatedOutline: brushSweptOutlinePolygons(
-        gesture.samples.map((sample) => sample.point),
-        REVEAL_RADIUS + neighbourhoodReach(params.faceSize),
-      ),
-      surfaceType: params.targetSurface,
-      faceSide: params.faceSize,
-      causeId,
-      tableId: ctx.tableId,
-      heightOfNewGround: heightAt,
-    });
-
-    report(
-      ctx,
-      normalized > 0 ? normalized : filled.built,
-      filled.refused,
-      filled.unadopted,
-      raised,
-      filled.refinementComplete,
-    );
+    report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
   },
 };
 

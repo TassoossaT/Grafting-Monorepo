@@ -3,8 +3,6 @@ import test from "node:test";
 
 import {
   heightFieldOf,
-  neighbourhoodReach,
-  normalizeTerrainAround,
   repairTerrainCut,
 } from "../src/composition/tabletop/tools/terrain/terrain-regenerate.ts";
 
@@ -201,47 +199,4 @@ test("a point no anchor reaches has no opinion, so the caller's rule decides", (
 test("sitting exactly on an anchor takes its height rather than dividing by zero", () => {
   const field = heightFieldOf([{ x: 3, y: 7, z: 4 }], 2);
   assert.equal(field.at({ x: 3, z: 4 }), 7);
-});
-
-test("the neighbourhood reaches past the brush, or the seam stays on its own rim", () => {
-  assert.ok(neighbourhoodReach(2) >= 2, "at least one face clear of anything the stroke touched");
-});
-
-test("normalizing consumes its own type and meets every other one", () => {
-  const context = field();
-  // The whole field, both terrain faces and the road, is in the neighbourhood.
-  context.runtime.getFootprintCoverage = () => [
-    { surfaceKey: ["terrain", "L"], surfaceType: "terrain" },
-    { surfaceKey: ["terrain", "R"], surfaceType: "terrain" },
-    { surfaceKey: ["road", "P"], surfaceType: "path" },
-  ];
-
-  normalizeTerrainAround(context.runtime, {
-    dilatedOutline: [[[[0, 0], [4, 0], [4, 4], [0, 4]]]],
-    surfaceType: "terrain",
-    faceSide: 2,
-    causeId: "cause-1",
-    tableId: "t",
-    heightOfNewGround: () => 0,
-  });
-
-  assert.deepEqual(context.deleted.sort(), ["terrain L", "terrain R"], "the road is met, never consumed");
-  const request = context.requests[0];
-  assert.equal(request.holes.length, 1, "the road went down as a contour");
-  assert.ok(request.holes[0].every((point) => typeof point.source === "number"));
-});
-
-test("normalizing where nothing of its own type stands does nothing", () => {
-  const context = field();
-  context.runtime.getFootprintCoverage = () => [{ surfaceKey: ["road", "P"], surfaceType: "path" }];
-  const built = normalizeTerrainAround(context.runtime, {
-    dilatedOutline: [[[[0, 0], [4, 0], [4, 4], [0, 4]]]],
-    surfaceType: "terrain",
-    faceSide: 2,
-    causeId: "cause-1",
-    tableId: "t",
-    heightOfNewGround: () => 0,
-  });
-  assert.equal(built, 0);
-  assert.deepEqual(context.deleted, []);
 });
