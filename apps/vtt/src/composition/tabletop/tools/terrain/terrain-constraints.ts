@@ -118,9 +118,74 @@ export function constraintsFromRings(
   return { rings: built, sources };
 }
 
-/** A stroke's own swept outline: real ground to fill, owned by nobody yet. */
+/**
+ * Ramer-Douglas-Peucker: drops every point that lies within `tolerance` of the
+ * line its neighbours already describe.
+ *
+ * Open chain, run per ring between two fixed anchors, so a closed ring keeps
+ * its start point and is simplified in two halves.
+ */
+function simplifyChain(
+  points: readonly (readonly [number, number])[],
+  tolerance: number,
+): (readonly [number, number])[] {
+  if (points.length < 3) return [...points];
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const dx = last[0] - first[0];
+  const dz = last[1] - first[1];
+  const lengthSq = dx * dx + dz * dz;
+
+  let worst = 0;
+  let at = 0;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const point = points[index]!;
+    const along =
+      lengthSq > 0
+        ? Math.min(Math.max(((point[0] - first[0]) * dx + (point[1] - first[1]) * dz) / lengthSq, 0), 1)
+        : 0;
+    const ox = first[0] + dx * along - point[0];
+    const oz = first[1] + dz * along - point[1];
+    const offset = Math.hypot(ox, oz);
+    if (offset > worst) {
+      worst = offset;
+      at = index;
+    }
+  }
+  if (worst <= tolerance) return [first, last];
+  return [
+    ...simplifyChain(points.slice(0, at + 1), tolerance).slice(0, -1),
+    ...simplifyChain(points.slice(at), tolerance),
+  ];
+}
+
+/**
+ * A stroke's own swept outline: real ground to fill, owned by nobody yet.
+ *
+ * **Simplified first, and this is where the cell size is really decided.**
+ * The outline arrives from `polygon-clipping` as the union of one capsule per
+ * pair of samples, which puts a vertex at every capsule intersection and every
+ * step of every cap arc -- hundreds of segments a fraction of a cell long. The
+ * generator has to satisfy an angle bound against every one of them and the
+ * ortho step puts a midpoint on each, so a stroke on *empty ground*, meeting
+ * nothing and adopting nothing, still came back at half the face size it asked
+ * for and four times the face count. Measured on the table: 215 faces of 1.02
+ * where 2.0 was asked.
+ *
+ * The tolerance is chosen so the surviving segments land at about twice the
+ * face size, which is where a boundary measurably stops driving the interior.
+ * For a cap of radius `r` simplified at sagitta `t` the chord is
+ * `2*sqrt(2*r*t)`, so a tolerance near `0.3 * faceSide` puts a radius-3 brush
+ * at roughly twice a face across -- and the long straight flanks of a stroke,
+ * where the real excess lives, collapse to their endpoints outright.
+ *
+ * Safe to do here and nowhere else: this ring is nobody's boundary yet, so no
+ * point of it carries a node id and dropping one costs no identity. The
+ * perimeter of standing ground is a different matter entirely.
+ */
 export function outlineConstraints(
   rings: readonly (readonly (readonly [number, number])[])[],
+  tolerance = 0,
 ): readonly ConstraintRing[] {
   return rings
     .map((ring) => {
@@ -133,8 +198,14 @@ export function outlineConstraints(
         ring[0]![1] === ring[ring.length - 1]![1]
           ? ring.slice(0, -1)
           : ring;
+      // Simplified as a closed ring: the first point is held as the anchor at
+      // both ends, so the ring cannot unwind into an open chain.
+      const simplified =
+        tolerance > 0 && open.length > 3
+          ? simplifyChain([...open, open[0]!], tolerance).slice(0, -1)
+          : open;
       return {
-        points: open.map(([x, z]) => ({ x, z })),
+        points: simplified.map(([x, z]) => ({ x, z })),
         edges: [] as readonly ConstructionRegionEdge[],
       };
     })

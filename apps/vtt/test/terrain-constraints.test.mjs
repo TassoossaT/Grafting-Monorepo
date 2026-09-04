@@ -225,3 +225,53 @@ test("a refused split costs that node its shared edge, never the stroke", () => 
   assert.equal(outcome.adopted.size, 1, "the second node still gets its shared edge");
   assert.equal(outcome.refused.length, 1, "the first is reported so its node lands as plain geometry");
 });
+
+test("the brush's own outline is simplified to segments the generator will not over-refine", async () => {
+  const { brushSweptOutlinePolygons } = await import(
+    "../src/composition/tabletop/tools/shapes/preview-shapes.ts"
+  );
+  // A drag as a hand actually makes it: sampled densely and never perfectly
+  // straight. A synthetic straight one is the wrong model -- `polygon-clipping`
+  // collapses its flanks to a single segment each, so it looks coarse and
+  // hides what a real stroke hands over.
+  const samples = [];
+  for (let step = 0; step <= 40; step += 1) {
+    samples.push({ x: step * 0.8, y: 0, z: Math.sin(step * 0.7) * 0.15 });
+  }
+  const swept = brushSweptOutlinePolygons(samples, 3);
+  const outer = swept.flatMap((polygon) => polygon.slice(0, 1));
+
+  const faceSide = 2;
+  const raw = outlineConstraints(outer);
+  const simplified = outlineConstraints(outer, faceSide * 0.3);
+
+  const segments = (rings) => {
+    const lengths = [];
+    for (const ring of rings) {
+      for (let index = 0; index < ring.points.length; index += 1) {
+        const from = ring.points[index];
+        const to = ring.points[(index + 1) % ring.points.length];
+        lengths.push(Math.hypot(to.x - from.x, to.z - from.z));
+      }
+    }
+    return lengths;
+  };
+  const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+
+  const before = segments(raw);
+  const after = segments(simplified);
+  // The shortest segment is what drives the refinement locally, and it is at
+  // the round ends of the stroke -- which is exactly where the table sees the
+  // cells bunch up.
+  assert.ok(Math.min(...before) < faceSide * 0.75, `the raw sweep has segments well under a face: ${Math.min(...before)}`);
+  assert.ok(
+    mean(after) >= faceSide * 1.5,
+    `simplified segments must clear the face size: ${mean(after)} against a face of ${faceSide}`,
+  );
+  assert.ok(after.length < before.length, `and there must be fewer of them: ${after.length} against ${before.length}`);
+
+  // The shape survives: no ring is lost, and the outline still spans the drag.
+  assert.equal(simplified.length, raw.length);
+  const xs = simplified.flatMap((ring) => ring.points.map((point) => point.x));
+  assert.ok(Math.min(...xs) < -2.5 && Math.max(...xs) > 34.5, "the swept extent is preserved");
+});

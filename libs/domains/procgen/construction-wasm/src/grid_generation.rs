@@ -476,6 +476,74 @@ mod tests {
     /// So the boundary only has to be coarsened to about twice the face size
     /// to stop driving the interior -- which, for a rim walked at the face
     /// size, is dropping every other point.
+    fn faces_and_side(boundary: &[(f64, f64)], face_side: f64) -> (usize, f64) {
+        let body: Vec<String> =
+            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
+            r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]}}"#,
+            body.join(",")
+        ))
+        .expect("parses");
+        let grid = irregular_quad_grid(request).expect("a grid");
+        let (mut min_x, mut min_z, mut max_x, mut max_z) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for &(x, z) in boundary {
+            min_x = min_x.min(x); min_z = min_z.min(z);
+            max_x = max_x.max(x); max_z = max_z.max(z);
+        }
+        let area = (max_x - min_x) * (max_z - min_z);
+        (grid.quads.len(), (area / grid.quads.len() as f64).sqrt())
+    }
+
+    /// The exact shape the brush hands over: a capsule, straight flanks and
+    /// arc caps in `cap_steps` segments each.
+    fn capsule(length: f64, radius: f64, cap_steps: usize) -> Vec<(f64, f64)> {
+        let mut points = vec![(0.0, -radius), (length, -radius)];
+        for step in 1..cap_steps {
+            let angle = -std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * step as f64 / cap_steps as f64;
+            points.push((length + radius * angle.cos(), radius * angle.sin()));
+        }
+        points.push((length, radius));
+        points.push((0.0, radius));
+        for step in 1..cap_steps {
+            let angle = std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * step as f64 / cap_steps as f64;
+            points.push((radius * angle.cos(), radius * angle.sin()));
+        }
+        points
+    }
+
+    /// Why the cells bunch up at the ends of a stroke and nowhere else.
+    ///
+    /// The brush hands over a capsule: two long straight flanks and two arc
+    /// caps chopped into short segments. Those cap segments are a fraction of
+    /// a face long, and the refinement answers to the shortest feature near
+    /// it, so the ends come back dense while the middle comes back right.
+    ///
+    /// Measured over the same ground, by how finely the caps are described:
+    ///
+    /// | cap segments | faces | mean side |
+    /// |--------------|-------|-----------|
+    /// | 8            | 88    | 1.61      |
+    /// | 4            | 80    | 1.69      |
+    /// | 2            | 67    | 1.84      |
+    /// | none         | 55    | 1.87      |
+    ///
+    /// Sixty percent of the faces of a straight stroke are bought by its two
+    /// round ends. Simplifying the outline before it becomes a constraint is
+    /// what `outlineConstraints` does about it.
+    #[test]
+    fn the_round_ends_of_a_stroke_cost_more_than_all_the_rest_of_it() {
+        let (fine, fine_side) = faces_and_side(&capsule(32.0, 3.0, 8), 2.0);
+        let (coarse, coarse_side) = faces_and_side(&capsule(32.0, 3.0, 1), 2.0);
+        assert!(
+            fine as f64 > coarse as f64 * 1.4,
+            "finely described ends cost far more faces: {fine} against {coarse}"
+        );
+        assert!(
+            fine_side < coarse_side * 0.9,
+            "and the cells come back smaller than asked: {fine_side} against {coarse_side}"
+        );
+    }
+
     #[test]
     fn a_walked_boundary_makes_a_finer_mesh_than_the_same_region_asked_for_plainly() {
         let plain = mean_face_side(&[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)], 2.0);
