@@ -620,4 +620,67 @@ mod tests {
             assert!(irregular_quad_grid(request).is_err(), "{name} should be refused");
         }
     }
+
+    /// **The number the brush has to describe its outline at.**
+    ///
+    /// A stroke's swept outline used to be described at the face size, and the
+    /// table above already says what that costs: a boundary walked at 1x the
+    /// face gives cells at about two thirds of it. Measured on the shape the
+    /// brush actually hands over -- a 30-long capsule of radius 6, asking for
+    /// faces of 2 -- by the chord its outline is described at:
+    ///
+    /// | chord | outline points | faces | mean side |
+    /// |-------|----------------|-------|-----------|
+    /// | 0.5x  | 98             | 312   | 1.27      |
+    /// | 1x    | 50             | 308   | 1.28      |
+    /// | 1.5x  | 34             | 196   | 1.60      |
+    /// | 2x    | 26             | 120   | 2.04      |
+    /// | 3x    | 18             | 104   | 2.20      |
+    ///
+    /// Describing it more finely than 1x buys nothing at all -- 98 points and
+    /// 50 points give the same mesh -- because below that the angle bound, not
+    /// the boundary, is what is binding. At 2x the mesh finally comes back the
+    /// size it was asked for, with two and a half times fewer faces.
+    #[test]
+    fn an_outline_described_at_twice_the_face_size_gives_the_size_asked_for() {
+        let face = 2.0;
+        let fine = faces_and_side(&capsule_outline(30.0, 6.0, face * 1.0), face);
+        let coarse = faces_and_side(&capsule_outline(30.0, 6.0, face * 2.0), face);
+        assert!(fine.1 < face * 0.75, "at the face size it comes back far finer; got {}", fine.1);
+        assert!(
+            (coarse.1 - face).abs() < face * 0.2,
+            "at twice the face size it comes back the size asked for; got {}",
+            coarse.1
+        );
+        assert!(
+            coarse.0 * 2 < fine.0,
+            "and with less than half the faces: {} against {}",
+            coarse.0,
+            fine.0
+        );
+    }
+
+    /// The brush's swept shape, described at `chord`: straight flanks and arc
+    /// caps, the same way `preview-shapes.ts` builds it.
+    fn capsule_outline(length: f64, radius: f64, chord: f64) -> Vec<(f64, f64)> {
+        let steps = ((std::f64::consts::PI * radius / chord).ceil() as usize).clamp(3, 24);
+        let flank = ((length / chord).ceil() as usize).max(1);
+        let mut points = Vec::new();
+        for i in 0..=flank {
+            points.push((length * i as f64 / flank as f64, -radius));
+        }
+        for i in 1..steps {
+            let a = -std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * i as f64 / steps as f64;
+            points.push((length + radius * a.cos(), radius * a.sin()));
+        }
+        for i in 0..=flank {
+            points.push((length * (flank - i) as f64 / flank as f64, radius));
+        }
+        for i in 1..steps {
+            let a = std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * i as f64 / steps as f64;
+            points.push((radius * a.cos(), radius * a.sin()));
+        }
+        points
+    }
+
 }

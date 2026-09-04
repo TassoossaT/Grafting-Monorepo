@@ -11,6 +11,7 @@ import type { MultiPolygon } from "polygon-clipping";
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import {
+  OUTLINE_CHORD_PER_FACE,
   SHORTEST_USEFUL_FRACTION,
   outlineConstraints,
   perimeterConstraints,
@@ -247,7 +248,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const swept = brushSweptOutlinePolygons(
       gesture.samples.map((sample) => sample.point),
       params.brushRadius,
-      params.faceSize,
+      params.faceSize * OUTLINE_CHORD_PER_FACE,
     );
     const weld = params.faceSize * SHORTEST_USEFUL_FRACTION;
     const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
