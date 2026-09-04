@@ -1,4 +1,5 @@
 import type {
+  ApplyPatchReplacementRequest,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionNodeId,
@@ -7,6 +8,8 @@ import type {
   ConstructionPatchOutcome,
   ConstructionPatchRegion,
   ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
 } from "@/ports";
 
 import type { AtomicEditOp } from "@/features/edit-construction";
@@ -46,6 +49,12 @@ export interface TerrainFillRuntime {
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined;
   addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome;
+  applyPatchReplacement(
+    request: ApplyPatchReplacementRequest,
+    origin: "local",
+    causeId: string,
+  ): ConstructionPatchOutcome;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
   getSnapshot(): {
     readonly map: {
@@ -108,6 +117,8 @@ export interface TerrainFillRequest {
    * it is neither inside a hole nor wound wrongly. It just collides.
    */
   readonly onGenerated?: () => { readonly deleted: number; readonly failed: readonly string[] } | void;
+  /** Existing faces replaced atomically with this fill. An empty list still makes the patch all-or-nothing. */
+  readonly replaceSurfaceKeys?: readonly ConstructionSurfaceKey[];
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
   readonly what: string;
   /** Faces this fill replaced, for the log only. */
@@ -177,6 +188,7 @@ function gridPatch(
   idFor: (vertex: number) => ConstructionNodeId | undefined,
   nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
   surfaceType: string,
+  freeSides: ReadonlyMap<string, boolean>,
   quadOf?: Map<string, readonly number[]>,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
@@ -185,14 +197,14 @@ function gridPatch(
   for (const quad of grid.quads) {
     const cycle = quad.map(idFor).filter((id): id is ConstructionNodeId => id !== undefined);
     if (cycle.length !== quad.length) continue;
-    // A cell whose corners resolved to the same node twice carries no ground.
-    // With nothing welding by proximity any more this should not happen at
-    // all; it is cheaper to skip than to have the engine reject the batch.
     if (new Set(cycle).size !== cycle.length) continue;
 
     const boundary: ConstructionOrientedEdgeUse[] = [];
     for (let index = 0; index < cycle.length; index += 1) {
-      boundary.push(edges.use(cycle[index]!, cycle[(index + 1) % cycle.length]!));
+      const from = cycle[index]!;
+      const to = cycle[(index + 1) % cycle.length]!;
+      const use = edges.use(from, to);
+      boundary.push({ ...use, reversed: freeSides.get(use.edgeId) ?? use.reversed });
     }
     regions.push({ regionId: cycle.join("|"), boundary, surfaceType, physical: true });
     quadOf?.set(cycle.join("|"), quad);
@@ -235,7 +247,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     });
     return NOTHING;
   }
-  const cleared = request.onGenerated?.() ?? undefined;
+  const clearedBeforePatch = request.replaceSurfaceKeys === undefined ? request.onGenerated?.() : undefined;
 
   let minX = Infinity;
   let minZ = Infinity;
@@ -280,14 +292,18 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     if (id !== undefined) claimed.add(id);
   }
   const snapped = new Map<number, ConstructionNodeId>();
+  const effectiveAdoptions = [...adoptions];
   for (const snap of snaps) {
     const id = request.sources[snap.source];
-    if (id === undefined || claimed.has(id)) continue;
+    if (id === undefined || claimed.has(id)) {
+      if (snap.fallback !== undefined) effectiveAdoptions.push(snap.fallback);
+      continue;
+    }
     claimed.add(id);
     snapped.set(snap.vertex, id);
   }
   const adoptionPositions = new Map<number, ConstructionPosition>();
-  for (const adoption of adoptions) {
+  for (const adoption of effectiveAdoptions) {
     const vertex = grid.vertices[adoption.vertex];
     if (vertex === undefined) continue;
     const from = live.get(adoption.edge.startNodeId)?.position;
@@ -303,7 +319,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     runtime,
     request.tableId,
     request.causeId,
-    adoptions,
+    effectiveAdoptions,
     (vertex) => nodeId(request.mint, vertex),
     (vertex) => adoptionPositions.get(vertex),
   );
@@ -335,7 +351,28 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
 
   const quadOf = new Map<string, readonly number[]>();
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, quadOf);
+  // Read after adoption: splitting a contour replaces one edge with fragments,
+  // and only the live surface topology knows which side of each fragment is
+  // occupied. The generic graph snapshot is not authoritative here -- contour
+  // edges need not be generic graph edges at all. A retained face walks its
+  // occupied side; the generated neighbour must walk the opposite one.
+  const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
+  const occupied = new Map<string, boolean[]>();
+  for (const topology of runtime.getAllRegionTopologies()) {
+    if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) {
+        const uses = occupied.get(use.edgeId) ?? [];
+        uses.push(use.reversed);
+        occupied.set(use.edgeId, uses);
+      }
+    }
+  }
+  const freeSides = new Map<string, boolean>();
+  for (const [edgeId, uses] of occupied) {
+    if (uses.length === 1) freeSides.set(edgeId, !uses[0]);
+  }
+  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, freeSides, quadOf);
 
   // **Does the patch itself already contain the clash?**
   //
@@ -356,7 +393,20 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     }
   }
 
-  const outcome = runtime.addPatch(patch, "local", request.causeId);
+  const outcome = request.replaceSurfaceKeys === undefined
+    ? runtime.addPatch(patch, "local", request.causeId)
+    : runtime.applyPatchReplacement(
+        {
+          operationId: `${request.causeId}:terrain-fill`,
+          sourceSurfaceKeys: request.replaceSurfaceKeys,
+          patch,
+        },
+        "local",
+        request.causeId,
+      );
+  const cleared = request.replaceSurfaceKeys === undefined
+    ? clearedBeforePatch
+    : { deleted: outcome.removedSurfaceKeys.length, failed: [] };
 
   // **Which of the two remaining causes is it?**
   //

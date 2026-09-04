@@ -142,7 +142,7 @@ pub fn apply_patch_replacement(
     if !response.skipped_region_ids.is_empty() {
         return Err(format!(
             "patch replacement target patch was refused: {}",
-            response.skipped_region_ids.join(", ")
+            response.skipped_region_reasons.join(" | ")
         ));
     }
     for key in &response.outcome.created_surface_keys {

@@ -202,6 +202,8 @@ export interface ContourSnap {
   readonly vertex: number;
   /** The `source` index of the ring corner it takes the identity of. */
   readonly source: number;
+  /** Split to perform when that corner identity is already claimed elsewhere. */
+  readonly fallback?: ContourAdoption;
 }
 
 export interface ResolvedAdoptions {
@@ -325,16 +327,24 @@ export function resolveAdoptions(
     // whether or not this segment owns an edge, because the damage a sliver
     // does is done by the geometry, not by the split.
     const length = Math.sqrt(lengthSq);
+    const edge = ring.edges[node.segment];
     if (along * length < shortestUseful && from.source !== undefined) {
-      snaps.push({ vertex: node.vertex, source: from.source });
+      snaps.push({
+        vertex: node.vertex,
+        source: from.source,
+        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along },
+      });
       continue;
     }
     if ((1 - along) * length < shortestUseful && to.source !== undefined) {
-      snaps.push({ vertex: node.vertex, source: to.source });
+      snaps.push({
+        vertex: node.vertex,
+        source: to.source,
+        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along },
+      });
       continue;
     }
 
-    const edge = ring.edges[node.segment];
     if (edge === undefined) continue;
     adoptions.push({ vertex: node.vertex, edge, along });
   }

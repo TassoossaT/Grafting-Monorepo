@@ -419,46 +419,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       boundary: outline,
       holes: holeRings,
       sources: perimeters.sources,
+      replaceSurfaceKeys: consumed.map((topology) => topology.surfaceKey),
       heightAt,
-      // Only once the generator has answered. A refusal then costs nothing;
-      // deleting first would cost the ground with nothing to lay back.
-      onGenerated: () => {
-        let deleted = 0;
-        const failed: string[] = [];
-        // One transaction for the lot, the same bargain the adoptions strike:
-        // a stroke that merges clears dozens of faces, and sending them one at
-        // a time pays the whole render sync per face. A batch that the engine
-        // will not take falls through to the loop below, where one stale key
-        // costs only itself.
-        try {
-          ctx.runtime.applyRegionEdit(
-            consumed.map((topology) => ({ kind: "delete-region", surfaceKey: topology.surfaceKey }) as const),
-            "local",
-            causeId,
-          );
-          return { deleted: consumed.length, failed };
-        } catch {
-          // Fall through and pay per face.
-        }
-        for (const topology of consumed) {
-          try {
-            ctx.runtime.applyRegionEdit(
-              [{ kind: "delete-region", surfaceKey: topology.surfaceKey }],
-              "local",
-              causeId,
-            );
-            deleted += 1;
-          } catch (error) {
-            // One stale key is that key's own problem, never a reason to leave
-            // the rest of the ground standing under the stroke. But it is
-            // counted and its words kept: ground that failed to go was left
-            // out of the hole rings on the promise that it would, so the next
-            // face laid over it collides with nothing anyone declared.
-            failed.push(error instanceof Error ? error.message : String(error));
-          }
-        }
-        return { deleted, failed };
-      },
     });
 
     // The growth of the contour was measured here, by scanning the
