@@ -235,10 +235,28 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // it here rather than splitting is what keeps sliver edges out of the graph
   // -- and it has to happen before anything is declared, or the fill mints a
   // second node a hundredth of a face from a real one.
+  //
+  // **One corner per node, and never a node some corner already carries.** Two
+  // corners resolving to one id is not a harmless duplicate: it collapses two
+  // distinct edges of the mesh into one, so two faces of this same fill end up
+  // walking it the same way and the engine refuses the second -- "no room on
+  // edge, its one free side faces the other way". The node a snap aims at is a
+  // *ring corner*, and a ring corner is itself a constraint point the
+  // triangulation keeps as a vertex, so the collision is the common case
+  // rather than the rare one. A snap that loses the claim is declared as
+  // ordinary new geometry instead, which is what it was before snapping
+  // existed.
+  const claimed = new Set<ConstructionNodeId>();
+  for (const vertex of grid.vertices) {
+    const id = vertex.source !== undefined ? request.sources[vertex.source] : undefined;
+    if (id !== undefined) claimed.add(id);
+  }
   const snapped = new Map<number, ConstructionNodeId>();
   for (const snap of snaps) {
     const id = request.sources[snap.source];
-    if (id !== undefined) snapped.set(snap.vertex, id);
+    if (id === undefined || claimed.has(id)) continue;
+    claimed.add(id);
+    snapped.set(snap.vertex, id);
   }
   const adoptionPositions = new Map<number, ConstructionPosition>();
   for (const adoption of adoptions) {
