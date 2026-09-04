@@ -115,6 +115,12 @@ function describe(report: TerrainCommitReport): void {
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
     segmentoMinimo: round(constrained.length === 0 ? 0 : Math.min(...constrained)),
+    // Split, because the two sides fail for different reasons and the fix is
+    // different. A short segment on the stroke's own outline came from the
+    // brush sweep; a short one among the holes is a sliver already standing in
+    // the graph, left by an earlier stroke's adoption.
+    minimoDoTraco: round(boundarySegments.length === 0 ? 0 : Math.min(...boundarySegments)),
+    minimoDoQueJaExiste: round(holeSegments.length === 0 ? 0 : Math.min(...holeSegments)),
     // Below about 2 the boundary drives the interior and the result comes
     // back finer than the face size asked for, whatever else is right.
     razaoSegmentoPorFace: round(mean(constrained) / report.faceSideAsked),
@@ -155,7 +161,8 @@ function describe(report: TerrainCommitReport): void {
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
     `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas ` +
     `| contorno ${contorno.pontos} pts ` +
-    `(${contorno.pontosComNo} com nó, min ${contorno.segmentoMinimo}, razão ${contorno.razaoSegmentoPorFace}) ` +
+    `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
+    `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });

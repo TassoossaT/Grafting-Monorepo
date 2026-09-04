@@ -6,6 +6,7 @@ import {
   outlineConstraints,
   perimeterConstraints,
   resolveAdoptions,
+  SHORTEST_USEFUL_FRACTION,
 } from "../src/composition/tabletop/tools/terrain/terrain-constraints.ts";
 
 /**
@@ -92,7 +93,7 @@ test("a reported node resolves to the edge it landed on, never to the nearest on
   const to = ring.points[2];
   const midpoint = { x: (from.x + to.x) / 2, z: (from.z + to.z) / 2 };
 
-  const adoptions = resolveAdoptions(
+  const { adoptions } = resolveAdoptions(
     table.rings,
     [],
     [{ vertex: 7, ringKind: "hole", ring: 0, segment: 1 }],
@@ -108,7 +109,7 @@ test("a reported node resolves to the edge it landed on, never to the nearest on
 test("a node landing exactly on a corner is not adopted -- that node is already shared", () => {
   const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
   const corner = table.rings[0].points[1];
-  const adoptions = resolveAdoptions(
+  const { adoptions } = resolveAdoptions(
     table.rings,
     [],
     [{ vertex: 1, ringKind: "hole", ring: 0, segment: 1 }],
@@ -119,7 +120,7 @@ test("a node landing exactly on a corner is not adopted -- that node is already 
 
 test("a node on the stroke's own outline is not adopted -- nothing owns that boundary yet", () => {
   const outline = outlineConstraints([[[0, 0], [4, 0], [4, 4], [0, 4]]]);
-  const adoptions = resolveAdoptions(
+  const { adoptions } = resolveAdoptions(
     [],
     outline,
     [{ vertex: 3, ringKind: "boundary", ring: 0, segment: 0 }],
@@ -137,7 +138,7 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
     [11, { x: 1, z: 0 }],
     [12, { x: 2, z: 0 }],
   ]);
-  const adoptions = resolveAdoptions(
+  const { adoptions } = resolveAdoptions(
     table.rings,
     [],
     [10, 11, 12].map((vertex) => ({ vertex, ringKind: "hole", ring: 0, segment: 0 })),
@@ -195,7 +196,7 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
 
 test("a refused split costs that node its shared edge, never the stroke", () => {
   const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
-  const adoptions = resolveAdoptions(
+  const { adoptions } = resolveAdoptions(
     table.rings,
     [],
     [
@@ -224,4 +225,101 @@ test("a refused split costs that node its shared edge, never the stroke", () => 
 
   assert.equal(outcome.adopted.size, 1, "the second node still gets its shared edge");
   assert.equal(outcome.refused.length, 1, "the first is reported so its node lands as plain geometry");
+});
+
+test("a corner too near the end of an edge takes that node instead of slicing a sliver off it", () => {
+  // The whole reason the mesh degraded over strokes. A split accepted here
+  // leaves a fragment in the graph a hundredth of a face long, which the next
+  // stroke has to honour as a constraint and comes back as slivers.
+  const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
+  const ring = table.rings[0];
+  const from = ring.points[0];
+  const to = ring.points[1];
+  // Half a percent along a segment four units long: a 0.02 fragment.
+  const near = { x: from.x + (to.x - from.x) * 0.005, z: from.z + (to.z - from.z) * 0.005 };
+
+  const loose = resolveAdoptions(table.rings, [], [{ vertex: 9, ringKind: "hole", ring: 0, segment: 0 }], () => near, 0);
+  assert.equal(loose.adoptions.length, 1, "with no floor this is the sliver that was being created");
+  assert.deepEqual(loose.snaps, []);
+
+  const { adoptions, snaps } = resolveAdoptions(
+    table.rings,
+    [],
+    [{ vertex: 9, ringKind: "hole", ring: 0, segment: 0 }],
+    () => near,
+    // A face of 2 at the fraction the tool uses.
+    2 * SHORTEST_USEFUL_FRACTION,
+  );
+  assert.deepEqual(adoptions, [], "nothing is split");
+  assert.equal(snaps.length, 1);
+  assert.equal(snaps[0].vertex, 9);
+  assert.equal(
+    table.sources[snaps[0].source],
+    ring.edges[0].startNodeId,
+    "it becomes the node it was nearly standing on",
+  );
+});
+
+test("a corner near the far end snaps to that end, not to the near one", () => {
+  const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
+  const ring = table.rings[0];
+  const from = ring.points[0];
+  const to = ring.points[1];
+  const near = { x: from.x + (to.x - from.x) * 0.995, z: from.z + (to.z - from.z) * 0.995 };
+  const { snaps } = resolveAdoptions(
+    table.rings,
+    [],
+    [{ vertex: 9, ringKind: "hole", ring: 0, segment: 0 }],
+    () => near,
+    2 * SHORTEST_USEFUL_FRACTION,
+  );
+  assert.equal(snaps.length, 1);
+  assert.equal(table.sources[snaps[0].source], ring.edges[0].endNodeId);
+});
+
+test("a corner comfortably inside an edge is still adopted -- the floor is not a ban on splitting", () => {
+  const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
+  const ring = table.rings[0];
+  const from = ring.points[0];
+  const to = ring.points[1];
+  const middle = { x: (from.x + to.x) / 2, z: (from.z + to.z) / 2 };
+  const { adoptions, snaps } = resolveAdoptions(
+    table.rings,
+    [],
+    [{ vertex: 9, ringKind: "hole", ring: 0, segment: 0 }],
+    () => middle,
+    2 * SHORTEST_USEFUL_FRACTION,
+  );
+  assert.equal(adoptions.length, 1);
+  assert.deepEqual(snaps, []);
+});
+
+test("the swept outline welds coincident points, and welding moves none of them", () => {
+  // Where two of the brush's capsules meet, the union leaves points a
+  // thousandth apart. A segment that short forces the same slivers a split
+  // fragment does.
+  const ring = [
+    [0, 0],
+    [4, 0],
+    [4.001, 0.0005],
+    [4, 4],
+    [0, 4],
+  ];
+  const welded = outlineConstraints([ring], 0.4)[0];
+  assert.equal(welded.points.length, 4, "the near-duplicate is dropped");
+  // Every surviving point is one of the originals, at its original position:
+  // this is welding, not the corner-cutting simplification that was reverted.
+  for (const point of welded.points) {
+    assert.ok(
+      ring.some(([x, z]) => x === point.x && z === point.z),
+      `points are kept or dropped, never moved; got ${point.x},${point.z}`,
+    );
+  }
+  assert.equal(outlineConstraints([ring])[0].points.length, 5, "and with no tolerance nothing is welded");
+});
+
+test("welding never eats a ring down past a triangle", () => {
+  const collapsing = [[0, 0], [0.01, 0], [0.02, 0.01], [0.01, 0.02]];
+  const rings = outlineConstraints([collapsing], 5);
+  for (const ring of rings) assert.ok(ring.points.length >= 3);
 });

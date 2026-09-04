@@ -11,7 +11,12 @@ import type {
 
 import type { AtomicEditOp } from "@/features/edit-construction";
 
-import { adoptContourNodes, resolveAdoptions, type ConstraintRing } from "./terrain-constraints.ts";
+import {
+  SHORTEST_USEFUL_FRACTION,
+  adoptContourNodes,
+  resolveAdoptions,
+  type ConstraintRing,
+} from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { createBoundaryEdges } from "../core/boundary-edges.ts";
 
@@ -219,7 +224,22 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // A corner being adopted onto a neighbour's edge takes the height of that
   // edge rather than the height rule's, so the seam has no vertical kink.
   const live = runtime.getSnapshot().map.nodePositions;
-  const adoptions = resolveAdoptions(request.holes, request.boundary, grid.onContour, (vertex) => grid.vertices[vertex]);
+  const { adoptions, snaps } = resolveAdoptions(
+    request.holes,
+    request.boundary,
+    grid.onContour,
+    (vertex) => grid.vertices[vertex],
+    request.faceSide * SHORTEST_USEFUL_FRACTION,
+  );
+  // A corner that landed too near an existing node *is* that node. Resolving
+  // it here rather than splitting is what keeps sliver edges out of the graph
+  // -- and it has to happen before anything is declared, or the fill mints a
+  // second node a hundredth of a face from a real one.
+  const snapped = new Map<number, ConstructionNodeId>();
+  for (const snap of snaps) {
+    const id = request.sources[snap.source];
+    if (id !== undefined) snapped.set(snap.vertex, id);
+  }
   const adoptionPositions = new Map<number, ConstructionPosition>();
   for (const adoption of adoptions) {
     const vertex = grid.vertices[adoption.vertex];
@@ -249,12 +269,14 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   const idFor = (vertex: number): ConstructionNodeId | undefined => {
     const source = grid.vertices[vertex]?.source;
     if (source !== undefined) return request.sources[source];
+    const snap = snapped.get(vertex);
+    if (snap !== undefined) return snap;
     return nodeId(request.mint, vertex);
   };
   const nodes: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
   for (let vertex = 0; vertex < grid.vertices.length; vertex += 1) {
     const point = grid.vertices[vertex]!;
-    if (point.source !== undefined || adoption.adopted.has(vertex)) continue;
+    if (point.source !== undefined || snapped.has(vertex) || adoption.adopted.has(vertex)) continue;
     const id = idFor(vertex);
     if (id === undefined) continue;
     // A refused adoption still needs its node, or the face referencing it has

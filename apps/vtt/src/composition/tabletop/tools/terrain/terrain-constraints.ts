@@ -135,10 +135,21 @@ export function constraintsFromRings(
  * Any future attempt has to preserve the ring's simplicity -- a local
  * collinearity test, or a simplification checked for self-intersection and
  * dropped when it fails -- and not merely its shape within a tolerance.
+ *
+ * **Welding coincident points is not that, and is done here.** `weld` drops a
+ * point only when it sits nearer than the tolerance to the point before it, and
+ * moves nothing. It cannot cut a corner wider than the tolerance and so cannot
+ * introduce a crossing the way a chord across a concavity does. It exists
+ * because the union of the brush's capsules leaves near-duplicate points where
+ * two capsules meet, and a segment a hundredth of a face long forces the
+ * triangulation into slivers exactly the way a split fragment does.
  */
 export function outlineConstraints(
   rings: readonly (readonly (readonly [number, number])[])[],
+  /** Consecutive points nearer than this collapse to one. `0` welds nothing. */
+  weld = 0,
 ): readonly ConstraintRing[] {
+  const weldSq = weld * weld;
   return rings
     .map((ring) => {
       // `polygon-clipping` closes a ring by repeating its first point as its
@@ -150,10 +161,30 @@ export function outlineConstraints(
         ring[0]![1] === ring[ring.length - 1]![1]
           ? ring.slice(0, -1)
           : ring;
-      return {
-        points: open.map(([x, z]) => ({ x, z })),
-        edges: [] as readonly ConstructionRegionEdge[],
-      };
+
+      const points: { x: number; z: number }[] = [];
+      for (const [x, z] of open) {
+        const previous = points[points.length - 1];
+        if (previous !== undefined) {
+          const dx = x - previous.x;
+          const dz = z - previous.z;
+          if (dx * dx + dz * dz < weldSq) continue;
+        }
+        points.push({ x, z });
+      }
+      // The ring closes on its first point, so the last segment is subject to
+      // the same rule -- and dropping the first would renumber every segment
+      // the generator reports back, so the last goes instead.
+      while (points.length >= 3) {
+        const last = points[points.length - 1]!;
+        const first = points[0]!;
+        const dx = last.x - first.x;
+        const dz = last.z - first.z;
+        if (dx * dx + dz * dz >= weldSq) break;
+        points.pop();
+      }
+
+      return { points, edges: [] as readonly ConstructionRegionEdge[] };
     })
     .filter((ring) => ring.points.length >= 3);
 }
@@ -166,14 +197,48 @@ export interface ContourAdoption {
   readonly along: number;
 }
 
+/** One generated corner that resolves to a node already standing, rather than splitting anything. */
+export interface ContourSnap {
+  readonly vertex: number;
+  /** The `source` index of the ring corner it takes the identity of. */
+  readonly source: number;
+}
+
+export interface ResolvedAdoptions {
+  readonly adoptions: readonly ContourAdoption[];
+  readonly snaps: readonly ContourSnap[];
+}
+
 /**
- * Resolves each reported contour node to the graph edge it landed on.
+ * The shortest piece of an edge worth keeping, as a fraction of the face size.
  *
- * Nodes on a ring that has no edges -- the stroke's own outline -- are left
- * out: there is nothing to split, because nothing owns that boundary yet.
+ * **This is the number that was missing, and its absence is what degraded the
+ * mesh over strokes.** A split used to be accepted anywhere strictly inside an
+ * edge, so a corner landing half a percent from an end left a fragment a
+ * hundredth of a face long -- permanently, as a real edge in the graph. The
+ * next stroke reads that fragment as a constraint, the triangulation has to
+ * honour it, and it comes back as a cluster of slivers whose winding is
+ * numerically ambiguous; then the ortho step midpoints it and the piece halves
+ * again. Measured on the table: a first stroke's contour had no segment under
+ * 1.98, and the second stroke, reading that stroke's own mesh, found one of
+ * 0.01 and lost 76 faces to "no room on edge".
  *
- * Sorted along each edge, because several nodes routinely land on one. The
- * triangulation may already have split a supplied segment before
+ * Below this, the corner takes the identity of the end it is near instead. The
+ * cell moves by at most this much -- a nudge on the scale the relax step
+ * already applies -- and no edge shorter than this can ever enter the graph.
+ */
+export const SHORTEST_USEFUL_FRACTION = 0.2;
+
+/**
+ * Resolves each reported contour node either to the graph edge it splits or to
+ * a node already standing that it is too close to be distinct from.
+ *
+ * Nodes on a segment that owns no edge -- the stroke's own outline -- can still
+ * snap, because a corner of that outline may land on top of a node the ring
+ * carries; there is simply nothing there to split.
+ *
+ * Adoptions are sorted along each edge, because several nodes routinely land on
+ * one. The triangulation may already have split a supplied segment before
  * quadrangulation put a midpoint on each of the pieces, so an edge of the
  * neighbour can owe two or three nodes, and they have to be inserted in the
  * order they sit -- each split shortens what is left to split.
@@ -183,16 +248,18 @@ export function resolveAdoptions(
   boundaryRings: readonly ConstraintRing[],
   reported: readonly ConstructionGridContourNode[],
   positionOf: (vertex: number) => { readonly x: number; readonly z: number } | undefined,
-): readonly ContourAdoption[] {
+  /** Fragments shorter than this are not created; see {@link SHORTEST_USEFUL_FRACTION}. */
+  shortestUseful = 0,
+): ResolvedAdoptions {
   const adoptions: ContourAdoption[] = [];
+  const snaps: ContourSnap[] = [];
   for (const node of reported) {
     const rings = node.ringKind === "hole" ? holeRings : boundaryRings;
     const ring = rings[node.ring];
-    const edge = ring?.edges[node.segment];
     const from = ring?.points[node.segment];
     const to = ring?.points[(node.segment + 1) % (ring?.points.length ?? 1)];
     const point = positionOf(node.vertex);
-    if (edge === undefined || from === undefined || to === undefined || point === undefined) continue;
+    if (ring === undefined || from === undefined || to === undefined || point === undefined) continue;
 
     const dx = to.x - from.x;
     const dz = to.z - from.z;
@@ -203,11 +270,26 @@ export function resolveAdoptions(
     // nodes and have nothing to split.
     if (!(along > 1e-9 && along < 1 - 1e-9)) continue;
 
+    // Too near an end to be a corner of its own. Take that end's identity --
+    // whether or not this segment owns an edge, because the damage a sliver
+    // does is done by the geometry, not by the split.
+    const length = Math.sqrt(lengthSq);
+    if (along * length < shortestUseful && from.source !== undefined) {
+      snaps.push({ vertex: node.vertex, source: from.source });
+      continue;
+    }
+    if ((1 - along) * length < shortestUseful && to.source !== undefined) {
+      snaps.push({ vertex: node.vertex, source: to.source });
+      continue;
+    }
+
+    const edge = ring.edges[node.segment];
+    if (edge === undefined) continue;
     adoptions.push({ vertex: node.vertex, edge, along });
   }
 
   adoptions.sort((a, b) => (a.edge.edgeId === b.edge.edgeId ? a.along - b.along : a.edge.edgeId < b.edge.edgeId ? -1 : 1));
-  return adoptions;
+  return { adoptions, snaps };
 }
 
 /**

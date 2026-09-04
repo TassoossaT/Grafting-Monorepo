@@ -10,7 +10,12 @@ import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
-import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
+import {
+  SHORTEST_USEFUL_FRACTION,
+  outlineConstraints,
+  perimeterConstraints,
+  type ConstraintRing,
+} from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
 import { heightFieldOf } from "./terrain-regenerate.ts";
 import { logContourGrowth } from "./terrain-diagnostics.ts";
@@ -244,7 +249,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.brushRadius,
       params.faceSize,
     );
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)));
+    const weld = params.faceSize * SHORTEST_USEFUL_FRACTION;
+    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
@@ -286,7 +292,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // was never painted, so it is subtracted like any other hole -- it simply
     // has no edges, and so owes nobody an adopted node.
     const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1))),
+      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1)), weld),
       ...perimeters.rings,
     ];
 
