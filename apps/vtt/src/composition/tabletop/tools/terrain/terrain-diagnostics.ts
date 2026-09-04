@@ -143,9 +143,26 @@ function describe(report: TerrainCommitReport): void {
   };
 
   const wrong = report.refusedFaces > 0 || report.unadopted > 0 || contorno.razaoSegmentoPorFace < 2;
-  const line = `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} (pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ${mescla.nosNaoCosturados} junções abertas`;
+  // In the text of the line, not only in the object beside it. A console
+  // collapses the object, and every number that decides anything here was
+  // being read by someone who had to expand it first -- which meant the
+  // deciding number was, in practice, never read.
+  const line =
+    `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} ` +
+    `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
+    `${mescla.nosNaoCosturados} junções abertas | contorno ${contorno.pontos} pts ` +
+    `(${contorno.pontosComNo} com nó, min ${contorno.segmentoMinimo}, razão ${contorno.razaoSegmentoPorFace}) ` +
+    `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
+
+  // Every distinct refusal, as its own plain line. A refusal is the engine
+  // telling this side that it planned ground where ground already stood, and
+  // its wording names the edge that decided it -- which is the whole
+  // diagnosis for terrain that will not join.
+  for (const reason of new Set(report.refusals ?? [])) {
+    console.warn(`${TERRAIN_PREFIX} ${report.what}: recusa -- ${reason}`);
+  }
 }
 
 /**
