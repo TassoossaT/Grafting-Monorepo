@@ -1,10 +1,10 @@
-// Wraps `@grafting/procgen-generation-wasm`'s `generate_heightmap` behind
+// Wraps `@grafting/procgen-generation-wasm`'s `generate_heightmap_at` behind
 // `TerrainNoisePort`. A separate Wasm module from
 // `@grafting/procgen-construction-wasm` (no shared state), so it gets its
 // own adapter/init lifecycle rather than being folded into
 // `ConstructionSessionWasmAdapter`.
 
-import initGeneration, { generate_heightmap } from "@grafting/procgen-generation-wasm";
+import initGeneration, { generate_heightmap_at } from "@grafting/procgen-generation-wasm";
 
 import type { TerrainNoisePort } from "@/ports";
 
@@ -26,7 +26,7 @@ class TerrainNoiseWasmAdapter implements TerrainNoisePort {
     originY: number,
   ): Float32Array {
     if (!this.#started) throw new Error("terrain noise adapter is not started");
-    return generate_heightmap(width, height, seed, scale, originX, originY);
+    return generate_heightmap_at(width, height, seed, scale, originX, originY);
   }
 }
 
