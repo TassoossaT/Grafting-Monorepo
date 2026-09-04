@@ -81,6 +81,13 @@ export interface TerrainCommitReport {
   /** Why the engine refused, in its own words, first few only. */
   readonly refusals: readonly string[];
   readonly declaredNodes: number;
+  /**
+   * Edges the patch walks twice the same way *before* the engine sees it.
+   *
+   * Non-empty means this side built the clash; empty with faces refused means
+   * the edge was already standing. The two need opposite fixes.
+   */
+  readonly selfClashes?: readonly string[];
   /** Faces of this stroke's own type that were thrown away and laid again. */
   readonly regenerated?: number;
 }
@@ -148,6 +155,7 @@ function describe(report: TerrainCommitReport): void {
     facesRegistradas: report.built,
     facesRegeneradas: report.regenerated ?? 0,
     facesPerdidas: report.refusedFaces,
+    colisoesNoProprioPatch: (report.selfClashes ?? []).length,
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
 
@@ -159,7 +167,8 @@ function describe(report: TerrainCommitReport): void {
   const line =
     `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} ` +
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
-    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas ` +
+    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas, ` +
+    `${mescla.colisoesNoProprioPatch} colisões no próprio patch ` +
     `| contorno ${contorno.pontos} pts ` +
     `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
@@ -171,6 +180,9 @@ function describe(report: TerrainCommitReport): void {
   // telling this side that it planned ground where ground already stood, and
   // its wording names the edge that decided it -- which is the whole
   // diagnosis for terrain that will not join.
+  for (const clash of (report.selfClashes ?? []).slice(0, 3)) {
+    console.warn(`${TERRAIN_PREFIX} ${report.what}: colisão interna -- ${clash}`);
+  }
   for (const reason of new Set(report.refusals ?? [])) {
     console.warn(`${TERRAIN_PREFIX} ${report.what}: recusa -- ${reason}`);
   }

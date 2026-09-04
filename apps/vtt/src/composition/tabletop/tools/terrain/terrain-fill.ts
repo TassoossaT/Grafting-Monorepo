@@ -306,11 +306,28 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     });
   }
 
-  const outcome = runtime.addPatch(
-    gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType),
-    "local",
-    request.causeId,
-  );
+  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType);
+
+  // **Does the patch itself already contain the clash?**
+  //
+  // The engine refuses a face with "no room on edge -- its one free side faces
+  // the other way", and that has exactly two possible causes: two faces of
+  // *this* patch walking one edge the same way, or an edge that was already
+  // standing with a face on it. Those need opposite fixes, and guessing
+  // between them has cost this branch a wrong fix already. So the fill asks
+  // the question itself, before handing anything over.
+  const walkedBy = new Map<string, string>();
+  const clashes: string[] = [];
+  for (const region of patch.regions) {
+    for (const use of region.boundary) {
+      const walk = `${use.edgeId}:${use.reversed}`;
+      const already = walkedBy.get(walk);
+      if (already !== undefined) clashes.push(`${use.edgeId} walked ${use.reversed} by ${already} and ${region.regionId}`);
+      else walkedBy.set(walk, region.regionId);
+    }
+  }
+
+  const outcome = runtime.addPatch(patch, "local", request.causeId);
   logTerrainCommit({
     what: request.what,
     faceSideAsked: request.faceSide,
@@ -324,6 +341,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusals: outcome.skippedRegionReasons,
     declaredNodes: nodes.length,
     regenerated: request.regenerated,
+    selfClashes: clashes,
   });
   return {
     built: outcome.createdSurfaceKeys.length,
