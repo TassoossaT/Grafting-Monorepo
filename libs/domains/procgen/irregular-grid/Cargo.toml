@@ -1,0 +1,14 @@
+[package]
+name = "grafting-procgen-irregular-grid"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Townscaper-style irregular quad grid: a constrained triangulation, randomly paired into rhombi, quadrangulated by Conway's ortho, welded and relaxed toward squares. Generic over what constrains it -- a bare outline, or the contours other clouds already committed to."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+spade = "2.15"
+
+[dev-dependencies]

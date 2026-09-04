@@ -4,7 +4,7 @@ import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.t
 import { ALL_AXES, addPosition } from "../../orchestration/atomic-edit.ts";
 import { followsOutward, parseStationNodeId } from "./station-node-id.ts";
 import { isSpineControlNodeId } from "./spine-graph/index.ts";
-import type { CascadeContext, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
 
@@ -190,6 +190,19 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
   }
 }
 
+/**
+ * A path has no regenerate escalation to lean on the way terrain does --
+ * `pathPolicyFor` names real, fixed roles instead of denying everything past
+ * a boundary -- so a cut through it cannot reuse the organic lattice-regen
+ * path. Repairing it means splitting the spine at the cut and capping the
+ * exposed ends, which has not been designed yet; declared `"unsupported"`
+ * rather than left silently unhandled.
+ */
+const PATH_CUT_REPAIR: CutRepair = {
+  kind: "unsupported",
+  reason: "path has no isolated repair for a cut yet -- needs its own spine-split-and-cap logic",
+};
+
 /** Builds one swept-product structure type on the shared spine model. */
 export function pathStructureType(
   surfaceType: string,
@@ -204,5 +217,6 @@ export function pathStructureType(
     roleFor: pathRoleFor,
     policyFor: pathPolicyFor,
     interactionOver,
+    repairAfterCut: PATH_CUT_REPAIR,
   });
 }

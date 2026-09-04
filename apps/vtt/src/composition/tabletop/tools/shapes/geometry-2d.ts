@@ -122,6 +122,32 @@ export function distanceToPolygonBoundaryXZ(point: PointXZ, polygon: readonly Po
 }
 
 /**
+ * The closest point on a polygon's own boundary edges to `point`, on the XZ
+ * plane -- the point form of {@link distanceToPolygonBoundaryXZ}, for a
+ * caller that needs somewhere to move *to*, not just how far away it is.
+ */
+export function nearestPointOnPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): PointXZ {
+  let best: PointXZ | undefined;
+  let bestDistanceSq = Infinity;
+  for (let i = 0; i < polygon.length; i += 1) {
+    const a = polygon[i];
+    const b = polygon[(i + 1) % polygon.length];
+    if (a === undefined || b === undefined) continue;
+    const abx = b.x - a.x;
+    const abz = b.z - a.z;
+    const lengthSq = abx * abx + abz * abz;
+    const t = lengthSq < 1e-9 ? 0 : Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lengthSq));
+    const candidate = { x: a.x + t * abx, z: a.z + t * abz };
+    const distanceSq = xzDistanceSq(point, candidate);
+    if (distanceSq < bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      best = candidate;
+    }
+  }
+  return best ?? point;
+}
+
+/**
  * Angle in radians from point `a` to point `b` on the XZ plane (-PI to PI).
  */
 export function angleFromToXZ(a: PointXZ, b: PointXZ): number {

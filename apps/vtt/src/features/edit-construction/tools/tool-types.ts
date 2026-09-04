@@ -102,19 +102,40 @@ export interface InteriorGenerateParams {
 }
 
 /**
- * A single seeded, self-contained hexagon of irregular terrain, submitted as
- * graph nodes/surfaces in one shot -- see
+ * Ground generated for the area a stroke sweeps, constrained by whatever
+ * already stands inside it and submitted as graph nodes/surfaces in one shot -- see
  * `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`.
  */
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
-  readonly trianglesPerSide: number;
+  /**
+   * How wide one terrain face should be, in world units.
+   *
+   * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
+   * a way that is felt rather than measured -- halving it roughly quadruples
+   * the faces a stroke registers, and the graph, the render sync and the
+   * scene all carry every one of them.
+   */
+  readonly faceSize: number;
+  /**
+   * How wide a band the stroke paints, as a radius in world units.
+   *
+   * Not cosmetic, and not independent of {@link faceSize}: a patch comes back
+   * with about twice as many faces as its outline has points, and an outline
+   * needs a point every cell around its whole perimeter. So a narrow brush
+   * spends nearly all of its faces describing its own edge and comes back
+   * far finer than the cell size asked for, whatever the generator does.
+   *
+   * Measured, at a face size of 2: a radius of 3 yields cells of about 1.3,
+   * a radius of 6 yields 2.2. Roughly, the radius wants to be three times the
+   * face size or more before the interior of the stroke outweighs its rim.
+   */
+  readonly brushRadius: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
-   * variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
-   * own `relax()` step is what pulls cells toward square in the first place --
-   * this maps directly onto its `strength` option.
+   * variety the random rhombus merge produces. The generator's own relaxation
+   * step is what pulls cells toward square in the first place; this is its
+   * `strength`, handed across the port as `relaxStrength`.
    */
   readonly irregularity: number;
   /** Multiplies the sampled Perlin noise (native `[-1, 1]`) into world-space height units. */
@@ -198,7 +219,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
-    trianglesPerSide: 10,
+    faceSize: 2,
+    brushRadius: 6,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

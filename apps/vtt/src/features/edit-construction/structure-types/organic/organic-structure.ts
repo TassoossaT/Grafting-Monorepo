@@ -1,6 +1,6 @@
 import type { EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
-import type { EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import type { CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "../creation-interaction.ts";
 
@@ -70,6 +70,25 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
   };
 }
 
+/**
+ * Cut-repair rides the same `structural` knob as the role table: a type that
+ * escalates a grabbed structural role to regeneration has, by construction,
+ * a way to regenerate -- the exact capability a cut's leftover needs. A type
+ * that instead denies structural edits (a flat swept product with nothing to
+ * regenerate from) has none, and says so.
+ */
+function organicCutRepair(structural: "regenerate" | "deny"): CutRepair {
+  return structural === "regenerate"
+    ? {
+        kind: "regenerate",
+        reason: "an organic region repairs a cut by regenerating its lattice, pinned to the rim the cut exposed",
+      }
+    : {
+        kind: "unsupported",
+        reason: "this organic type denies structural edits and has no regeneration path to repair a cut with",
+      };
+}
+
 export function organicStructureType(
   surfaceType: string,
   label: string,
@@ -84,6 +103,7 @@ export function organicStructureType(
     roleFor: organicRoleFor,
     policyFor: organicPolicyFactory(structural),
     interactionOver,
+    repairAfterCut: organicCutRepair(structural),
   });
 }
 

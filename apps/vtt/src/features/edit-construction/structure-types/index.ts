@@ -8,7 +8,7 @@ import {
 } from "./organic/organic-structure.ts";
 import { panelStructureType } from "./panel/panel-structure.ts";
 import { pathStructureType } from "./path/path-structure.ts";
-import type { EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
+import type { CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "./structure-type.ts";
 import { denied } from "./structure-type.ts";
 import { forbid, type CreationInteraction } from "./creation-interaction.ts";
 
@@ -111,6 +111,21 @@ export function resolveCreationInteraction(
     return forbid(`no structure type is defined for covered type "${coveredType}"`);
   }
   return definition.interactionOver(coveredType, paintedSubtype);
+}
+
+/**
+ * How `coveredType` repairs itself once a `"cut"` has consumed part of it.
+ *
+ * An unrecognized covered type has no table to consult, so it is reported
+ * `"unsupported"` for the same reason `resolveCreationInteraction` refuses
+ * one outright: there is nothing to defer to but a guess.
+ */
+export function resolveCutRepair(coveredType: string): CutRepair {
+  const definition = structureTypeFor(coveredType);
+  if (definition === undefined) {
+    return { kind: "unsupported", reason: `no structure type is defined for covered type "${coveredType}"` };
+  }
+  return definition.repairAfterCut;
 }
 
 /** One covered region, paired with what the painted type wants to do about it. */

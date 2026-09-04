@@ -7,7 +7,12 @@ import { reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnos
 /**
  * Runtime boundary for a PathCloud decision. This file deliberately contains
  * no path geometry or topology policy: it reads snapshots, invokes the type,
- * and submits the generic replacement transaction it returns.
+ * and submits the generic replacement transaction it returns. It has no
+ * opinion, and no code, for what happens when that replacement cuts into
+ * another type -- `plan.request.footprintOutline` rides along on the request
+ * itself, and `TabletopRuntime.applyPatchReplacement` is what notices a
+ * consumed region needs repairing and dispatches it, the same for any caller
+ * of that method, not a path-specific step this file performs.
  */
 export function commitPathCloudIntent(
   ctx: ToolContext,

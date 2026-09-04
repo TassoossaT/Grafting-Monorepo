@@ -298,3 +298,50 @@ test("planPathCloudMutation does not consume standing regions of unrelated path 
     "unrelated road op-10 must NOT be consumed or deleted when drawing op-1",
   );
 });
+
+function straightRoadEffect() {
+  return createPathBrushEffect(
+    {
+      brushShape: { kind: "circle", radius: 2.5 },
+      brushRegion: {
+        samples: [
+          { x: 0, y: 0, z: 0 },
+          { x: 10, y: 0, z: 0 },
+        ],
+      },
+      observedElements: [],
+      parameters: pathFormationFor(ROAD),
+    },
+    { operationId: "op-1", tableId: "table-1", initiatedBy: "path-brush" },
+  );
+}
+
+test("planPathCloudMutation never consumes another type's regions itself, whatever they are, and always carries its own footprint", () => {
+  // Consumption of a foreign type is entirely TabletopRuntime.applyPatchReplacement's
+  // call now, resolved fresh from footprintOutline -- this function's own
+  // sourceSurfaceKeys names only a path absorbing another path
+  // (planned.consumedSurfaceKeys). What it owes any foreign-type repair is
+  // just the footprint to resolve coverage against.
+  const terrainFace = {
+    surfaceKey: ["@region", "terrain:0:0"],
+    surfaceType: "terrain",
+    physical: true,
+    coverage: "centroid",
+    centroid: { x: 5, y: 0, z: 0 },
+    nodeIds: ["terrain-node-a", "terrain-node-b"],
+  };
+
+  const plan = planPathCloudMutation({
+    tableId: "table-1",
+    snapToGrid: false,
+    graphSnapshot: { nodes: [], edges: [] },
+    regionTopologies: [],
+    coverageFor: () => [terrainFace],
+    effect: straightRoadEffect(),
+    tolerance: 0.05,
+  });
+
+  assert.equal(plan.kind, "ready");
+  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a foreign region is never in this function's own sourceSurfaceKeys");
+  assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request regardless");
+});

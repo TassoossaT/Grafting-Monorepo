@@ -221,8 +221,11 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
         />
       </div>
-      {sliderRow("Alcance da pincelada", params.trianglesPerSide, 4, 25, 1, (trianglesPerSide) =>
-        onChange({ ...params, trianglesPerSide }),
+      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
+        onChange({ ...params, brushRadius }),
+      )}
+      {sliderRow("Tamanho da face", params.faceSize, 0.5, 6, 0.25, (faceSize) =>
+        onChange({ ...params, faceSize }),
       )}
       {sliderRow("Irregularidade", params.irregularity, 0, 1, 0.05, (irregularity) =>
         onChange({ ...params, irregularity }),

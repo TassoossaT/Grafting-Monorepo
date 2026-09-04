@@ -20,6 +20,8 @@ import type {
   ConstructionNodeId,
   ConstructionNodeSnapshot,
   ConstructionGraphSnapshot,
+  ConstructionIrregularQuadGrid,
+  ConstructionIrregularQuadGridRequest,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionPatchOutcome,
@@ -225,8 +227,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
           regions: patch.regions,
         }),
       ),
-    ) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    ) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
@@ -303,6 +305,47 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return wire.hits;
   }
 
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined {
+    let raw: string;
+    try {
+      const { relaxStrength, ...rest } = request;
+      raw = this.#require().irregular_quad_grid_json(
+        // `relax` only when there is something to say: the engine fills in
+        // every knob the caller left out, so an absent block is its standard
+        // rather than a set of values this side would have to keep in step.
+        JSON.stringify(relaxStrength === undefined ? rest : { ...rest, relax: { strength: relaxStrength } }),
+      );
+    } catch {
+      // A refusal, not a failure. The engine answers this way when the
+      // contours describe no ground it can triangulate -- degenerate rings,
+      // a hole that swallows its own boundary. The caller leaves what is
+      // standing alone, which is why this is `undefined` at the port rather
+      // than an exception the tool would have to guess the meaning of.
+      return undefined;
+    }
+    const wire = JSON.parse(raw) as {
+      readonly vertices: readonly { readonly x: number; readonly z: number; readonly source: number | null }[];
+      readonly quads: readonly (readonly [number, number, number, number])[];
+      readonly onContour: readonly {
+        readonly vertex: number;
+        readonly ringKind: "boundary" | "hole";
+        readonly ring: number;
+        readonly segment: number;
+      }[];
+      readonly refinementComplete: boolean;
+    };
+    return {
+      vertices: wire.vertices.map((vertex) =>
+        vertex.source === null ? { x: vertex.x, z: vertex.z } : { x: vertex.x, z: vertex.z, source: vertex.source },
+      ),
+      quads: wire.quads,
+      onContour: wire.onContour,
+      refinementComplete: wire.refinementComplete,
+    };
+  }
+
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
     const wire = JSON.parse(this.#require().region_topology_json(JSON.stringify({ surfaceKey }))) as
       | RegionTopologyWire
@@ -334,8 +377,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       outline: request.outline,
       boundary: request.boundary,
       patch,
-    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome {
@@ -356,8 +399,8 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
         edges: request.graphPatch.edges,
       },
       patch,
-    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[] };
-    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds };
+    }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
+    return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
   undoRegionOverlay(operationId: string): void {

@@ -773,6 +773,110 @@ mod tests {
         );
     }
 
+    /// A malformed region -- boundary edges submitted out of walk order, so
+    /// no consecutive pair actually connects -- costs only itself. Earlier
+    /// versions of `apply_add_patch` propagated `add_region`'s own error via
+    /// `?`, aborting the whole call the moment one region turned out
+    /// malformed; anything processed earlier in the same batch had already
+    /// mutated `topology` by then and was never rolled back, so a caller
+    /// reading the thrown error as "nothing landed" was wrong. `add_region`
+    /// itself fully validates before it mutates anything (its own doc), so
+    /// treating its failure as a skip -- exactly like "no room" -- is safe:
+    /// nothing about this region's own failure touches what came before it.
+    #[test]
+    fn a_region_whose_boundary_does_not_close_is_skipped_not_fatal_to_an_earlier_region_in_the_same_batch() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+
+        let nodes = [
+            ("a", [0.0, 0.0, 0.0]),
+            ("b", [1.0, 0.0, 0.0]),
+            ("c", [1.0, 1.0, 0.0]),
+            ("d", [0.0, 1.0, 0.0]),
+            ("w", [10.0, 0.0, 0.0]),
+            ("x", [11.0, 0.0, 0.0]),
+            ("y", [11.0, 1.0, 0.0]),
+            ("z", [10.0, 1.0, 0.0]),
+        ];
+        let ring = |names: [&str; 4], prefix: &str| {
+            (0..4)
+                .map(|index| PatchEdgeDto {
+                    edge_id: format!("{prefix}-{index}"),
+                    start_node_id: names[index].to_owned(),
+                    end_node_id: names[(index + 1) % 4].to_owned(),
+                    geometry: None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let closed_boundary = |prefix: &str| {
+            (0..4)
+                .map(|index| OrientedEdgeUseDto {
+                    edge_id: format!("{prefix}-{index}"),
+                    reversed: false,
+                })
+                .collect::<Vec<_>>()
+        };
+        // The same four real edges a genuinely closed "bad" quad would use,
+        // submitted out of walk order: edge[0] ("bad-0", w->x) ends at x, but
+        // edge[1] here is "bad-2" (y->z), which starts at y -- exactly the
+        // "expected next edge to start at X, found Y" mismatch a wrongly
+        // paired real-to-real weld produces.
+        let broken_boundary = vec![
+            OrientedEdgeUseDto { edge_id: "bad-0".into(), reversed: false },
+            OrientedEdgeUseDto { edge_id: "bad-2".into(), reversed: false },
+            OrientedEdgeUseDto { edge_id: "bad-1".into(), reversed: false },
+            OrientedEdgeUseDto { edge_id: "bad-3".into(), reversed: false },
+        ];
+
+        let response = apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: nodes
+                    .iter()
+                    .map(|(id, position)| PatchNodeDto {
+                        id: (*id).to_owned(),
+                        position: *position,
+                    })
+                    .collect(),
+                edges: ring(["a", "b", "c", "d"], "good")
+                    .into_iter()
+                    .chain(ring(["w", "x", "y", "z"], "bad"))
+                    .collect(),
+                regions: vec![
+                    PatchRegionDto {
+                        region_id: "good".into(),
+                        boundary: closed_boundary("good"),
+                        holes: Vec::new(),
+                        surface_type: "terrain".into(),
+                        physical: true,
+                    },
+                    PatchRegionDto {
+                        region_id: "bad".into(),
+                        boundary: broken_boundary,
+                        holes: Vec::new(),
+                        surface_type: "terrain".into(),
+                        physical: true,
+                    },
+                ],
+            },
+        )
+        .expect("a malformed region must not abort the whole submission");
+
+        assert_eq!(
+            response.skipped_region_ids,
+            vec!["bad".to_string()],
+            "the malformed region is skipped, not fatal"
+        );
+        assert!(
+            topology.region(&RegionId::new("good").unwrap()).is_some(),
+            "an earlier, valid region in the same batch still lands"
+        );
+        assert!(topology.region(&RegionId::new("bad").unwrap()).is_none());
+    }
+
     /// A face can carry more than one opening, and closing one leaves the
     /// others standing.
     #[test]
@@ -1049,6 +1153,18 @@ pub struct AddPatchResponse {
     /// refusing the whole stroke over one such face is what used to make
     /// painting near existing terrain do nothing at all.
     pub skipped_region_ids: Vec<String>,
+    /// Why each of `skipped_region_ids` was refused, in the same order and
+    /// naming the edge that decided it.
+    ///
+    /// A refusal is not one thing: a boundary can be turned away because an
+    /// edge it wants is already interior, because the one free side of an
+    /// edge faces the other way (the caller wound its loop against a
+    /// neighbour it meant to meet), or because the loop is malformed and
+    /// never closes. Those want opposite fixes, and a bare list of ids
+    /// cannot tell them apart -- a caller reading one was left to guess,
+    /// which is exactly how a repair that regenerated correct geometry could
+    /// be refused wholesale with nothing to say why.
+    pub skipped_region_reasons: Vec<String>,
 }
 
 /// Registers a whole generated patch -- nodes, **shared** boundary edges,
@@ -1110,6 +1226,7 @@ pub fn apply_add_patch(
 
     let mut created_surface_keys = Vec::new();
     let mut skipped_region_ids = Vec::new();
+    let mut skipped_region_reasons = Vec::new();
     let mut orphaned: Vec<ContourEdgeId> = Vec::new();
     for region in request.regions {
         let id = parse_region_id(&region.region_id)?;
@@ -1122,20 +1239,46 @@ pub fn apply_add_patch(
             .into_iter()
             .map(parse_loop)
             .collect::<Result<Vec<_>, _>>()?;
+        // Collected before `boundary`/`holes` are moved into `add_region`
+        // below -- needed either way, whether this region lands or is
+        // skipped for either reason.
+        let region_edges: Vec<ContourEdgeId> = boundary
+            .iter()
+            .chain(holes.iter().flatten())
+            .map(|use_| use_.edge().clone())
+            .collect();
         // Every loop the face declares has to fit, inner ones included: an
         // opening consumes a use on its rim exactly the way an outer
         // boundary does.
-        if !boundary_has_room(topology, &boundary)
-            || !holes.iter().all(|hole| boundary_has_room(topology, hole))
-        {
+        let no_room = boundary_refusal(topology, &boundary)
+            .or_else(|| holes.iter().find_map(|hole| boundary_refusal(topology, hole)));
+        // A malformed loop (`add_region`'s own `validate_loop`, e.g. a caller
+        // whose declared boundary does not actually close) is *also* just
+        // this one region's problem, never the rest of the batch's --
+        // `add_region` fully validates into a local buffer before it mutates
+        // anything (`ContourTopology::add_region`'s own doc), so a failed
+        // call here leaves `topology` exactly as it was, safe to skip
+        // exactly like "no room." Propagating it instead (an earlier version
+        // of this call did, via `?`) aborted the *whole* submission the
+        // moment one region turned out malformed -- leaving every region
+        // processed earlier in this same loop already committed, since nothing
+        // here ever wrapped the loop itself in a transaction. A caller
+        // reading that as "nothing landed" (this file's own `addPatch`
+        // contract) was then wrong, and the next call built on graph state
+        // this one had already partially, silently mutated.
+        let refusal = match no_room {
+            Some(reason) => Some(reason),
+            None => topology
+                .add_region(id.clone(), vec![boundary], holes)
+                .err()
+                .map(|error| format!("malformed loop: {error}")),
+        };
+        if let Some(reason) = refusal {
             skipped_region_ids.push(id.as_str().to_owned());
-            orphaned.extend(boundary.iter().map(|use_| use_.edge().clone()));
-            orphaned.extend(holes.iter().flatten().map(|use_| use_.edge().clone()));
+            skipped_region_reasons.push(format!("{}: {reason}", id.as_str()));
+            orphaned.extend(region_edges);
             continue;
         }
-        topology
-            .add_region(id.clone(), vec![boundary], holes)
-            .map_err(|error| error.to_string())?;
         surfaces
             .add_region_surface(
                 topology,
@@ -1165,11 +1308,12 @@ pub fn apply_add_patch(
             ..RegionEditOutcomeDto::default()
         },
         skipped_region_ids,
+        skipped_region_reasons,
     })
 }
 
-/// Whether every edge of `boundary` can still take one more use in the
-/// direction this loop walks it.
+/// Why `boundary` cannot take one more use in the direction it walks --
+/// `None` when it can, so a face may be registered on it.
 ///
 /// An edge already used twice is interior -- it has a face on both sides --
 /// and an edge used once in the same direction this loop wants is one whose
@@ -1178,12 +1322,27 @@ pub fn apply_add_patch(
 /// "terrain is never created above anything" rule arriving at the level
 /// where it is precise. Checked against the live topology, so faces earlier
 /// in this same batch count.
-fn boundary_has_room(topology: &ContourTopology, boundary: &ContourLoop) -> bool {
-    boundary
-        .iter()
-        .all(|use_| match topology.usage_count(use_.edge()) {
-            0 => true,
-            1 => topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()),
-            _ => false,
-        })
+fn boundary_refusal(topology: &ContourTopology, boundary: &ContourLoop) -> Option<String> {
+    for use_ in boundary.iter() {
+        let count = topology.usage_count(use_.edge());
+        let edge = use_.edge().as_str();
+        match count {
+            0 => continue,
+            1 => {
+                if topology.sole_usage_reversed(use_.edge()) != Some(use_.is_reversed()) {
+                    continue;
+                }
+                return Some(format!(
+                    "no room on edge {edge} -- its one free side faces the other way; this loop walks it reversed={}, and so does the face already on it",
+                    use_.is_reversed()
+                ));
+            }
+            _ => {
+                return Some(format!(
+                    "no room on edge {edge} -- already used {count} times, so it is interior ground"
+                ))
+            }
+        }
+    }
+    None
 }

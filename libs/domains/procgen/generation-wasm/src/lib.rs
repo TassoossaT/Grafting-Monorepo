@@ -49,12 +49,28 @@ pub const MAX_CELLS: u64 = 4096 * 4096;
 /// Validation happens here because panics are not catchable on
 /// `wasm32-unknown-unknown`, so an invalid argument would otherwise abort the
 /// caller's worker instead of rejecting.
+/// Samples the window starting at the noise's own origin. See
+/// [`generate_heightmap_at`] for why a caller laying ground in a world wants
+/// to place that window itself.
 #[wasm_bindgen]
-pub fn generate_heightmap(
+pub fn generate_heightmap(width: u32, height: u32, seed: u32, scale: f64) -> Result<Vec<f32>, JsValue> {
+    generate_heightmap_at(width, height, seed, scale, 0, 0)
+}
+
+/// [`generate_heightmap`], with the window placed anywhere in the noise rather
+/// than always at its origin.
+///
+/// A separate entry point rather than two more parameters on the original,
+/// because `wasm_bindgen` has no defaults and every existing caller would
+/// otherwise have to be edited to say it wants what it already had.
+#[wasm_bindgen]
+pub fn generate_heightmap_at(
     width: u32,
     height: u32,
     seed: u32,
     scale: f64,
+    origin_x: i32,
+    origin_y: i32,
 ) -> Result<Vec<f32>, JsValue> {
     let cells = validate(width, height, scale).map_err(|message| JsValue::from_str(&message))?;
 
@@ -62,7 +78,10 @@ pub fn generate_heightmap(
     let mut values = Vec::with_capacity(cells);
     for y in 0..height {
         for x in 0..width {
-            let sample = perlin.get([x as f64 * scale, y as f64 * scale]);
+            let sample = perlin.get([
+                (origin_x as f64 + x as f64) * scale,
+                (origin_y as f64 + y as f64) * scale,
+            ]);
             values.push(sample as f32);
         }
     }

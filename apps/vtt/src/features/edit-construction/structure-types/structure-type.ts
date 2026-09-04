@@ -1,4 +1,10 @@
-import type { ConstructionRegionTopology } from "@/ports";
+import type {
+  ConstructionNodeId,
+  ConstructionRegionEdge,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+} from "@/ports";
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
@@ -91,6 +97,92 @@ export interface CascadeContext {
 }
 
 /**
+ * How a type fixes itself once `"cut"` has consumed part of it and left a
+ * rim exposed where the consumed piece used to be.
+ *
+ * This is deliberately not folded into `EditResolution`'s own `"regenerate"`
+ * kind, even though the organic case answers it the same way: that kind
+ * resolves a *gesture* against a role the type already named, where a cut is
+ * not a gesture on this type's own geometry at all -- it is a side effect of
+ * *another* type's stroke landing on top of it. There is no role, no target,
+ * nothing for `roleFor` to classify; only a leftover shape and the rim the
+ * removal exposed.
+ *
+ * `"unsupported"` is not a permanent design choice the way `EditResolution`'s
+ * `"deny"` is -- it is a declared gap, present so every structure type states
+ * its position instead of one silently doing nothing when cut. The organic
+ * doc comment already lists cutting alongside subdividing and welding as
+ * structural work that escalates to regeneration; a type built on that same
+ * capability answers `"regenerate"`, and a type that has never had a repair
+ * path designed says so honestly rather than pretending the geometry stayed
+ * valid.
+ */
+export type CutRepair =
+  /**
+   * Regenerate the region from scratch, pinned to the rim the cut exposed --
+   * the same mechanism a structural interactive edit already escalates to
+   * for this type, applied to a cut's leftover instead of a grabbed role.
+   */
+  | { readonly kind: "regenerate"; readonly reason: string }
+  /** No repair has been designed for this type yet; the leftover is left as the cut leaves it. */
+  | { readonly kind: "unsupported"; readonly reason: string };
+
+/**
+ * What a `"cut"` actually did to one covered type -- the seam a
+ * `"regenerate"`-capable covered type now needs to close by welding onto
+ * the painter's own geometry, not merely echoing its position.
+ *
+ * Deliberately painter-agnostic: this is assembled by whichever generic
+ * layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
+ * tool -- see its own `applyPatchReplacement`), from a fact neither side
+ * privately owns -- what the paint actually registered, and what it
+ * resolved to consume. The covered type reads this and repairs itself
+ * entirely on its own, in its own module, outside `structure-types/`: this
+ * shape is the contract, not the repair, which needs a runtime this pure
+ * layer does not have.
+ */
+export interface CutFallout {
+  /**
+   * Every live node of the painter's own type, real graph nodes with real
+   * ids -- not a bare outline of numbers, and not only the handful *this one
+   * submission* happened to (re)declare.
+   *
+   * A repair needs these to name the far side of the hole. The engine
+   * considers an edge free-boundary only when **both** of its nodes are in
+   * the scope it was asked about, and the hole a cut leaves is bounded by the
+   * covered type's surviving rim on one side and the painter's own contour on
+   * the other -- so a repair naming only its own nodes finds no closed loop
+   * at all, and the cut visibly happens while nothing regenerates.
+   *
+   * Every live node of the type, not the current submission's own: a brush
+   * resubmits only its latest increment each tick, and most of an
+   * established cloud's boundary near a given hole was registered several
+   * ticks ago and never named again. Scoping to the increment leaves most of
+   * the hole's far side unnamed, which is the same failure by a slower route.
+   */
+  readonly paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
+  /**
+   * The painter's own faces, each as its own boundary loop of real oriented
+   * edges, in that face's own walk order.
+   *
+   * A cut can leave the painter standing *inside* the ground it removed --
+   * a road drawn across the middle of a field, reaching none of its borders.
+   * The engine reports the hole's outer rim and stops there, correctly: it
+   * tells a gap from an outline by which side the neighbouring faces lie on,
+   * and a face alone in the middle of a hole reads as an outline, not as
+   * something to fill. A repair mending the outer rim alone therefore lays
+   * ground straight across the painter -- the two banks joined over the top
+   * of the road instead of stopping at its contour. These are what let it
+   * open around the painter instead, and they are edges rather than
+   * positions because the mend has to *reuse* them: the painter already holds
+   * one side of each, and the repair takes the other.
+   */
+  readonly paintedLoops: readonly (readonly ConstructionRegionEdge[])[];
+  /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
+  readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
+}
+
+/**
  * One structure type's definition -- which is to say, **what a cloud of this
  * type does**, since the cloud is what the type names (`ADR-0022`, and
  * `construction-cloud.ts`). Nothing below is a property of a single face;
@@ -141,6 +233,13 @@ export interface StructureTypeDefinition {
     coveredType: string,
     paintedSubtype?: string,
   ) => CreationInteraction;
+  /**
+   * How this type repairs itself after `"cut"` has consumed part of it.
+   * Required rather than optional so a new structure type has to say where
+   * it stands -- `"unsupported"` is a legitimate, honest answer, silence is
+   * not.
+   */
+  readonly repairAfterCut: CutRepair;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

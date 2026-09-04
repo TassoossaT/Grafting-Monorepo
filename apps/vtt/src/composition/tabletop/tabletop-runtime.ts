@@ -26,6 +26,8 @@ import type {
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
+  ConstructionIrregularQuadGrid,
+  ConstructionIrregularQuadGridRequest,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -56,6 +58,7 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
+import { dispatchCutRepairs } from "./tools/cut-repair-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -131,6 +134,14 @@ export interface TabletopRuntime {
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  /**
+   * One irregular quad grid, generated against the contours given -- what
+   * ground is made of, whether it is being created or regenerated. Pure: it
+   * reads nothing from the live graph and changes nothing in it.
+   */
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
@@ -179,7 +190,14 @@ export interface TabletopRuntime {
     causeId: string,
   ): RegionEditOutcome;
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array;
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
@@ -662,7 +680,25 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    const meshes = surfaceKeys.flatMap((surfaceKey) => this.#construction.getSurfaceMesh(surfaceKey));
+    // Fetched one surface at a time, not `surfaceKeys.flatMap`, and a
+    // fetch that throws is skipped rather than aborting the whole sync: a
+    // single mutation can name several affected surfaces that also border
+    // *each other*, and one of them can legitimately have already been
+    // removed by this same call (a batch deleting several adjacent
+    // consumed regions together, say) -- its own removal is already
+    // handled through `removedSurfaceRefs`/`#foldRegionEditOutcome`'s own
+    // removed-keys loop, so a stale mesh fetch for it here is redundant,
+    // not load-bearing. Letting one such fetch abort the whole sync used
+    // to skip the render update for *every* surface in the batch, not just
+    // the stale one -- the mutation itself had already committed, so the
+    // screen simply never caught up.
+    const meshes = surfaceKeys.flatMap((surfaceKey) => {
+      try {
+        return this.#construction.getSurfaceMesh(surfaceKey);
+      } catch {
+        return [];
+      }
+    });
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
@@ -758,6 +794,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.classifyPoints(points);
   }
 
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined {
+    this.#requireReady("generating a terrain grid");
+    return this.#construction.generateIrregularQuadGrid(request);
+  }
+
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
     return this.#construction.getAllRegionTopologies();
@@ -851,6 +894,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
+  /**
+   * Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
+   * type this patch's own footprint cuts into repair itself, via
+   * `dispatchCutRepairs` (`tools/cut-repair-dispatch.ts`) -- the runtime's
+   * own choke point for `CUT`'s repair half, so any caller of this one
+   * method gets it, not only whichever tool happens to import a repair
+   * function by name. See `CutRepair`/`CutFallout`
+   * (`structure-types/structure-type.ts`) for the contract; the decision of
+   * *what* got cut and *who* repairs it is entirely `dispatchCutRepairs`'s
+   * and `resolveCutRepair`'s, not this method's.
+   */
   applyPatchReplacement(
     request: ApplyPatchReplacementRequest,
     origin: ChangeOrigin,
@@ -859,6 +913,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("replacing generated regions");
     const outcome = this.#construction.applyPatchReplacement(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
+    dispatchCutRepairs(this, request, causeId);
     return outcome;
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
@@ -945,8 +1000,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#render.clearPreview(channel);
   }
 
-  generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array {
-    return this.#terrainNoise.generateHeightmap(width, height, seed, scale);
+  generateHeightmap(
+    width: number,
+    height: number,
+    seed: number,
+    scale: number,
+    originX: number,
+    originY: number,
+  ): Float32Array {
+    return this.#terrainNoise.generateHeightmap(width, height, seed, scale, originX, originY);
   }
 
   attachView(target: HTMLElement): RenderViewId {
