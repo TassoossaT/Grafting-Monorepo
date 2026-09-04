@@ -38,3 +38,32 @@ test("a stroke of one sample still loads, so a tap is not a no-op", () => {
   assert.ok(load({ x: 5, y: 0, z: 5 }) > 0.99);
   assert.equal(load({ x: 9, y: 0, z: 5 }), 0);
 });
+
+test("the sweep is never described more finely than the mesh it will bound", async () => {
+  const { brushSweptOutlinePolygons } = await import(
+    "../src/composition/tabletop/tools/shapes/preview-shapes.ts"
+  );
+  const points = (swept) => swept.reduce((n, p) => n + p.reduce((m, r) => m + r.length, 0), 0);
+  const stroke = [];
+  for (let step = 0; step <= 40; step += 1) {
+    stroke.push({ x: step * 0.8, y: 0, z: Math.sin(step * 0.7) * 0.15 });
+  }
+
+  // A patch comes back with about twice as many faces as its outline has
+  // points, so the outline's point count is the face count.
+  const fixed = points(brushSweptOutlinePolygons(stroke, 3));
+  const sized = points(brushSweptOutlinePolygons(stroke, 3, 2));
+  assert.ok(sized < fixed, `a cell-sized sweep is coarser: ${sized} against ${fixed}`);
+
+  // And a wider brush spends fewer of its points per unit of ground, which is
+  // the ratio that decides whether cells come back the size they were asked
+  // for at all.
+  const narrow = points(brushSweptOutlinePolygons(stroke, 3, 2));
+  const wide = points(brushSweptOutlinePolygons(stroke, 6, 2));
+  const narrowArea = 2 * 3 * 32 + Math.PI * 9;
+  const wideArea = 2 * 6 * 32 + Math.PI * 36;
+  assert.ok(
+    wideArea / wide > narrowArea / narrow * 1.5,
+    `a wider brush buys much more ground per outline point: ${wideArea / wide} against ${narrowArea / narrow}`,
+  );
+});

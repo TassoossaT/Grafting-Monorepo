@@ -117,6 +117,20 @@ export interface TerrainSculptParams {
    */
   readonly faceSize: number;
   /**
+   * How wide a band the stroke paints, as a radius in world units.
+   *
+   * Not cosmetic, and not independent of {@link faceSize}: a patch comes back
+   * with about twice as many faces as its outline has points, and an outline
+   * needs a point every cell around its whole perimeter. So a narrow brush
+   * spends nearly all of its faces describing its own edge and comes back
+   * far finer than the cell size asked for, whatever the generator does.
+   *
+   * Measured, at a face size of 2: a radius of 3 yields cells of about 1.3,
+   * a radius of 6 yields 2.2. Roughly, the radius wants to be three times the
+   * face size or more before the interior of the stroke outweighs its rim.
+   */
+  readonly brushRadius: number;
+  /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
    * variety the random rhombus merge produces. The generator's own relaxation
@@ -206,6 +220,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
+    brushRadius: 6,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

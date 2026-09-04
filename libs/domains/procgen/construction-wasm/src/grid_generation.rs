@@ -530,6 +530,56 @@ mod tests {
     /// Sixty percent of the faces of a straight stroke are bought by its two
     /// round ends. Simplifying the outline before it becomes a constraint is
     /// what `outlineConstraints` does about it.
+    fn disc(radius: f64, steps: usize) -> Vec<(f64, f64)> {
+        (0..steps)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / steps as f64;
+                (radius * a.cos(), radius * a.sin())
+            })
+            .collect()
+    }
+
+    fn faces_with(boundary: &[(f64, f64)], face_side: f64, extra: &str) -> (usize, f64) {
+        let body: Vec<String> =
+            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
+            r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]{extra}}}"#,
+            body.join(",")
+        ))
+        .expect("parses");
+        let grid = irregular_quad_grid(request).expect("a grid");
+        let mut area = 0.0;
+        for q in &grid.quads {
+            let mut twice = 0.0;
+            for i in 0..4 {
+                let a = &grid.vertices[q[i]];
+                let b = &grid.vertices[q[(i + 1) % 4]];
+                twice += a.x * b.z - b.x * a.z;
+            }
+            area += twice.abs() / 2.0;
+        }
+        (grid.quads.len(), (area / grid.quads.len() as f64).sqrt())
+    }
+
+    #[test]
+    fn probe_the_dab() {
+        println!("-- a single dab: disc of radius 3, faceSide 2, ideal ~7 faces of 2.00");
+        for steps in [16, 12, 8, 6, 4] {
+            let (f, s) = faces_with(&disc(3.0, steps), 2.0, "");
+            println!("  outline in {steps:>2} segments: {f} faces of ~{s:.2}");
+        }
+        println!("-- 16 segments, varying the angle limit");
+        for angle in [30.0, 25.0, 20.0, 15.0] {
+            let (f, s) = faces_with(&disc(3.0, 16), 2.0, &format!(r#","refinement":{{"minAngleDegrees":{angle}}}"#));
+            println!("  angle {angle:>5}: {f} faces of ~{s:.2}");
+        }
+        println!("-- 16 segments, varying the minimum-area floor");
+        for ratio in [0.15, 0.4, 0.7, 1.0] {
+            let (f, s) = faces_with(&disc(3.0, 16), 2.0, &format!(r#","refinement":{{"minAreaRatio":{ratio}}}"#));
+            println!("  minArea {ratio:>4}: {f} faces of ~{s:.2}");
+        }
+    }
+
     #[test]
     fn the_round_ends_of_a_stroke_cost_more_than_all_the_rest_of_it() {
         let (fine, fine_side) = faces_and_side(&capsule(32.0, 3.0, 8), 2.0);

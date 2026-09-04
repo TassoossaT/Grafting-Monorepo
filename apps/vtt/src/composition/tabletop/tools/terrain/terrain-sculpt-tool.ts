@@ -62,16 +62,7 @@ const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
  */
 const NOISE_SPACING = 1;
 
-/**
- * The brush's own reach: how wide a band the stroke paints, and the shape the
- * preview shows.
- *
- * Its own constant rather than a multiple of the cell size, which is what it
- * used to be. Those are two unrelated things -- how much ground the stroke
- * covers, and how finely that ground is divided -- and tying them together
- * meant the brush silently got wider every time the cells were made coarser.
- */
-const REVEAL_RADIUS = 3;
+
 
 
 /**
@@ -111,9 +102,17 @@ function sampleHeightmapBilinear(
  * (`brushSweptOutlinePolygons` is shared with the preview), so the stroke
  * never affects ground the user was not shown.
  */
-function coveredByStroke(ctx: ToolContext, gesture: ToolGesture): readonly ConstructionCoveredRegion[] {
+function coveredByStroke(
+  ctx: ToolContext,
+  gesture: ToolGesture,
+  params: TerrainSculptParams,
+): readonly ConstructionCoveredRegion[] {
   const merged = new Map<string, ConstructionCoveredRegion>();
-  for (const polygon of brushSweptOutlinePolygons(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS)) {
+  for (const polygon of brushSweptOutlinePolygons(
+    gesture.samples.map((sample) => sample.point),
+    params.brushRadius,
+    params.faceSize,
+  )) {
     const ring = polygon[0];
     if (ring === undefined || ring.length < 3) continue;
     for (const region of ctx.runtime.getFootprintCoverage(ring)) {
@@ -165,9 +164,12 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
     return brushSweptRegionFill(
       gesture.samples.map((sample) => sample.point),
-      { kind: "circle", radius: REVEAL_RADIUS },
+      { kind: "circle", radius: params.brushRadius },
       TERRAIN_COLOR[params.targetSurface],
       0.35,
+      // The same chord the commit will sweep with, so the ghost is the shape
+      // the engine is actually asked about.
+      params.faceSize,
     );
   },
 
@@ -187,7 +189,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // height: a corner shared with the rim wants the raised Y, not the stale
     // one. Occupancy is unaffected either way -- the raise moves ground in Y,
     // never in XZ.
-    const covered = coveredByStroke(ctx, gesture);
+    const covered = coveredByStroke(ctx, gesture, params);
     const raised =
       covered.length > 0
         ? restackTerrain(
@@ -195,14 +197,22 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
             params.targetSurface,
             covered,
             causeId,
-            dirtLoadOver(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS),
+            dirtLoadOver(gesture.samples.map((sample) => sample.point), params.brushRadius),
           )
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
     // What the stroke asks to fill, and what is already standing in it. The
     // second becomes holes: ground somebody already holds is not regenerated,
     // it is met.
-    const swept = brushSweptOutlinePolygons(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS);
+    // The cell size goes into the sweep, so the outline is never described
+    // more finely than the mesh it is about to bound. A boundary point is a
+    // cell corner, and a patch comes back with about twice as many faces as
+    // its boundary has points.
+    const swept = brushSweptOutlinePolygons(
+      gesture.samples.map((sample) => sample.point),
+      params.brushRadius,
+      params.faceSize,
+    );
     const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)));
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
@@ -283,7 +293,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     logContourGrowth(
       "pincelada",
       contourBefore,
-      perimeterConstraints(standingAround(ctx, coveredByStroke(ctx, gesture)), 0).sources.length,
+      perimeterConstraints(standingAround(ctx, coveredByStroke(ctx, gesture, params)), 0).sources.length,
     );
 
     report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);

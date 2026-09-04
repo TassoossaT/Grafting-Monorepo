@@ -221,6 +221,9 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
         />
       </div>
+      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
+        onChange({ ...params, brushRadius }),
+      )}
       {sliderRow("Tamanho da face", params.faceSize, 0.5, 6, 0.25, (faceSize) =>
         onChange({ ...params, faceSize }),
       )}

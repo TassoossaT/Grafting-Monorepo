@@ -262,15 +262,41 @@ function unionCapsules(capsules: readonly Polygon[]): MultiPolygon {
   }
 }
 
+/**
+ * How many segments an arc of this radius is worth describing in, given that
+ * the outline is about to become the boundary of a mesh whose cells are
+ * `chord` across.
+ *
+ * A boundary point is a cell corner. Describing a brush cap in sixteen
+ * segments when the cells are two units wide does not buy a rounder shape --
+ * it buys cells a fraction of the size asked for, because the mesh cannot be
+ * coarser than the outline that bounds it. Measured: the face count of a
+ * generated patch is about twice its boundary point count whenever the region
+ * is too small for the interior lattice to survive, which is every brush
+ * stroke. A single dab described in 24 segments came back as 50 faces where
+ * seven were wanted.
+ *
+ * Clamped at both ends: never so coarse that a circle reads as a triangle,
+ * never so fine that it dictates the mesh again.
+ */
+function arcSegments(radius: number, chord: number): number {
+  if (!(chord > 0)) return 16;
+  return Math.min(24, Math.max(6, Math.ceil((2 * Math.PI * radius) / chord)));
+}
+
 /** One capsule per (decimated) stroke segment, snapped and ready to union. */
 function strokeCapsules(
   samples: readonly ConstructionPosition[],
   radius: number,
+  chord: number,
 ): readonly Polygon[] {
-  const decimated = decimateXZ(samples, Math.max(radius * 0.5, 0.05));
+  // Samples closer together than a cell add a capsule that changes the union
+  // by less than one cell, at the cost of two more points on its outline.
+  const spacing = Math.max(chord > 0 ? chord : radius * 0.5, radius * 0.5, 0.05);
+  const decimated = decimateXZ(samples, spacing);
   const capsules: Polygon[] = [];
   for (let index = 1; index < decimated.length; index += 1) {
-    capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, 16)]);
+    capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, arcSegments(radius, chord))]);
   }
   return capsules;
 }
@@ -286,11 +312,17 @@ function strokeCapsules(
 export function brushSweptOutlinePolygons(
   samples: readonly ConstructionPosition[],
   radius: number,
+  /**
+   * How far apart the points of the result may be, for a caller that is going
+   * to turn this outline into a mesh. Omitted keeps the fixed resolution every
+   * other caller has always had.
+   */
+  chord = 0,
 ): MultiPolygon {
   const first = samples[0];
   if (first === undefined) return [];
-  const capsules = strokeCapsules(samples, radius);
-  if (capsules.length === 0) return [[circleRing(first, radius, 24)]];
+  const capsules = strokeCapsules(samples, radius, chord);
+  if (capsules.length === 0) return [[circleRing(first, radius, arcSegments(radius, chord))]];
   return unionCapsules(capsules);
 }
 
@@ -299,6 +331,12 @@ export function brushSweptRegionFill(
   shape: BrushOutlineShape,
   color: number,
   opacity = 0.3,
+  /**
+   * Must match whatever the same stroke passes to
+   * {@link brushSweptOutlinePolygons}, or the ghost stops being the shape the
+   * engine is asked about.
+   */
+  chord = 0,
 ): PreviewDescriptor {
   const first = samples[0];
   if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
@@ -319,9 +357,9 @@ export function brushSweptRegionFill(
     for (const triangleIndex of triangles) indices.push(base + triangleIndex);
   };
 
-  const capsules = strokeCapsules(samples, radius);
+  const capsules = strokeCapsules(samples, radius, chord);
   if (capsules.length === 0) {
-    addPolygon([circleRing(first, radius, 24)], samples);
+    addPolygon([circleRing(first, radius, arcSegments(radius, chord))], samples);
   } else {
     for (const polygon of unionCapsules(capsules)) addPolygon(polygon, samples);
   }
