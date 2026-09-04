@@ -102,19 +102,17 @@ export interface InteriorGenerateParams {
 }
 
 /**
- * A single seeded, self-contained hexagon of irregular terrain, submitted as
- * graph nodes/surfaces in one shot -- see
+ * Ground generated for the area a stroke sweeps, constrained by whatever
+ * already stands inside it and submitted as graph nodes/surfaces in one shot -- see
  * `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`.
  */
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
-  readonly trianglesPerSide: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
-   * variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
-   * own `relax()` step is what pulls cells toward square in the first place --
-   * this maps directly onto its `strength` option.
+   * variety the random rhombus merge produces. The generator's own relaxation
+   * step is what pulls cells toward square in the first place; this is its
+   * `strength`, handed across the port as `relaxStrength`.
    */
   readonly irregularity: number;
   /** Multiplies the sampled Perlin noise (native `[-1, 1]`) into world-space height units. */
@@ -198,7 +196,6 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
   "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
-    trianglesPerSide: 10,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

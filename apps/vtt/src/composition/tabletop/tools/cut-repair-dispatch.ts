@@ -12,10 +12,9 @@ import {
   outwardPerimeterRings,
   resolveCoverage,
   resolveCutRepair,
-  repairOrganicCut,
   type CutFallout,
-  type OrganicCutRepairRuntime,
 } from "../../../features/edit-construction/index.ts";
+import { repairTerrainCut, type TerrainCutRepairRuntime } from "./terrain/terrain-cut-repair.ts";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
 import { reportToolFailure } from "./core/tool-diagnostics.ts";
@@ -23,12 +22,17 @@ import { reportToolFailure } from "./core/tool-diagnostics.ts";
 /**
  * One covered type's own answer to being cut -- `resolveCutRepair`'s
  * `"regenerate"`, made real. The type itself owns the whole thing, decision
- * and execution both (`repairOrganicCut`, `structure-types/organic/organic-cut-repair.ts`);
+ * and execution both (`repairTerrainCut`, `tools/terrain/terrain-cut-repair.ts`);
  * this only needs to know it by a runtime-shaped signature, never a
  * concrete `TabletopRuntime` import, so this table stays as thin as the
  * types it points at.
  */
-export type CutRepairExecutor = (runtime: OrganicCutRepairRuntime, fallout: CutFallout, causeId: string) => number;
+export type CutRepairExecutor = (
+  runtime: TerrainCutRepairRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+) => number;
 
 /**
  * Every structure type that has actually implemented `resolveCutRepair`'s
@@ -42,8 +46,8 @@ export type CutRepairExecutor = (runtime: OrganicCutRepairRuntime, fallout: CutF
  * entry is treated as nothing to do.
  */
 export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
-  terrain: repairOrganicCut,
-  "terrain-grass": repairOrganicCut,
+  terrain: repairTerrainCut,
+  "terrain-grass": repairTerrainCut,
 });
 
 /**
@@ -165,7 +169,7 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId);
+      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId, runtime.getSnapshot().tableId);
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }

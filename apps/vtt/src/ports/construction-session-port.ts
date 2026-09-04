@@ -407,6 +407,12 @@ export interface ConstructionIrregularQuadGridRequest {
   readonly holes?: readonly (readonly ConstructionGridConstraintPoint[])[];
   /** The lattice side: the one knob that sets the cell scale. */
   readonly triangleSide: number;
+  /**
+   * How hard the relaxation pulls cells toward square, `0` hardest and `1`
+   * leaving the raw irregular variety the rhombus pairing produced. Omitted
+   * takes the generator's own standard.
+   */
+  readonly relaxStrength?: number;
 }
 
 /** One corner the generator put along a contour the caller supplied. */

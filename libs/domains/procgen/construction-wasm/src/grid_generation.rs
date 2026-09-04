@@ -37,7 +37,7 @@ pub struct ConstraintPointDto {
 /// How square the refinement is asked to keep its triangles, and how many
 /// points it may spend getting there.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct RefinementDto {
     pub min_angle_degrees: f64,
     pub max_additional_vertices: usize,
@@ -49,8 +49,11 @@ impl Default for RefinementDto {
     }
 }
 
+/// `default` on the container, not only on the field that holds one: a caller
+/// that wants to move a single knob -- the irregularity slider sends
+/// `strength` alone -- should not have to restate the others to do it.
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct RelaxDto {
     pub iterations: u32,
     pub strength: f64,

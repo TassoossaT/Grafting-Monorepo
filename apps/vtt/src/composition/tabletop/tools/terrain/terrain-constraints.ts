@@ -34,10 +34,13 @@ export interface ConstraintRing {
    * The edge each segment of `points` runs along, index-aligned: `edges[i]`
    * spans `points[i]` to `points[i + 1]`, wrapping.
    *
-   * Empty for a ring that has no edges yet -- the stroke's own outline, which
-   * is nobody's boundary until this stroke registers it.
+   * A segment may own no edge, and that is a real state rather than an error:
+   * the stroke's own outline is nobody's boundary until this stroke registers
+   * it, and the rim of a hole left by a cut can run through a node the
+   * deletion took with it. Either way there is nothing to split there, so a
+   * node landing on that segment is declared as ordinary new geometry.
    */
-  readonly edges: readonly ConstructionRegionEdge[];
+  readonly edges: readonly (ConstructionRegionEdge | undefined)[];
 }
 
 /** The node ids a set of rings referred to, by the index they were given. */
@@ -60,6 +63,32 @@ export function perimeterConstraints(
   topologies: readonly ConstructionRegionTopology[],
   startingIndex: number,
 ): ConstraintTable {
+  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
+  for (const topology of topologies) {
+    for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
+  }
+  return constraintsFromRings(outwardPerimeterRings(topologies), (nodeId) => positions.get(nodeId), startingIndex);
+}
+
+/**
+ * The same thing one step lower: rings of oriented edges, already walked,
+ * turned into constraint rings that carry a node id per corner.
+ *
+ * Separate from {@link perimeterConstraints} because a cut's repair holds its
+ * rings before it holds any topology to read them from -- it walks the
+ * perimeter of the faces it is about to delete, and asks the graph for the
+ * positions afterwards. Both callers must be able to share one numbering, so
+ * `startingIndex` is where this table's `source` values begin.
+ *
+ * A corner whose position cannot be found leaves the ring unusable and the
+ * ring is dropped: keeping it would put a constraint through a point nobody
+ * stands at, which is worse than losing the seam it would have met.
+ */
+export function constraintsFromRings(
+  rings: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
+  startingIndex: number,
+): ConstraintTable {
   const sources: ConstructionNodeId[] = [];
   const index = new Map<ConstructionNodeId, number>();
   const claim = (nodeId: ConstructionNodeId): number => {
@@ -71,29 +100,22 @@ export function perimeterConstraints(
     return next;
   };
 
-  const rings: ConstraintRing[] = [];
-  for (const ring of outwardPerimeterRings(topologies)) {
-    const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
-    for (const topology of topologies) {
-      for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
-    }
+  const built: ConstraintRing[] = [];
+  for (const ring of rings) {
     const points: ConstructionGridConstraintPoint[] = [];
     let complete = true;
     for (const edge of ring) {
-      const position = positions.get(edge.startNodeId);
+      const position = positionOf(edge.startNodeId);
       if (position === undefined) {
         complete = false;
         break;
       }
       points.push({ x: position.x, z: position.z, source: claim(edge.startNodeId) });
     }
-    // A ring whose corners cannot all be placed describes nothing usable.
-    // Dropping it costs this stroke a seam it would have met exactly; keeping
-    // it costs a constraint through a position nobody stands at.
-    if (complete && points.length >= 3) rings.push({ points, edges: ring });
+    if (complete && points.length >= 3) built.push({ points, edges: ring });
   }
 
-  return { rings, sources };
+  return { rings: built, sources };
 }
 
 /** A stroke's own swept outline: real ground to fill, owned by nobody yet. */
@@ -207,8 +229,8 @@ export interface AdoptionRuntime {
  */
 export function adoptContourNodes(
   runtime: AdoptionRuntime,
-  tableId: string,
-  salt: number,
+  /** Prefix every edge this splitting mints is named under -- unique per fill. */
+  mint: string,
   causeId: string,
   adoptions: readonly ContourAdoption[],
   nodeIdFor: (vertex: number) => ConstructionNodeId,
@@ -228,8 +250,8 @@ export function adoptContourNodes(
       continue;
     }
     const edgeId = tail.get(adoption.edge.edgeId) ?? adoption.edge.edgeId;
-    const firstEdgeId: ConstructionEdgeId = `${tableId}:adopt-${salt}-${minted}a`;
-    const secondEdgeId: ConstructionEdgeId = `${tableId}:adopt-${salt}-${minted}b`;
+    const firstEdgeId: ConstructionEdgeId = `${mint}:adopt-${minted}a`;
+    const secondEdgeId: ConstructionEdgeId = `${mint}:adopt-${minted}b`;
     minted += 1;
     try {
       runtime.applyRegionEdit(

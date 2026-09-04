@@ -165,8 +165,7 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
   };
   const outcome = adoptContourNodes(
     runtime,
-    "t",
-    1,
+    "mint",
     "cause",
     adoptions,
     (vertex) => `new:${vertex}`,
@@ -206,8 +205,7 @@ test("a refused split costs that node its shared edge, never the stroke", () => 
   };
   const outcome = adoptContourNodes(
     runtime,
-    "t",
-    1,
+    "mint",
     "cause",
     adoptions,
     (vertex) => `new:${vertex}`,
