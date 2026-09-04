@@ -230,6 +230,7 @@ export function regenerateNeighbourhood(
     // Deterministic in the ground itself rather than in the clock, so the same
     // neighbourhood regenerated twice comes back the same: replayable from the
     // same log.
+    what: "reparo de corte",
     mint: `${request.causeId}:regen-${stamp}`,
     tableId: request.tableId,
     causeId: request.causeId,

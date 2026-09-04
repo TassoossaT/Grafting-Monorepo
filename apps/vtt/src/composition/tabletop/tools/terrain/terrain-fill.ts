@@ -12,6 +12,7 @@ import type {
 import type { AtomicEditOp } from "@/features/edit-construction";
 
 import { adoptContourNodes, resolveAdoptions, type ConstraintRing } from "./terrain-constraints.ts";
+import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { createBoundaryEdges } from "../core/boundary-edges.ts";
 
 /**
@@ -93,6 +94,8 @@ export interface TerrainFillRequest {
    * has nothing to put back. Generating first makes a refusal cost nothing.
    */
   readonly onGenerated?: () => void;
+  /** Names this commit in the console log -- "pincelada", "reparo de corte". */
+  readonly what: string;
 }
 
 export interface TerrainFillOutcome {
@@ -181,7 +184,22 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),
   });
-  if (grid === undefined) return NOTHING;
+  if (grid === undefined) {
+    logTerrainCommit({
+      what: request.what,
+      faceSideAsked: request.faceSide,
+      boundary: request.boundary,
+      holes: request.holes,
+      grid: undefined,
+      adopted: 0,
+      unadopted: 0,
+      built: 0,
+      refusedFaces: 0,
+      refusals: [],
+      declaredNodes: 0,
+    });
+    return NOTHING;
+  }
   request.onGenerated?.();
 
   let minX = Infinity;
@@ -251,6 +269,19 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     "local",
     request.causeId,
   );
+  logTerrainCommit({
+    what: request.what,
+    faceSideAsked: request.faceSide,
+    boundary: request.boundary,
+    holes: request.holes,
+    grid,
+    adopted: adoption.adopted.size,
+    unadopted: adoption.refused.length,
+    built: outcome.createdSurfaceKeys.length,
+    refusedFaces: outcome.skippedRegionIds.length,
+    refusals: outcome.skippedRegionReasons,
+    declaredNodes: nodes.length,
+  });
   return {
     built: outcome.createdSurfaceKeys.length,
     refused: outcome.skippedRegionIds.length,

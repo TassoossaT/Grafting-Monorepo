@@ -10,6 +10,7 @@ import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/previ
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
+import { logContourGrowth } from "./terrain-diagnostics.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -207,6 +208,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       return;
     }
     const perimeters = perimeterConstraints(standingAround(ctx, covered), 0);
+    const contourBefore = perimeters.sources.length;
     // A stroke that curls back on itself leaves a real hole in its own swept
     // shape, and `polygon-clipping` reports it as an inner ring. Ground there
     // was never painted, so it is subtracted like any other hole -- it simply
@@ -259,6 +261,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       ) * params.heightScale;
 
     const filled = fillTerrain(ctx.runtime, {
+      what: "pincelada",
       mint: `${ctx.tableId}:terrain-sculpt-${salt}`,
       tableId: ctx.tableId,
       causeId,
@@ -271,6 +274,16 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       sources: perimeters.sources,
       heightAt,
     });
+
+    // The one number that says whether the mesh degrades over strokes: how
+    // many nodes the perimeter of the ground around this stroke carries, now
+    // that the stroke has landed. Read the same way it was read before, over
+    // the same clouds, so the two are comparable.
+    logContourGrowth(
+      "pincelada",
+      contourBefore,
+      perimeterConstraints(standingAround(ctx, coveredByStroke(ctx, gesture)), 0).sources.length,
+    );
 
     report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
   },
