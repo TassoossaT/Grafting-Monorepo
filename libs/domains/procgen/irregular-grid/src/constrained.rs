@@ -347,21 +347,57 @@ fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
     inside_rings(&options.boundary, point) && !inside_rings(&options.holes, point)
 }
 
-/// Containment against a *set* of rings: inside any one of them counts.
+/// Containment against a *set* of rings, by the nonzero winding rule.
 ///
-/// The union, deliberately, rather than one even-odd sweep over all of them
-/// at once. Each ring here is an independent contour some cloud owns, not a
-/// ring of one polygon, and two of them genuinely overlap where two roads
-/// cross. Under one combined sweep that crossing winds twice, reads as even,
-/// and comes back out as ground -- terrain generated in the middle of a
-/// crossroads, standing on both roads at once. Each ring is tested even-odd
-/// on its own, which is what makes a ring that describes a shape with a
-/// pinch or a figure-eight still behave.
+/// Neither of the two obvious rules is right here, and each fails a case the
+/// table actually draws.
+///
+/// One even-odd sweep over every ring at once fails where two contours
+/// genuinely overlap -- two roads crossing. That crossing winds twice, reads
+/// as even, and comes back out as ground: terrain generated in the middle of
+/// a crossroads, standing on both roads at once.
+///
+/// A union of per-ring tests fails the opposite way, on any shape with a hole
+/// in it. A patch of terrain with a gap in the middle has an outer perimeter
+/// and an inner one, and the union says the gap is occupied, so nothing is
+/// ever laid there. Worse, it cannot describe the shape at all, which is what
+/// leaves ground planned over faces that are still standing -- and the engine
+/// then refuses each of those faces, because the new one and the old one both
+/// claim the same side of the edge between them.
+///
+/// Winding handles both, and needs nothing but rings that are consistently
+/// oriented: an outer ring and the inner ring of its own hole run opposite
+/// ways, so they subtract, while two separate contours that happen to overlap
+/// run the same way and add. A caller whose rings are all one orientation
+/// gets exactly the union it had before, so this can only be an improvement
+/// on what it replaces.
 fn inside_rings(rings: &[Vec<ConstraintPoint>], point: Vec2) -> bool {
-    rings.iter().any(|ring| {
+    let mut winding = 0i32;
+    for ring in rings {
         let positions: Vec<Vec2> = ring.iter().map(|entry| entry.position).collect();
-        inside_ring(&positions, point)
-    })
+        winding += winding_number(&positions, point);
+    }
+    winding != 0
+}
+
+/// How many times `ring` wraps around `point`, signed by its direction.
+fn winding_number(ring: &[Vec2], point: Vec2) -> i32 {
+    let mut winding = 0i32;
+    for index in 0..ring.len() {
+        let from = ring[index];
+        let to = ring[(index + 1) % ring.len()];
+        // Which side of the directed edge the point falls on; positive is to
+        // its left.
+        let side = (to.x - from.x) * (point.y - from.y) - (point.x - from.x) * (to.y - from.y);
+        if from.y <= point.y {
+            if to.y > point.y && side > 0.0 {
+                winding += 1;
+            }
+        } else if to.y <= point.y && side < 0.0 {
+            winding -= 1;
+        }
+    }
+    winding
 }
 
 

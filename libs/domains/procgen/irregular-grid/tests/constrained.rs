@@ -7,7 +7,16 @@
 use grafting_procgen_irregular_grid::constrained::{
     ConstrainedOptions, ConstraintPoint, triangulate_constrained,
 };
+use grafting_procgen_irregular_grid::hex::lattice_covering;
 use grafting_procgen_irregular_grid::mesh::Vec2;
+
+/// A ring of plain points, owned by nobody.
+fn ring(points: &[(f64, f64)]) -> Vec<ConstraintPoint> {
+    points
+        .iter()
+        .map(|&(x, y)| ConstraintPoint { position: Vec2::new(x, y), source: None })
+        .collect()
+}
 
 /// A 10x10 field of ground.
 fn field() -> Vec<ConstraintPoint> {
@@ -453,4 +462,79 @@ fn a_reported_node_names_the_segment_it_landed_on() {
         on_the_road > 0,
         "quadrangulating the road contour puts nodes on it; the road has to be told which edges"
     );
+}
+
+/// Ground with a gap in it: an outer perimeter and the inner ring of its own
+/// hole, which a correct perimeter walk hands over running the other way.
+///
+/// Under the union rule this shape could not be described at all -- the gap
+/// read as occupied -- which is what left ground planned over faces that were
+/// still standing.
+#[test]
+fn a_hole_inside_a_contour_is_free_ground_again() {
+    let outer = ring(&[(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)]);
+    // Same shape, opposite direction: the inner rim of the gap.
+    let inner = ring(&[(8.0, 8.0), (8.0, 12.0), (12.0, 12.0), (12.0, 8.0)]);
+    let options = ConstrainedOptions {
+        boundary: vec![ring(&[(-5.0, -5.0), (25.0, -5.0), (25.0, 25.0), (-5.0, 25.0)])],
+        holes: vec![outer, inner],
+        seeds: lattice_covering(Vec2 { x: -5.0, y: -5.0 }, Vec2 { x: 25.0, y: 25.0 }, 2.0),
+        seed_clearance: 0.5,
+        max_area: 0.75,
+        min_area: 0.0,
+        min_angle_degrees: 25.0,
+        max_additional_vertices: 20_000,
+    };
+    let out = triangulate_constrained(&options).expect("triangulated");
+
+    let covers = |x: f64, y: f64| {
+        out.mesh.faces.iter().any(|face| {
+            let points: Vec<Vec2> = face.iter().map(|&v| out.mesh.vertices[v]).collect();
+            let inside = |p: Vec2| {
+                let mut hit = false;
+                for i in 0..points.len() {
+                    let a = points[i];
+                    let b = points[(i + 1) % points.len()];
+                    if (a.y > p.y) != (b.y > p.y)
+                        && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x
+                    {
+                        hit = !hit;
+                    }
+                }
+                hit
+            };
+            inside(Vec2 { x, y })
+        })
+    };
+
+    assert!(covers(10.0, 10.0), "the gap inside the contour is ground to fill");
+    assert!(!covers(4.0, 10.0), "the contour itself is still occupied");
+    assert!(covers(-2.0, 10.0), "and so is everything outside it still free");
+}
+
+/// The case the union rule was introduced for, which must keep working: two
+/// separate contours that genuinely overlap, both running the same way, add
+/// rather than cancel.
+#[test]
+fn two_crossing_contours_do_not_cancel_each_other_out() {
+    let across = ring(&[(-10.0, -1.0), (10.0, -1.0), (10.0, 1.0), (-10.0, 1.0)]);
+    let down = ring(&[(-1.0, -10.0), (1.0, -10.0), (1.0, 10.0), (-1.0, 10.0)]);
+    let options = ConstrainedOptions {
+        boundary: vec![ring(&[(-12.0, -12.0), (12.0, -12.0), (12.0, 12.0), (-12.0, 12.0)])],
+        holes: vec![across, down],
+        seeds: lattice_covering(Vec2 { x: -12.0, y: -12.0 }, Vec2 { x: 12.0, y: 12.0 }, 2.0),
+        seed_clearance: 0.5,
+        max_area: 0.75,
+        min_area: 0.0,
+        min_angle_degrees: 25.0,
+        max_additional_vertices: 20_000,
+    };
+    let out = triangulate_constrained(&options).expect("triangulated");
+    let at_the_crossing = out.mesh.faces.iter().any(|face| {
+        face.iter().all(|&v| {
+            let p = out.mesh.vertices[v];
+            p.x.abs() < 0.9 && p.y.abs() < 0.9
+        })
+    });
+    assert!(!at_the_crossing, "no ground stands in the middle of a crossroads");
 }
