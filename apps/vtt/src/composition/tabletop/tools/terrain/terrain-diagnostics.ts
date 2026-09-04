@@ -40,6 +40,42 @@ function segmentLengths(rings: readonly ConstraintRing[]): number[] {
   return lengths;
 }
 
+/**
+ * Twice the signed area of a ring: positive counter-clockwise.
+ *
+ * Reported because the generator's ground rule sums the winding of every ring
+ * at once, and that only means what it should when the rings agree on which
+ * way round they run. They come from two sources with two conventions -- the
+ * brush's swept outline through `polygon-clipping`, and the rims of standing
+ * ground walked off the graph -- and nothing reconciles them. If two rings
+ * that overlap disagree, their windings cancel and the overlap reads as free
+ * ground, which is ground planned on top of ground that is still standing.
+ *
+ * An attempt to force the orientation by nesting depth was reverted: it turned
+ * cancelling pairs into summing ones, which subtracts overlaps that were real
+ * ground and leaves nodes and edges standing with no face on them. The nesting
+ * test is also unreliable exactly where it matters, because a gap's inner rim
+ * can share a node with the outer one and the winding at a point lying on a
+ * ring is not decided.
+ *
+ * So the orientations are measured here first, against a real drawing, rather
+ * than assumed either way again.
+ */
+function twiceSignedArea(ring: ConstraintRing): number {
+  let twice = 0;
+  for (let index = 0; index < ring.points.length; index += 1) {
+    const from = ring.points[index]!;
+    const to = ring.points[(index + 1) % ring.points.length]!;
+    twice += from.x * to.z - to.x * from.z;
+  }
+  return twice;
+}
+
+/** `+`/`-` per ring, in order, so a disagreement is visible at a glance. */
+function orientations(rings: readonly ConstraintRing[]): string {
+  return rings.map((ring) => (twiceSignedArea(ring) >= 0 ? "+" : "-")).join("") || "·";
+}
+
 function pointCount(rings: readonly ConstraintRing[]): number {
   return rings.reduce((total, ring) => total + ring.points.length, 0);
 }
@@ -131,6 +167,10 @@ function describe(report: TerrainCommitReport): void {
     // Below about 2 the boundary drives the interior and the result comes
     // back finer than the face size asked for, whatever else is right.
     razaoSegmentoPorFace: round(mean(constrained) / report.faceSideAsked),
+    // Which way each ring runs. Mixed signs among the holes is the condition
+    // under which the ground rule cancels and plans over standing ground.
+    sentidoBoundary: orientations(report.boundary),
+    sentidoHoles: orientations(report.holes),
   };
 
   if (report.grid === undefined) {
@@ -172,7 +212,8 @@ function describe(report: TerrainCommitReport): void {
     `| contorno ${contorno.pontos} pts ` +
     `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
-    `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles}`;
+    `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles} ` +
+    `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
 
