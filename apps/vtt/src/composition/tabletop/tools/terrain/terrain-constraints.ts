@@ -388,38 +388,83 @@ export function adoptContourNodes(
 ): { readonly adopted: ReadonlySet<number>; readonly refused: readonly number[] } {
   const adopted = new Set<number>();
   const refused: number[] = [];
-  // The fragment still to be split, per original edge, and where along the
-  // original edge that fragment starts.
-  const tail = new Map<ConstructionEdgeId, { edgeId: ConstructionEdgeId; startNodeId: ConstructionNodeId }>();
   const planned: { readonly vertex: number; readonly op: AtomicEditOp }[] = [];
 
+  // **Everything below runs in the edge's own stored direction, never the
+  // ring's.**
+  //
+  // `insert_vertex` splits by what the edge stores: the first fragment runs
+  // from `start_node` to the new node, the second from the new node to
+  // `end_node`. It takes the two names on trust and applies them in that
+  // order.
+  //
+  // The ring hands its edges over pointing the other way. `outwardPerimeterRings`
+  // flips them deliberately -- the free side of a boundary runs opposite the
+  // face that owns it -- so `startNodeId` there is the *free-side* walk, and
+  // for every edge whose owning face walks it forwards that is the reverse of
+  // what the graph stores.
+  //
+  // Naming the fragments from the ring's direction therefore put the two names
+  // on the wrong halves, and an edge whose id names a pair it does not connect
+  // is a contradiction the graph carries silently until something walks it:
+  // "expected next edge to start at X, found Y" on one face, and an arbitrary
+  // "no room on edge" on its neighbour. Half the seam, since it depends on
+  // which way round each edge happened to be minted.
+  //
+  // The `reversed` flag is what recovers the stored direction: false means the
+  // walk agrees with it, so `startNodeId` is the stored start.
+  const storedEndsOf = (edge: ContourAdoption["edge"]) =>
+    edge.reversed
+      ? { start: edge.endNodeId, end: edge.startNodeId }
+      : { start: edge.startNodeId, end: edge.endNodeId };
+
+  // Grouped per original edge, and ordered along the stored direction rather
+  // than the ring's, so "the fragment still to be split" is always the one
+  // running to the stored end.
+  const perEdge = new Map<
+    ConstructionEdgeId,
+    { readonly edge: ContourAdoption["edge"]; readonly entries: { vertex: number; alongStored: number }[] }
+  >();
   for (const adoption of adoptions) {
-    const position = positionOf(adoption.vertex);
-    if (position === undefined) {
+    if (positionOf(adoption.vertex) === undefined) {
       refused.push(adoption.vertex);
       continue;
     }
-    const fragment = tail.get(adoption.edge.edgeId);
-    const edgeId = fragment?.edgeId ?? adoption.edge.edgeId;
-    const from = fragment?.startNodeId ?? adoption.edge.startNodeId;
-    const nodeId = nodeIdFor(adoption.vertex);
-    // Named by the pair, through the one rule every edge in the graph is
-    // named by. Minting a name of this splitting's own would mean a face
-    // declared later over the same two nodes derives the shared name, finds
-    // nothing, and creates a second edge coincident with this one -- two
-    // edges used once each where there should be one used twice, which looks
-    // joined and is not.
-    const firstEdgeId = sharedEdgeId(tableId, from, nodeId);
-    const secondEdgeId = sharedEdgeId(tableId, nodeId, adoption.edge.endNodeId);
-    planned.push({
+    const group = perEdge.get(adoption.edge.edgeId) ?? { edge: adoption.edge, entries: [] };
+    perEdge.set(adoption.edge.edgeId, group);
+    group.entries.push({
       vertex: adoption.vertex,
-      op: { kind: "insert-vertex", edgeId, nodeId, position, firstEdgeId, secondEdgeId },
+      alongStored: adoption.edge.reversed ? 1 - adoption.along : adoption.along,
     });
-    // The next node on this edge sits further along, so it falls in the second
-    // fragment, which now runs from the node just inserted. Bookkeeping this
-    // side owns entirely -- it never had to wait for an answer, which is what
-    // makes one transaction for the lot possible.
-    tail.set(adoption.edge.edgeId, { edgeId: secondEdgeId, startNodeId: nodeId });
+  }
+
+  for (const group of perEdge.values()) {
+    const { start, end } = storedEndsOf(group.edge);
+    let edgeId = group.edge.edgeId;
+    let from = start;
+    for (const entry of [...group.entries].sort((a, b) => a.alongStored - b.alongStored)) {
+      const position = positionOf(entry.vertex);
+      if (position === undefined) continue;
+      const nodeId = nodeIdFor(entry.vertex);
+      // Named by the pair, through the one rule every edge in the graph is
+      // named by. Minting a name of this splitting's own would mean a face
+      // declared later over the same two nodes derives the shared name, finds
+      // nothing, and creates a second edge coincident with this one -- two
+      // edges used once each where there should be one used twice, which looks
+      // joined and is not.
+      const firstEdgeId = sharedEdgeId(tableId, from, nodeId);
+      const secondEdgeId = sharedEdgeId(tableId, nodeId, end);
+      planned.push({
+        vertex: entry.vertex,
+        op: { kind: "insert-vertex", edgeId, nodeId, position, firstEdgeId, secondEdgeId },
+      });
+      // The next node sits further along the stored direction, so it falls in
+      // the second fragment, which now runs from the node just inserted.
+      // Bookkeeping this side owns entirely -- it never had to wait for an
+      // answer, which is what makes one transaction for the lot possible.
+      edgeId = secondEdgeId;
+      from = nodeId;
+    }
   }
 
   if (planned.length === 0) return { adopted, refused };
