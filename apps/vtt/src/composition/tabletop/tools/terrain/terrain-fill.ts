@@ -21,7 +21,7 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
-import { createBoundaryEdges } from "../core/boundary-edges.ts";
+import { createBoundaryEdges, sharedEdgeId } from "../core/boundary-edges.ts";
 
 /**
  * Laying ground into an area bounded by what is already standing.
@@ -169,6 +169,11 @@ function nodeId(mint: string, vertex: number): ConstructionNodeId {
   return `${mint}:v${vertex}`;
 }
 
+type FreeEdgeUse = ConstructionOrientedEdgeUse & {
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+};
+
 /**
  * Turns the generated grid into a patch whose neighbours share their boundary
  * edges.
@@ -188,29 +193,46 @@ function gridPatch(
   idFor: (vertex: number) => ConstructionNodeId | undefined,
   nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
   surfaceType: string,
-  freeSides: ReadonlyMap<string, boolean>,
+  edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
 
-  for (const quad of grid.quads) {
+  quad: for (const quad of grid.quads) {
     const cycle = quad.map(idFor).filter((id): id is ConstructionNodeId => id !== undefined);
     if (cycle.length !== quad.length) continue;
     if (new Set(cycle).size !== cycle.length) continue;
+
+    // A constrained cell can occasionally survive on the occupied side of a
+    // retained contour. Its node pair names the real split fragment, but that
+    // fragment's free walk runs opposite to this cell's step. Overwriting only
+    // `reversed` used to turn `a -> b -> c -> d` into `b -> a, b -> c...`, a
+    // loop which cannot close. The cell is already covered by retained ground,
+    // so it belongs outside the replacement patch.
+    for (let index = 0; index < cycle.length; index += 1) {
+      const from = cycle[index]!;
+      const to = cycle[(index + 1) % cycle.length]!;
+      const edgeId = sharedEdgeId(tableId, from, to);
+      if (!edgeRooms.has(edgeId)) continue;
+      const free = edgeRooms.get(edgeId);
+      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) continue quad;
+    }
 
     const boundary: ConstructionOrientedEdgeUse[] = [];
     for (let index = 0; index < cycle.length; index += 1) {
       const from = cycle[index]!;
       const to = cycle[(index + 1) % cycle.length]!;
       const use = edges.use(from, to);
-      boundary.push({ ...use, reversed: freeSides.get(use.edgeId) ?? use.reversed });
+      boundary.push({ ...use, reversed: edgeRooms.get(use.edgeId)?.reversed ?? use.reversed });
     }
     regions.push({ regionId: cycle.join("|"), boundary, surfaceType, physical: true });
     quadOf?.set(cycle.join("|"), quad);
   }
 
-  return { nodes, edges: edges.all(), regions };
+  const patchEdges = edges.all();
+  const usedNodes = new Set(patchEdges.flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+  return { nodes: nodes.filter((node) => usedNodes.has(node.id)), edges: patchEdges, regions };
 }
 
 /**
@@ -355,7 +377,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // and only live topology knows which side of every fragment remains free.
   // Query only the generated extent instead of serializing the entire map.
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
-  const occupied = new Map<string, boolean[]>();
+  const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
   for (const topology of runtime.getRegionTopologiesInBounds({
     minX: bounds.minX - reach,
@@ -367,16 +389,24 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
       for (const use of loop) {
         const uses = occupied.get(use.edgeId) ?? [];
-        uses.push(use.reversed);
+        uses.push(use);
         occupied.set(use.edgeId, uses);
       }
     }
   }
-  const freeSides = new Map<string, boolean>();
+  const edgeRooms = new Map<string, FreeEdgeUse | null>();
   for (const [edgeId, uses] of occupied) {
-    if (uses.length === 1) freeSides.set(edgeId, !uses[0]);
+    const occupiedUse = uses[0];
+    if (uses.length === 1 && occupiedUse !== undefined) {
+      edgeRooms.set(edgeId, {
+        edgeId,
+        reversed: !occupiedUse.reversed,
+        startNodeId: occupiedUse.endNodeId,
+        endNodeId: occupiedUse.startNodeId,
+      });
+    } else edgeRooms.set(edgeId, null);
   }
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, freeSides, quadOf);
+  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf);
 
   // **Does the patch itself already contain the clash?**
   //
