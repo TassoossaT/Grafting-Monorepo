@@ -267,25 +267,56 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
     })
 }
 
-/// Whether `point` sits on any contour segment the caller supplied.
+/// Where on a supplied contour a point sits.
 ///
-/// Exposed because the stages after the triangulation create points on a
-/// contour too -- `ortho` puts a midpoint on every edge it quadrangulates,
-/// and a contour edge is an edge. Those corners are as much a part of the
-/// neighbour boundary as the ones the refinement split, and have to be
-/// treated the same: pinned, and handed back for the neighbour to adopt.
-pub fn lies_on_a_contour(options: &ConstrainedOptions, point: Vec2, tolerance: f64) -> bool {
-    options
-        .boundary
-        .iter()
-        .chain(options.holes.iter())
-        .filter(|ring| ring.len() >= 3)
-        .flat_map(|ring| {
-            ring.iter().enumerate().map(move |(position, entry)| {
-                (entry.position, ring[(position + 1) % ring.len()].position)
-            })
-        })
-        .any(|(from, to)| distance_to_segment(point, from, to) <= tolerance)
+/// Not a boolean, because the caller needs to *act* on it. A node the grid
+/// puts along a neighbour edge has to be adopted by that neighbour, and
+/// adopting it means splitting the exact edge it landed on. Answering "yes,
+/// somewhere" would send the caller back to finding that edge by position,
+/// which is the proximity guess this whole design exists to remove: the
+/// segment is named here, and the caller supplied the rings, so it already
+/// knows which of its own edges that is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContourLocation {
+    /// `false` for a ring of `boundary`, `true` for one of `holes`.
+    pub in_holes: bool,
+    /// Index of the ring within whichever of the two lists.
+    pub ring: usize,
+    /// Index of the segment within that ring, by the point it starts at.
+    pub segment: usize,
+}
+
+/// Which contour segment `point` sits on, if any.
+///
+/// The nearest one wins where several are within `tolerance`, which happens
+/// at a ring corner -- both segments meeting there contain the point, and
+/// either is a correct answer since the corner is a node both already share.
+pub fn locate_on_contour(
+    options: &ConstrainedOptions,
+    point: Vec2,
+    tolerance: f64,
+) -> Option<ContourLocation> {
+    let mut best: Option<(f64, ContourLocation)> = None;
+    for (in_holes, rings) in [(false, &options.boundary), (true, &options.holes)] {
+        for (ring_index, ring) in rings.iter().enumerate() {
+            if ring.len() < 3 {
+                continue;
+            }
+            for segment in 0..ring.len() {
+                let from = ring[segment].position;
+                let to = ring[(segment + 1) % ring.len()].position;
+                let distance = distance_to_segment(point, from, to);
+                if distance > tolerance {
+                    continue;
+                }
+                let location = ContourLocation { in_holes, ring: ring_index, segment };
+                if best.is_none_or(|(closest, _)| distance < closest) {
+                    best = Some((distance, location));
+                }
+            }
+        }
+    }
+    best.map(|(_, location)| location)
 }
 
 /// Ground is what the boundary encloses and no hole takes back.

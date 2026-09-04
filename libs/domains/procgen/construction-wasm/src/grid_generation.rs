@@ -90,14 +90,32 @@ pub struct GridVertexDto {
     pub source: Option<u32>,
 }
 
+/// One corner the grid put along a contour the caller supplied.
+///
+/// `ringKind`/`ring`/`segment` address it back into the request: the segment
+/// running from point `segment` of that ring to the next one. The caller
+/// already knows which of its own edges that is, so adopting the node is
+/// splitting a known edge rather than hunting for one by position.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContourNodeDto {
+    pub vertex: usize,
+    /// `"boundary"` or `"hole"` -- which of the two request lists `ring`
+    /// indexes. A hand-written string, never a derived `Debug`, so renaming
+    /// anything in Rust cannot silently change the JSON contract.
+    pub ring_kind: &'static str,
+    pub ring: usize,
+    pub segment: usize,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IrregularQuadGridResponse {
     pub vertices: Vec<GridVertexDto>,
     pub quads: Vec<[usize; 4]>,
-    /// Indices of corners that sit on a supplied contour but had no source --
-    /// nodes the cloud owning that contour has to adopt.
-    pub on_contour: Vec<usize>,
+    /// Corners sitting on a supplied contour that had no source -- nodes the
+    /// cloud owning that contour has to adopt, each naming its segment.
+    pub on_contour: Vec<ContourNodeDto>,
     /// `false` where the refinement stopped at its vertex budget; the mesh is
     /// usable but coarser somewhere.
     pub refinement_complete: bool,
@@ -193,7 +211,16 @@ pub fn irregular_quad_grid(
             })
             .collect(),
         quads: grid.mesh.quads,
-        on_contour: grid.on_contour,
+        on_contour: grid
+            .on_contour
+            .iter()
+            .map(|node| ContourNodeDto {
+                vertex: node.vertex,
+                ring_kind: if node.location.in_holes { "hole" } else { "boundary" },
+                ring: node.location.ring,
+                segment: node.location.segment,
+            })
+            .collect(),
         refinement_complete: grid.refinement_complete,
     })
 }
@@ -284,8 +311,16 @@ mod tests {
             "the nodes the road has to adopt are reported"
         );
         assert!(
-            response.on_contour.iter().all(|&index| response.vertices[index].source.is_none()),
+            response.on_contour.iter().all(|node| response.vertices[node.vertex].source.is_none()),
             "a reported node is one nobody already owned"
+        );
+        assert!(
+            response.on_contour.iter().any(|node| node.ring_kind == "hole"),
+            "the road contour is quadrangulated too, so it gains nodes it must adopt"
+        );
+        assert!(
+            response.on_contour.iter().all(|node| node.ring_kind == "hole" || node.ring_kind == "boundary"),
+            "ringKind is one of exactly two strings"
         );
     }
 

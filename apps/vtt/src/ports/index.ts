@@ -46,6 +46,7 @@ export type {
   ConstructionGraphSnapshot,
   ConstructionGraphPatch,
   ConstructionGridConstraintPoint,
+  ConstructionGridContourNode,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionOrientedEdgeUse,

@@ -26,6 +26,8 @@ import type {
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
+  ConstructionIrregularQuadGrid,
+  ConstructionIrregularQuadGridRequest,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
@@ -132,6 +134,14 @@ export interface TabletopRuntime {
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  /**
+   * One irregular quad grid, generated against the contours given -- what
+   * ground is made of, whether it is being created or regenerated. Pure: it
+   * reads nothing from the live graph and changes nothing in it.
+   */
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined;
   /** Every region's boundary. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
@@ -775,6 +785,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
     this.#requireReady("classifying points");
     return this.#construction.classifyPoints(points);
+  }
+
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined {
+    this.#requireReady("generating a terrain grid");
+    return this.#construction.generateIrregularQuadGrid(request);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {

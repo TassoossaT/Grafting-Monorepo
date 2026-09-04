@@ -88,6 +88,14 @@ pub fn build_from_triangles(
     relax(&welded, relax_options)
 }
 
+/// One corner the grid put along a contour somebody else owns.
+#[derive(Debug, Clone, Copy)]
+pub struct ContourNode {
+    /// Index into [`ConstrainedQuadGrid::mesh`]'s own vertices.
+    pub vertex: usize,
+    pub location: constrained::ContourLocation,
+}
+
 /// A grid, and what each of its corners already is.
 #[derive(Debug, Clone)]
 pub struct ConstrainedQuadGrid {
@@ -95,17 +103,22 @@ pub struct ConstrainedQuadGrid {
     /// Index-aligned with `mesh.vertices`: the caller own identity for that
     /// corner, where it had one. `None` is new ground.
     pub sources: Vec<Option<u32>>,
-    /// Indices of corners that sit *on* a contour the caller supplied but
-    /// arrived with no source of their own.
+    /// Corners that sit *on* a contour the caller supplied but arrived with
+    /// no source of their own, each with the segment it landed on.
     ///
     /// These are the nodes the owning cloud has to accept along its own
     /// boundary. Two things make them: the refinement splitting a constraint
-    /// segment, and `ortho` putting a midpoint on every edge it quadrangulates
-    /// -- a contour edge included. Both are wanted. The alternative to a
-    /// shared node here is a terrain corner resting against the middle of a
-    /// road edge without sharing it, which is the T-junction that reads as a
-    /// gap along the path.
-    pub on_contour: Vec<usize>,
+    /// segment, and `ortho` putting a midpoint on every edge it
+    /// quadrangulates -- a contour edge included. Both are wanted. The
+    /// alternative to a shared node here is a terrain corner resting against
+    /// the middle of a road edge without sharing it, which is the T-junction
+    /// that reads as a gap along the path.
+    ///
+    /// The segment is named rather than left for the caller to find, because
+    /// finding it means matching a position to an edge, which is the guess
+    /// this whole design removes. The caller supplied the rings, so a ring
+    /// and segment index is already an edge it knows by id.
+    pub on_contour: Vec<ContourNode>,
     /// `false` where the refinement stopped at its vertex budget.
     pub refinement_complete: bool,
 }
@@ -147,15 +160,16 @@ pub fn build_constrained_quad_grid(
         }
     }
 
-    let on_contour: Vec<usize> = (0..welded.vertices.len())
-        .filter(|&index| {
-            sources[index].is_none()
-                && constrained::lies_on_a_contour(options, welded.vertices[index], WELD_EPSILON)
+    let on_contour: Vec<ContourNode> = (0..welded.vertices.len())
+        .filter(|&index| sources[index].is_none())
+        .filter_map(|vertex| {
+            constrained::locate_on_contour(options, welded.vertices[vertex], WELD_EPSILON)
+                .map(|location| ContourNode { vertex, location })
         })
         .collect();
 
     let mut pinned = relax_options.clone();
-    for index in on_contour.iter().copied().chain(
+    for index in on_contour.iter().map(|node| node.vertex).chain(
         (0..welded.vertices.len()).filter(|&index| sources[index].is_some()),
     ) {
         pinned.pinned_targets.insert(index, welded.vertices[index]);

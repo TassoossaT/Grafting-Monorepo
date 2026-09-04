@@ -369,13 +369,14 @@ fn every_corner_that_meets_the_road_stays_exactly_on_it() {
         .collect();
     assert!(!named.is_empty(), "the contour corners survived into the finished grid");
 
-    for index in named.iter().copied().chain(grid.on_contour.iter().copied()) {
+    for index in named.iter().copied().chain(grid.on_contour.iter().map(|node| node.vertex)) {
         assert!(
-            grafting_procgen_irregular_grid::constrained::lies_on_a_contour(
+            grafting_procgen_irregular_grid::constrained::locate_on_contour(
                 &options,
                 grid.mesh.vertices[index],
                 1e-9,
-            ),
+            )
+            .is_some(),
             "corner {index} at ({}, {}) left the contour it was pinned to",
             grid.mesh.vertices[index].x,
             grid.mesh.vertices[index].y
@@ -401,7 +402,54 @@ fn the_nodes_the_road_has_to_adopt_are_reported_rather_than_left_implicit() {
         !grid.on_contour.is_empty(),
         "quadrangulating a contour edge puts a midpoint on it; that node has to be reported"
     );
-    for &index in &grid.on_contour {
-        assert!(grid.sources[index].is_none(), "a reported node is one nobody already owned");
+    for node in &grid.on_contour {
+        assert!(grid.sources[node.vertex].is_none(), "a reported node is one nobody already owned");
     }
+}
+
+#[test]
+fn a_reported_node_names_the_segment_it_landed_on() {
+    // The whole reason this is a location and not a boolean: adopting the
+    // node means splitting the exact edge under it, and the caller must not
+    // have to find that edge by position.
+    let options = options(vec![road_island()]);
+    let grid = grafting_procgen_irregular_grid::build_constrained_quad_grid(
+        &options,
+        7,
+        &grafting_procgen_irregular_grid::RelaxOptions::standard(),
+    )
+    .expect("a grid");
+
+    let mut on_the_road = 0;
+    for node in &grid.on_contour {
+        let rings = if node.location.in_holes { &options.holes } else { &options.boundary };
+        let ring = &rings[node.location.ring];
+        let from = ring[node.location.segment].position;
+        let to = ring[(node.location.segment + 1) % ring.len()].position;
+
+        // The named segment really is the one the node sits on.
+        let point = grid.mesh.vertices[node.vertex];
+        let along = ((point.x - from.x) * (to.x - from.x) + (point.y - from.y) * (to.y - from.y))
+            / ((to.x - from.x).powi(2) + (to.y - from.y).powi(2));
+        assert!(
+            (-1e-9..=1.0 + 1e-9).contains(&along),
+            "node {} is not between the ends of the segment it named",
+            node.vertex
+        );
+        let cross = (to.x - from.x) * (point.y - from.y) - (to.y - from.y) * (point.x - from.x);
+        let length = ((to.x - from.x).powi(2) + (to.y - from.y).powi(2)).sqrt();
+        assert!(
+            (cross / length).abs() < 1e-9,
+            "node {} is not on the segment it named",
+            node.vertex
+        );
+
+        if node.location.in_holes {
+            on_the_road += 1;
+        }
+    }
+    assert!(
+        on_the_road > 0,
+        "quadrangulating the road contour puts nodes on it; the road has to be told which edges"
+    );
 }

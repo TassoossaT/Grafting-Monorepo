@@ -322,7 +322,12 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const wire = JSON.parse(raw) as {
       readonly vertices: readonly { readonly x: number; readonly z: number; readonly source: number | null }[];
       readonly quads: readonly (readonly [number, number, number, number])[];
-      readonly onContour: readonly number[];
+      readonly onContour: readonly {
+        readonly vertex: number;
+        readonly ringKind: "boundary" | "hole";
+        readonly ring: number;
+        readonly segment: number;
+      }[];
       readonly refinementComplete: boolean;
     };
     return {

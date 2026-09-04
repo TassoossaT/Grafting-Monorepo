@@ -409,6 +409,17 @@ export interface ConstructionIrregularQuadGridRequest {
   readonly triangleSide: number;
 }
 
+/** One corner the generator put along a contour the caller supplied. */
+export interface ConstructionGridContourNode {
+  /** Index into {@link ConstructionIrregularQuadGrid.vertices}. */
+  readonly vertex: number;
+  /** Which of the two request lists {@link ring} indexes. */
+  readonly ringKind: "boundary" | "hole";
+  readonly ring: number;
+  /** The segment running from point `segment` of that ring to the next. */
+  readonly segment: number;
+}
+
 /**
  * A generated grid, and what each of its corners already is.
  *
@@ -426,8 +437,8 @@ export interface ConstructionIrregularQuadGrid {
   }[];
   readonly quads: readonly (readonly [number, number, number, number])[];
   /**
-   * Indices of corners sitting *on* a supplied contour that arrived with no
-   * source -- nodes the cloud owning that contour has to adopt.
+   * Corners sitting *on* a supplied contour that arrived with no source --
+   * nodes the cloud owning that contour has to adopt.
    *
    * They exist because the refinement splits a constraint segment where a
    * nearby point encroaches on it, and because quadrangulation puts a
@@ -435,8 +446,14 @@ export interface ConstructionIrregularQuadGrid {
    * alternative to a shared node here is a terrain corner resting against
    * the middle of a road edge without sharing it, which reads as a gap along
    * the path.
+   *
+   * Each names the segment it landed on, addressed back into the request.
+   * That is the difference between adopting it and guessing: the caller
+   * supplied the rings, so a ring and segment index already identifies one
+   * of its own edges by id, and the node is adopted by splitting that edge
+   * rather than by finding the nearest one to a position.
    */
-  readonly onContour: readonly number[];
+  readonly onContour: readonly ConstructionGridContourNode[];
   /**
    * `false` where the refinement stopped at its vertex budget. The grid is
    * still usable, just coarser somewhere -- worth logging, never worth
