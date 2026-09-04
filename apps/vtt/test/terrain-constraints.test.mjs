@@ -165,7 +165,7 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
   };
   const outcome = adoptContourNodes(
     runtime,
-    "mint",
+    "t",
     "cause",
     adoptions,
     (vertex) => `new:${vertex}`,
@@ -181,6 +181,16 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
   // earlier one's output.
   const minted = calls.flatMap((call) => [call.firstEdgeId, call.secondEdgeId]);
   assert.equal(new Set(minted).size, minted.length);
+  // And every one of them is the name the pair derives, not a name this
+  // splitting invented -- otherwise a face declared later over those two
+  // nodes mints a second edge coincident with the fragment.
+  for (const call of calls) {
+    const ends = [call.firstEdgeId, call.secondEdgeId];
+    for (const id of ends) {
+      assert.ok(id.startsWith("t:seg:"), `fragments carry the shared name; got ${id}`);
+      assert.ok(id.includes(call.nodeId), `and both name the node they meet at; got ${id}`);
+    }
+  }
 });
 
 test("a refused split costs that node its shared edge, never the stroke", () => {
@@ -205,7 +215,7 @@ test("a refused split costs that node its shared edge, never the stroke", () => 
   };
   const outcome = adoptContourNodes(
     runtime,
-    "mint",
+    "t",
     "cause",
     adoptions,
     (vertex) => `new:${vertex}`,

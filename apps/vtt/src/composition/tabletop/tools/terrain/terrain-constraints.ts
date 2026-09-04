@@ -12,7 +12,7 @@ import type {
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
-import { outwardPerimeterRings } from "../../../../features/edit-construction/index.ts";
+import { outwardPerimeterRings, sharedEdgeId } from "../../../../features/edit-construction/index.ts";
 
 /**
  * Turning the live graph into constraints for the grid generator, and turning
@@ -229,8 +229,8 @@ export interface AdoptionRuntime {
  */
 export function adoptContourNodes(
   runtime: AdoptionRuntime,
-  /** Prefix every edge this splitting mints is named under -- unique per fill. */
-  mint: string,
+  /** Which table the edges belong to; the pair, not this, is what names them. */
+  tableId: string,
   causeId: string,
   adoptions: readonly ContourAdoption[],
   nodeIdFor: (vertex: number) => ConstructionNodeId,
@@ -240,8 +240,7 @@ export function adoptContourNodes(
   const refused: number[] = [];
   // The fragment still to be split, per original edge, and where along the
   // original edge that fragment starts.
-  const tail = new Map<ConstructionEdgeId, ConstructionEdgeId>();
-  let minted = 0;
+  const tail = new Map<ConstructionEdgeId, { edgeId: ConstructionEdgeId; startNodeId: ConstructionNodeId }>();
 
   for (const adoption of adoptions) {
     const position = positionOf(adoption.vertex);
@@ -249,17 +248,25 @@ export function adoptContourNodes(
       refused.push(adoption.vertex);
       continue;
     }
-    const edgeId = tail.get(adoption.edge.edgeId) ?? adoption.edge.edgeId;
-    const firstEdgeId: ConstructionEdgeId = `${mint}:adopt-${minted}a`;
-    const secondEdgeId: ConstructionEdgeId = `${mint}:adopt-${minted}b`;
-    minted += 1;
+    const fragment = tail.get(adoption.edge.edgeId);
+    const edgeId = fragment?.edgeId ?? adoption.edge.edgeId;
+    const from = fragment?.startNodeId ?? adoption.edge.startNodeId;
+    const nodeId = nodeIdFor(adoption.vertex);
+    // Named by the pair, through the one rule every edge in the graph is
+    // named by. Minting a name of this splitting's own would mean a face
+    // declared later over the same two nodes derives the shared name, finds
+    // nothing, and creates a second edge coincident with this one -- two
+    // edges used once each where there should be one used twice, which looks
+    // joined and is not.
+    const firstEdgeId = sharedEdgeId(tableId, from, nodeId);
+    const secondEdgeId = sharedEdgeId(tableId, nodeId, adoption.edge.endNodeId);
     try {
       runtime.applyRegionEdit(
         [
           {
             kind: "insert-vertex",
             edgeId,
-            nodeId: nodeIdFor(adoption.vertex),
+            nodeId,
             position,
             firstEdgeId,
             secondEdgeId,
@@ -269,8 +276,8 @@ export function adoptContourNodes(
         causeId,
       );
       // The next node on this edge sits further along, so it falls in the
-      // second fragment.
-      tail.set(adoption.edge.edgeId, secondEdgeId);
+      // second fragment, which now runs from the node just inserted.
+      tail.set(adoption.edge.edgeId, { edgeId: secondEdgeId, startNodeId: nodeId });
       adopted.add(adoption.vertex);
     } catch {
       refused.push(adoption.vertex);

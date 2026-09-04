@@ -461,6 +461,21 @@ mod tests {
     /// The fix is to decimate the contour before it becomes a constraint and
     /// to restore the skipped nodes when the patch is built, so the generator
     /// sees a coarse boundary while the graph still gets the fine chain.
+    ///
+    /// Measured, on a 24x24 region asking for faces of 2, by the length of the
+    /// segments its boundary is walked in:
+    ///
+    /// | segment | mean face side |
+    /// |---------|----------------|
+    /// | 1       | 1.27           |
+    /// | 2       | 1.33           |
+    /// | 3       | 1.80           |
+    /// | 4       | 1.92           |
+    /// | 8       | 1.90           |
+    ///
+    /// So the boundary only has to be coarsened to about twice the face size
+    /// to stop driving the interior -- which, for a rim walked at the face
+    /// size, is dropping every other point.
     #[test]
     fn a_walked_boundary_makes_a_finer_mesh_than_the_same_region_asked_for_plainly() {
         let plain = mean_face_side(&[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)], 2.0);

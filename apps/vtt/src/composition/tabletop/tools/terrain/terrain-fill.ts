@@ -84,6 +84,15 @@ export interface TerrainFillRequest {
    * standing, and moving it would drag the ground it already belongs to.
    */
   readonly heightAt: (point: { readonly x: number; readonly z: number }, bounds: FillBounds) => number;
+  /**
+   * Called once the generator has answered and before anything is registered.
+   *
+   * This is where a caller that is *replacing* ground takes the old ground
+   * away. The ordering is the point: a caller that deletes first and then
+   * discovers the generator will not accept its rings has destroyed ground and
+   * has nothing to put back. Generating first makes a refusal cost nothing.
+   */
+  readonly onGenerated?: () => void;
 }
 
 export interface TerrainFillOutcome {
@@ -173,6 +182,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     holes: request.holes.map((ring) => ring.points),
   });
   if (grid === undefined) return NOTHING;
+  request.onGenerated?.();
 
   let minX = Infinity;
   let minZ = Infinity;
@@ -205,7 +215,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
 
   const adoption = adoptContourNodes(
     runtime,
-    request.mint,
+    request.tableId,
     request.causeId,
     adoptions,
     (vertex) => nodeId(request.mint, vertex),
