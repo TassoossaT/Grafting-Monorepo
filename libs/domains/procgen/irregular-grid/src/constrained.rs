@@ -37,7 +37,7 @@ use spade::{
     Triangulation,
 };
 
-use crate::geometry::{centroid_of, distance_to_segment, inside_ring, signed_area};
+use crate::geometry::{centroid_of, distance_to_segment, signed_area};
 use crate::mesh::{FaceMesh, Vec2};
 
 /// One point of a contour handed over as a constraint.
@@ -202,8 +202,9 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         return None;
     }
 
+    let ground = Ground::of(options);
     for &seed in &options.seeds {
-        if !is_ground(options, seed) {
+        if !ground.covers(seed) {
             continue;
         }
         if segments
@@ -245,7 +246,7 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         // nobody asked for.
         let corner_positions =
             face.positions().map(|point| Vec2::new(point.x, point.y));
-        if !is_ground(options, centroid_of(&corner_positions)) {
+        if !ground.covers(centroid_of(&corner_positions)) {
             continue;
         }
         let corners = face.vertices().map(|vertex| {
@@ -339,15 +340,96 @@ pub fn locate_on_contour(
     best.map(|(_, location)| location)
 }
 
-/// Ground is what the boundary encloses and no hole takes back.
+/// Ground is what the boundary encloses and no hole takes back, with every
+/// ring's orientation settled first.
 ///
-/// The one rule, applied to seeds before the triangulation and to faces
-/// after it, so the two can never disagree about where the ground is.
-fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
-    inside_rings(&options.boundary, point) && !inside_rings(&options.holes, point)
+/// Built once per triangulation and then asked per seed and per face, so the
+/// two can never disagree about where the ground is.
+struct Ground<'a> {
+    boundary: &'a [Vec<ConstraintPoint>],
+    holes: &'a [Vec<ConstraintPoint>],
+    boundary_signs: Vec<i32>,
+    hole_signs: Vec<i32>,
 }
 
-/// Containment against a *set* of rings, by the nonzero winding rule.
+impl<'a> Ground<'a> {
+    fn of(options: &'a ConstrainedOptions) -> Self {
+        Self {
+            boundary: &options.boundary,
+            holes: &options.holes,
+            boundary_signs: orientation_signs(&options.boundary),
+            hole_signs: orientation_signs(&options.holes),
+        }
+    }
+
+    fn covers(&self, point: Vec2) -> bool {
+        inside_rings(self.boundary, &self.boundary_signs, point)
+            && !inside_rings(self.holes, &self.hole_signs, point)
+    }
+}
+
+/// Which way each ring has to be walked for the winding rule to mean what the
+/// caller intended.
+///
+/// **The winding rule needs consistently oriented rings, and this is what
+/// makes them consistent instead of assuming they already are.** The rings
+/// arrive from two sources with two different conventions -- the brush's swept
+/// outline comes from `polygon-clipping`, the standing ground's rims come from
+/// walking the graph -- and nothing ever reconciled them. Two hole rings that
+/// happened to be wound against each other summed to zero, the point read as
+/// free ground, and the generator planned faces on top of ground that was
+/// still standing. The engine then refused each of those faces, one at a time,
+/// with "no room on edge -- its one free side faces the other way". On the
+/// table that is a stroke that lands full of holes wherever it meets what is
+/// already there, worst at a crossing, where the most rims meet.
+///
+/// A ring is walked positive when it sits at even nesting depth and negative
+/// at odd, which is exactly the outer-rim/inner-rim alternation the rule
+/// wants. Nesting is "every vertex of this ring lies inside that one", not
+/// "its middle does": two contours that merely cross -- two roads -- each have
+/// vertices outside the other, stay at depth zero, and so still add rather
+/// than cancel.
+fn orientation_signs(rings: &[Vec<ConstraintPoint>]) -> Vec<i32> {
+    rings
+        .iter()
+        .enumerate()
+        .map(|(index, ring)| {
+            let depth = rings
+                .iter()
+                .enumerate()
+                .filter(|&(other, _)| other != index)
+                .filter(|&(_, outer)| nests_inside(ring, outer))
+                .count();
+            let wanted = if depth % 2 == 0 { 1.0 } else { -1.0 };
+            if twice_signed_area(ring) * wanted >= 0.0 { 1 } else { -1 }
+        })
+        .collect()
+}
+
+/// Whether `inner` sits wholly within `outer`.
+///
+/// Every vertex, deliberately. A centroid test calls two crossing roads nested
+/// -- the middle of each does fall inside the other -- and flipping one of
+/// them is precisely the cancellation this is here to prevent.
+fn nests_inside(inner: &[ConstraintPoint], outer: &[ConstraintPoint]) -> bool {
+    inner.iter().all(|point| winding_of(outer, point.position) != 0)
+}
+
+/// Twice the signed area of a whole ring, by the shoelace rule: positive
+/// counter-clockwise. Named apart from `geometry::signed_area`, which is the
+/// area of one triangle.
+fn twice_signed_area(ring: &[ConstraintPoint]) -> f64 {
+    let mut twice = 0.0;
+    for index in 0..ring.len() {
+        let from = ring[index].position;
+        let to = ring[(index + 1) % ring.len()].position;
+        twice += from.x * to.y - to.x * from.y;
+    }
+    twice
+}
+
+/// Containment against a *set* of rings, by the nonzero winding rule, each
+/// ring counted in the direction {@link orientation_signs} settled on.
 ///
 /// Neither of the two obvious rules is right here, and each fails a case the
 /// table actually draws.
@@ -360,24 +442,22 @@ fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
 /// A union of per-ring tests fails the opposite way, on any shape with a hole
 /// in it. A patch of terrain with a gap in the middle has an outer perimeter
 /// and an inner one, and the union says the gap is occupied, so nothing is
-/// ever laid there. Worse, it cannot describe the shape at all, which is what
-/// leaves ground planned over faces that are still standing -- and the engine
-/// then refuses each of those faces, because the new one and the old one both
-/// claim the same side of the edge between them.
+/// ever laid there.
 ///
-/// Winding handles both, and needs nothing but rings that are consistently
-/// oriented: an outer ring and the inner ring of its own hole run opposite
-/// ways, so they subtract, while two separate contours that happen to overlap
-/// run the same way and add. A caller whose rings are all one orientation
-/// gets exactly the union it had before, so this can only be an improvement
-/// on what it replaces.
-fn inside_rings(rings: &[Vec<ConstraintPoint>], point: Vec2) -> bool {
+/// Winding handles both -- once the rings are oriented, which is the whole
+/// reason `orientation_signs` exists.
+fn inside_rings(rings: &[Vec<ConstraintPoint>], signs: &[i32], point: Vec2) -> bool {
     let mut winding = 0i32;
-    for ring in rings {
-        let positions: Vec<Vec2> = ring.iter().map(|entry| entry.position).collect();
-        winding += winding_number(&positions, point);
+    for (index, ring) in rings.iter().enumerate() {
+        winding += signs.get(index).copied().unwrap_or(1) * winding_of(ring, point);
     }
     winding != 0
+}
+
+/// {@link winding_number} over a ring still in its constraint form.
+fn winding_of(ring: &[ConstraintPoint], point: Vec2) -> i32 {
+    let positions: Vec<Vec2> = ring.iter().map(|entry| entry.position).collect();
+    winding_number(&positions, point)
 }
 
 /// How many times `ring` wraps around `point`, signed by its direction.

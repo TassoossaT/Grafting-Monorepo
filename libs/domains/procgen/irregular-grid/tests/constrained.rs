@@ -538,3 +538,61 @@ fn two_crossing_contours_do_not_cancel_each_other_out() {
     });
     assert!(!at_the_crossing, "no ground stands in the middle of a crossroads");
 }
+
+#[test]
+fn two_hole_rings_wound_against_each_other_still_both_subtract() {
+    // **The stroke-meets-standing-ground failure, at its smallest.**
+    //
+    // Hole rings reach the generator from two sources with two conventions:
+    // the brush's swept outline through `polygon-clipping`, and the rims of
+    // standing ground walked off the graph. Nothing reconciled them, so two
+    // that overlapped could be wound against each other, sum to zero, and read
+    // as free ground -- and the fill then planned faces on top of ground that
+    // was still standing, every one of which the engine refused.
+    //
+    // These two overlap and are deliberately wound opposite ways.
+    let clockwise = ring(&[(-6.0, -2.0), (-6.0, 2.0), (6.0, 2.0), (6.0, -2.0)]);
+    let counter = ring(&[(-2.0, -6.0), (2.0, -6.0), (2.0, 6.0), (-2.0, 6.0)]);
+    let options = ConstrainedOptions {
+        boundary: vec![ring(&[(-12.0, -12.0), (12.0, -12.0), (12.0, 12.0), (-12.0, 12.0)])],
+        holes: vec![clockwise, counter],
+        seeds: lattice_covering(Vec2 { x: -12.0, y: -12.0 }, Vec2 { x: 12.0, y: 12.0 }, 2.0),
+        seed_clearance: 0.5,
+        max_area: 0.75,
+        min_area: 0.0,
+        min_angle_degrees: 25.0,
+        max_additional_vertices: 20_000,
+    };
+    let out = triangulate_constrained(&options).expect("triangulated");
+
+    // By centroid, not by whole face: a face straddling the rim is still a
+    // face laid where no face belongs, and requiring every corner inside the
+    // box lets exactly those through.
+    let faces_around = |cx: f64, cy: f64, reach: f64| {
+        out.mesh
+            .faces
+            .iter()
+            .filter(|face| {
+                let mut x = 0.0;
+                let mut y = 0.0;
+                for &v in face.iter() {
+                    x += out.mesh.vertices[v].x;
+                    y += out.mesh.vertices[v].y;
+                }
+                let count = face.len() as f64;
+                ((x / count) - cx).abs() < reach && ((y / count) - cy).abs() < reach
+            })
+            .count()
+    };
+
+    // Where they cross is inside both. Wound against each other their windings
+    // summed to zero, the point read as free ground, and seven faces were laid
+    // straight over standing ground; oriented, none are.
+    assert_eq!(faces_around(0.0, 0.0, 0.8), 0, "no ground where the two holes cross");
+    // And each arm on its own is still taken, whichever way it was wound.
+    assert_eq!(faces_around(4.0, 0.0, 0.8), 0, "the clockwise hole is still a hole");
+    assert_eq!(faces_around(0.0, 4.0, 0.8), 0, "the counter-clockwise hole is still a hole");
+    // And this is not just an empty mesh: ground away from both is still laid.
+    let anywhere_near = |cx: f64, cy: f64| faces_around(cx, cy, 2.0) > 0;
+    assert!(anywhere_near(8.0, 8.0), "ground outside the holes is still laid");
+}
