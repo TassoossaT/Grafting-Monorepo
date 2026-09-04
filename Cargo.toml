@@ -15,6 +15,7 @@ members = [
     "libs/domains/procgen/surface-mesh",
     "libs/domains/procgen/curve-offset",
     "libs/domains/procgen/surface-transformations",
+    "libs/domains/procgen/irregular-grid",
     "libs/domains/procgen/construction-wasm",
     "tools/rust-api-docgen",
 ]
