@@ -12,7 +12,7 @@ import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/previ
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import {
   OUTLINE_CHORD_PER_FACE,
-  SHORTEST_USEFUL_FRACTION,
+  OUTLINE_WELD_PER_FACE,
   outlineConstraints,
   perimeterConstraints,
   type ConstraintRing,
@@ -250,7 +250,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.brushRadius,
       params.faceSize * OUTLINE_CHORD_PER_FACE,
     );
-    const weld = params.faceSize * SHORTEST_USEFUL_FRACTION;
+    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
     const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });

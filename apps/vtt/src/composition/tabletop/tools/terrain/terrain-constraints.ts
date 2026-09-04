@@ -254,6 +254,33 @@ export const SHORTEST_USEFUL_FRACTION = 0.2;
 export const OUTLINE_CHORD_PER_FACE = 2;
 
 /**
+ * How near two points of a swept outline have to be before they are one point,
+ * as a multiple of the face size.
+ *
+ * Deliberately *not* {@link SHORTEST_USEFUL_FRACTION}, though the two started
+ * as one number. That one governs node identity and has to stay small; this one
+ * only drops points from a ring nobody owns yet, and has to be large enough to
+ * catch what the union leaves behind.
+ *
+ * The brush's swept shape is the union of one capsule per stroke segment, each
+ * far wider than the step between them, so consecutive capsules cross and every
+ * crossing puts a vertex on the outline at a position the chord never chose.
+ * Measured on a wobbling 30-long stroke of radius 6, outline described at twice
+ * a face of 2:
+ *
+ * | weld  | outline points | shortest segment |
+ * |-------|----------------|------------------|
+ * | 0.2x  | 31             | 0.40             |
+ * | 0.5x  | 26             | 1.99             |
+ * | 1x    | 25             | 2.02             |
+ *
+ * At 0.2x the crossings survive and drag the mesh back down; at 0.5x they are
+ * gone and the outline is exactly the clean capsule the engine measures 2.04
+ * from. Past that there is nothing left to win.
+ */
+export const OUTLINE_WELD_PER_FACE = 0.5;
+
+/**
  * Resolves each reported contour node either to the graph edge it splits or to
  * a node already standing that it is too close to be distinct from.
  *

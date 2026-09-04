@@ -6,6 +6,8 @@ import {
   outlineConstraints,
   perimeterConstraints,
   resolveAdoptions,
+  OUTLINE_CHORD_PER_FACE,
+  OUTLINE_WELD_PER_FACE,
   SHORTEST_USEFUL_FRACTION,
 } from "../src/composition/tabletop/tools/terrain/terrain-constraints.ts";
 
@@ -322,4 +324,51 @@ test("welding never eats a ring down past a triangle", () => {
   const collapsing = [[0, 0], [0.01, 0], [0.02, 0.01], [0.01, 0.02]];
   const rings = outlineConstraints([collapsing], 5);
   for (const ring of rings) assert.ok(ring.points.length >= 3);
+});
+
+test("welding clears what the union of the brush's capsules leaves on the outline", async () => {
+  // The real pipeline, not a synthetic ring. The swept shape is the union of
+  // one capsule per stroke segment, each far wider than the step between them,
+  // so consecutive capsules cross and every crossing puts a vertex on the
+  // outline at a position the chord never chose. Those crossings are what drag
+  // the mesh back below the size the caller asked for.
+  const { brushSweptOutlinePolygons } = await import(
+    "../src/composition/tabletop/tools/shapes/preview-shapes.ts"
+  );
+  const samples = [];
+  for (let step = 0; step <= 120; step += 1) {
+    const along = step / 120;
+    samples.push({ x: along * 30, y: 0, z: Math.sin(along * 7) * 0.6 });
+  }
+
+  const face = 2;
+  const swept = brushSweptOutlinePolygons(samples, 6, face * OUTLINE_CHORD_PER_FACE);
+  const outer = swept.flatMap((polygon) => polygon.slice(0, 1));
+  const shortest = (rings) => {
+    let least = Infinity;
+    for (const ring of rings) {
+      for (let index = 0; index < ring.points.length; index += 1) {
+        const from = ring.points[index];
+        const to = ring.points[(index + 1) % ring.points.length];
+        least = Math.min(least, Math.hypot(to.x - from.x, to.z - from.z));
+      }
+    }
+    return least;
+  };
+
+  const raw = outlineConstraints(outer, 0);
+  const welded = outlineConstraints(outer, face * OUTLINE_WELD_PER_FACE);
+
+  assert.ok(
+    shortest(raw) < face * 0.3,
+    `the union leaves segments a fraction of a face long; got ${shortest(raw)}`,
+  );
+  assert.ok(
+    shortest(welded) > face * 0.9,
+    `welding clears them, so no segment is much under the face size; got ${shortest(welded)}`,
+  );
+  // And it does that by dropping a handful of points, not by redrawing the ring.
+  const points = (rings) => rings.reduce((total, ring) => total + ring.points.length, 0);
+  assert.ok(points(welded) < points(raw), "points are dropped");
+  assert.ok(points(welded) > points(raw) * 0.6, "but only the coincident ones");
 });
