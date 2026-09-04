@@ -73,16 +73,6 @@ const NOISE_SPACING = 1;
  */
 const REVEAL_RADIUS = 3;
 
-/**
- * How far the swept outline may be moved to simplify it, as a fraction of the
- * face size.
- *
- * Chosen so the surviving segments land at about twice the face size, which is
- * where a boundary measurably stops driving the interior. Larger flattens the
- * round ends of the brush visibly; smaller leaves the outline dense enough to
- * dictate cells finer than the ones asked for.
- */
-const OUTLINE_TOLERANCE_PER_FACE = 0.3;
 
 /**
  * Bilinear sample of a flat row-major heightmap at a position in *cells*.
@@ -213,11 +203,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // second becomes holes: ground somebody already holds is not regenerated,
     // it is met.
     const swept = brushSweptOutlinePolygons(gesture.samples.map((sample) => sample.point), REVEAL_RADIUS);
-    // See `outlineConstraints`: the brush's own outline is the boundary that
-    // was really setting the cell size, long before any neighbour's contour
-    // got involved.
-    const outlineTolerance = params.faceSize * OUTLINE_TOLERANCE_PER_FACE;
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), outlineTolerance);
+    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)));
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
@@ -229,7 +215,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // was never painted, so it is subtracted like any other hole -- it simply
     // has no edges, and so owes nobody an adopted node.
     const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1)), outlineTolerance),
+      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1))),
       ...perimeters.rings,
     ];
 
