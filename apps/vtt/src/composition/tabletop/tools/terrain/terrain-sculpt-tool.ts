@@ -2,14 +2,17 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
+  ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
 } from "@/ports";
+import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
+import { heightFieldOf } from "./terrain-regenerate.ts";
 import { logContourGrowth } from "./terrain-diagnostics.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
@@ -123,6 +126,34 @@ function coveredByStroke(
 }
 
 /**
+ * Whether a point lies inside the swept area, holes included.
+ *
+ * Even-odd against each polygon's outer ring, then against its inner rings, so
+ * a stroke that curls back on itself does not count the ground it left
+ * unpainted in the middle.
+ */
+function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean {
+  const inRing = (ring: readonly (readonly [number, number])[]): boolean => {
+    let inside = false;
+    for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
+      const [ax, az] = ring[index]!;
+      const [bx, bz] = ring[previous]!;
+      if (az > point.z !== bz > point.z && point.x < ((bx - ax) * (point.z - az)) / (bz - az) + ax) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+  for (const polygon of swept) {
+    const outer = polygon[0];
+    if (outer === undefined || !inRing(outer)) continue;
+    if (polygon.slice(1).some((hole) => inRing(hole))) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Everything already standing that the stroke reaches, as **whole clouds**.
  *
  * Whole clouds, not the faces the footprint happens to touch, and the
@@ -218,7 +249,37 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
     }
-    const perimeters = perimeterConstraints(standingAround(ctx, covered), 0);
+    // Ground the stroke covers *whole* is not met, it is regenerated: the
+    // faces go away and the area they held is laid again as part of this one
+    // generation.
+    //
+    // This is what stops the two failures the table reported together. A face
+    // left standing under the stroke is ground the generator is then told to
+    // work around, so it plans cells against edges that already carry a face
+    // on both sides and the engine refuses them -- 53 faces lost on one
+    // stroke, which is the band along the join simply never registering. And
+    // being told to stop at that face's contour is what put a vertex in the
+    // middle of every one of its edges, because the ortho step midpoints every
+    // segment it is given and the seam then has to adopt the result. Delete
+    // the face instead and neither arises: nothing to refuse, nothing to
+    // subdivide, and the ground comes back in one piece at one size.
+    //
+    // Whole, not merely touched. A face the stroke only clips keeps ground
+    // outside the swept outline, and the fill stops at that outline -- so
+    // consuming it would leave a gap exactly as wide as the part that stuck
+    // out. Those stay, and their contour is what the new ground meets.
+    const standing = standingAround(ctx, covered);
+    const consumed = standing.filter(
+      (topology) =>
+        topology.surfaceType === params.targetSurface &&
+        topology.nodes.length > 0 &&
+        topology.nodes.every((node) => insideSwept(node.position, swept)),
+    );
+    const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
+    const perimeters = perimeterConstraints(
+      standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" "))),
+      0,
+    );
     const contourBefore = perimeters.sources.length;
     // A stroke that curls back on itself leaves a real hole in its own swept
     // shape, and `polygon-clipping` reports it as an inner ring. Ground there
@@ -262,7 +323,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       originX,
       originZ,
     );
-    const heightAt = (point: { readonly x: number; readonly z: number }): number =>
+    const noiseAt = (point: { readonly x: number; readonly z: number }): number =>
       sampleHeightmapBilinear(
         heightmap,
         columns,
@@ -271,8 +332,21 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         point.z / NOISE_SPACING - originZ,
       ) * params.heightScale;
 
+    // Ground being regenerated keeps the height it had, read from the corners
+    // about to be deleted -- the raise this very stroke just applied
+    // included. Sampling the noise there instead would flatten the relief a
+    // person built up, and painting the same hill twice would reset it rather
+    // than raise it.
+    const kept = heightFieldOf(
+      consumed.flatMap((topology) => topology.nodes.map((node) => node.position)),
+      params.faceSize * 2,
+    );
+    const heightAt = (point: { readonly x: number; readonly z: number }): number =>
+      kept.at(point) ?? noiseAt(point);
+
     const filled = fillTerrain(ctx.runtime, {
       what: "pincelada",
+      regenerated: consumed.length,
       mint: `${ctx.tableId}:terrain-sculpt-${salt}`,
       tableId: ctx.tableId,
       causeId,
@@ -284,6 +358,22 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       holes: holeRings,
       sources: perimeters.sources,
       heightAt,
+      // Only once the generator has answered. A refusal then costs nothing;
+      // deleting first would cost the ground with nothing to lay back.
+      onGenerated: () => {
+        for (const topology of consumed) {
+          try {
+            ctx.runtime.applyRegionEdit(
+              [{ kind: "delete-region", surfaceKey: topology.surfaceKey }],
+              "local",
+              causeId,
+            );
+          } catch {
+            // One stale key is that key's own problem, never a reason to leave
+            // the rest of the ground standing under the stroke.
+          }
+        }
+      },
     });
 
     // The one number that says whether the mesh degrades over strokes: how

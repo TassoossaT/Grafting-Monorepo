@@ -81,6 +81,8 @@ export interface TerrainCommitReport {
   /** Why the engine refused, in its own words, first few only. */
   readonly refusals: readonly string[];
   readonly declaredNodes: number;
+  /** Faces of this stroke's own type that were thrown away and laid again. */
+  readonly regenerated?: number;
 }
 
 /**
@@ -138,6 +140,7 @@ function describe(report: TerrainCommitReport): void {
     nosNaoCosturados: report.unadopted,
     nosNovosDeclarados: report.declaredNodes,
     facesRegistradas: report.built,
+    facesRegeneradas: report.regenerated ?? 0,
     facesPerdidas: report.refusedFaces,
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
@@ -150,7 +153,8 @@ function describe(report: TerrainCommitReport): void {
   const line =
     `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} ` +
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
-    `${mescla.nosNaoCosturados} junções abertas | contorno ${contorno.pontos} pts ` +
+    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas ` +
+    `| contorno ${contorno.pontos} pts ` +
     `(${contorno.pontosComNo} com nó, min ${contorno.segmentoMinimo}, razão ${contorno.razaoSegmentoPorFace}) ` +
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });

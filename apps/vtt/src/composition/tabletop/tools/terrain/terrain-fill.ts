@@ -96,6 +96,8 @@ export interface TerrainFillRequest {
   readonly onGenerated?: () => void;
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
   readonly what: string;
+  /** Faces this fill replaced, for the log only. */
+  readonly regenerated?: number;
 }
 
 export interface TerrainFillOutcome {
@@ -281,6 +283,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedFaces: outcome.skippedRegionIds.length,
     refusals: outcome.skippedRegionReasons,
     declaredNodes: nodes.length,
+    regenerated: request.regenerated,
   });
   return {
     built: outcome.createdSurfaceKeys.length,
