@@ -166,6 +166,8 @@ impl From<Point2<f64>> for GridVertex {
 /// caller that gets `None` has ground it cannot describe, and should leave
 /// what is standing alone rather than substitute something.
 pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<ConstrainedTriangles> {
+    let boundary_winding = RingWinding::of(&options.boundary);
+    let hole_winding = RingWinding::of(&options.holes);
     let mut cdt: ConstrainedDelaunayTriangulation<GridVertex> =
         ConstrainedDelaunayTriangulation::new();
 
@@ -203,7 +205,7 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
     }
 
     for &seed in &options.seeds {
-        if !is_ground(options, seed) {
+        if !is_ground(&boundary_winding, &hole_winding, seed) {
             continue;
         }
         if segments
@@ -245,7 +247,7 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         // nobody asked for.
         let corner_positions =
             face.positions().map(|point| Vec2::new(point.x, point.y));
-        if !is_ground(options, centroid_of(&corner_positions)) {
+        if !is_ground(&boundary_winding, &hole_winding, centroid_of(&corner_positions)) {
             continue;
         }
         let corners = face.vertices().map(|vertex| {
@@ -343,11 +345,85 @@ pub fn locate_on_contour(
 ///
 /// The one rule, applied to seeds before the triangulation and to faces
 /// after it, so the two can never disagree about where the ground is.
-fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
-    inside_rings(&options.boundary, point) && !inside_rings(&options.holes, point)
+fn is_ground(boundary_winding: &RingWinding, hole_winding: &RingWinding, point: Vec2) -> bool {
+    boundary_winding.contains(point) && !hole_winding.contains(point)
 }
 
-/// Containment against a *set* of rings, by the nonzero winding rule.
+/// The multiplier that gives every independent outer ring the same winding,
+/// while preserving the relative winding of rings nested inside it.
+///
+/// A set of occupied contours is a union. Two independently-created terrain
+/// patches may arrive with opposite orientations; where they cross, summing
+/// their raw winding cancels to zero and incorrectly classifies the overlap as
+/// empty ground. Nested rings are different: their relative orientation is
+/// meaningful because an inner ring may remove a real hole. We therefore
+/// canonicalise each containment tree as a unit, without reversing the input
+/// arrays (their segment indexes are part of the caller contract).
+struct RingWinding {
+    positions: Vec<Vec<Vec2>>,
+    multipliers: Vec<i32>,
+}
+
+impl RingWinding {
+    fn of(rings: &[Vec<ConstraintPoint>]) -> Self {
+        let positions: Vec<Vec<Vec2>> = rings
+            .iter()
+            .map(|ring| ring.iter().map(|point| point.position).collect())
+            .collect();
+        let areas: Vec<f64> = positions.iter().map(|ring| ring_area(ring)).collect();
+        let mut parents = vec![None; rings.len()];
+
+        for child in 0..rings.len() {
+            let child_area = areas[child].abs();
+            let mut smallest_parent: Option<(usize, f64)> = None;
+            for candidate in 0..rings.len() {
+                let candidate_area = areas[candidate].abs();
+                if candidate == child || candidate_area <= child_area {
+                    continue;
+                }
+                if !positions[child].iter().all(|&point| inside_ring(&positions[candidate], point)) {
+                    continue;
+                }
+                if smallest_parent.is_none_or(|(_, area)| candidate_area < area) {
+                    smallest_parent = Some((candidate, candidate_area));
+                }
+            }
+            parents[child] = smallest_parent.map(|(index, _)| index);
+        }
+
+        let multipliers = (0..rings.len())
+            .map(|mut ring| {
+                while let Some(parent) = parents[ring] {
+                    ring = parent;
+                }
+                if areas[ring] < 0.0 { -1 } else { 1 }
+            })
+            .collect();
+        Self { positions, multipliers }
+    }
+
+    fn contains(&self, point: Vec2) -> bool {
+        self.positions
+            .iter()
+            .zip(&self.multipliers)
+            .map(|(ring, multiplier)| multiplier * winding_number(ring, point))
+            .sum::<i32>()
+            != 0
+    }
+}
+
+fn ring_area(ring: &[Vec2]) -> f64 {
+    (0..ring.len())
+        .map(|index| {
+            let from = ring[index];
+            let to = ring[(index + 1) % ring.len()];
+            from.x * to.y - to.x * from.y
+        })
+        .sum::<f64>()
+        / 2.0
+}
+
+/// Why containment uses canonical nonzero winding rather than parity or union.
 ///
 /// Neither of the two obvious rules is right here, and each fails a case the
 /// table actually draws.
@@ -365,21 +441,11 @@ fn is_ground(options: &ConstrainedOptions, point: Vec2) -> bool {
 /// then refuses each of those faces, because the new one and the old one both
 /// claim the same side of the edge between them.
 ///
-/// Winding handles both, and needs nothing but rings that are consistently
-/// oriented: an outer ring and the inner ring of its own hole run opposite
-/// ways, so they subtract, while two separate contours that happen to overlap
-/// run the same way and add. A caller whose rings are all one orientation
-/// gets exactly the union it had before, so this can only be an improvement
-/// on what it replaces.
-fn inside_rings(rings: &[Vec<ConstraintPoint>], point: Vec2) -> bool {
-    let mut winding = 0i32;
-    for ring in rings {
-        let positions: Vec<Vec2> = ring.iter().map(|entry| entry.position).collect();
-        winding += winding_number(&positions, point);
-    }
-    winding != 0
-}
-
+/// Winding handles both after each independent containment tree is put into a
+/// canonical orientation. An outer ring and the inner ring of its own hole
+/// keep their opposite directions and subtract; separate outer contours are
+/// made equal and add where they overlap.
+///
 /// How many times `ring` wraps around `point`, signed by its direction.
 fn winding_number(ring: &[Vec2], point: Vec2) -> i32 {
     let mut winding = 0i32;
@@ -399,5 +465,4 @@ fn winding_number(ring: &[Vec2], point: Vec2) -> i32 {
     }
     winding
 }
-
 

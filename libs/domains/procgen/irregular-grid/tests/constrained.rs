@@ -124,6 +124,33 @@ fn no_ground_is_generated_on_top_of_the_road() {
 }
 
 #[test]
+fn oppositely_wound_crossing_contours_are_one_occupied_union() {
+    // Two terrain strokes made in separate gestures can carry opposite ring
+    // orientation. Raw nonzero winding cancels at their crossing and used to
+    // generate a second layer of ground exactly in the middle of the X.
+    let horizontal = ring(&[(-2.0, 4.0), (12.0, 4.0), (12.0, 6.0), (-2.0, 6.0)]);
+    let vertical_reversed = ring(&[(6.0, -2.0), (6.0, 12.0), (4.0, 12.0), (4.0, -2.0)]);
+    let result = triangulate_constrained(&options(vec![horizontal, vertical_reversed]))
+        .expect("ground remains around the crossed contours");
+
+    for face in &result.mesh.faces {
+        let middle = centroid([
+            result.mesh.vertices[face[0]],
+            result.mesh.vertices[face[1]],
+            result.mesh.vertices[face[2]],
+        ]);
+        let inside_horizontal = middle.y > 4.0 && middle.y < 6.0;
+        let inside_vertical = middle.x > 4.0 && middle.x < 6.0;
+        assert!(
+            !inside_horizontal && !inside_vertical,
+            "ground was doubled over a crossed contour at ({}, {})",
+            middle.x,
+            middle.y
+        );
+    }
+}
+
+#[test]
 fn a_road_that_stops_inside_the_field_is_opened_around_rather_than_paved_over() {
     // The engine reports a gap outer rim and never a face standing alone in
     // the middle of it, so the previous mend joined the two banks over the
