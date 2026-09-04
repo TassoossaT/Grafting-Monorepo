@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { repairTerrainCut } from "../src/composition/tabletop/tools/terrain/terrain-cut-repair.ts";
+import {
+  heightFieldOf,
+  neighbourhoodReach,
+  normalizeTerrainAround,
+  repairTerrainCut,
+} from "../src/composition/tabletop/tools/terrain/terrain-regenerate.ts";
 
 /**
  * A field of two terrain faces sharing one edge, with a road standing on the
@@ -172,4 +177,71 @@ test("a cut that consumed nothing the engine still knows repairs nothing", () =>
   );
   assert.equal(built, 0);
   assert.deepEqual(context.deleted, [], "nothing is deleted on the strength of a stale key");
+});
+
+test("the height field keeps relief instead of averaging it away", () => {
+  // A ridge: high on the left, low on the right, far enough apart that a
+  // global blend would meet in the middle.
+  const anchors = [
+    { x: 0, y: 10, z: 0 },
+    { x: 1, y: 10, z: 0 },
+    { x: 40, y: 0, z: 0 },
+    { x: 41, y: 0, z: 0 },
+  ];
+  const field = heightFieldOf(anchors, 4);
+  assert.ok(field.at({ x: 0.5, z: 0 }) > 9, "next to the high side, it is high");
+  assert.ok(field.at({ x: 40.5, z: 0 }) < 1, "next to the low side, it is low");
+});
+
+test("a point no anchor reaches has no opinion, so the caller's rule decides", () => {
+  const field = heightFieldOf([{ x: 0, y: 5, z: 0 }], 2);
+  assert.equal(field.at({ x: 100, z: 100 }), undefined);
+});
+
+test("sitting exactly on an anchor takes its height rather than dividing by zero", () => {
+  const field = heightFieldOf([{ x: 3, y: 7, z: 4 }], 2);
+  assert.equal(field.at({ x: 3, z: 4 }), 7);
+});
+
+test("the neighbourhood reaches past the brush, or the seam stays on its own rim", () => {
+  assert.ok(neighbourhoodReach(2) >= 2, "at least one face clear of anything the stroke touched");
+});
+
+test("normalizing consumes its own type and meets every other one", () => {
+  const context = field();
+  // The whole field, both terrain faces and the road, is in the neighbourhood.
+  context.runtime.getFootprintCoverage = () => [
+    { surfaceKey: ["terrain", "L"], surfaceType: "terrain" },
+    { surfaceKey: ["terrain", "R"], surfaceType: "terrain" },
+    { surfaceKey: ["road", "P"], surfaceType: "path" },
+  ];
+
+  normalizeTerrainAround(context.runtime, {
+    dilatedOutline: [[[[0, 0], [4, 0], [4, 4], [0, 4]]]],
+    surfaceType: "terrain",
+    faceSide: 2,
+    causeId: "cause-1",
+    tableId: "t",
+    heightOfNewGround: () => 0,
+  });
+
+  assert.deepEqual(context.deleted.sort(), ["terrain L", "terrain R"], "the road is met, never consumed");
+  const request = context.requests[0];
+  assert.equal(request.holes.length, 1, "the road went down as a contour");
+  assert.ok(request.holes[0].every((point) => typeof point.source === "number"));
+});
+
+test("normalizing where nothing of its own type stands does nothing", () => {
+  const context = field();
+  context.runtime.getFootprintCoverage = () => [{ surfaceKey: ["road", "P"], surfaceType: "path" }];
+  const built = normalizeTerrainAround(context.runtime, {
+    dilatedOutline: [[[[0, 0], [4, 0], [4, 4], [0, 4]]]],
+    surfaceType: "terrain",
+    faceSide: 2,
+    causeId: "cause-1",
+    tableId: "t",
+    heightOfNewGround: () => 0,
+  });
+  assert.equal(built, 0);
+  assert.deepEqual(context.deleted, []);
 });

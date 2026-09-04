@@ -14,7 +14,7 @@ import {
   resolveCutRepair,
   type CutFallout,
 } from "../../../features/edit-construction/index.ts";
-import { repairTerrainCut, type TerrainCutRepairRuntime } from "./terrain/terrain-cut-repair.ts";
+import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain/terrain-regenerate.ts";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
 import { reportToolFailure } from "./core/tool-diagnostics.ts";
@@ -22,13 +22,13 @@ import { reportToolFailure } from "./core/tool-diagnostics.ts";
 /**
  * One covered type's own answer to being cut -- `resolveCutRepair`'s
  * `"regenerate"`, made real. The type itself owns the whole thing, decision
- * and execution both (`repairTerrainCut`, `tools/terrain/terrain-cut-repair.ts`);
+ * and execution both (`repairTerrainCut`, `tools/terrain/terrain-regenerate.ts`);
  * this only needs to know it by a runtime-shaped signature, never a
  * concrete `TabletopRuntime` import, so this table stays as thin as the
  * types it points at.
  */
 export type CutRepairExecutor = (
-  runtime: TerrainCutRepairRuntime,
+  runtime: TerrainRegenerateRuntime,
   fallout: CutFallout,
   causeId: string,
   tableId: string,

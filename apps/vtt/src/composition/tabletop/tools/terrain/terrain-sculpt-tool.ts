@@ -6,6 +6,7 @@ import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/previ
 import { restackTerrain } from "./terrain-restack.ts";
 import { outlineConstraints, perimeterConstraints, type ConstraintRing } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
+import { neighbourhoodReach, normalizeTerrainAround } from "./terrain-regenerate.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -171,6 +172,32 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.noiseScale,
     );
 
+    // Anchored to the stroke's own extent, and sampled the same way by both
+    // passes below. Anchoring to whatever extent each generation happened to
+    // settle on would give one world point two different heights in the same
+    // stroke, which is a step in the ground exactly where the two passes meet.
+    let minX = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    for (const polygon of swept) {
+      for (const ring of polygon) {
+        for (const [x, z] of ring) {
+          minX = Math.min(minX, x);
+          minZ = Math.min(minZ, z);
+          maxX = Math.max(maxX, x);
+          maxZ = Math.max(maxZ, z);
+        }
+      }
+    }
+    const heightAt = (point: { readonly x: number; readonly z: number }): number =>
+      sampleHeightmapBilinear(
+        heightmap,
+        HEIGHTMAP_RESOLUTION,
+        (point.x - minX) / (maxX - minX || 1),
+        (point.z - minZ) / (maxZ - minZ || 1),
+      ) * params.heightScale;
+
     const filled = fillTerrain(ctx.runtime, {
       mint: `${ctx.tableId}:terrain-sculpt-${salt}`,
       tableId: ctx.tableId,
@@ -182,16 +209,45 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       boundary: outline,
       holes: holeRings,
       sources: perimeters.sources,
-      heightAt: (point, bounds) =>
-        sampleHeightmapBilinear(
-          heightmap,
-          HEIGHTMAP_RESOLUTION,
-          (point.x - bounds.minX) / (bounds.maxX - bounds.minX || 1),
-          (point.z - bounds.minZ) / (bounds.maxZ - bounds.minZ || 1),
-        ) * params.heightScale,
+      heightAt,
     });
 
-    report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
+    // The stroke has landed, and where it met ground that was already there it
+    // met it along a contour -- one generation stopping exactly where another
+    // began. That line is the seam: cells on both sides of it were pinned
+    // during relaxation, so it reads as two meshes touching rather than as one
+    // piece of ground.
+    //
+    // So lay that whole neighbourhood again, now, as a single generation. It
+    // finds one cloud where a moment ago there were two, and the ring of cells
+    // that used to be the boundary is interior to what it regenerates. It also
+    // takes the accumulated nodes with it: laying ground against a contour
+    // doubles that contour, and this is what stops the doubling from being
+    // permanent -- the contour it would have accumulated on no longer exists.
+    // Only where there was something to join to. A stroke laying ground on
+    // empty space has no seam, and regenerating what it just made would cost a
+    // second generation and a fresh set of node ids to change nothing.
+    const met = covered.some((region) => region.surfaceType === params.targetSurface);
+    const normalized = !met ? 0 : normalizeTerrainAround(ctx.runtime, {
+      dilatedOutline: brushSweptOutlinePolygons(
+        gesture.samples.map((sample) => sample.point),
+        REVEAL_RADIUS + neighbourhoodReach(params.faceSize),
+      ),
+      surfaceType: params.targetSurface,
+      faceSide: params.faceSize,
+      causeId,
+      tableId: ctx.tableId,
+      heightOfNewGround: heightAt,
+    });
+
+    report(
+      ctx,
+      normalized > 0 ? normalized : filled.built,
+      filled.refused,
+      filled.unadopted,
+      raised,
+      filled.refinementComplete,
+    );
   },
 };
 
