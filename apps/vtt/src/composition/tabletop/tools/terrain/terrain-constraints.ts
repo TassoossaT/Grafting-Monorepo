@@ -391,6 +391,7 @@ export function adoptContourNodes(
   // The fragment still to be split, per original edge, and where along the
   // original edge that fragment starts.
   const tail = new Map<ConstructionEdgeId, { edgeId: ConstructionEdgeId; startNodeId: ConstructionNodeId }>();
+  const planned: { readonly vertex: number; readonly op: AtomicEditOp }[] = [];
 
   for (const adoption of adoptions) {
     const position = positionOf(adoption.vertex);
@@ -410,27 +411,44 @@ export function adoptContourNodes(
     // joined and is not.
     const firstEdgeId = sharedEdgeId(tableId, from, nodeId);
     const secondEdgeId = sharedEdgeId(tableId, nodeId, adoption.edge.endNodeId);
+    planned.push({
+      vertex: adoption.vertex,
+      op: { kind: "insert-vertex", edgeId, nodeId, position, firstEdgeId, secondEdgeId },
+    });
+    // The next node on this edge sits further along, so it falls in the second
+    // fragment, which now runs from the node just inserted. Bookkeeping this
+    // side owns entirely -- it never had to wait for an answer, which is what
+    // makes one transaction for the lot possible.
+    tail.set(adoption.edge.edgeId, { edgeId: secondEdgeId, startNodeId: nodeId });
+  }
+
+  if (planned.length === 0) return { adopted, refused };
+
+  // **One transaction, and one fold of the render, for every split.**
+  //
+  // A stroke adopts a node per point where the new mesh meets the old, which
+  // on a merge is well over a hundred. Sent one at a time that is a hundred
+  // separate commits, each paying the whole cost of syncing what is drawn --
+  // for a set of edits that was decided in full before the first was sent.
+  //
+  // The fallback is not caution for its own sake. A batch is all-or-nothing,
+  // so one op the engine will not take costs every other node its seam;
+  // applied one by one, it costs only itself. Fast when nothing is wrong,
+  // exactly as forgiving as before when something is.
+  try {
+    runtime.applyRegionEdit(planned.map((entry) => entry.op), "local", causeId);
+    for (const entry of planned) adopted.add(entry.vertex);
+    return { adopted, refused };
+  } catch {
+    // Fall through and pay per node, so one refusal loses one node.
+  }
+
+  for (const entry of planned) {
     try {
-      runtime.applyRegionEdit(
-        [
-          {
-            kind: "insert-vertex",
-            edgeId,
-            nodeId,
-            position,
-            firstEdgeId,
-            secondEdgeId,
-          },
-        ],
-        "local",
-        causeId,
-      );
-      // The next node on this edge sits further along, so it falls in the
-      // second fragment, which now runs from the node just inserted.
-      tail.set(adoption.edge.edgeId, { edgeId: secondEdgeId, startNodeId: nodeId });
-      adopted.add(adoption.vertex);
+      runtime.applyRegionEdit([entry.op], "local", causeId);
+      adopted.add(entry.vertex);
     } catch {
-      refused.push(adoption.vertex);
+      refused.push(entry.vertex);
     }
   }
 

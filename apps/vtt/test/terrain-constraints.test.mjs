@@ -159,10 +159,15 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
 
   // And each split after the first must consume the fragment the previous one
   // left, never the original edge again.
-  const calls = [];
+  // All three go down as one transaction -- a merge adopts well over a
+  // hundred nodes, and one commit each pays a full render sync per node for a
+  // set of edits decided in full before the first is sent. The chaining below
+  // is what makes that legal: every fragment id this side derives itself, so
+  // nothing here ever waited on an answer.
+  const batches = [];
   const runtime = {
     applyRegionEdit(ops) {
-      calls.push(ops[0]);
+      batches.push(ops);
       return {};
     },
   };
@@ -177,6 +182,9 @@ test("several nodes on one edge are inserted in the order they sit along it", ()
 
   assert.equal(outcome.adopted.size, 3);
   assert.deepEqual([...outcome.refused], []);
+  assert.equal(batches.length, 1, "one transaction for every split, not one each");
+  const calls = batches[0];
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].edgeId, ring.edges[0].edgeId, "the first split takes the original edge");
   assert.equal(calls[1].edgeId, calls[0].secondEdgeId, "the second takes what the first left");
   assert.equal(calls[2].edgeId, calls[1].secondEdgeId);
@@ -208,11 +216,14 @@ test("a refused split costs that node its shared edge, never the stroke", () => 
     (vertex) => (vertex === 1 ? { x: 2, z: 0 } : { x: 4, z: 2 }),
   );
 
-  let seen = 0;
+  // The engine will not take the first node's split, whenever it is asked.
+  // So the batch fails as a whole and the retry falls back to one transaction
+  // per node -- which is the entire point of the fallback: all-or-nothing is
+  // the fast path, and one op the engine refuses must cost that node only,
+  // never the hundred others sharing the seam with it.
   const runtime = {
-    applyRegionEdit() {
-      seen += 1;
-      if (seen === 1) throw new Error("no room");
+    applyRegionEdit(ops) {
+      if (ops.some((op) => op.nodeId === "new:1")) throw new Error("no room");
       return {};
     },
   };

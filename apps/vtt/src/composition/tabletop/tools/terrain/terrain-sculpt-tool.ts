@@ -180,35 +180,84 @@ function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean 
 /**
  * Everything already standing that the stroke reaches, as **whole clouds**.
  *
- * Whole clouds, not the faces the footprint happens to touch, and the
- * difference is not a refinement -- it decides whether the result is one mesh
- * or a scattering of them.
+ * Reached through the cloud, and then **cut back to the ground the stroke can
+ * actually touch**.
  *
- * The perimeter of a *subset* of a cloud is not that cloud's boundary. It runs
- * partly through the cloud's own interior, over edges that already carry a
- * face on both sides. Handing that to the generator as the outline of occupied
- * ground says the far side of those edges is free, so cells get planned
- * against them -- and every one of those faces is refused at registration,
- * because an edge with two sides is exactly what `refuse-when-full` exists to
- * protect. Faces vanish in ones and twos all along the seam, and what lands is
- * a mesh with holes punched through it.
+ * The cloud is the connected component of same-type surfaces sharing nodes, so
+ * once two strokes weld, every later stroke anywhere on the map pulls the
+ * whole continent: a topology read per face, a point-in-polygon test per node
+ * of every one of them, and a perimeter walked around the lot. The cost of one
+ * stroke becomes the size of the map rather than the size of the brush, and it
+ * only ever grows.
  *
- * `cloudFor` is the query that answers this properly: the connected component
- * of same-type surfaces reachable through shared nodes. Its perimeter is a
- * real free boundary, every edge of it with one side still open.
+ * It was written whole for a reason worth stating, because the reason has a
+ * hole in it. The perimeter of a *subset* of a cloud is not that cloud's
+ * boundary -- it runs partly through the cloud's own interior, over edges that
+ * already carry a face on both sides -- so handing it over as the outline of
+ * occupied ground appears to say the far side of those edges is free. But the
+ * generator can only lay cells **inside the swept outline**. If the far side
+ * of one of those interior edges is within the stroke, the face there was
+ * touched by the footprint and is in this set already; if it was not touched,
+ * it is outside the outline and unreachable. So the faces the footprint covers
+ * are sufficient, and the whole cloud is a safe over-approximation that costs
+ * the map.
+ *
+ * The bound is the stroke's own extent, widened by `reach` so nothing the
+ * outline can meet is dropped by a rounding of the box.
  */
+interface StrokeBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+}
+
 function standingAround(
   ctx: ToolContext,
   covered: readonly ConstructionCoveredRegion[],
+  within: StrokeBounds,
+  reach: number,
 ): readonly ConstructionRegionTopology[] {
   const keys = new Map<string, ConstructionSurfaceKey>();
   for (const region of covered) {
     const cloud = ctx.runtime.cloudFor({ seed: region.surfaceKey, surfaceType: region.surfaceType });
     for (const surfaceKey of cloud.surfaceKeys) keys.set(surfaceKey.join(" "), surfaceKey);
   }
-  return [...keys.values()]
-    .map((surfaceKey) => ctx.runtime.getRegionTopology(surfaceKey))
-    .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+  const near: ConstructionRegionTopology[] = [];
+  for (const surfaceKey of keys.values()) {
+    const topology = ctx.runtime.getRegionTopology(surfaceKey);
+    if (topology === undefined) continue;
+    // One corner within the widened box is enough: a face is kept if any part
+    // of it could meet the stroke, and dropped only when all of it is clear.
+    const reaches = topology.nodes.some(
+      (node) =>
+        node.position.x >= within.minX - reach &&
+        node.position.x <= within.maxX + reach &&
+        node.position.z >= within.minZ - reach &&
+        node.position.z <= within.maxZ + reach,
+    );
+    if (reaches) near.push(topology);
+  }
+  return near;
+}
+
+/** The axis-aligned extent of a swept stroke, in XZ. */
+function boundsOf(swept: MultiPolygon): StrokeBounds {
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const polygon of swept) {
+    for (const ring of polygon) {
+      for (const [x, z] of ring) {
+        minX = Math.min(minX, x);
+        minZ = Math.min(minZ, z);
+        maxX = Math.max(maxX, x);
+        maxZ = Math.max(maxZ, z);
+      }
+    }
+  }
+  return { minX, minZ, maxX, maxZ };
 }
 
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
@@ -293,7 +342,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // outside the swept outline, and the fill stops at that outline -- so
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
-    const standing = standingAround(ctx, covered);
+    const extent = boundsOf(swept);
+    const standing = standingAround(ctx, covered, extent, params.faceSize * 2);
     const consumed = standing.filter(
       (topology) =>
         topology.surfaceType === params.targetSurface &&
@@ -322,20 +372,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // the other way round: one world point has one height, whichever stroke
     // asks for it, so ground laid now and ground laid later are the same
     // surface where they meet.
-    let minX = Infinity;
-    let minZ = Infinity;
-    let maxX = -Infinity;
-    let maxZ = -Infinity;
-    for (const polygon of swept) {
-      for (const ring of polygon) {
-        for (const [x, z] of ring) {
-          minX = Math.min(minX, x);
-          minZ = Math.min(minZ, z);
-          maxX = Math.max(maxX, x);
-          maxZ = Math.max(maxZ, z);
-        }
-      }
-    }
+    const { minX, minZ, maxX, maxZ } = extent;
     const originX = Math.floor(minX / NOISE_SPACING) - 1;
     const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
     const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
@@ -388,6 +425,21 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       onGenerated: () => {
         let deleted = 0;
         const failed: string[] = [];
+        // One transaction for the lot, the same bargain the adoptions strike:
+        // a stroke that merges clears dozens of faces, and sending them one at
+        // a time pays the whole render sync per face. A batch that the engine
+        // will not take falls through to the loop below, where one stale key
+        // costs only itself.
+        try {
+          ctx.runtime.applyRegionEdit(
+            consumed.map((topology) => ({ kind: "delete-region", surfaceKey: topology.surfaceKey }) as const),
+            "local",
+            causeId,
+          );
+          return { deleted: consumed.length, failed };
+        } catch {
+          // Fall through and pay per face.
+        }
         for (const topology of consumed) {
           try {
             ctx.runtime.applyRegionEdit(
@@ -409,15 +461,15 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       },
     });
 
-    // The one number that says whether the mesh degrades over strokes: how
-    // many nodes the perimeter of the ground around this stroke carries, now
-    // that the stroke has landed. Read the same way it was read before, over
-    // the same clouds, so the two are comparable.
-    logContourGrowth(
-      "pincelada",
-      contourBefore,
-      perimeterConstraints(standingAround(ctx, coveredByStroke(ctx, gesture, params)), 0).sources.length,
-    );
+    // The growth of the contour was measured here, by scanning the
+    // neighbourhood a second time once the stroke had landed. It cost a full
+    // repeat of the three most expensive steps of the gesture -- the coverage
+    // query, the neighbourhood walk and the perimeter -- on every stroke, for
+    // one console line. It is gone, and nothing is lost with it: the commit
+    // line already carries `contorno N pts (M com nó)` for what went down and
+    // `nosNoContorno` for what the new mesh planted on it, which is the
+    // accumulation the growth number was there to expose.
+    void contourBefore;
 
     report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
   },
