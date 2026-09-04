@@ -128,6 +128,23 @@ export const DEFAULT_FACE_SIDE = 2;
 /** Nothing to do, reported as an outcome rather than as a failure. */
 const NOTHING: TerrainFillOutcome = { built: 0, refused: 0, unadopted: 0, refinementComplete: true };
 
+/** Summed winding of a ring set at one point -- the ground rule's own test. */
+function windingOf(rings: readonly ConstraintRing[], x: number, z: number): number {
+  let winding = 0;
+  for (const ring of rings) {
+    for (let index = 0; index < ring.points.length; index += 1) {
+      const from = ring.points[index]!;
+      const to = ring.points[(index + 1) % ring.points.length]!;
+      if (from.z <= z) {
+        if (to.z > z && (to.x - from.x) * (z - from.z) - (x - from.x) * (to.z - from.z) > 0) winding += 1;
+      } else if (to.z <= z && (to.x - from.x) * (z - from.z) - (x - from.x) * (to.z - from.z) < 0) {
+        winding -= 1;
+      }
+    }
+  }
+  return winding;
+}
+
 function nodeId(mint: string, vertex: number): ConstructionNodeId {
   return `${mint}:v${vertex}`;
 }
@@ -151,6 +168,7 @@ function gridPatch(
   idFor: (vertex: number) => ConstructionNodeId | undefined,
   nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
   surfaceType: string,
+  quadOf?: Map<string, readonly number[]>,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
@@ -168,6 +186,7 @@ function gridPatch(
       boundary.push(edges.use(cycle[index]!, cycle[(index + 1) % cycle.length]!));
     }
     regions.push({ regionId: cycle.join("|"), boundary, surfaceType, physical: true });
+    quadOf?.set(cycle.join("|"), quad);
   }
 
   return { nodes, edges: edges.all(), regions };
@@ -306,7 +325,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     });
   }
 
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType);
+  const quadOf = new Map<string, readonly number[]>();
+  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, quadOf);
 
   // **Does the patch itself already contain the clash?**
   //
@@ -328,6 +348,43 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
 
   const outcome = runtime.addPatch(patch, "local", request.causeId);
+
+  // **Which of the two remaining causes is it?**
+  //
+  // A refused face was either laid where ground already stood -- the ground
+  // rule failed, and its centroid sits inside a hole ring -- or it is wound
+  // against its neighbours, in which case it walks a shared edge the same way
+  // the standing face does while sitting correctly beside it. The two are
+  // mutually exclusive and need opposite fixes, and this branch has already
+  // shipped one wrong fix from guessing between them.
+  //
+  // Note the winding count only means something next to the built faces': a
+  // patch of uniform winding that clashes anyway is the first case, and a
+  // split reading is the second. Faces wound against the grain would not show
+  // up as self-clashes if they only ever touch standing ground, which is
+  // exactly where every refusal in the log lands.
+  let refusedInHole = 0;
+  let refusedClockwise = 0;
+  let builtClockwise = 0;
+  const refused = new Set(outcome.skippedRegionIds);
+  for (const [regionId, quad] of quadOf) {
+    let twice = 0;
+    let cx = 0;
+    let cz = 0;
+    let ok = true;
+    for (let index = 0; index < quad.length; index += 1) {
+      const from = grid.vertices[quad[index]!];
+      const to = grid.vertices[quad[(index + 1) % quad.length]!];
+      if (from === undefined || to === undefined) { ok = false; break; }
+      twice += from.x * to.z - to.x * from.z;
+      cx += from.x;
+      cz += from.z;
+    }
+    if (!ok || quad.length === 0) continue;
+    if (!refused.has(regionId)) { if (twice < 0) builtClockwise += 1; continue; }
+    if (twice < 0) refusedClockwise += 1;
+    if (windingOf(request.holes, cx / quad.length, cz / quad.length) !== 0) refusedInHole += 1;
+  }
   logTerrainCommit({
     what: request.what,
     faceSideAsked: request.faceSide,
@@ -342,6 +399,9 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     declaredNodes: nodes.length,
     regenerated: request.regenerated,
     selfClashes: clashes,
+    refusedInHole,
+    refusedClockwise,
+    builtClockwise,
   });
   return {
     built: outcome.createdSurfaceKeys.length,

@@ -126,6 +126,29 @@ export interface TerrainCommitReport {
   readonly selfClashes?: readonly string[];
   /** Faces of this stroke's own type that were thrown away and laid again. */
   readonly regenerated?: number;
+  /**
+   * Refused faces whose centre lies inside a hole ring -- ground planned on
+   * top of ground that was declared as still standing. Non-zero means the
+   * generator's ground rule let it through, and the fault is in what the rings
+   * said, not in how the patch was stitched.
+   */
+  readonly refusedInHole?: number;
+  /**
+   * Winding of the refused faces against the winding of the ones that landed.
+   *
+   * Two faces sharing an edge walk it in opposite directions *when they agree
+   * on which way round they run*. A face wound against the grain walks it the
+   * same way as its neighbour and is refused for exactly the reason the log
+   * reports -- while sitting perfectly beside it, overlapping nothing. It
+   * leaves no self-clash either, as long as it only ever touches ground that
+   * was already standing, which is where every refusal in the log lands.
+   *
+   * So a split reading here -- refused faces wound one way, built faces the
+   * other -- is the whole diagnosis, and it needs the opposite fix from
+   * `refusedInHole`.
+   */
+  readonly refusedClockwise?: number;
+  readonly builtClockwise?: number;
 }
 
 /**
@@ -196,6 +219,9 @@ function describe(report: TerrainCommitReport): void {
     facesRegeneradas: report.regenerated ?? 0,
     facesPerdidas: report.refusedFaces,
     colisoesNoProprioPatch: (report.selfClashes ?? []).length,
+    perdidasDentroDeFuro: report.refusedInHole ?? 0,
+    perdidasHorarias: report.refusedClockwise ?? 0,
+    registradasHorarias: report.builtClockwise ?? 0,
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
 
@@ -209,6 +235,9 @@ function describe(report: TerrainCommitReport): void {
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
     `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas, ` +
     `${mescla.colisoesNoProprioPatch} colisões no próprio patch ` +
+    `| perdidas: ${mescla.perdidasDentroDeFuro} dentro de furo, ` +
+    `${mescla.perdidasHorarias}/${report.refusedFaces} horárias ` +
+    `(registradas ${mescla.registradasHorarias}/${report.built} horárias) ` +
     `| contorno ${contorno.pontos} pts ` +
     `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
