@@ -16,6 +16,7 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
+import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
 import { heightFieldOf } from "./terrain-regenerate.ts";
 import { logContourGrowth } from "./terrain-diagnostics.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
@@ -184,27 +185,8 @@ function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean 
  * The bound is the stroke's own extent, widened by `reach` so nothing the
  * outline can meet is dropped by a rounding of the box.
  */
-interface StrokeBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-}
-
-function standingAround(ctx: ToolContext, within: StrokeBounds, reach: number) {
-  // Keep the whole scan and filtering inside Rust, and cross the Wasm boundary
-  // once with only the brush-sized result. Expanding every covered face to its
-  // cloud made a join traverse the same continent once per covered cell.
-  return ctx.runtime.getRegionTopologiesInBounds({
-    minX: within.minX - reach,
-    minZ: within.minZ - reach,
-    maxX: within.maxX + reach,
-    maxZ: within.maxZ + reach,
-  });
-}
-
 /** The axis-aligned extent of a swept stroke, in XZ. */
-function boundsOf(swept: MultiPolygon): StrokeBounds {
+function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -305,7 +287,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
     const extent = boundsOf(swept);
-    const standing = standingAround(ctx, extent, params.faceSize * 2);
+    const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
     const consumed = standing.filter(
       (topology) =>
         topology.surfaceType === params.targetSurface &&
