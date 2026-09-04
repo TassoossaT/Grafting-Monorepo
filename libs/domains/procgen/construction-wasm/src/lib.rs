@@ -10,6 +10,7 @@ mod enclosure;
 mod footprint;
 mod generation;
 mod geometry;
+mod grid_generation;
 mod mesh;
 mod patch_replacement;
 mod region_editing;

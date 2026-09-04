@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 grafting-graph-core = { path = "../../../graph/core" }
 grafting-procgen-terrain-generation = { path = "../terrain-generation" }
 grafting-procgen-structure-generation = { path = "../structure-generation" }
+grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 grafting-procgen-surface-mesh = { path = "../surface-mesh" }
 grafting-procgen-surface-transformations = { path = "../surface-transformations" }
 wasm-bindgen = "0.2"

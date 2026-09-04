@@ -75,6 +75,58 @@ pub fn build_triangle_hex(options: TriangleHexOptions) -> FaceMesh {
     FaceMesh { vertices, faces }
 }
 
+/// The same equilateral lattice [`build_triangle_hex`] lays, as loose points
+/// covering an axis-aligned box.
+///
+/// What the constrained stage seeds itself with. Refinement on its own
+/// produces a mesh of good *quality*, which is not the same as a mesh that
+/// looks like the rest of the world -- left to itself it would fill a wide
+/// area with whatever spacing satisfies the area limit, and ground
+/// regenerated beside a road would read as a different material. Seeding it
+/// with this lattice, at the same `triangle_side` the unconstrained stage
+/// uses, means the interior comes out with the spacing it has everywhere
+/// else and only the band near a contour adapts.
+///
+/// The box is covered generously by one row and column on each side: a seed
+/// just outside it can still be a corner of a triangle that reaches inside,
+/// and the caller drops whatever falls outside the ground anyway.
+pub fn lattice_covering(min: Vec2, max: Vec2, triangle_side: f64) -> Vec<Vec2> {
+    if !(triangle_side > 0.0) || !(max.x >= min.x) || !(max.y >= min.y) {
+        return Vec::new();
+    }
+    let ax = triangle_side;
+    let bx = triangle_side / 2.0;
+    let by = triangle_side * SQRT3_OVER_2;
+
+    // Invert `position = (i * ax + j * bx, j * by)` at each corner of the box
+    // to find the lattice indices that bracket it.
+    let j_low = (min.y / by).floor() as i64 - 1;
+    let j_high = (max.y / by).ceil() as i64 + 1;
+
+    let mut points = Vec::new();
+    for j in j_low..=j_high {
+        let row_y = j as f64 * by;
+        let offset = j as f64 * bx;
+        let i_low = ((min.x - offset) / ax).floor() as i64 - 1;
+        let i_high = ((max.x - offset) / ax).ceil() as i64 + 1;
+        for i in i_low..=i_high {
+            points.push(Vec2::new(i as f64 * ax + offset, row_y));
+        }
+    }
+    points
+}
+
+/// The area of one triangle of the lattice at `triangle_side`.
+///
+/// The refinement area limit the constrained stage runs at, so its triangles
+/// come out the size the unconstrained lattice would have made them. Stated
+/// as a function rather than left to the caller to work out, because getting
+/// it wrong is invisible until the ground is on screen next to ground made
+/// the other way.
+pub fn lattice_triangle_area(triangle_side: f64) -> f64 {
+    triangle_side * triangle_side * SQRT3_OVER_2 / 2.0
+}
+
 /// A regular hexagon has three distinct edge normals, so three tests decide
 /// containment rather than six.
 fn inside_hexagon(point: Vec2, apothem: f64) -> bool {

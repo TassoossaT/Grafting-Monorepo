@@ -429,6 +429,7 @@ version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "grafting-graph-core",
+ "grafting-procgen-irregular-grid",
  "grafting-procgen-structure-generation",
  "grafting-procgen-surface-mesh",
  "grafting-procgen-surface-transformations",

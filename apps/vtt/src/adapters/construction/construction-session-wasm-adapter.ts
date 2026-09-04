@@ -20,6 +20,8 @@ import type {
   ConstructionNodeId,
   ConstructionNodeSnapshot,
   ConstructionGraphSnapshot,
+  ConstructionIrregularQuadGrid,
+  ConstructionIrregularQuadGridRequest,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionPatchOutcome,
@@ -301,6 +303,36 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       hits: readonly { index: number; surfaceKey: readonly string[]; surfaceType: string }[];
     };
     return wire.hits;
+  }
+
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined {
+    let raw: string;
+    try {
+      raw = this.#require().irregular_quad_grid_json(JSON.stringify(request));
+    } catch {
+      // A refusal, not a failure. The engine answers this way when the
+      // contours describe no ground it can triangulate -- degenerate rings,
+      // a hole that swallows its own boundary. The caller leaves what is
+      // standing alone, which is why this is `undefined` at the port rather
+      // than an exception the tool would have to guess the meaning of.
+      return undefined;
+    }
+    const wire = JSON.parse(raw) as {
+      readonly vertices: readonly { readonly x: number; readonly z: number; readonly source: number | null }[];
+      readonly quads: readonly (readonly [number, number, number, number])[];
+      readonly onContour: readonly number[];
+      readonly refinementComplete: boolean;
+    };
+    return {
+      vertices: wire.vertices.map((vertex) =>
+        vertex.source === null ? { x: vertex.x, z: vertex.z } : { x: vertex.x, z: vertex.z, source: vertex.source },
+      ),
+      quads: wire.quads,
+      onContour: wire.onContour,
+      refinementComplete: wire.refinementComplete,
+    };
   }
 
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {

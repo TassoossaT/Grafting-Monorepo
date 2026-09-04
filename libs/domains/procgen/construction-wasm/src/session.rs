@@ -18,6 +18,7 @@ use crate::enclosure;
 use crate::footprint;
 use crate::generation;
 use crate::geometry::connected_component;
+use crate::grid_generation;
 use crate::mesh::{self, region_id_to_wire};
 use crate::patch_replacement;
 use crate::region_editing;
@@ -284,6 +285,20 @@ impl ConstructionSession {
         let response =
             enclosure::unfilled_loops(&self.graph, &self.topology, &self.surfaces, request)
                 .map_err(to_js_error)?;
+        serialize(&response)
+    }
+
+    /// One irregular quad grid, generated against the contours the request
+    /// names as constraints. Pure -- reads nothing from this session and
+    /// mutates nothing in it.
+    ///
+    /// The caller applies the result itself through `add_patch`, because
+    /// doing it here would mean minting node ids and sampling a height for
+    /// every new corner, neither of which this bridge has any business
+    /// deciding. See `grid_generation::irregular_quad_grid`.
+    pub fn irregular_quad_grid_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request = parse(request_json)?;
+        let response = grid_generation::irregular_quad_grid(request).map_err(to_js_error)?;
         serialize(&response)
     }
 

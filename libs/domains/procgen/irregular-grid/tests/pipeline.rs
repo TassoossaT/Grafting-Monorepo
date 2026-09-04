@@ -278,3 +278,51 @@ fn every_interior_edge_is_shared_by_exactly_two_cells() {
         "the mesh is connected, so interior edges exist"
     );
 }
+
+#[test]
+fn the_seed_lattice_covers_the_box_and_keeps_the_lattice_spacing() {
+    use grafting_procgen_irregular_grid::hex::{lattice_covering, lattice_triangle_area};
+
+    let points = lattice_covering(Vec2::new(0.0, 0.0), Vec2::new(10.0, 10.0), SIDE);
+    assert!(!points.is_empty());
+
+    // Every corner of the box has a seed near enough to be a triangle corner
+    // for it -- otherwise the refinement, not the lattice, decides the
+    // spacing there, and that patch of ground reads as a different material.
+    for corner in [
+        Vec2::new(0.0, 0.0),
+        Vec2::new(10.0, 0.0),
+        Vec2::new(0.0, 10.0),
+        Vec2::new(10.0, 10.0),
+        Vec2::new(5.0, 5.0),
+    ] {
+        let nearest = points
+            .iter()
+            .map(|&point| distance(point, corner))
+            .fold(f64::MAX, f64::min);
+        assert!(nearest <= SIDE, "no seed within one lattice side of ({}, {})", corner.x, corner.y);
+    }
+
+    // The spacing is the lattice one: every seed has a neighbour at exactly
+    // one side length, the way an equilateral lattice does.
+    for &point in points.iter().take(50) {
+        let touching = points
+            .iter()
+            .filter(|&&other| (distance(point, other) - SIDE).abs() < 1e-9)
+            .count();
+        assert!(touching > 0, "a seed with no neighbour at one side length is off-lattice");
+    }
+
+    // An equilateral triangle of that side, which is what the refinement is
+    // asked to cap its own triangles at.
+    let expected = SIDE * SIDE * 3.0_f64.sqrt() / 4.0;
+    assert!((lattice_triangle_area(SIDE) - expected).abs() < 1e-12);
+}
+
+#[test]
+fn a_degenerate_box_seeds_nothing_rather_than_looping() {
+    use grafting_procgen_irregular_grid::hex::lattice_covering;
+    assert!(lattice_covering(Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0), 0.0).is_empty());
+    assert!(lattice_covering(Vec2::new(5.0, 0.0), Vec2::new(0.0, 1.0), 0.5).is_empty());
+    assert!(lattice_covering(Vec2::new(0.0, 0.0), Vec2::new(1.0, f64::NAN), 0.5).is_empty());
+}

@@ -376,6 +376,75 @@ export interface ConstructionGraphPatch {
  * app-owned types. Mirrors the whole session ABI, not only the slice the
  * current runtime wiring calls.
  */
+/**
+ * One point of a contour handed to the grid generator as a constraint.
+ *
+ * `source` is an index into a table the *caller* keeps, never a node id.
+ * The engine forwards it untouched and never looks inside it, which is what
+ * lets a node come back identified instead of being matched to a position by
+ * proximity -- the guess that minted a second node on top of a real one in
+ * every fill this generator replaces.
+ */
+export interface ConstructionGridConstraintPoint {
+  readonly x: number;
+  readonly z: number;
+  readonly source?: number;
+}
+
+/** What bounds the ground to generate, and at what scale. */
+export interface ConstructionIrregularQuadGridRequest {
+  readonly seed: number;
+  /** Closed rings bounding the ground. Points in ring order; the closing edge is implicit. */
+  readonly boundary: readonly (readonly ConstructionGridConstraintPoint[])[];
+  /**
+   * Closed rings of ground another cloud already holds -- a road contour, a
+   * building footprint -- subtracted from `boundary`.
+   *
+   * Every ring is a constraint either way: no cell crosses one, whichever
+   * list it came from. This only decides which of the resulting cells come
+   * back as ground.
+   */
+  readonly holes?: readonly (readonly ConstructionGridConstraintPoint[])[];
+  /** The lattice side: the one knob that sets the cell scale. */
+  readonly triangleSide: number;
+}
+
+/**
+ * A generated grid, and what each of its corners already is.
+ *
+ * Handed back rather than applied, because registering it needs two decisions
+ * this layer owns and the engine does not: a node id for every new corner,
+ * and a height for it. The engine has no idea what a `ConstructionNodeId`
+ * looks like, and height is sampled from the heightmap here.
+ */
+export interface ConstructionIrregularQuadGrid {
+  readonly vertices: readonly {
+    readonly x: number;
+    readonly z: number;
+    /** The `source` this corner arrived with; absent where it is new ground. */
+    readonly source?: number;
+  }[];
+  readonly quads: readonly (readonly [number, number, number, number])[];
+  /**
+   * Indices of corners sitting *on* a supplied contour that arrived with no
+   * source -- nodes the cloud owning that contour has to adopt.
+   *
+   * They exist because the refinement splits a constraint segment where a
+   * nearby point encroaches on it, and because quadrangulation puts a
+   * midpoint on every edge, a contour edge included. Both are wanted: the
+   * alternative to a shared node here is a terrain corner resting against
+   * the middle of a road edge without sharing it, which reads as a gap along
+   * the path.
+   */
+  readonly onContour: readonly number[];
+  /**
+   * `false` where the refinement stopped at its vertex budget. The grid is
+   * still usable, just coarser somewhere -- worth logging, never worth
+   * discarding the result over.
+   */
+  readonly refinementComplete: boolean;
+}
+
 export interface ConstructionSessionPort {
   /**
    * Loads the underlying Wasm module and starts an empty session. Every
@@ -477,6 +546,23 @@ export interface ConstructionSessionPort {
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  /**
+   * One irregular quad grid, generated against the contours the request
+   * names -- what ground is *made of*, whether it is being created on empty
+   * land or regenerated beside something that moved.
+   *
+   * Pure: it reads nothing from the live graph and changes nothing in it.
+   * The caller mints ids for the new corners, samples their height, and
+   * registers the result through {@link addPatch} -- see
+   * {@link ConstructionIrregularQuadGrid} for why that split is deliberate.
+   *
+   * `undefined` where the contours describe no ground that can be
+   * triangulated. That is a refusal, not an error: a caller that gets one
+   * leaves what is standing alone rather than substituting something.
+   */
+  generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined;
   /** Mints a parallel copy; the same `suffix` always reproduces the same copy. */
   duplicateRegion(request: {
     readonly surfaceKey: ConstructionSurfaceKey;
