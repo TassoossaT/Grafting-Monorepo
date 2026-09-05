@@ -3755,6 +3755,8 @@ export interface ContourAdoption {
   readonly edge: ConstructionRegionEdge;
   /** Where along that edge it sits, `0` at its start and `1` at its end. */
   readonly along: number;
+  /** Length of the edge being split, for spacing checks. */
+  readonly edgeLength?: number;
   }
 export interface ContourSnap {
   readonly vertex: number;
@@ -3767,7 +3769,7 @@ export interface ResolvedAdoptions {
   readonly adoptions: readonly ContourAdoption[];
   readonly snaps: readonly ContourSnap[];
   }
-export const SHORTEST_USEFUL_FRACTION = 0.2;
+export const SHORTEST_USEFUL_FRACTION = 0.25;
 export const OUTLINE_CHORD_PER_FACE = 2;
 export const OUTLINE_WELD_PER_FACE = 0.5;
 export function resolveAdoptions(
