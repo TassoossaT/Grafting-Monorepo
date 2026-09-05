@@ -449,16 +449,39 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // Seeded with what the *halo* covers, not just the brush's own footprint
     // (`covered`, above). `joinHalo`'s entire point is reaching ground the
     // brush itself never overlaps, so when it is the only thing nearby,
-    // `covered` is empty -- and an empty seed list is what sends
-    // `terrainStandingAround` looking at every region in the box, joinHalo's
-    // intended neighbour included but also anything else that happens to
-    // share the box without sharing so much as a node with this stroke.
-    // `probeArea` already is `swept` when there is no halo, so this only
-    // costs a second engine crossing while `joinHalo` is actually widening
-    // the reach.
+    // `covered` is empty. `probeArea` already is `swept` when there is no
+    // halo, so this only costs a second engine crossing while `joinHalo` is
+    // actually widening the reach.
+    //
+    // The engine call itself is never skipped, empty seed list or not: with
+    // nothing to seed, it falls back to an unfiltered scan of its own
+    // *rectangular* bounds box, and that box is the one thing standing
+    // between a genuinely touching neighbour (a stroke landing in the gap
+    // between two already-touching pieces of ground routinely seeds nothing
+    // directly, yet still needs both handed back so their shared seam
+    // becomes a hole -- skipping there once caused a hard patch-replacement
+    // refusal) and an unrelated cloud that merely shares the box.
     const probeExtent = boundsOf(probeArea);
     const haloCovered = params.joinHalo > 0 ? coveredByStroke(ctx, probeArea) : covered;
-    const standing = terrainStandingAround(ctx.runtime, haloCovered, probeExtent, faceSize * 2);
+    const reach = faceSize * 2;
+    const nearby = terrainStandingAround(ctx.runtime, haloCovered, probeExtent, reach);
+
+    // The bounds box above is deliberately coarse and over-inclusive -- a
+    // rectangle, wide enough on its diagonal to reach noticeably farther
+    // than `reach` actually means everywhere except along its own axes.
+    // Reproduced live: a cloud comfortably outside this stroke's real halo
+    // circle, placed only along that diagonal, still came back as
+    // "standing" and picked up stray split nodes on its own untouched seam.
+    // `reachArea` is the same shape the halo itself already is -- a swept
+    // circle, not a box -- widened by that same `reach`, so this is the one
+    // place membership in `standing` is actually decided: never by whatever
+    // box shape the engine happened to search.
+    const reachArea = brushSweptOutlinePolygons(
+      gesture.samples.map((sample) => sample.point),
+      params.brushRadius + faceSize * params.joinHalo + reach,
+      strokeChord(faceSize),
+    );
+    const standing = nearby.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, reachArea)));
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
